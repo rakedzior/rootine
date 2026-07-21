@@ -26,6 +26,20 @@
   font-size: clamp(12px, 0.4vw + 8px, 14px);
 }
 
+@media (max-width: 1380px) {
+  .goals-side-panel:not(.goals-side-panel-selected) {
+    display: none;
+  }
+
+  .goals-side-panel-selected {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 30;
+    width: min(370px, 100%) !important;
+    box-shadow: -18px 0 50px rgba(0, 0, 0, 0.38);
+  }
+}
+
 @media (max-width: 1200px) {
   .summary-sidebar {
     display: none;
@@ -57,6 +71,89 @@
 @media (max-width: 760px) {
   .task-sub-sidebar,
   .app-sidebar {
+    display: none;
+  }
+}
+
+.goal-card-layout {
+  grid-template-columns: minmax(320px, 1fr) 150px auto 30px;
+}
+
+.goal-card-grid .goal-card-layout {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.goal-card-grid .goal-card-primary {
+  grid-column: 1 / -1;
+}
+
+.goal-card-grid .goal-card-date {
+  grid-column: 1;
+}
+
+.goal-card-grid .goal-card-status {
+  grid-column: 1;
+}
+
+.goal-card-grid .goal-card-more {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+}
+
+@media (max-width: 980px) {
+  .goal-card-layout {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .goal-card-primary {
+    grid-column: 1 / -1;
+  }
+
+  .goal-card-date {
+    grid-column: 1;
+    padding-left: 70px;
+  }
+
+  .goal-card-status {
+    grid-column: 1;
+    padding-left: 70px;
+  }
+
+  .goal-card-more {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .goal-card-layout {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .goal-card-date {
+    grid-column: 1;
+    grid-row: 2;
+    padding-left: 70px;
+  }
+
+  .goal-card-status {
+    grid-column: 1;
+    grid-row: 3;
+    padding-left: 70px;
+  }
+
+  .goal-card-more {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .goals-card-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .goals-sort {
     display: none;
   }
 }
