@@ -1,5 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import { useNavigate } from "react-router";
+import {
+  getGoalCurrentValue,
+  getGoalMetric,
+  getGoalProgress,
+  getRegularityTarget,
+  useGoalsStore,
+} from "../goals/goalsStore";
+import type {
+  Goal as StoredGoal,
+  GoalCategory,
+  GoalDraft,
+  GoalIconKey,
+  GoalProgressMode,
+  GoalStatus as StoredGoalStatus,
+} from "../goals/goalsStore";
+import {
+  ConfirmDialog,
+  GoalFormDialog,
+  MilestoneDialog,
+  ProgressDialog,
+  ThemedSelect,
+} from "../goals/GoalDialogs";
+import type { GoalEditorData } from "../goals/GoalDialogs";
 import {
   Activity,
   Archive,
@@ -23,7 +47,6 @@ import {
   HeartPulse,
   Languages,
   Laptop,
-  Link2,
   List,
   ListChecks,
   NotebookPen,
@@ -62,13 +85,15 @@ const C = {
   violet: "#9B8CE8",
 } as const;
 
-type GoalStatus = "active" | "risk" | "paused" | "completed" | "planned";
+type GoalStatus = "active" | "risk" | "paused" | "completed" | "planned" | "archived";
 type GoalPriority = "high" | "medium" | "low";
 type Goal = {
-  id: number;
+  id: string | number;
   title: string;
   category: string;
+  categoryId?: string;
   icon: LucideIcon;
+  customIcon?: string;
   color: string;
   progress: number;
   current: number;
@@ -79,7 +104,6 @@ type Goal = {
   status: GoalStatus;
   priority: GoalPriority;
   rhythm: string;
-  links: { label: string; icon: LucideIcon }[];
   nextMilestone: { title: string; progress: number; date: string; daysLeft: string };
   note: string;
 };
@@ -93,6 +117,7 @@ type FilterId =
   | "paused"
   | "completed"
   | "planned"
+  | "archived"
   | `category:${string}`;
 
 const GOALS: Goal[] = [
@@ -111,11 +136,6 @@ const GOALS: Goal[] = [
     status: "active",
     priority: "high",
     rhythm: "Kamienie milowe",
-    links: [
-      { label: "Zadania", icon: ListChecks },
-      { label: "Kalendarz", icon: CalendarDays },
-      { label: "Notatki", icon: NotebookPen },
-    ],
     nextMilestone: {
       title: "MVP — główne funkcje aplikacji",
       progress: 40,
@@ -139,10 +159,6 @@ const GOALS: Goal[] = [
     status: "active",
     priority: "high",
     rhythm: "Regularność",
-    links: [
-      { label: "Nawyki", icon: CheckCircle2 },
-      { label: "Notatki", icon: NotebookPen },
-    ],
     nextMilestone: {
       title: "60 dni bez papierosa",
       progress: 75,
@@ -166,11 +182,6 @@ const GOALS: Goal[] = [
     status: "risk",
     priority: "high",
     rhythm: "Wartość liczbowa",
-    links: [
-      { label: "Treningi", icon: Dumbbell },
-      { label: "Nawyki", icon: CheckCircle2 },
-      { label: "Notatki", icon: NotebookPen },
-    ],
     nextMilestone: {
       title: "Pełny zakres ruchu bez bólu",
       progress: 80,
@@ -194,10 +205,6 @@ const GOALS: Goal[] = [
     status: "active",
     priority: "medium",
     rhythm: "Kamienie milowe",
-    links: [
-      { label: "Nawyki", icon: CheckCircle2 },
-      { label: "Notatki", icon: NotebookPen },
-    ],
     nextMilestone: {
       title: "Swobodna rozmowa przez 30 minut",
       progress: 55,
@@ -221,11 +228,6 @@ const GOALS: Goal[] = [
     status: "active",
     priority: "medium",
     rhythm: "Wartość liczbowa",
-    links: [
-      { label: "Budżet", icon: WalletCards },
-      { label: "Płatności", icon: CalendarDays },
-      { label: "Notatki", icon: NotebookPen },
-    ],
     nextMilestone: {
       title: "Przekroczyć próg 25 000 PLN",
       progress: 73,
@@ -249,7 +251,6 @@ const GOALS: Goal[] = [
     status: "paused",
     priority: "medium",
     rhythm: "Plan treningowy",
-    links: [{ label: "Treningi", icon: Dumbbell }],
     nextMilestone: {
       title: "Długi bieg 12 km",
       progress: 60,
@@ -273,7 +274,6 @@ const GOALS: Goal[] = [
     status: "completed",
     priority: "low",
     rhythm: "Kamienie milowe",
-    links: [{ label: "Notatki", icon: NotebookPen }],
     nextMilestone: {
       title: "Certyfikat ukończenia",
       progress: 100,
@@ -297,7 +297,6 @@ const GOALS: Goal[] = [
     status: "planned",
     priority: "low",
     rhythm: "Lista kroków",
-    links: [{ label: "Zadania", icon: ListChecks }],
     nextMilestone: {
       title: "Wybrać termin i kierunek",
       progress: 0,
@@ -328,12 +327,96 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Sprawy osobiste": C.textSecond,
 };
 
+const GOAL_ICONS: Record<GoalIconKey, LucideIcon> = {
+  laptop: Laptop,
+  "no-smoking": CigaretteOff,
+  activity: Activity,
+  languages: Languages,
+  "piggy-bank": PiggyBank,
+  dumbbell: Dumbbell,
+  trophy: Trophy,
+  sparkles: Sparkles,
+  target: Target,
+};
+
+const CATEGORY_ICON_KEYS: Record<string, LucideIcon> = {
+  dumbbell: Dumbbell,
+  heart: HeartPulse,
+  briefcase: Briefcase,
+  wallet: WalletCards,
+  languages: Languages,
+  users: Users,
+  circle: Circle,
+};
+
+const PROGRESS_LABELS: Record<GoalProgressMode, string> = {
+  numeric: "Wartość liczbowa",
+  milestones: "Kamienie milowe",
+  regularity: "Regularność",
+  manual: "Postęp ręczny",
+};
+
+function formatGoalDate(date: string) {
+  return new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00`));
+}
+
+function formatDaysLeft(date: string, status: StoredGoalStatus) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${date}T00:00:00`);
+  const days = Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
+  if (status === "completed") return days < 0 ? `Ukończono ${Math.abs(days)} dni po terminie` : "Ukończono";
+  if (days === 0) return "Termin dzisiaj";
+  if (days < 0) return `${Math.abs(days)} dni po terminie`;
+  return `${days} dni zostało`;
+}
+
+function toViewGoal(goal: StoredGoal, categories: GoalCategory[]): Goal {
+  const category = categories.find((item) => item.id === goal.categoryId) ?? categories[0];
+  const nextMilestone = [...goal.milestones].filter((item) => !item.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+    ?? [...goal.milestones].sort((a, b) => b.dueDate.localeCompare(a.dueDate))[0];
+  const progress = getGoalProgress(goal);
+  const current = goal.progressMode === "milestones" ? goal.milestones.filter((item) => item.done).length : getGoalCurrentValue(goal);
+  const total = goal.progressMode === "milestones" ? goal.milestones.length : goal.progressMode === "regularity" ? getRegularityTarget(goal) : goal.targetValue;
+  return {
+    id: goal.id,
+    title: goal.title,
+    category: category?.label ?? "Bez kategorii",
+    categoryId: goal.categoryId,
+    icon: GOAL_ICONS[goal.iconKey] ?? Target,
+    customIcon: goal.customIcon,
+    color: goal.color || category?.color || C.iceBlue,
+    progress,
+    current,
+    total,
+    progressLabel: getGoalMetric(goal),
+    due: formatGoalDate(goal.dueDate),
+    daysLeft: formatDaysLeft(goal.dueDate, goal.status),
+    status: goal.status === "active" && goal.health === "risk" ? "risk" : goal.status,
+    priority: goal.priority,
+    rhythm: PROGRESS_LABELS[goal.progressMode],
+    nextMilestone: nextMilestone ? {
+      title: nextMilestone.title,
+      progress: nextMilestone.done ? 100 : progress,
+      date: formatGoalDate(nextMilestone.dueDate),
+      daysLeft: formatDaysLeft(nextMilestone.dueDate, nextMilestone.done ? "completed" : "active"),
+    } : {
+      title: "Dodaj pierwszy kamień milowy",
+      progress: 0,
+      date: formatGoalDate(goal.dueDate),
+      daysLeft: formatDaysLeft(goal.dueDate, goal.status),
+    },
+    note: goal.note,
+  };
+}
+
 const STATUS_META: Record<GoalStatus, { label: string; color: string }> = {
   active: { label: "Aktywny", color: C.seaGlass },
   risk: { label: "Zagrożony", color: C.warning },
   paused: { label: "Wstrzymany", color: C.textSecond },
   completed: { label: "Zakończony", color: C.seaGlass },
   planned: { label: "Zaplanowany", color: C.violet },
+  archived: { label: "Zarchiwizowany", color: C.textSecond },
 };
 
 const FILTER_ITEMS: { id: FilterId; label: string; icon: LucideIcon; color?: string }[] = [
@@ -344,10 +427,10 @@ const FILTER_ITEMS: { id: FilterId; label: string; icon: LucideIcon; color?: str
   { id: "planned", label: "Zaplanowane", icon: CircleDashed, color: C.violet },
 ];
 
-const countForFilter = (id: FilterId) => {
-  if (id === "all") return GOALS.length;
-  if (id === "active") return GOALS.filter((goal) => goal.status === "active" || goal.status === "risk").length;
-  return GOALS.filter((goal) => goal.status === id).length;
+const countForFilter = (id: FilterId, goals: Goal[]) => {
+  if (id === "all") return goals.filter((goal) => goal.status !== "archived").length;
+  if (id === "active") return goals.filter((goal) => goal.status === "active" || goal.status === "risk").length;
+  return goals.filter((goal) => goal.status === id).length;
 };
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -358,14 +441,25 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; onFilter: (id: FilterId) => void }) {
-  const [categories, setCategories] = useState(() => Object.keys(CATEGORY_ICONS).map((label) => ({
-    id: label.toLocaleLowerCase("pl-PL").replaceAll(" ", "-"),
-    label,
-    filterValue: label,
-    icon: CATEGORY_ICONS[label],
-    color: CATEGORY_COLORS[label],
-  })));
+function GoalSubSidebar({
+  activeFilter,
+  onFilter,
+  goals,
+  categories,
+  onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
+  onSettings,
+}: {
+  activeFilter: FilterId;
+  onFilter: (id: FilterId) => void;
+  goals: Goal[];
+  categories: GoalCategory[];
+  onCreateCategory: (draft: Omit<GoalCategory, "id">) => void;
+  onUpdateCategory: (id: string, patch: Partial<GoalCategory>) => void;
+  onDeleteCategory: (id: string) => void;
+  onSettings: () => void;
+}) {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -379,20 +473,14 @@ function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; on
   const addCategory = () => {
     const label = newCategory.trim();
     if (!label) return;
-    setCategories((current) => [...current, {
-      id: `${label.toLocaleLowerCase("pl-PL").replaceAll(" ", "-")}-${Date.now()}`,
-      label,
-      filterValue: label,
-      icon: Circle,
-      color: C.textSecond,
-    }]);
+    onCreateCategory({ label, iconKey: "circle", color: C.textSecond });
     setNewCategory("");
     setAdding(false);
   };
 
   const saveCategory = (id: string) => {
     const label = editingValue.trim();
-    if (label) setCategories((current) => current.map((category) => category.id === id ? { ...category, label } : category));
+    if (label) onUpdateCategory(id, { label });
     setEditingId(null);
     setEditingValue("");
   };
@@ -433,7 +521,7 @@ function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; on
 
         <SectionLabel>Cele</SectionLabel>
         <div className="mb-6 space-y-px">
-          {FILTER_ITEMS.map((filter) => item(filter.id, filter.label, filter.icon, countForFilter(filter.id), filter.color))}
+          {FILTER_ITEMS.map((filter) => item(filter.id, filter.label, filter.icon, countForFilter(filter.id, goals), filter.color))}
         </div>
 
         <div className="mb-2 flex items-center justify-between px-1.5">
@@ -511,8 +599,8 @@ function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; on
             )}
 
             {filteredCategories.map((category) => {
-              const Icon = category.icon;
-              const active = activeFilter === `category:${category.filterValue}`;
+              const Icon = CATEGORY_ICON_KEYS[category.iconKey] ?? Circle;
+              const active = activeFilter === `category:${category.id}`;
               return (
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg" style={{ background: active ? C.iceBlueBg : "transparent" }}>
                   {editingId === category.id ? (
@@ -531,7 +619,7 @@ function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; on
                   ) : (
                     <button
                       type="button"
-                      onClick={() => onFilter(`category:${category.filterValue}`)}
+                      onClick={() => onFilter(`category:${category.id}`)}
                       className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 text-left"
                       style={{ color: active ? C.iceBlue : C.textMuted, borderLeft: `2px solid ${active ? C.iceBlue : "transparent"}` }}
                     >
@@ -551,16 +639,16 @@ function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; on
                       >
                         <Pencil size={11} strokeWidth={1.7} />
                       </button>
-                      <button
-                        type="button"
-                        aria-label={`Usuń kategorię ${category.label}`}
-                        title="Usuń"
-                        onClick={() => { setCategories((current) => current.filter((item) => item.id !== category.id)); if (active) onFilter("overview"); }}
-                        className="flex h-6 w-6 items-center justify-center rounded-md"
-                        style={{ color: C.danger }}
-                      >
-                        <Trash2 size={11} strokeWidth={1.7} />
-                      </button>
+                      {category.id !== "personal" && <button
+                          type="button"
+                          aria-label={`Usuń kategorię ${category.label}`}
+                          title="Usuń"
+                          onClick={() => onDeleteCategory(category.id)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md"
+                          style={{ color: C.danger }}
+                        >
+                          <Trash2 size={11} strokeWidth={1.7} />
+                        </button>}
                     </div>
                   )}
                 </div>
@@ -573,15 +661,15 @@ function GoalSubSidebar({ activeFilter, onFilter }: { activeFilter: FilterId; on
       <div className="border-t px-2.5 pb-4 pt-4" style={{ borderColor: C.borderSubtle, background: C.subSidebar }}>
         <SectionLabel>Zarządzanie</SectionLabel>
         <div className="space-y-px">
-          <button type="button" className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2" style={{ color: C.textMuted }}>
+          <button type="button" onClick={() => setCategoriesOpen(true)} className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2" style={{ color: C.textMuted }}>
             <FolderCog size={13} strokeWidth={1.7} />
             <span className="text-[12px]">Kategorie</span>
           </button>
-          <button type="button" className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2" style={{ color: C.textMuted }}>
+          <button type="button" onClick={() => onFilter("archived")} className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2" style={{ color: activeFilter === "archived" ? C.iceBlue : C.textMuted, background: activeFilter === "archived" ? C.iceBlueBg : "transparent" }}>
             <Archive size={13} strokeWidth={1.7} />
             <span className="text-[12px]">Archiwum</span>
           </button>
-          <button type="button" className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2" style={{ color: C.textMuted }}>
+          <button type="button" onClick={onSettings} className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2" style={{ color: C.textMuted }}>
             <Settings2 size={13} strokeWidth={1.7} />
             <span className="text-[12px]">Ustawienia</span>
           </button>
@@ -595,16 +683,40 @@ function StatusPill({ status }: { status: GoalStatus }) {
   const meta = STATUS_META[status];
   return (
     <span
-      className="inline-flex h-[30px] items-center gap-1 rounded-lg border px-3 text-[11px] font-medium"
+      className="inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[10px] font-medium"
       style={{ color: meta.color, borderColor: `${meta.color}38`, background: `${meta.color}0B` }}
     >
       {meta.label}
-      <ChevronDown size={11} strokeWidth={1.7} />
+      <ChevronDown size={10} strokeWidth={1.7} />
     </span>
   );
 }
 
-function GoalCard({ goal, selected, grid, onSelect }: { goal: Goal; selected: boolean; grid: boolean; onSelect: () => void }) {
+function GoalCard({
+  goal,
+  selected,
+  grid,
+  onSelect,
+  onEdit,
+  onProgress,
+  onDuplicate,
+  onDelete,
+  onOpen,
+  onStatus,
+}: {
+  goal: Goal;
+  selected: boolean;
+  grid: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onProgress: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onOpen: () => void;
+  onStatus: (status: GoalStatus) => void;
+}) {
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
   const statusColor = STATUS_META[goal.status].color;
@@ -629,27 +741,27 @@ function GoalCard({ goal, selected, grid, onSelect }: { goal: Goal; selected: bo
       }}
     >
       <div className="goal-card-layout grid items-start gap-x-5 gap-y-3 px-[18px] py-[17px]">
-        <div className="goal-card-primary flex min-w-0 gap-4">
+        <div className="goal-card-primary flex min-w-0 items-center gap-3.5">
           <div
-            className="flex h-[54px] w-[54px] flex-shrink-0 items-center justify-center rounded-xl border"
+            className="flex h-[50px] w-[50px] flex-shrink-0 items-center justify-center rounded-xl border"
             style={{ color: goal.color, background: `${goal.color}16`, borderColor: `${goal.color}24` }}
           >
-            <Icon size={24} strokeWidth={1.55} />
+            {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-7 w-7 object-contain" /> : <Icon size={21} strokeWidth={1.55} />}
           </div>
-          <div className="min-w-0 flex-1 pt-0.5">
-            <h3 className="truncate text-[15px] font-semibold leading-5" style={{ color: C.textPrimary }}>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-[14px] font-semibold leading-5" style={{ color: C.textPrimary }}>
               {goal.title}
             </h3>
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[10px]" style={{ color: C.textMuted }}>
+            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[9px]" style={{ color: C.textMuted }}>
               <span className="flex items-center gap-1 font-medium" style={{ color: goal.color }}>
-                <CategoryIcon size={10} strokeWidth={1.7} /> {goal.category}
+                <CategoryIcon size={9} strokeWidth={1.7} /> {goal.category}
               </span>
               <span>•</span>
               <span>{goal.rhythm}</span>
               <span>•</span>
               <span>{goal.progressLabel}</span>
             </div>
-            <div className="mt-3.5 flex items-center gap-3">
+            <div className="mt-3 flex items-center gap-3">
               <div className="h-[5px] flex-1 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
                 <div
                   className="h-full rounded-full transition-all duration-500"
@@ -660,37 +772,51 @@ function GoalCard({ goal, selected, grid, onSelect }: { goal: Goal; selected: bo
                 {goal.progress}%
               </span>
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-              {goal.links.map(({ label, icon: LinkIcon }) => (
-                <span key={label} className="flex items-center gap-1 text-[10px]" style={{ color: C.textMuted }}>
-                  <LinkIcon size={10} strokeWidth={1.7} /> {label}
-                </span>
-              ))}
-            </div>
           </div>
         </div>
 
-        <div className="goal-card-date flex gap-2 pt-1">
-          <CalendarDays size={14} strokeWidth={1.6} style={{ color: goal.status === "risk" ? C.warning : C.textSecond }} />
+        <div className="goal-card-date flex items-start gap-2">
+          <CalendarDays className="mt-0.5" size={14} strokeWidth={1.6} style={{ color: goal.status === "risk" ? C.warning : C.textSecond }} />
           <div>
             <p className="text-[11px] font-medium" style={{ color: goal.status === "risk" ? C.warning : C.textPrimary }}>{goal.due}</p>
             <p className="mt-1 text-[10px]" style={{ color: C.textMuted }}>{goal.daysLeft}</p>
           </div>
         </div>
 
-        <div className="goal-card-status" onClick={(event) => event.stopPropagation()}>
-          <StatusPill status={goal.status} />
+        <div className="goal-card-status relative self-center" onClick={(event) => event.stopPropagation()}>
+          <button type="button" onClick={() => { setStatusOpen((open) => !open); setMenuOpen(false); }}><StatusPill status={goal.status} /></button>
+          {statusOpen && (
+            <div className="absolute right-0 top-9 z-30 w-40 overflow-hidden rounded-xl border py-1 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
+              {(["active", "paused", "completed", "planned", "archived"] as GoalStatus[]).map((status) => (
+                <button key={status} type="button" onClick={() => { onStatus(status); setStatusOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: STATUS_META[status].color }}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_META[status].color }} />{STATUS_META[status].label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={(event) => event.stopPropagation()}
-          aria-label={`Więcej opcji dla celu ${goal.title}`}
-          className="goal-card-more flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors"
-          style={{ color: C.textMuted }}
-        >
-          <Ellipsis size={17} strokeWidth={1.8} />
-        </button>
+        <div className="goal-card-more relative self-center" onClick={(event) => event.stopPropagation()}>
+          <button type="button" onClick={() => { setMenuOpen((open) => !open); setStatusOpen(false); }} aria-label={`Więcej opcji dla celu ${goal.title}`} className="flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors" style={{ color: C.textMuted }}>
+            <Ellipsis size={17} strokeWidth={1.8} />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-9 z-30 w-44 overflow-hidden rounded-xl border py-1 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
+              {[
+                { label: "Dodaj postęp", icon: BarChart3, action: onProgress },
+                { label: "Edytuj cel", icon: Pencil, action: onEdit },
+                { label: "Otwórz pełny widok", icon: Target, action: onOpen },
+                { label: "Duplikuj", icon: Plus, action: onDuplicate },
+                { label: goal.status === "archived" ? "Przywróć" : "Archiwizuj", icon: Archive, action: () => onStatus(goal.status === "archived" ? "active" : "archived") },
+                { label: "Usuń", icon: Trash2, action: onDelete, danger: true },
+              ].map(({ label, icon: MenuIcon, action, danger }) => (
+                <button key={label} type="button" onClick={() => { action(); setMenuOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: danger ? C.danger : C.textSecond }}>
+                  <MenuIcon size={12} strokeWidth={1.7} />{label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="pointer-events-none h-px opacity-0 transition-opacity group-hover:opacity-100" style={{ background: `linear-gradient(90deg, transparent, ${statusColor}40, transparent)` }} />
     </article>
@@ -706,25 +832,25 @@ function PanelSection({ title, children }: { title: string; children: React.Reac
   );
 }
 
-function SummaryPanel({ onFilter }: { onFilter: (filter: FilterId) => void }) {
-  const activeGoals = GOALS.filter((goal) => goal.status === "active" || goal.status === "risk");
+function SummaryPanel({ goals, onFilter, onSelectGoal }: { goals: Goal[]; onFilter: (filter: FilterId) => void; onSelectGoal: (id: string) => void }) {
+  const activeGoals = goals.filter((goal) => goal.status === "active" || goal.status === "risk");
   const onTrack = activeGoals.filter((goal) => goal.status === "active").length;
   const atRisk = activeGoals.filter((goal) => goal.status === "risk").length;
-  const upcoming = [...activeGoals].sort((a, b) => a.id - b.id).slice(0, 3);
-  const averageProgress = Math.round(activeGoals.reduce((sum, goal) => sum + goal.progress, 0) / activeGoals.length);
+  const upcoming = activeGoals.slice(0, 3);
+  const averageProgress = activeGoals.length ? Math.round(activeGoals.reduce((sum, goal) => sum + goal.progress, 0) / activeGoals.length) : 0;
 
   const stats = [
-    { label: "Aktywne cele", note: "W realizacji", value: activeGoals.length, icon: Target, color: C.seaGlass },
-    { label: "Na dobrej drodze", note: "Realizowane zgodnie z planem", value: onTrack, icon: CheckCircle2, color: C.iceBlue },
-    { label: "Zagrożone", note: "Wymagają uwagi", value: atRisk, icon: CircleAlert, color: C.warning },
+    { label: "Aktywne cele", note: "W realizacji", value: activeGoals.length, icon: Target, color: C.seaGlass, filter: "active" as FilterId },
+    { label: "Na dobrej drodze", note: "Realizowane zgodnie z planem", value: onTrack, icon: CheckCircle2, color: C.iceBlue, filter: "ontrack" as FilterId },
+    { label: "Zagrożone", note: "Wymagają uwagi", value: atRisk, icon: CircleAlert, color: C.warning, filter: "risk" as FilterId },
   ];
 
   return (
     <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6 pt-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <PanelSection title="Podsumowanie">
         <div className="space-y-2">
-          {stats.map(({ label, note, value, icon: Icon, color }) => (
-            <div key={label} className="flex items-center gap-3.5 rounded-xl border px-3.5 py-3.5" style={{ background: C.panel, borderColor: C.borderSubtle }}>
+          {stats.map(({ label, note, value, icon: Icon, color, filter }) => (
+            <button type="button" onClick={() => onFilter(filter)} key={label} className="flex w-full items-center gap-3.5 rounded-xl border px-3.5 py-3.5 text-left" style={{ background: C.panel, borderColor: C.borderSubtle }}>
               <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: `${color}16`, color }}>
                 <Icon size={19} strokeWidth={1.7} />
               </div>
@@ -733,7 +859,7 @@ function SummaryPanel({ onFilter }: { onFilter: (filter: FilterId) => void }) {
                 <p className="mt-0.5 truncate text-[10px]" style={{ color: C.textMuted }}>{note}</p>
               </div>
               <span className="text-[20px] font-medium" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace" }}>{value}</span>
-            </div>
+            </button>
           ))}
         </div>
       </PanelSection>
@@ -756,7 +882,7 @@ function SummaryPanel({ onFilter }: { onFilter: (filter: FilterId) => void }) {
             <button
               key={goal.id}
               type="button"
-              onClick={() => onFilter(`category:${goal.category}`)}
+              onClick={() => onSelectGoal(String(goal.id))}
               className="flex w-full gap-2.5 py-3 text-left"
               style={{ borderBottom: index < upcoming.length - 1 ? `1px solid ${C.borderSubtle}` : "none" }}
             >
@@ -777,9 +903,9 @@ function SummaryPanel({ onFilter }: { onFilter: (filter: FilterId) => void }) {
   );
 }
 
-function DetailRow({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {
+function DetailRow({ icon: Icon, label, children, onClick }: { icon: LucideIcon; label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
-    <div className="flex min-h-10 items-center gap-2.5 border-b py-3 last:border-b-0" style={{ borderColor: C.borderSubtle }}>
+    <div onClick={onClick} onKeyDown={(event) => { if (onClick && (event.key === "Enter" || event.key === " ")) onClick(); }} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} className="flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0" style={{ borderColor: C.borderSubtle, cursor: onClick ? "pointer" : "default" }}>
       <Icon size={13} strokeWidth={1.6} style={{ color: C.textMuted }} />
       <span className="flex-1 text-[11px]" style={{ color: C.textMuted }}>{label}</span>
       <div className="flex items-center gap-1.5 text-right text-[11px]" style={{ color: C.textSecond }}>{children}</div>
@@ -788,11 +914,40 @@ function DetailRow({ icon: Icon, label, children }: { icon: LucideIcon; label: s
   );
 }
 
-function GoalDetail({ goal, note, onNoteChange, onClose }: { goal: Goal; note: string; onNoteChange: (value: string) => void; onClose: () => void }) {
+function GoalDetail({
+  goal,
+  rawGoal,
+  note,
+  onNoteChange,
+  onClose,
+  onEdit,
+  onProgress,
+  onStatus,
+  onAddMilestone,
+  onToggleMilestone,
+  onOpen,
+}: {
+  goal: Goal;
+  rawGoal: StoredGoal;
+  note: string;
+  onNoteChange: (value: string) => void;
+  onClose: () => void;
+  onEdit: () => void;
+  onProgress: () => void;
+  onStatus: (status: StoredGoalStatus) => void;
+  onAddMilestone: () => void;
+  onToggleMilestone: (id: string, done: boolean) => void;
+  onOpen: () => void;
+}) {
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
   const status = STATUS_META[goal.status];
   const priority = goal.priority === "high" ? { label: "Wysoki", color: C.danger } : goal.priority === "medium" ? { label: "Średni", color: C.warning } : { label: "Niski", color: C.iceBlue };
+  const measurementLabel = rawGoal.progressMode === "milestones"
+    ? "Kamienie milowe"
+    : rawGoal.progressMode === "regularity"
+      ? rawGoal.regularityMode === "frequency" ? "Wykonania" : "Dni serii"
+      : rawGoal.progressMode === "manual" ? "Postęp" : "Wartość";
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -804,18 +959,18 @@ function GoalDetail({ goal, note, onNoteChange, onClose }: { goal: Goal; note: s
         </div>
 
         <div className="flex items-start gap-3">
-          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: goal.color, background: `${goal.color}16`, borderColor: `${goal.color}25` }}>
-            <Icon size={25} strokeWidth={1.55} />
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: goal.color, background: `${goal.color}16`, borderColor: `${goal.color}25` }}>
+            {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={19} strokeWidth={1.55} />}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[15px] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
+            <h2 className="text-[14px] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
             <p className="mt-1.5 flex items-center gap-1 text-[10px]" style={{ color: goal.color }}>
               <CategoryIcon size={10} /> {goal.category}
               <span style={{ color: C.textDisabled }}>•</span>
               <span style={{ color: C.textMuted }}>{goal.rhythm}</span>
             </p>
           </div>
-          <StatusPill status={goal.status} />
+          <div className="w-[106px]"><ThemedSelect compact value={rawGoal.status} onChange={(value) => onStatus(value as StoredGoalStatus)} options={[{ value: "planned", label: "Zaplanowany" }, { value: "active", label: "Aktywny" }, { value: "paused", label: "Wstrzymany" }, { value: "completed", label: "Zakończony" }, { value: "archived", label: "Archiwum" }]} ariaLabel="Status celu" /></div>
         </div>
 
         <div className="my-5 border-y py-4" style={{ borderColor: C.borderSubtle }}>
@@ -826,57 +981,53 @@ function GoalDetail({ goal, note, onNoteChange, onClose }: { goal: Goal; note: s
           <div className="h-2 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
             <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: goal.status === "risk" ? C.warning : goal.color }} />
           </div>
+          <button type="button" onClick={onProgress} className="mt-3 flex items-center gap-1.5 text-[10px] font-medium" style={{ color: C.iceBlue }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj kamień milowy" : "Dodaj aktualizację postępu"}</button>
         </div>
 
         <div className="mb-5">
-          <DetailRow icon={CalendarDays} label="Termin">
+          <DetailRow icon={CalendarDays} label="Termin" onClick={onEdit}>
             <span style={{ color: goal.status === "risk" ? C.warning : C.textPrimary }}>{goal.due}</span>
           </DetailRow>
-          <DetailRow icon={Flag} label="Priorytet">
+          <DetailRow icon={Flag} label="Priorytet" onClick={onEdit}>
             <Flag size={10} fill={`${priority.color}38`} style={{ color: priority.color }} />
             <span style={{ color: priority.color }}>{priority.label}</span>
           </DetailRow>
-          <DetailRow icon={Target} label="Kategoria">
+          <DetailRow icon={Target} label="Kategoria" onClick={onEdit}>
             <span style={{ color: goal.color }}>{goal.category}</span>
           </DetailRow>
-          <DetailRow icon={BarChart3} label="Postęp liczbowy">
+          <DetailRow icon={BarChart3} label={measurementLabel} onClick={onProgress}>
             <span style={{ color: goal.color }}>{goal.progress}%</span>
-          </DetailRow>
-          <DetailRow icon={Link2} label="Powiązane moduły">
-            <div className="flex -space-x-1">
-              {goal.links.slice(0, 3).map(({ label, icon: LinkIcon }) => (
-                <span key={label} title={label} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: C.inputBg, borderColor: C.borderStrong, color: goal.color }}>
-                  <LinkIcon size={12} strokeWidth={1.7} />
-                </span>
-              ))}
-            </div>
           </DetailRow>
         </div>
 
-        <PanelSection title="Najbliższy kamień milowy">
-          <div className="rounded-xl border p-3" style={{ background: C.panel, borderColor: C.borderSubtle }}>
-            <div className="flex items-start gap-2.5">
-              <div className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full border" style={{ borderColor: C.textMuted }} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-[11px] font-medium leading-4" style={{ color: C.textPrimary }}>{goal.nextMilestone.title}</p>
-                  <span className="text-[11px]" style={{ color: goal.color, fontFamily: "'DM Mono', monospace" }}>{goal.nextMilestone.progress}%</span>
+        {rawGoal.progressMode === "milestones" && <>
+          <PanelSection title="Najbliższy kamień milowy">
+            <button type="button" onClick={() => {
+              const next = [...rawGoal.milestones].filter((item) => !item.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+              if (next) onToggleMilestone(next.id, true); else onAddMilestone();
+            }} className="w-full rounded-xl border p-3 text-left" style={{ background: C.panel, borderColor: C.borderSubtle }}>
+              <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full border" style={{ borderColor: C.textMuted }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[11px] font-medium leading-4" style={{ color: C.textPrimary }}>{goal.nextMilestone.title}</p>
+                    <span className="text-[11px]" style={{ color: goal.color, fontFamily: "'DM Mono', monospace" }}>{goal.nextMilestone.progress}%</span>
+                  </div>
+                  <p className="mt-1 text-[9px]" style={{ color: C.textMuted }}>Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
                 </div>
-                <p className="mt-1 text-[9px]" style={{ color: C.textMuted }}>Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
               </div>
-            </div>
-          </div>
-        </PanelSection>
-
-        <div className="my-5 border-t" style={{ borderColor: C.borderSubtle }} />
+            </button>
+          </PanelSection>
+          <div className="my-5 border-t" style={{ borderColor: C.borderSubtle }} />
+        </>}
 
         <PanelSection title="Statystyki">
           <div className="grid grid-cols-2 gap-2">
             {[
-              { value: `${goal.current} / ${goal.total}`, label: "Kamienie milowe", color: C.textPrimary },
+              { value: `${goal.current} / ${goal.total}`, label: measurementLabel, color: C.textPrimary },
               { value: `${goal.progress}%`, label: "Ogólny postęp", color: goal.color },
               { value: goal.status === "risk" ? "Uwaga" : "Na planie", label: "Status planu", color: status.color },
-              { value: String(Math.max(1, goal.links.length - 1)), label: "Powiązane nawyki", color: C.textPrimary },
+              { value: goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski", label: "Priorytet", color: priority.color },
             ].map((stat) => (
               <div key={stat.label} className="rounded-lg border p-2.5" style={{ background: C.panel, borderColor: C.borderSubtle }}>
                 <p className="text-[14px] font-medium" style={{ color: stat.color, fontFamily: "'DM Mono', monospace" }}>{stat.value}</p>
@@ -900,7 +1051,7 @@ function GoalDetail({ goal, note, onNoteChange, onClose }: { goal: Goal; note: s
       </div>
 
       <div className="border-t p-4" style={{ borderColor: C.borderSubtle, background: C.subSidebar }}>
-        <button type="button" className="w-full rounded-lg py-3.5 text-[11px] font-semibold" style={{ color: "#BFCBFF", background: C.iceBlueBg, border: `1px solid rgba(71,114,250,0.18)` }}>
+        <button type="button" onClick={onOpen} className="w-full rounded-lg py-3.5 text-[11px] font-semibold" style={{ color: "#BFCBFF", background: C.iceBlueBg, border: `1px solid rgba(71,114,250,0.18)` }}>
           Otwórz pełny widok celu
         </button>
       </div>
@@ -909,30 +1060,105 @@ function GoalDetail({ goal, note, onNoteChange, onClose }: { goal: Goal; note: s
 }
 
 export default function Cele() {
+  const navigate = useNavigate();
+  const {
+    goals: storedGoals,
+    categories,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+    restoreGoal,
+    duplicateGoal,
+    addProgress,
+    addMilestone,
+    updateMilestone,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    exportStore,
+    importStore,
+  } = useGoalsStore();
   const [activeFilter, setActiveFilter] = useState<FilterId>("overview");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [layout, setLayout] = useState<"list" | "grid">("list");
-  const [notes, setNotes] = useState<Record<number, string>>(() => Object.fromEntries(GOALS.map((goal) => [goal.id, goal.note])));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [layout, setLayout] = useState<"list" | "grid">(() => localStorage.getItem("routine.goals.layout") === "grid" ? "grid" : "list");
+  const [sortKey, setSortKey] = useState<"priority" | "due" | "progress" | "updated" | "name">(() => {
+    const saved = localStorage.getItem("routine.goals.sort");
+    return saved === "due" || saved === "progress" || saved === "updated" || saved === "name" ? saved : "priority";
+  });
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [goalFormId, setGoalFormId] = useState<"new" | string | null>(null);
+  const [progressGoalId, setProgressGoalId] = useState<string | null>(null);
+  const [milestoneGoalId, setMilestoneGoalId] = useState<string | null>(null);
+  const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [deletedGoal, setDeletedGoal] = useState<StoredGoal | null>(null);
+  const goals = useMemo(() => storedGoals.map((goal) => toViewGoal(goal, categories)), [storedGoals, categories]);
+
+  useEffect(() => { localStorage.setItem("routine.goals.layout", layout); }, [layout]);
+  useEffect(() => { localStorage.setItem("routine.goals.sort", sortKey); }, [sortKey]);
 
   const visibleGoals = useMemo(() => {
+    let result: Goal[];
     if (activeFilter === "overview" || activeFilter === "active") {
-      return GOALS.filter((goal) => goal.status === "active" || goal.status === "risk");
-    }
-    if (activeFilter === "all") return GOALS;
-    if (activeFilter === "ontrack") return GOALS.filter((goal) => goal.status === "active");
-    if (activeFilter.startsWith("category:")) {
-      return GOALS.filter((goal) => goal.category === activeFilter.slice("category:".length));
-    }
-    return GOALS.filter((goal) => goal.status === activeFilter);
-  }, [activeFilter]);
+      result = goals.filter((goal) => goal.status === "active" || goal.status === "risk");
+    } else if (activeFilter === "all") result = goals.filter((goal) => goal.status !== "archived");
+    else if (activeFilter === "ontrack") result = goals.filter((goal) => goal.status === "active");
+    else if (activeFilter.startsWith("category:")) result = goals.filter((goal) => goal.categoryId === activeFilter.slice("category:".length) && goal.status !== "archived");
+    else result = goals.filter((goal) => goal.status === activeFilter);
 
-  const selectedGoal = GOALS.find((goal) => goal.id === selectedId) ?? null;
+    const priorityOrder: Record<GoalPriority, number> = { high: 0, medium: 1, low: 2 };
+    return [...result].sort((a, b) => {
+      const rawA = storedGoals.find((goal) => goal.id === String(a.id));
+      const rawB = storedGoals.find((goal) => goal.id === String(b.id));
+      if (sortKey === "name") return a.title.localeCompare(b.title, "pl");
+      if (sortKey === "progress") return b.progress - a.progress;
+      if (sortKey === "due") return (rawA?.dueDate ?? "").localeCompare(rawB?.dueDate ?? "");
+      if (sortKey === "updated") return (rawB?.updatedAt ?? "").localeCompare(rawA?.updatedAt ?? "");
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    });
+  }, [activeFilter, goals, sortKey, storedGoals]);
+
+  const selectedGoal = goals.find((goal) => goal.id === selectedId) ?? null;
   const priorityGoals = visibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk");
   const remainingGoals = visibleGoals.filter((goal) => !priorityGoals.includes(goal));
 
   const handleFilter = (filter: FilterId) => {
     setActiveFilter(filter);
     setSelectedId(null);
+  };
+
+  const openProgressFor = (goalId: string) => {
+    const goal = storedGoals.find((item) => item.id === goalId);
+    if (goal?.progressMode === "milestones") setMilestoneGoalId(goalId);
+    else setProgressGoalId(goalId);
+  };
+
+  const changeStatus = (goalId: string, status: GoalStatus) => {
+    if (status === "risk") updateGoal(goalId, { status: "active", health: "risk" });
+    else updateGoal(goalId, { status: status as StoredGoalStatus, ...(status === "active" ? { health: "ontrack" as const } : {}) });
+  };
+
+  const submitGoal = (data: GoalEditorData) => {
+    if (goalFormId === "new") {
+      const draft: GoalDraft = { ...data, initialValue: 0, milestones: [], progressEntries: [] };
+      const id = createGoal(draft);
+      setSelectedId(id);
+    } else if (goalFormId) updateGoal(goalFormId, data);
+    setGoalFormId(null);
+  };
+
+  const exportGoals = () => {
+    const blob = new Blob([exportStore()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `routine-cele-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setHeaderMenuOpen(false);
   };
 
   const filterLabel = activeFilter === "overview" || activeFilter === "active"
@@ -943,13 +1169,24 @@ export default function Cele() {
         ? "Na dobrej drodze"
         : activeFilter === "risk"
           ? "Zagrożone"
-      : activeFilter.startsWith("category:")
-          ? activeFilter.slice("category:".length)
+      : activeFilter === "archived"
+        ? "Archiwum"
+        : activeFilter.startsWith("category:")
+          ? categories.find((category) => category.id === activeFilter.slice("category:".length))?.label ?? "Kategoria"
           : FILTER_ITEMS.find((item) => item.id === activeFilter)?.label ?? "Cele";
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 overflow-hidden" style={{ background: C.bg }}>
-      <GoalSubSidebar activeFilter={activeFilter} onFilter={handleFilter} />
+      <GoalSubSidebar
+        activeFilter={activeFilter}
+        onFilter={handleFilter}
+        goals={goals}
+        categories={categories}
+        onCreateCategory={createCategory}
+        onUpdateCategory={updateCategory}
+        onDeleteCategory={setDeleteCategoryId}
+        onSettings={() => setSettingsOpen(true)}
+      />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex min-h-[82px] items-center justify-between gap-4 border-b px-7 py-4" style={{ borderColor: C.borderSubtle }}>
@@ -958,25 +1195,32 @@ export default function Cele() {
             <p className="mt-1 text-[11px]" style={{ color: C.textMuted }}>Przegląd Twoich celów i postępów</p>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="flex h-10 items-center gap-1.5 rounded-lg px-4 text-[12px] font-semibold" style={{ color: "white", background: C.iceBlue, boxShadow: "0 6px 18px rgba(71,114,250,0.22)" }}>
+            <button type="button" onClick={() => setGoalFormId("new")} className="flex h-10 items-center gap-1.5 rounded-lg px-4 text-[12px] font-semibold" style={{ color: "white", background: C.iceBlue, boxShadow: "0 6px 18px rgba(71,114,250,0.22)" }}>
               <Plus size={15} strokeWidth={2} /> Nowy cel
             </button>
-            <button type="button" aria-label="Więcej opcji" className="flex h-10 w-10 items-center justify-center rounded-lg border" style={{ color: C.textSecond, borderColor: C.borderSubtle, background: C.inputBg }}>
-              <Ellipsis size={17} />
-            </button>
+            <div className="relative">
+              <button type="button" onClick={() => setHeaderMenuOpen((open) => !open)} aria-label="Więcej opcji" className="flex h-10 w-10 items-center justify-center rounded-lg border" style={{ color: C.textSecond, borderColor: C.borderSubtle, background: C.inputBg }}><Ellipsis size={17} /></button>
+              {headerMenuOpen && <div className="absolute right-0 top-12 z-40 w-48 overflow-hidden rounded-xl border py-1 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
+                <label className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: C.textSecond }}><Archive size={12} />Importuj dane<input type="file" accept="application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) file.text().then((raw) => importStore(raw)); setHeaderMenuOpen(false); }} /></label>
+                <button type="button" onClick={exportGoals} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: C.textSecond }}><NotebookPen size={12} />Eksportuj dane</button>
+                <button type="button" onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: C.textSecond }}><Archive size={12} />Otwórz archiwum</button>
+              </div>}
+            </div>
           </div>
         </header>
 
         <div className="flex min-h-[70px] items-center justify-between gap-3 border-b px-7 py-3" style={{ borderColor: C.borderSubtle }}>
-          <button type="button" className="flex h-9 items-center gap-2 rounded-lg border px-3.5 text-[11px]" style={{ color: C.textSecond, borderColor: C.borderSubtle, background: C.inputBg }}>
-            <span className="h-2 w-2 rounded-full border" style={{ borderColor: C.seaGlass }} />
-            {filterLabel}
-            <ChevronDown size={11} strokeWidth={1.7} />
-          </button>
+          <div className="relative">
+            <button type="button" onClick={() => setFilterMenuOpen((open) => !open)} className="flex h-9 items-center gap-2 rounded-lg border px-3.5 text-[11px]" style={{ color: C.textSecond, borderColor: C.borderSubtle, background: C.inputBg }}><span className="h-2 w-2 rounded-full border" style={{ borderColor: C.seaGlass }} />{filterLabel}<ChevronDown size={11} strokeWidth={1.7} /></button>
+            {filterMenuOpen && <div className="absolute left-0 top-11 z-40 w-48 overflow-hidden rounded-xl border py-1 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
+              {[{ id: "all" as FilterId, label: "Wszystkie cele" }, { id: "active" as FilterId, label: "Aktywne" }, { id: "ontrack" as FilterId, label: "Na dobrej drodze" }, { id: "risk" as FilterId, label: "Zagrożone" }, { id: "paused" as FilterId, label: "Wstrzymane" }, { id: "completed" as FilterId, label: "Zakończone" }, { id: "planned" as FilterId, label: "Zaplanowane" }].map((option) => <button key={option.id} type="button" onClick={() => { handleFilter(option.id); setFilterMenuOpen(false); }} className="flex w-full items-center justify-between px-3 py-2.5 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: activeFilter === option.id ? C.iceBlue : C.textSecond }}>{option.label}{activeFilter === option.id && <Check size={11} />}</button>)}
+            </div>}
+          </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="goals-sort flex h-9 items-center gap-1.5 rounded-lg border px-3.5 text-[11px]" style={{ color: C.textSecond, borderColor: C.borderSubtle, background: C.inputBg }}>
-              Sortuj: <span style={{ color: C.textPrimary }}>Priorytet</span> <ChevronDown size={11} />
-            </button>
+            <div className="relative goals-sort">
+              <button type="button" onClick={() => setSortMenuOpen((open) => !open)} className="flex h-9 items-center gap-1.5 rounded-lg border px-3.5 text-[11px]" style={{ color: C.textSecond, borderColor: C.borderSubtle, background: C.inputBg }}>Sortuj: <span style={{ color: C.textPrimary }}>{({ priority: "Priorytet", due: "Termin", progress: "Postęp", updated: "Ostatnia zmiana", name: "Nazwa" } as const)[sortKey]}</span> <ChevronDown size={11} /></button>
+              {sortMenuOpen && <div className="absolute right-0 top-11 z-40 w-44 overflow-hidden rounded-xl border py-1 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <button key={option.id} type="button" onClick={() => { setSortKey(option.id); setSortMenuOpen(false); }} className="flex w-full items-center justify-between px-3 py-2.5 text-left text-[10px] hover:bg-white/[0.04]" style={{ color: sortKey === option.id ? C.iceBlue : C.textSecond }}>{option.label}{sortKey === option.id && <Check size={11} />}</button>)}</div>}
+            </div>
             <div className="flex overflow-hidden rounded-lg border" style={{ borderColor: C.borderSubtle, background: C.inputBg }}>
               <button type="button" onClick={() => setLayout("list")} aria-label="Widok listy" className="flex h-9 w-10 items-center justify-center border-r" style={{ color: layout === "list" ? C.iceBlue : C.textMuted, background: layout === "list" ? C.iceBlueBg : "transparent", borderColor: C.borderSubtle }}>
                 <List size={15} strokeWidth={1.8} />
@@ -1001,7 +1245,19 @@ export default function Cele() {
                   <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.textMuted }}>Priorytetowe</p>
                   <div className={layout === "grid" ? "goals-card-grid grid grid-cols-2 gap-3" : "space-y-3"}>
                     {priorityGoals.map((goal) => (
-                      <GoalCard key={goal.id} goal={goal} selected={selectedId === goal.id} grid={layout === "grid"} onSelect={() => setSelectedId(selectedId === goal.id ? null : goal.id)} />
+                      <GoalCard
+                        key={goal.id}
+                        goal={goal}
+                        selected={selectedId === goal.id}
+                        grid={layout === "grid"}
+                        onSelect={() => setSelectedId(selectedId === goal.id ? null : String(goal.id))}
+                        onEdit={() => setGoalFormId(String(goal.id))}
+                        onProgress={() => openProgressFor(String(goal.id))}
+                        onDuplicate={() => duplicateGoal(String(goal.id))}
+                        onDelete={() => setDeleteGoalId(String(goal.id))}
+                        onOpen={() => navigate(`/cele/${goal.id}`)}
+                        onStatus={(status) => changeStatus(String(goal.id), status)}
+                      />
                     ))}
                   </div>
                 </section>
@@ -1014,7 +1270,19 @@ export default function Cele() {
                   </p>
                   <div className={layout === "grid" ? "goals-card-grid grid grid-cols-2 gap-3" : "space-y-3"}>
                     {remainingGoals.map((goal) => (
-                      <GoalCard key={goal.id} goal={goal} selected={selectedId === goal.id} grid={layout === "grid"} onSelect={() => setSelectedId(selectedId === goal.id ? null : goal.id)} />
+                      <GoalCard
+                        key={goal.id}
+                        goal={goal}
+                        selected={selectedId === goal.id}
+                        grid={layout === "grid"}
+                        onSelect={() => setSelectedId(selectedId === goal.id ? null : String(goal.id))}
+                        onEdit={() => setGoalFormId(String(goal.id))}
+                        onProgress={() => openProgressFor(String(goal.id))}
+                        onDuplicate={() => duplicateGoal(String(goal.id))}
+                        onDelete={() => setDeleteGoalId(String(goal.id))}
+                        onOpen={() => navigate(`/cele/${goal.id}`)}
+                        onStatus={(status) => changeStatus(String(goal.id), status)}
+                      />
                     ))}
                   </div>
                 </section>
@@ -1031,14 +1299,90 @@ export default function Cele() {
         {selectedGoal ? (
           <GoalDetail
             goal={selectedGoal}
-            note={notes[selectedGoal.id]}
-            onNoteChange={(value) => setNotes((current) => ({ ...current, [selectedGoal.id]: value }))}
+            rawGoal={storedGoals.find((goal) => goal.id === String(selectedGoal.id))!}
+            note={selectedGoal.note}
+            onNoteChange={(value) => updateGoal(String(selectedGoal.id), { note: value })}
             onClose={() => setSelectedId(null)}
+            onEdit={() => setGoalFormId(String(selectedGoal.id))}
+            onProgress={() => openProgressFor(String(selectedGoal.id))}
+            onStatus={(status) => updateGoal(String(selectedGoal.id), { status, ...(status === "active" ? { health: "ontrack" as const } : {}) })}
+            onAddMilestone={() => setMilestoneGoalId(String(selectedGoal.id))}
+            onToggleMilestone={(id, done) => updateMilestone(String(selectedGoal.id), id, { done })}
+            onOpen={() => navigate(`/cele/${selectedGoal.id}`)}
           />
         ) : (
-          <SummaryPanel onFilter={handleFilter} />
+          <SummaryPanel goals={goals} onFilter={handleFilter} onSelectGoal={setSelectedId} />
         )}
       </aside>
+
+      {goalFormId && (
+        <GoalFormDialog
+          goal={goalFormId === "new" ? null : storedGoals.find((goal) => goal.id === goalFormId)}
+          categories={categories}
+          onClose={() => setGoalFormId(null)}
+          onSubmit={submitGoal}
+        />
+      )}
+
+      {progressGoalId && storedGoals.find((goal) => goal.id === progressGoalId) && (
+        <ProgressDialog
+          goal={storedGoals.find((goal) => goal.id === progressGoalId)!}
+          onClose={() => setProgressGoalId(null)}
+          onSubmit={(draft) => {
+            const goal = storedGoals.find((item) => item.id === progressGoalId)!;
+            addProgress(progressGoalId, { ...draft, value: goal.progressMode === "manual" ? Math.max(0, Math.min(100, draft.value)) : draft.value });
+            setProgressGoalId(null);
+          }}
+        />
+      )}
+
+      {milestoneGoalId && (
+        <MilestoneDialog
+          onClose={() => setMilestoneGoalId(null)}
+          onSubmit={(draft) => { addMilestone(milestoneGoalId, draft); setMilestoneGoalId(null); }}
+        />
+      )}
+
+      {deleteGoalId && storedGoals.find((goal) => goal.id === deleteGoalId) && (
+        <ConfirmDialog
+          title="Usunąć cel?"
+          message={`Cel „${storedGoals.find((goal) => goal.id === deleteGoalId)?.title}” wraz z historią postępów i kamieniami milowymi zostanie usunięty.`}
+          onClose={() => setDeleteGoalId(null)}
+          onConfirm={() => {
+            const deleted = deleteGoal(deleteGoalId);
+            setDeletedGoal(deleted);
+            if (selectedId === deleteGoalId) setSelectedId(null);
+            setDeleteGoalId(null);
+          }}
+        />
+      )}
+
+      {deleteCategoryId && categories.find((category) => category.id === deleteCategoryId) && (
+        <ConfirmDialog
+          title="Usunąć kategorię?"
+          message={`Kategoria „${categories.find((category) => category.id === deleteCategoryId)?.label}” zostanie usunięta. Przypisane cele zostaną przeniesione do kategorii „Sprawy osobiste”.`}
+          onClose={() => setDeleteCategoryId(null)}
+          onConfirm={() => { if (activeFilter === `category:${deleteCategoryId}`) handleFilter("overview"); deleteCategory(deleteCategoryId); setDeleteCategoryId(null); }}
+        />
+      )}
+
+      {deletedGoal && (
+        <div className="fixed bottom-5 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-4 rounded-xl border px-4 py-3 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
+          <span className="text-[11px]" style={{ color: C.textSecond }}>Cel został usunięty</span>
+          <button type="button" onClick={() => { restoreGoal(deletedGoal); setDeletedGoal(null); }} className="text-[11px] font-semibold" style={{ color: C.iceBlue }}>Cofnij</button>
+          <button type="button" onClick={() => setDeletedGoal(null)} aria-label="Zamknij" style={{ color: C.textMuted }}><X size={13} /></button>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-5 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
+          <div className="w-full max-w-[460px] rounded-2xl border shadow-2xl" style={{ background: C.bg, borderColor: C.borderStrong }}>
+            <div className="flex items-start justify-between border-b px-5 py-4" style={{ borderColor: C.borderSubtle }}><div><h2 className="text-[16px] font-semibold" style={{ color: C.textPrimary }}>Ustawienia celów</h2><p className="mt-1 text-[10px]" style={{ color: C.textMuted }}>Preferencje są zapamiętywane na tym urządzeniu.</p></div><button type="button" onClick={() => setSettingsOpen(false)} style={{ color: C.textSecond }}><X size={16} /></button></div>
+            <div className="space-y-5 px-5 py-5"><div><p className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: C.textMuted }}>Domyślny widok</p><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setLayout("list")} className="flex items-center justify-center gap-2 rounded-lg border py-3 text-[11px]" style={{ color: layout === "list" ? C.iceBlue : C.textSecond, borderColor: layout === "list" ? C.iceBlue : C.borderSubtle, background: C.inputBg }}><List size={13} />Lista</button><button type="button" onClick={() => setLayout("grid")} className="flex items-center justify-center gap-2 rounded-lg border py-3 text-[11px]" style={{ color: layout === "grid" ? C.iceBlue : C.textSecond, borderColor: layout === "grid" ? C.iceBlue : C.borderSubtle, background: C.inputBg }}><Grid2X2 size={13} />Kafelki</button></div></div><div><p className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: C.textMuted }}>Domyślne sortowanie</p><ThemedSelect value={sortKey} onChange={(value) => setSortKey(value as typeof sortKey)} options={[{ value: "priority", label: "Priorytet" }, { value: "due", label: "Termin" }, { value: "progress", label: "Postęp" }, { value: "updated", label: "Ostatnia zmiana" }, { value: "name", label: "Nazwa" }]} ariaLabel="Domyślne sortowanie" /></div></div>
+            <div className="flex justify-end border-t px-5 py-4" style={{ borderColor: C.borderSubtle }}><button type="button" onClick={() => setSettingsOpen(false)} className="rounded-lg px-4 py-2.5 text-[11px] font-semibold" style={{ background: C.iceBlue, color: "white" }}>Gotowe</button></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,11 @@
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
+import { GoalsProvider } from "./goals/goalsStore";
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <GoalsProvider>
+      <RouterProvider router={router} />
+    </GoalsProvider>
+  );
 }

@@ -10,6 +10,7 @@ import Finanse from "./pages/Finanse";
 import Notatki from "./pages/Notatki";
 import Sprawy from "./pages/Sprawy";
 import Kalendarz from "./pages/Kalendarz";
+import CelSzczegoly from "./pages/CelSzczegoly";
 
 export const router = createBrowserRouter([
   {
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: "zadania",       Component: Zadania   },
       { path: "kalendarz",     Component: Kalendarz },
       { path: "cele",          Component: Cele      },
+      { path: "cele/:goalId",  Component: CelSzczegoly },
       { path: "sport",         Component: Sport     },
       { path: "odzywanie",     Component: Odzywanie },
       { path: "praca",         Component: Praca     },
