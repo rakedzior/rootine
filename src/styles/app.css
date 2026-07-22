@@ -6,7 +6,13 @@
   --sidebar-font-size: clamp(10px, 0.4vw + 6px, 12px);
   color: #f0f0f0;
   background: #1c1c1c;
-  font-family: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    "Plus Jakarta Sans",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -247,8 +253,37 @@
 }
 
 .goal-card-layout {
-  grid-template-columns: minmax(320px, 1fr) 150px auto 30px;
+  grid-template-columns: minmax(320px, 1fr) 150px 30px;
   align-items: start;
+}
+
+.goal-card-inline-date {
+  display: none;
+}
+
+.goal-card-meta > :nth-child(4) {
+  display: none;
+}
+
+.goal-card-status {
+  grid-column: 2 / 4;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+}
+
+.goal-card-date {
+  grid-column: 2 / 4;
+  grid-row: 1;
+  align-self: end;
+  justify-self: end;
+}
+
+.goal-card-more {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: start;
+  justify-self: end;
 }
 
 .goal-card-grid .goal-card-layout {
@@ -261,10 +296,15 @@
 
 .goal-card-grid .goal-card-date {
   grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
 }
 
 .goal-card-grid .goal-card-status {
   grid-column: 1;
+  grid-row: 3;
+  align-self: start;
+  justify-self: start;
 }
 
 .goal-card-grid .goal-card-more {
@@ -284,12 +324,15 @@
 
   .goal-card-date {
     grid-column: 1;
-    padding-left: 64px;
+    grid-row: 2;
+    justify-self: start;
   }
 
   .goal-card-status {
     grid-column: 1;
-    padding-left: 64px;
+    grid-row: 3;
+    align-self: start;
+    justify-self: start;
   }
 
   .goal-card-more {
@@ -303,16 +346,11 @@
     grid-template-columns: minmax(0, 1fr) auto !important;
   }
 
-  .goal-card-date {
-    grid-column: 1;
-    grid-row: 2;
-    padding-left: 64px;
-  }
-
   .goal-card-status {
     grid-column: 1;
     grid-row: 3;
-    padding-left: 64px;
+    align-self: start;
+    justify-self: start;
   }
 
   .goal-card-more {

@@ -411,21 +411,29 @@ function toViewGoal(goal: StoredGoal, categories: GoalCategory[]): Goal {
 }
 
 const STATUS_META: Record<GoalStatus, { label: string; color: string }> = {
-  active: { label: "Aktywny", color: C.seaGlass },
+  active: { label: "Aktywny", color: C.iceBlue },
   risk: { label: "Zagrożony", color: C.warning },
   paused: { label: "Wstrzymany", color: C.textSecond },
   completed: { label: "Zakończony", color: C.seaGlass },
-  planned: { label: "Zaplanowany", color: C.violet },
+  planned: { label: "Zaplanowany", color: C.textSecond },
   archived: { label: "Zarchiwizowany", color: C.textSecond },
 };
 
 const FILTER_ITEMS: { id: FilterId; label: string; icon: LucideIcon; color?: string }[] = [
   { id: "all", label: "Wszystkie cele", icon: Target },
-  { id: "active", label: "Aktywne", icon: Activity, color: C.seaGlass },
+  { id: "active", label: "Aktywne", icon: Activity, color: C.iceBlue },
   { id: "paused", label: "Wstrzymane", icon: CirclePause, color: C.textSecond },
   { id: "completed", label: "Zakończone", icon: CheckCircle2, color: C.seaGlass },
-  { id: "planned", label: "Zaplanowane", icon: CircleDashed, color: C.violet },
+  { id: "planned", label: "Zaplanowane", icon: CircleDashed, color: C.textSecond },
 ];
+
+function deadlineColor(goal: Goal) {
+  if (goal.daysLeft.includes("po terminie")) return C.danger;
+  const daysRemaining = Number(goal.daysLeft.match(/^(\d+) dni zostało/)?.[1]);
+  if (Number.isFinite(daysRemaining) && daysRemaining <= 14) return C.warning;
+  if (goal.status === "risk") return C.warning;
+  return C.textSecond;
+}
 
 const countForFilter = (id: FilterId, goals: Goal[]) => {
   if (id === "all") return goals.filter((goal) => goal.status !== "archived").length;
@@ -605,7 +613,7 @@ function GoalSubSidebar({
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg" style={{ background: active ? C.iceBlueBg : "transparent" }}>
                   {editingId === category.id ? (
                     <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
-                      <Icon size={12} strokeWidth={1.7} style={{ color: category.color }} />
+                      <Icon size={12} strokeWidth={1.7} style={{ color: C.textSecond }} />
                       <input
                         autoFocus
                         value={editingValue}
@@ -623,7 +631,7 @@ function GoalSubSidebar({
                       className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 text-left"
                       style={{ color: active ? C.iceBlue : C.textMuted, borderLeft: `2px solid ${active ? C.iceBlue : "transparent"}` }}
                     >
-                      <Icon size={13} strokeWidth={1.7} style={{ color: active ? C.iceBlue : category.color }} />
+                      <Icon size={13} strokeWidth={1.7} style={{ color: active ? C.iceBlue : C.textSecond }} />
                       <span className="truncate text-[12px]">{category.label}</span>
                     </button>
                   )}
@@ -720,6 +728,7 @@ function GoalCard({
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
   const statusColor = STATUS_META[goal.status].color;
+  const dueColor = deadlineColor(goal);
 
   return (
     <article
@@ -744,42 +753,44 @@ function GoalCard({
         <div className="goal-card-primary flex min-w-0 items-center gap-3.5">
           <div
             className="flex h-[50px] w-[50px] flex-shrink-0 items-center justify-center rounded-xl border"
-            style={{ color: goal.color, background: `${goal.color}16`, borderColor: `${goal.color}24` }}
+            style={{ color: C.textSecond, background: C.inputBg, borderColor: C.borderStrong }}
           >
             {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-7 w-7 object-contain" /> : <Icon size={21} strokeWidth={1.55} />}
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[14px] font-semibold leading-5" style={{ color: C.textPrimary }}>
+          <div className="min-w-0 flex flex-1 flex-col">
+            <h3 className="truncate text-[16px] font-semibold leading-5" style={{ color: C.textPrimary }}>
               {goal.title}
             </h3>
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[9px]" style={{ color: C.textMuted }}>
-              <span className="flex items-center gap-1 font-medium" style={{ color: goal.color }}>
-                <CategoryIcon size={9} strokeWidth={1.7} /> {goal.category}
+            <div className="goal-card-meta order-2 mt-3 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px]" style={{ color: C.textMuted }}>
+              <span className="flex items-center gap-1 font-medium" style={{ color: C.textSecond }}>
+                <CategoryIcon size={13} strokeWidth={1.7} /> {goal.category}
               </span>
-              <span>•</span>
-              <span>{goal.rhythm}</span>
               <span>•</span>
               <span>{goal.progressLabel}</span>
+              <span>•</span>
+              <span className="hidden">{goal.progressLabel}</span>
             </div>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="h-[5px] flex-1 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${goal.progress}%`, background: goal.status === "risk" ? C.warning : goal.color }}
-                />
+            <div className="order-1 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div
+                className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[10px]"
+                style={{ color: dueColor, borderColor: dueColor === C.textSecond ? C.borderStrong : `${dueColor}35`, background: C.inputBg }}
+              >
+                <CalendarDays size={12} strokeWidth={1.7} />
+                <span className="font-medium" style={{ color: dueColor === C.textSecond ? C.textPrimary : dueColor }}>{goal.due}</span>
+                <span style={{ color: C.textMuted }}>· {goal.daysLeft}</span>
               </div>
-              <span className="w-9 text-right text-[11px] font-medium tabular-nums" style={{ color: C.textSecond, fontFamily: "'DM Mono', monospace" }}>
-                {goal.progress}%
-              </span>
+              <div className="flex min-w-[150px] flex-1 items-center gap-3">
+                <div className="h-[6px] flex-1 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${goal.progress}%`, background: C.iceBlue }}
+                  />
+                </div>
+                <span className="w-9 text-right text-[12px] font-semibold tabular-nums" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace" }}>
+                  {goal.progress}%
+                </span>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="goal-card-date flex items-start gap-2">
-          <CalendarDays className="mt-0.5" size={14} strokeWidth={1.6} style={{ color: goal.status === "risk" ? C.warning : C.textSecond }} />
-          <div>
-            <p className="text-[11px] font-medium" style={{ color: goal.status === "risk" ? C.warning : C.textPrimary }}>{goal.due}</p>
-            <p className="mt-1 text-[10px]" style={{ color: C.textMuted }}>{goal.daysLeft}</p>
           </div>
         </div>
 
@@ -794,6 +805,11 @@ function GoalCard({
               ))}
             </div>
           )}
+        </div>
+
+        <div className="goal-card-date flex items-center gap-2 text-[11px] font-medium" style={{ color: dueColor }}>
+          <CalendarDays size={15} strokeWidth={1.7} />
+          <span>{goal.due}</span>
         </div>
 
         <div className="goal-card-more relative self-center" onClick={(event) => event.stopPropagation()}>
@@ -840,8 +856,8 @@ function SummaryPanel({ goals, onFilter, onSelectGoal }: { goals: Goal[]; onFilt
   const averageProgress = activeGoals.length ? Math.round(activeGoals.reduce((sum, goal) => sum + goal.progress, 0) / activeGoals.length) : 0;
 
   const stats = [
-    { label: "Aktywne cele", note: "W realizacji", value: activeGoals.length, icon: Target, color: C.seaGlass, filter: "active" as FilterId },
-    { label: "Na dobrej drodze", note: "Realizowane zgodnie z planem", value: onTrack, icon: CheckCircle2, color: C.iceBlue, filter: "ontrack" as FilterId },
+    { label: "Aktywne cele", note: "W realizacji", value: activeGoals.length, icon: Target, color: C.iceBlue, filter: "active" as FilterId },
+    { label: "Na dobrej drodze", note: "Realizowane zgodnie z planem", value: onTrack, icon: CheckCircle2, color: C.seaGlass, filter: "ontrack" as FilterId },
     { label: "Zagrożone", note: "Wymagają uwagi", value: atRisk, icon: CircleAlert, color: C.warning, filter: "risk" as FilterId },
   ];
 
@@ -942,7 +958,8 @@ function GoalDetail({
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
   const status = STATUS_META[goal.status];
-  const priority = goal.priority === "high" ? { label: "Wysoki", color: C.danger } : goal.priority === "medium" ? { label: "Średni", color: C.warning } : { label: "Niski", color: C.iceBlue };
+  const priority = goal.priority === "high" ? { label: "Wysoki", color: C.textSecond } : goal.priority === "medium" ? { label: "Średni", color: C.textSecond } : { label: "Niski", color: C.textSecond };
+  const dueColor = deadlineColor(goal);
   const measurementLabel = rawGoal.progressMode === "milestones"
     ? "Kamienie milowe"
     : rawGoal.progressMode === "regularity"
@@ -959,12 +976,12 @@ function GoalDetail({
         </div>
 
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: goal.color, background: `${goal.color}16`, borderColor: `${goal.color}25` }}>
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: C.textSecond, background: C.inputBg, borderColor: C.borderStrong }}>
             {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={19} strokeWidth={1.55} />}
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-[14px] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
-            <p className="mt-1.5 flex items-center gap-1 text-[10px]" style={{ color: goal.color }}>
+            <p className="mt-1.5 flex items-center gap-1 text-[10px]" style={{ color: C.textSecond }}>
               <CategoryIcon size={10} /> {goal.category}
               <span style={{ color: C.textDisabled }}>•</span>
               <span style={{ color: C.textMuted }}>{goal.rhythm}</span>
@@ -979,24 +996,24 @@ function GoalDetail({
             <span className="text-[10px]" style={{ color: C.textMuted }}>{goal.progressLabel}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
-            <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: goal.status === "risk" ? C.warning : goal.color }} />
+            <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: C.iceBlue }} />
           </div>
           <button type="button" onClick={onProgress} className="mt-3 flex items-center gap-1.5 text-[10px] font-medium" style={{ color: C.iceBlue }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj kamień milowy" : "Dodaj aktualizację postępu"}</button>
         </div>
 
         <div className="mb-5">
           <DetailRow icon={CalendarDays} label="Termin" onClick={onEdit}>
-            <span style={{ color: goal.status === "risk" ? C.warning : C.textPrimary }}>{goal.due}</span>
+            <span style={{ color: dueColor === C.textSecond ? C.textPrimary : dueColor }}>{goal.due}</span>
           </DetailRow>
           <DetailRow icon={Flag} label="Priorytet" onClick={onEdit}>
             <Flag size={10} fill={`${priority.color}38`} style={{ color: priority.color }} />
             <span style={{ color: priority.color }}>{priority.label}</span>
           </DetailRow>
           <DetailRow icon={Target} label="Kategoria" onClick={onEdit}>
-            <span style={{ color: goal.color }}>{goal.category}</span>
+            <span style={{ color: C.textSecond }}>{goal.category}</span>
           </DetailRow>
           <DetailRow icon={BarChart3} label={measurementLabel} onClick={onProgress}>
-            <span style={{ color: goal.color }}>{goal.progress}%</span>
+            <span style={{ color: C.iceBlue }}>{goal.progress}%</span>
           </DetailRow>
         </div>
 
@@ -1011,7 +1028,7 @@ function GoalDetail({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-[11px] font-medium leading-4" style={{ color: C.textPrimary }}>{goal.nextMilestone.title}</p>
-                    <span className="text-[11px]" style={{ color: goal.color, fontFamily: "'DM Mono', monospace" }}>{goal.nextMilestone.progress}%</span>
+                    <span className="text-[11px]" style={{ color: C.iceBlue, fontFamily: "'DM Mono', monospace" }}>{goal.nextMilestone.progress}%</span>
                   </div>
                   <p className="mt-1 text-[9px]" style={{ color: C.textMuted }}>Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
                 </div>
@@ -1025,7 +1042,7 @@ function GoalDetail({
           <div className="grid grid-cols-2 gap-2">
             {[
               { value: `${goal.current} / ${goal.total}`, label: measurementLabel, color: C.textPrimary },
-              { value: `${goal.progress}%`, label: "Ogólny postęp", color: goal.color },
+              { value: `${goal.progress}%`, label: "Ogólny postęp", color: C.iceBlue },
               { value: goal.status === "risk" ? "Uwaga" : "Na planie", label: "Status planu", color: status.color },
               { value: goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski", label: "Priorytet", color: priority.color },
             ].map((stat) => (

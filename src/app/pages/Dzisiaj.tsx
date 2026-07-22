@@ -57,7 +57,7 @@ export default function Dzisiaj() {
   const STATS = [
     { label: "Zadania dziś",  value: `${doneT}/${tasks.length}`,   sub: `${tasks.length - doneT} pozostałe`,  ice: false },
     { label: "Nawyki",        value: `${doneH}/${habits.length}`,  sub: `${habits.length - doneH} pozostałe`, ice: false },
-    { label: "Seria dni",     value: "5",                          sub: "dni z rzędu",                        ice: true  },
+    { label: "Seria dni",     value: "5",                          sub: "dni z rzędu",                        ice: false },
     { label: "Ten tydzień",   value: "68%",                        sub: "ukończone",                          ice: false },
   ];
 
@@ -135,8 +135,8 @@ export default function Dzisiaj() {
                     {t.time && (
                       <span className="text-[10px]" style={{ fontFamily: "'DM Mono', monospace", color: C.iceBlue }}>{t.time}</span>
                     )}
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ color: t.tagColor, background: t.tagColor + "18" }}>
-                      {t.tag}
+                    <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ color: C.textSecond, background: C.elevated }}>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.tagColor }} />{t.tag}
                     </span>
                   </div>
                 </div>
@@ -186,7 +186,7 @@ export default function Dzisiaj() {
                   </span>
                   {h.streak > 0 && (
                     <div className="flex items-center gap-1">
-                      <Flame size={10} strokeWidth={1.5} style={{ color: C.warning }} />
+                      <Flame size={10} strokeWidth={1.5} style={{ color: C.textMuted }} />
                       <span className="text-[10px]" style={{ fontFamily: "'DM Mono', monospace", color: C.textDisabled }}>{h.streak}</span>
                     </div>
                   )}
@@ -203,14 +203,14 @@ export default function Dzisiaj() {
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[12px] font-medium" style={{ color: C.textSecond }}>Postęp dnia</span>
-            <span className="text-[12px]" style={{ fontFamily: "'DM Mono', monospace", color: totalProgress === 100 ? C.seaGlass : C.iceBlue }}>
+            <span className="text-[12px]" style={{ fontFamily: "'DM Mono', monospace", color: C.iceBlue }}>
               {totalProgress}%
             </span>
           </div>
           <div className="h-[5px] rounded-full overflow-hidden" style={{ background: C.borderSubtle }}>
             <div
               className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${totalProgress}%`, background: totalProgress === 100 ? C.seaGlass : C.iceBlue }}
+              style={{ width: `${totalProgress}%`, background: C.iceBlue }}
             />
           </div>
         </div>
