@@ -377,8 +377,8 @@
 }
 
 .goal-card-layout {
-  grid-template-columns: minmax(320px, 1fr) 150px 30px;
-  align-items: start;
+  grid-template-columns: minmax(320px, 1fr) auto;
+  align-items: center;
 }
 
 .goal-card-inline-date {
@@ -666,96 +666,78 @@
   }
 }
 
-.goal-card-status {
-  grid-column: 2 / 4;
+.goal-card-actions {
+  display: flex;
+  grid-column: 2;
   grid-row: 1;
-  align-self: center;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-md);
+  padding-inline-start: var(--space-lg);
+  border-inline-start: 1px solid var(--color-border-subtle);
   justify-self: end;
 }
 
 .goal-card-date {
-  grid-column: 2 / 4;
-  grid-row: 1;
-  align-self: end;
-  justify-self: end;
+  white-space: nowrap;
 }
 
-.goal-card-more {
-  grid-column: 3;
-  grid-row: 1;
-  align-self: start;
-  justify-self: end;
+.goal-card-more > button:hover {
+  background: var(--color-graphite-hover);
+  color: var(--color-chalk-white) !important;
 }
 
 .goal-card-grid .goal-card-layout {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .goal-card-grid .goal-card-primary {
   grid-column: 1 / -1;
 }
 
-.goal-card-grid .goal-card-date {
+.goal-card-grid .goal-card-actions {
   grid-column: 1;
   grid-row: 2;
-  justify-self: start;
-}
-
-.goal-card-grid .goal-card-status {
-  grid-column: 1;
-  grid-row: 3;
-  align-self: start;
-  justify-self: start;
+  width: 100%;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+  justify-self: stretch;
 }
 
 .goal-card-grid .goal-card-more {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: end;
+  margin-inline-start: auto;
 }
 
 @media (max-width: 980px) {
   .goal-card-layout {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .goal-card-primary {
     grid-column: 1 / -1;
   }
 
-  .goal-card-date {
+  .goal-card-actions {
     grid-column: 1;
     grid-row: 2;
-    justify-self: start;
-  }
-
-  .goal-card-status {
-    grid-column: 1;
-    grid-row: 3;
-    align-self: start;
-    justify-self: start;
+    width: 100%;
+    padding-inline-start: 0;
+    border-inline-start: 0;
+    justify-self: stretch;
   }
 
   .goal-card-more {
-    grid-column: 2;
-    grid-row: 2;
+    margin-inline-start: auto;
   }
 }
 
 @media (max-width: 760px) {
   .goal-card-layout {
-    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .goal-card-status {
-    grid-column: 1;
-    grid-row: 3;
-    align-self: start;
-    justify-self: start;
-  }
-
-  .goal-card-more {
-    display: none;
+  .goal-card-actions {
+    gap: var(--space-sm);
   }
 
   .task-workspace-toolbar {
@@ -916,6 +898,85 @@ select:focus-visible,
   font-family: var(--font-data);
   font-size: 10px;
   line-height: 1;
+}
+
+.task-overdue-section {
+  margin: 0 0 var(--space-lg);
+}
+
+.task-overdue-header {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: 1px 4px 5px;
+}
+
+.task-overdue-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.task-overdue-toggle {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.task-overdue-toggle:hover {
+  background: var(--color-graphite-hover);
+  color: var(--color-chalk-white);
+}
+
+.task-overdue-toggle svg {
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+
+.task-overdue-title {
+  margin: 0;
+  color: var(--color-chalk-white);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.task-overdue-count {
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.task-overdue-header > .ui-button {
+  color: var(--color-precision-blue-text);
+}
+
+.task-overdue-deadline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-danger-coral);
+  font-family: var(--font-data);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.task-reschedule-copy {
+  max-width: 56ch;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-emphasis);
+  line-height: 1.6;
 }
 
 .task-entry:focus-within {

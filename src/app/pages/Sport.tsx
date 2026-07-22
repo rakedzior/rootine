@@ -109,6 +109,7 @@ export default function Sport() {
 
   const updateSession = (id: string, patch: Partial<WorkoutSession>) => setState((current) => ({ ...current, sessions: current.sessions.map((session) => session.id === id ? { ...session, ...patch } : session) }));
   const replaceSession = (next: WorkoutSession) => setState((current) => ({ ...current, sessions: current.sessions.map((session) => session.id === next.id ? next : session) }));
+  const toggleSelectedSession = (id: string) => setSelectedSessionId((current) => current === id ? null : id);
   const deleteSession = (id: string) => { setState((current) => ({ ...current, sessions: current.sessions.filter((session) => session.id !== id) })); setSelectedSessionId(null); };
   const moveSession = (id: string, date: string) => updateSession(id, { date, status: state.sessions.find((session) => session.id === id)?.status === "missed" ? "scheduled" : state.sessions.find((session) => session.id === id)?.status });
   const openAdd = (date = toDateKey(new Date())) => { setAddDate(date); setDialog("add"); };
@@ -148,13 +149,13 @@ export default function Sport() {
 
   const content = (() => {
     switch (view) {
-      case "week": return <FullWeekPlan sessions={state.sessions} weekStart={weekStart} onWeekChange={setWeekStart} onMove={moveSession} onSelect={setSelectedSessionId} onAdd={openAdd} />;
+      case "week": return <FullWeekPlan sessions={state.sessions} weekStart={weekStart} onWeekChange={setWeekStart} onMove={moveSession} onSelect={toggleSelectedSession} onAdd={openAdd} />;
       case "plans": return <PlansView plans={state.plans} templates={state.templates} onCreatePlan={() => setDialog("plan")} onCreateAIPlan={() => setDialog("ai")} onTogglePlan={(id) => setState((current) => ({ ...current, plans: current.plans.map((plan) => plan.id === id ? { ...plan, active: !plan.active } : plan) }))} onEditPlan={setEditingPlanId} onCreateTemplate={() => setDialog("template")} onEditTemplate={setEditingTemplateId} onSchedule={() => setDialog("schedule")} />;
-      case "history": return <HistoryView sessions={state.sessions} onSelect={setSelectedSessionId} />;
+      case "history": return <HistoryView sessions={state.sessions} onSelect={toggleSelectedSession} />;
       case "progress": return <ProgressView sessions={state.sessions} plans={state.plans} />;
       case "exercises": return <ExercisesView exercises={state.exercises} onAdd={() => setDialog("exercise")} />;
       case "integrations": return <IntegrationsView imports={state.imports} sessions={state.sessions} connections={state.connections} onToggleConnection={(name) => setState((current) => ({ ...current, connections: { ...current.connections, [name]: !current.connections[name] } }))} onResolve={resolveImport} />;
-      default: return <SportOverview sessions={state.sessions} weekStart={weekStart} onWeekChange={setWeekStart} onMove={moveSession} onSelect={setSelectedSessionId} onStart={startSession} onAdd={openAdd} />;
+      default: return <SportOverview sessions={state.sessions} weekStart={weekStart} onWeekChange={setWeekStart} onMove={moveSession} onSelect={toggleSelectedSession} onStart={startSession} onAdd={openAdd} />;
     }
   })();
 

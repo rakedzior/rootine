@@ -32,6 +32,7 @@ import {
   DetailPanel,
   Menu,
   MenuItem,
+  Modal,
   ModuleMain,
   ModuleShell,
   PageHeader,
@@ -186,6 +187,18 @@ function viewedTaskDayHeading(view: string) {
   if (view === "jutro") date.setDate(date.getDate() + 1);
   const weekday = date.toLocaleDateString("pl-PL", { weekday: "long" });
   return `${weekday}, ${view === "dzis" ? "Dziś" : "Jutro"}`;
+}
+
+function overdueDateLabel(calendarDate: string): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadline = new Date(`${calendarDate}T12:00:00`);
+  if (Number.isNaN(deadline.getTime())) return "Po terminie";
+  deadline.setHours(0, 0, 0, 0);
+  const daysAgo = Math.round((today.getTime() - deadline.getTime()) / 86_400_000);
+  if (daysAgo === 1) return "Wczoraj";
+  if (daysAgo > 1) return `${daysAgo} dni temu`;
+  return "Po terminie";
 }
 
 function getMiniWeek() {
@@ -844,13 +857,14 @@ function DatePickerPopup({
 
 // ── Task row ──────────────────────────────────────────────
 function TaskRow({
-  task, selected, onToggle, onSelect, onUpdate, tagi,
+  task, selected, onToggle, onSelect, onUpdate, tagi, deadlineLabel,
 }: {
   task: Task; selected: boolean;
   onToggle: (id: number) => void;
   onSelect: (id: number) => void;
   onUpdate: (id: number, patch: Partial<Task>) => void;
   tagi: TagItem[];
+  deadlineLabel?: string;
 }) {
   const taskTags = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const priorityColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.seaGlass : null;
@@ -892,14 +906,14 @@ function TaskRow({
         }}>
           {task.text}
         </span>
-        {task.date && (
+        {task.date && !deadlineLabel && (
           <div className="flex items-center gap-1 mt-1">
             <Calendar size={9} strokeWidth={1.5} style={{ color: C.textMuted }} />
             <span style={{ fontSize: "10px", color: C.textMuted }}>{task.date}</span>
           </div>
         )}
       </div>
-      {(taskTags.length > 0 || timeLabel) && (
+      {(taskTags.length > 0 || timeLabel || deadlineLabel) && (
         <div className="flex items-center gap-1.5 flex-shrink-0 self-center ml-2">
           {taskTags.map(td => (
             <button
@@ -922,6 +936,12 @@ function TaskRow({
               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: C.iceBlue, whiteSpace: "nowrap" }}>
                 {timeLabel}
               </span>
+            </div>
+          )}
+          {deadlineLabel && (
+            <div className="task-overdue-deadline">
+              <Calendar size={9} strokeWidth={1.6} aria-hidden="true" />
+              <span>{deadlineLabel}</span>
             </div>
           )}
         </div>
@@ -1789,6 +1809,8 @@ export default function Zadania() {
   const [newDateVal,    setNewDateVal]    = useState<DateVal>(DEFAULT_DATE_VAL);
   const [inputDropdown, setInputDropdown] = useState<"priority" | "list" | "tags" | null>(null);
   const [showDone,      setShowDone]      = useState(true);
+  const [showOverdue,   setShowOverdue]   = useState(true);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
 
@@ -1853,7 +1875,14 @@ export default function Zadania() {
   });
   const pending   = visible.filter(t => !t.done);
   const completed = visible.filter(t => t.done);
+  const todayKey = toCalendarDateKey(new Date());
+  const overdue = taskView === "dzis"
+    ? pending.filter(t => Boolean(t.calendarDate) && t.calendarDate! < todayKey)
+    : [];
+  const overdueIds = new Set(overdue.map(task => task.id));
+  const currentPending = pending.filter(task => !overdueIds.has(task.id));
   const dayHeading = viewedTaskDayHeading(taskView);
+  const dayHeadingCount = currentPending.length + completed.length;
 
   const viewCounts = Object.fromEntries(
     SMART_VIEWS.map(v => [
@@ -1961,6 +1990,14 @@ export default function Zadania() {
   };
   const deleteTask = (id: number) => { updateTask(id, { deleted: true }); setSelectedId(null); };
   const toggleHabit = (id: number) => setHabits(p => p.map(h => h.id === id ? { ...h, done: !h.done } : h));
+
+  const rescheduleOverdue = () => {
+    const ids = new Set(overdue.map(task => task.id));
+    setTasks(existing => existing.map(task => ids.has(task.id)
+      ? { ...task, calendarDate: todayKey, date: "Dziś", view: "dzis" }
+      : task));
+    setRescheduleOpen(false);
+  };
 
   const closeDatePicker = useCallback(() => setDatePickerOpen(false), []);
 
@@ -2448,11 +2485,56 @@ export default function Zadania() {
             </div>
           </div>
 
-          {dayHeading && (
-            <div className="task-day-heading" aria-label={`${dayHeading}. ${visible.length} zadań`}>
+          {overdue.length > 0 && (
+            <section className="task-overdue-section" aria-labelledby="task-overdue-heading">
+              <div className="task-overdue-header">
+                <div className="task-overdue-heading">
+                  <button
+                    type="button"
+                    className="task-overdue-toggle"
+                    aria-label={showOverdue ? "Zwiń zadania po terminie" : "Rozwiń zadania po terminie"}
+                    aria-expanded={showOverdue}
+                    aria-controls="task-overdue-list"
+                    onClick={() => setShowOverdue(open => !open)}
+                  >
+                    <ChevronDown
+                      size={13}
+                      strokeWidth={1.6}
+                      aria-hidden="true"
+                      style={{ transform: showOverdue ? "none" : "rotate(-90deg)" }}
+                    />
+                  </button>
+                  <h2 id="task-overdue-heading" className="task-overdue-title">Po terminie</h2>
+                  <span className="task-overdue-count">{overdue.length}</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setRescheduleOpen(true)}>
+                  Przełóż
+                </Button>
+              </div>
+              {showOverdue && (
+                <div id="task-overdue-list" className="space-y-px">
+                  {overdue.map(task => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      tagi={tagi}
+                      deadlineLabel={overdueDateLabel(task.calendarDate!)}
+                      selected={selectedId === task.id}
+                      onToggle={id => updateTask(id, { done: true })}
+                      onUpdate={updateTask}
+                      onSelect={id => setSelectedId(selectedId === id ? null : id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {dayHeading && dayHeadingCount > 0 && (
+            <div className="task-day-heading" aria-label={`${dayHeading}. ${dayHeadingCount} zadań`}>
               <ChevronDown size={13} strokeWidth={1.6} aria-hidden="true" />
               <h2 className="task-day-heading__title">{dayHeading}</h2>
-              <span className="task-day-heading__count">{visible.length}</span>
+              <span className="task-day-heading__count">{dayHeadingCount}</span>
             </div>
           )}
 
@@ -2491,9 +2573,9 @@ export default function Zadania() {
           ) : (
             <>
               {/* Pending tasks */}
-              {pending.length > 0 && (
+              {currentPending.length > 0 && (
                 <div className="space-y-px mb-2">
-                  {pending.map(t => (
+                  {currentPending.map(t => (
                     <TaskRow key={t.id} task={t} tagi={tagi}
                       selected={selectedId === t.id}
                       onToggle={id => updateTask(id, { done: true })}
@@ -2560,6 +2642,25 @@ export default function Zadania() {
           onClose={closeDatePicker}
           anchorEl={dateButtonRef.current}
         />
+      )}
+
+      {rescheduleOpen && (
+        <Modal
+          title="Przełożyć zaległe zadania na dziś?"
+          onClose={() => setRescheduleOpen(false)}
+          width={480}
+          footer={(
+            <>
+              <Button variant="quiet" onClick={() => setRescheduleOpen(false)}>Anuluj</Button>
+              <Button variant="primary" onClick={rescheduleOverdue}>Przełóż na dziś</Button>
+            </>
+          )}
+        >
+          <p className="task-reschedule-copy">
+            Wszystkie zadania z sekcji „Po terminie” dostaną dzisiejszą datę.
+            Pozostałe informacje pozostaną bez zmian.
+          </p>
+        </Modal>
       )}
 
       {/* ── Input priority dropdown ── */}

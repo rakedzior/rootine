@@ -780,44 +780,46 @@ function GoalCard({
           </div>
         </div>
 
-        <div className="goal-card-status relative self-center" onClick={(event) => event.stopPropagation()}>
-          <button type="button" onClick={() => { setStatusOpen((open) => !open); setMenuOpen(false); }}><StatusPill status={goal.status} /></button>
-          {statusOpen && (
-            <Menu className="absolute right-0 top-9 z-30 w-40">
-              {(["active", "paused", "completed", "planned", "archived"] as GoalStatus[]).map((status) => (
-                <MenuItem key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_META[status].color }} />} style={{ color: STATUS_META[status].color }}>
-                  {STATUS_META[status].label}
-                </MenuItem>
-              ))}
-            </Menu>
-          )}
-        </div>
+        <div className="goal-card-actions" onClick={(event) => event.stopPropagation()}>
+          <div className="goal-card-status relative">
+            <button type="button" onClick={() => { setStatusOpen((open) => !open); setMenuOpen(false); }}><StatusPill status={goal.status} /></button>
+            {statusOpen && (
+              <Menu className="absolute right-0 top-9 z-30 w-40">
+                {(["active", "paused", "completed", "planned", "archived"] as GoalStatus[]).map((status) => (
+                  <MenuItem key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_META[status].color }} />} style={{ color: STATUS_META[status].color }}>
+                    {STATUS_META[status].label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            )}
+          </div>
 
-        <div className="goal-card-date flex items-center gap-2 text-[10px] font-medium" style={{ color: dueColor }}>
-          <CalendarDays size={13} strokeWidth={1.7} />
-          <span>{goal.due}</span>
-        </div>
+          <div className="goal-card-date flex items-center gap-2 text-[10px] font-medium" style={{ color: dueColor }}>
+            <CalendarDays size={13} strokeWidth={1.7} />
+            <span>{goal.due}</span>
+          </div>
 
-        <div className="goal-card-more relative self-center" onClick={(event) => event.stopPropagation()}>
-          <button type="button" onClick={() => { setMenuOpen((open) => !open); setStatusOpen(false); }} aria-label={`Więcej opcji dla celu ${goal.title}`} className="flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors" style={{ color: C.textMuted }}>
-            <Ellipsis size={17} strokeWidth={1.8} />
-          </button>
-          {menuOpen && (
-            <Menu className="absolute right-0 top-9 z-30 w-44">
-              {[
-                { label: "Dodaj postęp", icon: BarChart3, action: onProgress },
-                { label: "Edytuj cel", icon: Pencil, action: onEdit },
-                { label: "Otwórz pełny widok", icon: Target, action: onOpen },
-                { label: "Duplikuj", icon: Plus, action: onDuplicate },
-                { label: goal.status === "archived" ? "Przywróć" : "Archiwizuj", icon: Archive, action: () => onStatus(goal.status === "archived" ? "active" : "archived") },
-                { label: "Usuń", icon: Trash2, action: onDelete, danger: true },
-              ].map(({ label, icon: MenuIcon, action, danger }) => (
-                <MenuItem key={label} onClick={() => { action(); setMenuOpen(false); }} tone={danger ? "danger" : "default"} leadingIcon={<MenuIcon />}>
-                  {label}
-                </MenuItem>
-              ))}
-            </Menu>
-          )}
+          <div className="goal-card-more relative">
+            <button type="button" onClick={() => { setMenuOpen((open) => !open); setStatusOpen(false); }} aria-label={`Więcej opcji dla celu ${goal.title}`} className="flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors" style={{ color: C.textMuted }}>
+              <Ellipsis size={17} strokeWidth={1.8} />
+            </button>
+            {menuOpen && (
+              <Menu className="absolute right-0 top-9 z-30 w-44">
+                {[
+                  { label: "Dodaj postęp", icon: BarChart3, action: onProgress },
+                  { label: "Edytuj cel", icon: Pencil, action: onEdit },
+                  { label: "Otwórz pełny widok", icon: Target, action: onOpen },
+                  { label: "Duplikuj", icon: Plus, action: onDuplicate },
+                  { label: goal.status === "archived" ? "Przywróć" : "Archiwizuj", icon: Archive, action: () => onStatus(goal.status === "archived" ? "active" : "archived") },
+                  { label: "Usuń", icon: Trash2, action: onDelete, danger: true },
+                ].map(({ label, icon: MenuIcon, action, danger }) => (
+                  <MenuItem key={label} onClick={() => { action(); setMenuOpen(false); }} tone={danger ? "danger" : "default"} leadingIcon={<MenuIcon />}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            )}
+          </div>
         </div>
       </div>
       <div className="pointer-events-none h-px opacity-0 transition-opacity group-hover:opacity-100" style={{ background: `linear-gradient(90deg, transparent, ${statusColor}40, transparent)` }} />
