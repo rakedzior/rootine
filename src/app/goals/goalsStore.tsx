@@ -77,7 +77,7 @@ export const INITIAL_CATEGORIES: GoalCategory[] = [
   { id: "work", label: "Praca", color: "#4772FA", iconKey: "briefcase" },
   { id: "finance", label: "Finanse", color: "#D4AA68", iconKey: "wallet" },
   { id: "growth", label: "Rozwój", color: "#9B8CE8", iconKey: "languages" },
-  { id: "relationships", label: "Relacje", color: "#C77DBB", iconKey: "users" },
+  { id: "relationships", label: "Relacje", color: "#9B8CE8", iconKey: "users" },
   { id: "personal", label: "Sprawy osobiste", color: "#A0A0A0", iconKey: "circle" },
 ];
 
@@ -221,6 +221,7 @@ export function getGoalMetric(goal: Goal): string {
 type GoalsStoreValue = {
   goals: Goal[];
   categories: GoalCategory[];
+  storageFailed: boolean;
   createGoal: (draft: GoalDraft) => string;
   updateGoal: (id: string, patch: Partial<Goal>) => void;
   deleteGoal: (id: string) => Goal | null;
@@ -242,9 +243,46 @@ type GoalsStoreValue = {
 const GoalsStoreContext = createContext<GoalsStoreValue | null>(null);
 
 function withoutLegacyModules(goal: Goal): Goal {
-  const cleanGoal = { ...goal } as Goal & { modules?: unknown };
+  const cleanGoal = { ...goal, color: normalizePaletteColor(goal.color) } as Goal & { modules?: unknown };
   delete cleanGoal.modules;
   return cleanGoal;
+}
+
+function normalizeCategory(category: GoalCategory): GoalCategory {
+  const color = normalizePaletteColor(category.color);
+  return color === category.color ? category : { ...category, color };
+}
+
+function normalizePaletteColor(color: string): string {
+  const numericColor = color.startsWith("#") ? Number.parseInt(color.slice(1), 16) : Number.NaN;
+  return numericColor === 0xc77dbb ? "#9B8CE8" : color;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isGoalCategory(value: unknown): value is GoalCategory {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.label === "string"
+    && typeof value.color === "string"
+    && typeof value.iconKey === "string";
+}
+
+function isGoal(value: unknown): value is Goal {
+  if (!isRecord(value)) return false;
+  return typeof value.id === "string"
+    && typeof value.title === "string"
+    && typeof value.categoryId === "string"
+    && typeof value.status === "string"
+    && typeof value.health === "string"
+    && typeof value.priority === "string"
+    && typeof value.startDate === "string"
+    && typeof value.dueDate === "string"
+    && typeof value.progressMode === "string"
+    && Array.isArray(value.milestones)
+    && Array.isArray(value.progressEntries);
 }
 
 function readInitialStore(): { goals: Goal[]; categories: GoalCategory[] } {
@@ -252,8 +290,14 @@ function readInitialStore(): { goals: Goal[]; categories: GoalCategory[] } {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { goals: SEED_GOALS, categories: INITIAL_CATEGORIES };
     const parsed = JSON.parse(raw) as { version?: number; goals?: Goal[]; categories?: GoalCategory[] };
-    if (parsed.version !== STORE_VERSION || !Array.isArray(parsed.goals) || !Array.isArray(parsed.categories)) throw new Error("Invalid store");
-    return { goals: parsed.goals.map(withoutLegacyModules), categories: parsed.categories };
+    if (
+      parsed.version !== STORE_VERSION
+      || !Array.isArray(parsed.goals)
+      || !Array.isArray(parsed.categories)
+      || !parsed.goals.every(isGoal)
+      || !parsed.categories.every(isGoalCategory)
+    ) throw new Error("Invalid store");
+    return { goals: parsed.goals.map(withoutLegacyModules), categories: parsed.categories.map(normalizeCategory) };
   } catch {
     return { goals: SEED_GOALS, categories: INITIAL_CATEGORIES };
   }
@@ -263,14 +307,21 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
   const initial = useMemo(readInitialStore, []);
   const [goals, setGoals] = useState<Goal[]>(initial.goals);
   const [categories, setCategories] = useState<GoalCategory[]>(initial.categories);
+  const [storageFailed, setStorageFailed] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: STORE_VERSION, goals, categories }));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: STORE_VERSION, goals, categories }));
+      setStorageFailed(false);
+    } catch {
+      setStorageFailed(true);
+    }
   }, [goals, categories]);
 
   const value = useMemo<GoalsStoreValue>(() => ({
     goals,
     categories,
+    storageFailed,
     createGoal: (draft) => {
       const id = uid();
       const stamp = nowIso();
@@ -308,14 +359,19 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     importStore: (raw) => {
       try {
         const parsed = JSON.parse(raw) as { goals?: Goal[]; categories?: GoalCategory[] };
-        if (!Array.isArray(parsed.goals) || !Array.isArray(parsed.categories)) return false;
+        if (
+          !Array.isArray(parsed.goals)
+          || !Array.isArray(parsed.categories)
+          || !parsed.goals.every(isGoal)
+          || !parsed.categories.every(isGoalCategory)
+        ) return false;
         setGoals(parsed.goals.map(withoutLegacyModules));
-        setCategories(parsed.categories);
+        setCategories(parsed.categories.map(normalizeCategory));
         return true;
       } catch { return false; }
     },
     exportStore: () => JSON.stringify({ version: STORE_VERSION, exportedAt: nowIso(), goals, categories }, null, 2),
-  }), [goals, categories]);
+  }), [goals, categories, storageFailed]);
 
   return <GoalsStoreContext.Provider value={value}>{children}</GoalsStoreContext.Provider>;
 }

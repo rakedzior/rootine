@@ -10,10 +10,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json --pretty false",
     "css:lint": "stylelint \"src/**/*.{css,scss}\"",
     "css:lint:fix": "stylelint \"src/**/*.{css,scss}\" --fix",
-    "css:audit": "wallace dist/assets/*.css",
-    "css:audit:json": "wallace dist/assets/*.css --json"
+    "css:audit": "node scripts/css-audit.mjs",
+    "css:audit:json": "node scripts/css-audit.mjs --json"
   },
   "dependencies": {
+    "impeccable": "^3.3.0",
     "lucide-react": "^0.542.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

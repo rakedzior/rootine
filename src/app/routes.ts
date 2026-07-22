@@ -1,33 +1,18 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, redirect } from "react-router";
 import Layout from "./layout/Layout";
-import Dzisiaj from "./pages/Dzisiaj";
-import Zadania from "./pages/Zadania";
-import Cele from "./pages/Cele";
-import Sport from "./pages/Sport";
-import Odzywanie from "./pages/Odzywanie";
-import Praca from "./pages/Praca";
-import Finanse from "./pages/Finanse";
-import Notatki from "./pages/Notatki";
-import Sprawy from "./pages/Sprawy";
-import Kalendarz from "./pages/Kalendarz";
-import CelSzczegoly from "./pages/CelSzczegoly";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     Component: Layout,
     children: [
-      { index: true,           Component: Dzisiaj   },
-      { path: "zadania",       Component: Zadania   },
-      { path: "kalendarz",     Component: Kalendarz },
-      { path: "cele",          Component: Cele      },
-      { path: "cele/:goalId",  Component: CelSzczegoly },
-      { path: "sport",         Component: Sport     },
-      { path: "odzywanie",     Component: Odzywanie },
-      { path: "praca",         Component: Praca     },
-      { path: "finanse",       Component: Finanse   },
-      { path: "notatki",       Component: Notatki   },
-      { path: "sprawy",        Component: Sprawy    },
+      { index: true,           loader: () => redirect("/zadania") },
+      { path: "zadania",       lazy: async () => ({ Component: (await import("./pages/Zadania")).default }) },
+      { path: "kalendarz",     lazy: async () => ({ Component: (await import("./pages/Kalendarz")).default }) },
+      { path: "cele",          lazy: async () => ({ Component: (await import("./pages/Cele")).default }) },
+      { path: "cele/:goalId",  lazy: async () => ({ Component: (await import("./pages/CelSzczegoly")).default }) },
+      { path: "sport",         lazy: async () => ({ Component: (await import("./pages/Sport")).default }) },
+      { path: "*",             loader: () => redirect("/zadania") },
     ],
   },
 ]);

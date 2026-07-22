@@ -5,47 +5,73 @@ import {
   Tag, TrendingUp, Calendar, CalendarDays, LayoutGrid,
   Clock, AlignLeft, Star, X, Circle,
   Sun, Sunrise, Moon, Bell,
-  Flag, MessageSquare, Smile, Image as ImageIcon,
-  MoreHorizontal, Search, Paperclip, Pin, Copy,
-  Link, Printer, Bookmark, Activity, ListPlus, XCircle,
-  FileText, PenLine, BarChart2, Hash, List,
+  Flag, MessageSquare,
+  MoreHorizontal, Search,
+  Printer, ListPlus,
+  PenLine, BarChart2, Hash, List, CheckSquare,
 } from "lucide-react";
-import { CALENDAR_TASKS } from "../data/calendarTasks";
-import { hydrateTaskCompletion, persistTaskCompletion } from "../data/taskCompletion";
+import { persistTaskCompletion } from "../data/taskCompletion";
+import {
+  loadTaskWorkspace,
+  saveTaskWorkspace,
+  taskViewForCalendarDate,
+  toCalendarDateKey,
+  type TaskComment,
+  type TaskPriority,
+  type TaskSubtask,
+  type WorkspaceHabit,
+  type WorkspaceList,
+  type WorkspaceTag,
+  type WorkspaceTask,
+} from "../data/taskWorkspace";
+import {
+  Badge,
+  Button,
+  ContextNavItem,
+  ContextSidebar,
+  DetailPanel,
+  Menu,
+  MenuItem,
+  ModuleMain,
+  ModuleShell,
+  PageHeader,
+  SectionHeader,
+  WorkspaceToolbar,
+  uiColors,
+  uiShadows,
+} from "../ui";
 
 const C = {
-  bg:           "#242424",
-  subSidebar:   "#1E1E1E",
-  elevated:     "#363636",
-  card:         "#2E2E2E",
-  cardHover:    "#343434",
-  inputBg:      "#222222",
-  borderSubtle: "#383838",
-  borderStrong: "#484848",
-  textPrimary:  "#F0F0F0",
-  textSecond:   "#A0A0A0",
-  textMuted:    "#646464",
-  textDisabled: "#404040",
-  iceBlue:      "#4772FA",
-  iceBlueBg:    "rgba(71,114,250,0.11)",
-  seaGlass:     "#70B89F",
-  seaGlassBg:   "rgba(112,184,159,0.12)",
-  warning:      "#D4AA68",
-  danger:       "#CF777C",
-  dangerBg:     "rgba(207,119,124,0.11)",
+  bg:           uiColors.graphiteCanvas,
+  subSidebar:   uiColors.graphiteSidebar,
+  elevated:     uiColors.graphiteHover,
+  card:         uiColors.graphiteCard,
+  cardHover:    uiColors.graphiteHover,
+  inputBg:      uiColors.graphiteInput,
+  borderSubtle: uiColors.borderSubtle,
+  borderStrong: uiColors.borderStrong,
+  textPrimary:  uiColors.chalkWhite,
+  textSecond:   uiColors.textSecondary,
+  textMuted:    uiColors.textMuted,
+  textDisabled: uiColors.textDisabled,
+  iceBlue:      uiColors.precisionBlueText,
+  iceBlueSolid: uiColors.precisionBlueStrong,
+  iceBlueBg:    uiColors.precisionBlueSoft,
+  seaGlass:     uiColors.success,
+  seaGlassBg:   uiColors.successSoft,
+  warning:      uiColors.warning,
+  danger:       uiColors.danger,
+  dangerBg:     uiColors.dangerSoft,
+  blueBorder:   "color-mix(in srgb, var(--color-precision-blue) 35%, transparent)",
+  floatingShadow: uiShadows.floating,
 } as const;
 
-type Priority = "high" | "medium" | "low";
-export type Subtask = { id: number; text: string; done: boolean };
-export type Task = {
-  id: number; text: string; done: boolean;
-  time?: string; endTime?: string; tags?: string[]; list?: string;
-  view: string; priority?: Priority; notes?: string; deleted?: boolean; calendarDate?: string;
-  date?: string; subtasks?: Subtask[];
-};
-type Habit = { id: number; name: string; streak: number; done: boolean };
-export type ListItem = { id: string; label: string; color: string };
-export type TagItem  = { id: string; label: string; color: string };
+type Priority = TaskPriority;
+export type Subtask = TaskSubtask;
+export type Task = WorkspaceTask;
+type Habit = WorkspaceHabit;
+export type ListItem = WorkspaceList;
+export type TagItem = WorkspaceTag;
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   high: C.danger, medium: C.warning, low: C.iceBlue,
@@ -72,39 +98,12 @@ const VIEW_LABELS: Record<string, string> = {
 };
 
 const PALETTE = [
-  "#4772FA","#70B89F","#D4AA68","#CF777C",
-  "#A8BCD4","#A0A0A0","#9B8CE8","#E8A07A",
+  C.iceBlue, C.seaGlass, C.warning, C.danger,
+  C.textSecond, uiColors.violet,
 ];
 const VISIBLE_TAG_LIMIT = 6;
 
 
-const INIT_TASKS: Task[] = [
-  { id: 1,  text: "Ogród – Piłsudskiego – Zarezerwowane", done: false, time: "18:00", tags: ["hobby"],   list: "hobby",  view: "dzis",     priority: "medium" },
-  { id: 2,  text: "ZAKO Drinkbar – zarezerwowane",        done: false,               tags: ["hobby"],   list: "hobby",  view: "dzis",     priority: "low"    },
-  { id: 3,  text: "Klub RE – rezerwacja sala paląca",     done: false,               tags: ["dom"],     list: "dom",    view: "dzis"                         },
-  { id: 4,  text: "Przejrzeć raporty finansowe Q2",       done: false, time: "14:00", tags: ["praca"],   list: "praca",  view: "jutro",    priority: "high"   },
-  { id: 5,  text: "Kupić bilety na koncert",              done: false,               tags: ["hobby"],   list: "hobby",  view: "7dni"                         },
-  { id: 6,  text: "Przegląd samochodu",                  done: false, time: "10:00", tags: ["dom"],     list: "dom",    view: "7dni",     priority: "medium" },
-  { id: 7,  text: "Wysłać ofertę do klienta",             done: false, time: "09:00", tags: ["praca"],   list: "praca",  view: "skrzynka", priority: "high"   },
-  { id: 8,  text: "Zamówić suplementy",                  done: false,               tags: ["zdrowie"], list: "zdrowie",view: "skrzynka"                      },
-  { id: 9,  text: "Tomasz Karcz – zadzwonić",             done: true,                tags: ["praca"],   list: "praca",  view: "dzis"                         },
-  { id: 10, text: "Black Gallery Pub – nie odbierają",    done: true,                tags: ["hobby"],   list: "hobby",  view: "dzis"                         },
-  { id: 11, text: "Stara Zajezdnia – rezerwacja",         done: true,                tags: ["dom"],     list: "dom",    view: "skrzynka"                      },
-];
-
-const INIT_CALENDAR_TASKS: Task[] = CALENDAR_TASKS.map(({ dateLabel, ...task }) => ({
-  ...task,
-  date: dateLabel,
-  view: "kalendarz",
-}));
-const INITIAL_TASKS: Task[] = [...INIT_TASKS, ...INIT_CALENDAR_TASKS];
-
-const INIT_HABITS: Habit[] = [
-  { id: 1, name: "Medytacja rano",  streak: 5,  done: true  },
-  { id: 2, name: "8 szklanek wody", streak: 2,  done: false },
-  { id: 3, name: "30 min czytania", streak: 12, done: false },
-  { id: 4, name: "Spacer 20 min",   streak: 0,  done: false },
-];
 
 const PL_MONTHS = [
   "styczeń","luty","marzec","kwiecień","maj","czerwiec",
@@ -181,6 +180,14 @@ function todayStr() {
   return (w[0].toUpperCase() + w.slice(1)) + ", " + r;
 }
 
+function viewedTaskDayHeading(view: string) {
+  if (view !== "dzis" && view !== "jutro") return null;
+  const date = new Date();
+  if (view === "jutro") date.setDate(date.getDate() + 1);
+  const weekday = date.toLocaleDateString("pl-PL", { weekday: "long" });
+  return `${weekday}, ${view === "dzis" ? "Dziś" : "Jutro"}`;
+}
+
 function getMiniWeek() {
   const today = new Date();
   const dow = today.getDay();
@@ -246,8 +253,8 @@ function CustomSelect({ value, onChange, options, placeholder = "Wybierz…" }: 
       <button ref={btnRef} onClick={handleToggle} style={{
         width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "8px 11px", borderRadius: 8, cursor: "pointer",
-        background: "#191919", border: `1px solid ${open ? "rgba(71,114,250,0.4)" : C.borderSubtle}`,
-        boxShadow: open ? "0 0 0 2px rgba(71,114,250,0.08)" : "none",
+        background: C.inputBg, border: `1px solid ${open ? C.blueBorder : C.borderSubtle}`,
+        boxShadow: open ? `0 0 0 2px ${C.iceBlueBg}` : "none",
         transition: "border-color .15s, box-shadow .15s",
       }}>
         <span style={{ fontSize: 12, color: value ? C.textPrimary : C.textDisabled }}>
@@ -258,27 +265,19 @@ function CustomSelect({ value, onChange, options, placeholder = "Wybierz…" }: 
       </button>
 
       {open && rect && (
-        <div ref={listRef} style={{
+        <Menu ref={listRef} style={{
           position: "fixed", top: rect.bottom + 4, left: rect.left, width: rect.width,
-          background: "#1E1E1E", border: "1px solid #333",
-          borderRadius: 10, overflow: "hidden", zIndex: 10000,
-          boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-          fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+          zIndex: 10000,
         }}>
           {options.map(opt => {
             const active = opt.value === value;
             return (
-              <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }}
-                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", background: "none", border: "none", cursor: "pointer" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}
-              >
-                <span style={{ fontSize: 12, color: active ? C.iceBlue : C.textSecond }}>{opt.label}</span>
-                {active && <Check size={11} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-              </button>
+              <MenuItem key={opt.value} selected={active} onClick={() => { onChange(opt.value); setOpen(false); }} trailingIcon={active ? <Check /> : undefined}>
+                {opt.label}
+              </MenuItem>
             );
           })}
-        </div>
+        </Menu>
       )}
     </>
   );
@@ -304,9 +303,9 @@ function TimePicker({ value, onChange }: { value: string; onChange: (v: string) 
 
   return (
     <div style={{
-      borderRadius: "10px", overflow: "hidden",
+      borderRadius: "var(--radius-lg)", overflow: "hidden",
       border: `1px solid ${C.borderStrong}`,
-      background: "#191919",
+      background: C.inputBg,
     }}>
       {/* Header */}
       <div style={{
@@ -351,7 +350,7 @@ function TimePicker({ value, onChange }: { value: string; onChange: (v: string) 
               style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 width: "100%", padding: "7px 12px",
-                background: active ? "rgba(71,114,250,0.07)" : "none",
+                background: active ? C.iceBlueBg : "none",
                 border: "none", cursor: "pointer",
                 color: active ? C.iceBlue : C.textSecond,
                 fontSize: "13px", fontFamily: "'DM Mono', monospace",
@@ -525,10 +524,10 @@ function DatePickerPopup({
       ref={popRef}
       style={{
         position: "fixed", top: popupPosition.top, left: popupPosition.left, width: `${popWidth}px`, zIndex: 9999,
-        background: "#2A2A2A",
+        background: C.elevated,
         border: `1px solid ${C.borderStrong}`,
-        borderRadius: "14px",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: C.floatingShadow,
         overflow: "hidden",
         fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
       }}
@@ -567,10 +566,10 @@ function DatePickerPopup({
                   onClick={() => { setSelDate(new Date(qd)); setViewYear(qd.getFullYear()); setViewMonth(qd.getMonth()); }}
                   style={{
                     flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-                    gap: "5px", padding: "9px 4px", borderRadius: "10px",
+                    gap: "5px", padding: "9px 4px", borderRadius: "var(--radius-md)",
                     background: active ? C.iceBlueBg : C.elevated,
                     color: active ? C.iceBlue : C.textMuted,
-                    border: `1px solid ${active ? "rgba(71,114,250,0.3)" : "transparent"}`,
+                    border: `1px solid ${active ? C.blueBorder : "transparent"}`,
                     cursor: "pointer",
                   }}
                 >
@@ -626,10 +625,10 @@ function DatePickerPopup({
                     justifyContent: "center", borderRadius: "50%",
                     fontSize: "11px",
                     fontFamily: "'DM Mono', monospace",
-                    background: sel ? C.iceBlue : "transparent",
-                    color: sel ? "#fff" : tod ? C.iceBlue : cell.cur ? C.textPrimary : C.textDisabled,
+                    background: sel ? C.iceBlueSolid : "transparent",
+                    color: sel ? C.textPrimary : tod ? C.iceBlue : cell.cur ? C.textPrimary : C.textDisabled,
                     fontWeight: tod && !sel ? 700 : 400,
-                    border: `1.5px solid ${tod && !sel ? "rgba(71,114,250,0.45)" : "transparent"}`,
+                    border: `1px solid ${tod && !sel ? C.blueBorder : "transparent"}`,
                     cursor: "pointer",
                   }}
                 >
@@ -676,12 +675,12 @@ function DatePickerPopup({
               style={{ ...rowBtn, justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px" }}>Cały dzień</span>
               <span style={{
-                width: "34px", height: "18px", borderRadius: "10px", position: "relative", display: "block",
-                background: allDay ? C.iceBlue : C.elevated, transition: "background .2s",
+                width: "34px", height: "18px", borderRadius: "var(--radius-pill)", position: "relative", display: "block",
+                background: allDay ? C.iceBlueSolid : C.elevated, transition: "background .2s",
               }}>
                 <span style={{
                   position: "absolute", top: "3px", left: allDay ? "17px" : "3px", width: "12px", height: "12px",
-                  borderRadius: "50%", background: "#fff", transition: "left .2s",
+                  borderRadius: "50%", background: C.textPrimary, transition: "left .2s",
                 }} />
               </span>
             </button>
@@ -696,8 +695,8 @@ function DatePickerPopup({
             <button
               onClick={() => { setAllDay(v => !v); setOpenTimeField(null); }}
               style={{
-                width: "36px", height: "20px", borderRadius: "10px", border: "none",
-                background: allDay ? C.iceBlue : C.elevated,
+                width: "36px", height: "20px", borderRadius: "var(--radius-pill)", border: "none",
+                background: allDay ? C.iceBlueSolid : C.elevated,
                 cursor: "pointer", position: "relative" as const, transition: "background .2s",
                 flexShrink: 0,
               }}
@@ -706,7 +705,7 @@ function DatePickerPopup({
                 position: "absolute" as const, top: "3px",
                 left: allDay ? "17px" : "3px",
                 width: "14px", height: "14px", borderRadius: "50%",
-                background: "#fff", transition: "left .2s",
+                background: C.textPrimary, transition: "left .2s",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
               }} />
             </button>
@@ -741,7 +740,7 @@ function DatePickerPopup({
                     style={{
                       flex: 1, padding: "6px 10px", borderRadius: "8px", textAlign: "center" as const,
                       background: open || isSelectedStart ? C.iceBlueBg : C.inputBg,
-                      border: `1px solid ${open || isSelectedStart ? "rgba(71,114,250,0.35)" : C.borderSubtle}`,
+                      border: `1px solid ${open || isSelectedStart ? C.blueBorder : C.borderSubtle}`,
                       color: open || isSelectedStart ? C.iceBlue : timeVal ? C.textPrimary : C.textDisabled,
                       fontSize: "12px", fontFamily: "'DM Mono', monospace",
                       cursor: allDay ? "default" : "pointer", opacity: allDay ? 0.55 : 1,
@@ -833,8 +832,8 @@ function DatePickerPopup({
         </button>
         <button onClick={handleOk} style={{
           flex: 1, padding: "8px", borderRadius: "8px",
-          background: C.iceBlue, border: "none",
-          color: "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+          background: C.iceBlueSolid, border: "none",
+          color: C.textPrimary, fontSize: "var(--text-body)", fontWeight: 600, cursor: "pointer",
         }}>
           OK
         </button>
@@ -859,7 +858,16 @@ function TaskRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={`Otwórz szczegóły zadania: ${task.text}`}
       onClick={() => onSelect(task.id)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        onSelect(task.id);
+      }}
       className="flex items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-100 group"
       style={{
         background: selected ? C.card : "transparent",
@@ -868,16 +876,15 @@ function TaskRow({
       onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLElement).style.background = C.card + "88"; }}
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
     >
-      <div
+      <button
+        type="button"
+        aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
         onClick={e => { e.stopPropagation(); onToggle(task.id); }}
-        className="mt-[2px] w-[13px] h-[11px] rounded-[3px] flex items-center justify-center flex-shrink-0 transition-all duration-200 cursor-pointer"
-        style={{
-          border: `1.5px solid ${task.done ? C.seaGlass : priorityColor ?? C.borderStrong}`,
-          background: task.done ? C.seaGlassBg : priorityColor ? priorityColor + "14" : "transparent",
-        }}
+        className={`task-checkbox mt-[2px] ${task.done ? "is-checked" : ""}`}
+        style={{ borderColor: task.done ? C.iceBlue : priorityColor ?? C.borderStrong }}
       >
-        {task.done && <Check size={7} strokeWidth={2.5} style={{ color: C.seaGlass }} />}
-      </div>
+        {task.done && <Check size={8} strokeWidth={2.5} />}
+      </button>
       <div className="flex-1 min-w-0">
         <span className="text-[13px] leading-snug block" style={{
           color: task.done ? C.textDisabled : C.textPrimary,
@@ -896,6 +903,7 @@ function TaskRow({
         <div className="flex items-center gap-1.5 flex-shrink-0 self-center ml-2">
           {taskTags.map(td => (
             <button
+              type="button"
               key={td.id}
               onClick={e => { e.stopPropagation(); onUpdate(task.id, { tags: (task.tags ?? []).filter(id => id !== td.id) }); }}
               title={`Usuń tag #${td.label}`}
@@ -944,30 +952,22 @@ function PriorityDropdown({ current, anchorEl, onSelect, onClose }: {
     return () => document.removeEventListener("mousedown", h);
   }, [anchorEl, onClose]);
   return (
-    <div ref={ref} style={{
+    <Menu ref={ref} style={{
       position: "fixed", top: rect.bottom + 4, right: window.innerWidth - rect.right,
-      width: 148, background: "#1E1E1E", border: "1px solid #333",
-      borderRadius: 12, overflow: "hidden", zIndex: 9999,
-      boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+      width: 148, zIndex: 9999,
     }}>
       {PRIORITY_FLAGS.map(({ p, label, color }) => (
-        <button key={String(p)} onClick={() => onSelect(p as Priority | null)}
-          style={{
-            width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "9px 14px", background: "none", border: "none", cursor: "pointer",
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}
+        <MenuItem
+          key={String(p)}
+          selected={current === p}
+          onClick={() => onSelect(p as Priority | null)}
+          leadingIcon={<Flag fill={p ? color : "none"} style={{ color }} />}
+          trailingIcon={current === p ? <Check /> : undefined}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <Flag size={13} strokeWidth={1.5} fill={p ? color : "none"} style={{ color }} />
-            <span style={{ fontSize: 12, color: C.textSecond }}>{label}</span>
-          </div>
-          {current === p && <Check size={11} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-        </button>
+          {label}
+        </MenuItem>
       ))}
-    </div>
+    </Menu>
   );
 }
 
@@ -996,56 +996,41 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
   const currentLabel = listy.find(l => l.id === current)?.label ?? "Skrzynka zadań";
 
   return (
-    <div ref={ref} style={{
+    <Menu ref={ref} style={{
       position: "fixed", bottom: window.innerHeight - rect.top + 4, left: rect.left,
-      width: 210, background: "#1E1E1E", border: "1px solid #333",
-      borderRadius: 12, overflow: "hidden", zIndex: 9999,
-      boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+      width: 210, zIndex: 9999,
     }}>
-      <div style={{ padding: "8px", borderBottom: "1px solid #2A2A2A" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#111", borderRadius: 7, padding: "5px 9px" }}>
+      <div style={{ padding: "8px", borderBottom: `1px solid ${C.borderSubtle}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, background: C.inputBg, borderRadius: 7, padding: "5px 9px" }}>
           <Search size={11} strokeWidth={1.5} style={{ color: C.textDisabled, flexShrink: 0 }} />
           <input autoFocus placeholder="Szukaj" value={q} onChange={e => setQ(e.target.value)}
-            style={{ background: "none", border: "none", outline: "none", fontSize: 12, color: C.textPrimary, flex: 1, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }} />
+            style={{ background: "none", border: "none", outline: "none", fontSize: 10, color: C.textPrimary, flex: 1, fontFamily: "var(--font-sans)" }} />
         </div>
       </div>
       {all.map(l => (
-        <button key={String(l.id)} onClick={() => onSelect(l.id)}
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", background: "none", border: "none", cursor: "pointer" }}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}
+        <MenuItem
+          key={String(l.id)}
+          selected={current === l.id}
+          onClick={() => onSelect(l.id)}
+          leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: l.color }} />}
+          trailingIcon={current === l.id ? <Check /> : undefined}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 12, color: current === l.id ? C.iceBlue : C.textSecond }}>{l.label}</span>
-          </div>
-          {current === l.id && <Check size={11} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-        </button>
+          {l.label}
+        </MenuItem>
       ))}
-      <div style={{ borderTop: "1px solid #2A2A2A", padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ borderTop: `1px solid ${C.borderSubtle}`, padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}>
         <Inbox size={11} strokeWidth={1.5} style={{ color: C.textDisabled }} />
         <span style={{ fontSize: 11, color: C.textMuted }}>{currentLabel}</span>
       </div>
-    </div>
+    </Menu>
   );
 }
 
 // ── More menu ─────────────────────────────────────────────
 const MORE_ITEMS: ({ action: string; label: string; icon: React.ComponentType<{size?:number;strokeWidth?:number;style?:React.CSSProperties}>; danger?: boolean } | null)[] = [
   { action: "subtask",   label: "Dodaj podzadanie",   icon: ListPlus   },
-  { action: "pin",       label: "Przypnij",            icon: Pin        },
-  { action: "wontdo",    label: "Nie zrobię",           icon: XCircle    },
-  { action: "tags",      label: "Tagi",                 icon: Tag        },
-  { action: "attach",    label: "Prześlij załącznik",   icon: Paperclip  },
-  null,
-  { action: "activity",  label: "Aktywności zadań",    icon: Activity   },
-  { action: "template",  label: "Zapisz jako szablon", icon: Bookmark   },
-  { action: "duplicate", label: "Duplikuj",             icon: Copy       },
-  { action: "link",      label: "Kopiuj link",          icon: Link       },
-  { action: "note",      label: "Konwertuj na notatkę", icon: FileText   },
-  null,
   { action: "print",     label: "Drukuj",               icon: Printer    },
+  null,
   { action: "delete",    label: "Usuń",                 icon: Trash2, danger: true },
 ];
 
@@ -1057,72 +1042,60 @@ function MoreMenu({ anchorEl, onAction, onClose }: {
   const ref  = useRef<HTMLDivElement>(null);
   const rect = anchorEl.getBoundingClientRect();
   useEffect(() => {
+    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) onClose();
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+      anchorEl.focus();
+    };
     document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", h);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [anchorEl, onClose]);
   return (
-    <div ref={ref} style={{
+    <Menu ref={ref} aria-label="Akcje zadania" style={{
       position: "fixed", bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right,
-      width: 210, background: "#1E1E1E", border: "1px solid #333",
-      borderRadius: 12, overflow: "hidden", zIndex: 9999,
-      boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+      width: 210, zIndex: 9999,
     }}>
       {MORE_ITEMS.map((item, i) =>
         item === null
-          ? <div key={i} style={{ height: 1, background: "#2A2A2A", margin: "3px 0" }} />
+          ? <div key={i} style={{ height: 1, background: C.borderSubtle, margin: "3px 0" }} />
           : (
-            <button key={item.action} onClick={() => onAction(item.action)}
-              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "none", border: "none", cursor: "pointer" }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}
-            >
-              <item.icon size={13} strokeWidth={1.5} style={{ color: item.danger ? C.danger : C.textMuted }} />
-              <span style={{ fontSize: 12, color: item.danger ? C.danger : C.textSecond }}>{item.label}</span>
-            </button>
+            <MenuItem key={item.action} tone={item.danger ? "danger" : "default"} onClick={() => onAction(item.action)} leadingIcon={<item.icon />}>
+              {item.label}
+            </MenuItem>
           )
       )}
-    </div>
+    </Menu>
   );
 }
 
 // ── Task detail panel ─────────────────────────────────────
-const FORMAT_ACTIONS = [
-  { label: "H",    title: "Nagłówek"     },
-  { label: "B",    title: "Pogrubienie", bold: true },
-  { label: "A",    title: "Kolor",       colored: true },
-  { label: "I",    title: "Kursywa",     italic: true },
-  { label: "U",    title: "Podkreślenie"},
-  { label: "S̶",    title: "Przekreślenie"},
-  { label: "•",    title: "Lista"        },
-  { label: "1.",   title: "Numeracja"    },
-  { label: "</>",  title: "Kod"          },
-];
-
-export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, calendarAnchorEl, surface }: {
+export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
   task: Task; onClose: () => void;
   onUpdate: (id: number, patch: Partial<Task>) => void;
   onDelete: (id: number) => void;
   listy: ListItem[];
   tagi: TagItem[];
-  calendarAnchorEl?: HTMLElement | null;
-  surface?: "default" | "calendar";
 }) {
   const [showPriority,  setShowPriority]  = useState(false);
   const [showListPick,  setShowListPick]  = useState(false);
   const [showMore,      setShowMore]      = useState(false);
-  const [showFormat,    setShowFormat]    = useState(false);
   const [showComments,  setShowComments]  = useState(false);
   const [newComment,    setNewComment]    = useState("");
-  const [comments,      setComments]      = useState<{ id: number; author: string; text: string; time: string }[]>([]);
+  const comments = task.comments ?? [];
   const [editTitle,     setEditTitle]     = useState(task.text);
   const [editNotes,     setEditNotes]     = useState(task.notes ?? "");
 
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const taskCalendarDate = (task as Task & { calendarDate?: string }).calendarDate;
+  const taskCalendarDate = task.calendarDate;
   const parsedTaskDate = taskCalendarDate ? new Date(`${taskCalendarDate}T12:00:00`) : null;
   const [taskDateVal,    setTaskDateVal]    = useState<DateVal>({
     date: parsedTaskDate && !Number.isNaN(parsedTaskDate.getTime()) ? parsedTaskDate : null, time: task.endTime ? "" : task.time ?? "", reminder: "", repeat: "", startTime: task.time ?? "09:00", endTime: task.endTime ?? "10:00", duration: Boolean(task.endTime), allDay: true,
@@ -1157,12 +1130,18 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
   const listLabel = listy.find(l => l.id === task.list)?.label ?? "Skrzynka zadań";
   const listColor = listy.find(l => l.id === task.list)?.color ?? C.textMuted;
   const taskTagDefs = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
-  const dateStr   = task.date ?? "Dziś, 16 lip";
+  const dateStr   = task.date ?? "Bez terminu";
   const timeStr   = task.time ? `, ${task.time}${task.endTime ? `–${task.endTime}` : ""}` : "";
 
   const addComment = () => {
     if (!newComment.trim()) return;
-    setComments(p => [...p, { id: Date.now(), author: "Mateusz", text: newComment.trim(), time: "teraz" }]);
+    const comment: TaskComment = {
+      id: Date.now(),
+      author: "Ty",
+      text: newComment.trim(),
+      time: new Intl.DateTimeFormat("pl-PL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date()),
+    };
+    onUpdate(task.id, { comments: [...comments, comment] });
     setNewComment("");
   };
 
@@ -1172,10 +1151,9 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
   };
 
   const D = {
-    bg:     surface === "calendar" ? "#2A2A2A" : "#131313",
-    bar:    surface === "calendar" ? "#303030" : "#181818",
-    border: surface === "calendar" ? "rgba(255,255,255,0.08)" : "#232323",
-    hover:  surface === "calendar" ? "#353535" : "#222222",
+    bg:     C.subSidebar,
+    border: C.borderSubtle,
+    hover:  C.elevated,
   };
 
   return (
@@ -1185,10 +1163,13 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
         {/* Done checkbox (square) */}
         <button
+          type="button"
+          aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
           onClick={() => onUpdate(task.id, { done: !task.done })}
-          style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1.5px solid ${task.done ? C.seaGlass : "#484848"}`, background: task.done ? C.seaGlassBg : "transparent" }}
+          className={`task-checkbox task-checkbox--detail ${task.done ? "is-checked" : ""}`}
+          style={{ borderColor: task.done ? C.iceBlue : C.borderStrong }}
         >
-          {task.done && <Check size={9} strokeWidth={2.5} style={{ color: C.seaGlass }} />}
+          {task.done && <Check size={9} strokeWidth={2.5} />}
         </button>
 
         {/* Divider */}
@@ -1197,6 +1178,8 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
         {/* Date chip — opens DatePickerPopup */}
         <button
           ref={dateBtnRef}
+          type="button"
+          aria-label="Zmień termin zadania"
           onClick={() => { setShowDatePicker(v => !v); closeAll(); }}
           style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, overflow: "hidden", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
         >
@@ -1209,6 +1192,8 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
         {/* Priority flag */}
         <button
           ref={flagBtnRef}
+          type="button"
+          aria-label="Zmień priorytet zadania"
           onClick={() => { setShowPriority(v => !v); setShowListPick(false); setShowMore(false); }}
           style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex", flexShrink: 0 }}
         >
@@ -1245,7 +1230,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
             rows={1}
             style={{
               flex: 1, background: "none", border: "none", outline: "none", resize: "none", overflow: "hidden",
-              fontSize: 18, fontWeight: 700, color: C.textPrimary, lineHeight: 1.3,
+              fontSize: 16, fontWeight: 600, color: C.textPrimary, lineHeight: 1.3,
               fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", padding: 0,
               textDecoration: task.done ? "line-through" : "none",
             }}
@@ -1263,7 +1248,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
           placeholder="Wpisz treść lub wpisz /, aby wyświetlić menu"
           style={{
             flex: 1, minHeight: 80, width: "100%", background: "none", border: "none", outline: "none", resize: "none",
-            fontSize: 13, color: C.textSecond, lineHeight: 1.65,
+            fontSize: 12, color: C.textSecond, lineHeight: 1.6,
             fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", padding: 0,
           }}
         />
@@ -1308,7 +1293,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
                 onBlur={() => { setTagInput(""); setShowTagInput(false); }}
                 placeholder="#tag"
                 style={{
-                  background: "#1E1E1E", border: `1px solid ${C.iceBlue}55`, borderRadius: 20,
+                  background: C.subSidebar, border: `1px solid ${C.blueBorder}`, borderRadius: 20,
                   outline: "none", fontSize: 11, color: C.textSecond, padding: "3px 8px",
                   fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", width: 72,
                 }}
@@ -1336,16 +1321,19 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
             {(task.subtasks ?? []).map(st => (
               <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
                 <button
+                  type="button"
+                  aria-label={st.done ? `Oznacz podzadanie ${st.text || "bez nazwy"} jako niewykonane` : `Oznacz podzadanie ${st.text || "bez nazwy"} jako wykonane`}
                   onClick={() => toggleSubtask(st.id)}
-                  style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", border: `1.5px solid ${st.done ? C.seaGlass : "#484848"}`, background: st.done ? C.seaGlassBg : "transparent" }}
+                  className={`task-checkbox ${st.done ? "is-checked" : ""}`}
+                  style={{ borderColor: st.done ? C.iceBlue : C.borderStrong }}
                 >
-                  {st.done && <Check size={7} strokeWidth={2.5} style={{ color: C.seaGlass }} />}
+                  {st.done && <Check size={7} strokeWidth={2.5} />}
                 </button>
                 <span style={{ fontSize: 12, color: st.done ? C.textDisabled : C.textSecond, textDecoration: st.done ? "line-through" : "none" }}>{st.text || "Nowe podzadanie"}</span>
               </div>
             ))}
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
-              <div style={{ width: 14, height: 14, borderRadius: 3, border: `1.5px solid #2A2A2A`, flexShrink: 0 }} />
+              <div style={{ width: 14, height: 14, borderRadius: 3, border: `1px solid ${C.borderSubtle}`, flexShrink: 0 }} />
               <span style={{ fontSize: 12, color: C.textDisabled }}>Naciśnij klawisz "Enter", aby dodać pozycję do listy</span>
             </div>
           </div>
@@ -1354,7 +1342,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
         {/* Comments section */}
         {showComments && comments.length > 0 && (
           <div style={{ marginTop: 18 }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, marginBottom: 12 }}>Komentarze {comments.length}</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 12 }}>Komentarze {comments.length}</p>
             {comments.map(c => (
               <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 12 }}>
                 <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: C.iceBlueBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: C.iceBlue }}>
@@ -1373,34 +1361,18 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
         )}
       </div>
 
-      {/* ── Format bar ── */}
-      {showFormat && (
-        <div style={{ borderTop: `1px solid ${D.border}`, padding: "5px 8px", display: "flex", gap: 1, flexWrap: "wrap", background: D.bar, flexShrink: 0 }}>
-          {FORMAT_ACTIONS.map(f => (
-            <button key={f.label} title={f.title}
-              style={{ padding: "4px 7px", borderRadius: 5, background: "none", border: "none", cursor: "pointer", color: f.colored ? C.iceBlue : C.textMuted, fontSize: 11, fontWeight: f.bold ? 700 : f.italic ? 400 : 400, fontStyle: f.italic ? "italic" : "normal" }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* ── Comment input ── */}
       {showComments && (
         <div style={{ borderTop: `1px solid ${D.border}`, padding: "8px 12px", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, border: `1px solid ${newComment ? C.iceBlue : "#333"}`, borderRadius: 8, padding: "7px 10px", transition: "border-color .2s" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, border: `1px solid ${newComment ? C.iceBlue : C.borderSubtle}`, borderRadius: 8, padding: "7px 10px", transition: "border-color .2s" }}>
             <input
+              aria-label="Nowy komentarz"
               placeholder="Napisz komentarz"
               value={newComment}
               onChange={e => setNewComment(e.target.value)}
               onKeyDown={e => e.key === "Enter" && addComment()}
               style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 12, color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}
             />
-            <Smile size={13} strokeWidth={1.5} style={{ color: C.textDisabled, flexShrink: 0 }} />
-            <ImageIcon size={13} strokeWidth={1.5} style={{ color: C.textDisabled, flexShrink: 0 }} />
           </div>
         </div>
       )}
@@ -1417,21 +1389,16 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
         </button>
 
         <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
-          {/* Format toggle (A) */}
-          <button onClick={() => setShowFormat(v => !v)}
-            style={{ padding: "5px 7px", borderRadius: 6, background: showFormat ? C.iceBlueBg : "none", border: "none", cursor: "pointer", color: showFormat ? C.iceBlue : C.textDisabled, fontSize: 12, fontWeight: 700 }}>
-            A
-          </button>
           {/* Comments toggle */}
-          <button onClick={() => setShowComments(v => !v)}
+          <button type="button" aria-label="Pokaż komentarze" aria-expanded={showComments} onClick={() => setShowComments(v => !v)}
             style={{ padding: "4px 6px", borderRadius: 6, background: showComments ? C.iceBlueBg : "none", border: "none", cursor: "pointer", color: showComments ? C.iceBlue : C.textDisabled, display: "flex", alignItems: "center", gap: 3 }}>
             <MessageSquare size={13} strokeWidth={1.5} />
             {comments.length > 0 && <span style={{ fontSize: 9, color: C.iceBlue, fontWeight: 700 }}>{comments.length}</span>}
           </button>
           {/* More (...) */}
-          <button ref={moreBtnRef}
+          <button ref={moreBtnRef} type="button" aria-label="Więcej akcji zadania" aria-expanded={showMore}
             onClick={() => { setShowMore(v => !v); setShowListPick(false); setShowPriority(false); }}
-            style={{ padding: "4px 5px", borderRadius: 6, background: showMore ? "#2A2A2A" : "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", alignItems: "center" }}>
+            style={{ padding: "4px 5px", borderRadius: 6, background: showMore ? C.elevated : "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", alignItems: "center" }}>
             <MoreHorizontal size={15} strokeWidth={1.5} />
           </button>
         </div>
@@ -1444,19 +1411,18 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
           onConfirm={v => {
             setTaskDateVal(v);
             const label = formatDateLabel(v);
+            const calendarDate = v.date ? toCalendarDateKey(v.date) : undefined;
             onUpdate(task.id, {
               date: label || undefined,
               time: v.duration ? v.startTime : v.time || undefined,
               endTime: v.duration ? v.endTime : undefined,
-              ...(taskCalendarDate !== undefined && v.date ? {
-                calendarDate: `${v.date.getFullYear()}-${String(v.date.getMonth() + 1).padStart(2, "0")}-${String(v.date.getDate()).padStart(2, "0")}`,
-              } : {}),
+              calendarDate,
+              ...(calendarDate ? { view: taskViewForCalendarDate(calendarDate) } : {}),
             });
             setShowDatePicker(false);
           }}
           onClose={() => setShowDatePicker(false)}
           anchorEl={dateBtnRef.current}
-          placementAnchorEl={calendarAnchorEl}
         />
       )}
       {showPriority && flagBtnRef.current && (
@@ -1485,6 +1451,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi, cal
               const sub: Subtask = { id: Date.now(), text: "Nowe podzadanie", done: false };
               onUpdate(task.id, { subtasks: [...(task.subtasks ?? []), sub] });
             }
+            if (action === "print") window.print();
             setShowMore(false);
           }}
           onClose={() => setShowMore(false)}
@@ -1504,10 +1471,10 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
   const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
   const week  = getMiniWeek();
   const todayIdx = week.findIndex(d => d.today);
-  const panelBg = "#2C2C2C";
-  const panelBorder = "#3C3C3C";
-  const headingColor = "#929292";
-  const secondaryText = "#858585";
+  const panelBg = C.card;
+  const panelBorder = C.borderSubtle;
+  const headingColor = C.textMuted;
+  const secondaryText = C.textMuted;
   const DL = ["Pn","Wt","Śr","Cz","Pt","So","Nd"];
 
   return (
@@ -1531,10 +1498,10 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
         <div className="rounded-xl p-3.5" style={{ background: panelBg, border: `1px solid ${panelBorder}` }}>
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[11px]" style={{ color: headingColor }}>Postęp dnia</span>
-            <span className="text-[15px] font-semibold leading-none" style={{ fontFamily: "'DM Mono',monospace", color: pct === 100 ? C.seaGlass : C.iceBlue }}>{pct}%</span>
+            <span className="text-[16px] font-semibold leading-none" style={{ fontFamily: "'DM Mono',monospace", color: pct === 100 ? C.seaGlass : C.iceBlue }}>{pct}%</span>
           </div>
           <div className="h-[4px] rounded-full overflow-hidden" style={{ background: C.borderSubtle }}>
-            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: pct === 100 ? C.seaGlass : C.iceBlue }} />
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: pct === 100 ? C.seaGlass : C.iceBlueSolid }} />
           </div>
         </div>
       </section>
@@ -1546,8 +1513,8 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
         </div>
         <div className="space-y-1.5">
           {habits.map(h => (
-            <div key={h.id} onClick={() => onToggleHabit(h.id)}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150"
+            <button key={h.id} type="button" aria-pressed={h.done} onClick={() => onToggleHabit(h.id)}
+              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer text-left transition-all duration-150"
               style={{ background: panelBg, border: `1px solid ${panelBorder}` }}
               onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = C.cardHover)}
               onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = panelBg)}>
@@ -1556,7 +1523,7 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
                 {h.done && <Check size={7} strokeWidth={2.5} style={{ color: C.seaGlass }} />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] leading-none" style={{ color: h.done ? "#767676" : "#D0D0D0", textDecoration: h.done ? "line-through" : "none" }}>{h.name}</div>
+                <div className="text-[11px] leading-none" style={{ color: h.done ? C.textMuted : C.textSecond, textDecoration: h.done ? "line-through" : "none" }}>{h.name}</div>
                 {h.streak > 0 && (
                   <div className="flex items-center gap-1 mt-0.5">
                     <Flame size={9} strokeWidth={1.5} style={{ color: C.warning }} />
@@ -1565,7 +1532,7 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
                 )}
               </div>
               {h.done && <Star size={10} strokeWidth={1.5} style={{ color: C.warning, flexShrink: 0 }} />}
-            </div>
+            </button>
           ))}
         </div>
       </section>
@@ -1581,7 +1548,7 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
                     aspectRatio: "1",
                     background: d.today ? C.iceBlueBg : i < todayIdx ? C.seaGlassBg : "transparent",
                     color: d.today ? C.iceBlue : i < todayIdx ? C.seaGlass : secondaryText,
-                    border: `1px solid ${d.today ? "rgba(71,114,250,0.3)" : "transparent"}`,
+                    border: `1px solid ${d.today ? C.blueBorder : "transparent"}`,
                   }}>
                   {i < todayIdx ? <Check size={8} strokeWidth={2.5} /> : d.n}
                 </div>
@@ -1620,7 +1587,7 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
         {showDate && task.date && (
           <span style={{ fontSize: 12, color: C.textMuted, flexShrink: 0 }}>[{fmtTaskDate(task.date)}]</span>
         )}
-        <span style={{ fontSize: 13.5, color: C.textSecond, lineHeight: 1.55 }}>{task.text}</span>
+        <span style={{ fontSize: 12, color: C.textSecond, lineHeight: 1.55 }}>{task.text}</span>
       </div>
     );
   }
@@ -1634,11 +1601,11 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
             <div style={{ display: "flex", flexDirection: "column", gap: 3.5, flexShrink: 0 }}>
               {[0,1,2].map(i => <div key={i} style={{ width: 14, height: 1.5, background: C.textMuted, borderRadius: 1 }} />)}
             </div>
-            <span style={{ fontSize: 20, fontWeight: 700, color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, fontFamily: "var(--font-sans)" }}>
               Podsumowanie
             </span>
           </div>
-          <span style={{ fontSize: 13, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{weekLabel}</span>
+          <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "var(--font-data)" }}>{weekLabel}</span>
         </div>
         {/* Toolbar */}
         <div style={{
@@ -1666,7 +1633,7 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
 
       {/* Date range hero */}
       <div style={{ padding: "0 26px 16px", flexShrink: 0 }}>
-        <div style={{ fontSize: 26, fontWeight: 700, color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
+        <div style={{ fontSize: 22, fontWeight: 600, color: C.textPrimary, fontFamily: "var(--font-sans)" }}>
           {weekLabel}
         </div>
       </div>
@@ -1675,7 +1642,7 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 26px 16px", scrollbarWidth: "none" }}>
         {/* Ukończone */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.seaGlass, marginBottom: 8, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.seaGlass, marginBottom: 8, fontFamily: "var(--font-sans)" }}>
             Ukończone
           </div>
           {done.length === 0
@@ -1685,7 +1652,7 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
         </div>
         {/* Niewykonane */}
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.danger, marginBottom: 8, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.danger, marginBottom: 8, fontFamily: "var(--font-sans)" }}>
             Niewykonane
           </div>
           {undone.length === 0
@@ -1695,25 +1662,6 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
         </div>
       </div>
 
-      {/* Footer */}
-      <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "12px 26px", borderTop: `1px solid ${C.borderSubtle}` }}>
-        {[
-          { icon: <Bookmark size={13} strokeWidth={1.5} />, label: "Zapisz jako" },
-          { icon: <Copy size={13} strokeWidth={1.5} />,     label: "Kopiuj" },
-        ].map(({ icon, label }) => (
-          <button key={label} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "7px 14px", borderRadius: 8,
-            background: C.card, border: `1px solid ${C.borderSubtle}`,
-            cursor: "pointer", fontSize: 12, color: C.textMuted,
-            fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = C.cardHover)}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = C.card)}>
-            {icon}{label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1744,7 +1692,7 @@ function SummaryOptions() {
 
   const Divider = () => <div style={{ height: 1, background: C.borderSubtle, margin: "8px 14px" }} />;
   const SectionLabel = ({ text }: { text: string }) => (
-    <div style={{ padding: "10px 14px 6px", fontSize: 10.5, fontWeight: 600, color: C.textMuted, textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>{text}</div>
+    <SectionHeader title={text} level={4} variant="label" className="px-[14px] pb-[6px] pt-[10px]" />
   );
 
   return (
@@ -1780,14 +1728,14 @@ function SummaryOptions() {
         </span>
         <button onClick={() => setNextPeriod(v => !v)} style={{
           width: 34, height: 19, borderRadius: 10, flexShrink: 0,
-          background: nextPeriod ? C.iceBlue : C.borderStrong,
+          background: nextPeriod ? C.iceBlueSolid : C.borderStrong,
           border: "none", cursor: "pointer", position: "relative" as const, transition: "background .2s",
         }}>
           <div style={{
             position: "absolute" as const, top: 2,
             left: nextPeriod ? 17 : 2,
             width: 15, height: 15, borderRadius: "50%",
-            background: "#fff", transition: "left .2s",
+            background: C.textPrimary, transition: "left .2s",
           }} />
         </button>
       </div>
@@ -1809,50 +1757,29 @@ function InputFloatMenu({ anchorEl, onClose, children }: {
     return () => document.removeEventListener("mousedown", h);
   }, [anchorEl, onClose]);
   return (
-    <div ref={ref} style={{
+    <Menu ref={ref} style={{
       position: "fixed",
       top: rect.bottom + 6,
       left: rect.left,
       minWidth: 170,
-      background: "#1E1E1E",
-      border: "1px solid #333",
-      borderRadius: 12,
-      overflow: "hidden",
       zIndex: 9999,
-      boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-      fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-      paddingBlock: 4,
     }}>
       {children}
-    </div>
+    </Menu>
   );
 }
 
 // ── Main page ─────────────────────────────────────────────
-const INIT_LISTY: ListItem[] = [
-  { id: "praca",   label: "Praca",   color: "#4772FA" },
-  { id: "dom",     label: "Dom",     color: "#D4AA68" },
-  { id: "hobby",   label: "Hobby",   color: "#A0A0A0" },
-  { id: "zdrowie", label: "Zdrowie", color: "#70B89F" },
-];
-const INIT_TAGI: TagItem[] = [
-  { id: "praca",   label: "praca",   color: "#4772FA" },
-  { id: "trening", label: "trening", color: "#70B89F" },
-  { id: "dom",     label: "dom",     color: "#D4AA68" },
-  { id: "finanse", label: "finanse", color: "#A0A0A0" },
-  { id: "zdrowie", label: "zdrowie", color: "#70B89F" },
-  { id: "hobby",   label: "hobby",   color: "#A8BCD4" },
-];
-
 export default function Zadania() {
+  const [initialWorkspace] = useState(loadTaskWorkspace);
   const [taskView,      setTaskView]      = useState("dzis");
   const [listFilter,    setListFilter]    = useState<string | null>(null);
   const [tagFilter,     setTagFilter]     = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
-  const [tasks,         setTasks]         = useState<Task[]>(() => hydrateTaskCompletion(INITIAL_TASKS));
-  const [habits,        setHabits]        = useState<Habit[]>(INIT_HABITS);
-  const [listy,         setListy]         = useState<ListItem[]>(INIT_LISTY);
-  const [tagi,          setTagi]          = useState<TagItem[]>(INIT_TAGI);
+  const [tasks,         setTasks]         = useState<Task[]>(initialWorkspace.tasks);
+  const [habits,        setHabits]        = useState<Habit[]>(initialWorkspace.habits);
+  const [listy,         setListy]         = useState<ListItem[]>(initialWorkspace.lists);
+  const [tagi,          setTagi]          = useState<TagItem[]>(initialWorkspace.tags);
   const [selectedId,    setSelectedId]    = useState<number | null>(null);
   const [newTask,       setNewTask]       = useState("");
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
@@ -1863,9 +1790,13 @@ export default function Zadania() {
   const [inputDropdown, setInputDropdown] = useState<"priority" | "list" | "tags" | null>(null);
   const [showDone,      setShowDone]      = useState(true);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [storageFailed, setStorageFailed] = useState(false);
+
+  useEffect(() => {
+    setStorageFailed(!saveTaskWorkspace({ ...initialWorkspace, tasks, habits, lists: listy, tags: tagi }));
+  }, [habits, initialWorkspace, listy, tagi, tasks]);
 
   // Sidebar collapse state
-  const [filtersOpen,   setFiltersOpen]   = useState(false);
   const [listyOpen,     setListyOpen]     = useState(false);
   const [tagiOpen,      setTagiOpen]      = useState(false);
 
@@ -1913,7 +1844,7 @@ export default function Zadania() {
     if (taskView === "kosz") return Boolean(t.deleted);
     if (t.deleted) return false;
     if (taskView === "ukonczone") return t.done;
-    const viewMatch = taskView === "wszystkie" || taskView === "skrzynka" || taskView === "podsumowanie"
+    const viewMatch = taskView === "wszystkie" || taskView === "podsumowanie"
       ? true : t.view === taskView;
     const listMatch = listFilter ? t.list === listFilter : true;
     const tagMatch  = tagFilter  ? (t.tags ?? []).includes(tagFilter) : true;
@@ -1922,12 +1853,13 @@ export default function Zadania() {
   });
   const pending   = visible.filter(t => !t.done);
   const completed = visible.filter(t => t.done);
+  const dayHeading = viewedTaskDayHeading(taskView);
 
   const viewCounts = Object.fromEntries(
     SMART_VIEWS.map(v => [
       v.id,
       tasks.filter(t => !t.deleted && !t.done && (
-        v.id === "wszystkie" || v.id === "skrzynka" || v.id === "podsumowanie" ? true : t.view === v.id
+        v.id === "wszystkie" || v.id === "podsumowanie" ? true : t.view === v.id
       )).length,
     ])
   );
@@ -1957,6 +1889,8 @@ export default function Zadania() {
     if (!text) return;
     const id = Date.now();
     const dateLabel = formatDateLabel(newDateVal);
+    const calendarDate = newDateVal.date ? toCalendarDateKey(newDateVal.date) : undefined;
+    const fallbackView = taskView === "wszystkie" || taskView === "podsumowanie" || taskView === "kosz" || taskView === "ukonczone" ? "dzis" : taskView;
     setTagi(existing => {
       const known = new Set(existing.map(tag => tag.id));
       const missing = newTaskTags.filter(tag => !known.has(tag));
@@ -1969,13 +1903,14 @@ export default function Zadania() {
           }))];
     });
     setTasks(p => [...p, {
-      id, text, done: false, view: taskView === "wszystkie" || taskView === "podsumowanie" || taskView === "kosz" ? "dzis" : taskView,
+      id, text, done: false, view: calendarDate ? taskViewForCalendarDate(calendarDate) : fallbackView,
       tags: newTaskTags.length > 0 ? newTaskTags : undefined,
       list: newTaskList ?? undefined,
       priority: newPriority ?? undefined,
       time: newDateVal.duration ? newDateVal.startTime : newDateVal.time || undefined,
       endTime: newDateVal.duration ? newDateVal.endTime : undefined,
       date: dateLabel || undefined,
+      calendarDate,
     }]);
     setNewTask(""); setNewPriority(null); setNewTaskTags([]); setNewTaskList(null);
     setNewDateVal(DEFAULT_DATE_VAL); setInputDropdown(null);
@@ -2040,79 +1975,39 @@ export default function Zadania() {
   const dateLabel = formatDateLabel(newDateVal);
   const flagColor = newPriority === "high" ? C.danger : newPriority === "medium" ? C.warning : newPriority === "low" ? C.iceBlue : null;
 
+  const startNewTask = () => {
+    if (taskView === "podsumowanie" || taskView === "ukonczone" || taskView === "kosz") {
+      setTaskView("dzis");
+    }
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   return (
-    <div className="flex flex-1 overflow-hidden h-full">
+    <ModuleShell>
 
       {/* ── Sub-sidebar ── */}
-      <div className="task-sub-sidebar w-[200px] flex-shrink-0 border-r flex flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ background: C.subSidebar, borderColor: C.borderSubtle }}>
+      <ContextSidebar label="Widoki i listy zadań" className="overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* Smart views */}
-        <div className="px-2.5 pt-4 pb-2 space-y-px">
-          {SMART_VIEWS.map(v => {
+        <div className="px-2.5 pb-4 pt-5">
+          <SectionHeader title="Główne" level={3} variant="label" className="px-1.5" />
+          <div className="space-y-px">
+            {SMART_VIEWS.map(v => {
             const Icon = v.icon;
             const active = taskView === v.id && !listFilter && !tagFilter;
             const count = viewCounts[v.id];
             return (
-              <button key={v.id}
+              <ContextNavItem
+                key={v.id}
+                active={active}
                 onClick={() => { setTaskView(v.id); setListFilter(null); setTagFilter(null); }}
-                className="sidebar-item w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[11px] transition-all duration-150"
-                style={{
-                  background: active ? C.iceBlueBg : "transparent",
-                  color: active ? C.iceBlue : C.textMuted,
-                  fontSize: "var(--sidebar-font-size)",
-                  fontWeight: active ? 500 : 400,
-                  borderLeft: active ? `2px solid ${C.iceBlue}` : "2px solid transparent",
-                }}
-                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
-                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                <Icon size={12} strokeWidth={1.6} className="flex-shrink-0" />
-                <span className="flex-1 text-left leading-none">{v.label}</span>
-                {v.id !== "podsumowanie" && count > 0 && (
-                  <span style={{ fontFamily: "'DM Mono',monospace", fontSize: "8px", color: active ? C.iceBlue : C.textDisabled }}>{count}</span>
-                )}
-              </button>
+                icon={<Icon />}
+                label={v.label}
+                meta={v.id !== "podsumowanie" && count > 0 ? count : undefined}
+              />
             );
-          })}
-        </div>
-
-        <div className="mx-3 my-2 h-px" style={{ background: C.borderSubtle }} />
-
-        {/* Filtry */}
-        <div className="px-2.5 mb-2">
-          <button onClick={() => setFiltersOpen(open => !open)}
-            className="flex items-center gap-1.5 px-1.5 mb-1.5"
-            style={{ background: "none", border: "none", cursor: "pointer", paddingTop: 0, paddingBottom: 0 }}>
-            <ChevronRight size={10} strokeWidth={2} style={{ color: C.textDisabled, transform: filtersOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
-            <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: C.textMuted }}>Filtry</span>
-          </button>
-          {filtersOpen && <div className="space-y-px mt-1.5">
-            {([
-              { p: "high"   as Priority, label: "Wysoki", color: C.danger  },
-              { p: "medium" as Priority, label: "Średni", color: C.warning },
-              { p: "low"    as Priority, label: "Niski",  color: C.iceBlue },
-            ] as const).map(({ p, label, color }) => {
-              const active = priorityFilter === p;
-              return (
-                <button key={p}
-                  onClick={() => setPriorityFilter(active ? null : p)}
-                  className="w-full flex items-center gap-2.5 px-3 py-[6px] rounded-lg transition-all"
-                  style={{
-                    background: active ? color + "14" : "transparent",
-                    color: active ? color : C.textMuted,
-                    borderLeft: active ? `2px solid ${color}` : "2px solid transparent",
-                    fontSize: "11px",
-                    fontWeight: active ? 500 : 400,
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
-                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, opacity: active ? 1 : 0.7, flexShrink: 0 }} />
-                  <span>{label}</span>
-                </button>
-              );
             })}
-          </div>}
+          </div>
         </div>
 
         <div className="mx-3 my-2 h-px" style={{ background: C.borderSubtle }} />
@@ -2180,35 +2075,26 @@ export default function Zadania() {
                       <input autoFocus value={editListLabel} onChange={e => setEditListLabel(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") saveList(l.id); if (e.key === "Escape") setEditingListId(null); }}
                         onBlur={() => saveList(l.id)}
-                        style={{ flex: 1, background: "#1A1A1A", border: `1px solid ${C.iceBlue}55`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }} />
+                        style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
                     </div>
                   ) : (
-                    <button
+                    <ContextNavItem
+                      active={active}
                       onClick={() => { setListFilter(active ? null : l.id); setTagFilter(null); }}
-                      className="sidebar-item w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[11px] transition-all"
-                      style={{
-                        background: active ? l.color+"14" : "transparent",
-                        color: active ? l.color : C.textMuted,
-                        fontSize: "var(--sidebar-font-size)",
-                        fontWeight: active ? 500 : 400,
-                        borderLeft: active ? `2px solid ${l.color}` : "2px solid transparent",
-                      }}
-                      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
-                      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0, opacity: active ? 1 : 0.7 }} />
-                      <span className="flex-1 text-left leading-none truncate">{l.label}</span>
-                      {count > 0 && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: "8px", color: active ? l.color : C.textDisabled }}>{count}</span>}
-                    </button>
+                      icon={<span className="h-2 w-2 rounded-full" style={{ background: l.color, opacity: active ? 1 : 0.7 }} />}
+                      label={l.label}
+                      meta={count > 0 ? count : undefined}
+                    />
                   )}
                   {/* Hover actions */}
                   {editingListId !== l.id && (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
                       <button onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
-                        style={{ background: "#2A2A2A", border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
+                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
                       <button onClick={e => { e.stopPropagation(); deleteList(l.id); }}
-                        style={{ background: "#2A2A2A", border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
+                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
                     </div>
@@ -2222,7 +2108,7 @@ export default function Zadania() {
                 <input autoFocus placeholder="Nazwa listy" value={newListLabel} onChange={e => setNewListLabel(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addList(); if (e.key === "Escape") { setAddingList(false); setNewListLabel(""); } }}
                   onBlur={() => { if (newListLabel.trim()) addList(); else { setAddingList(false); setNewListLabel(""); } }}
-                  style={{ flex: 1, background: "#1A1A1A", border: `1px solid ${C.iceBlue}55`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }} />
+                  style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
               </div>
             )}
           </div>}
@@ -2292,33 +2178,24 @@ export default function Zadania() {
                       <input autoFocus value={editTagLabel} onChange={e => setEditTagLabel(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") saveTag(t.id); if (e.key === "Escape") setEditingTagId(null); }}
                         onBlur={() => saveTag(t.id)}
-                        style={{ flex: 1, background: "#1A1A1A", border: `1px solid ${C.iceBlue}55`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }} />
+                        style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
                     </div>
                   ) : (
-                    <button
+                    <ContextNavItem
+                      active={active}
                       onClick={() => { setTagFilter(active ? null : t.id); setListFilter(null); }}
-                      className="sidebar-item w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[11px] transition-all"
-                      style={{
-                        background: active ? t.color+"14" : "transparent",
-                        color: active ? t.color : C.textMuted,
-                        fontSize: "var(--sidebar-font-size)",
-                        fontWeight: active ? 500 : 400,
-                        borderLeft: active ? `2px solid ${t.color}` : "2px solid transparent",
-                      }}
-                      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
-                      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: t.color, flexShrink: 0, opacity: active ? 1 : 0.7 }} />
-                      <span className="flex-1 text-left leading-none">#{t.label}</span>
-                    </button>
+                      icon={<span className="h-2 w-2 rounded-full" style={{ background: t.color, opacity: active ? 1 : 0.7 }} />}
+                      label={`#${t.label}`}
+                    />
                   )}
                   {editingTagId !== t.id && (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
                       <button onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
-                        style={{ background: "#2A2A2A", border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
+                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
                       <button onClick={e => { e.stopPropagation(); deleteTag(t.id); }}
-                        style={{ background: "#2A2A2A", border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
+                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
                     </div>
@@ -2332,7 +2209,7 @@ export default function Zadania() {
                 <input autoFocus placeholder="#tag" value={newTagLabel} onChange={e => setNewTagLabel(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addTagItem(); if (e.key === "Escape") { setAddingTag(false); setNewTagLabel(""); } }}
                   onBlur={() => { if (newTagLabel.trim()) addTagItem(); else { setAddingTag(false); setNewTagLabel(""); } }}
-                  style={{ flex: 1, background: "#1A1A1A", border: `1px solid ${C.iceBlue}55`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }} />
+                  style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
               </div>
             )}
           </div>}
@@ -2346,69 +2223,120 @@ export default function Zadania() {
           ] as const).map(({ icon: Icon, label, view }) => {
             const active = taskView === view && !listFilter && !tagFilter;
             return (
-              <button key={label}
+              <ContextNavItem
+                key={label}
+                active={active}
                 onClick={() => { setTaskView(view); setListFilter(null); setTagFilter(null); }}
-                className="sidebar-item w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[11px] transition-colors"
-                style={{
-                  color: active ? C.iceBlue : C.textDisabled,
-                  fontSize: "var(--sidebar-font-size)",
-                  background: active ? C.iceBlueBg : "transparent",
-                  borderLeft: active ? `2px solid ${C.iceBlue}` : "2px solid transparent",
-                }}
-                onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; (e.currentTarget as HTMLElement).style.color = C.textMuted; } }}
-                onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = C.textDisabled; } }}>
-                <Icon size={12} strokeWidth={1.5} /><span>{label}</span>
-              </button>
+                icon={<Icon />}
+                label={label}
+              />
             );
           })}
         </div>
-      </div>
+      </ContextSidebar>
 
       {/* ── Summary document (replaces task list in podsumowanie mode) ── */}
-      {taskView === "podsumowanie" && <SummaryDocument tasks={tasks.filter(t => !t.deleted)} listy={listy} />}
+      {taskView === "podsumowanie" && (
+        <ModuleMain>
+          <PageHeader
+            title="Zadania"
+            description={`Podsumowanie · ${todayStr()}`}
+            leading={<CheckSquare size={18} strokeWidth={1.5} />}
+            meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+            actions={<Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}><span className="header-action-label">Nowe zadanie</span></Button>}
+          />
+          <WorkspaceToolbar>
+            <select
+              aria-label="Widok zadań"
+              className="context-mobile-select ui-field__control ui-select ui-select--compact"
+              value={taskView}
+              onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
+            >
+              {SMART_VIEWS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              <option value="ukonczone">Ukończone</option>
+              <option value="kosz">Kosz</option>
+            </select>
+            <span className="workspace-context-label">Podsumowanie</span>
+          </WorkspaceToolbar>
+          <SummaryDocument tasks={tasks.filter(t => !t.deleted)} listy={listy} />
+        </ModuleMain>
+      )}
 
       {/* ── Task list ── */}
-      <main className="flex-1 flex flex-col overflow-hidden min-w-0"
+      <ModuleMain
         style={{ background: C.bg, display: taskView === "podsumowanie" ? "none" : undefined }}>
-        <header className="flex-shrink-0 px-6 pt-5 pb-4 border-b" style={{ borderColor: C.borderSubtle }}>
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-[16px] font-semibold" style={{ color: C.textPrimary }}>
-                {listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
-              </h1>
-              <p className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>{todayStr()}</p>
-            </div>
-            {pending.length > 0 && (
-              <span className="text-[11px] px-2 py-0.5 rounded-md mt-0.5" style={{ background: C.card, color: C.textMuted }}>
-                {pending.length} zadań
-              </span>
-            )}
-          </div>
-          {(listFilter || tagFilter || priorityFilter) && (
-            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+        <PageHeader
+          title="Zadania"
+          description={`${listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]} · ${todayStr()}`}
+          leading={<CheckSquare size={18} strokeWidth={1.5} />}
+          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+          actions={(
+            <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
+              <span className="header-action-label">Nowe zadanie</span>
+            </Button>
+          )}
+        />
+
+        <WorkspaceToolbar className="task-workspace-toolbar">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <select
+              aria-label="Widok zadań"
+              className="context-mobile-select ui-field__control ui-select ui-select--compact"
+              value={taskView}
+              onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
+            >
+              {SMART_VIEWS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              <option value="ukonczone">Ukończone</option>
+              <option value="kosz">Kosz</option>
+            </select>
+            <span className="workspace-context-label">
+              {listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
+            </span>
+            {(listFilter || tagFilter || priorityFilter) && (
+              <div className="flex flex-wrap items-center gap-1.5">
               {listFilter && (
-                <button onClick={() => setListFilter(null)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md"
+                <Button variant="quiet" size="sm" onClick={() => setListFilter(null)}
                   style={{ background: (listy.find(l => l.id === listFilter)?.color ?? C.iceBlue)+"18", color: listy.find(l => l.id === listFilter)?.color ?? C.iceBlue }}>
                   {listy.find(l => l.id === listFilter)?.label} <X size={9} strokeWidth={2} />
-                </button>
+                </Button>
               )}
               {tagFilter && (
-                <button onClick={() => setTagFilter(null)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md"
+                <Button variant="quiet" size="sm" onClick={() => setTagFilter(null)}
                   style={{ background: (tagi.find(t => t.id === tagFilter)?.color ?? C.iceBlue)+"18", color: tagi.find(t => t.id === tagFilter)?.color ?? C.iceBlue }}>
                   #{tagFilter} <X size={9} strokeWidth={2} />
-                </button>
+                </Button>
               )}
               {priorityFilter && (
-                <button onClick={() => setPriorityFilter(null)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md"
+                <Button variant="quiet" size="sm" onClick={() => setPriorityFilter(null)}
                   style={{ background: PRIORITY_COLOR[priorityFilter]+"18", color: PRIORITY_COLOR[priorityFilter] }}>
                   {priorityFilter === "high" ? "Wysoki" : priorityFilter === "medium" ? "Średni" : "Niski"} <X size={9} strokeWidth={2} />
-                </button>
+                </Button>
               )}
-            </div>
-          )}
-        </header>
+              </div>
+            )}
+          </div>
+          <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
+            {([
+              { id: "high" as Priority, label: "Wysoki", color: C.danger },
+              { id: "medium" as Priority, label: "Średni", color: C.warning },
+              { id: "low" as Priority, label: "Niski", color: C.iceBlue },
+            ]).map((item) => (
+              <Button
+                key={item.id}
+                variant="ghost"
+                size="sm"
+                aria-pressed={priorityFilter === item.id}
+                onClick={() => setPriorityFilter(priorityFilter === item.id ? null : item.id)}
+                style={{ color: priorityFilter === item.id ? item.color : C.textMuted, background: priorityFilter === item.id ? `${item.color}14` : undefined }}
+              >
+                {item.label}
+              </Button>
+            ))}
+            {pending.length > 0 && <Badge tone="neutral">{pending.length} otwartych</Badge>}
+          </div>
+        </WorkspaceToolbar>
 
-        <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-3 py-3">
+        <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-7 py-5">
           {/* Add task input */}
           <div className="task-entry mx-1 mb-3 rounded-xl transition-all duration-200"
             style={{
@@ -2457,7 +2385,7 @@ export default function Zadania() {
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
                   title="Priorytet"
                   style={{
-                    background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? "#2A2A2A" : "transparent",
+                    background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? C.elevated : "transparent",
                     color: flagColor ?? C.textDisabled,
                     border: `1px solid ${flagColor ? flagColor + "40" : "transparent"}`,
                   }}>
@@ -2471,7 +2399,7 @@ export default function Zadania() {
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
                   title="Lista"
                   style={{
-                    background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? "#2A2A2A" : "transparent",
+                    background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? C.elevated : "transparent",
                     color: newTaskList ? listy.find(l => l.id === newTaskList)?.color : C.textDisabled,
                     border: `1px solid ${newTaskList ? (listy.find(l => l.id === newTaskList)?.color ?? C.iceBlue) + "40" : "transparent"}`,
                   }}>
@@ -2485,9 +2413,9 @@ export default function Zadania() {
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
                   title="Tagi"
                   style={{
-                    background: newTaskTags.length > 0 ? C.iceBlueBg : inputDropdown === "tags" ? "#2A2A2A" : "transparent",
+                    background: newTaskTags.length > 0 ? C.iceBlueBg : inputDropdown === "tags" ? C.elevated : "transparent",
                     color: newTaskTags.length > 0 ? C.iceBlue : C.textDisabled,
-                    border: `1px solid ${newTaskTags.length > 0 ? "rgba(71,114,250,0.3)" : "transparent"}`,
+                    border: `1px solid ${newTaskTags.length > 0 ? C.blueBorder : "transparent"}`,
                   }}>
                   <Hash size={12} strokeWidth={1.5} />
                 </button>
@@ -2500,7 +2428,7 @@ export default function Zadania() {
                   style={{
                     background: dateLabel ? C.iceBlueBg : "transparent",
                     color: dateLabel ? C.iceBlue : C.textDisabled,
-                    border: `1px solid ${dateLabel ? "rgba(71,114,250,0.3)" : "transparent"}`,
+                    border: `1px solid ${dateLabel ? C.blueBorder : "transparent"}`,
                   }}>
                   <Calendar size={12} strokeWidth={1.5} />
                   {dateLabel && (
@@ -2512,13 +2440,21 @@ export default function Zadania() {
                   <button
                     onMouseDown={e => { e.preventDefault(); addTask(); }}
                     className="text-[10px] font-semibold px-2 h-7 rounded-md flex-shrink-0"
-                    style={{ background: C.iceBlue, color: "#fff" }}>
+                    style={{ background: C.iceBlueSolid, color: C.textPrimary }}>
                     ↵
                   </button>
                 )}
               </div>
             </div>
           </div>
+
+          {dayHeading && (
+            <div className="task-day-heading" aria-label={`${dayHeading}. ${visible.length} zadań`}>
+              <ChevronDown size={13} strokeWidth={1.6} aria-hidden="true" />
+              <h2 className="task-day-heading__title">{dayHeading}</h2>
+              <span className="task-day-heading__count">{visible.length}</span>
+            </div>
+          )}
 
           {taskView === "ukonczone" ? (
             /* Ukończone view — flat list of all done tasks */
@@ -2603,19 +2539,18 @@ export default function Zadania() {
             </div>
           )}
         </div>
-      </main>
+      </ModuleMain>
 
       {/* ── Right panel ── */}
-      <div className="summary-sidebar w-[288px] flex-shrink-0 border-l flex flex-col overflow-hidden"
-        style={{ background: C.subSidebar, borderColor: C.borderSubtle }}>
+      {(selectedTask || taskView === "podsumowanie") && (
+        <DetailPanel className={selectedTask ? "" : "task-summary-detail"} label={selectedTask ? "Szczegóły zadania" : "Podsumowanie zadań"}>
         {selectedTask ? (
           <TaskDetail task={selectedTask} onClose={() => setSelectedId(null)} onUpdate={updateTask} onDelete={deleteTask} listy={listy} tagi={tagi} />
-        ) : taskView === "podsumowanie" ? (
-          <SummaryOptions />
         ) : (
           <SummaryPanel tasks={visible} habits={habits} onToggleHabit={toggleHabit} />
         )}
-      </div>
+        </DetailPanel>
+      )}
 
       {/* ── Date picker popup (fixed) ── */}
       {datePickerOpen && dateButtonRef.current && (
@@ -2636,17 +2571,13 @@ export default function Zadania() {
             { p: "low"    as Priority, label: "Niski",  color: C.iceBlue },
             { p: null,                 label: "Brak",   color: C.textDisabled },
           ] as const).map(({ p, label, color }) => (
-            <button key={String(p)}
+            <MenuItem key={String(p)}
+              selected={newPriority === p}
               onMouseDown={e => { e.preventDefault(); setNewPriority(p as Priority | null); setInputDropdown(null); }}
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 13px", background: "none", border: "none", cursor: "pointer" }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <Flag size={12} strokeWidth={1.5} fill={p ? color : "none"} style={{ color }} />
-                <span style={{ fontSize: 12, color: C.textSecond }}>{label}</span>
-              </div>
-              {newPriority === p && <Check size={11} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-            </button>
+              leadingIcon={<Flag fill={p ? color : "none"} style={{ color }} />}
+              trailingIcon={newPriority === p ? <Check /> : undefined}>
+              {label}
+            </MenuItem>
           ))}
         </InputFloatMenu>
       )}
@@ -2655,17 +2586,13 @@ export default function Zadania() {
       {inputDropdown === "list" && listBtnInputRef.current && (
         <InputFloatMenu anchorEl={listBtnInputRef.current} onClose={() => setInputDropdown(null)}>
           {[{ id: null as string | null, label: "Skrzynka zadań", color: C.textMuted }, ...listy.map(l => ({ ...l, id: l.id as string | null }))].map(l => (
-            <button key={String(l.id)}
+            <MenuItem key={String(l.id)}
+              selected={newTaskList === l.id}
               onMouseDown={e => { e.preventDefault(); setNewTaskList(l.id); setInputDropdown(null); }}
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 13px", background: "none", border: "none", cursor: "pointer" }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: C.textSecond }}>{l.label}</span>
-              </div>
-              {newTaskList === l.id && <Check size={11} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-            </button>
+              leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: l.color }} />}
+              trailingIcon={newTaskList === l.id ? <Check /> : undefined}>
+              {l.label}
+            </MenuItem>
           ))}
         </InputFloatMenu>
       )}
@@ -2676,21 +2603,17 @@ export default function Zadania() {
           {tagi.map(t => {
             const active = newTaskTags.includes(t.id);
             return (
-              <button key={t.id}
+              <MenuItem key={t.id}
+                selected={active}
                 onMouseDown={e => { e.preventDefault(); setNewTaskTags(p => active ? p.filter(id => id !== t.id) : [...p, t.id]); }}
-                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 13px", background: "none", border: "none", cursor: "pointer" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "#2A2A2A")}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: t.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: C.textSecond }}>#{t.label}</span>
-                </div>
-                {active && <Check size={11} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-              </button>
+                leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: t.color }} />}
+                trailingIcon={active ? <Check /> : undefined}>
+                #{t.label}
+              </MenuItem>
             );
           })}
         </InputFloatMenu>
       )}
-    </div>
+    </ModuleShell>
   );
 }

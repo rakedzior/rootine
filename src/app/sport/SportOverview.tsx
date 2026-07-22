@@ -12,14 +12,14 @@ const DAY_LABELS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
 function SessionRow({ session, onSelect, onStart }: { session: WorkoutSession; onSelect: () => void; onStart: () => void }) {
   const exerciseCount = session.exercises.length || session.stages?.length || 0;
   return (
-    <article onClick={onSelect} className="sport-session-row group flex min-h-[62px] cursor-pointer flex-wrap items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-colors sm:flex-nowrap" style={{ background: C.card, borderColor: C.border }} onMouseEnter={(event) => { event.currentTarget.style.background = C.cardHover; }} onMouseLeave={(event) => { event.currentTarget.style.background = C.card; }}>
+    <article onClick={onSelect} className="sport-session-row group flex min-h-[66px] cursor-pointer flex-wrap items-center gap-3 rounded-xl border px-4 py-2.5 transition-colors sm:flex-nowrap" style={{ background: C.card, borderColor: C.border }} onMouseEnter={(event) => { event.currentTarget.style.background = C.cardHover; }} onMouseLeave={(event) => { event.currentTarget.style.background = C.card; }}>
       <span className="h-7 w-0.5 flex-shrink-0 rounded-full" style={{ background: session.status === "in_progress" ? C.warning : session.status === "completed" ? C.green : C.blue, opacity: session.status === "missed" ? .35 : .8 }} />
       <div className="min-w-[180px] flex-1 sm:min-w-0">
         <div className="flex items-center gap-2">
-          <h3 className="truncate text-[12px] font-medium" style={{ color: session.status === "missed" ? C.textMuted : C.text }}>{session.title}</h3>
+          <h3 className="ui-record-title truncate" style={{ color: session.status === "missed" ? C.textMuted : C.text }}>{session.title}</h3>
           {session.status !== "scheduled" && <StatusLabel status={session.status} compact />}
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[9px]" style={{ color: C.textMuted }}>
+        <div className="ui-record-meta mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1" style={{ color: C.textMuted }}>
           <DisciplineLabel discipline={session.discipline} compact />
           {session.time && <span style={{ fontFamily: "'DM Mono', monospace" }}>{session.time}</span>}
           <span>{session.durationMinutes} min</span>
@@ -57,25 +57,25 @@ export function WeekBoard({ sessions, weekStart, onWeekChange, onMove, onSelect,
         {weekStart !== startOfWeekKey() && <button type="button" onClick={() => onWeekChange(startOfWeekKey())} className="text-[10px]" style={{ color: C.blue }}>Bieżący tydzień</button>}
       </div>
 
-      <div className="min-w-0 overflow-x-auto pb-2 [scrollbar-width:thin]">
+      <div className="min-w-0 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
         <div className="sport-week-grid grid min-w-[980px] gap-2">
           {days.map((dateKey, dayIndex) => {
             const daySessions = sessions.filter((session) => session.date === dateKey);
             const isToday = fromDateKey(dateKey).toDateString() === today;
             return (
-              <div key={dateKey} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/sport-session") || draggedId; if (id) onMove(id, dateKey); setDraggedId(null); }} className={`flex flex-col rounded-lg border p-2 ${expanded ? "min-h-[440px]" : "min-h-[268px]"}`} style={{ background: isToday ? "rgba(71,114,250,.035)" : C.input, borderColor: isToday ? "rgba(71,114,250,.42)" : C.border }}>
+              <div key={dateKey} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/sport-session") || draggedId; if (id) onMove(id, dateKey); setDraggedId(null); }} className={`flex flex-col rounded-lg border p-2 ${expanded ? "min-h-[440px]" : "min-h-[268px]"}`} style={{ background: isToday ? C.blueBg : C.input, borderColor: isToday ? "color-mix(in srgb, var(--color-precision-blue) 42%, transparent)" : C.border }}>
                 <div className="mb-2 flex items-start justify-between px-1 py-0.5">
                   <div>
                     <p className="text-[10px] font-medium" style={{ color: isToday ? C.blue : C.textSecond }}>{DAY_LABELS[dayIndex]}</p>
                     <p className="mt-0.5 text-[9px]" style={{ color: isToday ? C.blue : C.textMuted, fontFamily: "'DM Mono', monospace" }}>{fromDateKey(dateKey).getDate()}</p>
                   </div>
-                  {isToday && <span className="rounded px-1.5 py-0.5 text-[8px]" style={{ color: C.blue, background: C.blueBg }}>dziś</span>}
+                  {isToday && <span className="rounded-md px-1.5 py-0.5 text-[9px]" style={{ color: C.blue, background: C.blueBg }}>dziś</span>}
                 </div>
                 <div className="space-y-1.5">
                   {daySessions.map((session) => (
                     <button key={session.id} type="button" draggable onDragStart={(event) => { setDraggedId(session.id); event.dataTransfer.setData("text/sport-session", session.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDraggedId(null)} onClick={() => onSelect(session.id)} className="w-full cursor-grab rounded-md border px-2 py-1.5 text-left active:cursor-grabbing" style={{ background: C.card, borderColor: C.border, opacity: draggedId === session.id ? .45 : 1 }}>
-                      <p className="line-clamp-2 text-[10px] font-medium leading-4" style={{ color: session.status === "missed" ? C.textMuted : C.textSecond }}>{session.title}</p>
-                      {session.time && <p className="mt-1 text-[8px]" style={{ color: C.textDisabled, fontFamily: "'DM Mono', monospace" }}>{session.time}</p>}
+                      <p className="ui-record-title--compact line-clamp-2" style={{ color: session.status === "missed" ? C.textMuted : C.textSecond }}>{session.title}</p>
+                      {session.time && <p className="mt-1 text-[9px]" style={{ color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>{session.time}</p>}
                       <div className="mt-1.5"><StatusLabel status={session.status} compact /></div>
                     </button>
                   ))}
@@ -105,7 +105,7 @@ export function SportOverview({ sessions, weekStart, onWeekChange, onMove, onSel
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
             <SectionLabel>Dzisiejsze treningi · {todaySessions.length}</SectionLabel>
-            <p className="text-[10px] -mt-1" style={{ color: C.textDisabled }}>{formatLongDate(today)}</p>
+            <p className="text-[10px] -mt-1" style={{ color: C.textMuted }}>{formatLongDate(today)}</p>
           </div>
         </div>
         {todaySessions.length ? <div className="space-y-2">{todaySessions.map((session) => <SessionRow key={session.id} session={session} onSelect={() => onSelect(session.id)} onStart={() => onStart(session.id)} />)}</div> : <EmptyState title="Brak treningów na dziś" description="Zaplanuj sesję albo rozpocznij szybki trening bez szablonu." action={<button type="button" onClick={() => onAdd(today)} className="rounded-lg px-3 py-2 text-[10px]" style={{ color: C.blue, background: C.blueBg }}>Dodaj trening</button>} />}

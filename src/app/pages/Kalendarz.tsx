@@ -1,23 +1,35 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
-  CalendarDays, ChevronDown, ChevronLeft, ChevronRight,
-  MoreHorizontal, Plus, Calendar, Printer,
+  CalendarDays, ChevronLeft, ChevronRight,
+  Plus, Printer,
 } from "lucide-react";
-import { TaskDetail, type ListItem, type TagItem, type Task } from "./Zadania";
-import { CALENDAR_TASKS } from "../data/calendarTasks";
-import { hydrateTaskCompletion, persistTaskCompletion } from "../data/taskCompletion";
+import { TaskDetail } from "./Zadania";
+import { persistTaskCompletion } from "../data/taskCompletion";
+import {
+  isCalendarTask,
+  loadTaskWorkspace,
+  replaceCalendarTasks,
+  saveTaskWorkspace,
+  taskViewForCalendarDate,
+  type WorkspaceList as ListItem,
+  type WorkspaceTag as TagItem,
+  type WorkspaceTask as Task,
+} from "../data/taskWorkspace";
+import { Badge, Button, ModuleMain, ModuleShell, PageHeader, WorkspaceToolbar, uiColors } from "../ui";
 
 const C = {
-  bg: "#242424",
-  grid: "#242424",
-  border: "#383838",
-  borderStrong: "#484848",
-  text: "#F0F0F0",
-  second: "#9A9A9A",
-  muted: "#646464",
-  disabled: "#444444",
-  blue: "#4772FA",
-  blueSoft: "rgba(71,114,250,0.62)",
+  bg: uiColors.graphiteCanvas,
+  grid: uiColors.graphiteCanvas,
+  border: uiColors.borderSubtle,
+  text: uiColors.chalkWhite,
+  second: uiColors.textSecondary,
+  muted: uiColors.textMuted,
+  disabled: uiColors.textDisabled,
+  blue: uiColors.precisionBlueStrong,
+  blueSignal: uiColors.precisionBlue,
+  blueText: uiColors.precisionBlueText,
+  blueSoft: uiColors.precisionBlueSoft,
+  hover: uiColors.graphiteHover,
 } as const;
 
 const MONTHS = [
@@ -26,24 +38,7 @@ const MONTHS = [
 ];
 const WEEKDAYS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
 
-const LISTS: ListItem[] = [
-  { id: "hobby", label: "Hobby", color: "#8EA5C8" },
-  { id: "dom", label: "Dom", color: "#D4AA68" },
-  { id: "praca", label: "Praca", color: "#4772FA" },
-];
-const TAGS: TagItem[] = [
-  { id: "hobby", label: "hobby", color: "#8EA5C8" },
-  { id: "dom", label: "dom", color: "#D4AA68" },
-  { id: "praca", label: "praca", color: "#4772FA" },
-];
-
 type CalendarEvent = Task & { calendarDate: string };
-
-const INITIAL_EVENTS: CalendarEvent[] = CALENDAR_TASKS.map((task) => ({
-  ...task,
-  date: task.dateLabel,
-  view: "kalendarz",
-}));
 
 const dateKey = (year: number, month: number, day: number) =>
   `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -79,34 +74,52 @@ function formatHeaderDate(value: Date) {
   return `${MONTHS[value.getMonth()]} ${value.getFullYear()}`;
 }
 
-function CalendarEventBar({ event, onClick, onToggle }: { event: CalendarEvent; onClick: () => void; onToggle: () => void }) {
+function formatTaskDate(calendarDate: string) {
+  const parsed = new Date(`${calendarDate}T12:00:00`);
+  return parsed.toLocaleDateString("pl-PL", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function CalendarEventBar({ event, dragging, onClick, onToggle, onDragStart, onDragEnd }: {
+  event: CalendarEvent;
+  dragging: boolean;
+  onClick: () => void;
+  onToggle: () => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+}) {
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      role="group"
+      aria-label={`Zadanie: ${event.text || "bez nazwy"}`}
       className="calendar-event"
+      draggable
+      aria-grabbed={dragging}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       style={{
         width: "100%", minWidth: 0, display: "flex", alignItems: "center", gap: 4,
-        border: "1px solid rgba(148,165,255,0.58)", borderRadius: 3, padding: "2px 4px",
-        background: C.blueSoft, color: "#F0F2FF", cursor: "pointer", textAlign: "left",
-        fontSize: 11, lineHeight: 1.25, overflow: "hidden", transition: "background .15s, border-color .15s",
+        border: "none", borderRadius: 4, padding: "3px 5px",
+        background: C.blueSoft, color: C.text, textAlign: "left",
+        fontSize: 11, lineHeight: 1.25, overflow: "hidden", cursor: dragging ? "grabbing" : "grab",
+        opacity: dragging ? 0.48 : 1, transition: "background-color 140ms ease-out, opacity 140ms ease-out",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(71,114,250,0.82)"; e.currentTarget.style.borderColor = "rgba(148,165,255,0.85)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = C.blueSoft; e.currentTarget.style.borderColor = "rgba(148,165,255,0.58)"; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = C.hover; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = C.blueSoft; }}
     >
       <button
         type="button"
         aria-label={event.done ? "Oznacz jako niewykonane" : "Oznacz jako wykonane"}
         onClick={(e) => { e.stopPropagation(); onToggle(); }}
         onKeyDown={(e) => e.stopPropagation()}
-        style={{ width: 11, height: 11, display: "grid", placeItems: "center", border: `1px solid ${event.done ? "#70B89F" : "rgba(200,208,255,0.72)"}`, borderRadius: 2, background: event.done ? "rgba(112,184,159,0.2)" : "transparent", color: "#70B89F", flexShrink: 0, cursor: "pointer", padding: 0 }}
+        className={`task-checkbox task-checkbox--compact ${event.done ? "is-checked" : ""}`}
+        style={{ borderColor: event.done ? C.blueText : C.second }}
       >
         {event.done && <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700 }}>✓</span>}
       </button>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.done ? "line-through" : "none", opacity: event.done ? 0.6 : 1 }}>{event.text}</span>
-      {event.time && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#C3CAFF", flexShrink: 0 }}>{event.time}</span>}
+      <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} className="flex min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left" style={{ color: "inherit", cursor: "pointer" }} aria-label={`Otwórz zadanie ${event.text || "bez nazwy"}`}>
+        <span title={event.text} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.done ? "line-through" : "none", opacity: event.done ? 0.6 : 1 }}>{event.text}</span>
+        {event.time && <span style={{ fontFamily: "var(--font-data)", fontSize: 9, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
+      </button>
     </div>
   );
 }
@@ -114,17 +127,25 @@ function CalendarEventBar({ event, onClick, onToggle }: { event: CalendarEvent; 
 export default function Kalendarz() {
   const now = new Date();
   const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
-  const [events, setEvents] = useState<CalendarEvent[]>(() => hydrateTaskCompletion(INITIAL_EVENTS));
+  const [events, setEvents] = useState<CalendarEvent[]>(() => loadTaskWorkspace().tasks.filter(isCalendarTask).filter((event) => !event.deleted));
+  const [lists] = useState<ListItem[]>(() => loadTaskWorkspace().lists);
+  const [tags] = useState<TagItem[]>(() => loadTaskWorkspace().tags);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [anchorDateKey, setAnchorDateKey] = useState<string | null>(null);
   const [detailPosition, setDetailPosition] = useState({ left: 8, top: 73, width: 440, height: 400, ready: false });
-  const [viewMode, setViewMode] = useState("Miesiąc");
-  const [showViewMenu, setShowViewMenu] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
   const calendarRootRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const suppressCellClickRef = useRef(false);
+  const [storageFailed, setStorageFailed] = useState(false);
+
+  useEffect(() => {
+    const workspace = loadTaskWorkspace();
+    const persistedEvents = events.filter((event) => event.text.trim().length > 0);
+    setStorageFailed(!saveTaskWorkspace(replaceCalendarTasks(workspace, persistedEvents)));
+  }, [events]);
 
   const cells = useMemo(() => getCalendarCells(viewDate.getFullYear(), viewDate.getMonth()), [viewDate]);
   const eventsByDate = useMemo(() => {
@@ -133,16 +154,12 @@ export default function Kalendarz() {
     return grouped;
   }, [events]);
   const selectedTask = selectedId === null ? null : events.find((event) => event.id === selectedId) ?? null;
-  const calendarAnchorEl = anchorDateKey
-    ? calendarRootRef.current?.querySelector<HTMLElement>(`[data-calendar-cell="${anchorDateKey}"]`) ?? null
-    : null;
 
   useLayoutEffect(() => {
     if (!selectedTask || !anchorDateKey) return;
     const repositionDetail = () => {
       const cell = calendarRootRef.current?.querySelector<HTMLElement>(`[data-calendar-cell="${anchorDateKey}"]`);
-      const panel = detailRef.current;
-      if (!cell || !panel) return;
+      if (!cell) return;
       const cellRect = cell.getBoundingClientRect();
       const width = Math.min(Math.max(cellRect.width * 1.5, 320), 520, window.innerWidth - 16);
       const height = Math.min(Math.max(cellRect.height * 1.5, 300), 520, window.innerHeight - 16);
@@ -162,7 +179,10 @@ export default function Kalendarz() {
     repositionDetail();
     window.addEventListener("resize", repositionDetail);
     window.addEventListener("scroll", repositionDetail, true);
-    return () => { window.removeEventListener("resize", repositionDetail); window.removeEventListener("scroll", repositionDetail, true); };
+    return () => {
+      window.removeEventListener("resize", repositionDetail);
+      window.removeEventListener("scroll", repositionDetail, true);
+    };
   }, [selectedTask, anchorDateKey, viewDate]);
 
   const closeTaskDetail = () => {
@@ -191,9 +211,7 @@ export default function Kalendarz() {
       const target = event.target;
       if (detailRef.current?.contains(target as Node)) return;
       if (target instanceof Element && target.closest(".calendar-event")) return;
-      if (target instanceof Element && target.closest(".calendar-cell")) {
-        suppressCellClickRef.current = true;
-      }
+      if (target instanceof Element && target.closest(".calendar-cell")) suppressCellClickRef.current = true;
       closeTaskDetail();
     };
     document.addEventListener("mousedown", closeOnOutsideClick);
@@ -207,10 +225,33 @@ export default function Kalendarz() {
   const goToday = () => {
     const current = new Date();
     setViewDate(new Date(current.getFullYear(), current.getMonth(), 1));
+    closeTaskDetail();
   };
-  const updateTask = (id: number, patch: Partial<Task>) => {
+  const updateTask = (id: number, patch: Partial<CalendarEvent>) => {
     if (typeof patch.done === "boolean") persistTaskCompletion(id, patch.done);
+    const dateWasCleared = Object.prototype.hasOwnProperty.call(patch, "calendarDate") && !patch.calendarDate;
+    if (dateWasCleared) {
+      const workspace = loadTaskWorkspace();
+      const tasks = workspace.tasks.map((task) => task.id === id ? { ...task, ...patch, calendarDate: undefined } : task);
+      setStorageFailed(!saveTaskWorkspace({ ...workspace, tasks }));
+      setEvents((current) => current.filter((event) => event.id !== id));
+      if (draftId === id) setDraftId(null);
+      if (selectedId === id) {
+        setSelectedId(null);
+        setAnchorDateKey(null);
+        setDetailPosition((current) => ({ ...current, ready: false }));
+      }
+      return;
+    }
     setEvents((current) => current.map((event) => event.id === id ? { ...event, ...patch } : event));
+    if (selectedId === id && patch.calendarDate) {
+      const nextDate = new Date(`${patch.calendarDate}T12:00:00`);
+      setAnchorDateKey(patch.calendarDate);
+      if (!Number.isNaN(nextDate.getTime())) setViewDate(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+    }
+  };
+  const moveTaskToDate = (id: number, calendarDate: string) => {
+    updateTask(id, { calendarDate, date: formatTaskDate(calendarDate), view: taskViewForCalendarDate(calendarDate) });
   };
   const deleteTask = (id: number) => {
     setEvents((current) => current.filter((event) => event.id !== id));
@@ -219,10 +260,9 @@ export default function Kalendarz() {
   };
   const createDraft = (calendarDate = todayKey()) => {
     const parsed = new Date(`${calendarDate}T12:00:00`);
-    const label = parsed.toLocaleDateString("pl-PL", { weekday: "short", day: "numeric", month: "short" });
     const event: CalendarEvent = {
-      id: Date.now(), calendarDate, text: "", done: false, date: label,
-      view: "kalendarz", list: "hobby", tags: ["hobby"],
+      id: Date.now(), calendarDate, text: "", done: false, date: formatTaskDate(calendarDate),
+      view: taskViewForCalendarDate(calendarDate), list: "hobby", tags: ["hobby"],
     };
     if (draftId !== null) closeTaskDetail();
     setEvents((current) => [...current, event]);
@@ -233,76 +273,138 @@ export default function Kalendarz() {
   };
 
   return (
-    <section ref={calendarRootRef} className="calendar-page" style={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: C.bg, color: C.text }}>
-      <header style={{ height: 58, padding: "0 15px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <CalendarDays size={18} strokeWidth={1.5} style={{ color: C.text, flexShrink: 0 }} />
-          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 500, textTransform: "lowercase", whiteSpace: "nowrap" }}>{formatHeaderDate(viewDate)}</h1>
-        </div>
+    <ModuleShell>
+      <ModuleMain>
+        <PageHeader
+          title="Kalendarz"
+          description={formatHeaderDate(viewDate)}
+          leading={<CalendarDays size={18} strokeWidth={1.5} />}
+          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+          actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Nowe wydarzenie</span></Button>}
+        />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-          <button type="button" aria-label="Dodaj zadanie" onClick={() => { createDraft(); setShowViewMenu(false); setShowMoreMenu(false); }} style={{ width: 31, height: 31, display: "grid", placeItems: "center", border: `1px solid ${C.borderStrong}`, borderRadius: 9, background: "transparent", color: C.text, cursor: "pointer" }}>
-            <Plus size={16} strokeWidth={1.5} />
-          </button>
-          <button type="button" onClick={() => { setShowViewMenu((value) => !value); setShowMoreMenu(false); }} style={{ height: 31, display: "flex", alignItems: "center", gap: 5, padding: "0 11px", border: `1px solid ${C.borderStrong}`, borderRadius: 9, background: "transparent", color: C.text, cursor: "pointer", fontSize: 12 }}>
-            {viewMode}<ChevronDown size={12} strokeWidth={1.5} />
-          </button>
-          <div style={{ display: "flex", height: 31, border: `1px solid ${C.borderStrong}`, borderRadius: 9, overflow: "hidden" }}>
-            <button type="button" aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)} style={{ width: 32, border: 0, borderRight: `1px solid ${C.borderStrong}`, background: "transparent", color: C.second, cursor: "pointer" }}><ChevronLeft size={15} strokeWidth={1.5} /></button>
-            <button type="button" onClick={goToday} style={{ padding: "0 11px", border: 0, background: "transparent", color: C.text, cursor: "pointer", fontSize: 12 }}>Dziś</button>
-            <button type="button" aria-label="Następny miesiąc" onClick={() => moveMonth(1)} style={{ width: 32, border: 0, borderLeft: `1px solid ${C.borderStrong}`, background: "transparent", color: C.second, cursor: "pointer" }}><ChevronRight size={15} strokeWidth={1.5} /></button>
+        <WorkspaceToolbar>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
+            <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={15} strokeWidth={1.5} /></Button>
+            <span className="calendar-toolbar-period workspace-context-label capitalize">{formatHeaderDate(viewDate)}</span>
           </div>
-          <button type="button" aria-label="Więcej opcji" onClick={() => { setShowMoreMenu((value) => !value); setShowViewMenu(false); }} style={{ width: 29, height: 31, display: "grid", placeItems: "center", border: 0, borderRadius: 8, background: "transparent", color: C.text, cursor: "pointer" }}><MoreHorizontal size={18} strokeWidth={1.5} /></button>
+          <div className="flex items-center gap-2">
+            <Badge tone="neutral">Miesiąc</Badge>
+            <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={15} strokeWidth={1.5} /></Button>
+          </div>
+        </WorkspaceToolbar>
 
-          {showViewMenu && (
-            <div className="calendar-float-menu" style={{ position: "absolute", zIndex: 20, right: 108, top: 38, width: 185, padding: 5, border: `1px solid ${C.borderStrong}`, borderRadius: 13, background: "#292929", boxShadow: "0 12px 30px rgba(0,0,0,.45)" }}>
-              {["Dzień", "Tydzień", "Miesiąc", "Rok", "Harmonogram"].map((mode) => (
-                <button key={mode} type="button" onClick={() => { setViewMode(mode); setShowViewMenu(false); }} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 9px", border: 0, borderRadius: 7, background: mode === viewMode ? "rgba(91,114,244,.12)" : "transparent", color: mode === viewMode ? C.blue : C.text, cursor: "pointer", textAlign: "left", fontSize: 12 }}>
-                  {mode}<span style={{ color: mode === viewMode ? C.blue : C.muted, fontSize: 11 }}>{mode === "Dzień" ? "D/1" : mode === "Tydzień" ? "W/2" : mode === "Miesiąc" ? "M/3" : mode === "Rok" ? "Y/4" : "A/5"}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {showMoreMenu && (
-            <div className="calendar-float-menu" style={{ position: "absolute", zIndex: 20, right: 0, top: 38, width: 205, padding: 5, border: `1px solid ${C.borderStrong}`, borderRadius: 13, background: "#292929", boxShadow: "0 12px 30px rgba(0,0,0,.45)" }}>
-              {[
-                { label: "Zobacz opcje", icon: CalendarDays },
-                { label: "Zaplanuj zadania", icon: Calendar },
-                { label: "Subskrybuj kalendarz", icon: CalendarDays },
-                { label: "Drukuj", icon: Printer },
-              ].map(({ label, icon: Icon }) => <button key={label} type="button" onClick={() => { if (label === "Drukuj") window.print(); setShowMoreMenu(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", border: 0, borderRadius: 7, background: "transparent", color: C.text, cursor: "pointer", textAlign: "left", fontSize: 12 }}><Icon size={15} strokeWidth={1.5} style={{ color: C.second }} />{label}</button>)}
-            </div>
-          )}
-        </div>
-      </header>
+        <section ref={calendarRootRef} className="calendar-page flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" style={{ background: C.bg, color: C.text }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", height: 31, flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
+            {WEEKDAYS.map((day) => <div key={day} style={{ display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: "var(--text-label)" }}>{day}</div>)}
+          </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", height: 31, flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
-        {WEEKDAYS.map((day) => <div key={day} style={{ display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 10 }}>{day}</div>)}
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gridTemplateRows: `repeat(${cells.length / 7}, minmax(88px, 1fr))`, overflow: "hidden" }}>
+          <div role="grid" aria-label={`Kalendarz: ${formatHeaderDate(viewDate)}`} style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gridTemplateRows: `repeat(${cells.length / 7}, minmax(88px, 1fr))`, overflow: "hidden" }}>
         {cells.map((cell) => {
           const key = dateKey(cell.year, cell.month, cell.day);
           const dayEvents = eventsByDate.get(key) ?? [];
           const isToday = key === todayKey();
           return (
-            <div key={key} data-calendar-cell={key} className="calendar-cell" onClick={() => { if (suppressCellClickRef.current) { suppressCellClickRef.current = false; return; } createDraft(key); }} style={{ minWidth: 0, minHeight: 0, position: "relative", padding: "7px 5px 4px", borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, background: isToday ? "rgba(71,114,250,.018)" : C.grid, cursor: "pointer" }}>
+            <div
+              key={key}
+              role="gridcell"
+              tabIndex={0}
+              aria-label={`${cell.day} ${MONTHS[cell.month]} ${cell.year}. Enter, aby dodać zadanie.`}
+              data-calendar-cell={key}
+              className="calendar-cell"
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                if (selectedTask) closeTaskDetail();
+                else createDraft(key);
+              }}
+              onClick={() => {
+                if (suppressCellClickRef.current) {
+                  suppressCellClickRef.current = false;
+                  return;
+                }
+                createDraft(key);
+              }}
+              onDragOver={(event) => {
+                if (draggedId === null) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragOverDateKey(key);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDragOverDateKey((current) => current === key ? null : current);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                suppressCellClickRef.current = true;
+                window.setTimeout(() => { suppressCellClickRef.current = false; }, 0);
+                const transferredId = Number(event.dataTransfer.getData("application/x-rootine-task-id"));
+                const taskId = Number.isFinite(transferredId) && transferredId > 0 ? transferredId : draggedId;
+                if (taskId !== null) moveTaskToDate(taskId, key);
+                setDraggedId(null);
+                setDragOverDateKey(null);
+              }}
+              style={{
+                minWidth: 0, minHeight: 0, position: "relative", padding: "7px 5px 4px",
+                borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
+                background: dragOverDateKey === key ? C.hover : isToday ? C.blueSoft : C.grid,
+                boxShadow: dragOverDateKey === key ? `inset 0 0 0 1px ${C.blueSignal}` : "none",
+                cursor: "pointer", transition: "background-color 140ms ease-out, box-shadow 140ms ease-out",
+              }}
+            >
               <div style={{ height: 25, display: "flex", alignItems: "flex-start" }}>
-                <span style={{ width: 25, height: 25, display: "grid", placeItems: "center", borderRadius: "50%", background: isToday ? C.blue : "transparent", color: isToday ? "white" : cell.current ? C.text : C.disabled, fontSize: 12, fontWeight: isToday ? 600 : 400 }}>{cell.day}</span>
+                <span style={{ width: 25, height: 25, display: "grid", placeItems: "center", borderRadius: "50%", background: isToday ? C.blue : "transparent", color: isToday ? C.text : cell.current ? C.text : C.disabled, fontSize: 12, fontWeight: isToday ? 600 : 400 }}>{cell.day}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-                {dayEvents.map((event) => <CalendarEventBar key={event.id} event={event} onClick={() => selectEvent(event.id)} onToggle={() => updateTask(event.id, { done: !event.done })} />)}
+                {dayEvents.map((event) => (
+                  <CalendarEventBar
+                    key={event.id}
+                    event={event}
+                    dragging={draggedId === event.id}
+                    onClick={() => selectEvent(event.id)}
+                    onToggle={() => updateTask(event.id, { done: !event.done })}
+                    onDragStart={(dragEvent) => {
+                      dragEvent.stopPropagation();
+                      dragEvent.dataTransfer.effectAllowed = "move";
+                      dragEvent.dataTransfer.setData("application/x-rootine-task-id", String(event.id));
+                      setDraggedId(event.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedId(null);
+                      setDragOverDateKey(null);
+                    }}
+                  />
+                ))}
               </div>
             </div>
           );
         })}
-      </div>
+          </div>
+        </section>
+      </ModuleMain>
 
       {selectedTask && (
-        <div ref={detailRef} className="calendar-task-detail" style={{ position: "fixed", zIndex: 40, left: detailPosition.left, top: detailPosition.top, visibility: detailPosition.ready ? "visible" : "hidden", width: detailPosition.width, height: detailPosition.height, overflow: "hidden", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 15, boxShadow: "0 12px 36px rgba(0,0,0,.38)" }}>
-          <TaskDetail task={selectedTask} onClose={closeTaskDetail} onUpdate={updateTask} onDelete={deleteTask} listy={LISTS} tagi={TAGS} calendarAnchorEl={calendarAnchorEl} surface="calendar" />
+        <div
+          ref={detailRef}
+          className="calendar-task-detail"
+          role="dialog"
+          aria-label="Szczegóły wydarzenia"
+          style={{
+            position: "fixed", zIndex: 40, left: detailPosition.left, top: detailPosition.top,
+            visibility: detailPosition.ready ? "visible" : "hidden",
+            width: detailPosition.width, height: detailPosition.height, overflow: "hidden",
+            border: `1px solid ${C.border}`, borderRadius: 15,
+            boxShadow: "0 12px 36px rgba(0,0,0,.38)",
+          }}
+        >
+          <TaskDetail task={selectedTask} onClose={closeTaskDetail} onUpdate={updateTask} onDelete={deleteTask} listy={lists} tagi={tags} />
         </div>
       )}
-    </section>
+    </ModuleShell>
   );
 }

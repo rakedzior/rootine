@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import type { SportView } from "./model";
 import { SPORT_COLORS as C } from "./theme";
+import { ContextNavItem, ContextSidebar, SectionHeader } from "../ui";
 
 const GROUPS: { label: string; items: { id: SportView; label: string; icon: LucideIcon }[] }[] = [
   { label: "Główne", items: [
@@ -33,21 +34,23 @@ export const VIEW_LABELS: Record<SportView, { title: string; subtitle: string }>
 function SidebarItem({ id, label, icon: Icon, activeView, onChange, count }: { id: SportView; label: string; icon: LucideIcon; activeView: SportView; onChange: (view: SportView) => void; count?: number }) {
   const active = id === activeView;
   return (
-    <button type="button" onClick={() => onChange(id)} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-[7px] text-[11px] transition-colors" style={{ color: active ? C.blue : C.textMuted, background: active ? C.blueBg : "transparent", borderLeft: `2px solid ${active ? C.blue : "transparent"}` }}>
-      <Icon size={12} strokeWidth={1.65} />
-      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-      {count !== undefined && <span className="text-[8px] tabular-nums" style={{ color: active ? C.blue : C.textDisabled, fontFamily: "'DM Mono', monospace" }}>{count}</span>}
-    </button>
+    <ContextNavItem
+      active={active}
+      icon={<Icon />}
+      label={label}
+      meta={count}
+      onClick={() => onChange(id)}
+    />
   );
 }
 
 export function SportSidebar({ view, onChange, importCount }: { view: SportView; onChange: (view: SportView) => void; importCount: number }) {
   return (
-    <aside className="task-sub-sidebar flex w-[200px] flex-shrink-0 flex-col overflow-hidden border-r" style={{ background: C.subSidebar, borderColor: C.border }}>
+    <ContextSidebar label="Widoki Sportu">
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pb-4 pt-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {GROUPS.map((group) => (
           <section key={group.label} className="mb-6">
-            <p className="mb-2 px-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.textMuted }}>{group.label}</p>
+            <SectionHeader title={group.label} level={3} variant="label" className="px-1.5" />
             <div className="space-y-px">
               {group.items.map((item) => <SidebarItem key={item.id} {...item} activeView={view} onChange={onChange} />)}
             </div>
@@ -57,6 +60,6 @@ export function SportSidebar({ view, onChange, importCount }: { view: SportView;
       <div className="border-t p-2.5" style={{ borderColor: C.border }}>
         <SidebarItem id="integrations" label="Integracje" icon={Link2} activeView={view} onChange={onChange} count={importCount || undefined} />
       </div>
-    </aside>
+    </ContextSidebar>
   );
 }

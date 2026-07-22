@@ -17,12 +17,12 @@ import {
 import {
   DisciplineLabel,
   EmptyState,
-  inputStyle,
   ProgressBar,
   SectionLabel,
   StatusLabel,
 } from "./Shared";
 import { DISCIPLINE_META, SPORT_COLORS as C } from "./theme";
+import { Select } from "../ui";
 
 export function PlansView({
   plans,
@@ -30,6 +30,7 @@ export function PlansView({
   onCreatePlan,
   onCreateAIPlan,
   onTogglePlan,
+  onEditPlan,
   onCreateTemplate,
   onEditTemplate,
   onSchedule,
@@ -39,6 +40,7 @@ export function PlansView({
   onCreatePlan: () => void;
   onCreateAIPlan: () => void;
   onTogglePlan: (id: string) => void;
+  onEditPlan: (id: string) => void;
   onCreateTemplate: () => void;
   onEditTemplate: (id: string) => void;
   onSchedule: () => void;
@@ -93,7 +95,7 @@ export function PlansView({
                 className="rounded-xl border p-4 text-left transition-colors"
                 style={{
                   background: C.card,
-                  borderColor: selected ? "rgba(71,114,250,.45)" : C.border,
+                  borderColor: selected ? "color-mix(in srgb, var(--color-precision-blue) 45%, transparent)" : C.border,
                 }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -115,7 +117,7 @@ export function PlansView({
                     </div>
                   </div>
                   <span
-                    className="rounded px-1.5 py-1 text-[8px]"
+                    className="rounded px-1.5 py-1 text-[9px]"
                     style={{
                       color: plan.active ? C.green : C.textMuted,
                       background: plan.active ? C.greenBg : C.input,
@@ -170,14 +172,19 @@ export function PlansView({
                 nadpisania każdej sesji
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => onTogglePlan(selectedPlan.id)}
-              className="sport-link-action"
-              style={{ color: selectedPlan.active ? C.warning : C.green }}
-            >
-              {selectedPlan.active ? "Wstrzymaj" : "Aktywuj"}
-            </button>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => onEditPlan(selectedPlan.id)} className="sport-link-action" style={{ color: C.blue }}>
+                Edytuj plan
+              </button>
+              <button
+                type="button"
+                onClick={() => onTogglePlan(selectedPlan.id)}
+                className="sport-link-action"
+                style={{ color: selectedPlan.active ? C.warning : C.green }}
+              >
+                {selectedPlan.active ? "Wstrzymaj" : "Aktywuj"}
+              </button>
+            </div>
           </div>
           <div className="p-4">
             {selectedPlan.blocks?.length ? (
@@ -192,7 +199,7 @@ export function PlansView({
                         borderColor:
                           block.startWeek <= selectedPlan.currentWeek &&
                           block.endWeek >= selectedPlan.currentWeek
-                            ? "rgba(71,114,250,.38)"
+                            ? "color-mix(in srgb, var(--color-precision-blue) 38%, transparent)"
                             : C.border,
                         background: C.input,
                       }}
@@ -205,7 +212,7 @@ export function PlansView({
                           {block.name}
                         </p>
                         <span
-                          className="text-[8px]"
+                          className="text-[9px]"
                           style={{ color: C.textMuted }}
                         >
                           tyg. {block.startWeek}–{block.endWeek}
@@ -258,10 +265,9 @@ export function PlansView({
                           {template.description}
                         </p>
                       </div>
-                      <ChevronRight
-                        size={11}
-                        style={{ color: C.textDisabled }}
-                      />
+                      <span className="whitespace-nowrap text-[9px]" style={{ color: C.blue }}>
+                        Edytuj serie
+                      </span>
                     </div>
                     <div
                       className="mt-3 flex gap-3 text-[9px]"
@@ -382,32 +388,32 @@ export function HistoryView({
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        <select
+        <Select
+          compact
           value={discipline}
           onChange={(event) =>
             setDiscipline(event.target.value as typeof discipline)
           }
-          className="h-8 rounded-lg border px-3 text-[10px] outline-none"
-          style={inputStyle}
-        >
-          <option value="all">Wszystkie dyscypliny</option>
-          {Object.entries(DISCIPLINE_META).map(([value, meta]) => (
-            <option key={value} value={value}>
-              {meta.label}
-            </option>
-          ))}
-        </select>
-        <select
+          aria-label="Filtr dyscypliny"
+          className="min-w-[168px]"
+          options={[
+            { value: "all", label: "Wszystkie dyscypliny" },
+            ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
+          ]}
+        />
+        <Select
+          compact
           value={status}
           onChange={(event) => setStatus(event.target.value as typeof status)}
-          className="h-8 rounded-lg border px-3 text-[10px] outline-none"
-          style={inputStyle}
-        >
-          <option value="all">Wszystkie statusy</option>
-          <option value="completed">Wykonane</option>
-          <option value="incomplete">Niedokończone</option>
-          <option value="missed">Pominięte</option>
-        </select>
+          aria-label="Filtr statusu"
+          className="min-w-[148px]"
+          options={[
+            { value: "all", label: "Wszystkie statusy" },
+            { value: "completed", label: "Wykonane" },
+            { value: "incomplete", label: "Niedokończone" },
+            { value: "missed", label: "Pominięte" },
+          ]}
+        />
         <span className="ml-auto text-[9px]" style={{ color: C.textMuted }}>
           {history.length} sesji
         </span>
@@ -437,7 +443,7 @@ export function HistoryView({
                         {formatShortDate(session.date)}
                       </p>
                       <p
-                        className="mt-1 text-[8px]"
+                        className="mt-1 text-[9px]"
                         style={{
                           color: C.textMuted,
                           fontFamily: "'DM Mono', monospace",
@@ -549,7 +555,7 @@ export function ProgressView({
               style={{ background: C.card, borderColor: C.border }}
             >
               <p
-                className="text-[20px] font-semibold"
+                className="text-[22px] font-semibold"
                 style={{ color: C.text, fontFamily: "'DM Mono', monospace" }}
               >
                 {item.value}
@@ -626,7 +632,7 @@ export function ProgressView({
                     }}
                   />
                   <span
-                    className="text-[8px]"
+                    className="text-[9px]"
                     style={{ color: C.textDisabled }}
                   >
                     {formatShortDate(week)}
@@ -639,9 +645,9 @@ export function ProgressView({
       </section>
       <section
         className="rounded-xl border p-4"
-        style={{ background: C.blueBg, borderColor: "rgba(71,114,250,.24)" }}
+        style={{ background: C.blueBg, borderColor: "color-mix(in srgb, var(--color-precision-blue) 24%, transparent)" }}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div>
           <div>
             <p
               className="text-[9px] font-semibold uppercase tracking-[0.16em]"
@@ -664,9 +670,6 @@ export function ProgressView({
               planu automatycznie.
             </p>
           </div>
-          <button type="button" className="sport-primary-button flex-shrink-0">
-            Zobacz analizę
-          </button>
         </div>
       </section>
     </div>
@@ -716,21 +719,19 @@ export function ExercisesView({
               style={{ color: C.textSecond }}
             />
           </div>
-          <select
+          <Select
+            compact
             value={discipline}
             onChange={(event) =>
               setDiscipline(event.target.value as typeof discipline)
             }
-            className="h-8 rounded-lg border px-3 text-[10px] outline-none"
-            style={inputStyle}
-          >
-            <option value="all">Wszystkie dyscypliny</option>
-            {Object.entries(DISCIPLINE_META).map(([value, meta]) => (
-              <option key={value} value={value}>
-                {meta.label}
-              </option>
-            ))}
-          </select>
+            aria-label="Filtr dyscypliny ćwiczeń"
+            className="min-w-[168px]"
+            options={[
+              { value: "all", label: "Wszystkie dyscypliny" },
+              ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
+            ]}
+          />
           <button
             type="button"
             onClick={onAdd}
@@ -770,7 +771,7 @@ export function ExercisesView({
                       {item.name}
                       {item.custom && (
                         <span
-                          className="ml-2 text-[8px]"
+                          className="ml-2 text-[9px]"
                           style={{ color: C.warning }}
                         >
                           własne
@@ -817,7 +818,7 @@ export function ExercisesView({
             </div>
             {selected.custom && (
               <span
-                className="rounded px-1.5 py-1 text-[8px]"
+                className="rounded px-1.5 py-1 text-[9px]"
                 style={{ color: C.warning, background: C.warningBg }}
               >
                 Własne
@@ -975,7 +976,7 @@ export function IntegrationsView({
                         {item.title}
                       </p>
                       <span
-                        className="rounded px-1.5 py-0.5 text-[8px]"
+                        className="rounded px-1.5 py-0.5 text-[9px]"
                         style={{ color: C.textMuted, background: C.input }}
                       >
                         {item.source}
@@ -1019,19 +1020,20 @@ export function IntegrationsView({
                     className="mt-4 flex gap-2 border-t pt-4"
                     style={{ borderColor: C.border }}
                   >
-                    <select
+                    <Select
+                      compact
                       value={sessionId}
                       onChange={(event) => setSessionId(event.target.value)}
-                      className="h-8 min-w-0 flex-1 rounded-lg border px-3 text-[9px] outline-none"
-                      style={inputStyle}
-                    >
-                      <option value="">Wybierz jednostkę z planu</option>
-                      {schedulable.map((session) => (
-                        <option key={session.id} value={session.id}>
-                          {formatShortDate(session.date)} · {session.title}
-                        </option>
-                      ))}
-                    </select>
+                      aria-label="Jednostka planu do przypisania"
+                      className="min-w-0 flex-1"
+                      options={[
+                        { value: "", label: "Wybierz jednostkę z planu" },
+                        ...schedulable.map((session) => ({
+                          value: session.id,
+                          label: `${formatShortDate(session.date)} · ${session.title}`,
+                        })),
+                      ]}
+                    />
                     <button
                       disabled={!sessionId}
                       type="button"

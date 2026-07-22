@@ -19,6 +19,7 @@ import type {
   WorkoutTemplate,
 } from "./model";
 import { formatLongDate } from "./model";
+import { Menu, MenuItem } from "../ui";
 import {
   DisciplineLabel,
   inputStyle,
@@ -62,10 +63,7 @@ export function WorkoutDetailPanel({
   const totalSets = session.exercises.flatMap((item) => item.sets).length;
 
   return (
-    <aside
-      className="sport-detail-panel absolute inset-y-0 right-0 z-50 flex w-[370px] max-w-full flex-col border-l shadow-2xl"
-      style={{ background: C.subSidebar, borderColor: C.border }}
-    >
+    <div className="flex h-full min-h-0 flex-col">
       <header
         className="flex min-h-[68px] items-center justify-between border-b px-5"
         style={{ borderColor: C.border }}
@@ -78,7 +76,7 @@ export function WorkoutDetailPanel({
             Szczegóły treningu
           </p>
           <h2
-            className="mt-1 truncate text-[14px] font-semibold"
+            className="mt-1 truncate text-[16px] font-semibold"
             style={{ color: C.text }}
           >
             {session.title}
@@ -95,66 +93,48 @@ export function WorkoutDetailPanel({
               <Ellipsis size={15} />
             </button>
             {menuOpen && (
-              <div
-                className="absolute right-0 top-8 z-10 w-40 rounded-xl border py-1 shadow-2xl"
-                style={{
-                  background: C.cardStrong,
-                  borderColor: C.borderStrong,
-                }}
-              >
-                <button
-                  type="button"
+              <Menu className="absolute right-0 top-8 z-10 w-40">
+                <MenuItem
                   onClick={() => {
                     setEditing(true);
                     setMenuOpen(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-[10px] hover:bg-white/[0.04]"
-                  style={{ color: C.textSecond }}
                 >
                   Edytuj sesję
-                </button>
-                <button
-                  type="button"
+                </MenuItem>
+                <MenuItem
                   onClick={() => {
                     onDuplicate();
                     setMenuOpen(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-[10px] hover:bg-white/[0.04]"
-                  style={{ color: C.textSecond }}
                 >
                   Duplikuj sesję
-                </button>
-                <button
-                  type="button"
+                </MenuItem>
+                <MenuItem
                   onClick={() => {
                     onUpdate({ status: "missed" });
                     setMenuOpen(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-[10px] hover:bg-white/[0.04]"
-                  style={{ color: C.textSecond }}
                 >
                   Oznacz jako pominięty
-                </button>
-                <button
-                  type="button"
+                </MenuItem>
+                <MenuItem
+                  tone="success"
                   onClick={() => {
                     onUpdate({ status: "completed" });
                     setMenuOpen(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-[10px] hover:bg-white/[0.04]"
-                  style={{ color: C.green }}
                 >
                   Oznacz jako wykonany
-                </button>
-                <button
-                  type="button"
+                </MenuItem>
+                <MenuItem
                   onClick={onDelete}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[10px] hover:bg-white/[0.04]"
-                  style={{ color: C.danger }}
+                  tone="danger"
+                  leadingIcon={<Trash2 />}
                 >
-                  <Trash2 size={11} /> Usuń sesję
-                </button>
-              </div>
+                  Usuń sesję
+                </MenuItem>
+              </Menu>
             )}
           </div>
           <button
@@ -470,7 +450,7 @@ export function WorkoutDetailPanel({
           )}
         </footer>
       )}
-    </aside>
+    </div>
   );
 }
 
@@ -495,7 +475,7 @@ function NumberInput({
         step={step}
         value={value ?? 0}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="h-11 w-full rounded-lg border bg-transparent px-3 pr-9 text-center text-[14px] outline-none"
+        className="h-11 w-full rounded-lg border bg-transparent px-3 pr-9 text-center text-[13px] outline-none"
         style={{
           color: C.text,
           borderColor: C.borderStrong,
@@ -701,7 +681,7 @@ export function ActiveWorkout({
                 }
                 className="flex w-full items-center gap-4 rounded-xl border p-4 text-left"
                 style={{
-                  borderColor: stage.done ? "rgba(112,184,159,.28)" : C.border,
+                  borderColor: stage.done ? "color-mix(in srgb, var(--color-success-seaglass) 28%, transparent)" : C.border,
                   background: C.card,
                 }}
               >
@@ -1157,7 +1137,7 @@ export function ActiveWorkout({
             Przerwa
           </span>
           <span
-            className="min-w-[48px] text-center text-[15px]"
+            className="min-w-[48px] text-center text-[16px]"
             style={{
               color: timerSeconds === 0 ? C.green : C.text,
               fontFamily: "'DM Mono', monospace",
@@ -1239,7 +1219,7 @@ export function ActiveWorkout({
                   style={{
                     borderColor:
                       index === exerciseIndex
-                        ? "rgba(71,114,250,.45)"
+                        ? "color-mix(in srgb, var(--color-precision-blue) 45%, transparent)"
                         : C.border,
                     background: C.card,
                   }}

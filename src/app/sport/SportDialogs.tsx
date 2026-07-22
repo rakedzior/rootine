@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  CopyPlus,
   Plus,
   Sparkles,
   Trash2,
@@ -16,10 +17,12 @@ import {
   type ExerciseLibraryItem,
   type TrainingPlan,
   type WorkoutSession,
+  type WorkoutSet,
   type WorkoutTemplate,
 } from "./model";
 import { inputStyle, Modal } from "./Shared";
 import { DISCIPLINE_META, SPORT_COLORS as C } from "./theme";
+import { Select } from "../ui";
 
 const disciplines = Object.entries(DISCIPLINE_META) as [
   Discipline,
@@ -228,16 +231,18 @@ export function AddWorkoutDialog({
 }
 
 export function NewPlanDialog({
+  plan,
   onClose,
   onSubmit,
 }: {
+  plan?: TrainingPlan;
   onClose: () => void;
   onSubmit: (plan: TrainingPlan) => void;
 }) {
-  const [name, setName] = useState("");
-  const [weeks, setWeeks] = useState(8);
-  const [days, setDays] = useState(3);
-  const [selected, setSelected] = useState<Discipline[]>(["strength"]);
+  const [name, setName] = useState(plan?.name ?? "");
+  const [weeks, setWeeks] = useState(plan?.weeks ?? 8);
+  const [days, setDays] = useState(plan?.sessionsPerWeek ?? 3);
+  const [selected, setSelected] = useState<Discipline[]>(plan?.disciplines ?? ["strength"]);
   const toggle = (discipline: Discipline) =>
     setSelected((current) =>
       current.includes(discipline)
@@ -246,31 +251,28 @@ export function NewPlanDialog({
     );
   const submit = () => {
     if (!name.trim() || !selected.length) return;
+    const adjustedBlocks = plan?.blocks
+      ?.filter((block) => block.startWeek <= weeks)
+      .map((block) => ({ ...block, endWeek: Math.max(block.startWeek, Math.min(block.endWeek, weeks)) }));
     onSubmit({
-      id: `plan-${Date.now()}`,
+      id: plan?.id ?? `plan-${Date.now()}`,
       name: name.trim(),
       disciplines: selected,
       weeks,
-      currentWeek: 1,
-      active: true,
+      currentWeek: Math.min(plan?.currentWeek ?? 1, weeks),
+      active: plan?.active ?? true,
       sessionsPerWeek: days,
-      completedSessions: 0,
+      completedSessions: plan?.completedSessions ?? 0,
       totalSessions: weeks * days,
-      templateIds: [],
-      source: "manual",
-      blocks: [
-        {
-          id: `block-${Date.now()}`,
-          name: "Blok główny",
-          startWeek: 1,
-          endWeek: weeks,
-          focus: "Regularna realizacja planu",
-        },
+      templateIds: plan?.templateIds ?? [],
+      source: plan?.source ?? "manual",
+      blocks: adjustedBlocks?.length ? adjustedBlocks : [
+        { id: `block-${Date.now()}`, name: "Blok główny", startWeek: 1, endWeek: weeks, focus: "Regularna realizacja planu" },
       ],
     });
   };
   return (
-    <Modal title="Nowy plan treningowy" eyebrow="Plan ręczny" onClose={onClose}>
+    <Modal title={plan ? "Edytuj plan treningowy" : "Nowy plan treningowy"} eyebrow={plan ? "Ustawienia planu" : "Plan ręczny"} onClose={onClose}>
       <div className="space-y-4 p-5">
         <label className="block">
           <span
@@ -366,7 +368,7 @@ export function NewPlanDialog({
             disabled={!name.trim() || !selected.length}
             className="sport-primary-button"
           >
-            Utwórz plan
+            {plan ? "Zapisz plan" : "Utwórz plan"}
           </button>
         </div>
       </div>
@@ -504,7 +506,7 @@ export function AIPlanDialog({
               className="mt-4 rounded-lg border px-3 py-2.5 text-[9px] leading-4"
               style={{
                 color: C.warning,
-                borderColor: "rgba(212,170,104,.24)",
+                borderColor: "color-mix(in srgb, var(--color-warning-ochre) 24%, transparent)",
                 background: C.warningBg,
               }}
             >
@@ -1069,45 +1071,54 @@ export function TemplateEditorDialog({
         item.id === id ? { ...item, ...patch } : item,
       ),
     });
-  const updatePlanValues = (
-    id: string,
-    field: "sets" | "reps" | "weight" | "rest",
-    value: number,
-  ) =>
-    setDraft({
-      ...draft,
-      exercises: draft.exercises.map((item) => {
-        if (item.id !== id) return item;
-        if (field === "rest") return { ...item, restSeconds: value };
-        const current = item.sets[0];
-        const count = field === "sets" ? value : item.sets.length;
-        return {
-          ...item,
-          sets: Array.from({ length: count }, (_, index) => ({
-            ...(item.sets[index] ??
-              current ?? { id: `${item.id}-s${index}`, done: false }),
-            id: item.sets[index]?.id ?? `${item.id}-s${index}`,
-            plannedReps:
-              field === "reps"
-                ? value
-                : (item.sets[index]?.plannedReps ?? current?.plannedReps ?? 8),
-            actualReps:
-              field === "reps"
-                ? value
-                : (item.sets[index]?.actualReps ?? current?.actualReps ?? 8),
-            plannedWeight:
-              field === "weight"
-                ? value
-                : (item.sets[index]?.plannedWeight ?? current?.plannedWeight),
-            actualWeight:
-              field === "weight"
-                ? value
-                : (item.sets[index]?.actualWeight ?? current?.actualWeight),
-            done: false,
-          })),
-        };
+  const updateSet = (exerciseId: string, setId: string, patch: Partial<WorkoutSet>) =>
+    setDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => exercise.id === exerciseId ? {
+        ...exercise,
+        sets: exercise.sets.map((set) => set.id === setId ? {
+          ...set,
+          ...patch,
+          actualReps: patch.plannedReps ?? set.actualReps,
+          actualSeconds: patch.plannedSeconds ?? set.actualSeconds,
+          actualWeight: patch.plannedWeight ?? set.actualWeight,
+          done: false,
+        } : set),
+      } : exercise),
+    }));
+
+  const addSet = (exerciseId: string) =>
+    setDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+        const source = exercise.sets.at(-1);
+        const id = `${exercise.id}-s${Date.now()}-${exercise.sets.length + 1}`;
+        const next: WorkoutSet = source
+          ? { ...source, id, done: false }
+          : { id, plannedReps: 8, actualReps: 8, plannedWeight: 0, actualWeight: 0, rir: 2, done: false };
+        return { ...exercise, sets: [...exercise.sets, next] };
       }),
-    });
+    }));
+
+  const removeSet = (exerciseId: string, setId: string) =>
+    setDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => exercise.id === exerciseId && exercise.sets.length > 1
+        ? { ...exercise, sets: exercise.sets.filter((set) => set.id !== setId) }
+        : exercise),
+    }));
+
+  const duplicateSet = (exerciseId: string, setId: string) =>
+    setDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => exercise.id === exerciseId ? {
+        ...exercise,
+        sets: exercise.sets.flatMap((set, index) => set.id === setId
+          ? [set, { ...set, id: `${exercise.id}-s${Date.now()}-${index + 2}`, done: false }]
+          : [set]),
+      } : exercise),
+    }));
   return (
     <Modal
       title={`Edytuj: ${template.name}`}
@@ -1297,78 +1308,117 @@ export function TemplateEditorDialog({
                         <Trash2 size={11} />
                       </button>
                     </div>
-                    <div className="mt-3 grid grid-cols-4 gap-2">
-                      {[
-                        {
-                          label: "Serie",
-                          field: "sets" as const,
-                          value: item.sets.length,
-                        },
-                        {
-                          label: "Powt.",
-                          field: "reps" as const,
-                          value: item.sets[0]?.plannedReps ?? 0,
-                        },
-                        {
-                          label: "Ciężar kg",
-                          field: "weight" as const,
-                          value: item.sets[0]?.plannedWeight ?? 0,
-                        },
-                        {
-                          label: "Przerwa s",
-                          field: "rest" as const,
-                          value: item.restSeconds,
-                        },
-                      ].map((control) => (
-                        <label key={control.field}>
-                          <span
-                            className="mb-1 block text-[8px]"
-                            style={{ color: C.textMuted }}
-                          >
-                            {control.label}
-                          </span>
-                          <input
-                            type="number"
-                            min={control.field === "sets" ? 1 : 0}
-                            step={control.field === "weight" ? 0.5 : 1}
-                            value={control.value}
-                            onChange={(event) =>
-                              updatePlanValues(
-                                item.id,
-                                control.field,
-                                Number(event.target.value),
-                              )
-                            }
-                            className="w-full rounded-md border px-2 py-1.5 text-[9px] outline-none"
-                            style={inputStyle}
-                          />
-                        </label>
-                      ))}
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                      <p className="text-[9px] font-medium" style={{ color: C.textMuted }}>
+                        Serie · każda może mieć inny cel
+                      </p>
+                      <label className="flex items-center gap-2 text-[9px]" style={{ color: C.textMuted }}>
+                        Przerwa
+                        <input
+                          aria-label={`Przerwa po ćwiczeniu ${item.name} w sekundach`}
+                          type="number"
+                          min={0}
+                          step={5}
+                          value={item.restSeconds}
+                          onChange={(event) => updateExercise(item.id, { restSeconds: Number(event.target.value) })}
+                          className="h-7 w-16 rounded-md border px-2 text-right text-[9px] outline-none"
+                          style={inputStyle}
+                        />
+                        s
+                      </label>
                     </div>
+                    <div className="mt-2 overflow-hidden rounded-md border" style={{ borderColor: C.border }}>
+                      <div className="grid grid-cols-[28px_minmax(74px,1fr)_minmax(82px,1fr)_58px_56px] items-center gap-1.5 border-b px-2 py-1.5 text-[9px]" style={{ color: C.textMuted, borderColor: C.border }}>
+                        <span>#</span>
+                        <span>{item.sets.some((set) => set.plannedSeconds !== undefined) ? "Czas s" : "Powt."}</span>
+                        <span>Ciężar kg</span>
+                        <span>RIR</span>
+                        <span />
+                      </div>
+                      {item.sets.map((set, setIndex) => {
+                        const usesSeconds = item.sets.some((entry) => entry.plannedSeconds !== undefined);
+                        return (
+                          <div key={set.id} className="grid grid-cols-[28px_minmax(74px,1fr)_minmax(82px,1fr)_58px_56px] items-center gap-1.5 border-b px-2 py-1.5 last:border-b-0" style={{ borderColor: C.border }}>
+                            <span className="text-[9px] tabular-nums" style={{ color: C.textDisabled }}>{setIndex + 1}</span>
+                            <input
+                              aria-label={`${usesSeconds ? "Czas" : "Powtórzenia"}, seria ${setIndex + 1}`}
+                              type="number"
+                              min={0}
+                              value={usesSeconds ? (set.plannedSeconds ?? 0) : (set.plannedReps ?? 0)}
+                              onChange={(event) => updateSet(item.id, set.id, usesSeconds ? { plannedSeconds: Number(event.target.value) } : { plannedReps: Number(event.target.value) })}
+                              className="h-7 min-w-0 rounded-md border px-2 text-[10px] outline-none"
+                              style={inputStyle}
+                            />
+                            <input
+                              aria-label={`Ciężar, seria ${setIndex + 1}`}
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={set.plannedWeight ?? 0}
+                              onChange={(event) => updateSet(item.id, set.id, { plannedWeight: Number(event.target.value) })}
+                              className="h-7 min-w-0 rounded-md border px-2 text-[10px] outline-none"
+                              style={inputStyle}
+                            />
+                            <input
+                              aria-label={`RIR, seria ${setIndex + 1}`}
+                              type="number"
+                              min={0}
+                              max={10}
+                              value={set.rir ?? 0}
+                              onChange={(event) => updateSet(item.id, set.id, { rir: Number(event.target.value) })}
+                              className="h-7 min-w-0 rounded-md border px-2 text-[10px] outline-none"
+                              style={inputStyle}
+                            />
+                            <span className="flex items-center">
+                              <button
+                                type="button"
+                                aria-label={`Duplikuj serię ${setIndex + 1}`}
+                                onClick={() => duplicateSet(item.id, set.id)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md"
+                                style={{ color: C.textMuted }}
+                              >
+                                <CopyPlus size={11} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={item.sets.length === 1}
+                                aria-label={`Usuń serię ${setIndex + 1}`}
+                                onClick={() => removeSet(item.id, set.id)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md disabled:opacity-30"
+                                style={{ color: C.danger }}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button type="button" onClick={() => addSet(item.id)} className="sport-link-action mt-2" style={{ color: C.blue }}>
+                      <Plus size={10} /> Dodaj serię
+                    </button>
                   </div>
                 ))}
               </div>
             </div>
             <div className="flex gap-2">
-              <select
+              <Select
+                compact
                 value={exerciseId}
                 onChange={(event) => setExerciseId(event.target.value)}
-                className="h-8 min-w-0 flex-1 rounded-lg border px-3 text-[9px] outline-none"
-                style={inputStyle}
-              >
-                <option value="">Wybierz ćwiczenie z biblioteki</option>
-                {library
+                aria-label="Ćwiczenie z biblioteki"
+                fieldClassName="min-w-0 flex-1"
+                options={[
+                  { value: "", label: "Wybierz ćwiczenie z biblioteki" },
+                  ...library
                   .filter(
                     (item) =>
                       item.discipline === draft.discipline ||
                       draft.discipline === "custom",
                   )
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-              </select>
+                  .map((item) => ({ value: item.id, label: item.name })),
+                ]}
+              />
               <button
                 type="button"
                 disabled={!exerciseId}
@@ -1534,10 +1584,10 @@ export function ScheduleCycleDialog({
                         : [...current, index],
                     )
                   }
-                  className="h-7 rounded-md border text-[8px]"
+                  className="h-7 rounded-md border text-[9px]"
                   style={{
                     color: active ? C.blue : C.textMuted,
-                    borderColor: active ? "rgba(71,114,250,.45)" : C.border,
+                    borderColor: active ? "color-mix(in srgb, var(--color-precision-blue) 45%, transparent)" : C.border,
                     background: active ? C.blueBg : C.input,
                   }}
                 >

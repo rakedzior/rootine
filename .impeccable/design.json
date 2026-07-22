@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-22T09:10:30.7613702Z",
+  "title": "Design System: Routine",
+  "extensions": {
+    "colorMeta": {
+      "precision-blue": {
+        "role": "primary",
+        "displayName": "Precyzyjny błękit",
+        "canonical": "#4772FA",
+        "tonalRamp": ["oklch(15% 0.06 270)", "oklch(26% 0.10 270)", "oklch(38% 0.15 270)", "oklch(50% 0.20 270)", "oklch(61% 0.23 270)", "oklch(72% 0.18 270)", "oklch(84% 0.10 270)", "oklch(95% 0.03 270)"]
+      },
+      "precision-blue-text": {
+        "role": "primary",
+        "displayName": "Precyzyjny błękit tekstowy",
+        "canonical": "#809AF4",
+        "tonalRamp": ["oklch(15% 0.04 270)", "oklch(26% 0.07 270)", "oklch(38% 0.10 270)", "oklch(50% 0.14 270)", "oklch(61% 0.17 270)", "oklch(72% 0.14 270)", "oklch(84% 0.08 270)", "oklch(95% 0.02 270)"]
+      },
+      "precision-blue-strong": {
+        "role": "primary",
+        "displayName": "Precyzyjny błękit mocny",
+        "canonical": "#3E63DA",
+        "tonalRamp": ["oklch(15% 0.06 270)", "oklch(26% 0.10 270)", "oklch(38% 0.14 270)", "oklch(50% 0.18 270)", "oklch(61% 0.20 270)", "oklch(72% 0.16 270)", "oklch(84% 0.09 270)", "oklch(95% 0.03 270)"]
+      },
+      "precision-blue-soft": {
+        "role": "primary",
+        "displayName": "Mgła błękitnego sygnału",
+        "canonical": "rgba(71,114,250,0.11)",
+        "tonalRamp": ["oklch(15% 0.02 270)", "oklch(26% 0.03 270)", "oklch(38% 0.04 270)", "oklch(50% 0.05 270)", "oklch(61% 0.06 270)", "oklch(72% 0.05 270)", "oklch(84% 0.03 270)", "oklch(95% 0.01 270)"]
+      },
+      "graphite-shell": {
+        "role": "neutral",
+        "displayName": "Grafit powłoki",
+        "canonical": "#1C1C1C",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "graphite-sidebar": {
+        "role": "neutral",
+        "displayName": "Grafit panelu bocznego",
+        "canonical": "#1E1E1E",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "graphite-input": {
+        "role": "neutral",
+        "displayName": "Grafit pola",
+        "canonical": "#222222",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "graphite-canvas": {
+        "role": "neutral",
+        "displayName": "Grafit roboczy",
+        "canonical": "#242424",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "graphite-panel": {
+        "role": "neutral",
+        "displayName": "Grafit modułu",
+        "canonical": "#2A2A2A",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "graphite-card": {
+        "role": "neutral",
+        "displayName": "Grafit karty",
+        "canonical": "#2E2E2E",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "graphite-hover": {
+        "role": "neutral",
+        "displayName": "Grafit reakcji",
+        "canonical": "#333333",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "border-subtle": {
+        "role": "neutral",
+        "displayName": "Linia subtelna",
+        "canonical": "#383838",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "border-strong": {
+        "role": "neutral",
+        "displayName": "Linia mocna",
+        "canonical": "#484848",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "chalk-white": {
+        "role": "neutral",
+        "displayName": "Kredowa biel",
+        "canonical": "#F0F0F0",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Popiel pomocniczy",
+        "canonical": "#A0A0A0",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Popiel wyciszony",
+        "canonical": "#969696",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "text-disabled": {
+        "role": "neutral",
+        "displayName": "Popiel nieaktywny",
+        "canonical": "#444444",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(26% 0 0)", "oklch(38% 0 0)", "oklch(50% 0 0)", "oklch(61% 0 0)", "oklch(72% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "success-seaglass": {
+        "role": "secondary",
+        "displayName": "Morskie szkło",
+        "canonical": "#70B89F",
+        "tonalRamp": ["oklch(15% 0.03 165)", "oklch(26% 0.05 165)", "oklch(38% 0.07 165)", "oklch(50% 0.09 165)", "oklch(61% 0.11 165)", "oklch(72% 0.09 165)", "oklch(84% 0.05 165)", "oklch(95% 0.02 165)"]
+      },
+      "warning-ochre": {
+        "role": "secondary",
+        "displayName": "Warsztatowa ochra",
+        "canonical": "#D4AA68",
+        "tonalRamp": ["oklch(15% 0.03 75)", "oklch(26% 0.05 75)", "oklch(38% 0.07 75)", "oklch(50% 0.09 75)", "oklch(61% 0.11 75)", "oklch(72% 0.09 75)", "oklch(84% 0.05 75)", "oklch(95% 0.02 75)"]
+      },
+      "danger-coral": {
+        "role": "secondary",
+        "displayName": "Przygaszony koral",
+        "canonical": "#CF777C",
+        "tonalRamp": ["oklch(15% 0.03 20)", "oklch(26% 0.05 20)", "oklch(38% 0.07 20)", "oklch(50% 0.09 20)", "oklch(61% 0.11 20)", "oklch(72% 0.09 20)", "oklch(84% 0.05 20)", "oklch(95% 0.02 20)"]
+      },
+      "accent-violet": {
+        "role": "tertiary",
+        "displayName": "Znacznik fioletowy",
+        "canonical": "#9B8CE8",
+        "tonalRamp": ["oklch(15% 0.03 295)", "oklch(26% 0.05 295)", "oklch(38% 0.08 295)", "oklch(50% 0.11 295)", "oklch(61% 0.13 295)", "oklch(72% 0.10 295)", "oklch(84% 0.06 295)", "oklch(95% 0.02 295)"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Pojedynczy tytuł pełnego obszaru roboczego." },
+      "title": { "displayName": "Title", "purpose": "Nagłówki modułów, paneli i dialogów." },
+      "body": { "displayName": "Body", "purpose": "Podstawowa treść operacyjna i wartości pól." },
+      "label": { "displayName": "Label", "purpose": "Krótkie etykiety sekcji i metadata." },
+      "data": { "displayName": "Data", "purpose": "Czas, daty, wyniki, liczniki i procenty." }
+    },
+    "shadows": [
+      { "name": "card-rest", "value": "0 1px 2px rgba(0,0,0,0.12)", "purpose": "Minimalne odcięcie interaktywnej karty od tła." },
+      { "name": "selected-card", "value": "0 0 0 1px rgba(71,114,250,0.12), 0 12px 28px rgba(0,0,0,0.16)", "purpose": "Wybrana karta bez mocnego blasku." },
+      { "name": "floating-menu", "value": "0 8px 28px rgba(0,0,0,0.55)", "purpose": "Menu, select i mały popover ponad treścią." },
+      { "name": "overlay-panel", "value": "0 12px 36px rgba(0,0,0,0.38)", "purpose": "Panel szczegółów i duży popover." },
+      { "name": "primary-action", "value": "0 6px 18px rgba(71,114,250,0.22)", "purpose": "Opcjonalne podkreślenie jednej głównej akcji." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "140ms ease", "purpose": "Hover i subtelne przejścia koloru kompaktowych kontrolek." },
+      { "name": "state-standard", "value": "150ms ease", "purpose": "Menu, chevrony i standardowa zmiana stanu." },
+      { "name": "control-settle", "value": "200ms ease", "purpose": "Checkbox, switch i bardziej widoczna zmiana kontrolki." }
+    ],
+    "breakpoints": [
+      { "name": "compact-grid", "value": "620px" },
+      { "name": "mobile-workspace", "value": "760px" },
+      { "name": "collapsed-navigation", "value": "980px" },
+      { "name": "single-column-detail", "value": "1100px" },
+      { "name": "reduced-metrics", "value": "1200px" },
+      { "name": "overlay-side-panel", "value": "1380px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Główna akcja bieżącego kontekstu; maksymalnie jedna dominująca na obszar.",
+      "html": "<button class=\"ds-button\">Dodaj cel</button>",
+      "css": ".ds-button{height:40px;padding:0 16px;border:1px solid #3E63DA;border-radius:8px;background:#3E63DA;color:#F0F0F0;font:600 12px/1.2 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(71,114,250,.22);transition:background-color 140ms ease,border-color 140ms ease}.ds-button:hover{background:#3658C7}.ds-button:active{background:#3150B6}.ds-button:focus-visible{outline:2px solid #4772FA;outline-offset:2px}.ds-button:disabled{cursor:default;opacity:.38;box-shadow:none}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Gęsta powierzchnia robocza oddzielona tonem i subtelną linią.",
+      "html": "<article class=\"ds-card\"><p class=\"ds-card-label\">AKTYWNY CEL</p><h3>Przebiec półmaraton</h3><p>68% ukończone</p></article>",
+      "css": ".ds-card{padding:16px;border:1px solid #383838;border-radius:12px;background:#2E2E2E;color:#F0F0F0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;box-shadow:0 1px 2px rgba(0,0,0,.12);transition:background-color 140ms ease,border-color 140ms ease}.ds-card:hover{background:#333;border-color:#484848}.ds-card h3{margin:6px 0;font-size:13px;line-height:1.4}.ds-card p{margin:0;color:#A0A0A0;font-size:10px}.ds-card .ds-card-label{color:#969696;font-size:9px;font-weight:600;letter-spacing:.16em}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standardowe pole tekstowe dla formularzy i filtrów.",
+      "html": "<input class=\"ds-input\" placeholder=\"Co chcesz osiągnąć?\" />",
+      "css": ".ds-input{width:280px;height:40px;padding:10px 12px;border:1px solid #383838;border-radius:8px;background:#222;color:#F0F0F0;font:400 12px/1.5 'Plus Jakarta Sans',system-ui,sans-serif;outline:none;transition:border-color 150ms ease,box-shadow 150ms ease}.ds-input::placeholder{color:#969696}.ds-input:hover{border-color:#484848}.ds-input:focus{border-color:#4772FA;box-shadow:0 0 0 2px rgba(71,114,250,.08)}.ds-input:disabled{color:#444;cursor:default}"
+    },
+    {
+      "name": "Select",
+      "kind": "input",
+      "refersTo": "select",
+      "description": "Pole wyboru zgodne z inputem, z czytelnym stanem otwarcia.",
+      "html": "<button class=\"ds-select\" aria-haspopup=\"listbox\" aria-expanded=\"false\"><span>Priorytet</span><span aria-hidden=\"true\">⌄</span></button>",
+      "css": ".ds-select{width:220px;height:40px;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #383838;border-radius:8px;background:#222;color:#F0F0F0;font:400 12px/1.5 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;transition:border-color 150ms ease,background-color 150ms ease}.ds-select:hover{border-color:#484848;background:#2A2A2A}.ds-select:focus-visible{outline:2px solid #4772FA;outline-offset:2px}.ds-select[aria-expanded=\"true\"]{border-color:#4772FA;box-shadow:0 0 0 2px rgba(71,114,250,.08)}"
+    },
+    {
+      "name": "Modal",
+      "kind": "custom",
+      "refersTo": "modal",
+      "description": "Skupiona warstwa dla tworzenia, edycji i potwierdzania.",
+      "html": "<section class=\"ds-modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"ds-modal-title\"><header><div><p>NOWY ELEMENT</p><h2 id=\"ds-modal-title\">Dodaj cel</h2></div><button aria-label=\"Zamknij\">×</button></header><div class=\"ds-modal-body\">Treść formularza</div></section>",
+      "css": ".ds-modal{width:min(520px,calc(100vw - 32px));overflow:hidden;border:1px solid #484848;border-radius:16px;background:#2E2E2E;color:#F0F0F0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;box-shadow:0 12px 36px rgba(0,0,0,.38)}.ds-modal header{display:flex;align-items:flex-start;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #383838}.ds-modal header p{margin:0 0 4px;color:#969696;font-size:9px;font-weight:600;letter-spacing:.16em}.ds-modal h2{margin:0;font-size:16px}.ds-modal button{width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#969696;cursor:pointer}.ds-modal button:hover{background:#333;color:#F0F0F0}.ds-modal button:focus-visible{outline:2px solid #4772FA;outline-offset:2px}.ds-modal-body{padding:20px;color:#A0A0A0;font-size:12px}"
+    },
+    {
+      "name": "Tabs",
+      "kind": "nav",
+      "refersTo": "tabs-active",
+      "description": "Kompaktowe przełączanie podwidoków bez ciężkiej obudowy.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Widok\"><button aria-selected=\"true\">Przegląd</button><button aria-selected=\"false\">Postęp</button><button aria-selected=\"false\">Notatki</button></nav>",
+      "css": ".ds-tabs{display:inline-flex;gap:4px;padding:4px;border:1px solid #383838;border-radius:12px;background:#222}.ds-tabs button{padding:8px 12px;border:0;border-radius:8px;background:transparent;color:#A0A0A0;font:500 11px/1 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;transition:background-color 140ms ease,color 140ms ease}.ds-tabs button:hover{background:#333;color:#F0F0F0}.ds-tabs button[aria-selected=\"true\"]{background:rgba(71,114,250,.11);color:#809AF4}.ds-tabs button:focus-visible{outline:2px solid #4772FA;outline-offset:2px}"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "Krótki status z kolorem semantycznym i opcjonalną kropką.",
+      "html": "<span class=\"ds-badge\"><span aria-hidden=\"true\"></span>Aktywny</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid rgba(71,114,250,.28);border-radius:999px;background:rgba(71,114,250,.11);color:#809AF4;font:600 9px/1.2 'Plus Jakarta Sans',system-ui,sans-serif}.ds-badge>span{width:6px;height:6px;border-radius:999px;background:#809AF4}.ds-badge:focus-visible{outline:2px solid #4772FA;outline-offset:2px}"
+    },
+    {
+      "name": "PageHeader",
+      "kind": "custom",
+      "refersTo": "page-header",
+      "description": "Stały punkt wejścia do sekcji z tytułem, opisem i ograniczoną liczbą akcji.",
+      "html": "<header class=\"ds-page-header\"><div><h1>Cele</h1><p>Planuj i śledź najważniejsze rezultaty</p></div><button>Dodaj cel</button></header>",
+      "css": ".ds-page-header{height:70px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 28px;border-bottom:1px solid #383838;background:#242424;color:#F0F0F0;font-family:'Plus Jakarta Sans',system-ui,sans-serif}.ds-page-header h1{margin:0;font-size:16px;font-weight:600}.ds-page-header p{margin:3px 0 0;color:#969696;font-size:10px}.ds-page-header button{height:40px;padding:0 16px;border:0;border-radius:8px;background:#3E63DA;color:#F0F0F0;font-size:12px;font-weight:600;cursor:pointer}.ds-page-header button:hover{background:#3658C7}.ds-page-header button:focus-visible{outline:2px solid #4772FA;outline-offset:2px}"
+    },
+    {
+      "name": "SectionHeader",
+      "kind": "custom",
+      "refersTo": "section-header",
+      "description": "Wyciszona etykieta porządkująca grupę treści.",
+      "html": "<div class=\"ds-section-header\"><h2>NAJBLIŻSZE KAMIENIE MILOWE</h2><button>Zobacz wszystkie</button></div>",
+      "css": ".ds-section-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 8px;font-family:'Plus Jakarta Sans',system-ui,sans-serif}.ds-section-header h2{margin:0;color:#969696;font-size:10px;font-weight:600;line-height:1.2;letter-spacing:.16em}.ds-section-header button{padding:4px 6px;border:0;border-radius:6px;background:transparent;color:#A0A0A0;font-size:10px;cursor:pointer}.ds-section-header button:hover{background:#333;color:#F0F0F0}.ds-section-header button:focus-visible{outline:2px solid #4772FA;outline-offset:2px}"
+    },
+    {
+      "name": "EmptyState",
+      "kind": "custom",
+      "refersTo": "empty-state",
+      "description": "Spokojne wyjaśnienie braku danych z jedną możliwą akcją.",
+      "html": "<section class=\"ds-empty\"><h3>Brak treningów</h3><p>Zaplanuj pierwszą sesję, aby rozpocząć tydzień.</p><button>Dodaj trening</button></section>",
+      "css": ".ds-empty{min-height:208px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;border:1px dashed #383838;border-radius:12px;background:transparent;text-align:center;font-family:'Plus Jakarta Sans',system-ui,sans-serif}.ds-empty h3{margin:0;color:#A0A0A0;font-size:12px;font-weight:500}.ds-empty p{max-width:320px;margin:6px 0 16px;color:#969696;font-size:10px;line-height:1.5}.ds-empty button{height:32px;padding:0 12px;border:1px solid #383838;border-radius:8px;background:transparent;color:#A0A0A0;font-size:10px;cursor:pointer}.ds-empty button:hover{border-color:#484848;background:#333;color:#F0F0F0}.ds-empty button:focus-visible{outline:2px solid #4772FA;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Grafitowy warsztat",
+    "overview": "Routine jest spokojnym, precyzyjnym i dyskretnym narzędziem do działania. Interfejs przypomina dobrze uporządkowany warsztat: każda kontrolka ma konkretne zadanie, treść ma pierwszeństwo, a gęstość pozwala szybko skanować wiele informacji bez wizualnego hałasu.\n\nSystem jest ciemny, tonalny i kompaktowy. Marka ujawnia się przez konsekwentny rytm, oszczędne użycie Precyzyjnego błękitu, drobną typografię oraz dobrze rozróżnione stany, nie przez dekorację. To interfejs w trybie Operate: ma ułatwiać wykonanie zadania, a nie konkurować o uwagę.",
+    "keyCharacteristics": [
+      "Grafitowe powierzchnie budują hierarchię przez różnicę tonu.",
+      "Precyzyjny błękit oznacza wybór, aktywność i główną akcję.",
+      "Układ jest zwarty, modularny i przygotowany na dużą ilość danych.",
+      "Obramowania porządkują powierzchnie; cienie są zarezerwowane dla warstw unoszących się nad treścią.",
+      "Komunikacja jest krótka, rzeczowa i po polsku."
+    ],
+    "rules": [
+      { "name": "The Signal, Not Paint Rule", "body": "Precyzyjny błękit jest sygnałem działania, nie dekoracyjną farbą; na jednym ekranie powinien wskazywać tylko najważniejsze aktywne miejsca.", "section": "colors" },
+      { "name": "The Semantic Honesty Rule", "body": "Zieleń, ochra i koral opisują rzeczywisty status. Nie służą do przypadkowego różnicowania kart.", "section": "colors" },
+      { "name": "The Compact Legibility Rule", "body": "Mały tekst musi mieć wyraźną rolę pomocniczą, wystarczający kontrast i krótką długość. Rozmiar nie może zastępować hierarchii.", "section": "typography" },
+      { "name": "The Data Voice Rule", "body": "DM Mono jest zarezerwowany dla danych, nie dla nagłówków ani zwykłych opisów.", "section": "typography" },
+      { "name": "The Workspace First Rule", "body": "Szerokość należy oddać głównej czynności. Panele pomocnicze mogą znikać lub nakładać się wcześniej niż treść robocza.", "section": "layout" },
+      { "name": "The Four-Pixel Rhythm Rule", "body": "Nowe odległości muszą wynikać z czteropikselowego rytmu, chyba że korekta optyczna wymaga pojedynczego piksela.", "section": "layout" },
+      { "name": "The Lift Has a Job Rule", "body": "Cień oznacza zmianę warstwy lub priorytetu interakcji. Zwykłe karty pozostają tonalne i obramowane.", "section": "elevation" },
+      { "name": "The Radius Ladder Rule", "body": "Promień rośnie wraz z wagą powierzchni: kontrolka → karta → modal. Nie należy losowo mieszać 6, 8, 9, 10 i 12px dla elementów tej samej klasy.", "section": "shapes" },
+      { "name": "The Quiet-by-Default Rule", "body": "Kontrolki zaczynają od neutralnego stanu. Kolor i podniesienie pojawiają się dopiero jako informacja o priorytecie, wyborze albo statusie.", "section": "components" }
+    ],
+    "dos": [
+      "**Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Select, Modal, Tabs, Badge, PageHeader, SectionHeader oraz EmptyState.",
+      "**Do** używaj różnic tonu grafitu i obramowań jako podstawowego mechanizmu grupowania.",
+      "**Do** rezerwuj Precyzyjny błękit dla aktywnego wyboru, focusu i głównej akcji.",
+      "**Do** używaj DM Mono dla czasu, dat, wartości, liczników i procentów.",
+      "**Do** zachowuj czteropikselowy rytm oraz kompaktową gęstość.",
+      "**Do** projektuj responsywność przez ochronę głównego workspace i redukcję paneli pomocniczych."
+    ],
+    "donts": [
+      "**Don't** wprowadzaj gamingowego neonu, kolorowych poświat ani nasyconych gradientów.",
+      "**Don't** zmieniaj Routine w korporacyjny dashboard z wielkimi KPI i dekoracyjnymi wykresami.",
+      "**Don't** używaj przesadnie dużej typografii; ekran aplikacyjny ma pozostać narzędziem.",
+      "**Don't** stosuj glassmorphismu, przezroczystych kart ani rozmycia jako głównego materiału powierzchni.",
+      "**Don't** dodawaj mocnego cienia do każdej karty.",
+      "**Don't** twórz nowych lokalnych odcieni, radiusów lub wariantów komponentu, jeśli istniejący token opisuje tę samą rolę."
+    ]
+  }
+}

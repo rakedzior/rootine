@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Image as ImageIcon, Plus, Target, Upload, X } from "lucide-react";
 import { getGoalCurrentValue } from "./goalsStore";
+import { Input, Modal, Select, uiColors } from "../ui";
 import type {
   Goal,
   GoalCategory,
@@ -16,8 +17,8 @@ import type {
 } from "./goalsStore";
 
 const C = {
-  surface: "#242424", panel: "#2E2E2E", input: "#202020", border: "#3C3C3C", borderStrong: "#4A4A4A",
-  primary: "#F0F0F0", second: "#A0A0A0", muted: "#707070", blue: "#4772FA", green: "#70B89F", danger: "#CF777C",
+  surface: uiColors.graphiteCanvas, panel: uiColors.graphiteCard, input: uiColors.graphiteInput, border: uiColors.borderSubtle, borderStrong: uiColors.borderStrong,
+  primary: uiColors.chalkWhite, second: uiColors.textSecondary, muted: uiColors.textMuted, blue: uiColors.precisionBlue, green: uiColors.success, danger: uiColors.danger,
 };
 
 const inputStyle = { color: C.primary, background: C.input, borderColor: C.border, colorScheme: "dark" as const };
@@ -29,60 +30,7 @@ export function ThemedSelect({ value, onChange, options, ariaLabel, compact = fa
   ariaLabel: string;
   compact?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const selected = options.find((option) => option.value === value);
-  const estimatedMenuHeight = Math.min(280, options.reduce((height, option) => height + (option.description ? 47 : 36), 8));
-  const menuTop = rect && rect.bottom + estimatedMenuHeight + 12 > window.innerHeight
-    ? Math.max(12, rect.top - estimatedMenuHeight - 5)
-    : (rect?.bottom ?? 0) + 5;
-  const menuWidth = rect ? Math.max(rect.width, compact ? 140 : rect.width) : 0;
-  const menuLeft = rect ? Math.max(12, Math.min(rect.left, window.innerWidth - menuWidth - 12)) : 0;
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      if (!buttonRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnScroll = () => setOpen(false);
-    document.addEventListener("mousedown", close);
-    window.addEventListener("resize", closeOnScroll);
-    window.addEventListener("scroll", closeOnScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      window.removeEventListener("resize", closeOnScroll);
-      window.removeEventListener("scroll", closeOnScroll, true);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        role="combobox"
-        aria-label={ariaLabel}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        onClick={() => { if (!open && buttonRef.current) setRect(buttonRef.current.getBoundingClientRect()); setOpen((current) => !current); }}
-        className={`flex w-full items-center justify-between rounded-lg border text-left transition-colors ${compact ? "h-7 px-2.5 text-[10px]" : "px-3 py-2.5 text-[12px]"}`}
-        style={{ color: C.primary, background: C.input, borderColor: open ? "rgba(71,114,250,.55)" : C.border, boxShadow: open ? "0 0 0 2px rgba(71,114,250,.08)" : "none" }}
-      >
-        <span className="min-w-0 truncate">{selected?.label ?? "Wybierz"}</span>
-        <ChevronDown size={12} strokeWidth={1.7} style={{ color: C.muted, transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms" }} />
-      </button>
-      {open && rect && (
-        <div ref={menuRef} role="listbox" className="overflow-y-auto rounded-xl border py-1 shadow-2xl" style={{ position: "fixed", top: menuTop, left: menuLeft, width: menuWidth, maxHeight: 280, zIndex: 160, background: "#1E1E1E", borderColor: C.borderStrong, boxShadow: "0 8px 28px rgba(0,0,0,.55)" }}>
-          {options.map((option) => {
-            const active = option.value === value;
-            return <button key={option.value} type="button" role="option" aria-selected={active} onClick={() => { onChange(option.value); setOpen(false); }} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.04]" style={{ color: active ? C.blue : C.second }}><span className="min-w-0 flex-1"><span className="block text-[11px]">{option.label}</span>{option.description && <span className="mt-0.5 block text-[9px]" style={{ color: C.muted }}>{option.description}</span>}</span>{active && <Check size={11} strokeWidth={2.2} />}</button>;
-          })}
-        </div>
-      )}
-    </>
-  );
+  return <Select value={value} onChange={(event) => onChange(event.target.value)} options={options} aria-label={ariaLabel} compact={compact} />;
 }
 
 async function prepareTransparentIcon(file: File): Promise<string> {
@@ -126,26 +74,7 @@ async function prepareTransparentIcon(file: File): Promise<string> {
 }
 
 function DialogShell({ title, subtitle, onClose, children, width = 700 }: { title: string; subtitle?: string; onClose: () => void; children: React.ReactNode; width?: number }) {
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-5 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="max-h-[90vh] w-full overflow-hidden rounded-2xl border shadow-2xl" style={{ maxWidth: width, background: C.surface, borderColor: C.borderStrong }}>
-        <div className="flex items-start justify-between border-b px-6 py-5" style={{ borderColor: C.border }}>
-          <div>
-            <h2 className="text-[17px] font-semibold" style={{ color: C.primary }}>{title}</h2>
-            {subtitle && <p className="mt-1 text-[11px]" style={{ color: C.muted }}>{subtitle}</p>}
-          </div>
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ color: C.second }}><X size={17} /></button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <Modal title={title} description={subtitle} onClose={onClose} width={width} bodyClassName="p-0">{children}</Modal>;
 }
 
 function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
@@ -222,7 +151,7 @@ export function GoalFormDialog({ goal, categories, onClose, onSubmit }: { goal?:
       <form onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ ...form, title: form.title.trim() }); }} className="flex max-h-[calc(90vh-84px)] flex-col">
         <div className="goal-dialog-grid grid flex-1 grid-cols-2 gap-4 overflow-y-auto px-6 py-5">
           <Field label="Nazwa celu" wide>
-            <input autoFocus value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="Co chcesz osiągnąć?" className="w-full rounded-lg border px-3 py-2.5 text-[12px] outline-none" style={inputStyle} />
+            <Input autoFocus value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="Co chcesz osiągnąć?" />
           </Field>
           <Field label="Opis" wide>
             <textarea value={form.description} onChange={(event) => set("description", event.target.value)} rows={2} placeholder="Dlaczego ten cel jest ważny?" className="w-full resize-none rounded-lg border px-3 py-2.5 text-[12px] outline-none" style={inputStyle} />
@@ -237,7 +166,16 @@ export function GoalFormDialog({ goal, categories, onClose, onSubmit }: { goal?:
             <div className="flex items-center gap-3 rounded-xl border p-3" style={{ background: C.input, borderColor: iconError ? C.danger : C.border }}>
               <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border" style={{ borderColor: C.border, background: `${form.color}12` }}>{form.customIcon ? <img src={form.customIcon} alt="Podgląd własnej ikony" className="h-7 w-7 object-contain" /> : <ImageIcon size={16} style={{ color: C.muted }} />}</div>
               <div className="min-w-0 flex-1"><p className="text-[10px]" style={{ color: C.second }}>PNG lub WebP z przezroczystym tłem</p><p className="mt-0.5 text-[9px]" style={{ color: iconError ? C.danger : C.muted }}>{iconError || "Maks. 2 MB · zapis do 128×128 px"}</p></div>
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px]" style={{ color: C.blue, borderColor: "rgba(71,114,250,.35)" }}><Upload size={11} />Wgraj<input type="file" accept="image/png,image/webp" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; setIconError(""); prepareTransparentIcon(file).then((data) => set("customIcon", data)).catch((error: unknown) => setIconError(error instanceof Error ? error.message : "Nie udało się wczytać ikony.")); event.currentTarget.value = ""; }} /></label>
+              <label
+                tabIndex={0}
+                className="file-upload-trigger flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px]"
+                style={{ color: C.blue, borderColor: "rgba(71,114,250,.35)" }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  event.currentTarget.querySelector("input")?.click();
+                }}
+              ><Upload size={11} />Wgraj<input type="file" accept="image/png,image/webp" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; setIconError(""); prepareTransparentIcon(file).then((data) => set("customIcon", data)).catch((error: unknown) => setIconError(error instanceof Error ? error.message : "Nie udało się wczytać ikony.")); event.currentTarget.value = ""; }} /></label>
               {form.customIcon && <button type="button" onClick={() => set("customIcon", undefined)} aria-label="Usuń własną ikonę" style={{ color: C.danger }}><X size={13} /></button>}
             </div>
           </Field>

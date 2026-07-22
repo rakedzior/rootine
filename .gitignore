@@ -6,3 +6,4 @@ vite.config.d.ts
 .DS_Store
 Thumbs.db
 *.log
+.impeccable/config.local.json

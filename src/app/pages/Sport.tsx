@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Dumbbell, Plus } from "lucide-react";
 import { useSearchParams } from "react-router";
 import {
   EXERCISE_LIBRARY, INITIAL_IMPORTS, INITIAL_PLANS, INITIAL_TEMPLATES,
-  addDays, createInitialSessions, startOfWeekKey, toDateKey,
+  addDays, cloneExercises, createInitialSessions, startOfWeekKey, toDateKey,
   type ExerciseLibraryItem, type PendingImport, type SportView, type TrainingPlan,
   type WorkoutSession, type WorkoutTemplate,
 } from "../sport/model";
@@ -12,8 +12,8 @@ import { FullWeekPlan, SportOverview } from "../sport/SportOverview";
 import { ActiveConflictDialog, ActiveWorkout, WorkoutDetailPanel } from "../sport/SportWorkout";
 import { ExercisesView, HistoryView, IntegrationsView, PlansView, ProgressView } from "../sport/SportViews";
 import { AddWorkoutDialog, AIPlanDialog, NewExerciseDialog, NewPlanDialog, NewTemplateDialog, ScheduleCycleDialog, TemplateEditorDialog } from "../sport/SportDialogs";
-import { ProgressBar } from "../sport/Shared";
 import { SPORT_COLORS as C } from "../sport/theme";
+import { Badge, Button, DetailPanel, ModuleMain, ModuleShell, PageHeader, WorkspaceToolbar } from "../ui";
 
 type DialogName = "add" | "plan" | "ai" | "template" | "exercise" | "schedule" | null;
 
@@ -29,10 +29,32 @@ type PersistedSportState = {
 const STORAGE_KEY = "routine-sport-v3";
 const VIEWS: SportView[] = ["overview", "week", "plans", "history", "progress", "exercises", "integrations"];
 
+function isPersistedSportState(value: unknown): value is PersistedSportState {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PersistedSportState>;
+  return Array.isArray(candidate.sessions)
+    && candidate.sessions.every((session) => Boolean(session) && typeof session === "object" && typeof session.id === "string" && typeof session.title === "string" && typeof session.date === "string" && Array.isArray(session.exercises))
+    && Array.isArray(candidate.plans)
+    && candidate.plans.every((plan) => Boolean(plan) && typeof plan === "object" && typeof plan.id === "string" && typeof plan.name === "string" && Array.isArray(plan.templateIds) && Array.isArray(plan.blocks))
+    && Array.isArray(candidate.templates)
+    && candidate.templates.every((template) => Boolean(template) && typeof template === "object" && typeof template.id === "string" && typeof template.name === "string" && Array.isArray(template.exercises))
+    && Array.isArray(candidate.exercises)
+    && candidate.exercises.every((exercise) => Boolean(exercise) && typeof exercise === "object" && typeof exercise.id === "string" && typeof exercise.name === "string")
+    && Array.isArray(candidate.imports)
+    && candidate.imports.every((item) => Boolean(item) && typeof item === "object" && typeof item.id === "string" && typeof item.date === "string")
+    && Boolean(candidate.connections)
+    && typeof candidate.connections === "object"
+    && !Array.isArray(candidate.connections)
+    && Object.values(candidate.connections).every((connected) => typeof connected === "boolean");
+}
+
 function initialState(): PersistedSportState {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as PersistedSportState;
+    if (stored) {
+      const parsed: unknown = JSON.parse(stored);
+      if (isPersistedSportState(parsed)) return parsed;
+    }
   } catch {
     // A broken local draft must not prevent Sport from opening.
   }
@@ -57,10 +79,17 @@ export default function Sport() {
   const [addDate, setAddDate] = useState(toDateKey(new Date()));
   const [activeMode, setActiveMode] = useState(false);
   const [requestedStartId, setRequestedStartId] = useState<string | null>(null);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [storageFailed, setStorageFailed] = useState(false);
 
   useEffect(() => {
-    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* local persistence is best-effort */ }
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      setStorageFailed(false);
+    } catch {
+      setStorageFailed(true);
+    }
   }, [state]);
 
   useEffect(() => { setSelectedSessionId(null); }, [view]);
@@ -120,7 +149,7 @@ export default function Sport() {
   const content = (() => {
     switch (view) {
       case "week": return <FullWeekPlan sessions={state.sessions} weekStart={weekStart} onWeekChange={setWeekStart} onMove={moveSession} onSelect={setSelectedSessionId} onAdd={openAdd} />;
-      case "plans": return <PlansView plans={state.plans} templates={state.templates} onCreatePlan={() => setDialog("plan")} onCreateAIPlan={() => setDialog("ai")} onTogglePlan={(id) => setState((current) => ({ ...current, plans: current.plans.map((plan) => plan.id === id ? { ...plan, active: !plan.active } : plan) }))} onCreateTemplate={() => setDialog("template")} onEditTemplate={setEditingTemplateId} onSchedule={() => setDialog("schedule")} />;
+      case "plans": return <PlansView plans={state.plans} templates={state.templates} onCreatePlan={() => setDialog("plan")} onCreateAIPlan={() => setDialog("ai")} onTogglePlan={(id) => setState((current) => ({ ...current, plans: current.plans.map((plan) => plan.id === id ? { ...plan, active: !plan.active } : plan) }))} onEditPlan={setEditingPlanId} onCreateTemplate={() => setDialog("template")} onEditTemplate={setEditingTemplateId} onSchedule={() => setDialog("schedule")} />;
       case "history": return <HistoryView sessions={state.sessions} onSelect={setSelectedSessionId} />;
       case "progress": return <ProgressView sessions={state.sessions} plans={state.plans} />;
       case "exercises": return <ExercisesView exercises={state.exercises} onAdd={() => setDialog("exercise")} />;
@@ -134,40 +163,58 @@ export default function Sport() {
   const selectedTemplate = selectedSession?.templateId ? state.templates.find((template) => template.id === selectedSession.templateId) : undefined;
 
   return (
-    <div className="sport-module relative flex h-full min-w-0 flex-1 overflow-hidden" style={{ background: C.bg }}>
+    <ModuleShell className="sport-module">
       <SportSidebar view={view} onChange={changeView} importCount={state.imports.length} />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-[70px] items-center justify-between gap-4 border-b px-6 py-3.5" style={{ borderColor: C.border }}>
-          <div className="min-w-0">
-            <h1 className="text-[16px] font-semibold" style={{ color: C.text }}>{labels.title}</h1>
-            <p className="mt-0.5 truncate text-[10px]" style={{ color: C.textMuted }}>{labels.subtitle}</p>
-            <select aria-label="Widok Sport" value={view} onChange={(event) => changeView(event.target.value as SportView)} className="sport-mobile-nav mt-2 hidden rounded-md border px-2 py-1 text-[10px] outline-none" style={{ background: C.input, color: C.textSecond, borderColor: C.border }}>{VIEWS.map((item) => <option key={item} value={item}>{VIEW_LABELS[item].title}</option>)}</select>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => changeView("progress")} className="sport-header-metric hidden h-9 min-w-[116px] rounded-lg border px-2.5 text-left xl:block" style={{ background: C.input, borderColor: C.border }}><div className="flex items-center justify-between gap-2"><span className="text-[7px]" style={{ color: C.textMuted }}>Realizacja planu</span><span className="text-[9px]" style={{ color: C.green, fontFamily: "'DM Mono', monospace" }}>{completedThisWeek}/{currentWeekSessions.length} · {completion}%</span></div><div className="mt-1.5"><ProgressBar value={completion} color={C.green} /></div></button>
-            <button type="button" onClick={() => changeView("integrations")} className="sport-header-metric hidden h-9 min-w-[116px] rounded-lg border px-2.5 text-left xl:block" style={{ background: C.input, borderColor: C.border }}><p className="text-[7px]" style={{ color: C.textMuted }}>Aktywności</p><p className="mt-1 text-[9px]" style={{ color: state.imports.length ? C.warning : C.textSecond }}>{state.imports.length ? `${state.imports.length} do przypisania` : "Wszystko przypisane"}</p></button>
-            <button type="button" onClick={() => openAdd()} className="sport-quiet-button flex items-center gap-1.5"><Plus size={10} strokeWidth={1.6} /> Dodaj trening</button>
-          </div>
-        </header>
+      <ModuleMain>
+        <PageHeader
+          title="Sport"
+          description={`${labels.title} · ${labels.subtitle}`}
+          leading={<Dumbbell size={18} strokeWidth={1.5} />}
+          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+          actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => openAdd()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj trening</span></Button>}
+        />
 
-        {activeSession && <button type="button" onClick={() => setActiveMode(true)} className="flex min-h-10 items-center justify-between border-b px-7 text-left" style={{ background: C.warningBg, borderColor: "rgba(212,170,104,.2)" }}><span className="text-[10px]" style={{ color: C.warning }}>Trening w toku: <strong>{activeSession.title}</strong></span><span className="text-[9px]" style={{ color: C.warning }}>Wznów →</span></button>}
+        <WorkspaceToolbar>
+          <div className="flex min-w-0 items-center gap-2">
+            <select aria-label="Widok Sport" value={view} onChange={(event) => changeView(event.target.value as SportView)} className="context-mobile-select ui-field__control ui-select ui-select--compact">{VIEWS.map((item) => <option key={item} value={item}>{VIEW_LABELS[item].title}</option>)}</select>
+            <span className="workspace-context-label">{labels.title}</span>
+          </div>
+          <div className="sport-toolbar-metrics flex items-center gap-1">
+            <Button variant="quiet" size="sm" onClick={() => changeView("progress")}>Plan {completion}%</Button>
+            <Button variant="quiet" size="sm" onClick={() => changeView("integrations")}>{state.imports.length ? `${state.imports.length} aktywności` : "Aktywności"}</Button>
+          </div>
+        </WorkspaceToolbar>
+
+        {activeSession && <button type="button" onClick={() => setActiveMode(true)} className="flex min-h-10 items-center justify-between border-b px-7 text-left" style={{ background: C.warningBg, borderColor: "color-mix(in srgb, var(--color-warning-ochre) 25%, transparent)" }}><span className="text-[10px]" style={{ color: C.warning }}>Trening w toku: <strong>{activeSession.title}</strong></span><span className="text-[9px]" style={{ color: C.warning }}>Wznów →</span></button>}
 
         <div className={`min-h-0 flex-1 ${view === "week" || view === "exercises" ? "overflow-hidden" : "overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"}`}>
-          <div className={`h-full w-full ${view === "week" ? "px-5 py-5" : "px-6 py-5"}`}>{content}</div>
+          <div className="sport-content h-full w-full px-7 py-5">{content}</div>
         </div>
-      </main>
+      </ModuleMain>
 
-      {selectedSession && <WorkoutDetailPanel session={selectedSession} plan={selectedPlan} template={selectedTemplate} onClose={() => setSelectedSessionId(null)} onStart={() => startSession(selectedSession.id)} onUpdate={(patch) => updateSession(selectedSession.id, patch)} onDuplicate={() => { const id = `session-copy-${Date.now()}`; const copy: WorkoutSession = { ...selectedSession, id, title: `${selectedSession.title} — kopia`, status: "scheduled", exercises: selectedSession.exercises.map((item, itemIndex) => ({ ...item, id: `${id}-e${itemIndex}`, sets: item.sets.map((set, setIndex) => ({ ...set, id: `${id}-e${itemIndex}-s${setIndex}`, done: false })) })) }; setState((current) => ({ ...current, sessions: [...current.sessions, copy] })); setSelectedSessionId(id); }} onDelete={() => deleteSession(selectedSession.id)} />}
+      {selectedSession && <DetailPanel label="Szczegóły treningu"><WorkoutDetailPanel session={selectedSession} plan={selectedPlan} template={selectedTemplate} onClose={() => setSelectedSessionId(null)} onStart={() => startSession(selectedSession.id)} onUpdate={(patch) => updateSession(selectedSession.id, patch)} onDuplicate={() => { const id = `session-copy-${Date.now()}`; const copy: WorkoutSession = { ...selectedSession, id, title: `${selectedSession.title} — kopia`, status: "scheduled", exercises: selectedSession.exercises.map((item, itemIndex) => ({ ...item, id: `${id}-e${itemIndex}`, sets: item.sets.map((set, setIndex) => ({ ...set, id: `${id}-e${itemIndex}-s${setIndex}`, done: false })) })) }; setState((current) => ({ ...current, sessions: [...current.sessions, copy] })); setSelectedSessionId(id); }} onDelete={() => deleteSession(selectedSession.id)} /></DetailPanel>}
 
       {dialog === "add" && <AddWorkoutDialog templates={state.templates} initialDate={addDate} onClose={() => setDialog(null)} onSubmit={(session) => { setState((current) => ({ ...current, sessions: [...current.sessions, session] })); setDialog(null); setSelectedSessionId(session.id); }} />}
       {dialog === "plan" && <NewPlanDialog onClose={() => setDialog(null)} onSubmit={(plan) => { setState((current) => ({ ...current, plans: [...current.plans, plan] })); setDialog(null); }} />}
+      {editingPlanId && state.plans.find((plan) => plan.id === editingPlanId) && <NewPlanDialog plan={state.plans.find((plan) => plan.id === editingPlanId)!} onClose={() => setEditingPlanId(null)} onSubmit={(plan) => { setState((current) => ({ ...current, plans: current.plans.map((item) => item.id === plan.id ? plan : item) })); setEditingPlanId(null); }} />}
       {dialog === "ai" && <AIPlanDialog onClose={() => setDialog(null)} onSubmit={(plan) => { setState((current) => ({ ...current, plans: [...current.plans, plan] })); setDialog(null); }} />}
       {dialog === "template" && <NewTemplateDialog onClose={() => setDialog(null)} onSubmit={(template) => { setState((current) => ({ ...current, templates: [...current.templates, template] })); setDialog(null); }} />}
       {dialog === "exercise" && <NewExerciseDialog onClose={() => setDialog(null)} onSubmit={(exercise) => { setState((current) => ({ ...current, exercises: [...current.exercises, exercise] })); setDialog(null); }} />}
       {dialog === "schedule" && <ScheduleCycleDialog plans={state.plans} templates={state.templates} onClose={() => setDialog(null)} onSubmit={(sessions) => { setState((current) => ({ ...current, sessions: [...current.sessions, ...sessions] })); setDialog(null); changeView("week"); }} />}
-      {editingTemplateId && state.templates.find((template) => template.id === editingTemplateId) && <TemplateEditorDialog template={state.templates.find((template) => template.id === editingTemplateId)!} library={state.exercises} onClose={() => setEditingTemplateId(null)} onSubmit={(template) => { setState((current) => ({ ...current, templates: current.templates.map((item) => item.id === template.id ? template : item) })); setEditingTemplateId(null); }} />}
+      {editingTemplateId && state.templates.find((template) => template.id === editingTemplateId) && <TemplateEditorDialog template={state.templates.find((template) => template.id === editingTemplateId)!} library={state.exercises} onClose={() => setEditingTemplateId(null)} onSubmit={(template) => { setState((current) => ({
+        ...current,
+        templates: current.templates.map((item) => item.id === template.id ? template : item),
+        sessions: current.sessions.map((session) => session.templateId === template.id && session.status === "scheduled" ? {
+          ...session,
+          title: template.name,
+          discipline: template.discipline,
+          durationMinutes: template.durationMinutes,
+          exercises: cloneExercises(template.exercises, session.id),
+          stages: template.stages?.map((stage, index) => ({ ...stage, id: `${session.id}-stage-${index}`, done: false })),
+        } : session),
+      })); setEditingTemplateId(null); }} />}
 
       {activeSession && requestedSession && <ActiveConflictDialog active={activeSession} requested={requestedSession} onResume={() => { setRequestedStartId(null); setActiveMode(true); }} onSaveIncomplete={() => resolveConflict("incomplete")} onDiscard={() => resolveConflict("discard")} onClose={() => setRequestedStartId(null)} />}
-    </div>
+    </ModuleShell>
   );
 }
