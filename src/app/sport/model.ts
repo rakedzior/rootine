@@ -38,6 +38,7 @@ export type RunningStage = {
 
 export type WorkoutSession = {
   id: string;
+  cycleWorkoutId?: string;
   title: string;
   discipline: Discipline;
   date: string;
@@ -51,6 +52,8 @@ export type WorkoutSession = {
   exercises: WorkoutExercise[];
   stages?: RunningStage[];
   importedFrom?: string;
+  startedAt?: number;
+  completedAt?: number;
   restTimerRemaining?: number;
   restTimerRunning?: boolean;
   restTimerUpdatedAt?: number;

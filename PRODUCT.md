@@ -20,14 +20,18 @@ Routine ma być jednym spójnym miejscem do pracy z powiązanymi obszarami życi
 
 ## Operating Context
 
-Obecny interfejs obejmuje pulpit dnia oraz moduły zadań, kalendarza, celów, sportu, odżywiania, pracy, finansów, notatek i spraw. Cztery rozbudowane sekcje — Zadania, Kalendarz, Cele i Sport — są punktem odniesienia dla wspólnego systemu interfejsu, według którego mają powstać kolejne sekcje.
+Obecny interfejs obejmuje pulpit dnia oraz moduły zadań, kalendarza, celów, sportu, odżywiania, pracy, finansów, notatek i spraw. Pięć rozbudowanych sekcji — Zadania, Kalendarz, Cele, Sport i Odżywianie — wyznacza wspólny system interfejsu dla kolejnych obszarów.
 
 ## Capabilities and Constraints
 
 - MVP jest tworzone lokalnie jako aplikacja webowa.
 - Obecnie nie ma kont użytkowników ani backendu; stan jest lokalny, a część modułów korzysta z `localStorage`.
-- Aktualny zakres funkcjonalny obejmuje przede wszystkim zadania, kalendarz, cele i sport oraz prostsze wersje pozostałych modułów.
-- Po MVP planowane są kolejno: backend, bazy danych, synchronizacja, integracje, mechanizmy prywatności i eksport danych.
+- Aktualny zakres funkcjonalny obejmuje przede wszystkim zadania, kalendarz, cele, sport i dziennik odżywiania oraz prostsze wersje pozostałych modułów.
+- Planowanie w module Sport składa się z biblioteki szablonów przypisanych do kategorii oraz jednego aktywnego cyklu. Cykl pozwala rozłożyć treningi na tygodnie i dni, powtarzać je co tydzień albo tylko w wybranych tygodniach, przesuwać, edytować pojedynczo lub seriami, usuwać i zapisać jako jeden plan. Widok Dzisiaj uruchamia pełną aktywną sesję z ćwiczeniami, seriami, obciążeniem, powtórzeniami, RIR lub bólem, notatkami i trwałym timerem przerw; zakończenie automatycznie aktualizuje Historię i Analizę.
+- Dziennik odżywiania łączy lokalny katalog podstawowych produktów USDA z odczytem publicznego katalogu Open Food Facts; zapisane posiłki nadal pozostają wyłącznie lokalne.
+- Cele kalorii i nawodnienia mogą być ustawione ręcznie albo oszacowane z lokalnego profilu obejmującego dane ciała, charakter pracy, listę tygodniowych aktywności i procentową lub kaloryczną korektę celu diety. Makroskładniki można ustawić przez profil automatyczny, procenty albo twarde wartości; wynik kalkulatora pozostaje edytowalny i nie jest poradą medyczną.
+- Moduł odżywiania przechowuje lokalne pomiary masy ciała i zestawia ich trend z zapisanymi kaloriami oraz makroskładnikami w zakresach 7, 30 i 90 dni.
+- Po MVP planowane są kolejno: backend, własne bazy danych, synchronizacja, dalsze integracje, mechanizmy prywatności i eksport danych.
 - Wersja mobilna jest planowana na końcu tej sekwencji i nie jest częścią bieżącego MVP.
 - Architektura interfejsu nie powinna zakładać, że przykładowy użytkownik „Mateusz” jest jedynym użytkownikiem produktu.
 
@@ -39,8 +43,10 @@ Nazwa produktu to Routine. Interfejs i komunikaty są obecnie tworzone w języku
 
 - Działająca implementacja React/Vite: `src/app/`.
 - Routing i lista obszarów produktu: `src/app/routes.ts` oraz `src/app/layout/Layout.tsx`.
-- Rozbudowane przepływy referencyjne: `src/app/pages/Zadania.tsx`, `src/app/pages/Kalendarz.tsx`, `src/app/pages/Cele.tsx` oraz `src/app/pages/Sport.tsx` wraz z `src/app/sport/`.
-- Lokalne przechowywanie stanu jest widoczne m.in. w `src/app/goals/goalsStore.tsx`, `src/app/data/taskCompletion.ts` i `src/app/pages/Sport.tsx`.
+- Rozbudowane przepływy referencyjne: `src/app/pages/Zadania.tsx`, `src/app/pages/Kalendarz.tsx`, `src/app/pages/Cele.tsx`, `src/app/pages/Sport.tsx` wraz z `src/app/sport/` oraz `src/app/pages/Odzywanie.tsx`.
+- Lokalne przechowywanie stanu jest widoczne m.in. w `src/app/goals/goalsStore.tsx`, `src/app/data/taskCompletion.ts`, `src/app/pages/Sport.tsx` i `src/app/data/nutritionWorkspace.ts`.
+- Katalog produktów i reguły podpowiedzi dla odżywiania znajdują się w `src/app/data/nutritionCatalog.ts`.
+- Jawne wzory estymacji kalorii i nawodnienia znajdują się w `src/app/data/nutritionCalculator.ts`.
 - README opisuje obecną aplikację jako rekonstrukcję dostarczonego pliku Figma Make.
 - Brak potwierdzonych referencji klientów, benchmarków, danych o użyciu lub innych dowodów rynkowych; przyszłe prace nie powinny ich fabrykować.
 

@@ -1,20 +1,39 @@
+import {
+  DEFAULT_MACRO_CONFIGURATION,
+  normalizeMacroConfiguration,
+  normalizeNutritionCalculatorProfile,
+  type MacroConfiguration,
+  type NutritionCalculatorProfile,
+} from "./nutritionCalculator";
+
 export type MealSlot = "breakfast" | "lunch" | "snack" | "dinner";
 
 export interface NutritionEntry {
   id: string;
   name: string;
   portion: string;
+  amount?: number;
+  unit?: "g" | "ml";
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
+  brand?: string;
+  catalogId?: string;
+  catalogSource?: "usda" | "openfoodfacts";
+  per100g?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
   createdAt: string;
   updatedAt?: string;
 }
 
 export interface NutritionDay {
   date: string;
-  water: number;
+  waterMl: number;
   source: "user" | "demo";
   entries: Record<MealSlot, NutritionEntry[]>;
 }
@@ -24,13 +43,23 @@ export interface NutritionGoals {
   protein: number;
   carbs: number;
   fat: number;
-  water: number;
+  waterMl: number;
+}
+
+export interface WeightMeasurement {
+  date: string;
+  weightKg: number;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface NutritionWorkspace {
-  version: 1;
+  version: 5;
   updatedAt: string;
   goals: NutritionGoals;
+  calculatorProfile?: NutritionCalculatorProfile;
+  macroConfiguration: MacroConfiguration;
+  weightMeasurements: Record<string, WeightMeasurement>;
   days: Record<string, NutritionDay>;
 }
 
@@ -40,14 +69,14 @@ export interface NutritionLoadResult {
 }
 
 const STORAGE_KEY = "rootine.nutrition-workspace.v1";
-const WORKSPACE_VERSION = 1 as const;
+const WORKSPACE_VERSION = 5 as const;
 
 export const DEFAULT_NUTRITION_GOALS: NutritionGoals = {
   calories: 2300,
   protein: 150,
   carbs: 270,
   fat: 75,
-  water: 8,
+  waterMl: 2000,
 };
 
 export function nutritionDateKey(date = new Date()) {
@@ -60,7 +89,7 @@ export function nutritionDateKey(date = new Date()) {
 export function createEmptyNutritionDay(date: string): NutritionDay {
   return {
     date,
-    water: 0,
+    waterMl: 0,
     source: "user",
     entries: { breakfast: [], lunch: [], snack: [], dinner: [] },
   };
@@ -71,6 +100,8 @@ export function createEmptyNutritionWorkspace(): NutritionWorkspace {
     version: WORKSPACE_VERSION,
     updatedAt: new Date(0).toISOString(),
     goals: { ...DEFAULT_NUTRITION_GOALS },
+    macroConfiguration: { ...DEFAULT_MACRO_CONFIGURATION },
+    weightMeasurements: {},
     days: {},
   };
 }
@@ -79,7 +110,7 @@ export function createDemoNutritionDay(date: string): NutritionDay {
   const createdAt = new Date().toISOString();
   return {
     date,
-    water: 5,
+    waterMl: 1250,
     source: "demo",
     entries: {
       breakfast: [
@@ -111,22 +142,38 @@ function safePositiveNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function safeOptionalPositiveNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function normalizeEntry(value: unknown): NutritionEntry | null {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") return null;
+  const per100g = isRecord(value.per100g) ? {
+    calories: safeNumber(value.per100g.calories),
+    protein: safeNumber(value.per100g.protein),
+    carbs: safeNumber(value.per100g.carbs),
+    fat: safeNumber(value.per100g.fat),
+  } : undefined;
   return {
     id: value.id,
     name: value.name,
     portion: typeof value.portion === "string" ? value.portion : "1 porcja",
+    amount: safeOptionalPositiveNumber(value.amount),
+    unit: value.unit === "ml" ? "ml" : value.unit === "g" ? "g" : undefined,
     calories: safeNumber(value.calories),
     protein: safeNumber(value.protein),
     carbs: safeNumber(value.carbs),
     fat: safeNumber(value.fat),
+    brand: typeof value.brand === "string" ? value.brand : undefined,
+    catalogId: typeof value.catalogId === "string" ? value.catalogId : undefined,
+    catalogSource: value.catalogSource === "usda" || value.catalogSource === "openfoodfacts" ? value.catalogSource : undefined,
+    per100g,
     createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date(0).toISOString(),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
   };
 }
 
-function normalizeDay(date: string, value: unknown): NutritionDay {
+function normalizeDay(date: string, value: unknown, legacy = false): NutritionDay {
   const fallback = createEmptyNutritionDay(date);
   if (!isRecord(value) || !isRecord(value.entries)) return fallback;
   const entries = value.entries;
@@ -146,9 +193,27 @@ function normalizeDay(date: string, value: unknown): NutritionDay {
   const inferredDemo = flattened.length > 0 && flattened.every((entry) => entry.id.startsWith("demo-"));
   return {
     date,
-    water: safeNumber(value.water),
+    waterMl: legacy ? safeNumber(value.water) * 250 : safeNumber(value.waterMl),
     source: value.source === "demo" || inferredDemo ? "demo" : "user",
     entries: normalizedEntries,
+  };
+}
+
+function normalizeWeightMeasurement(date: string, value: unknown): WeightMeasurement | null {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    || !isRecord(value)
+    || typeof value.weightKg !== "number"
+    || !Number.isFinite(value.weightKg)
+    || value.weightKg < 20
+    || value.weightKg > 500
+  ) return null;
+
+  return {
+    date,
+    weightKg: value.weightKg,
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date(0).toISOString(),
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
   };
 }
 
@@ -159,23 +224,35 @@ export function loadNutritionWorkspace(): NutritionLoadResult {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return { status: "missing", workspace: fallback };
     const parsed: unknown = JSON.parse(stored);
-    if (!isRecord(parsed) || parsed.version !== WORKSPACE_VERSION || !isRecord(parsed.goals) || !isRecord(parsed.days)) {
+    if (!isRecord(parsed) || ![1, 2, 3, 4, WORKSPACE_VERSION].includes(parsed.version as number) || !isRecord(parsed.goals) || !isRecord(parsed.days)) {
       return { status: "corrupt", workspace: fallback };
     }
+    const legacy = parsed.version === 1;
     const goals: NutritionGoals = {
       calories: safePositiveNumber(parsed.goals.calories, fallback.goals.calories),
       protein: safePositiveNumber(parsed.goals.protein, fallback.goals.protein),
       carbs: safePositiveNumber(parsed.goals.carbs, fallback.goals.carbs),
       fat: safePositiveNumber(parsed.goals.fat, fallback.goals.fat),
-      water: safePositiveNumber(parsed.goals.water, fallback.goals.water),
+      waterMl: legacy
+        ? safePositiveNumber(parsed.goals.water, fallback.goals.waterMl / 250) * 250
+        : safePositiveNumber(parsed.goals.waterMl, fallback.goals.waterMl),
     };
-    const days = Object.fromEntries(Object.entries(parsed.days).map(([date, value]) => [date, normalizeDay(date, value)]));
+    const days = Object.fromEntries(Object.entries(parsed.days).map(([date, value]) => [date, normalizeDay(date, value, legacy)]));
+    const storedWeightMeasurements = isRecord(parsed.weightMeasurements) ? parsed.weightMeasurements : {};
+    const weightMeasurements = Object.fromEntries(
+      Object.entries(storedWeightMeasurements)
+        .map(([date, value]) => [date, normalizeWeightMeasurement(date, value)] as const)
+        .filter((entry): entry is readonly [string, WeightMeasurement] => Boolean(entry[1])),
+    );
     return {
       status: "ok",
       workspace: {
         version: WORKSPACE_VERSION,
         updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : fallback.updatedAt,
         goals,
+        calculatorProfile: normalizeNutritionCalculatorProfile(parsed.calculatorProfile),
+        macroConfiguration: normalizeMacroConfiguration(parsed.macroConfiguration),
+        weightMeasurements,
         days,
       },
     };

@@ -1,6 +1,7 @@
 export { Badge, type BadgeProps, type BadgeTone } from "./components/Badge";
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./components/Button";
 export { Card, type CardProps } from "./components/Card";
+export { DatePicker, type DatePickerProps } from "./components/DatePicker";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { Input, type InputProps } from "./components/Input";
 export { Menu, MenuItem, type MenuItemProps, type MenuItemTone, type MenuProps } from "./components/Menu";

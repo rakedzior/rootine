@@ -37,6 +37,7 @@ import {
   ModuleShell,
   PageHeader,
   SectionHeader,
+  Select,
   WorkspaceToolbar,
   uiColors,
   uiShadows,
@@ -2283,16 +2284,18 @@ export default function Zadania() {
             actions={<Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}><span className="header-action-label">Nowe zadanie</span></Button>}
           />
           <WorkspaceToolbar>
-            <select
+            <Select
               aria-label="Widok zadań"
-              className="context-mobile-select ui-field__control ui-select ui-select--compact"
+              fieldClassName="context-mobile-select"
+              compact
               value={taskView}
+              options={[
+                ...SMART_VIEWS.map((item) => ({ value: item.id, label: item.label })),
+                { value: "ukonczone", label: "Ukończone" },
+                { value: "kosz", label: "Kosz" },
+              ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
-            >
-              {SMART_VIEWS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              <option value="ukonczone">Ukończone</option>
-              <option value="kosz">Kosz</option>
-            </select>
+            />
             <span className="workspace-context-label">Podsumowanie</span>
           </WorkspaceToolbar>
           <SummaryDocument tasks={tasks.filter(t => !t.deleted)} listy={listy} />
@@ -2316,16 +2319,18 @@ export default function Zadania() {
 
         <WorkspaceToolbar className="task-workspace-toolbar">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <select
+            <Select
               aria-label="Widok zadań"
-              className="context-mobile-select ui-field__control ui-select ui-select--compact"
+              fieldClassName="context-mobile-select"
+              compact
               value={taskView}
+              options={[
+                ...SMART_VIEWS.map((item) => ({ value: item.id, label: item.label })),
+                { value: "ukonczone", label: "Ukończone" },
+                { value: "kosz", label: "Kosz" },
+              ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
-            >
-              {SMART_VIEWS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              <option value="ukonczone">Ukończone</option>
-              <option value="kosz">Kosz</option>
-            </select>
+            />
             <span className="workspace-context-label">
               {listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
             </span>

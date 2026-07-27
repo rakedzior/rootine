@@ -1,0 +1,512 @@
+import {
+  INITIAL_TEMPLATES,
+  addDays,
+  cloneExercises,
+  createInitialSessions,
+  fromDateKey,
+  startOfWeekKey,
+  toDateKey,
+  type Discipline,
+  type TrainingPlan,
+  type WorkoutSession,
+  type WorkoutTemplate,
+} from "./model";
+import { DISCIPLINE_META } from "./theme";
+
+export type PlannerView = "today" | "cycle" | "templates" | "history" | "analysis";
+
+export interface CycleWorkout {
+  id: string;
+  week: number;
+  day: number;
+  title: string;
+  discipline: Discipline;
+  durationMinutes: number;
+  templateId?: string;
+  seriesId?: string;
+  time?: string;
+  note?: string;
+}
+
+export interface TrainingCycle {
+  id: string;
+  name: string;
+  startDate: string;
+  weeks: number;
+  workouts: CycleWorkout[];
+  updatedAt: string;
+}
+
+export interface WorkoutHistoryEntry {
+  id: string;
+  title: string;
+  discipline: Discipline;
+  date: string;
+  durationMinutes: number;
+  status: "completed" | "incomplete" | "missed";
+  templateId?: string;
+}
+
+export interface WorkoutOutcome {
+  status: "completed" | "incomplete" | "missed";
+  sessionId?: string;
+  updatedAt: string;
+}
+
+export interface SportPlannerState {
+  version: 3;
+  templates: WorkoutTemplate[];
+  activeCycle: TrainingCycle | null;
+  history: WorkoutHistoryEntry[];
+  sessions: WorkoutSession[];
+  workoutOutcomes: Record<string, WorkoutOutcome>;
+}
+
+interface SportPlannerStateV2 {
+  version: 2;
+  templates: WorkoutTemplate[];
+  activeCycle: TrainingCycle | null;
+  history: WorkoutHistoryEntry[];
+}
+
+interface SportPlannerStateV1 {
+  version: 1;
+  templates: WorkoutTemplate[];
+  activeCycle: TrainingCycle | null;
+}
+
+interface LegacySportState {
+  sessions: WorkoutSession[];
+  plans: TrainingPlan[];
+  templates: WorkoutTemplate[];
+}
+
+export const SPORT_PLANNER_STORAGE_KEY = "routine-sport-planner-v1";
+const LEGACY_STORAGE_KEY = "routine-sport-v3";
+
+export const DAY_LABELS = [
+  { short: "Pn", full: "Poniedziałek" },
+  { short: "Wt", full: "Wtorek" },
+  { short: "Śr", full: "Środa" },
+  { short: "Cz", full: "Czwartek" },
+  { short: "Pt", full: "Piątek" },
+  { short: "So", full: "Sobota" },
+  { short: "Nd", full: "Niedziela" },
+];
+
+const disciplineIds = Object.keys(DISCIPLINE_META) as Discipline[];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function clampInteger(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function isDiscipline(value: unknown): value is Discipline {
+  return typeof value === "string" && disciplineIds.includes(value as Discipline);
+}
+
+function isWorkoutTemplate(value: unknown): value is WorkoutTemplate {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.name === "string"
+    && isDiscipline(value.discipline)
+    && typeof value.description === "string"
+    && typeof value.durationMinutes === "number"
+    && value.durationMinutes > 0
+    && Array.isArray(value.exercises);
+}
+
+function isCycleWorkout(value: unknown): value is CycleWorkout {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.week === "number"
+    && Number.isInteger(value.week)
+    && value.week >= 1
+    && value.week <= 52
+    && typeof value.day === "number"
+    && Number.isInteger(value.day)
+    && value.day >= 0
+    && value.day <= 6
+    && typeof value.title === "string"
+    && isDiscipline(value.discipline)
+    && typeof value.durationMinutes === "number"
+    && value.durationMinutes > 0
+    && (value.templateId === undefined || typeof value.templateId === "string")
+    && (value.seriesId === undefined || typeof value.seriesId === "string")
+    && (value.time === undefined || typeof value.time === "string")
+    && (value.note === undefined || typeof value.note === "string");
+}
+
+function isTrainingCycle(value: unknown): value is TrainingCycle {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.name === "string"
+    && typeof value.startDate === "string"
+    && typeof value.weeks === "number"
+    && Number.isInteger(value.weeks)
+    && value.weeks >= 1
+    && value.weeks <= 52
+    && Array.isArray(value.workouts)
+    && value.workouts.every((workout) => isCycleWorkout(workout) && workout.week <= (value.weeks as number))
+    && typeof value.updatedAt === "string";
+}
+
+function isWorkoutHistoryEntry(value: unknown): value is WorkoutHistoryEntry {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.title === "string"
+    && isDiscipline(value.discipline)
+    && typeof value.date === "string"
+    && typeof value.durationMinutes === "number"
+    && value.durationMinutes > 0
+    && (value.status === "completed" || value.status === "incomplete" || value.status === "missed")
+    && (value.templateId === undefined || typeof value.templateId === "string");
+}
+
+function isWorkoutSession(value: unknown): value is WorkoutSession {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.title === "string"
+    && isDiscipline(value.discipline)
+    && typeof value.date === "string"
+    && typeof value.durationMinutes === "number"
+    && value.durationMinutes > 0
+    && (value.status === "scheduled"
+      || value.status === "in_progress"
+      || value.status === "completed"
+      || value.status === "incomplete"
+      || value.status === "missed")
+    && Array.isArray(value.exercises)
+    && (value.cycleWorkoutId === undefined || typeof value.cycleWorkoutId === "string");
+}
+
+function isWorkoutOutcome(value: unknown): value is WorkoutOutcome {
+  return isRecord(value)
+    && (value.status === "completed" || value.status === "incomplete" || value.status === "missed")
+    && (value.sessionId === undefined || typeof value.sessionId === "string")
+    && typeof value.updatedAt === "string";
+}
+
+function isSportPlannerState(value: unknown): value is SportPlannerState {
+  return isRecord(value)
+    && value.version === 3
+    && Array.isArray(value.templates)
+    && value.templates.every(isWorkoutTemplate)
+    && (value.activeCycle === null || isTrainingCycle(value.activeCycle))
+    && Array.isArray(value.history)
+    && value.history.every(isWorkoutHistoryEntry)
+    && Array.isArray(value.sessions)
+    && value.sessions.every(isWorkoutSession)
+    && isRecord(value.workoutOutcomes)
+    && Object.values(value.workoutOutcomes).every(isWorkoutOutcome);
+}
+
+function isSportPlannerStateV2(value: unknown): value is SportPlannerStateV2 {
+  return isRecord(value)
+    && value.version === 2
+    && Array.isArray(value.templates)
+    && value.templates.every(isWorkoutTemplate)
+    && (value.activeCycle === null || isTrainingCycle(value.activeCycle))
+    && Array.isArray(value.history)
+    && value.history.every(isWorkoutHistoryEntry);
+}
+
+function isSportPlannerStateV1(value: unknown): value is SportPlannerStateV1 {
+  return isRecord(value)
+    && value.version === 1
+    && Array.isArray(value.templates)
+    && value.templates.every(isWorkoutTemplate)
+    && (value.activeCycle === null || isTrainingCycle(value.activeCycle));
+}
+
+function isLegacySportState(value: unknown): value is LegacySportState {
+  return isRecord(value)
+    && Array.isArray(value.sessions)
+    && value.sessions.every((session) => isRecord(session) && typeof session.id === "string" && typeof session.date === "string")
+    && Array.isArray(value.plans)
+    && value.plans.every((plan) => isRecord(plan) && typeof plan.id === "string" && typeof plan.name === "string")
+    && Array.isArray(value.templates)
+    && value.templates.every(isWorkoutTemplate);
+}
+
+export function createPlannerId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function normalizeCycleStart(dateKey: string) {
+  return startOfWeekKey(fromDateKey(dateKey));
+}
+
+export function cycleWorkoutDate(cycle: TrainingCycle, workout: Pick<CycleWorkout, "week" | "day">) {
+  return addDays(cycle.startDate, (workout.week - 1) * 7 + workout.day);
+}
+
+export function cycleDateRange(cycle: TrainingCycle) {
+  return {
+    start: cycle.startDate,
+    end: addDays(cycle.startDate, cycle.weeks * 7 - 1),
+  };
+}
+
+export function createCycle(
+  name = "Cykl treningowy",
+  startDate = startOfWeekKey(),
+  weeks = 12,
+): TrainingCycle {
+  return {
+    id: createPlannerId("cycle"),
+    name,
+    startDate: normalizeCycleStart(startDate),
+    weeks: clampInteger(weeks, 1, 52),
+    workouts: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function createWorkoutFromTemplate(
+  template: WorkoutTemplate,
+  week: number,
+  day: number,
+  time = "",
+  seriesId?: string,
+): CycleWorkout {
+  return {
+    id: createPlannerId("cycle-workout"),
+    week,
+    day,
+    title: template.name,
+    discipline: template.discipline,
+    durationMinutes: template.durationMinutes,
+    templateId: template.id,
+    seriesId,
+    time: time || undefined,
+  };
+}
+
+export function createSessionFromCycleWorkout(
+  cycle: TrainingCycle,
+  workout: CycleWorkout,
+  template?: WorkoutTemplate,
+  status: WorkoutSession["status"] = "in_progress",
+): WorkoutSession {
+  const sessionId = createPlannerId("session");
+  return {
+    id: sessionId,
+    cycleWorkoutId: workout.id,
+    title: workout.title,
+    discipline: workout.discipline,
+    date: cycleWorkoutDate(cycle, workout),
+    time: workout.time,
+    durationMinutes: workout.durationMinutes,
+    status,
+    planId: cycle.id,
+    templateId: workout.templateId,
+    note: workout.note,
+    exercises: template ? cloneExercises(template.exercises, sessionId) : [],
+    stages: template?.stages?.map((stage, index) => ({
+      ...stage,
+      id: `${sessionId}-stage-${index + 1}`,
+      done: status === "completed",
+    })),
+    startedAt: status === "in_progress" ? Date.now() : undefined,
+    completedAt: status === "completed" || status === "incomplete" ? Date.now() : undefined,
+  };
+}
+
+export function historyEntryFromSession(session: WorkoutSession): WorkoutHistoryEntry | null {
+  if (session.status !== "completed" && session.status !== "incomplete" && session.status !== "missed") return null;
+  return {
+    id: session.id,
+    title: session.title,
+    discipline: session.discipline,
+    date: session.date,
+    durationMinutes: session.durationMinutes,
+    status: session.status,
+    templateId: session.templateId,
+  };
+}
+
+function seedDefaultCycle(templates: WorkoutTemplate[]) {
+  const cycle = createCycle("Cykl 12 tygodni", startOfWeekKey(), 12);
+  const preferred = [
+    { id: "tpl-upper-a", day: 0 },
+    { id: "tpl-easy-run", day: 2 },
+    { id: "tpl-lower-a", day: 4 },
+  ];
+  const assignments = preferred
+    .map((item) => ({ template: templates.find((template) => template.id === item.id), day: item.day }))
+    .filter((item): item is { template: WorkoutTemplate; day: number } => Boolean(item.template));
+  if (!assignments.length && templates[0]) assignments.push({ template: templates[0], day: 0 });
+
+  cycle.workouts = Array.from({ length: cycle.weeks }, (_, index) => index + 1)
+    .flatMap((week) => assignments.map(({ template, day }) => createWorkoutFromTemplate(
+      template,
+      week,
+      day,
+      "",
+      `seed-series-${template.id}-${day}`,
+    )));
+  return cycle;
+}
+
+function historyFromSessions(sessions: WorkoutSession[]): WorkoutHistoryEntry[] {
+  return sessions
+    .filter((session): session is WorkoutSession & { status: WorkoutHistoryEntry["status"] } => (
+      session.status === "completed" || session.status === "incomplete" || session.status === "missed"
+    ))
+    .map((session) => ({
+      id: session.id,
+      title: session.title,
+      discipline: session.discipline,
+      date: session.date,
+      durationMinutes: session.durationMinutes,
+      status: session.status,
+      templateId: session.templateId,
+    }))
+    .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function withMigratedSeries(cycle: TrainingCycle | null) {
+  if (!cycle) return null;
+  return {
+    ...cycle,
+    workouts: cycle.workouts.map((workout) => ({
+      ...workout,
+      seriesId: workout.seriesId ?? (workout.templateId
+        ? `migrated-series-${workout.templateId}-${workout.day}`
+        : undefined),
+    })),
+  };
+}
+
+function migrateLegacyState(legacy: LegacySportState): SportPlannerState {
+  const templates = legacy.templates.length ? legacy.templates : INITIAL_TEMPLATES;
+  const activePlan = legacy.plans.find((plan) => plan.active) ?? legacy.plans[0];
+  const weeks = clampInteger(activePlan?.weeks ?? 12, 1, 52);
+  const startDate = startOfWeekKey();
+  const cycle = createCycle(activePlan?.name ?? "Bieżący cykl", startDate, weeks);
+  const cycleEnd = addDays(startDate, weeks * 7 - 1);
+
+  cycle.workouts = legacy.sessions
+    .filter((session) => session.date >= startDate && session.date <= cycleEnd && session.status !== "completed")
+    .map((session) => {
+      const difference = Math.round((fromDateKey(session.date).getTime() - fromDateKey(startDate).getTime()) / 86_400_000);
+      return {
+        id: session.id,
+        week: Math.floor(difference / 7) + 1,
+        day: ((difference % 7) + 7) % 7,
+        title: session.title,
+        discipline: session.discipline,
+        durationMinutes: session.durationMinutes,
+        templateId: session.templateId,
+        seriesId: session.templateId ? `legacy-series-${session.templateId}-${((difference % 7) + 7) % 7}` : undefined,
+        time: session.time,
+        note: session.note,
+      };
+    })
+    .filter((workout) => workout.week >= 1 && workout.week <= weeks);
+
+  return {
+    version: 3,
+    templates,
+    activeCycle: cycle.workouts.length ? cycle : seedDefaultCycle(templates),
+    history: historyFromSessions(legacy.sessions),
+    sessions: legacy.sessions.filter((session) => session.status !== "scheduled"),
+    workoutOutcomes: {},
+  };
+}
+
+export function createDefaultSportPlannerState(): SportPlannerState {
+  const templates = INITIAL_TEMPLATES.map((template) => ({
+    ...template,
+    exercises: cloneExercises(template.exercises, `template-${template.id}`),
+    stages: template.stages?.map((stage) => ({ ...stage })),
+  }));
+  const initialSessions = createInitialSessions();
+  return {
+    version: 3,
+    templates,
+    activeCycle: seedDefaultCycle(templates),
+    history: historyFromSessions(initialSessions),
+    sessions: initialSessions.filter((session) => session.status !== "scheduled"),
+    workoutOutcomes: {},
+  };
+}
+
+export function loadSportPlannerState(): SportPlannerState {
+  if (typeof window === "undefined") return createDefaultSportPlannerState();
+  try {
+    const stored = window.localStorage.getItem(SPORT_PLANNER_STORAGE_KEY);
+    if (stored) {
+      const parsed: unknown = JSON.parse(stored);
+      if (isSportPlannerState(parsed)) return parsed;
+      if (isSportPlannerStateV2(parsed)) {
+        const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+        const legacy: unknown = legacyStored ? JSON.parse(legacyStored) : null;
+        return {
+          version: 3,
+          templates: parsed.templates,
+          activeCycle: parsed.activeCycle,
+          history: parsed.history,
+          sessions: isLegacySportState(legacy)
+            ? legacy.sessions.filter((session) => session.status !== "scheduled")
+            : [],
+          workoutOutcomes: {},
+        };
+      }
+      if (isSportPlannerStateV1(parsed)) {
+        let history = historyFromSessions(createInitialSessions());
+        let sessions: WorkoutSession[] = [];
+        const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacyStored) {
+          const legacy: unknown = JSON.parse(legacyStored);
+          if (isLegacySportState(legacy)) {
+            history = historyFromSessions(legacy.sessions);
+            sessions = legacy.sessions.filter((session) => session.status !== "scheduled");
+          }
+        }
+        return {
+          version: 3,
+          templates: parsed.templates,
+          activeCycle: withMigratedSeries(parsed.activeCycle),
+          history,
+          sessions,
+          workoutOutcomes: {},
+        };
+      }
+    }
+
+    const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacyStored) {
+      const legacy: unknown = JSON.parse(legacyStored);
+      if (isLegacySportState(legacy)) return migrateLegacyState(legacy);
+    }
+  } catch {
+    // A malformed local draft falls back to a safe editable example.
+  }
+  return createDefaultSportPlannerState();
+}
+
+export function saveSportPlannerState(state: SportPlannerState) {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(SPORT_PLANNER_STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function cycleWeekDate(cycle: TrainingCycle, week: number, day: number) {
+  return addDays(cycle.startDate, (week - 1) * 7 + day);
+}
+
+export function todayCycleWeek(cycle: TrainingCycle) {
+  const today = fromDateKey(toDateKey(new Date()));
+  const start = fromDateKey(cycle.startDate);
+  const difference = Math.floor((today.getTime() - start.getTime()) / 86_400_000);
+  return clampInteger(Math.floor(difference / 7) + 1, 1, cycle.weeks);
+}

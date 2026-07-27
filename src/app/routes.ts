@@ -12,6 +12,7 @@ export const router = createBrowserRouter([
       { path: "cele",          lazy: async () => ({ Component: (await import("./pages/Cele")).default }) },
       { path: "cele/:goalId",  lazy: async () => ({ Component: (await import("./pages/CelSzczegoly")).default }) },
       { path: "sport",         lazy: async () => ({ Component: (await import("./pages/Sport")).default }) },
+      { path: "odzywianie",    lazy: async () => ({ Component: (await import("./pages/Odzywanie")).default }) },
       { path: "*",             loader: () => redirect("/zadania") },
     ],
   },

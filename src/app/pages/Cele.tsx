@@ -37,6 +37,7 @@ import {
   ModuleShell,
   PageHeader,
   SectionHeader,
+  Select,
   WorkspaceToolbar,
   uiColors,
 } from "../ui";
@@ -1228,17 +1229,19 @@ export default function Cele() {
 
         <WorkspaceToolbar>
           <div className="flex min-w-0 items-center gap-2">
-            <select
+            <Select
               aria-label="Widok celów"
-              className="context-mobile-select ui-field__control ui-select ui-select--compact"
+              fieldClassName="context-mobile-select"
+              compact
               value={activeFilter}
+              options={[
+                { value: "overview", label: "Przegląd" },
+                ...FILTER_ITEMS.map((item) => ({ value: item.id, label: item.label })),
+                ...categories.map((category) => ({ value: `category:${category.id}`, label: category.label })),
+                { value: "archived", label: "Archiwum" },
+              ]}
               onChange={(event) => handleFilter(event.target.value as FilterId)}
-            >
-              <option value="overview">Przegląd</option>
-              {FILTER_ITEMS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              {categories.map((category) => <option key={category.id} value={`category:${category.id}`}>{category.label}</option>)}
-              <option value="archived">Archiwum</option>
-            </select>
+            />
             <span className="workspace-context-label">{filterLabel}</span>
           </div>
           <div className="flex items-center gap-2">
