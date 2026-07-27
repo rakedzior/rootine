@@ -1,5 +1,14 @@
 import { NavLink, Outlet } from "react-router";
-import { CalendarDays, CheckSquare, Dumbbell, Salad, Target, type LucideIcon } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CalendarDays,
+  CheckSquare,
+  Dumbbell,
+  Salad,
+  ShieldCheck,
+  Target,
+  type LucideIcon,
+} from "lucide-react";
 
 const NAV: Array<{ label: string; icon: LucideIcon; to: string }> = [
   { label: "Zadania", icon: CheckSquare, to: "/zadania" },
@@ -7,6 +16,8 @@ const NAV: Array<{ label: string; icon: LucideIcon; to: string }> = [
   { label: "Cele", icon: Target, to: "/cele" },
   { label: "Sport", icon: Dumbbell, to: "/sport" },
   { label: "Odżywianie", icon: Salad, to: "/odzywianie" },
+  { label: "Praca", icon: BriefcaseBusiness, to: "/praca" },
+  { label: "Sprawy", icon: ShieldCheck, to: "/sprawy" },
 ];
 
 function PrimaryNavItem({ label, icon: Icon, to, mobile = false }: { label: string; icon: LucideIcon; to: string; mobile?: boolean }) {

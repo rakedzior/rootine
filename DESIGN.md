@@ -230,13 +230,13 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 
 ## Layout
 
-Aplikacja używa jednego `AppShell` ze stałą globalną nawigacją o szerokości 204px. W aktualnym MVP globalna nawigacja zawiera Zadania, Kalendarz, Cele, Sport i Odżywianie. `ModuleShell` może dodać kontekstowy sidebar 200px wyłącznie wtedy, gdy moduł ma prawdziwe podwidoki: Zadania, Cele i Sport. Kalendarz oraz Odżywianie pozostają pojedynczym canvasem bez lokalnego sidebara.
+Aplikacja używa jednego `AppShell` ze stałą globalną nawigacją o szerokości 204px. W aktualnym MVP globalna nawigacja zawiera Zadania, Kalendarz, Cele, Sport, Odżywianie, Pracę i Sprawy. `ModuleShell` może dodać kontekstowy sidebar 200px wyłącznie wtedy, gdy moduł ma prawdziwe podwidoki, tak jak Zadania, Cele, Sport i Sprawy. JDG jest podwidokiem Spraw, nie osobnym modułem globalnym. Kalendarz oraz Odżywianie pozostają pojedynczym canvasem bez lokalnego sidebara.
 
 Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Filtry i sortowanie należą do `WorkspaceToolbar`. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i toolbarze. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
 Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Zadania, Kalendarz, Cele, Sport i Odżywianie używają wspólnego `PageHeader` o wysokości 70px i poziomym paddingu 28px. Ten sam komponent jest obowiązkowy dla nowych ekranów.
 
-Układ jest przede wszystkim desktopowy i gęsty. Przy 1380px każdy `DetailPanel` przechodzi w warstwę nakładaną, przy 980px globalny sidebar zwęża się do ikon, a przy 760px globalny sidebar zmienia się w dolną nawigację pięciu modułów. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
+Układ jest przede wszystkim desktopowy i gęsty. Przy 1380px każdy `DetailPanel` przechodzi w warstwę nakładaną, przy 980px globalny sidebar zwęża się do ikon, a przy 760px globalny sidebar zmienia się w przewijaną poziomo dolną nawigację wszystkich modułów. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
 
 **The Workspace First Rule.** Szerokość należy oddać głównej czynności. Panele pomocnicze mogą znikać lub nakładać się wcześniej niż treść robocza.
 

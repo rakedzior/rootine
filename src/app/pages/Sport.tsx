@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Dumbbell, Plus, Save, Undo2 } from "lucide-react";
+import { Check, Dumbbell, Play, Plus, Save, Undo2 } from "lucide-react";
 import {
   ActiveSessionConflictDialog,
   SportActiveSession,
@@ -27,6 +27,9 @@ import {
 } from "../sport/SportPlanner";
 import {
   createSessionFromCycleWorkout,
+  createPlannerId,
+  cycleDateRange,
+  DAY_LABELS,
   historyEntryFromSession,
   loadSportPlannerState,
   saveSportPlannerState,
@@ -40,7 +43,9 @@ import {
 import {
   EXERCISE_LIBRARY,
   addDays,
+  cloneExercises,
   fromDateKey,
+  toDateKey,
   type WorkoutExercise,
   type WorkoutSession,
   type WorkoutTemplate,
@@ -62,6 +67,7 @@ interface WorkoutDialogState {
   workoutId?: string;
   week: number;
   day: number;
+  templateId?: string;
   editScope?: "single" | "series";
 }
 
@@ -70,6 +76,8 @@ interface MoveUndo {
   title: string;
   previousWeek: number;
   previousDay: number;
+  message: string;
+  persisted: boolean;
 }
 
 function upsertHistory(history: WorkoutHistoryEntry[], entry: WorkoutHistoryEntry) {
@@ -121,6 +129,7 @@ export default function Sport() {
   const [requestedWorkoutId, setRequestedWorkoutId] = useState<string | null>(null);
   const [moveUndo, setMoveUndo] = useState<MoveUndo | null>(null);
   const [moveNotice, setMoveNotice] = useState("");
+  const [autosaveNotice, setAutosaveNotice] = useState("");
   const [storageFailed, setStorageFailed] = useState(false);
 
   const savedCycleSignature = useMemo(
@@ -139,6 +148,10 @@ export default function Sport() {
   const selectedTemplate = selectedWorkout?.templateId
     ? plannerState.templates.find((template) => template.id === selectedWorkout.templateId)
     : undefined;
+  const selectedOutcome = selectedWorkout ? plannerState.workoutOutcomes[selectedWorkout.id] : undefined;
+  const selectedSession = selectedOutcome?.sessionId
+    ? plannerState.sessions.find((session) => session.id === selectedOutcome.sessionId)
+    : undefined;
   const selectedSeriesCount = selectedWorkout?.seriesId
     ? cycleDraft?.workouts.filter((workout) => workout.seriesId === selectedWorkout.seriesId).length ?? 1
     : 1;
@@ -147,6 +160,10 @@ export default function Sport() {
     ? cycleDraft?.workouts.find((workout) => workout.id === requestedWorkoutId)
     : undefined;
   const viewMeta = SPORT_VIEW_LABELS[view];
+  const todayKey = toDateKey(new Date());
+  const todayWorkoutCount = cycleDraft?.workouts.filter((workout) => (
+    cycleWorkoutDate(cycleDraft, workout) === todayKey
+  )).length ?? 0;
 
   useEffect(() => {
     setStorageFailed(!saveSportPlannerState(plannerState));
@@ -157,6 +174,12 @@ export default function Sport() {
     const timer = window.setTimeout(() => setMoveUndo(null), 8000);
     return () => window.clearTimeout(timer);
   }, [moveUndo]);
+
+  useEffect(() => {
+    if (!autosaveNotice) return;
+    const timer = window.setTimeout(() => setAutosaveNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [autosaveNotice]);
 
   const closeDialogs = useCallback(() => {
     setDialog(null);
@@ -181,6 +204,17 @@ export default function Sport() {
     setPlannerState((current) => ({ ...current, activeCycle: savedCycle }));
   };
 
+  const applyCycleChange = (nextCycle: TrainingCycle, notice: string) => {
+    if (view === "today") {
+      const savedCycle = { ...nextCycle, updatedAt: new Date().toISOString() };
+      setCycleDraft(savedCycle);
+      setPlannerState((current) => ({ ...current, activeCycle: savedCycle }));
+      setAutosaveNotice(notice);
+      return;
+    }
+    setCycleDraft(nextCycle);
+  };
+
   const submitCycleSettings = (cycle: TrainingCycle) => {
     setCycleDraft(cycle);
     setActiveWeek((current) => Math.min(current, cycle.weeks));
@@ -188,10 +222,23 @@ export default function Sport() {
   };
 
   const moveWorkout = (id: string, week: number, day?: number) => {
+    const previous = cycleDraft?.workouts.find((workout) => workout.id === id);
+    if (!previous || (previous.week === week && (day === undefined || previous.day === day))) return;
+    const nextDay = day ?? previous.day;
+    setMoveUndo({
+      workoutId: previous.id,
+      title: previous.title,
+      previousWeek: previous.week,
+      previousDay: previous.day,
+      message: previous.week === week
+        ? `„${previous.title}” przeniesiono: ${DAY_LABELS[previous.day].short} → ${DAY_LABELS[nextDay].short}.`
+        : `„${previous.title}” przeniesiono do tygodnia ${week}.`,
+      persisted: false,
+    });
     setCycleDraft((current) => current ? {
       ...current,
       workouts: current.workouts.map((workout) => workout.id === id
-        ? { ...workout, week, day: day ?? workout.day }
+        ? { ...workout, week, day: nextDay }
         : workout),
     } : current);
   };
@@ -220,11 +267,42 @@ export default function Sport() {
       title: workout.title,
       previousWeek: workout.week,
       previousDay: workout.day,
+      message: `„${workout.title}” przeniesiono na jutro.`,
+      persisted: true,
     });
     setMoveNotice("");
     setCycleDraft(updatedCycle);
     setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
     setSelectedWorkoutId(null);
+  };
+
+  const moveWorkoutFromOverview = (workout: CycleWorkout, day: number) => {
+    if (
+      !cycleDraft
+      || workout.day === day
+      || day < 0
+      || day > 6
+      || activeSession?.cycleWorkoutId === workout.id
+      || plannerState.workoutOutcomes[workout.id]
+    ) return;
+    const updatedCycle = {
+      ...cycleDraft,
+      workouts: cycleDraft.workouts.map((item) => item.id === workout.id
+        ? { ...item, day }
+        : item),
+      updatedAt: new Date().toISOString(),
+    };
+    setMoveUndo({
+      workoutId: workout.id,
+      title: workout.title,
+      previousWeek: workout.week,
+      previousDay: workout.day,
+      message: `„${workout.title}” przeniesiono: ${DAY_LABELS[workout.day].short} → ${DAY_LABELS[day].short}.`,
+      persisted: true,
+    });
+    setMoveNotice("");
+    setCycleDraft(updatedCycle);
+    setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
   };
 
   const undoMove = () => {
@@ -237,7 +315,9 @@ export default function Sport() {
       updatedAt: new Date().toISOString(),
     };
     setCycleDraft(updatedCycle);
-    setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+    if (moveUndo.persisted) {
+      setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+    }
     setMoveUndo(null);
   };
 
@@ -246,45 +326,50 @@ export default function Sport() {
     editingId?: string,
     editScope: "single" | "series" = "single",
   ) => {
-    setCycleDraft((current) => {
-      if (!current) return current;
-      const edited = editingId ? current.workouts.find((workout) => workout.id === editingId) : undefined;
-      if (edited && editScope === "series" && edited.seriesId && workouts[0]) {
-        const patch = workouts[0];
-        return {
-          ...current,
-          workouts: current.workouts.map((workout) => workout.seriesId === edited.seriesId
+    const submitted = workouts[0];
+    if (!cycleDraft || !submitted) return;
+    const edited = editingId
+      ? cycleDraft.workouts.find((workout) => workout.id === editingId)
+      : undefined;
+    const nextCycle = edited && editScope === "series" && edited.seriesId
+      ? {
+          ...cycleDraft,
+          workouts: cycleDraft.workouts.map((workout) => workout.seriesId === edited.seriesId
             ? {
                 ...workout,
-                day: patch.day,
-                title: patch.title,
-                discipline: patch.discipline,
-                durationMinutes: patch.durationMinutes,
-                templateId: patch.templateId,
-                time: patch.time,
-                note: patch.note,
+                day: submitted.day,
+                title: submitted.title,
+                discipline: submitted.discipline,
+                durationMinutes: submitted.durationMinutes,
+                templateId: submitted.templateId,
+                time: submitted.time,
+                note: submitted.note,
               }
             : workout),
+        }
+      : {
+          ...cycleDraft,
+          workouts: editingId
+            ? cycleDraft.workouts.map((workout) => workout.id === editingId ? submitted : workout)
+            : [...cycleDraft.workouts, ...workouts],
         };
-      }
-      return {
-        ...current,
-        workouts: editingId
-          ? current.workouts.map((workout) => workout.id === editingId ? workouts[0] : workout)
-          : [...current.workouts, ...workouts],
-      };
-    });
-    if (workouts[0]) setActiveWeek(workouts[0].week);
+    applyCycleChange(
+      nextCycle,
+      editingId
+        ? "Zmiany treningu zapisano automatycznie."
+        : "Trening dodano i zapisano automatycznie.",
+    );
+    setActiveWeek(submitted.week);
     closeDialogs();
   };
 
   const deleteWorkout = () => {
     const workout = editingWorkout ?? selectedWorkout;
-    if (!workout) return;
-    setCycleDraft((current) => current ? {
-      ...current,
-      workouts: current.workouts.filter((item) => item.id !== workout.id),
-    } : current);
+    if (!workout || !cycleDraft) return;
+    applyCycleChange({
+      ...cycleDraft,
+      workouts: cycleDraft.workouts.filter((item) => item.id !== workout.id),
+    }, "Trening usunięto i zapisano automatycznie.");
     setSelectedWorkoutId(null);
     closeDialogs();
   };
@@ -307,6 +392,14 @@ export default function Sport() {
     setView("cycle");
   };
 
+  const openTodayWorkoutDialog = () => {
+    if (!cycleDraft) return;
+    setWorkoutDialog({
+      week: todayCycleWeek(cycleDraft),
+      day: (new Date().getDay() + 6) % 7,
+    });
+  };
+
   const saveTemplate = (template: WorkoutTemplate) => {
     setPlannerState((current) => ({
       ...current,
@@ -315,6 +408,42 @@ export default function Sport() {
         : [...current.templates, template],
     }));
     closeDialogs();
+  };
+
+  const duplicateTemplate = (template: WorkoutTemplate) => {
+    const id = createPlannerId("template");
+    const duplicate: WorkoutTemplate = {
+      ...template,
+      id,
+      name: `${template.name} — kopia`,
+      exercises: cloneExercises(template.exercises, id),
+      stages: template.stages?.map((stage, index) => ({
+        ...stage,
+        id: `${id}-stage-${index + 1}`,
+      })),
+    };
+    setPlannerState((current) => ({ ...current, templates: [...current.templates, duplicate] }));
+    setAutosaveNotice("Utworzono kopię szablonu.");
+  };
+
+  const openTemplateWorkoutDialog = (template: WorkoutTemplate, today = false) => {
+    if (!cycleDraft) {
+      setMoveNotice("Najpierw utwórz aktywny cykl treningowy.");
+      return;
+    }
+    let week = activeWeek;
+    let day = 0;
+    if (today) {
+      const todayKey = toDateKey(new Date());
+      const range = cycleDateRange(cycleDraft);
+      if (todayKey < range.start || todayKey > range.end) {
+        setMoveNotice("Dzisiejsza data wypada poza aktywnym cyklem. Dodaj trening do wybranego tygodnia.");
+        return;
+      }
+      week = todayCycleWeek(cycleDraft);
+      day = (new Date().getDay() + 6) % 7;
+    }
+    setWorkoutDialog({ week, day, templateId: template.id });
   };
 
   const deleteTemplate = () => {
@@ -376,14 +505,44 @@ export default function Sport() {
     setActiveMode(true);
   };
 
-  const markWorkout = (workout: CycleWorkout, status: "completed" | "missed") => {
+  const markWorkout = (
+    workout: CycleWorkout,
+    status: "completed" | "incomplete" | "missed",
+  ) => {
     if (!cycleDraft) return;
     const template = workout.templateId
       ? plannerState.templates.find((item) => item.id === workout.templateId)
       : undefined;
     let session = createSessionFromCycleWorkout(cycleDraft, workout, template, status);
     if (status === "completed") session = markAllDone(session);
-    recordSessionOutcome(session, status);
+    const historyEntry = historyEntryFromSession(session);
+    setPlannerState((current) => {
+      const previousSessionId = current.workoutOutcomes[workout.id]?.sessionId;
+      const sessions = current.sessions.filter((item) => item.id !== previousSessionId);
+      const history = previousSessionId
+        ? current.history.filter((entry) => entry.id !== previousSessionId)
+        : current.history;
+      return {
+        ...current,
+        sessions: [...sessions, session],
+        history: historyEntry ? upsertHistory(history, historyEntry) : history,
+        workoutOutcomes: {
+          ...current.workoutOutcomes,
+          [workout.id]: {
+            status,
+            sessionId: session.id,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+    });
+    setAutosaveNotice(
+      status === "completed"
+        ? "Status zmieniono na Wykonany."
+        : status === "incomplete"
+          ? "Status zmieniono na Niedokończony."
+          : "Status zmieniono na Pominięty.",
+    );
   };
 
   const clearWorkoutOutcome = (workout: CycleWorkout) => {
@@ -402,6 +561,7 @@ export default function Sport() {
           : current.sessions,
       };
     });
+    setAutosaveNotice("Przywrócono status Zaplanowany.");
   };
 
   const finishActiveSession = (status: "completed" | "incomplete") => {
@@ -481,21 +641,40 @@ export default function Sport() {
 
   const headerAction = view === "templates"
     ? <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog("new-template")}>Nowy szablon</Button>
-    : view === "cycle" && cycleDraft
-      ? <Button variant="primary" leadingIcon={<Save size={14} />} disabled={!cycleDirty} onClick={saveCycle}>{cycleDirty ? "Zapisz plan" : "Plan zapisany"}</Button>
-      : view === "cycle"
+    : view === "cycle" && cycleDraft && cycleDirty
+      ? <Button variant="primary" leadingIcon={<Save size={14} />} onClick={saveCycle}>Zapisz plan</Button>
+      : view === "cycle" && !cycleDraft
         ? <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog("cycle")}>Utwórz cykl</Button>
-        : view === "today" && cycleDraft
+        : view === "today" && activeSession
           ? (
+            <>
+              {cycleDraft && (
+                <Button variant="quiet" leadingIcon={<Plus size={14} />} onClick={openTodayWorkoutDialog}>
+                  <span className="header-action-label">Dodaj trening</span>
+                </Button>
+              )}
               <Button
+                className="ui-button--icon-mobile"
                 variant="primary"
-                leadingIcon={<Plus size={14} />}
-                onClick={() => setWorkoutDialog({ week: todayCycleWeek(cycleDraft), day: (new Date().getDay() + 6) % 7 })}
+                leadingIcon={<Play size={14} />}
+                onClick={() => setActiveMode(true)}
               >
-                Dodaj trening
+                <span className="header-action-label">Wznów trening</span>
               </Button>
+            </>
             )
-          : undefined;
+          : view === "today" && cycleDraft
+            ? (
+                <Button
+                  className="ui-button--icon-mobile"
+                  variant={todayWorkoutCount ? "quiet" : "primary"}
+                  leadingIcon={<Plus size={14} />}
+                  onClick={openTodayWorkoutDialog}
+                >
+                  <span className="header-action-label">Dodaj trening</span>
+                </Button>
+              )
+            : undefined;
 
   return (
     <ModuleShell
@@ -514,13 +693,13 @@ export default function Sport() {
       <ModuleMain>
         <PageHeader
           title="Sport"
-          description={`${viewMeta.title} · ${viewMeta.description}`}
+          description={viewMeta.description}
           leading={<Dumbbell size={18} strokeWidth={1.5} />}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={headerAction}
         />
 
-        <WorkspaceToolbar className="sport-planner-toolbar">
+        <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}>
           <Select
             compact
             fieldClassName="context-mobile-select"
@@ -529,16 +708,11 @@ export default function Sport() {
             options={Object.entries(SPORT_VIEW_LABELS).map(([id, meta]) => ({ value: id, label: meta.title }))}
             onChange={(event) => changeView(event.target.value as PlannerView)}
           />
-          <span className="workspace-context-label">{viewMeta.title}</span>
           <div className="sport-planner-toolbar__right">
-            {activeSession && (
-              <Button variant="quiet" size="sm" onClick={() => setActiveMode(true)}>
-                Trening w toku · wznów
-              </Button>
-            )}
             {view === "cycle" && cycleDraft && (
-              <span className="sport-planner-toolbar__status">
-                {cycleDirty ? "Zmiany czekają na zapis" : "Wszystkie zmiany zapisane"}
+              <span className={`sport-planner-toolbar__status ${cycleDirty ? "is-dirty" : ""}`.trim()}>
+                {!cycleDirty && <Check size={12} aria-hidden="true" />}
+                {cycleDirty ? "Zmiany czekają na zapis" : "Zapisano"}
               </span>
             )}
           </div>
@@ -552,16 +726,21 @@ export default function Sport() {
         )}
 
         <div className="sport-planner-scroll">
-          <div className="sport-planner-content">
+          <div className={`sport-planner-content sport-planner-content--${view}`}>
             {view === "today" && (
               <SportOverview
                 cycle={cycleDraft}
+                activeSession={activeSession}
                 outcomes={plannerState.workoutOutcomes}
                 selectedWorkoutId={selectedWorkoutId}
+                onCreateCycle={() => setDialog("cycle")}
+                onResumeActive={() => setActiveMode(true)}
                 onSelectWorkout={toggleWorkoutDetails}
                 onStartWorkout={startWorkout}
                 onCompleteWorkout={(workout) => markWorkout(workout, "completed")}
+                onResetWorkout={clearWorkoutOutcome}
                 onMoveTomorrow={moveWorkoutTomorrow}
+                onMoveWorkout={moveWorkoutFromOverview}
                 onOpenCycle={openCycleView}
               />
             )}
@@ -582,8 +761,10 @@ export default function Sport() {
             {view === "templates" && (
               <TemplateLibrary
                 templates={plannerState.templates}
-                onCreate={() => setDialog("new-template")}
                 onEdit={(template) => setEditingTemplateId(template.id)}
+                onDuplicate={duplicateTemplate}
+                onAddToCycle={(template) => openTemplateWorkoutDialog(template)}
+                onUseToday={(template) => openTemplateWorkoutDialog(template, true)}
               />
             )}
             {view === "history" && <SportHistory history={plannerState.history} />}
@@ -597,11 +778,14 @@ export default function Sport() {
           workout={selectedWorkout}
           cycle={cycleDraft}
           template={selectedTemplate}
+          session={selectedSession}
           seriesCount={selectedSeriesCount}
-          outcome={plannerState.workoutOutcomes[selectedWorkout.id]}
+          outcome={selectedOutcome}
+          active={activeSession?.cycleWorkoutId === selectedWorkout.id}
           onClose={() => setSelectedWorkoutId(null)}
           onStart={() => startWorkout(selectedWorkout)}
           onComplete={() => markWorkout(selectedWorkout, "completed")}
+          onIncomplete={() => markWorkout(selectedWorkout, "incomplete")}
           onMiss={() => markWorkout(selectedWorkout, "missed")}
           onMoveTomorrow={() => moveWorkoutTomorrow(selectedWorkout)}
           onClearOutcome={() => clearWorkoutOutcome(selectedWorkout)}
@@ -613,8 +797,15 @@ export default function Sport() {
 
       {moveUndo && (
         <div className="sport-undo-toast" role="status">
-          <span>„{moveUndo.title}” przeniesiono na jutro.</span>
+          <span>{moveUndo.message}</span>
           <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={12} />} onClick={undoMove}>Cofnij</Button>
+        </div>
+      )}
+
+      {autosaveNotice && !moveUndo && (
+        <div className="sport-undo-toast sport-autosave-toast" role="status">
+          <Check size={13} aria-hidden="true" />
+          <span>{autosaveNotice}</span>
         </div>
       )}
 
@@ -642,6 +833,7 @@ export default function Sport() {
           workout={editingWorkout}
           initialWeek={workoutDialog.week}
           initialDay={workoutDialog.day}
+          initialTemplateId={workoutDialog.templateId}
           editScope={workoutDialog.editScope}
           seriesCount={editingWorkout?.seriesId
             ? cycleDraft.workouts.filter((workout) => workout.seriesId === editingWorkout.seriesId).length

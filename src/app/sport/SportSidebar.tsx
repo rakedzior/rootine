@@ -16,8 +16,8 @@ const GROUPS: Array<{
   items: Array<{ id: PlannerView; label: string; icon: LucideIcon }>;
 }> = [
   {
-    label: "Główne",
-    items: [{ id: "today", label: "Dzisiaj", icon: Activity }],
+    label: "Plan",
+    items: [{ id: "today", label: "Plan na dziś", icon: Activity }],
   },
   {
     label: "Planowanie",
@@ -27,20 +27,20 @@ const GROUPS: Array<{
     ],
   },
   {
-    label: "Dane",
+    label: "Postępy",
     items: [
       { id: "history", label: "Historia", icon: History },
-      { id: "analysis", label: "Analiza", icon: BarChart3 },
+      { id: "analysis", label: "Postępy", icon: BarChart3 },
     ],
   },
 ];
 
 export const SPORT_VIEW_LABELS: Record<PlannerView, { title: string; description: string }> = {
-  today: { title: "Dzisiaj", description: "Dzisiejsze treningi i obecny tydzień" },
+  today: { title: "Plan na dziś", description: "Treningi do wykonania i kontekst bieżącego tygodnia" },
   cycle: { title: "Cykl treningowy", description: "Prosty plan tygodni aktywnego cyklu" },
   templates: { title: "Szablony", description: "Powtarzalne jednostki według kategorii sportu" },
   history: { title: "Historia", description: "Wyniki wykonanych i pominiętych treningów" },
-  analysis: { title: "Analiza", description: "Regularność i objętość treningowa" },
+  analysis: { title: "Postępy", description: "Regularność, objętość i realizacja planu" },
 };
 
 export function SportSidebar({

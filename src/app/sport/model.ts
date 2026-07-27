@@ -43,6 +43,7 @@ export type WorkoutSession = {
   discipline: Discipline;
   date: string;
   time?: string;
+  plannedDurationMinutes?: number;
   durationMinutes: number;
   status: SessionStatus;
   planId?: string;
@@ -263,7 +264,20 @@ export function createInitialSessions(todayKey = toDateKey(new Date())): Workout
       id: `${id}-${stage.id}`,
       done: status === "completed" || (status === "incomplete" && stageIndex === 0),
     }));
-    return { id, title: template.name, discipline: template.discipline, date, time, durationMinutes: template.durationMinutes, status, planId, templateId, exercises, stages };
+    return {
+      id,
+      title: template.name,
+      discipline: template.discipline,
+      date,
+      time,
+      plannedDurationMinutes: template.durationMinutes,
+      durationMinutes: template.durationMinutes,
+      status,
+      planId,
+      templateId,
+      exercises,
+      stages,
+    };
   };
 
   const sessions: WorkoutSession[] = [

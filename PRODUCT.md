@@ -20,13 +20,15 @@ Routine ma być jednym spójnym miejscem do pracy z powiązanymi obszarami życi
 
 ## Operating Context
 
-Obecny interfejs obejmuje pulpit dnia oraz moduły zadań, kalendarza, celów, sportu, odżywiania, pracy, finansów, notatek i spraw. Pięć rozbudowanych sekcji — Zadania, Kalendarz, Cele, Sport i Odżywianie — wyznacza wspólny system interfejsu dla kolejnych obszarów.
+Obecny interfejs obejmuje moduły zadań, kalendarza, celów, sportu, odżywiania, pracy oraz spraw. JDG jest wydzielonym podwidokiem modułu Sprawy. Rozbudowane sekcje korzystają ze wspólnego systemu interfejsu i lokalnych obszarów roboczych dopasowanych do charakteru danych.
 
 ## Capabilities and Constraints
 
 - MVP jest tworzone lokalnie jako aplikacja webowa.
 - Obecnie nie ma kont użytkowników ani backendu; stan jest lokalny, a część modułów korzysta z `localStorage`.
 - Aktualny zakres funkcjonalny obejmuje przede wszystkim zadania, kalendarz, cele, sport i dziennik odżywiania oraz prostsze wersje pozostałych modułów.
+- Sprawy są centrum prywatnych zobowiązań: łączą poważne formalności, płatności jednorazowe i cykliczne, subskrypcje, ważność dokumentów, rejestr pojazdów z terminami datowymi i przebiegowymi oraz miesięczny budżet plan-versus-actual. Wspólny radar porządkuje najbliższe ryzyka między tymi rejestrami.
+- Podwidok JDG w module Sprawy prowadzi miesięczną checklistę dokumentów, podatków, składek, dowodów wysyłki i zamknięcia miesiąca; wymagane punkty blokują przedwczesne zamknięcie, a własne punkty przechodzą do nowo tworzonych miesięcy.
 - Planowanie w module Sport składa się z biblioteki szablonów przypisanych do kategorii oraz jednego aktywnego cyklu. Cykl pozwala rozłożyć treningi na tygodnie i dni, powtarzać je co tydzień albo tylko w wybranych tygodniach, przesuwać, edytować pojedynczo lub seriami, usuwać i zapisać jako jeden plan. Widok Dzisiaj uruchamia pełną aktywną sesję z ćwiczeniami, seriami, obciążeniem, powtórzeniami, RIR lub bólem, notatkami i trwałym timerem przerw; zakończenie automatycznie aktualizuje Historię i Analizę.
 - Dziennik odżywiania łączy lokalny katalog podstawowych produktów USDA z odczytem publicznego katalogu Open Food Facts; zapisane posiłki nadal pozostają wyłącznie lokalne.
 - Cele kalorii i nawodnienia mogą być ustawione ręcznie albo oszacowane z lokalnego profilu obejmującego dane ciała, charakter pracy, listę tygodniowych aktywności i procentową lub kaloryczną korektę celu diety. Makroskładniki można ustawić przez profil automatyczny, procenty albo twarde wartości; wynik kalkulatora pozostaje edytowalny i nie jest poradą medyczną.

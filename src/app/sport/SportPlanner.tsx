@@ -1,13 +1,17 @@
 import { useMemo, useState, type FormEvent } from "react";
 import {
+  CalendarClock,
   CalendarRange,
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Copy,
+  Ellipsis,
   GripVertical,
   Pencil,
   Plus,
   Repeat2,
+  Search,
   Trash2,
 } from "lucide-react";
 import {
@@ -32,6 +36,7 @@ import {
 import {
   formatShortDate,
   fromDateKey,
+  normalizeSearch,
   startOfWeekKey,
   type Discipline,
   type WorkoutTemplate,
@@ -61,18 +66,41 @@ function workoutContentCount(template: WorkoutTemplate) {
 
 export function TemplateLibrary({
   templates,
-  onCreate,
   onEdit,
+  onDuplicate,
+  onAddToCycle,
+  onUseToday,
 }: {
   templates: WorkoutTemplate[];
-  onCreate: () => void;
   onEdit: (template: WorkoutTemplate) => void;
+  onDuplicate: (template: WorkoutTemplate) => void;
+  onAddToCycle: (template: WorkoutTemplate) => void;
+  onUseToday: (template: WorkoutTemplate) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const [discipline, setDiscipline] = useState<"all" | Discipline>("all");
+  const [sort, setSort] = useState<"name" | "duration" | "content">("name");
+  const query = normalizeSearch(search);
+  const visibleTemplates = templates
+    .filter((template) => discipline === "all" || template.discipline === discipline)
+    .filter((template) => (
+      !query
+      || normalizeSearch(`${template.name} ${template.description} ${DISCIPLINE_META[template.discipline].label}`).includes(query)
+    ))
+    .sort((left, right) => {
+      if (sort === "duration") return right.durationMinutes - left.durationMinutes;
+      if (sort === "content") {
+        const leftCount = left.stages?.length ?? left.exercises.length;
+        const rightCount = right.stages?.length ?? right.exercises.length;
+        return rightCount - leftCount || left.name.localeCompare(right.name, "pl");
+      }
+      return left.name.localeCompare(right.name, "pl");
+    });
   const groups = Object.entries(DISCIPLINE_META)
     .map(([discipline, meta]) => ({
       discipline: discipline as Discipline,
       label: meta.label,
-      templates: templates.filter((template) => template.discipline === discipline),
+      templates: visibleTemplates.filter((template) => template.discipline === discipline),
     }))
     .filter((group) => group.templates.length > 0);
 
@@ -80,9 +108,43 @@ export function TemplateLibrary({
     <div className="sport-planner-section">
       <SectionHeader
         title="Szablony treningów"
-        description="Każdy szablon należy do jednej kategorii sportu i może być używany wielokrotnie w cyklu."
-        action={<Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={onCreate}>Nowy szablon</Button>}
+        description={`${templates.length} zapisanych jednostek · wybierz szablon, aby go edytować albo dodać do planu.`}
       />
+      <div className="sport-template-tools" aria-label="Filtry szablonów">
+        <div className="sport-template-search">
+          <Search size={14} aria-hidden="true" />
+          <Input
+            aria-label="Szukaj szablonu"
+            type="search"
+            placeholder="Szukaj po nazwie lub opisie"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <Select
+          compact
+          fieldClassName="sport-template-filter"
+          aria-label="Filtruj szablony po kategorii"
+          value={discipline}
+          options={[
+            { value: "all", label: "Wszystkie kategorie" },
+            ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
+          ]}
+          onChange={(event) => setDiscipline(event.target.value as "all" | Discipline)}
+        />
+        <Select
+          compact
+          fieldClassName="sport-template-sort"
+          aria-label="Sortuj szablony"
+          value={sort}
+          options={[
+            { value: "name", label: "Nazwa A–Z" },
+            { value: "duration", label: "Najdłuższe" },
+            { value: "content", label: "Najwięcej elementów" },
+          ]}
+          onChange={(event) => setSort(event.target.value as "name" | "duration" | "content")}
+        />
+      </div>
       {groups.length ? (
         <div className="sport-template-groups">
           {groups.map((group) => (
@@ -92,22 +154,43 @@ export function TemplateLibrary({
                 <span>{group.templates.length}</span>
               </div>
               <Card padding="none">
+                <div className="sport-template-table-head" aria-hidden="true">
+                  <span>Nazwa</span>
+                  <span>Typ</span>
+                  <span>Czas</span>
+                  <span>Zawartość</span>
+                  <span>Akcje</span>
+                </div>
                 <div className="sport-template-list">
                   {group.templates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className="sport-template-row"
-                      onClick={() => onEdit(template)}
-                    >
-                      <div className="sport-template-row__main">
+                    <div key={template.id} className="sport-template-row">
+                      <button type="button" className="sport-template-row__main" onClick={() => onEdit(template)}>
                         <strong>{template.name}</strong>
                         <p>{template.description || "Bez opisu"}</p>
-                      </div>
+                      </button>
+                      <DisciplineLabel discipline={template.discipline} compact />
                       <span>{template.durationMinutes} min</span>
                       <span>{workoutContentCount(template)}</span>
-                      <Pencil size={12} aria-hidden="true" />
-                    </button>
+                      <details className="sport-template-actions">
+                        <summary aria-label={`Akcje szablonu ${template.name}`}>
+                          <Ellipsis size={16} aria-hidden="true" />
+                        </summary>
+                        <div>
+                          <button type="button" onClick={() => onEdit(template)}>
+                            <Pencil size={13} aria-hidden="true" /> Edytuj
+                          </button>
+                          <button type="button" onClick={() => onDuplicate(template)}>
+                            <Copy size={13} aria-hidden="true" /> Duplikuj
+                          </button>
+                          <button type="button" onClick={() => onAddToCycle(template)}>
+                            <CalendarRange size={13} aria-hidden="true" /> Dodaj do cyklu
+                          </button>
+                          <button type="button" onClick={() => onUseToday(template)}>
+                            <CalendarClock size={13} aria-hidden="true" /> Trening na dziś
+                          </button>
+                        </div>
+                      </details>
+                    </div>
                   ))}
                 </div>
               </Card>
@@ -116,9 +199,10 @@ export function TemplateLibrary({
         </div>
       ) : (
         <EmptyState
-          title="Brak szablonów"
-          description="Utwórz pierwszy szablon i przypisz go do kategorii sportu."
-          action={<Button variant="primary" size="sm" onClick={onCreate}>Utwórz szablon</Button>}
+          title={templates.length ? "Brak pasujących szablonów" : "Brak szablonów"}
+          description={templates.length
+            ? "Zmień wyszukiwanie lub wybraną kategorię."
+            : "Użyj przycisku „Nowy szablon” w nagłówku, aby utworzyć pierwszą jednostkę."}
         />
       )}
     </div>
@@ -207,7 +291,7 @@ function WeekBoard({
               }}
             >
               <span>T{week}</span>
-              <small>{count}</small>
+              <small>{count} tr.</small>
             </button>
           );
         })}
@@ -330,7 +414,16 @@ export function CyclePlanner({
   }
 
   const range = cycleDateRange(cycle);
-  const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek).length;
+  const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek);
+  const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
+  const activeDays = new Set(weekWorkouts.map((workout) => workout.day)).size;
+  const weekDisciplines = Object.entries(DISCIPLINE_META)
+    .map(([discipline, meta]) => ({
+      discipline: discipline as Discipline,
+      label: meta.label,
+      count: weekWorkouts.filter((workout) => workout.discipline === discipline).length,
+    }))
+    .filter((item) => item.count > 0);
 
   return (
     <div className="sport-planner-section">
@@ -348,7 +441,7 @@ export function CyclePlanner({
         <div className="sport-cycle-summary__facts">
           <span><strong>{cycle.weeks}</strong> tygodni</span>
           <span><strong>{cycle.workouts.length}</strong> treningów</span>
-          <span><strong>{weekWorkouts}</strong> w tym tygodniu</span>
+          <span><strong>{weekWorkouts.length}</strong> w tym tygodniu</span>
         </div>
         <div className="sport-cycle-summary__actions">
           <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia cyklu</Button>
@@ -367,6 +460,28 @@ export function CyclePlanner({
         onSelect={onSelectWorkout}
         onAdd={onAddWorkout}
       />
+
+      <section className="sport-week-summary" aria-labelledby="sport-week-summary-heading">
+        <div>
+          <h3 id="sport-week-summary-heading">Podsumowanie tygodnia {activeWeek}</h3>
+          <p>Planowana objętość przed rozpoczęciem treningów.</p>
+        </div>
+        <dl>
+          <div><dt>Treningi</dt><dd>{weekWorkouts.length}</dd></div>
+          <div><dt>Planowany czas</dt><dd>{weekMinutes} min</dd></div>
+          <div><dt>Aktywne dni</dt><dd>{activeDays} z 7</dd></div>
+        </dl>
+        <div className="sport-week-summary__disciplines">
+          {weekDisciplines.length
+            ? weekDisciplines.map((item) => (
+                <span key={item.discipline}>
+                  <i style={{ background: DISCIPLINE_META[item.discipline].color }} />
+                  {item.label} · {item.count}
+                </span>
+              ))
+            : <span>Brak treningów w tym tygodniu</span>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -579,6 +694,7 @@ export function WorkoutDialog({
   workout,
   initialWeek,
   initialDay,
+  initialTemplateId,
   editScope = "single",
   seriesCount = 1,
   onClose,
@@ -590,13 +706,18 @@ export function WorkoutDialog({
   workout?: CycleWorkout;
   initialWeek: number;
   initialDay: number;
+  initialTemplateId?: string;
   editScope?: "single" | "series";
   seriesCount?: number;
   onClose: () => void;
   onSubmit: (workouts: CycleWorkout[], editingId?: string, editScope?: "single" | "series") => void;
   onDelete?: () => void;
 }) {
-  const initialTemplate = workout?.templateId ? templates.find((template) => template.id === workout.templateId) : undefined;
+  const initialTemplate = workout?.templateId
+    ? templates.find((template) => template.id === workout.templateId)
+    : initialTemplateId
+      ? templates.find((template) => template.id === initialTemplateId)
+      : undefined;
   const [mode, setMode] = useState<"template" | "manual">(
     workout ? (initialTemplate ? "template" : "manual") : templates.length ? "template" : "manual",
   );

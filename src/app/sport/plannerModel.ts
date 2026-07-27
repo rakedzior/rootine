@@ -42,9 +42,19 @@ export interface WorkoutHistoryEntry {
   title: string;
   discipline: Discipline;
   date: string;
+  plannedDurationMinutes?: number;
   durationMinutes: number;
   status: "completed" | "incomplete" | "missed";
   templateId?: string;
+  completedUnits?: number;
+  totalUnits?: number;
+  unitKind?: "sets" | "stages";
+  volumeKg?: number;
+  distanceKm?: number;
+  averagePace?: string;
+  averageHeartRate?: number;
+  rpe?: number;
+  pain?: number;
 }
 
 export interface WorkoutOutcome {
@@ -163,7 +173,17 @@ function isWorkoutHistoryEntry(value: unknown): value is WorkoutHistoryEntry {
     && typeof value.durationMinutes === "number"
     && value.durationMinutes > 0
     && (value.status === "completed" || value.status === "incomplete" || value.status === "missed")
-    && (value.templateId === undefined || typeof value.templateId === "string");
+    && (value.templateId === undefined || typeof value.templateId === "string")
+    && (value.plannedDurationMinutes === undefined || typeof value.plannedDurationMinutes === "number")
+    && (value.completedUnits === undefined || typeof value.completedUnits === "number")
+    && (value.totalUnits === undefined || typeof value.totalUnits === "number")
+    && (value.unitKind === undefined || value.unitKind === "sets" || value.unitKind === "stages")
+    && (value.volumeKg === undefined || typeof value.volumeKg === "number")
+    && (value.distanceKm === undefined || typeof value.distanceKm === "number")
+    && (value.averagePace === undefined || typeof value.averagePace === "string")
+    && (value.averageHeartRate === undefined || typeof value.averageHeartRate === "number")
+    && (value.rpe === undefined || typeof value.rpe === "number")
+    && (value.pain === undefined || typeof value.pain === "number");
 }
 
 function isWorkoutSession(value: unknown): value is WorkoutSession {
@@ -180,7 +200,8 @@ function isWorkoutSession(value: unknown): value is WorkoutSession {
       || value.status === "incomplete"
       || value.status === "missed")
     && Array.isArray(value.exercises)
-    && (value.cycleWorkoutId === undefined || typeof value.cycleWorkoutId === "string");
+    && (value.cycleWorkoutId === undefined || typeof value.cycleWorkoutId === "string")
+    && (value.plannedDurationMinutes === undefined || typeof value.plannedDurationMinutes === "number");
 }
 
 function isWorkoutOutcome(value: unknown): value is WorkoutOutcome {
@@ -300,6 +321,7 @@ export function createSessionFromCycleWorkout(
     discipline: workout.discipline,
     date: cycleWorkoutDate(cycle, workout),
     time: workout.time,
+    plannedDurationMinutes: workout.durationMinutes,
     durationMinutes: workout.durationMinutes,
     status,
     planId: cycle.id,
@@ -318,14 +340,38 @@ export function createSessionFromCycleWorkout(
 
 export function historyEntryFromSession(session: WorkoutSession): WorkoutHistoryEntry | null {
   if (session.status !== "completed" && session.status !== "incomplete" && session.status !== "missed") return null;
+  const sets = session.exercises.flatMap((exercise) => exercise.sets);
+  const stages = session.stages ?? [];
+  const usesStages = stages.length > 0;
+  const completedUnits = usesStages
+    ? stages.filter((stage) => stage.done).length
+    : sets.filter((set) => set.done).length;
+  const totalUnits = usesStages ? stages.length : sets.length;
+  const volumeKg = sets
+    .filter((set) => set.done)
+    .reduce((sum, set) => (
+      sum
+      + (set.actualWeight ?? set.plannedWeight ?? 0)
+      * (set.actualReps ?? set.plannedReps ?? 0)
+    ), 0);
   return {
     id: session.id,
     title: session.title,
     discipline: session.discipline,
     date: session.date,
+    plannedDurationMinutes: session.plannedDurationMinutes ?? session.durationMinutes,
     durationMinutes: session.durationMinutes,
     status: session.status,
     templateId: session.templateId,
+    completedUnits: totalUnits ? completedUnits : undefined,
+    totalUnits: totalUnits || undefined,
+    unitKind: totalUnits ? (usesStages ? "stages" : "sets") : undefined,
+    volumeKg: volumeKg > 0 ? Math.round(volumeKg) : undefined,
+    distanceKm: session.metrics?.distanceKm,
+    averagePace: session.metrics?.averagePace,
+    averageHeartRate: session.metrics?.averageHeartRate,
+    rpe: session.metrics?.rpe,
+    pain: session.metrics?.pain,
   };
 }
 
@@ -354,19 +400,27 @@ function seedDefaultCycle(templates: WorkoutTemplate[]) {
 
 function historyFromSessions(sessions: WorkoutSession[]): WorkoutHistoryEntry[] {
   return sessions
-    .filter((session): session is WorkoutSession & { status: WorkoutHistoryEntry["status"] } => (
-      session.status === "completed" || session.status === "incomplete" || session.status === "missed"
-    ))
-    .map((session) => ({
-      id: session.id,
-      title: session.title,
-      discipline: session.discipline,
-      date: session.date,
-      durationMinutes: session.durationMinutes,
-      status: session.status,
-      templateId: session.templateId,
-    }))
+    .map(historyEntryFromSession)
+    .filter((entry): entry is WorkoutHistoryEntry => Boolean(entry))
     .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function enrichPlannerState(state: SportPlannerState): SportPlannerState {
+  const cycle = state.activeCycle;
+  const sessions = state.sessions.map((session) => {
+    if (session.plannedDurationMinutes) return session;
+    const planned = cycle?.workouts.find((workout) => workout.id === session.cycleWorkoutId)?.durationMinutes;
+    return planned ? { ...session, plannedDurationMinutes: planned } : session;
+  });
+  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  const history = state.history.map((entry) => {
+    const session = sessionById.get(entry.id);
+    const derived = session ? historyEntryFromSession(session) : null;
+    return derived
+      ? { ...entry, ...derived }
+      : { ...entry, plannedDurationMinutes: entry.plannedDurationMinutes ?? entry.durationMinutes };
+  });
+  return { ...state, sessions, history };
 }
 
 function withMigratedSeries(cycle: TrainingCycle | null) {
@@ -442,7 +496,7 @@ export function loadSportPlannerState(): SportPlannerState {
     const stored = window.localStorage.getItem(SPORT_PLANNER_STORAGE_KEY);
     if (stored) {
       const parsed: unknown = JSON.parse(stored);
-      if (isSportPlannerState(parsed)) return parsed;
+      if (isSportPlannerState(parsed)) return enrichPlannerState(parsed);
       if (isSportPlannerStateV2(parsed)) {
         const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
         const legacy: unknown = legacyStored ? JSON.parse(legacyStored) : null;
