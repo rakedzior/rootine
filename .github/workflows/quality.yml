@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint, test, and build
+      - name: Lint, typecheck web and API, test, and build
         run: npm run check
 
       - name: Install Playwright Chromium

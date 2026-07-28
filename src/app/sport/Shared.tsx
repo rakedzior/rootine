@@ -33,8 +33,6 @@ export function Modal({ title, eyebrow, children, onClose, width = 520 }: { titl
   return <UiModal title={title} eyebrow={eyebrow} onClose={onClose} width={width} bodyClassName="p-0">{children}</UiModal>;
 }
 
-export const inputStyle = { background: C.input, borderColor: C.border, color: C.text };
-
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
   return <UiEmptyState title={title} description={description} action={action} />;
 }

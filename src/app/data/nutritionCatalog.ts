@@ -21,6 +21,18 @@ interface SearchPayload {
   hits?: unknown[];
 }
 
+export class OpenFoodFactsSearchError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds?: number;
+
+  constructor(status: number, retryAfterSeconds?: number) {
+    super(`Open Food Facts: ${status}`);
+    this.name = "OpenFoodFactsSearchError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 const SEARCH_ENDPOINT = (import.meta.env.VITE_OPEN_FOOD_FACTS_PROXY_URL as string | undefined)?.trim()
   || "/api/openfoodfacts/search";
 const onlineSearchCache = new Map<string, FoodSuggestion[]>();
@@ -191,7 +203,13 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal) {
     signal,
     headers: { Accept: "application/json" },
   });
-  if (!response.ok) throw new Error(`Open Food Facts: ${response.status}`);
+  if (!response.ok) {
+    const retryAfter = response.headers.get("retry-after");
+    const seconds = retryAfter && /^\d+$/.test(retryAfter)
+      ? Number.parseInt(retryAfter, 10)
+      : undefined;
+    throw new OpenFoodFactsSearchError(response.status, seconds);
+  }
   const payload = await response.json() as SearchPayload;
   const queryTerms = normalizedText(normalizedQuery).split(/\s+/).filter(Boolean);
   const mapped = (payload.hits ?? [])

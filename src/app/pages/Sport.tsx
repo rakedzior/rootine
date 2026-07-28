@@ -6,10 +6,14 @@
  * FORM: Operacyjny pulpit dnia przechodzący w pełnoekranową konsolę aktywnej sesji.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Dumbbell, Play, Plus, Save, Undo2 } from "lucide-react";
 import { calendarDaysBetween } from "../data/localDate";
-import { subscribeToLocalWorkspace } from "../data/localRepository";
+import {
+  listLocalPersistenceIssues,
+  subscribeToLocalPersistenceIssues,
+  subscribeToLocalWorkspace,
+} from "../data/localRepository";
 import {
   ActiveSessionConflictDialog,
   SportActiveSession,
@@ -40,6 +44,7 @@ import {
   cycleWorkoutDate,
   type CycleWorkout,
   type PlannerView,
+  type SportPlannerState,
   type TrainingCycle,
   type WorkoutHistoryEntry,
 } from "../sport/plannerModel";
@@ -52,7 +57,12 @@ import {
   type WorkoutSession,
   type WorkoutTemplate,
 } from "../sport/model";
-import { SportSidebar, SPORT_VIEW_LABELS } from "../sport/SportSidebar";
+import { SportSidebar } from "../sport/SportSidebar";
+import {
+  createSportPersistenceQueue,
+  type SportPersistenceQueue,
+} from "../sport/sportPersistence";
+import { SPORT_VIEW_LABELS } from "../sport/sportViewMeta";
 import {
   Badge,
   Button,
@@ -63,6 +73,7 @@ import {
   Select,
   WorkspaceToolbar,
 } from "../ui";
+import "../../styles/sport.css";
 
 type PlannerDialog = "cycle" | "new-template" | null;
 
@@ -187,6 +198,15 @@ export default function Sport() {
   const [storageFailed, setStorageFailed] = useState(false);
   const [workoutDeleteState, setWorkoutDeleteState] = useState<WorkoutDeleteState | null>(null);
   const [workoutDeleteUndo, setWorkoutDeleteUndo] = useState<WorkoutDeleteUndo | null>(null);
+  const activeSessionEditRef = useRef(false);
+  const persistenceQueueRef = useRef<SportPersistenceQueue<SportPlannerState> | null>(null);
+  if (!persistenceQueueRef.current) {
+    persistenceQueueRef.current = createSportPersistenceQueue((state) => {
+      const saved = saveSportPlannerState(state);
+      setStorageFailed(!saved);
+      return saved;
+    });
+  }
 
   const savedCycleSignature = useMemo(
     () => JSON.stringify(plannerState.activeCycle),
@@ -222,11 +242,36 @@ export default function Sport() {
   )).length ?? 0;
 
   useEffect(() => {
-    setStorageFailed(!saveSportPlannerState(plannerState));
+    const mode = activeSessionEditRef.current ? "debounced" : "immediate";
+    activeSessionEditRef.current = false;
+    persistenceQueueRef.current?.schedule(plannerState, mode);
   }, [plannerState]);
 
+  useEffect(() => {
+    const flush = () => {
+      const saved = persistenceQueueRef.current?.flush() ?? true;
+      setStorageFailed(!saved);
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      flush();
+    };
+  }, []);
+
+  useEffect(() => subscribeToLocalPersistenceIssues(() => {
+    setStorageFailed(listLocalPersistenceIssues().some((issue) => (
+      issue.key === SPORT_PLANNER_STORAGE_KEY
+    )));
+  }), []);
+
   useEffect(() => subscribeToLocalWorkspace(SPORT_PLANNER_STORAGE_KEY, () => {
-    if (cycleDirty) {
+    if (cycleDirty || persistenceQueueRef.current?.hasPending()) {
       setAutosaveNotice("Dane sportowe zmieniły się w innej karcie. Zapisz albo odrzuć szkic i odśwież widok.");
       return;
     }
@@ -753,6 +798,7 @@ export default function Sport() {
   };
 
   const updateActiveSession = (session: WorkoutSession) => {
+    activeSessionEditRef.current = true;
     setPlannerState((current) => ({
       ...current,
       sessions: current.sessions.map((item) => item.id === session.id ? session : item),

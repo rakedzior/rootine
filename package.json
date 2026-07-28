@@ -5,18 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.app.json && vite build",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "lint": "eslint src api e2e playwright.config.ts vite.config.ts vitest.config.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json --pretty false",
+    "lint": "eslint src api e2e scripts playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
+    "typecheck": "npm run typecheck:app && npm run typecheck:api",
+    "typecheck:app": "tsc --noEmit -p tsconfig.app.json --pretty false",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json --pretty false",
     "test": "vitest run",
+    "test:api": "vitest run api/openfoodfacts/search.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "smoke:production": "node scripts/smoke-production.mjs",
     "css:lint": "stylelint \"src/**/*.{css,scss}\"",
     "css:lint:fix": "stylelint \"src/**/*.{css,scss}\" --fix",
     "css:audit": "node scripts/css-audit.mjs",
     "css:audit:json": "node scripts/css-audit.mjs --json",
-    "check": "npm run lint && npm run typecheck && npm run css:lint && npm run test && npm run build"
+    "architecture:audit": "node scripts/architecture-audit.mjs",
+    "check": "npm run lint && npm run css:lint && npm run architecture:audit && npm run test && npm run build"
   },
   "dependencies": {
     "impeccable": "^3.3.0",

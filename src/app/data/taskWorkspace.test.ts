@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { createBrowserWorkspacePayloadStore } from "./indexedDbWorkspaceStore";
+import { setWorkspacePayloadStoreForTests } from "./localRepository";
+import { projectTaskOccurrences } from "./taskSchedule";
 import {
   emptyTaskTrash,
   loadTaskWorkspaceResult,
@@ -13,6 +16,7 @@ import {
 describe("task workspace", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    setWorkspacePayloadStoreForTests(createBrowserWorkspacePayloadStore(undefined));
   });
 
   it("migrates version-one timed tasks to an explicit schedule", () => {
@@ -61,6 +65,7 @@ describe("task workspace", () => {
           endTime: "10:30",
           reminderMinutes: 30,
           recurrence: "monthly",
+          completedDates: ["2026-08-28"],
           timezone: "Europe/Warsaw",
         },
       }],
@@ -76,8 +81,42 @@ describe("task workspace", () => {
       endTime: "10:30",
       reminderMinutes: 30,
       recurrence: "monthly",
+      completedDates: ["2026-08-28"],
       timezone: "Europe/Warsaw",
     });
+  });
+
+  it("never serializes runtime recurrence projections as source tasks", () => {
+    const source = {
+      id: 88,
+      text: "Raport cykliczny",
+      done: false,
+      view: "dzis",
+      calendarDate: "2026-07-31",
+      time: "09:00",
+      schedule: {
+        allDay: false,
+        startTime: "09:00",
+        recurrence: "monthly",
+        timezone: "Europe/Warsaw",
+      },
+    } satisfies TaskWorkspace["tasks"][number];
+    const projected = projectTaskOccurrences([source], "2026-07-01", "2026-09-30");
+    const workspace = {
+      version: 2,
+      updatedAt: "",
+      tasks: projected,
+      habits: [],
+      lists: [],
+      tags: [],
+    } satisfies TaskWorkspace;
+
+    expect(saveTaskWorkspace(workspace)).toBe(true);
+
+    const persisted = JSON.parse(window.localStorage.getItem("rootine.task-workspace.v1") ?? "{}");
+    expect(persisted.tasks).toHaveLength(1);
+    expect(persisted.tasks[0]).toMatchObject({ id: 88, calendarDate: "2026-07-31" });
+    expect(persisted.tasks[0]).not.toHaveProperty("occurrence");
   });
 
   it("quarantines impossible same-day duration ranges", () => {

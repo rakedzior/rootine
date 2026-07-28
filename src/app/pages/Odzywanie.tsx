@@ -6,19 +6,16 @@
  * FORM: Arkusz składników pogrupowany według posiłków, z ustawieniami osadzonymi przy danych, których dotyczą.
  */
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
-  Apple,
   CalendarDays,
   ChartNoAxesCombined,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Coffee,
   Droplets,
   LoaderCircle,
-  Moon,
   Pencil,
   Plus,
   RefreshCw,
@@ -28,7 +25,6 @@ import {
   Scale,
   Settings,
   Trash2,
-  Utensils,
 } from "lucide-react";
 import {
   Badge,
@@ -43,29 +39,12 @@ import {
 } from "../ui";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
-  ACTIVITY_INTENSITY_OPTIONS,
-  ACTIVITY_TYPE_OPTIONS,
-  calculateMacroTargetsByPercent,
-  calculateMacroTargetsByPreset,
   calculateNutritionTargets,
-  DEFAULT_MACRO_CONFIGURATION,
-  DIET_ADJUSTMENT_MODE_OPTIONS,
-  EQUATION_VARIANT_OPTIONS,
   MACRO_MODE_OPTIONS,
   MACRO_PRESET_OPTIONS,
-  WORK_ACTIVITY_OPTIONS,
-  type ActivityIntensity,
-  type ActivityType,
-  type DietAdjustmentMode,
-  type EquationVariant,
-  type MacroConfiguration,
-  type MacroMode,
-  type MacroPreset,
-  type NutritionCalculatorProfile,
-  type WeeklyActivity,
-  type WorkActivity,
 } from "../data/nutritionCalculator";
 import {
+  OpenFoodFactsSearchError,
   scaleNutrition,
   searchGenericFoods,
   searchOpenFoodFacts,
@@ -88,428 +67,38 @@ import {
   NutritionAnalysis,
   type NutritionAnalysisRange,
 } from "../nutrition/NutritionAnalysis";
+import "../../styles/nutrition.css";
 
-const MEAL_META = [
-  { id: "breakfast" as const, label: "Śniadanie", icon: Coffee },
-  { id: "lunch" as const, label: "Obiad", icon: Utensils },
-  { id: "dinner" as const, label: "Kolacja", icon: Moon },
-  { id: "snack" as const, label: "Przekąski", icon: Apple },
-];
-
-const NUTRIENT_META = [
-  { key: "calories" as const, label: "Kalorie", color: uiColors.categorySky },
-  { key: "protein" as const, label: "Białko", unit: "g", color: uiColors.categoryTeal },
-  { key: "carbs" as const, label: "Węglowodany", unit: "g", color: uiColors.categorySand },
-  { key: "fat" as const, label: "Tłuszcze", unit: "g", color: uiColors.categoryRose },
-];
-
-const WATER_AMOUNTS = [150, 250, 330, 500];
-
-type EntryField = "calories" | "protein" | "carbs" | "fat";
-type GoalDialog = "nutrition" | "water" | null;
-type WeightDialog = "measurement" | "analysis" | null;
-
-interface EntryDraft {
-  meal: MealSlot;
-  name: string;
-  amount: string;
-  unit: "g" | "ml";
-  calories: string;
-  protein: string;
-  carbs: string;
-  fat: string;
-}
-
-interface CalculatorDraft {
-  equationVariant: string;
-  age: string;
-  weightKg: string;
-  heightCm: string;
-  workActivity: string;
-  activities: ActivityDraft[];
-  dietAdjustmentMode: string;
-  dietAdjustmentValue: string;
-}
-
-interface ActivityDraft {
-  id: string;
-  type: string;
-  intensity: string;
-  timesPerWeek: string;
-  minutesPerSession: string;
-}
-
-interface MacroDraft {
-  mode: string;
-  preset: string;
-  proteinPercent: string;
-  carbsPercent: string;
-  fatPercent: string;
-}
-
-interface CalculationSyncState {
-  calories: boolean;
-  macros: boolean;
-  water: boolean;
-}
-
-type CalculatorErrorField = "equationVariant" | "age" | "weightKg" | "heightCm" | "workActivity" | "activities" | "dietAdjustmentMode" | "dietAdjustmentValue";
-type CalculatorErrors = Partial<Record<CalculatorErrorField, string>>;
-
-const createEntryDraft = (meal: MealSlot = "breakfast"): EntryDraft => ({
-  meal,
-  name: "",
-  amount: "100",
-  unit: "g",
-  calories: "",
-  protein: "",
-  carbs: "",
-  fat: "",
-});
-
-function createCalculatorDraft(profile?: NutritionCalculatorProfile): CalculatorDraft {
-  return {
-    equationVariant: profile?.equationVariant ?? "",
-    age: profile ? String(profile.age) : "",
-    weightKg: profile ? String(profile.weightKg) : "",
-    heightCm: profile ? String(profile.heightCm) : "",
-    workActivity: profile?.workActivity ?? "desk",
-    activities: profile?.activities.map((activity) => ({
-      id: activity.id,
-      type: activity.type,
-      intensity: activity.intensity,
-      timesPerWeek: String(activity.timesPerWeek),
-      minutesPerSession: String(activity.minutesPerSession),
-    })) ?? [],
-    dietAdjustmentMode: profile?.dietAdjustmentMode ?? "percent",
-    dietAdjustmentValue: profile ? String(profile.dietAdjustmentValue) : "0",
-  };
-}
-
-function createMacroDraft(configuration: MacroConfiguration = DEFAULT_MACRO_CONFIGURATION): MacroDraft {
-  return {
-    mode: configuration.mode,
-    preset: configuration.preset,
-    proteinPercent: String(configuration.proteinPercent),
-    carbsPercent: String(configuration.carbsPercent),
-    fatPercent: String(configuration.fatPercent),
-  };
-}
-
-function parseCalculatorDraft(draft: CalculatorDraft): { errors: CalculatorErrors; profile?: NutritionCalculatorProfile } {
-  const errors: CalculatorErrors = {};
-  const age = Number(draft.age.replace(",", "."));
-  const weightKg = Number(draft.weightKg.replace(",", "."));
-  const heightCm = Number(draft.heightCm.replace(",", "."));
-  const equationVariant = draft.equationVariant as EquationVariant;
-  const workActivity = draft.workActivity as WorkActivity;
-  const dietAdjustmentMode = draft.dietAdjustmentMode as DietAdjustmentMode;
-  const dietAdjustmentValue = Number(draft.dietAdjustmentValue.replace(",", "."));
-  const activities: WeeklyActivity[] = draft.activities.map((activity) => ({
-    id: activity.id,
-    type: activity.type as ActivityType,
-    intensity: activity.intensity as ActivityIntensity,
-    timesPerWeek: Number(activity.timesPerWeek.replace(",", ".")),
-    minutesPerSession: Number(activity.minutesPerSession.replace(",", ".")),
-  }));
-
-  if (!EQUATION_VARIANT_OPTIONS.some((option) => option.value === equationVariant)) errors.equationVariant = "Wybierz płeć.";
-  if (!Number.isFinite(age) || age < 18 || age > 100) errors.age = "Podaj wiek od 18 do 100 lat.";
-  if (!Number.isFinite(weightKg) || weightKg < 30 || weightKg > 300) errors.weightKg = "Podaj wagę od 30 do 300 kg.";
-  if (!Number.isFinite(heightCm) || heightCm < 120 || heightCm > 230) errors.heightCm = "Podaj wzrost od 120 do 230 cm.";
-  if (!WORK_ACTIVITY_OPTIONS.some((option) => option.value === workActivity)) errors.workActivity = "Wybierz charakter pracy.";
-  if (activities.some((activity) => (
-    !ACTIVITY_TYPE_OPTIONS.some((option) => option.value === activity.type)
-    || !ACTIVITY_INTENSITY_OPTIONS.some((option) => option.value === activity.intensity)
-    || !Number.isFinite(activity.timesPerWeek) || activity.timesPerWeek < 1 || activity.timesPerWeek > 14
-    || !Number.isFinite(activity.minutesPerSession) || activity.minutesPerSession < 5 || activity.minutesPerSession > 360
-  ))) errors.activities = "Każda aktywność wymaga rodzaju, intensywności, 1–14 treningów tygodniowo i 5–360 minut.";
-  if (!DIET_ADJUSTMENT_MODE_OPTIONS.some((option) => option.value === dietAdjustmentMode)) errors.dietAdjustmentMode = "Wybierz sposób korekty.";
-  const adjustmentLimit = dietAdjustmentMode === "percent" ? 40 : 2000;
-  if (!Number.isFinite(dietAdjustmentValue) || Math.abs(dietAdjustmentValue) > adjustmentLimit) {
-    errors.dietAdjustmentValue = dietAdjustmentMode === "percent"
-      ? "Podaj wartość od −40% do +40%."
-      : "Podaj wartość od −2000 do +2000 kcal.";
-  }
-
-  if (Object.keys(errors).length) return { errors };
-  return {
-    errors,
-    profile: {
-      equationVariant,
-      age,
-      weightKg,
-      heightCm,
-      workActivity,
-      activities,
-      dietAdjustmentMode,
-      dietAdjustmentValue,
-    } satisfies NutritionCalculatorProfile,
-  };
-}
-
-function parseMacroDraft(draft: MacroDraft): { error?: string; configuration?: MacroConfiguration } {
-  const mode = draft.mode as MacroMode;
-  const preset = draft.preset as MacroPreset;
-  const proteinPercent = Number(draft.proteinPercent.replace(",", "."));
-  const carbsPercent = Number(draft.carbsPercent.replace(",", "."));
-  const fatPercent = Number(draft.fatPercent.replace(",", "."));
-  if (!MACRO_MODE_OPTIONS.some((option) => option.value === mode)) return { error: "Wybierz sposób konfiguracji makroskładników." };
-  if (mode === "auto" && !MACRO_PRESET_OPTIONS.some((option) => option.value === preset)) return { error: "Wybierz profil autowyliczenia." };
-  if (mode === "percent") {
-    if ([proteinPercent, carbsPercent, fatPercent].some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
-      return { error: "Każdy udział procentowy musi mieścić się w zakresie 0–100%." };
-    }
-    if (Math.abs(proteinPercent + carbsPercent + fatPercent - 100) > 0.01) {
-      return { error: "Białko, węglowodany i tłuszcze muszą razem dawać 100%." };
-    }
-  }
-  return {
-    configuration: {
-      mode,
-      preset,
-      proteinPercent: Number.isFinite(proteinPercent) ? proteinPercent : DEFAULT_MACRO_CONFIGURATION.proteinPercent,
-      carbsPercent: Number.isFinite(carbsPercent) ? carbsPercent : DEFAULT_MACRO_CONFIGURATION.carbsPercent,
-      fatPercent: Number.isFinite(fatPercent) ? fatPercent : DEFAULT_MACRO_CONFIGURATION.fatPercent,
-    },
-  };
-}
-
-function calculateMacroDraftTargets(
-  calories: number,
-  draft: MacroDraft,
-  profile?: NutritionCalculatorProfile,
-) {
-  if (!Number.isFinite(calories) || calories <= 0) return null;
-  if (draft.mode === "auto") {
-    if (!profile || !MACRO_PRESET_OPTIONS.some((option) => option.value === draft.preset)) return null;
-    return calculateMacroTargetsByPreset(calories, profile.weightKg, draft.preset as MacroPreset);
-  }
-  if (draft.mode === "percent") {
-    const proteinPercent = Number(draft.proteinPercent.replace(",", "."));
-    const carbsPercent = Number(draft.carbsPercent.replace(",", "."));
-    const fatPercent = Number(draft.fatPercent.replace(",", "."));
-    return calculateMacroTargetsByPercent(calories, proteinPercent, carbsPercent, fatPercent);
-  }
-  return null;
-}
-
-function CalculatorProfileFields({
-  draft,
-  errors,
-  includeDietGoal,
-  onChange,
-  onAddActivity,
-  onChangeActivity,
-  onRemoveActivity,
-}: {
-  draft: CalculatorDraft;
-  errors: CalculatorErrors;
-  includeDietGoal: boolean;
-  onChange: (field: Exclude<keyof CalculatorDraft, "activities">, value: string) => void;
-  onAddActivity: () => void;
-  onChangeActivity: (id: string, field: Exclude<keyof ActivityDraft, "id">, value: string) => void;
-  onRemoveActivity: (id: string) => void;
-}) {
-  return (
-    <>
-      <div className="nutrition-calculator-profile-grid">
-        <Select
-          label="Płeć"
-          value={draft.equationVariant}
-          error={errors.equationVariant}
-          options={[
-            { value: "", label: "Wybierz", disabled: true },
-            ...EQUATION_VARIANT_OPTIONS,
-          ]}
-          onChange={(event) => onChange("equationVariant", event.target.value)}
-        />
-        <Input
-          label="Wiek"
-          type="number"
-          min="18"
-          max="100"
-          step="1"
-          placeholder="np. 32"
-          value={draft.age}
-          error={errors.age}
-          onChange={(event) => onChange("age", event.target.value)}
-        />
-        <Input
-          label="Waga (kg)"
-          type="number"
-          min="30"
-          max="300"
-          step="0.1"
-          placeholder="np. 78"
-          value={draft.weightKg}
-          error={errors.weightKg}
-          onChange={(event) => onChange("weightKg", event.target.value)}
-        />
-        <Input
-          label="Wzrost (cm)"
-          type="number"
-          min="120"
-          max="230"
-          step="1"
-          placeholder="np. 180"
-          value={draft.heightCm}
-          error={errors.heightCm}
-          onChange={(event) => onChange("heightCm", event.target.value)}
-        />
-      </div>
-      <Select
-        label="Charakter pracy"
-        value={draft.workActivity}
-        error={errors.workActivity}
-        options={WORK_ACTIVITY_OPTIONS}
-        onChange={(event) => onChange("workActivity", event.target.value)}
-      />
-      <div className="nutrition-weekly-activities">
-        <div className="nutrition-weekly-activities__header">
-          <div>
-            <h4>Aktywność fizyczna</h4>
-            <p>Dodaj każdy typ treningu osobno. Wynik tygodnia zostanie przeliczony na średnią dzienną.</p>
-          </div>
-          <Button type="button" variant="ghost" size="sm" leadingIcon={<Plus size={12} />} onClick={onAddActivity}>Dodaj aktywność</Button>
-        </div>
-        {draft.activities.length ? (
-          <div className="nutrition-weekly-activities__list">
-            {draft.activities.map((activity, index) => (
-              <div key={activity.id} className="nutrition-weekly-activity">
-                <Select
-                  label={`Rodzaj ${index + 1}`}
-                  value={activity.type}
-                  options={ACTIVITY_TYPE_OPTIONS}
-                  onChange={(event) => onChangeActivity(activity.id, "type", event.target.value)}
-                />
-                <Select
-                  label="Intensywność"
-                  value={activity.intensity}
-                  options={ACTIVITY_INTENSITY_OPTIONS}
-                  onChange={(event) => onChangeActivity(activity.id, "intensity", event.target.value)}
-                />
-                <Input
-                  label="Razy / tydz."
-                  type="number"
-                  min="1"
-                  max="14"
-                  step="1"
-                  value={activity.timesPerWeek}
-                  onChange={(event) => onChangeActivity(activity.id, "timesPerWeek", event.target.value)}
-                />
-                <Input
-                  label="Min / trening"
-                  type="number"
-                  min="5"
-                  max="360"
-                  step="5"
-                  value={activity.minutesPerSession}
-                  onChange={(event) => onChangeActivity(activity.id, "minutesPerSession", event.target.value)}
-                />
-                <Button type="button" variant="ghost" size="sm" iconOnly aria-label={`Usuń aktywność ${index + 1}`} onClick={() => onRemoveActivity(activity.id)}>
-                  <Trash2 size={12} />
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="nutrition-weekly-activities__empty">Brak regularnych treningów.</div>
-        )}
-        {errors.activities && <p className="ui-field__error" role="alert">{errors.activities}</p>}
-      </div>
-      {includeDietGoal && (
-        <div className="nutrition-diet-adjustment">
-          <Select
-            label="Cel diety"
-            value={draft.dietAdjustmentMode}
-            error={errors.dietAdjustmentMode}
-            options={DIET_ADJUSTMENT_MODE_OPTIONS}
-            onChange={(event) => onChange("dietAdjustmentMode", event.target.value)}
-          />
-          <Input
-            label={draft.dietAdjustmentMode === "percent" ? "Korekta (%)" : "Korekta (kcal)"}
-            type="number"
-            min={draft.dietAdjustmentMode === "percent" ? "-40" : "-2000"}
-            max={draft.dietAdjustmentMode === "percent" ? "40" : "2000"}
-            step={draft.dietAdjustmentMode === "percent" ? "1" : "50"}
-            placeholder={draft.dietAdjustmentMode === "percent" ? "np. −15 lub +10" : "np. −500 lub +250"}
-            value={draft.dietAdjustmentValue}
-            error={errors.dietAdjustmentValue}
-            hint="Wartość ujemna oznacza redukcję, 0 utrzymanie, dodatnia przyrost."
-            onChange={(event) => onChange("dietAdjustmentValue", event.target.value)}
-          />
-        </div>
-      )}
-    </>
-  );
-}
-
-function shiftDate(dateKey: string, days: number) {
-  const date = new Date(`${dateKey}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return nutritionDateKey(date);
-}
-
-function formatDate(dateKey: string) {
-  return new Intl.DateTimeFormat("pl-PL", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(`${dateKey}T12:00:00`));
-}
-
-function formatCompactDate(dateKey: string) {
-  return new Intl.DateTimeFormat("pl-PL", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(`${dateKey}T12:00:00`));
-}
-
-function sumEntries(entries: NutritionEntry[]) {
-  return entries.reduce((totals, entry) => ({
-    calories: totals.calories + entry.calories,
-    protein: totals.protein + entry.protein,
-    carbs: totals.carbs + entry.carbs,
-    fat: totals.fat + entry.fat,
-  }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
-}
-
-function parseDraftNumber(value: string) {
-  const parsed = Number(value.replace(",", "."));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-}
-
-function formatNumber(value: number) {
-  return value.toLocaleString("pl-PL", { maximumFractionDigits: 1 });
-}
-
-function formatWater(value: number) {
-  if (value >= 1000) return `${(value / 1000).toLocaleString("pl-PL", { maximumFractionDigits: 2 })} l`;
-  return `${value.toLocaleString("pl-PL")} ml`;
-}
-
-function formatEntryCount(count: number) {
-  if (count === 1) return "1 pozycja";
-  const lastTwo = count % 100;
-  const last = count % 10;
-  return `${count} ${last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? "pozycje" : "pozycji"}`;
-}
-
-function entrySuggestion(entry: NutritionEntry): FoodSuggestion | null {
-  if (!entry.per100g || !entry.catalogId || !entry.catalogSource) return null;
-  return {
-    id: entry.catalogId,
-    name: entry.name,
-    brand: entry.brand,
-    source: entry.catalogSource,
-    defaultAmount: entry.amount ?? 100,
-    unit: entry.unit ?? "g",
-    per100g: entry.per100g,
-  };
-}
+import {
+  MEAL_META,
+  NUTRIENT_META,
+  WATER_AMOUNTS,
+  calculateMacroDraftTargets,
+  createCalculatorDraft,
+  createEntryDraft,
+  createMacroDraft,
+  entrySuggestion,
+  formatCompactDate,
+  formatDate,
+  formatEntryCount,
+  formatNumber,
+  formatWater,
+  parseCalculatorDraft,
+  parseDraftNumber,
+  parseMacroDraft,
+  shiftDate,
+  sumEntries,
+  type ActivityDraft,
+  type CalculationSyncState,
+  type CalculatorDraft,
+  type CalculatorErrors,
+  type EntryDraft,
+  type EntryField,
+  type GoalDialog,
+  type MacroDraft,
+  type WeightDialog,
+} from "../nutrition/nutritionPresentationModel";
+import { CalculatorProfileFields } from "../nutrition/NutritionCalculatorFields";
 
 export default function Odzywanie() {
   const [initialLoad] = useState(loadNutritionWorkspace);
@@ -525,7 +114,9 @@ export default function Odzywanie() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogResults, setCatalogResults] = useState<FoodSuggestion[]>([]);
   const [catalogPending, setCatalogPending] = useState(false);
-  const [catalogError, setCatalogError] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogSearchedQuery, setCatalogSearchedQuery] = useState("");
+  const catalogRequestRef = useRef<AbortController | null>(null);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const [goalDialog, setGoalDialog] = useState<GoalDialog>(null);
   const [goalDraft, setGoalDraft] = useState(() => ({
@@ -652,43 +243,20 @@ export default function Odzywanie() {
     setActiveSuggestion(0);
   }, [allSuggestions.length, entryDraft.name]);
 
-  useEffect(() => {
-    const query = entryDraft.name.trim();
-    if (!entryDialogOpen || query.length < 2 || selectedFood?.name === query) {
-      setCatalogResults([]);
-      setCatalogPending(false);
-      setCatalogError(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setCatalogPending(true);
-      setCatalogError(false);
-      searchOpenFoodFacts(query, controller.signal)
-        .then((results) => setCatalogResults(results))
-        .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setCatalogResults([]);
-            setCatalogError(true);
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setCatalogPending(false);
-        });
-    }, 450);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [entryDialogOpen, entryDraft.name, selectedFood]);
+  useEffect(() => () => catalogRequestRef.current?.abort(), []);
 
   const closeEntryDialog = useCallback(() => {
+    catalogRequestRef.current?.abort();
+    catalogRequestRef.current = null;
     setEntryDialogOpen(false);
     setEntryErrors({});
     setEditingEntry(null);
     setSelectedFood(null);
     setCatalogOpen(false);
     setCatalogResults([]);
+    setCatalogPending(false);
+    setCatalogError("");
+    setCatalogSearchedQuery("");
   }, []);
 
   const closeGoalDialog = useCallback(() => {
@@ -704,16 +272,24 @@ export default function Odzywanie() {
 
   const openEntryDialog = (meal: MealSlot = "breakfast") => {
     if (dayClosed) return;
+    catalogRequestRef.current?.abort();
+    catalogRequestRef.current = null;
     setEntryDraft(createEntryDraft(meal));
     setEditingEntry(null);
     setSelectedFood(null);
     setEntryErrors({});
     setCatalogOpen(false);
+    setCatalogResults([]);
+    setCatalogPending(false);
+    setCatalogError("");
+    setCatalogSearchedQuery("");
     setEntryDialogOpen(true);
   };
 
   const openEditDialog = (meal: MealSlot, entry: NutritionEntry) => {
     if (dayClosed) return;
+    catalogRequestRef.current?.abort();
+    catalogRequestRef.current = null;
     setEntryDraft({
       meal,
       name: entry.name,
@@ -728,6 +304,10 @@ export default function Odzywanie() {
     setEditingEntry({ meal, entry });
     setEntryErrors({});
     setCatalogOpen(false);
+    setCatalogResults([]);
+    setCatalogPending(false);
+    setCatalogError("");
+    setCatalogSearchedQuery("");
     setEntryDialogOpen(true);
   };
 
@@ -765,6 +345,8 @@ export default function Odzywanie() {
   };
 
   const chooseFood = (food: FoodSuggestion) => {
+    catalogRequestRef.current?.abort();
+    catalogRequestRef.current = null;
     const values = scaleNutrition(food.per100g, food.defaultAmount);
     setSelectedFood(food);
     setEntryDraft((current) => ({
@@ -791,10 +373,54 @@ export default function Odzywanie() {
   };
 
   const changeProductName = (value: string) => {
+    catalogRequestRef.current?.abort();
+    catalogRequestRef.current = null;
     setEntryDraft((current) => ({ ...current, name: value }));
     if (selectedFood?.name !== value) setSelectedFood(null);
     setCatalogOpen(value.trim().length >= 2);
+    setCatalogResults([]);
+    setCatalogPending(false);
+    setCatalogError("");
+    setCatalogSearchedQuery("");
     setEntryErrors((current) => ({ ...current, name: undefined }));
+  };
+
+  const searchCatalogOnline = () => {
+    const query = entryDraft.name.trim();
+    if (query.length < 2 || catalogPending || catalogSearchedQuery === query) return;
+
+    catalogRequestRef.current?.abort();
+    const controller = new AbortController();
+    catalogRequestRef.current = controller;
+    setCatalogOpen(true);
+    setCatalogPending(true);
+    setCatalogResults([]);
+    setCatalogError("");
+
+    searchOpenFoodFacts(query, controller.signal)
+      .then((results) => {
+        if (catalogRequestRef.current !== controller) return;
+        setCatalogResults(results);
+        setCatalogSearchedQuery(query);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || catalogRequestRef.current !== controller) return;
+        setCatalogResults([]);
+        if (error instanceof OpenFoodFactsSearchError && error.status === 429) {
+          const retry = error.retryAfterSeconds
+            ? ` Spróbuj ponownie za ${error.retryAfterSeconds} s.`
+            : " Spróbuj ponownie za chwilę.";
+          setCatalogError(`Limit wyszukiwania online został osiągnięty.${retry}`);
+          return;
+        }
+        setCatalogError("Baza online jest chwilowo niedostępna. Możesz wybrać produkt podstawowy albo uzupełnić dane ręcznie.");
+      })
+      .finally(() => {
+        if (catalogRequestRef.current === controller) {
+          catalogRequestRef.current = null;
+          setCatalogPending(false);
+        }
+      });
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -1616,6 +1242,30 @@ export default function Odzywanie() {
                 onKeyDown={handleSearchKeyDown}
                 onChange={(event) => changeProductName(event.target.value)}
               />
+              {entryDraft.name.trim().length >= 2 && !selectedFood && (
+                <div
+                  className="mt-1 flex min-h-9 items-center justify-between gap-2"
+                  style={{ color: uiColors.textMuted, fontSize: "var(--text-micro)", lineHeight: 1.35 }}
+                >
+                  <span>Produkty marek pobieramy dopiero na Twoje żądanie.</span>
+                  <Button
+                    type="button"
+                    variant="quiet"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={catalogPending || catalogSearchedQuery === entryDraft.name.trim()}
+                    leadingIcon={catalogPending ? <LoaderCircle size={13} className="nutrition-search-spinner" /> : undefined}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={searchCatalogOnline}
+                  >
+                    {catalogPending
+                      ? "Szukamy…"
+                      : catalogSearchedQuery === entryDraft.name.trim()
+                        ? "Wyniki pobrane"
+                        : "Szukaj online"}
+                  </Button>
+                </div>
+              )}
               {catalogOpen && entryDraft.name.trim().length >= 2 && (
                 <div id="nutrition-food-suggestions" className="nutrition-suggestions" role="listbox" aria-label="Podpowiedzi produktów">
                   {renderSuggestionGroup("Produkty podstawowe · USDA", genericResults)}
@@ -1628,13 +1278,15 @@ export default function Odzywanie() {
                     </div>
                   )}
                   {!catalogPending && catalogError && (
-                    <div className="nutrition-suggestions__status is-error">
-                      Baza online jest chwilowo niedostępna. Możesz wybrać produkt podstawowy albo uzupełnić dane ręcznie.
+                    <div className="nutrition-suggestions__status is-error" role="alert">
+                      {catalogError}
                     </div>
                   )}
                   {!catalogPending && !catalogError && !allSuggestions.length && (
                     <div className="nutrition-suggestions__status">
-                      Nie znaleźliśmy produktu. Wpisz pełną nazwę i uzupełnij wartości ręcznie.
+                      {catalogSearchedQuery === entryDraft.name.trim()
+                        ? "Nie znaleźliśmy produktu. Wpisz pełną nazwę i uzupełnij wartości ręcznie."
+                        : "Brak produktu podstawowego. Wybierz „Szukaj online” albo uzupełnij wartości ręcznie."}
                     </div>
                   )}
                 </div>

@@ -36,6 +36,15 @@ export const test = base.extend<RoutineFixtures>({
     });
     await page.route("https://fonts.gstatic.com/**", (route) => route.abort("blockedbyclient"));
 
+    await page.route("**/api/openfoodfacts/search**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "cache-control": "public, max-age=300" },
+        body: JSON.stringify({ hits: [] }),
+      });
+    });
+
     await page.addInitScript(() => {
       const marker = "routine:e2e:storage-initialized";
       try {

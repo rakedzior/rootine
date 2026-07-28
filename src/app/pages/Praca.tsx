@@ -727,15 +727,6 @@ export default function Praca() {
       className="work-module"
       contextSidebar={(
         <ContextSidebar label="Nawigacja pracy" className="work-company-sidebar">
-          <div className="work-sidebar-heading">
-            <div>
-              <span>Obszar pracy</span>
-              <strong>Praca</strong>
-            </div>
-            <Button variant="ghost" size="sm" iconOnly aria-label="Dodaj firmę" onClick={() => openCompanyEditor()}>
-              <Plus size={14} />
-            </Button>
-          </div>
           <nav className="work-company-list" aria-label="Widoki pracy i firmy">
             <p className="work-sidebar-section-label">Główne</p>
             <ContextNavItem
@@ -752,63 +743,49 @@ export default function Praca() {
               const active = company.id === selectedCompanyId;
               return (
                 <div key={company.id} className="work-company-tree-group">
-                  <div className={`work-company-tree-row ${active ? "is-active" : ""}`}>
-                    <button
-                      type="button"
-                      className="work-company-tree-row__toggle"
-                      aria-label={expanded ? `Zwiń firmę ${company.name}` : `Rozwiń firmę ${company.name}`}
-                      aria-expanded={expanded}
-                      onClick={() => toggleCompanyExpanded(company.id)}
-                    >
-                      {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    </button>
-                    <button
-                      type="button"
-                      className="work-company-tree-row__name"
-                      aria-expanded={expanded}
-                      onClick={() => toggleCompanyExpanded(company.id)}
-                    >
-                      <span>{company.name}</span>
-                    </button>
-                    <span className="work-company-tree-row__meta">{companyProjectCounts.get(company.id) ?? 0}</span>
-                  </div>
+                  <ContextNavItem
+                    active={active && !selectedProjectId}
+                    aria-expanded={expanded}
+                    aria-label={expanded ? `Zwiń firmę ${company.name}` : `Rozwiń firmę ${company.name}`}
+                    icon={expanded ? <ChevronDown /> : <ChevronRight />}
+                    label={company.name}
+                    meta={companyProjectCounts.get(company.id) ?? 0}
+                    onClick={() => toggleCompanyExpanded(company.id)}
+                  />
                   {expanded && (
                     <div className="work-project-tree" role="group" aria-label={`Projekty firmy ${company.name}`}>
                       {projects.map((project, projectIndex) => {
                         const count = projectTaskCounts.get(project.id) ?? { completed: 0, total: 0 };
                         const shadeStrength = 92 - (projectIndex % 5) * 13;
                         return (
-                          <button
+                          <ContextNavItem
                             key={project.id}
-                            type="button"
-                            className={project.id === selectedProjectId ? "is-active" : ""}
+                            active={project.id === selectedProjectId}
                             aria-current={project.id === selectedProjectId ? "page" : undefined}
+                            icon={(
+                              <span
+                                className="work-project-tree__status"
+                                style={{
+                                  background: `color-mix(in srgb, ${company.color} ${shadeStrength}%, var(--color-chalk-white))`,
+                                }}
+                              />
+                            )}
+                            label={project.name}
+                            meta={`${count.completed}/${count.total}`}
                             onClick={() => selectProject(company.id, project.id)}
-                          >
-                            <span
-                              className="work-project-tree__status"
-                              style={{
-                                background: `color-mix(in srgb, ${company.color} ${shadeStrength}%, var(--color-chalk-white))`,
-                              }}
-                            />
-                            <span>{project.name}</span>
-                            <small>{count.completed}/{count.total}</small>
-                          </button>
+                          />
                         );
                       })}
                       {projects.length === 0 && (
-                        <button
-                          type="button"
-                          className="work-project-tree__empty"
+                        <ContextNavItem
+                          icon={<Plus />}
+                          label="Dodaj projekt"
                           onClick={() => {
                             setSelectedCompanyId(company.id);
                             setSelectedProjectId("");
                             openProjectEditor();
                           }}
-                        >
-                          <Plus size={11} aria-hidden="true" />
-                          <span>Dodaj projekt</span>
-                        </button>
+                        />
                       )}
                     </div>
                   )}

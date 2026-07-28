@@ -39,6 +39,7 @@ export const router = createBrowserRouter([
           { path: "sprawy",        Component: SprawyPage },
           { path: "podroze",       Component: PodrozePage },
           { path: "podroze/:tripId", Component: PodrozePage },
+          // Legacy bookmarks only: these are intentionally absent from APP_MODULES/navigation.
           { path: "biuro",         loader: () => redirect("/praca") },
           { path: "finanse",       loader: () => redirect("/sprawy?widok=budget") },
           { path: "jdg",           loader: () => redirect("/sprawy?widok=jdg") },

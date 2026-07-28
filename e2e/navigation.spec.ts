@@ -28,6 +28,24 @@ test.describe("route smoke", { tag: "@shared" }, () => {
   }
 });
 
+test.describe("legacy navigation aliases", { tag: "@shared" }, () => {
+  test("old Biuro bookmark redirects to the canonical Praca module", async ({ routinePage: page }) => {
+    await openRoutineRoute(page, "/biuro");
+
+    await expect(page).toHaveURL(/\/praca$/);
+    await expect(page.locator(".ui-page-header__title")).toHaveText("Praca");
+    await expect(page.getByRole("link", { name: "Biuro", exact: true })).toHaveCount(0);
+  });
+
+  test("old Finanse bookmark redirects to the canonical Sprawy budget view", async ({ routinePage: page }) => {
+    await openRoutineRoute(page, "/finanse");
+
+    await expect(page).toHaveURL(/\/sprawy\?widok=budget$/);
+    await expect(page.locator(".ui-page-header__title")).toHaveText("Sprawy");
+    await expect(page.getByRole("link", { name: "Finanse", exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe("desktop sidebar", { tag: "@desktop" }, () => {
   test("loads another module and marks it current", async ({ routinePage: page }) => {
     await openRoutineRoute(page, "/dzisiaj");
