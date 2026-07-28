@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { Link } from "react-router";
 import {
   Plus, Check, Inbox, Flame, Trash2, RotateCcw,
   ChevronDown, ChevronLeft, ChevronRight,
   Tag, TrendingUp, Calendar, CalendarDays, LayoutGrid,
-  Clock, AlignLeft, Star, X, Circle,
+  Clock, Star, X, Circle,
   Sun, Sunrise, Moon, Bell,
   Flag, MessageSquare,
   MoreHorizontal, Search,
@@ -11,15 +12,26 @@ import {
   PenLine, BarChart2, Hash, List, CheckSquare,
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
+import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
+import { WORK_STORAGE_KEY } from "../data/workWorkspace";
 import {
   isHabitDoneOnDate,
+  emptyTaskTrash,
   loadTaskWorkspace,
+  purgeTask,
+  restoreTask,
   saveTaskWorkspace,
+  trashTask,
   toggleHabitOnDate,
   taskViewForCalendarDate,
+  TASK_STORAGE_KEY,
   toCalendarDateKey,
   type TaskComment,
   type TaskPriority,
+  type TaskRecurrence,
+  type TaskSchedule,
   type TaskSubtask,
   type WorkspaceHabit,
   type WorkspaceList,
@@ -40,10 +52,12 @@ import {
   PageHeader,
   SectionHeader,
   Select,
+  Tabs,
   WorkspaceToolbar,
   uiColors,
   uiShadows,
 } from "../ui";
+import "../../styles/task-habits.css";
 
 const C = {
   bg:           uiColors.graphiteCanvas,
@@ -150,7 +164,7 @@ type DateVal = {
 
 const DEFAULT_DATE_VAL: DateVal = {
   date: null, time: "", reminder: "", repeat: "",
-  startTime: "09:00", endTime: "10:00", duration: false, allDay: false,
+  startTime: "09:00", endTime: "10:00", duration: false, allDay: true,
 };
 
 function buildCalendarGrid(viewYear: number, viewMonth: number) {
@@ -178,7 +192,7 @@ function buildCalendarGrid(viewYear: number, viewMonth: number) {
 function formatDateLabel(val: DateVal): string {
   if (!val.date) return "";
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const tmrw  = new Date(today.getTime() + 86400000);
+  const tmrw  = new Date(today); tmrw.setDate(tmrw.getDate() + 1);
   const d     = new Date(val.date); d.setHours(0, 0, 0, 0);
   if (d.getTime() === today.getTime()) return "Dziś";
   if (d.getTime() === tmrw.getTime())  return "Jutro";
@@ -201,12 +215,8 @@ function viewedTaskDayHeading(view: string) {
 }
 
 function overdueDateLabel(calendarDate: string): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const deadline = new Date(`${calendarDate}T12:00:00`);
-  if (Number.isNaN(deadline.getTime())) return "Po terminie";
-  deadline.setHours(0, 0, 0, 0);
-  const daysAgo = Math.round((today.getTime() - deadline.getTime()) / 86_400_000);
+  const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
+  if (daysAgo === null) return "Po terminie";
   if (daysAgo === 1) return "Wczoraj";
   if (daysAgo > 1) return `${daysAgo} dni temu`;
   return "Po terminie";
@@ -242,161 +252,87 @@ const REPEAT_OPTIONS = [
   { value: "yearly",  label: "Co rok"        },
 ];
 
+function browserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Warsaw";
+  } catch {
+    return "Europe/Warsaw";
+  }
+}
+
+function scheduleFromDateValue(value: DateVal): TaskSchedule | undefined {
+  if (!value.date) return undefined;
+  const hasTime = value.duration ? Boolean(value.startTime && value.endTime) : Boolean(value.time);
+  const allDay = value.allDay || !hasTime;
+  return {
+    allDay,
+    startTime: allDay ? "" : value.duration ? value.startTime : value.time,
+    endTime: !allDay && value.duration ? value.endTime : undefined,
+    reminderMinutes: value.reminder === "" ? undefined : Number(value.reminder),
+    recurrence: (value.repeat || undefined) as TaskRecurrence | undefined,
+    timezone: browserTimezone(),
+  };
+}
+
 // ── Custom select (themed) ────────────────────────────────
 function CustomSelect({ value, onChange, options, placeholder = "Wybierz…" }: {
   value: string; onChange: (v: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
 }) {
-  const [open, setOpen]   = useState(false);
-  const [rect, setRect]   = useState<DOMRect | null>(null);
-  const btnRef  = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (listRef.current && !listRef.current.contains(e.target as Node) &&
-          btnRef.current  && !btnRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-
-  const current = options.find(o => o.value === value);
-
-  const handleToggle = () => {
-    if (!open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
-    setOpen(v => !v);
-  };
-
   return (
-    <>
-      <button ref={btnRef} onClick={handleToggle} style={{
-        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "8px 11px", borderRadius: 8, cursor: "pointer",
-        background: C.inputBg, border: `1px solid ${open ? C.blueBorder : C.borderSubtle}`,
-        boxShadow: open ? `0 0 0 2px ${C.iceBlueBg}` : "none",
-        transition: "border-color .15s, box-shadow .15s",
-      }}>
-        <span style={{ fontSize: 12, color: value ? C.textPrimary : C.textDisabled }}>
-          {current?.label ?? placeholder}
-        </span>
-        <ChevronDown size={11} strokeWidth={1.5}
-          style={{ color: C.textDisabled, transform: open ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }} />
-      </button>
-
-      {open && rect && (
-        <Menu ref={listRef} style={{
-          position: "fixed", top: rect.bottom + 4, left: rect.left, width: rect.width,
-          zIndex: 10000,
-        }}>
-          {options.map(opt => {
-            const active = opt.value === value;
-            return (
-              <MenuItem key={opt.value} selected={active} onClick={() => { onChange(opt.value); setOpen(false); }} trailingIcon={active ? <Check /> : undefined}>
-                {opt.label}
-              </MenuItem>
-            );
-          })}
-        </Menu>
-      )}
-    </>
+    <Select
+      compact
+      aria-label={placeholder}
+      value={value}
+      options={options}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
   );
 }
 
-// ── Time Picker ───────────────────────────────────────────
-const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
-  const h = Math.floor(i / 2).toString().padStart(2, "0");
-  const m = i % 2 === 0 ? "00" : "30";
-  return `${h}:${m}`;
-});
-
-function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [input, setInput] = useState(value);
-  const listRef  = useRef<HTMLDivElement>(null);
-  const selRef   = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    selRef.current?.scrollIntoView({ block: "center", behavior: "instant" });
-  }, []);
-
-  const commit = (v: string) => { onChange(v); setInput(v); };
-
+// Native time input keeps keyboard entry, validation, and the platform picker
+// in one control instead of maintaining a second time-selection model.
+function TimePicker({
+  value,
+  onChange,
+  label = "Godzina",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label?: string;
+}) {
   return (
     <div style={{
-      borderRadius: "var(--radius-lg)", overflow: "hidden",
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "8px 10px", borderRadius: "var(--radius-lg)",
       border: `1px solid ${C.borderStrong}`,
       background: C.inputBg,
     }}>
-      {/* Header */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: "8px",
-        padding: "8px 10px",
-        borderBottom: `1px solid ${C.borderSubtle}`,
-      }}>
-        <Clock size={13} strokeWidth={1.5} style={{ color: C.iceBlue, flexShrink: 0 }} />
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onBlur={() => { if (TIME_SLOTS.includes(input)) commit(input); else setInput(value); }}
-          onKeyDown={e => { if (e.key === "Enter" && TIME_SLOTS.includes(input)) commit(input); }}
-          placeholder="--:--"
-          style={{
-            flex: 1, background: "none", border: "none", outline: "none",
-            color: C.iceBlue, fontSize: "13px",
-            fontFamily: "'DM Mono', monospace",
-          }}
-        />
-        {value && (
-          <button onClick={() => commit("")}
-            style={{ background: "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", padding: 0 }}>
-            <X size={12} strokeWidth={1.75} />
-          </button>
-        )}
-      </div>
-
-      {/* Slot list */}
-      <div ref={listRef} style={{
-        maxHeight: "168px", overflowY: "auto",
-        scrollbarWidth: "thin",
-        scrollbarColor: `${C.borderStrong} transparent`,
-      }}>
-        {TIME_SLOTS.map(slot => {
-          const active = slot === value;
-          return (
-            <button
-              key={slot}
-              ref={active ? selRef : null}
-              onClick={() => commit(slot)}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                width: "100%", padding: "7px 12px",
-                background: active ? C.iceBlueBg : "none",
-                border: "none", cursor: "pointer",
-                color: active ? C.iceBlue : C.textSecond,
-                fontSize: "13px", fontFamily: "'DM Mono', monospace",
-                textAlign: "left",
-              }}
-            >
-              {slot}
-              {active && <Check size={12} strokeWidth={2.5} style={{ color: C.iceBlue }} />}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Timezone */}
-      <div style={{
-        borderTop: `1px solid ${C.borderSubtle}`,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "7px 12px", cursor: "pointer",
-      }}>
-        <span style={{ fontSize: "11px", color: C.textMuted }}>Warszawa, GMT+2</span>
-        <ChevronDown size={11} strokeWidth={1.5} style={{ color: C.textDisabled }} />
-      </div>
+      <Clock size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: C.iceBlue, flexShrink: 0 }} />
+      <input
+        type="time"
+        step={1800}
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        style={{
+          flex: 1, minWidth: 0, padding: "4px 6px",
+          border: "none", borderRadius: 6, background: "transparent",
+          color: C.iceBlue, fontSize: "13px",
+          fontFamily: "'DM Mono', monospace",
+        }}
+      />
+      {value && (
+        <button
+          type="button"
+          aria-label={`Wyczyść: ${label.toLocaleLowerCase("pl-PL")}`}
+          onClick={() => onChange("")}
+          style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 4 }}
+        >
+          <X size={12} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -430,14 +366,27 @@ function DatePickerPopup({
   const [showRep,        setShowRep]        = useState(false);
   const [openTimeField,  setOpenTimeField]  = useState<"start" | "koniec" | null>(null);
   const [allDay,         setAllDay]         = useState(value.allDay);
-  const [startDate,      setStartDate]      = useState<Date>(() => new Date(value.date ?? today));
-  const [endDate,        setEndDate]        = useState<Date>(() => new Date(value.date ?? today));
   const [showDurRem,     setShowDurRem]     = useState(false);
   const [showDurRep,     setShowDurRep]     = useState(false);
+  const scheduleError = tab === "duracja" && !selDate
+    ? "Wybierz datę dla przedziału czasu."
+    : tab === "duracja" && !allDay && (!startTime || !endTime)
+      ? "Podaj godzinę rozpoczęcia i zakończenia."
+      : tab === "duracja" && !allDay && endTime <= startTime
+        ? "Godzina zakończenia musi być późniejsza niż rozpoczęcia."
+        : "";
 
   const popRef = useRef<HTMLDivElement>(null);
   const popWidth = 292;
   const [popupPosition, setPopupPosition] = useState({ top: 8, left: 8 });
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const selected = popRef.current?.querySelector<HTMLElement>("[aria-pressed='true']");
+      (selected ?? popRef.current)?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   useLayoutEffect(() => {
     const target = placementAnchorEl ?? anchorEl;
@@ -478,7 +427,8 @@ function DatePickerPopup({
     return () => { window.removeEventListener("resize", reposition); window.removeEventListener("scroll", reposition, true); };
   }, [anchorEl, placementAnchorEl]);
 
-  const confirmAndClose = () => {
+  const confirmAndClose = useCallback(() => {
+    if (scheduleError) return;
     onConfirm({
       date: selDate,
       time: allDay ? "" : tab === "data" ? time : "",
@@ -490,18 +440,35 @@ function DatePickerPopup({
       allDay,
     });
     onClose();
-  };
+    requestAnimationFrame(() => anchorEl.focus());
+  }, [allDay, anchorEl, endTime, onClose, onConfirm, reminder, repeat, scheduleError, selDate, startTime, tab, time]);
+
+  const cancelAndClose = useCallback(() => {
+    onClose();
+    requestAnimationFrame(() => anchorEl.focus());
+  }, [anchorEl, onClose]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const insideAnchor = anchorEl.contains(e.target as Node) || Boolean(placementAnchorEl?.contains(e.target as Node));
       if (popRef.current && !popRef.current.contains(e.target as Node) && !insideAnchor) {
-        confirmAndClose();
+        onClose();
+        requestAnimationFrame(() => anchorEl.focus());
       }
     };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+      requestAnimationFrame(() => anchorEl.focus());
+    };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [anchorEl, confirmAndClose]);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [anchorEl, onClose, placementAnchorEl]);
 
   const cells = buildCalendarGrid(viewYear, viewMonth);
 
@@ -519,8 +486,8 @@ function DatePickerPopup({
   const nextMonth = () => viewMonth === 11 ? (setViewMonth(0),  setViewYear(y => y + 1)) : setViewMonth(m => m + 1);
   const goToday   = () => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); };
 
-  const tmrw = new Date(today.getTime() + 86400000);
-  const nextWeek = new Date(today.getTime() + 7 * 86400000);
+  const tmrw = new Date(today); tmrw.setDate(tmrw.getDate() + 1);
+  const nextWeek = new Date(today); nextWeek.setDate(nextWeek.getDate() + 7);
   const nextMonth_ = new Date(today); nextMonth_.setMonth(nextMonth_.getMonth() + 1);
 
   const quickDates = [
@@ -534,7 +501,7 @@ function DatePickerPopup({
 
   const handleClear = () => {
     setSelDate(null); setTime(""); setReminder(""); setRepeat("");
-    setStartTime("09:00"); setEndTime("10:00"); setAllDay(false);
+    setStartTime("09:00"); setEndTime("10:00"); setAllDay(true);
   };
 
   const rowBtn = {
@@ -543,9 +510,30 @@ function DatePickerPopup({
     cursor: "pointer", color: C.textMuted,
   };
 
+  const moveCalendarFocus = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const movement: Record<string, number> = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+      ArrowUp: -7,
+      ArrowDown: 7,
+    };
+    let nextIndex = index + (movement[event.key] ?? 0);
+    if (event.key === "Home") nextIndex = index - (index % 7);
+    if (event.key === "End") nextIndex = index + (6 - (index % 7));
+    if (!(event.key in movement) && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const target = popRef.current?.querySelector<HTMLButtonElement>(`[data-task-day-index="${Math.max(0, Math.min(41, nextIndex))}"]`);
+    target?.focus();
+  };
+
   return (
     <div
       ref={popRef}
+      role="dialog"
+      aria-modal="false"
+      aria-label="Ustaw termin zadania"
+      aria-describedby={scheduleError ? "task-schedule-error" : undefined}
+      tabIndex={-1}
       style={{
         position: "fixed", top: popupPosition.top, left: popupPosition.left, width: `${popWidth}px`, zIndex: 9999,
         background: C.elevated,
@@ -557,29 +545,19 @@ function DatePickerPopup({
       }}
     >
       {/* ── Top tabs ── */}
-      <div style={{
-        display: "flex", padding: "10px 10px 0",
-        borderBottom: `1px solid ${C.borderSubtle}`,
-      }}>
-        {([["data","Data"],["duracja","Czas trwania"]] as [string,string][]).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setTab(id as "data" | "duracja")}
-            style={{
-              flex: 1, padding: "7px 8px", borderRadius: "8px 8px 0 0",
-              background: tab === id ? C.bg : "transparent",
-              color: tab === id ? C.textPrimary : C.textMuted,
-              border: "none", cursor: "pointer",
-              fontSize: "12px", fontWeight: tab === id ? 500 : 400,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="task-schedule-tabs"
+        ariaLabel="Sposób planowania terminu"
+        activeId={tab}
+        onChange={(id) => setTab(id as "data" | "duracja")}
+        items={[
+          { id: "data", label: "Data", panelId: "task-date-data-panel", tabId: "task-date-data-tab" },
+          { id: "duracja", label: "Czas trwania", panelId: "task-date-duracja-panel", tabId: "task-date-duracja-tab" },
+        ]}
+      />
 
       {tab === "data" ? (
-        <div style={{ padding: "12px" }}>
+        <div id="task-date-data-panel" role="tabpanel" aria-labelledby="task-date-data-tab" style={{ padding: "12px" }}>
           {/* ── Quick shortcuts ── */}
           <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
             {quickDates.map(({ label, icon: Icon, date: qd }) => {
@@ -615,7 +593,12 @@ function DatePickerPopup({
                 { icon: Circle,       action: goToday   },
                 { icon: ChevronRight, action: nextMonth },
               ].map(({ icon: Icon, action }, i) => (
-                <button key={i} onClick={action} style={{
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={i === 0 ? "Poprzedni miesiąc" : i === 1 ? "Pokaż bieżący miesiąc" : "Następny miesiąc"}
+                  onClick={action}
+                  style={{
                   background: "none", border: "none", cursor: "pointer",
                   color: C.textMuted, padding: "4px 5px", borderRadius: "6px",
                   display: "flex", alignItems: "center",
@@ -643,7 +626,14 @@ function DatePickerPopup({
               return (
                 <button
                   key={i}
+                  type="button"
+                  aria-label={new Intl.DateTimeFormat("pl-PL", { dateStyle: "full" }).format(new Date(cell.y, cell.m, cell.d, 12))}
+                  aria-pressed={sel}
+                  aria-current={tod ? "date" : undefined}
+                  data-task-day-index={i}
+                  tabIndex={sel || (!selDate && tod) ? 0 : -1}
                   onClick={() => selectDate(cell.y, cell.m, cell.d)}
+                  onKeyDown={(event) => moveCalendarFocus(event, i)}
                   style={{
                     aspectRatio: "1", display: "flex", alignItems: "center",
                     justifyContent: "center", borderRadius: "50%",
@@ -667,7 +657,7 @@ function DatePickerPopup({
             {
               key: "time", label: "Czas", Icon: Clock,
               show: showTime, toggle: () => setShowTime(v => !v),
-              content: <TimePicker value={time} onChange={v => { setTime(v); setStartTime(v); }} />,
+              content: <TimePicker label="Godzina zadania" value={time} onChange={v => { setTime(v); setStartTime(v); if (v) setAllDay(false); }} />,
             },
             {
               key: "reminder", label: "Przypomnienie", Icon: Bell,
@@ -695,6 +685,9 @@ function DatePickerPopup({
           ))}
           <div style={{ borderTop: `1px solid ${C.borderSubtle}`, marginTop: "8px" }}>
             <button
+              type="button"
+              role="switch"
+              aria-checked={allDay}
               onClick={() => { setAllDay(v => !v); setShowTime(false); }}
               style={{ ...rowBtn, justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px" }}>Cały dzień</span>
@@ -712,11 +705,15 @@ function DatePickerPopup({
         </div>
       ) : (
         /* ── Czas trwania tab ── */
-        <div>
+        <div id="task-date-duracja-panel" role="tabpanel" aria-labelledby="task-date-duracja-tab">
           {/* Cały dzień — ustawione przed godziną rozpoczęcia */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px" }}>
             <span style={{ fontSize: "13px", color: C.textSecond }}>Cały dzień</span>
             <button
+              type="button"
+              role="switch"
+              aria-checked={allDay}
+              aria-label="Cały dzień"
               onClick={() => { setAllDay(v => !v); setOpenTimeField(null); }}
               style={{
                 width: "36px", height: "20px", borderRadius: "var(--radius-pill)", border: "none",
@@ -737,35 +734,40 @@ function DatePickerPopup({
 
           <div style={{ height: "1px", background: C.borderSubtle, margin: "2px 0" }} />
 
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            margin: "8px 12px 2px", padding: "8px 10px",
+            borderRadius: 8, background: C.inputBg, border: `1px solid ${C.borderSubtle}`,
+          }}>
+            <Calendar size={13} aria-hidden="true" style={{ color: C.iceBlue, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: C.textSecond }}>
+              {selDate
+                ? selDate.toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" })
+                : "Nie wybrano daty"}
+            </span>
+            <span style={{ fontSize: 10, color: C.textMuted }}>ten sam dzień</span>
+          </div>
+
           {/* Rozpocznij / Koniec rows */}
           {([
-            { label: "Rozpocznij", date: startDate, timeVal: startTime, field: "start"  as const },
-            { label: "Koniec",     date: endDate,   timeVal: endTime,   field: "koniec" as const },
-          ]).map(({ label, date, timeVal, field }) => {
+            { label: "Rozpocznij", timeVal: startTime, field: "start" as const },
+            { label: "Koniec", timeVal: endTime, field: "koniec" as const },
+          ]).map(({ label, timeVal, field }) => {
             const open    = openTimeField === field;
-            const isSelectedStart = field === "start" && Boolean(time) && !allDay;
-            const dateStr = date.toLocaleDateString("pl-PL", { day: "numeric", month: "short" }).replace(".", "");
             return (
               <div key={field}>
                 <div style={{ display: "flex", alignItems: "center", gap: "7px", padding: "9px 12px" }}>
                   <span style={{ width: "68px", fontSize: "12px", color: C.textSecond, flexShrink: 0 }}>{label}</span>
-                  {/* Date chip */}
-                  <div style={{
-                    flex: 1, padding: "6px 10px", borderRadius: "8px", textAlign: "center" as const,
-                    background: C.inputBg, border: `1px solid ${C.borderSubtle}`,
-                    fontSize: "12px", fontFamily: "'DM Mono', monospace", color: C.textPrimary,
-                  }}>
-                    {dateStr}
-                  </div>
                   {/* Time chip — toggles picker */}
                   <button
+                    type="button"
                     disabled={allDay}
                     onClick={() => { if (!allDay) setOpenTimeField(open ? null : field); }}
                     style={{
                       flex: 1, padding: "6px 10px", borderRadius: "8px", textAlign: "center" as const,
-                      background: open || isSelectedStart ? C.iceBlueBg : C.inputBg,
-                      border: `1px solid ${open || isSelectedStart ? C.blueBorder : C.borderSubtle}`,
-                      color: open || isSelectedStart ? C.iceBlue : timeVal ? C.textPrimary : C.textDisabled,
+                      background: open ? C.iceBlueBg : C.inputBg,
+                      border: `1px solid ${open ? C.blueBorder : C.borderSubtle}`,
+                      color: open ? C.iceBlue : timeVal ? C.textPrimary : C.textMuted,
                       fontSize: "12px", fontFamily: "'DM Mono', monospace",
                       cursor: allDay ? "default" : "pointer", opacity: allDay ? 0.55 : 1,
                     }}
@@ -778,6 +780,7 @@ function DatePickerPopup({
                   <div style={{ padding: "0 12px 8px" }}>
                     <TimePicker
                       value={timeVal}
+                      label={field === "start" ? "Godzina rozpoczęcia" : "Godzina zakończenia"}
                       onChange={v => {
                         if (field === "start") { setStartTime(v); setTime(v); }
                         else setEndTime(v);
@@ -794,10 +797,10 @@ function DatePickerPopup({
             margin: "0 12px 4px",
             borderRadius: "8px", background: C.inputBg, border: `1px solid ${C.borderSubtle}`,
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "9px 12px", cursor: "pointer",
+            padding: "9px 12px",
           }}>
-            <span style={{ fontSize: "12px", color: C.textSecond }}>Warsaw, GMT+2</span>
-            <ChevronDown size={12} strokeWidth={1.5} style={{ color: C.textDisabled }} />
+            <span style={{ fontSize: "12px", color: C.textSecond }}>{browserTimezone()}</span>
+            <span style={{ fontSize: "10px", color: C.textMuted }}>strefa urządzenia</span>
           </div>
 
           {/* O godzinie (przypomnienie) */}
@@ -842,24 +845,42 @@ function DatePickerPopup({
         </div>
       )}
 
+      {scheduleError && (
+        <p
+          id="task-schedule-error"
+          role="alert"
+          style={{ margin: 0, padding: "8px 12px", color: C.danger, fontSize: 11, lineHeight: 1.45 }}
+        >
+          {scheduleError}
+        </p>
+      )}
+
       {/* ── Footer ── */}
       <div style={{
         display: "flex", gap: "8px", padding: "10px 12px",
         borderTop: `1px solid ${C.borderSubtle}`,
       }}>
-        <button onClick={handleClear} style={{
+        <button type="button" onClick={handleClear} style={{
           flex: 1, padding: "8px", borderRadius: "8px",
           background: "transparent", border: `1px solid ${C.borderSubtle}`,
           color: C.textSecond, fontSize: "12px", fontWeight: 500, cursor: "pointer",
         }}>
           Wyczyść
         </button>
-        <button onClick={handleOk} style={{
+        <button type="button" onClick={cancelAndClose} style={{
+          flex: 1, padding: "8px", borderRadius: "8px",
+          background: "transparent", border: `1px solid ${C.borderSubtle}`,
+          color: C.textSecond, fontSize: "12px", fontWeight: 500, cursor: "pointer",
+        }}>
+          Anuluj
+        </button>
+        <button type="button" onClick={handleOk} disabled={Boolean(scheduleError)} style={{
           flex: 1, padding: "8px", borderRadius: "8px",
           background: C.iceBlueSolid, border: "none",
-          color: C.textPrimary, fontSize: "var(--text-body)", fontWeight: 600, cursor: "pointer",
+          color: C.textPrimary, fontSize: "var(--text-body)", fontWeight: 600,
+          cursor: scheduleError ? "not-allowed" : "pointer", opacity: scheduleError ? 0.55 : 1,
         }}>
-          OK
+          Zastosuj
         </button>
       </div>
     </div>
@@ -877,23 +898,16 @@ function TaskRow({
   tagi: TagItem[];
   deadlineLabel?: string;
 }) {
-  const taskTags = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
+  const taskTags = task.source
+    ? []
+    : (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const priorityColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.seaGlass : null;
   const timeLabel = task.time ? `${task.time}${task.endTime ? `–${task.endTime}` : ""}` : null;
+  const sourceLabel = task.source?.kind === "work" ? "Praca" : task.source ? "Podróże" : null;
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      aria-label={`Otwórz szczegóły zadania: ${task.text}`}
-      onClick={() => onSelect(task.id)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
-        event.preventDefault();
-        onSelect(task.id);
-      }}
-      className="flex items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-100 group"
+      className="flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-100 group"
       style={{
         background: selected ? C.card : "transparent",
         borderLeft: selected ? `2px solid ${C.iceBlue}` : "2px solid transparent",
@@ -906,13 +920,19 @@ function TaskRow({
         aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
         onClick={e => { e.stopPropagation(); onToggle(task.id); }}
         className={`task-checkbox mt-[2px] ${task.done ? "is-checked" : ""}`}
-        style={{ borderColor: task.done ? C.iceBlue : priorityColor ?? C.borderStrong }}
+        style={{ "--task-checkbox-color": task.done ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
       >
         {task.done && <Check size={8} strokeWidth={2.5} />}
       </button>
-      <div className="flex-1 min-w-0">
+      <button
+        type="button"
+        aria-pressed={selected}
+        aria-label={`Otwórz szczegóły zadania: ${task.text}`}
+        onClick={() => onSelect(task.id)}
+        className="flex-1 min-w-0 border-0 bg-transparent p-0 text-left"
+      >
         <span className="text-[13px] leading-snug block" style={{
-          color: task.done ? C.textDisabled : C.textPrimary,
+          color: task.done ? C.textMuted : C.textPrimary,
           textDecoration: task.done ? "line-through" : "none",
         }}>
           {task.text}
@@ -923,8 +943,13 @@ function TaskRow({
             <span style={{ fontSize: "10px", color: C.textMuted }}>{task.date}</span>
           </div>
         )}
-      </div>
-      {(taskTags.length > 0 || timeLabel || deadlineLabel) && (
+        {task.source && (
+          <span className="mt-1 block truncate text-[10px]" style={{ color: C.textMuted }}>
+            {sourceLabel} · {task.source.context}
+          </span>
+        )}
+      </button>
+      {(taskTags.length > 0 || timeLabel || deadlineLabel || task.source) && (
         <div className="flex items-center gap-1.5 flex-shrink-0 self-center ml-2">
           {taskTags.map(td => (
             <button
@@ -932,10 +957,11 @@ function TaskRow({
               key={td.id}
               onClick={e => { e.stopPropagation(); onUpdate(task.id, { tags: (task.tags ?? []).filter(id => id !== td.id) }); }}
               title={`Usuń tag #${td.label}`}
-              className="flex items-center gap-0.5 rounded-md"
+              className="task-tag-control flex items-center gap-0.5 rounded-md"
               style={{
-                fontSize: "9px", color: td.color + "C0", background: td.color + "12",
-                border: `1px solid ${td.color}22`, padding: "2px 4px 2px 5px", cursor: "pointer", whiteSpace: "nowrap",
+                fontSize: "10px", color: C.textSecond, background: C.inputBg,
+                border: `1px solid ${C.borderSubtle}`, boxShadow: `inset 2px 0 0 ${td.color}`,
+                padding: "3px 5px 3px 7px", cursor: "pointer", whiteSpace: "nowrap",
               }}>
               #{td.label}
               <X size={7} strokeWidth={2.2} />
@@ -955,6 +981,16 @@ function TaskRow({
               <span>{deadlineLabel}</span>
             </div>
           )}
+          {task.source && (
+            <Link
+              to={task.source.href}
+              aria-label={`Otwórz zadanie w module ${sourceLabel}: ${task.source.context}`}
+              className="task-source-link rounded-md px-1.5 text-[10px] no-underline"
+              style={{ color: C.iceBlue, background: C.iceBlueBg }}
+            >
+              {sourceLabel}
+            </Link>
+          )}
         </div>
       )}
     </div>
@@ -966,7 +1002,7 @@ const PRIORITY_FLAGS = [
   { p: "high"   as Priority, label: "Wysoki", color: C.danger  },
   { p: "medium" as Priority, label: "Średni", color: C.warning },
   { p: "low"    as Priority, label: "Niski",  color: C.iceBlue },
-  { p: null,                 label: "Brak",   color: C.textDisabled },
+  { p: null,                 label: "Brak",   color: C.textMuted },
 ] as const;
 
 function PriorityDropdown({ current, anchorEl, onSelect, onClose }: {
@@ -1128,20 +1164,32 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const taskCalendarDate = task.calendarDate;
   const parsedTaskDate = taskCalendarDate ? new Date(`${taskCalendarDate}T12:00:00`) : null;
+  const storedSchedule = task.schedule;
   const [taskDateVal,    setTaskDateVal]    = useState<DateVal>({
-    date: parsedTaskDate && !Number.isNaN(parsedTaskDate.getTime()) ? parsedTaskDate : null, time: task.endTime ? "" : task.time ?? "", reminder: "", repeat: "", startTime: task.time ?? "09:00", endTime: task.endTime ?? "10:00", duration: Boolean(task.endTime), allDay: true,
+    date: parsedTaskDate && !Number.isNaN(parsedTaskDate.getTime()) ? parsedTaskDate : null,
+    time: (storedSchedule?.endTime ?? task.endTime) ? "" : storedSchedule?.startTime ?? task.time ?? "",
+    reminder: storedSchedule?.reminderMinutes === undefined ? "" : String(storedSchedule.reminderMinutes),
+    repeat: storedSchedule?.recurrence ?? "",
+    startTime: storedSchedule?.startTime || task.time || "09:00",
+    endTime: storedSchedule?.endTime || task.endTime || "10:00",
+    duration: Boolean(storedSchedule?.endTime ?? task.endTime),
+    allDay: storedSchedule?.allDay ?? !task.time,
   });
   useEffect(() => {
     const nextDate = taskCalendarDate ? new Date(`${taskCalendarDate}T12:00:00`) : null;
+    const schedule = task.schedule;
     setTaskDateVal((current) => ({
       ...current,
       date: nextDate && !Number.isNaN(nextDate.getTime()) ? nextDate : null,
-      time: task.endTime ? "" : task.time ?? "",
-      startTime: task.time ?? "09:00",
-      endTime: task.endTime ?? "10:00",
-      duration: Boolean(task.endTime),
+      time: (schedule?.endTime ?? task.endTime) ? "" : schedule?.startTime ?? task.time ?? "",
+      reminder: schedule?.reminderMinutes === undefined ? "" : String(schedule.reminderMinutes),
+      repeat: schedule?.recurrence ?? "",
+      startTime: schedule?.startTime || task.time || "09:00",
+      endTime: schedule?.endTime || task.endTime || "10:00",
+      duration: Boolean(schedule?.endTime ?? task.endTime),
+      allDay: schedule?.allDay ?? !task.time,
     }));
-  }, [task.id, taskCalendarDate, task.time, task.endTime]);
+  }, [task.id, taskCalendarDate, task.time, task.endTime, task.schedule]);
 
   const flagBtnRef = useRef<HTMLButtonElement>(null);
   const listBtnRef = useRef<HTMLButtonElement>(null);
@@ -1157,12 +1205,13 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
   const [tagInput, setTagInput] = useState("");
   const [showTagInput, setShowTagInput] = useState(false);
 
-  const flagColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.iceBlue : C.textDisabled;
+  const flagColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.iceBlue : C.textMuted;
   const listLabel = listy.find(l => l.id === task.list)?.label ?? "Skrzynka zadań";
   const listColor = listy.find(l => l.id === task.list)?.color ?? C.textMuted;
   const taskTagDefs = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const dateStr   = task.date ?? "Bez terminu";
   const timeStr   = task.time ? `, ${task.time}${task.endTime ? `–${task.endTime}` : ""}` : "";
+  const sourceLabel = task.source?.kind === "work" ? "Praca" : task.source ? "Podróże" : null;
 
   const addComment = () => {
     if (!newComment.trim()) return;
@@ -1198,7 +1247,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
           aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
           onClick={() => onUpdate(task.id, { done: !task.done })}
           className={`task-checkbox task-checkbox--detail ${task.done ? "is-checked" : ""}`}
-          style={{ borderColor: task.done ? C.iceBlue : C.borderStrong }}
+          style={{ "--task-checkbox-color": task.done ? C.iceBlue : C.borderStrong } as React.CSSProperties}
         >
           {task.done && <Check size={9} strokeWidth={2.5} />}
         </button>
@@ -1224,9 +1273,10 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
         <button
           ref={flagBtnRef}
           type="button"
-          aria-label="Zmień priorytet zadania"
+          aria-label={task.source?.kind === "travel" ? "Priorytet jest zarządzany w module źródłowym" : "Zmień priorytet zadania"}
+          disabled={task.source?.kind === "travel"}
           onClick={() => { setShowPriority(v => !v); setShowListPick(false); setShowMore(false); }}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex", flexShrink: 0 }}
+          style={{ background: "none", border: "none", cursor: task.source?.kind === "travel" ? "not-allowed" : "pointer", padding: 3, display: "flex", flexShrink: 0, opacity: task.source?.kind === "travel" ? 0.55 : 1 }}
         >
           <Flag size={15} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
         </button>
@@ -1235,11 +1285,22 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
           type="button"
           aria-label="Zamknij szczegóły zadania"
           onClick={onClose}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex", flexShrink: 0, color: C.textDisabled }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex", flexShrink: 0, color: C.textMuted }}
         >
           <X size={15} strokeWidth={1.5} />
         </button>
       </div>
+
+      {task.source && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderBottom: `1px solid ${D.border}`, background: C.iceBlueBg }}>
+          <span style={{ minWidth: 0, flex: 1, fontSize: 10.5, color: C.textSecond, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            Źródło: {sourceLabel} · {task.source.context}
+          </span>
+          <Link to={task.source.href} style={{ flexShrink: 0, fontSize: 10.5, color: C.iceBlue, textDecoration: "none" }}>
+            Otwórz źródło
+          </Link>
+        </div>
+      )}
 
       {/* ── Main content ── */}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none", padding: "14px 14px 8px", display: "flex", flexDirection: "column" }}>
@@ -1251,7 +1312,6 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
             placeholder="Co chciałbyś zrobić?"
             onChange={e => {
               setEditTitle(e.target.value);
-              onUpdate(task.id, { text: e.target.value });
               const t = e.target;
               t.style.height = "auto";
               t.style.height = t.scrollHeight + "px";
@@ -1266,17 +1326,15 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
               textDecoration: task.done ? "line-through" : "none",
             }}
           />
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: C.textDisabled, padding: 2, flexShrink: 0, marginTop: 3 }}>
-            <AlignLeft size={14} strokeWidth={1.5} />
-          </button>
         </div>
 
         {/* Notes — fills remaining space */}
         <textarea
           value={editNotes}
-          onChange={e => setEditNotes(e.target.value)}
-          onBlur={() => onUpdate(task.id, { notes: editNotes })}
-          placeholder="Wpisz treść lub wpisz /, aby wyświetlić menu"
+          disabled={Boolean(task.source)}
+          onChange={e => { if (!task.source) setEditNotes(e.target.value); }}
+          onBlur={() => { if (!task.source) onUpdate(task.id, { notes: editNotes }); }}
+          placeholder={task.source ? "Notatki są zarządzane w module źródłowym." : "Wpisz treść lub wpisz /, aby wyświetlić menu"}
           style={{
             flex: 1, minHeight: 80, width: "100%", background: "none", border: "none", outline: "none", resize: "none",
             fontSize: 12, color: C.textSecond, lineHeight: 1.6,
@@ -1285,18 +1343,22 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
         />
 
         {/* Tags */}
-        {(taskTagDefs.length > 0 || showTagInput) && (
+        {!task.source && (taskTagDefs.length > 0 || showTagInput) && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12, alignItems: "center" }}>
             {taskTagDefs.map(td => (
               <span key={td.id} style={{
                 display: "inline-flex", alignItems: "center", gap: 4,
                 fontSize: 11, fontWeight: 500, padding: "3px 8px", borderRadius: 20,
-                color: td.color, background: td.color + "1A",
+                color: C.textSecond, background: C.inputBg,
+                border: `1px solid ${C.borderSubtle}`, boxShadow: `inset 2px 0 0 ${td.color}`,
               }}>
                 #{td.label}
                 <button
+                  type="button"
+                  aria-label={`Usuń tag ${td.label} z zadania`}
+                  className="task-tag-control"
                   onClick={() => onUpdate(task.id, { tags: (task.tags ?? []).filter(id => id !== td.id) })}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: td.color, display: "flex", padding: 0, lineHeight: 1 }}>
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 0, lineHeight: 1 }}>
                   <X size={9} strokeWidth={2.5} />
                 </button>
               </span>
@@ -1331,23 +1393,27 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
               />
             ) : (
               <button
+                type="button"
+                className="task-tag-control"
                 onClick={() => setShowTagInput(true)}
-                style={{ background: "none", border: `1px dashed ${C.borderStrong}`, borderRadius: 20, cursor: "pointer", fontSize: 11, color: C.textDisabled, padding: "3px 8px", display: "flex", alignItems: "center", gap: 3 }}>
+                style={{ background: "none", border: `1px dashed ${C.borderStrong}`, borderRadius: 20, cursor: "pointer", fontSize: 11, color: C.textMuted, padding: "3px 8px", display: "flex", alignItems: "center", gap: 3 }}>
                 <Plus size={9} strokeWidth={2} /> tag
               </button>
             )}
           </div>
         )}
-        {taskTagDefs.length === 0 && !showTagInput && (
+        {!task.source && taskTagDefs.length === 0 && !showTagInput && (
           <button
+            type="button"
+            className="task-tag-control"
             onClick={() => setShowTagInput(true)}
-            style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8, background: "none", border: "none", cursor: "pointer", color: C.textDisabled, fontSize: 11, padding: 0 }}>
+            style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8, background: "none", border: "none", cursor: "pointer", color: C.textMuted, fontSize: 11, padding: 0 }}>
             <Tag size={11} strokeWidth={1.5} /> Dodaj tag
           </button>
         )}
 
         {/* Subtasks */}
-        {(task.subtasks ?? []).length > 0 && (
+        {!task.source && (task.subtasks ?? []).length > 0 && (
           <div style={{ marginTop: 14, borderTop: `1px solid ${D.border}`, paddingTop: 12 }}>
             {(task.subtasks ?? []).map(st => (
               <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
@@ -1356,22 +1422,22 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
                   aria-label={st.done ? `Oznacz podzadanie ${st.text || "bez nazwy"} jako niewykonane` : `Oznacz podzadanie ${st.text || "bez nazwy"} jako wykonane`}
                   onClick={() => toggleSubtask(st.id)}
                   className={`task-checkbox ${st.done ? "is-checked" : ""}`}
-                  style={{ borderColor: st.done ? C.iceBlue : C.borderStrong }}
+                  style={{ "--task-checkbox-color": st.done ? C.iceBlue : C.borderStrong } as React.CSSProperties}
                 >
                   {st.done && <Check size={7} strokeWidth={2.5} />}
                 </button>
-                <span style={{ fontSize: 12, color: st.done ? C.textDisabled : C.textSecond, textDecoration: st.done ? "line-through" : "none" }}>{st.text || "Nowe podzadanie"}</span>
+                <span style={{ fontSize: 12, color: st.done ? C.textMuted : C.textSecond, textDecoration: st.done ? "line-through" : "none" }}>{st.text || "Nowe podzadanie"}</span>
               </div>
             ))}
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
               <div style={{ width: 14, height: 14, borderRadius: 3, border: `1px solid ${C.borderSubtle}`, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: C.textDisabled }}>Naciśnij klawisz "Enter", aby dodać pozycję do listy</span>
+              <span style={{ fontSize: 12, color: C.textMuted }}>Naciśnij klawisz "Enter", aby dodać pozycję do listy</span>
             </div>
           </div>
         )}
 
         {/* Comments section */}
-        {showComments && comments.length > 0 && (
+        {!task.source && showComments && comments.length > 0 && (
           <div style={{ marginTop: 18 }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 12 }}>Komentarze {comments.length}</p>
             {comments.map(c => (
@@ -1382,7 +1448,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
                 <div>
                   <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
                     <span style={{ fontSize: 12, fontWeight: 500, color: C.textPrimary }}>{c.author}</span>
-                    <span style={{ fontSize: 10, color: C.textDisabled }}>{c.time}</span>
+                    <span style={{ fontSize: 10, color: C.textMuted }}>{c.time}</span>
                   </div>
                   <p style={{ fontSize: 12, color: C.textSecond, marginTop: 2 }}>{c.text}</p>
                 </div>
@@ -1393,7 +1459,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
       </div>
 
       {/* ── Comment input ── */}
-      {showComments && (
+      {!task.source && showComments && (
         <div style={{ borderTop: `1px solid ${D.border}`, padding: "8px 12px", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, border: `1px solid ${newComment ? C.iceBlue : C.borderSubtle}`, borderRadius: 8, padding: "7px 10px", transition: "border-color .2s" }}>
             <input
@@ -1409,7 +1475,12 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
       )}
 
       {/* ── Footer bar ── */}
-      <div style={{ borderTop: `1px solid ${D.border}`, display: "flex", alignItems: "center", padding: "7px 10px", flexShrink: 0, gap: 4 }}>
+      {task.source && (
+        <div style={{ borderTop: `1px solid ${D.border}`, padding: "9px 12px", fontSize: 10, lineHeight: 1.45, color: C.textMuted }}>
+          Tytuł, ukończenie i termin synchronizują się ze źródłem. Pozostałe pola edytuj w module {sourceLabel}.
+        </div>
+      )}
+      <div style={{ borderTop: `1px solid ${D.border}`, display: task.source ? "none" : "flex", alignItems: "center", padding: "7px 10px", flexShrink: 0, gap: 4 }}>
         {/* List picker */}
         <button ref={listBtnRef}
           onClick={() => { setShowListPick(v => !v); setShowMore(false); setShowPriority(false); }}
@@ -1422,14 +1493,14 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
         <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
           {/* Comments toggle */}
           <button type="button" aria-label="Pokaż komentarze" aria-expanded={showComments} onClick={() => setShowComments(v => !v)}
-            style={{ padding: "4px 6px", borderRadius: 6, background: showComments ? C.iceBlueBg : "none", border: "none", cursor: "pointer", color: showComments ? C.iceBlue : C.textDisabled, display: "flex", alignItems: "center", gap: 3 }}>
+            style={{ padding: "4px 6px", borderRadius: 6, background: showComments ? C.iceBlueBg : "none", border: "none", cursor: "pointer", color: showComments ? C.iceBlue : C.textMuted, display: "flex", alignItems: "center", gap: 3 }}>
             <MessageSquare size={13} strokeWidth={1.5} />
             {comments.length > 0 && <span style={{ fontSize: 9, color: C.iceBlue, fontWeight: 700 }}>{comments.length}</span>}
           </button>
           {/* More (...) */}
           <button ref={moreBtnRef} type="button" aria-label="Więcej akcji zadania" aria-expanded={showMore}
             onClick={() => { setShowMore(v => !v); setShowListPick(false); setShowPriority(false); }}
-            style={{ padding: "4px 5px", borderRadius: 6, background: showMore ? C.elevated : "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", alignItems: "center" }}>
+            style={{ padding: "4px 5px", borderRadius: 6, background: showMore ? C.elevated : "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", alignItems: "center" }}>
             <MoreHorizontal size={15} strokeWidth={1.5} />
           </button>
         </div>
@@ -1443,11 +1514,21 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
             setTaskDateVal(v);
             const label = formatDateLabel(v);
             const calendarDate = v.date ? toCalendarDateKey(v.date) : undefined;
+            if (task.source) {
+              onUpdate(task.id, {
+                date: label || undefined,
+                calendarDate,
+                ...(calendarDate ? { view: taskViewForCalendarDate(calendarDate) } : {}),
+              });
+              setShowDatePicker(false);
+              return;
+            }
             onUpdate(task.id, {
               date: label || undefined,
               time: v.duration ? v.startTime : v.time || undefined,
               endTime: v.duration ? v.endTime : undefined,
               calendarDate,
+              schedule: scheduleFromDateValue(v),
               ...(calendarDate ? { view: taskViewForCalendarDate(calendarDate) } : {}),
             });
             setShowDatePicker(false);
@@ -1456,7 +1537,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
           anchorEl={dateBtnRef.current}
         />
       )}
-      {showPriority && flagBtnRef.current && (
+      {showPriority && task.source?.kind !== "travel" && flagBtnRef.current && (
         <PriorityDropdown
           current={task.priority ?? null}
           anchorEl={flagBtnRef.current}
@@ -1464,7 +1545,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
           onClose={() => setShowPriority(false)}
         />
       )}
-      {showListPick && listBtnRef.current && (
+      {showListPick && !task.source && listBtnRef.current && (
         <ListPicker
           current={task.list ?? null}
           anchorEl={listBtnRef.current}
@@ -1473,7 +1554,7 @@ export function TaskDetail({ task, onClose, onUpdate, onDelete, listy, tagi }: {
           listy={listy}
         />
       )}
-      {showMore && moreBtnRef.current && (
+      {showMore && !task.source && moreBtnRef.current && (
         <MoreMenu
           anchorEl={moreBtnRef.current}
           onAction={action => {
@@ -1775,7 +1856,7 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
             Ukończone
           </div>
           {done.length === 0
-            ? <p style={{ fontSize: 12, color: C.textDisabled, paddingLeft: 14 }}>Brak ukończonych zadań w tym okresie.</p>
+            ? <p style={{ fontSize: 12, color: C.textMuted, paddingLeft: 14 }}>Brak ukończonych zadań w tym okresie.</p>
             : done.map(t => <Line key={t.id} task={t} showDate={true} />)
           }
         </div>
@@ -1785,7 +1866,7 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
             Niewykonane
           </div>
           {undone.length === 0
-            ? <p style={{ fontSize: 12, color: C.textDisabled, paddingLeft: 14 }}>Brak niewykonanych. Świetna robota!</p>
+            ? <p style={{ fontSize: 12, color: C.textMuted, paddingLeft: 14 }}>Brak niewykonanych. Świetna robota!</p>
             : undone.map(t => <Line key={t.id} task={t} showDate={false} />)
           }
         </div>
@@ -1795,98 +1876,16 @@ function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] })
   );
 }
 
-// ── Podsumowanie: right options panel ─────────────────────
-function SummaryOptions() {
-  const [nextPeriod, setNextPeriod] = useState(true);
-
-  function DropRow({ label, value }: { label: string; value: string }) {
-    return (
-      <div style={{ padding: "5px 14px" }}>
-        <div style={{ fontSize: 10, color: C.textDisabled, textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
-        <button style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: C.card, border: `1px solid ${C.borderSubtle}`,
-          borderRadius: 8, padding: "5px 9px", cursor: "pointer",
-          fontSize: 11, color: C.textSecond,
-          fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
-        }}
-        onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = C.cardHover)}
-        onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = C.card)}>
-          <span style={{ textAlign: "left", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{value}</span>
-          <ChevronDown size={11} strokeWidth={2} style={{ color: C.textDisabled, flexShrink: 0, marginLeft: 4 }} />
-        </button>
-      </div>
-    );
-  }
-
-  const Divider = () => <div style={{ height: 1, background: C.borderSubtle, margin: "8px 14px" }} />;
-  const SectionLabel = ({ text }: { text: string }) => (
-    <SectionHeader title={text} level={4} variant="label" className="px-[14px] pb-[6px] pt-[10px]" />
-  );
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto", scrollbarWidth: "none" as const }}>
-      {/* Szablon */}
-      <div style={{ padding: "16px 14px 8px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <SectionLabel text="Szablon" />
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", padding: "10px 14px 6px" }}
-            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
-            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textDisabled)}>
-            <Plus size={13} strokeWidth={2} />
-          </button>
-        </div>
-      </div>
-
-      <Divider />
-      <SectionLabel text="Filtruj" />
-      <DropRow label="Data" value={`Ten tydzień (${getWeekRangeLabel()})`} />
-      <DropRow label="Listy" value="Wszystkie listy" />
-      <DropRow label="Status" value="Wszystkie statusy" />
-      <DropRow label="Więcej" value="Brak" />
-
-      <Divider />
-      <SectionLabel text="Opcje wyświetlania" />
-      <DropRow label="Grupowanie" value="Według statusu ukończenia" />
-      <DropRow label="Pola" value="3 wybranych" />
-
-      <Divider />
-      <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 12, color: C.textSecond, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", flex: 1, paddingRight: 8, lineHeight: 1.4 }}>
-          Zadania na następny okres
-        </span>
-        <button onClick={() => setNextPeriod(v => !v)} style={{
-          width: 34, height: 19, borderRadius: 10, flexShrink: 0,
-          background: nextPeriod ? C.iceBlueSolid : C.borderStrong,
-          border: "none", cursor: "pointer", position: "relative" as const, transition: "background .2s",
-        }}>
-          <div style={{
-            position: "absolute" as const, top: 2,
-            left: nextPeriod ? 17 : 2,
-            width: 15, height: 15, borderRadius: "50%",
-            background: C.textPrimary, transition: "left .2s",
-          }} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Lightweight floating menu for input bar dropdowns ─────
 function InputFloatMenu({ anchorEl, onClose, children }: {
   anchorEl: HTMLElement; onClose: () => void; children: React.ReactNode;
 }) {
   const ref  = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(anchorEl);
+  triggerRef.current = anchorEl;
   const rect = anchorEl.getBoundingClientRect();
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [anchorEl, onClose]);
   return (
-    <Menu ref={ref} style={{
+    <Menu ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" style={{
       position: "fixed",
       top: rect.bottom + 6,
       left: rect.left,
@@ -1901,6 +1900,7 @@ function InputFloatMenu({ anchorEl, onClose, children }: {
 // ── Main page ─────────────────────────────────────────────
 export default function Zadania() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
+  const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(initialTaskView);
   const [listFilter,    setListFilter]    = useState<string | null>(null);
   const [tagFilter,     setTagFilter]     = useState<string | null>(null);
@@ -1922,10 +1922,38 @@ export default function Zadania() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
+  const [taxonomyDelete, setTaxonomyDelete] = useState<{
+    kind: "list" | "tag";
+    id: string;
+    label: string;
+    affected: number;
+  } | null>(null);
+  const [purgeTaskId, setPurgeTaskId] = useState<number | null>(null);
+  const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
 
   useEffect(() => {
-    setStorageFailed(!saveTaskWorkspace({ ...initialWorkspace, tasks, habits, lists: listy, tags: tagi }));
-  }, [habits, initialWorkspace, listy, tagi, tasks]);
+    const nextWorkspace = { ...workspaceRef.current, tasks, habits, lists: listy, tags: tagi };
+    workspaceRef.current = nextWorkspace;
+    setStorageFailed(!saveTaskWorkspace(nextWorkspace));
+  }, [habits, listy, tagi, tasks]);
+
+  useEffect(() => {
+    const syncWorkspace = () => {
+      const nextWorkspace = loadTaskWorkspace();
+      workspaceRef.current = nextWorkspace;
+      setTasks(nextWorkspace.tasks);
+      setHabits(nextWorkspace.habits);
+      setListy(nextWorkspace.lists);
+      setTagi(nextWorkspace.tags);
+      setSelectedId((current) => current !== null && nextWorkspace.tasks.some((task) => task.id === current) ? current : null);
+    };
+    const unsubscribers = [
+      subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace),
+      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkspace),
+      subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, syncWorkspace),
+    ];
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, []);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -1957,6 +1985,15 @@ export default function Zadania() {
   const flagBtnInputRef = useRef<HTMLButtonElement>(null);
   const listBtnInputRef = useRef<HTMLButtonElement>(null);
   const hashBtnInputRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("akcja") !== "nowe-zadanie") return;
+    if (taskView !== "dzis") setTaskView("dzis");
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+    url.searchParams.delete("akcja");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [taskView]);
 
   const selectedTask = tasks.find(t => t.id === selectedId) ?? null;
   const tagUsage = tasks.reduce<Record<string, number>>((counts, task) => {
@@ -2014,18 +2051,17 @@ export default function Zadania() {
   // Hashtag parsing
   const handleTaskInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
-    const match = v.match(/#(\w+)\s$/);
+    const match = v.match(/#([\p{L}\p{N}_-]+)\s$/u);
     if (match) {
-      const raw = match[1].toLowerCase();
+      const raw = match[1].toLocaleLowerCase("pl-PL");
       if (!newTaskTags.includes(raw)) setNewTaskTags(prev => [...prev, raw]);
-      setNewTask(v.replace(/#(\w+)\s$/, "").trimEnd());
+      setNewTask(v.replace(/#([\p{L}\p{N}_-]+)\s$/u, "").trimEnd());
     } else {
       setNewTask(v);
     }
   };
 
   const handleTaskKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") { addTask(); return; }
     if (e.key === "Backspace" && newTask === "" && newTaskTags.length > 0) {
       setNewTaskTags(prev => prev.slice(0, -1));
     }
@@ -2062,6 +2098,7 @@ export default function Zadania() {
       priority: newPriority ?? undefined,
       time: newDateVal.duration ? newDateVal.startTime : newDateVal.time || undefined,
       endTime: newDateVal.duration ? newDateVal.endTime : undefined,
+      schedule: scheduleFromDateValue(newDateVal),
       date: dateLabel || undefined,
       calendarDate,
     }]);
@@ -2085,8 +2122,9 @@ export default function Zadania() {
     setEditingListId(null);
   };
   const deleteList = (id: string) => {
-    setListy(p => p.filter(l => l.id !== id));
-    if (listFilter === id) setListFilter(null);
+    const list = listy.find((candidate) => candidate.id === id);
+    if (!list) return;
+    setTaxonomyDelete({ kind: "list", id, label: list.label, affected: listUsage[id] ?? 0 });
   };
 
   // Tag CRUD
@@ -2104,15 +2142,58 @@ export default function Zadania() {
     setEditingTagId(null);
   };
   const deleteTag = (id: string) => {
-    setTagi(p => p.filter(t => t.id !== id));
-    if (tagFilter === id) setTagFilter(null);
+    const tag = tagi.find((candidate) => candidate.id === id);
+    if (!tag) return;
+    setTaxonomyDelete({ kind: "tag", id, label: `#${tag.label}`, affected: tagUsage[id] ?? 0 });
+  };
+
+  const confirmTaxonomyDelete = () => {
+    if (!taxonomyDelete) return;
+    if (taxonomyDelete.kind === "list") {
+      setListy((current) => current.filter((list) => list.id !== taxonomyDelete.id));
+      setTasks((current) => current.map((task) => task.list === taxonomyDelete.id
+        ? { ...task, list: undefined }
+        : task));
+      if (listFilter === taxonomyDelete.id) setListFilter(null);
+    } else {
+      setTagi((current) => current.filter((tag) => tag.id !== taxonomyDelete.id));
+      setTasks((current) => current.map((task) => (task.tags ?? []).includes(taxonomyDelete.id)
+        ? { ...task, tags: task.tags?.filter((tag) => tag !== taxonomyDelete.id) }
+        : task));
+      if (tagFilter === taxonomyDelete.id) setTagFilter(null);
+    }
+    setTaxonomyDelete(null);
   };
 
   const updateTask = (id: number, patch: Partial<Task>) => {
     if (typeof patch.done === "boolean") persistTaskCompletion(id, patch.done);
     setTasks(p => p.map(t => t.id === id ? { ...t, ...patch } : t));
   };
-  const deleteTask = (id: number) => { updateTask(id, { deleted: true }); setSelectedId(null); };
+  const workspaceWithTasks = (nextTasks: Task[]) => ({
+    ...workspaceRef.current,
+    tasks: nextTasks,
+    habits,
+    lists: listy,
+    tags: tagi,
+  });
+  const deleteTask = (id: number) => {
+    setTasks((current) => trashTask(workspaceWithTasks(current), id).tasks);
+    setSelectedId(null);
+  };
+  const restoreTaskFromTrash = (id: number) => {
+    setTasks((current) => restoreTask(workspaceWithTasks(current), id).tasks);
+    setSelectedId(null);
+  };
+  const permanentlyDeleteTask = (id: number) => {
+    setTasks((current) => purgeTask(workspaceWithTasks(current), id).tasks);
+    setPurgeTaskId(null);
+    setSelectedId(null);
+  };
+  const emptyTrash = () => {
+    setTasks((current) => emptyTaskTrash(workspaceWithTasks(current)).tasks);
+    setEmptyTrashOpen(false);
+    setSelectedId(null);
+  };
   const toggleHabit = (id: number) => setHabits((current) => current.map((habit) => (
     habit.id === id ? toggleHabitOnDate(habit, toCalendarDateKey(new Date())) : habit
   )));
@@ -2189,22 +2270,22 @@ export default function Zadania() {
               <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: C.textMuted }}>Listy</span>
             </button>
             {listyOpen && (
-              <div className="flex items-center gap-1">
+              <div className="task-taxonomy-header-actions flex items-center gap-1">
                 <button
                   onClick={() => { setListSearchOpen(open => !open); setListSearch(""); }}
                   aria-label="Szukaj listy"
                   title="Szukaj listy"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: listSearchOpen ? C.iceBlue : C.textDisabled, display: "flex", padding: 2 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: listSearchOpen ? C.iceBlue : C.textMuted, display: "flex", padding: 2 }}
                   onMouseEnter={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}
-                  onMouseLeave={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textDisabled; }}>
+                  onMouseLeave={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}>
                   <Search size={11} strokeWidth={1.8} />
                 </button>
                 <button onClick={() => { setAddingList(true); setAddingTag(false); setListSearchOpen(false); }}
                   aria-label="Dodaj listę"
                   title="Dodaj listę"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", padding: 2 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 2 }}
                   onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
-                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textDisabled)}>
+                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}>
                   <Plus size={11} strokeWidth={2} />
                 </button>
               </div>
@@ -2226,10 +2307,10 @@ export default function Zadania() {
               </div>
             )}
             {listy.length === 0 && !addingList && (
-              <p style={{ fontSize: 11, color: C.textDisabled, padding: "4px 12px" }}>Brak list. Kliknij + aby dodać.</p>
+              <p style={{ fontSize: 11, color: C.textMuted, padding: "4px 12px" }}>Brak list. Kliknij + aby dodać.</p>
             )}
             {listy.length > 0 && visibleLists.length === 0 && (
-              <p style={{ fontSize: 10, color: C.textDisabled, padding: "4px 12px" }}>Brak pasujących list.</p>
+              <p style={{ fontSize: 10, color: C.textMuted, padding: "4px 12px" }}>Brak pasujących list.</p>
             )}
             {visibleLists.map(l => {
               const active = listFilter === l.id;
@@ -2259,12 +2340,12 @@ export default function Zadania() {
                   )}
                   {/* Hover actions */}
                   {editingListId !== l.id && (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
-                      <button onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
+                    <div className="task-taxonomy-actions absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
+                      <button type="button" aria-label={`Edytuj listę ${l.label}`} onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
                         style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
-                      <button onClick={e => { e.stopPropagation(); deleteList(l.id); }}
+                      <button type="button" aria-label={`Usuń listę ${l.label}`} onClick={e => { e.stopPropagation(); deleteList(l.id); }}
                         style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
@@ -2297,22 +2378,22 @@ export default function Zadania() {
               <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: C.textMuted }}>Tagi</span>
             </button>
             {tagiOpen && (
-              <div className="flex items-center gap-1">
+              <div className="task-taxonomy-header-actions flex items-center gap-1">
                 <button
                   onClick={() => { setTagSearchOpen(open => !open); setTagSearch(""); }}
                   aria-label="Szukaj tagu"
                   title="Szukaj tagu"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: tagSearchOpen ? C.iceBlue : C.textDisabled, display: "flex", padding: 2 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: tagSearchOpen ? C.iceBlue : C.textMuted, display: "flex", padding: 2 }}
                   onMouseEnter={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}
-                  onMouseLeave={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textDisabled; }}>
+                  onMouseLeave={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}>
                   <Search size={11} strokeWidth={1.8} />
                 </button>
                 <button onClick={() => { setAddingTag(true); setAddingList(false); setTagSearchOpen(false); }}
                   aria-label="Dodaj tag"
                   title="Dodaj tag"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textDisabled, display: "flex", padding: 2 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 2 }}
                   onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
-                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textDisabled)}>
+                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}>
                   <Plus size={11} strokeWidth={2} />
                 </button>
               </div>
@@ -2334,10 +2415,10 @@ export default function Zadania() {
               </div>
             )}
             {tagi.length === 0 && !addingTag && (
-              <p style={{ fontSize: 11, color: C.textDisabled, padding: "4px 12px" }}>Brak tagów.</p>
+              <p style={{ fontSize: 11, color: C.textMuted, padding: "4px 12px" }}>Brak tagów.</p>
             )}
             {tagi.length > 0 && visibleTags.length === 0 && (
-              <p style={{ fontSize: 10, color: C.textDisabled, padding: "4px 12px" }}>Brak pasujących tagów.</p>
+              <p style={{ fontSize: 10, color: C.textMuted, padding: "4px 12px" }}>Brak pasujących tagów.</p>
             )}
             {visibleTags.map(t => {
               const active = tagFilter === t.id;
@@ -2364,12 +2445,12 @@ export default function Zadania() {
                     />
                   )}
                   {editingTagId !== t.id && (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5">
-                      <button onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
+                    <div className="task-taxonomy-actions absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
+                      <button type="button" aria-label={`Edytuj tag #${t.label}`} onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
                         style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
-                      <button onClick={e => { e.stopPropagation(); deleteTag(t.id); }}
+                      <button type="button" aria-label={`Usuń tag #${t.label}`} onClick={e => { e.stopPropagation(); deleteTag(t.id); }}
                         style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
@@ -2478,9 +2559,15 @@ export default function Zadania() {
           leading={<CheckSquare size={18} strokeWidth={1.5} />}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={(
-            <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
-              <span className="header-action-label">Nowe zadanie</span>
-            </Button>
+            taskView === "kosz" && visible.length > 0 ? (
+              <Button variant="danger" leadingIcon={<Trash2 size={14} />} onClick={() => setEmptyTrashOpen(true)}>
+                Opróżnij kosz
+              </Button>
+            ) : (
+              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
+                <span className="header-action-label">Nowe zadanie</span>
+              </Button>
+            )
           )}
         />
 
@@ -2547,14 +2634,20 @@ export default function Zadania() {
 
         <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-7 py-5">
           {/* Add task input */}
-          <div className="task-entry mx-1 mb-3 rounded-xl transition-all duration-200"
+          <form
+            className="task-entry mx-1 mb-3 rounded-xl transition-all duration-200"
+            aria-label="Dodaj zadanie"
+            onSubmit={(event) => {
+              event.preventDefault();
+              addTask();
+            }}
             style={{
               background: C.inputBg,
               border: `1px solid ${C.borderSubtle}`,
               boxShadow: "none",
             }}>
             <div className="flex items-center gap-2 px-3.5 py-2.5 flex-wrap">
-              <Plus size={13} strokeWidth={1.75} style={{ color: inputFocused ? C.iceBlue : C.textDisabled, flexShrink: 0 }} />
+              <Plus size={13} strokeWidth={1.75} style={{ color: inputFocused ? C.iceBlue : C.textMuted, flexShrink: 0 }} />
               {/* Tag chips in input */}
               {newTaskTags.map(tagId => {
                 const td = tagi.find(t => t.id === tagId);
@@ -2566,7 +2659,10 @@ export default function Zadania() {
                     color, background: color + "1A", flexShrink: 0,
                   }}>
                     #{td?.label ?? tagId}
-                    <button onMouseDown={e => { e.preventDefault(); setNewTaskTags(p => p.filter(id => id !== tagId)); }}
+                    <button
+                      type="button"
+                      aria-label={`Usuń tag #${td?.label ?? tagId} z nowego zadania`}
+                      onClick={() => setNewTaskTags(p => p.filter(id => id !== tagId))}
                       style={{ background: "none", border: "none", cursor: "pointer", color, display: "flex", padding: 0 }}>
                       <X size={8} strokeWidth={2.5} />
                     </button>
@@ -2575,6 +2671,7 @@ export default function Zadania() {
               })}
               <input
                 ref={inputRef} type="text"
+                aria-label="Nazwa nowego zadania"
                 placeholder={newTaskTags.length === 0 ? getPlaceholder() : "Dodaj więcej…"}
                 value={newTask}
                 onChange={handleTaskInput}
@@ -2590,12 +2687,15 @@ export default function Zadania() {
                 {/* Flag — priority */}
                 <button
                   ref={flagBtnInputRef}
-                  onMouseDown={e => { e.preventDefault(); setInputDropdown(d => d === "priority" ? null : "priority"); }}
+                  type="button"
+                  aria-label="Ustaw priorytet nowego zadania"
+                  aria-expanded={inputDropdown === "priority"}
+                  onClick={() => setInputDropdown(d => d === "priority" ? null : "priority")}
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
                   title="Priorytet"
                   style={{
                     background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? C.elevated : "transparent",
-                    color: flagColor ?? C.textDisabled,
+                    color: flagColor ?? C.textMuted,
                     border: `1px solid ${flagColor ? flagColor + "40" : "transparent"}`,
                   }}>
                   <Flag size={12} strokeWidth={1.5} fill={flagColor ?? "none"} />
@@ -2604,12 +2704,15 @@ export default function Zadania() {
                 {/* List */}
                 <button
                   ref={listBtnInputRef}
-                  onMouseDown={e => { e.preventDefault(); setInputDropdown(d => d === "list" ? null : "list"); }}
+                  type="button"
+                  aria-label="Wybierz listę nowego zadania"
+                  aria-expanded={inputDropdown === "list"}
+                  onClick={() => setInputDropdown(d => d === "list" ? null : "list")}
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
                   title="Lista"
                   style={{
                     background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? C.elevated : "transparent",
-                    color: newTaskList ? listy.find(l => l.id === newTaskList)?.color : C.textDisabled,
+                    color: newTaskList ? listy.find(l => l.id === newTaskList)?.color : C.textMuted,
                     border: `1px solid ${newTaskList ? (listy.find(l => l.id === newTaskList)?.color ?? C.iceBlue) + "40" : "transparent"}`,
                   }}>
                   <List size={12} strokeWidth={1.5} />
@@ -2618,12 +2721,15 @@ export default function Zadania() {
                 {/* Hash — tags */}
                 <button
                   ref={hashBtnInputRef}
-                  onMouseDown={e => { e.preventDefault(); setInputDropdown(d => d === "tags" ? null : "tags"); }}
+                  type="button"
+                  aria-label="Dodaj tagi do nowego zadania"
+                  aria-expanded={inputDropdown === "tags"}
+                  onClick={() => setInputDropdown(d => d === "tags" ? null : "tags")}
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
                   title="Tagi"
                   style={{
                     background: newTaskTags.length > 0 ? C.iceBlueBg : inputDropdown === "tags" ? C.elevated : "transparent",
-                    color: newTaskTags.length > 0 ? C.iceBlue : C.textDisabled,
+                    color: newTaskTags.length > 0 ? C.iceBlue : C.textMuted,
                     border: `1px solid ${newTaskTags.length > 0 ? C.blueBorder : "transparent"}`,
                   }}>
                   <Hash size={12} strokeWidth={1.5} />
@@ -2632,11 +2738,14 @@ export default function Zadania() {
                 {/* Date */}
                 <button
                   ref={dateButtonRef}
-                  onMouseDown={e => { e.preventDefault(); setDatePickerOpen(o => !o); setInputDropdown(null); }}
+                  type="button"
+                  aria-label="Ustaw termin nowego zadania"
+                  aria-expanded={datePickerOpen}
+                  onClick={() => { setDatePickerOpen(o => !o); setInputDropdown(null); }}
                   className="flex items-center gap-1 px-1.5 h-7 rounded-lg transition-all flex-shrink-0"
                   style={{
                     background: dateLabel ? C.iceBlueBg : "transparent",
-                    color: dateLabel ? C.iceBlue : C.textDisabled,
+                    color: dateLabel ? C.iceBlue : C.textMuted,
                     border: `1px solid ${dateLabel ? C.blueBorder : "transparent"}`,
                   }}>
                   <Calendar size={12} strokeWidth={1.5} />
@@ -2647,7 +2756,8 @@ export default function Zadania() {
 
                 {(newTask || newTaskTags.length > 0 || newPriority || newTaskList) && (
                   <button
-                    onMouseDown={e => { e.preventDefault(); addTask(); }}
+                    type="submit"
+                    aria-label="Dodaj zadanie"
                     className="text-[10px] font-semibold px-2 h-7 rounded-md flex-shrink-0"
                     style={{ background: C.iceBlueSolid, color: C.textPrimary }}>
                     ↵
@@ -2655,7 +2765,7 @@ export default function Zadania() {
                 )}
               </div>
             </div>
-          </div>
+          </form>
 
           {overdue.length > 0 && (
             <section className="task-overdue-section" aria-labelledby="task-overdue-heading">
@@ -2714,7 +2824,7 @@ export default function Zadania() {
             /* Ukończone view — flat list of all done tasks */
             <div className="space-y-px">
               {visible.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textDisabled }}>
+                <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textMuted }}>
                   <RotateCcw size={28} strokeWidth={1} />
                   <span className="text-[13px]">Brak ukończonych zadań</span>
                 </div>
@@ -2730,16 +2840,37 @@ export default function Zadania() {
           ) : taskView === "kosz" ? (
             <div className="space-y-px">
               {visible.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textDisabled }}>
+                <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textMuted }}>
                   <Trash2 size={28} strokeWidth={1} />
                   <span className="text-[13px]">Kosz jest pusty</span>
                 </div>
               ) : visible.map(t => (
-                <TaskRow key={t.id} task={t} tagi={tagi}
-                  selected={selectedId === t.id}
-                  onToggle={() => {}}
-                  onUpdate={updateTask}
-                  onSelect={id => setSelectedId(selectedId === id ? null : id)} />
+                <div key={t.id} className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <TaskRow task={t} tagi={tagi}
+                      selected={selectedId === t.id}
+                      onToggle={() => restoreTaskFromTrash(t.id)}
+                      onUpdate={updateTask}
+                      onSelect={id => setSelectedId(selectedId === id ? null : id)} />
+                  </div>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    leadingIcon={<RotateCcw size={12} />}
+                    onClick={() => restoreTaskFromTrash(t.id)}
+                  >
+                    Przywróć
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    iconOnly
+                    aria-label={`Usuń trwale zadanie ${t.text}`}
+                    onClick={() => setPurgeTaskId(t.id)}
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
               ))}
             </div>
           ) : (
@@ -2762,13 +2893,13 @@ export default function Zadania() {
                 <div className="mt-2">
                   <button onClick={() => setShowDone(v => !v)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] transition-colors mb-1"
-                    style={{ color: C.textDisabled }}>
+                    style={{ color: C.textMuted }}>
                     <ChevronDown size={12} strokeWidth={1.5}
                       style={{ transform: showDone ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .2s" }} />
                     Ukończone · {completed.length}
                   </button>
                   {showDone && (
-                    <div style={{ opacity: 0.5 }} className="space-y-px">
+                    <div className="space-y-px">
                       {completed.map(t => (
                         <TaskRow key={t.id} task={t} tagi={tagi}
                           selected={selectedId === t.id}
@@ -2784,7 +2915,7 @@ export default function Zadania() {
           )}
 
           {taskView !== "kosz" && pending.length === 0 && completed.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textDisabled }}>
+            <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textMuted }}>
               <Circle size={28} strokeWidth={1} />
               <span className="text-[13px]">Brak zadań</span>
               <button onClick={() => inputRef.current?.focus()} className="text-[11px] mt-1" style={{ color: C.iceBlue }}>
@@ -2797,9 +2928,20 @@ export default function Zadania() {
 
       {/* ── Right panel ── */}
       {(selectedTask || taskView === "podsumowanie") && (
-        <DetailPanel className={selectedTask ? "" : "task-summary-detail"} label={selectedTask ? "Szczegóły zadania" : "Podsumowanie zadań"}>
+        <DetailPanel
+          className={selectedTask ? "" : "task-summary-detail"}
+          label={selectedTask ? "Szczegóły zadania" : "Podsumowanie zadań"}
+          onDismiss={() => selectedTask ? setSelectedId(null) : setTaskView("dzis")}
+        >
         {selectedTask ? (
-          <TaskDetail task={selectedTask} onClose={() => setSelectedId(null)} onUpdate={updateTask} onDelete={deleteTask} listy={listy} tagi={tagi} />
+          <TaskDetail
+            task={selectedTask}
+            onClose={() => setSelectedId(null)}
+            onUpdate={updateTask}
+            onDelete={selectedTask.deleted ? (id) => setPurgeTaskId(id) : deleteTask}
+            listy={listy}
+            tagi={tagi}
+          />
         ) : (
           <SummaryPanel tasks={visible} habits={habits} onToggleHabit={toggleHabit} />
         )}
@@ -2835,6 +2977,62 @@ export default function Zadania() {
         </Modal>
       )}
 
+      {taxonomyDelete && (
+        <Modal
+          title={`Usunąć ${taxonomyDelete.kind === "list" ? "listę" : "tag"} „${taxonomyDelete.label}”?`}
+          description={taxonomyDelete.affected > 0
+            ? `${taxonomyDelete.affected} ${taxonomyDelete.affected === 1 ? "zadanie korzysta" : "zadań korzysta"} z tej klasyfikacji. Zadania pozostaną, a odwołania zostaną bezpiecznie usunięte.`
+            : "Ta klasyfikacja nie jest używana przez żadne zadanie."}
+          onClose={() => setTaxonomyDelete(null)}
+          footer={(
+            <>
+              <Button variant="quiet" onClick={() => setTaxonomyDelete(null)}>Anuluj</Button>
+              <Button variant="danger" onClick={confirmTaxonomyDelete}>Usuń i uporządkuj zadania</Button>
+            </>
+          )}
+        >
+          <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+            Tej operacji nie można cofnąć, dlatego zależności zostaną zaktualizowane w tym samym zapisie.
+          </p>
+        </Modal>
+      )}
+
+      {purgeTaskId !== null && (
+        <Modal
+          title="Usunąć zadanie trwale?"
+          description="Zadanie zniknie z Kosza i nie będzie można go przywrócić."
+          onClose={() => setPurgeTaskId(null)}
+          footer={(
+            <>
+              <Button variant="quiet" onClick={() => setPurgeTaskId(null)}>Anuluj</Button>
+              <Button variant="danger" onClick={() => permanentlyDeleteTask(purgeTaskId)}>Usuń trwale</Button>
+            </>
+          )}
+        >
+          <p className="text-[12px] text-[var(--color-text-secondary)]">
+            {tasks.find((task) => task.id === purgeTaskId)?.text}
+          </p>
+        </Modal>
+      )}
+
+      {emptyTrashOpen && (
+        <Modal
+          title="Opróżnić Kosz?"
+          description={`${tasks.filter((task) => task.deleted).length} zadań zostanie usuniętych trwale.`}
+          onClose={() => setEmptyTrashOpen(false)}
+          footer={(
+            <>
+              <Button variant="quiet" onClick={() => setEmptyTrashOpen(false)}>Anuluj</Button>
+              <Button variant="danger" onClick={emptyTrash}>Opróżnij Kosz</Button>
+            </>
+          )}
+        >
+          <p className="text-[12px] text-[var(--color-text-secondary)]">
+            Jeśli chcesz zachować wybrane pozycje, przywróć je przed opróżnieniem.
+          </p>
+        </Modal>
+      )}
+
       {/* ── Input priority dropdown ── */}
       {inputDropdown === "priority" && flagBtnInputRef.current && (
         <InputFloatMenu anchorEl={flagBtnInputRef.current} onClose={() => setInputDropdown(null)}>
@@ -2842,11 +3040,15 @@ export default function Zadania() {
             { p: "high"   as Priority, label: "Wysoki", color: C.danger  },
             { p: "medium" as Priority, label: "Średni", color: C.warning },
             { p: "low"    as Priority, label: "Niski",  color: C.iceBlue },
-            { p: null,                 label: "Brak",   color: C.textDisabled },
+            { p: null,                 label: "Brak",   color: C.textMuted },
           ] as const).map(({ p, label, color }) => (
             <MenuItem key={String(p)}
               selected={newPriority === p}
-              onMouseDown={e => { e.preventDefault(); setNewPriority(p as Priority | null); setInputDropdown(null); }}
+              onClick={() => {
+                setNewPriority(p as Priority | null);
+                setInputDropdown(null);
+                requestAnimationFrame(() => flagBtnInputRef.current?.focus());
+              }}
               leadingIcon={<Flag fill={p ? color : "none"} style={{ color }} />}
               trailingIcon={newPriority === p ? <Check /> : undefined}>
               {label}
@@ -2861,7 +3063,11 @@ export default function Zadania() {
           {[{ id: null as string | null, label: "Skrzynka zadań", color: C.textMuted }, ...listy.map(l => ({ ...l, id: l.id as string | null }))].map(l => (
             <MenuItem key={String(l.id)}
               selected={newTaskList === l.id}
-              onMouseDown={e => { e.preventDefault(); setNewTaskList(l.id); setInputDropdown(null); }}
+              onClick={() => {
+                setNewTaskList(l.id);
+                setInputDropdown(null);
+                requestAnimationFrame(() => listBtnInputRef.current?.focus());
+              }}
               leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: l.color }} />}
               trailingIcon={newTaskList === l.id ? <Check /> : undefined}>
               {l.label}
@@ -2878,7 +3084,7 @@ export default function Zadania() {
             return (
               <MenuItem key={t.id}
                 selected={active}
-                onMouseDown={e => { e.preventDefault(); setNewTaskTags(p => active ? p.filter(id => id !== t.id) : [...p, t.id]); }}
+                onClick={() => setNewTaskTags(p => active ? p.filter(id => id !== t.id) : [...p, t.id])}
                 leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: t.color }} />}
                 trailingIcon={active ? <Check /> : undefined}>
                 #{t.label}

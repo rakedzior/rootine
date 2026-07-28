@@ -164,6 +164,25 @@
   padding: var(--space-2xl) var(--space-3xl) var(--space-3xl);
 }
 
+.travel-trip-undo {
+  display: flex;
+  width: min(1180px, 100%);
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 auto;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-precision-blue-soft);
+  color: var(--color-text-secondary);
+}
+
+.travel-trip-undo > span {
+  min-width: 0;
+  flex: 1;
+}
+
 .travel-overview > .ui-empty-state {
   width: min(720px, 100%);
   min-height: 300px;
@@ -1108,6 +1127,34 @@ article:focus-within > .travel-row-actions {
   font-family: var(--font-data);
   font-size: var(--text-body-emphasis);
   font-weight: 500;
+}
+
+.travel-budget-link-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-graphite-panel);
+  color: var(--color-text-muted);
+}
+
+.travel-budget-link-note > span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.travel-budget-link-note strong {
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+}
+
+.travel-budget-link-note small {
+  font-size: var(--text-meta);
+  line-height: 1.5;
 }
 
 .travel-budget-register__head,

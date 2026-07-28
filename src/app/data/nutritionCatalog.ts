@@ -21,7 +21,8 @@ interface SearchPayload {
   hits?: unknown[];
 }
 
-const SEARCH_ENDPOINT = "/api/openfoodfacts/search";
+const SEARCH_ENDPOINT = (import.meta.env.VITE_OPEN_FOOD_FACTS_PROXY_URL as string | undefined)?.trim()
+  || "/api/openfoodfacts/search";
 const onlineSearchCache = new Map<string, FoodSuggestion[]>();
 
 export const GENERIC_FOODS: FoodSuggestion[] = [

@@ -29,19 +29,32 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
   const titleId = labelledBy ?? `${generatedId}-title`;
   const descriptionId = description ? `${generatedId}-description` : undefined;
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
+    const isTopmostDialog = () => {
+      const dialogs = Array.from(document.querySelectorAll<HTMLElement>(".ui-modal[role='dialog']"));
+      return dialogs.at(-1) === dialog;
+    };
+    const isOwnedOverlayTarget = (target: EventTarget | null) => target instanceof Element
+      && Boolean(target.closest(".ui-date-picker, .ui-select-menu"));
     const initialFocus = dialog?.querySelector<HTMLElement>("[autofocus], [data-autofocus]")
       ?? dialog?.querySelector<HTMLElement>(".ui-modal__body input:not([type='hidden']), .ui-modal__body select, .ui-modal__body textarea, .ui-modal__body button:not([disabled])")
       ?? dialog?.querySelector<HTMLElement>("button:not([disabled])");
     initialFocus?.focus();
 
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!isTopmostDialog() || event.defaultPrevented || isOwnedOverlayTarget(event.target)) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        event.stopPropagation();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !dialog) return;
@@ -63,15 +76,28 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
       }
     };
 
+    const onFocusIn = (event: FocusEvent) => {
+      if (
+        !dialog
+        || !isTopmostDialog()
+        || dialog.contains(event.target as Node)
+        || isOwnedOverlayTarget(event.target)
+      ) return;
+      const fallback = dialog.querySelector<HTMLElement>(focusableSelector) ?? dialog;
+      fallback.focus();
+    };
+
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      previousFocus?.focus();
+      document.removeEventListener("focusin", onFocusIn);
+      if (previousFocus?.isConnected && !previousFocus.matches(":disabled")) previousFocus.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return createPortal(
-    <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onCloseRef.current(); }}>
       <section
         ref={dialogRef}
         className="ui-modal [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -88,7 +114,7 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
             <h2 id={titleId} className="ui-modal__title">{title}</h2>
             {description && <p id={descriptionId} className="ui-modal__description">{description}</p>}
           </div>
-          <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij" onClick={onClose}>
+          <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij" onClick={() => onCloseRef.current()}>
             <X size={14} />
           </Button>
         </header>

@@ -19,7 +19,7 @@ export function PageHeader({ title, description, leading, meta, actions, below, 
           <div className="ui-page-header__copy">
             <div className="ui-page-header__heading">
               <h1 className="ui-page-header__title">{title}</h1>
-              {meta}
+              {meta && <div className="ui-page-header__meta">{meta}</div>}
             </div>
             {description && <p className="ui-page-header__description">{description}</p>}
           </div>

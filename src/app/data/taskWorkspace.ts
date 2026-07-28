@@ -1,12 +1,29 @@
 import { CALENDAR_TASKS } from "./calendarTasks";
+import {
+  isCommitmentTaskSource,
+  projectCommitments,
+  propagateCommitmentEdits,
+  stripProjectedCommitments,
+  type CommitmentTaskSource,
+} from "./commitmentRepository";
 import { hydrateTaskCompletion } from "./taskCompletion";
+import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
 
-const STORAGE_KEY = "rootine.task-workspace.v1";
-const WORKSPACE_VERSION = 1 as const;
+export const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
+const WORKSPACE_VERSION = 2 as const;
 
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskSubtask = { id: number; text: string; done: boolean };
 export type TaskComment = { id: number; author: string; text: string; time: string };
+export type TaskRecurrence = "daily" | "weekly" | "monthly" | "yearly";
+export type TaskSchedule = {
+  allDay: boolean;
+  startTime: string;
+  endTime?: string;
+  reminderMinutes?: number;
+  recurrence?: TaskRecurrence;
+  timezone: string;
+};
 
 export type WorkspaceTask = {
   id: number;
@@ -24,6 +41,8 @@ export type WorkspaceTask = {
   date?: string;
   subtasks?: TaskSubtask[];
   comments?: TaskComment[];
+  schedule?: TaskSchedule;
+  source?: CommitmentTaskSource;
 };
 
 export type WorkspaceHabit = {
@@ -45,17 +64,21 @@ export type TaskWorkspace = {
   tags: WorkspaceTag[];
 };
 
+type LegacyTaskWorkspace = Omit<TaskWorkspace, "version" | "tasks"> & {
+  version: 1;
+  tasks: Array<Omit<WorkspaceTask, "schedule">>;
+};
+
 export function toCalendarDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export function taskViewForCalendarDate(calendarDate: string, referenceDate = new Date()): string {
-  const target = new Date(`${calendarDate}T12:00:00`);
-  if (Number.isNaN(target.getTime())) return "skrzynka";
-  const reference = new Date(referenceDate);
-  reference.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  const dayDifference = Math.round((target.getTime() - reference.getTime()) / 86_400_000);
+  const [year, month, day] = calendarDate.split("-").map(Number);
+  if (!year || !month || !day) return "skrzynka";
+  const targetDay = Date.UTC(year, month - 1, day);
+  const referenceDay = Date.UTC(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  const dayDifference = Math.round((targetDay - referenceDay) / 86_400_000);
   if (dayDifference <= 0) return "dzis";
   if (dayDifference === 1) return "jutro";
   if (dayDifference <= 7) return "7dni";
@@ -122,7 +145,31 @@ function isWorkspaceTask(value: unknown): value is WorkspaceTask {
     && typeof value.done === "boolean"
     && typeof value.view === "string"
     && (value.calendarDate === undefined || typeof value.calendarDate === "string")
-    && (value.tags === undefined || (Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === "string")));
+    && (value.tags === undefined || (Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === "string")))
+    && (value.schedule === undefined || isTaskSchedule(value.schedule))
+    && (value.source === undefined || isCommitmentTaskSource(value.source));
+}
+
+function isClockTime(value: string) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function isTaskSchedule(value: unknown): value is TaskSchedule {
+  if (!isRecord(value)) return false;
+  if (typeof value.allDay !== "boolean" || typeof value.startTime !== "string") return false;
+  const validTimeRange = value.allDay
+    ? value.startTime === "" && value.endTime === undefined
+    : isClockTime(value.startTime)
+      && (value.endTime === undefined
+        || (typeof value.endTime === "string" && isClockTime(value.endTime) && value.endTime > value.startTime));
+  return validTimeRange
+    && (value.reminderMinutes === undefined
+      || (typeof value.reminderMinutes === "number"
+        && Number.isInteger(value.reminderMinutes)
+        && value.reminderMinutes >= 0))
+    && (value.recurrence === undefined || ["daily", "weekly", "monthly", "yearly"].includes(String(value.recurrence)))
+    && typeof value.timezone === "string"
+    && value.timezone.trim().length > 0;
 }
 
 function isWorkspaceHabit(value: unknown): value is WorkspaceHabit {
@@ -142,26 +189,66 @@ function isWorkspaceList(value: unknown): value is WorkspaceList {
     && typeof value.color === "string";
 }
 
-export function loadTaskWorkspace(): TaskWorkspace {
-  const fallback = createDefaultWorkspace();
-  if (typeof window === "undefined") return fallback;
+function isWorkspace(value: unknown): value is TaskWorkspace {
+  return isRecord(value)
+    && value.version === WORKSPACE_VERSION
+    && typeof value.updatedAt === "string"
+    && Array.isArray(value.tasks)
+    && value.tasks.every(isWorkspaceTask)
+    && Array.isArray(value.habits)
+    && value.habits.every(isWorkspaceHabit)
+    && Array.isArray(value.lists)
+    && value.lists.every(isWorkspaceList)
+    && Array.isArray(value.tags)
+    && value.tags.every(isWorkspaceList);
+}
 
+function isLegacyWorkspace(value: unknown): value is LegacyTaskWorkspace {
+  return isRecord(value)
+    && value.version === 1
+    && typeof value.updatedAt === "string"
+    && Array.isArray(value.tasks)
+    && value.tasks.every((task) => isRecord(task)
+      && typeof task.id === "number"
+      && typeof task.text === "string"
+      && typeof task.done === "boolean"
+      && typeof task.view === "string")
+    && Array.isArray(value.habits)
+    && value.habits.every(isWorkspaceHabit)
+    && Array.isArray(value.lists)
+    && value.lists.every(isWorkspaceList)
+    && Array.isArray(value.tags)
+    && value.tags.every(isWorkspaceList);
+}
+
+function currentTimezone() {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<TaskWorkspace>;
-    if (
-      parsed.version !== WORKSPACE_VERSION
-      || !Array.isArray(parsed.tasks)
-      || !Array.isArray(parsed.habits)
-      || !Array.isArray(parsed.lists)
-      || !Array.isArray(parsed.tags)
-      || !parsed.tasks.every(isWorkspaceTask)
-      || !parsed.habits.every(isWorkspaceHabit)
-      || !parsed.lists.every(isWorkspaceList)
-      || !parsed.tags.every(isWorkspaceList)
-    ) return fallback;
-    const workspace = parsed as TaskWorkspace;
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Warsaw";
+  } catch {
+    return "Europe/Warsaw";
+  }
+}
+
+function scheduleFromLegacyTask(task: Omit<WorkspaceTask, "schedule">): TaskSchedule | undefined {
+  if (!task.calendarDate) return undefined;
+  return {
+    allDay: !task.time,
+    startTime: task.time ?? "",
+    endTime: task.endTime,
+    timezone: currentTimezone(),
+  };
+}
+
+function migrateLegacyWorkspace(value: unknown): TaskWorkspace | null {
+  if (!isLegacyWorkspace(value)) return null;
+  return {
+    ...value,
+    version: WORKSPACE_VERSION,
+    tasks: value.tasks.map((task) => ({ ...task, schedule: scheduleFromLegacyTask(task) })),
+  };
+}
+
+function normalizeLoadedWorkspace(workspace: TaskWorkspace): TaskWorkspace {
     const todayKey = toCalendarDateKey(new Date());
     return {
       ...workspace,
@@ -173,21 +260,44 @@ export function loadTaskWorkspace(): TaskWorkspace {
         return { ...habit, completedDates, done: completedDates.includes(todayKey) };
       }),
     };
-  } catch {
-    return fallback;
-  }
+}
+
+function withProjectedCommitments(workspace: TaskWorkspace): TaskWorkspace {
+  return {
+    ...workspace,
+    tasks: [
+      ...stripProjectedCommitments(workspace.tasks),
+      ...projectCommitments(),
+    ],
+  };
+}
+
+export function loadTaskWorkspaceResult(): LocalLoadResult<TaskWorkspace> {
+  const result = readLocalWorkspace({
+    key: TASK_STORAGE_KEY,
+    fallback: createDefaultWorkspace,
+    validate: isWorkspace,
+    migrate: migrateLegacyWorkspace,
+  });
+  return {
+    ...result,
+    workspace: withProjectedCommitments(normalizeLoadedWorkspace(result.workspace)),
+  };
+}
+
+export function loadTaskWorkspace(): TaskWorkspace {
+  return loadTaskWorkspaceResult().workspace;
 }
 
 export function saveTaskWorkspace(workspace: TaskWorkspace): boolean {
-  if (typeof window === "undefined") return false;
-  const next: TaskWorkspace = { ...workspace, version: WORKSPACE_VERSION, updatedAt: new Date().toISOString() };
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new CustomEvent("rootine:task-workspace", { detail: { updatedAt: next.updatedAt } }));
-    return true;
-  } catch {
-    return false;
-  }
+  const sourceSaved = propagateCommitmentEdits(workspace.tasks);
+  const next: TaskWorkspace = {
+    ...workspace,
+    version: WORKSPACE_VERSION,
+    updatedAt: new Date().toISOString(),
+    tasks: stripProjectedCommitments(workspace.tasks),
+  };
+  return writeLocalWorkspace(TASK_STORAGE_KEY, next) && sourceSaved;
 }
 
 export function isHabitDoneOnDate(habit: WorkspaceHabit, dateKey: string): boolean {
@@ -209,6 +319,34 @@ export function isCalendarTask(task: WorkspaceTask): task is WorkspaceTask & { c
 export function replaceCalendarTasks(workspace: TaskWorkspace, calendarTasks: WorkspaceTask[]): TaskWorkspace {
   return {
     ...workspace,
-    tasks: [...workspace.tasks.filter((task) => !isCalendarTask(task) || task.deleted), ...calendarTasks],
+    tasks: [...workspace.tasks.filter((task) => !isCalendarTask(task)), ...calendarTasks],
+  };
+}
+
+export function trashTask(workspace: TaskWorkspace, taskId: number): TaskWorkspace {
+  return {
+    ...workspace,
+    tasks: workspace.tasks.map((task) => task.id === taskId ? { ...task, deleted: true } : task),
+  };
+}
+
+export function restoreTask(workspace: TaskWorkspace, taskId: number): TaskWorkspace {
+  return {
+    ...workspace,
+    tasks: workspace.tasks.map((task) => task.id === taskId ? { ...task, deleted: false } : task),
+  };
+}
+
+export function purgeTask(workspace: TaskWorkspace, taskId: number): TaskWorkspace {
+  return {
+    ...workspace,
+    tasks: workspace.tasks.filter((task) => task.id !== taskId),
+  };
+}
+
+export function emptyTaskTrash(workspace: TaskWorkspace): TaskWorkspace {
+  return {
+    ...workspace,
+    tasks: workspace.tasks.filter((task) => !task.deleted),
   };
 }

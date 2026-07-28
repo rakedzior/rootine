@@ -6,6 +6,8 @@
  * FORM: The sixth grounded structure — a trip dossier with a readiness ledger — selected with seed 46ce9e6f.
  */
 import {
+  Archive,
+  ArchiveRestore,
   BedDouble,
   Bus,
   CalendarDays,
@@ -13,6 +15,7 @@ import {
   Check,
   ChevronRight,
   FileText,
+  Download,
   LayoutDashboard,
   ListChecks,
   Map as MapIcon,
@@ -29,10 +32,16 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
+import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   createTravelId,
+  isDateWithinTrip,
   loadTravelWorkspace,
+  normalizeIsoCurrency,
   saveTravelWorkspace,
+  summarizeTravelBudget,
+  TRAVEL_STORAGE_KEY,
   type BudgetCategory,
   type BudgetLine,
   type DocumentStatus,
@@ -63,6 +72,7 @@ import {
   Tabs,
   WorkspaceToolbar,
 } from "../ui";
+import "../../styles/travel.css";
 
 type TravelSection = "overview" | "itinerary" | "reservations" | "budget" | "documents" | "tasks";
 type EditorKind = "trip" | "itinerary" | "stay" | "transport" | "budget" | "document" | "task";
@@ -71,6 +81,10 @@ type DeleteState = {
   kind: Exclude<EditorKind, "trip">;
   id: string;
   label: string;
+};
+type TripActionState = {
+  kind: "archive" | "delete";
+  trip: TravelTrip;
 };
 
 type Draft = {
@@ -230,12 +244,12 @@ const SECTION_COPY: Record<TravelSection, string> = {
 };
 
 const SECTION_TABS = [
-  { id: "overview", label: "Pulpit" },
-  { id: "itinerary", label: "Plan podróży" },
-  { id: "reservations", label: "Rezerwacje" },
-  { id: "budget", label: "Budżet" },
-  { id: "documents", label: "Dokumenty" },
-  { id: "tasks", label: "Do zrobienia" },
+  { id: "overview", label: "Pulpit", tabId: "travel-tab-overview", panelId: "travel-panel-overview" },
+  { id: "itinerary", label: "Plan podróży", tabId: "travel-tab-itinerary", panelId: "travel-panel-itinerary" },
+  { id: "reservations", label: "Rezerwacje", tabId: "travel-tab-reservations", panelId: "travel-panel-reservations" },
+  { id: "budget", label: "Budżet", tabId: "travel-tab-budget", panelId: "travel-panel-budget" },
+  { id: "documents", label: "Dokumenty", tabId: "travel-tab-documents", panelId: "travel-panel-documents" },
+  { id: "tasks", label: "Do zrobienia", tabId: "travel-tab-tasks", panelId: "travel-panel-tasks" },
 ];
 
 function isTravelSection(value: string | null): value is TravelSection {
@@ -266,25 +280,24 @@ function formatDateTime(value: string): string {
 }
 
 function formatMoney(value: number, currency = "PLN"): string {
-  return new Intl.NumberFormat("pl-PL", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value);
+  try {
+    return new Intl.NumberFormat("pl-PL", {
+      style: "currency",
+      currency: normalizeIsoCurrency(currency) ?? "PLN",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${Math.round(value).toLocaleString("pl-PL")} ${currency}`;
+  }
 }
 
 function tripDuration(trip: TravelTrip): number {
-  const start = new Date(`${trip.startDate}T12:00:00`).getTime();
-  const end = new Date(`${trip.endDate}T12:00:00`).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
-  return Math.max(1, Math.round((end - start) / 86_400_000) + 1);
+  const days = calendarDaysBetween(trip.startDate, trip.endDate);
+  return days === null ? 0 : Math.max(1, days + 1);
 }
 
 function daysUntil(value: string): number {
-  const target = new Date(`${value}T12:00:00`).getTime();
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  return Math.ceil((target - today.getTime()) / 86_400_000);
+  return calendarDaysBetween(todayLocalDateKey(), value) ?? 0;
 }
 
 function tripCountdown(trip: TravelTrip): string {
@@ -303,7 +316,7 @@ function readinessParts(trip: TravelTrip) {
   const completedTasks = trip.tasks.filter((item) => item.completed).length;
   const itineraryDays = new Set(trip.itinerary.map((item) => item.date)).size;
   const totalDays = tripDuration(trip);
-  const budgetReady = trip.budget.length > 0 ? 1 : 0;
+  const budgetReady = trip.budget.length > 0 || reservations.some((item) => item.amount > 0) ? 1 : 0;
 
   return [
     {
@@ -356,18 +369,21 @@ function nextAction(trip: TravelTrip): string {
   return "Plan jest domknięty";
 }
 
-function numberFrom(value: string): number {
+function numberFrom(value: string): number | null {
+  if (!value.trim()) return 0;
   const parsed = Number(value.replace(",", "."));
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 export default function Podroze() {
   const [workspace, setWorkspace] = useState(loadTravelWorkspace);
-  const [statusFilter, setStatusFilter] = useState<"upcoming" | "all" | TripStatus>("upcoming");
+  const [statusFilter, setStatusFilter] = useState<"upcoming" | "all" | "archived" | TripStatus>("upcoming");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
+  const [tripActionState, setTripActionState] = useState<TripActionState | null>(null);
+  const [deletedTripUndo, setDeletedTripUndo] = useState<TravelTrip | null>(null);
   const [storageError, setStorageError] = useState(false);
   const { tripId } = useParams();
   const navigate = useNavigate();
@@ -380,20 +396,24 @@ export default function Podroze() {
     setStorageError(!saveTravelWorkspace(workspace));
   }, [workspace]);
 
+  useEffect(() => subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, () => {
+    setWorkspace(loadTravelWorkspace());
+  }), []);
+
   useEffect(() => {
     if (tripId && !selectedTrip) navigate("/podroze", { replace: true });
   }, [navigate, selectedTrip, tripId]);
 
   const upcomingTrips = useMemo(
     () => workspace.trips
-      .filter((trip) => trip.status !== "completed")
+      .filter((trip) => !trip.archivedAt && trip.status !== "completed")
       .sort((a, b) => a.startDate.localeCompare(b.startDate)),
     [workspace.trips],
   );
 
   const completedTrips = useMemo(
     () => workspace.trips
-      .filter((trip) => trip.status === "completed")
+      .filter((trip) => trip.archivedAt || trip.status === "completed")
       .sort((a, b) => b.startDate.localeCompare(a.startDate)),
     [workspace.trips],
   );
@@ -401,10 +421,12 @@ export default function Podroze() {
   const filteredTrips = useMemo(() => workspace.trips
     .filter((trip) => {
       if (statusFilter === "all") return true;
-      if (statusFilter === "upcoming") return trip.status !== "completed";
+      if (statusFilter === "upcoming") return !trip.archivedAt && trip.status !== "completed";
+      if (statusFilter === "archived") return Boolean(trip.archivedAt);
       return trip.status === statusFilter;
     })
     .sort((a, b) => {
+      if (Boolean(a.archivedAt) !== Boolean(b.archivedAt)) return a.archivedAt ? 1 : -1;
       if (a.status === "completed" && b.status !== "completed") return 1;
       if (a.status !== "completed" && b.status === "completed") return -1;
       return a.status === "completed"
@@ -426,11 +448,17 @@ export default function Podroze() {
   }, [selectedTrip]);
 
   const budgetSummary = useMemo(() => {
-    const lines = selectedTrip?.budget ?? [];
-    const planned = lines.reduce((sum, item) => sum + item.planned, 0);
-    const actual = lines.reduce((sum, item) => sum + item.actual, 0);
-    const paid = lines.filter((item) => item.paid).reduce((sum, item) => sum + item.actual, 0);
-    return { planned, actual, paid, remaining: planned - actual };
+    if (!selectedTrip) {
+      return {
+        planned: 0,
+        actual: 0,
+        paid: 0,
+        remaining: 0,
+        reservationCommitted: 0,
+        unbudgetedReservations: 0,
+      };
+    }
+    return summarizeTravelBudget(selectedTrip);
   }, [selectedTrip]);
 
   const setSection = (section: TravelSection) => {
@@ -576,6 +604,11 @@ export default function Podroze() {
         setEditorError("Data zakończenia nie może być wcześniejsza niż początek.");
         return;
       }
+      const currency = normalizeIsoCurrency(draft.currency);
+      if (!currency) {
+        setEditorError("Podaj prawidłowy kod waluty ISO, np. PLN, EUR lub USD.");
+        return;
+      }
       const travelers = draft.travelers.split(",").map((item) => item.trim()).filter(Boolean);
       if (editor.mode === "edit" && editor.id) {
         updateTrip(editor.id, (trip) => ({
@@ -586,7 +619,7 @@ export default function Podroze() {
           endDate: draft.endDate,
           status: draft.tripStatus,
           travelers,
-          baseCurrency: draft.currency.trim().toUpperCase() || "PLN",
+          baseCurrency: currency,
           note: draft.note.trim(),
         }));
       } else {
@@ -601,8 +634,9 @@ export default function Podroze() {
             endDate: draft.endDate,
             status: draft.tripStatus,
             travelers,
-            baseCurrency: draft.currency.trim().toUpperCase() || "PLN",
+            baseCurrency: currency,
             note: draft.note.trim(),
+            archivedAt: null,
             stays: [],
             transports: [],
             itinerary: [],
@@ -624,6 +658,10 @@ export default function Podroze() {
         setEditorError("Wybierz dzień planu.");
         return;
       }
+      if (!isDateWithinTrip(draft.date, selectedTrip)) {
+        setEditorError(`Dzień planu musi mieścić się między ${formatDate(selectedTrip.startDate)} a ${formatDate(selectedTrip.endDate)}.`);
+        return;
+      }
       const value: ItineraryItem = {
         id: editor.id ?? createTravelId("plan"),
         date: draft.date,
@@ -643,6 +681,23 @@ export default function Podroze() {
     }
 
     if (editor.kind === "stay") {
+      if (!draft.startDate || !draft.endDate) {
+        setEditorError("Uzupełnij datę zameldowania i wymeldowania.");
+        return;
+      }
+      if (draft.endDate < draft.startDate) {
+        setEditorError("Wymeldowanie nie może być wcześniejsze niż zameldowanie.");
+        return;
+      }
+      if (!isDateWithinTrip(draft.startDate, selectedTrip) || !isDateWithinTrip(draft.endDate, selectedTrip)) {
+        setEditorError("Daty noclegu muszą mieścić się w terminie podróży.");
+        return;
+      }
+      const amount = numberFrom(draft.amount);
+      if (amount === null) {
+        setEditorError("Kwota noclegu musi być liczbą nieujemną.");
+        return;
+      }
       const value: TravelStay = {
         id: editor.id ?? createTravelId("stay"),
         name,
@@ -652,7 +707,7 @@ export default function Podroze() {
         checkOut: draft.endDate,
         bookingRef: draft.bookingRef.trim(),
         status: draft.reservationStatus,
-        amount: numberFrom(draft.amount),
+        amount,
       };
       updateTrip(selectedTrip.id, (trip) => ({
         ...trip,
@@ -663,6 +718,26 @@ export default function Podroze() {
     }
 
     if (editor.kind === "transport") {
+      if ((draft.departure && !draft.arrival) || (!draft.departure && draft.arrival)) {
+        setEditorError("Uzupełnij zarówno czas odjazdu, jak i przyjazdu.");
+        return;
+      }
+      if (draft.departure && draft.arrival && draft.arrival < draft.departure) {
+        setEditorError("Przyjazd nie może być wcześniejszy niż odjazd.");
+        return;
+      }
+      if (
+        (draft.departure && !isDateWithinTrip(draft.departure.slice(0, 10), selectedTrip))
+        || (draft.arrival && !isDateWithinTrip(draft.arrival.slice(0, 10), selectedTrip))
+      ) {
+        setEditorError("Daty transportu muszą mieścić się w terminie podróży.");
+        return;
+      }
+      const amount = numberFrom(draft.amount);
+      if (amount === null) {
+        setEditorError("Kwota transportu musi być liczbą nieujemną.");
+        return;
+      }
       const value: TravelTransport = {
         id: editor.id ?? createTravelId("transport"),
         mode: draft.transportMode,
@@ -673,7 +748,7 @@ export default function Podroze() {
         arrival: draft.arrival,
         bookingRef: draft.bookingRef.trim(),
         status: draft.reservationStatus,
-        amount: numberFrom(draft.amount),
+        amount,
       };
       updateTrip(selectedTrip.id, (trip) => ({
         ...trip,
@@ -684,12 +759,18 @@ export default function Podroze() {
     }
 
     if (editor.kind === "budget") {
+      const planned = numberFrom(draft.planned);
+      const actual = numberFrom(draft.actual);
+      if (planned === null || actual === null) {
+        setEditorError("Plan i kwota rzeczywista muszą być liczbami nieujemnymi.");
+        return;
+      }
       const value: BudgetLine = {
         id: editor.id ?? createTravelId("budget"),
         category: draft.budgetCategory,
         label: name,
-        planned: numberFrom(draft.planned),
-        actual: numberFrom(draft.actual),
+        planned,
+        actual,
         paid: draft.paid,
       };
       updateTrip(selectedTrip.id, (trip) => ({
@@ -748,6 +829,51 @@ export default function Podroze() {
       return { ...trip, tasks: trip.tasks.filter((item) => item.id !== deleteState.id) };
     });
     setDeleteState(null);
+  };
+
+  const exportTrip = (trip: TravelTrip) => {
+    const payload = JSON.stringify({
+      format: "rootine-trip",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      trip,
+    }, null, 2);
+    const blob = new Blob([payload], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `rootine-podroz-${trip.id}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const confirmTripAction = () => {
+    if (!tripActionState) return;
+    if (tripActionState.kind === "archive") {
+      updateTrip(tripActionState.trip.id, (trip) => ({ ...trip, archivedAt: new Date().toISOString() }));
+    } else {
+      setWorkspace((current) => ({
+        ...current,
+        trips: current.trips.filter((trip) => trip.id !== tripActionState.trip.id),
+      }));
+      setDeletedTripUndo(tripActionState.trip);
+      navigate("/podroze");
+    }
+    setTripActionState(null);
+  };
+
+  const restoreArchivedTrip = (trip: TravelTrip) => {
+    updateTrip(trip.id, (current) => ({ ...current, archivedAt: null }));
+  };
+
+  const undoTripDelete = () => {
+    if (!deletedTripUndo) return;
+    setWorkspace((current) => current.trips.some((trip) => trip.id === deletedTripUndo.id)
+      ? current
+      : { ...current, trips: [...current.trips, deletedTripUndo] });
+    const restoredId = deletedTripUndo.id;
+    setDeletedTripUndo(null);
+    navigate(`/podroze/${restoredId}`);
   };
 
   const toggleTask = (task: TravelTask) => {
@@ -844,6 +970,42 @@ export default function Podroze() {
       <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj podróż" title="Edytuj podróż" onClick={() => openTripEditor(selectedTrip)}>
         <Pencil size={13} />
       </Button>
+      <Button variant="ghost" size="sm" iconOnly aria-label="Eksportuj podróż" title="Eksportuj JSON" onClick={() => exportTrip(selectedTrip)}>
+        <Download size={13} />
+      </Button>
+      {selectedTrip.archivedAt ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          aria-label="Przywróć podróż z archiwum"
+          title="Przywróć z archiwum"
+          onClick={() => restoreArchivedTrip(selectedTrip)}
+        >
+          <ArchiveRestore size={13} />
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          aria-label="Archiwizuj podróż"
+          title="Archiwizuj podróż"
+          onClick={() => setTripActionState({ kind: "archive", trip: selectedTrip })}
+        >
+          <Archive size={13} />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        aria-label="Usuń podróż"
+        title="Usuń podróż"
+        onClick={() => setTripActionState({ kind: "delete", trip: selectedTrip })}
+      >
+        <Trash2 size={13} />
+      </Button>
       {activeSection === "reservations" ? (
         <>
           <Button variant="quiet" leadingIcon={<BedDouble size={13} />} onClick={() => openStayEditor()}>Nocleg</Button>
@@ -866,7 +1028,7 @@ export default function Podroze() {
               ? "Pozycja"
               : activeSection === "documents"
                 ? "Dokument"
-                : "Sprawa"}
+                : "Zadanie"}
         </Button>
       )}
     </>
@@ -887,6 +1049,7 @@ export default function Podroze() {
           meta={(
             <>
               {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
+              {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
               {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
             </>
           )}
@@ -945,6 +1108,7 @@ export default function Podroze() {
                   { value: "planning", label: "W planowaniu" },
                   { value: "ready", label: "Gotowe" },
                   { value: "completed", label: "Zakończone" },
+                  { value: "archived", label: "Archiwum" },
                 ]}
                 onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
               />
@@ -954,6 +1118,13 @@ export default function Podroze() {
 
         {!selectedTrip ? (
           <section className="travel-overview" aria-label="Przegląd podróży">
+            {deletedTripUndo && (
+              <div className="travel-trip-undo" role="status">
+                <span>Usunięto podróż „{deletedTripUndo.name}”.</span>
+                <Button variant="quiet" size="sm" onClick={undoTripDelete}>Cofnij</Button>
+                <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij komunikat" onClick={() => setDeletedTripUndo(null)}>×</Button>
+              </div>
+            )}
             {filteredTrips.length === 0 ? (
               <EmptyState
                 icon={<MapIcon size={18} />}
@@ -963,7 +1134,7 @@ export default function Podroze() {
               />
             ) : (
               <>
-                {filteredTrips[0]?.status !== "completed" && (
+                {filteredTrips[0] && !filteredTrips[0].archivedAt && filteredTrips[0].status !== "completed" && (
                   <button type="button" className="travel-next-departure" onClick={() => selectTrip(filteredTrips[0].id)}>
                     <span className="travel-next-departure__marker"><Plane size={15} /></span>
                     <span className="travel-next-departure__identity">
@@ -1005,8 +1176,7 @@ export default function Podroze() {
                     <span />
                   </div>
                   {filteredTrips.map((trip) => {
-                    const planned = trip.budget.reduce((sum, item) => sum + item.planned, 0);
-                    const actual = trip.budget.reduce((sum, item) => sum + item.actual, 0);
+                    const tripBudget = summarizeTravelBudget(trip);
                     const score = readinessScore(trip);
                     return (
                       <button key={trip.id} type="button" className="travel-board__row" onClick={() => selectTrip(trip.id)}>
@@ -1030,8 +1200,8 @@ export default function Podroze() {
                           <small>{tripCountdown(trip)}</small>
                         </span>
                         <span className="travel-board__money">
-                          <strong>{formatMoney(planned, trip.baseCurrency)}</strong>
-                          <small>{actual ? `${formatMoney(actual, trip.baseCurrency)} wpisane` : "Brak wydatków"}</small>
+                          <strong>{formatMoney(tripBudget.planned, trip.baseCurrency)}</strong>
+                          <small>{tripBudget.actual ? `${formatMoney(tripBudget.actual, trip.baseCurrency)} rzeczywiście` : "Brak wydatków"}</small>
                         </span>
                         <ChevronRight size={14} aria-hidden="true" />
                       </button>
@@ -1042,7 +1212,13 @@ export default function Podroze() {
             )}
           </section>
         ) : (
-          <section id={`panel-${activeSection}`} role="tabpanel" aria-labelledby={`tab-${activeSection}`} className="travel-canvas">
+          <section
+            id={`travel-panel-${activeSection}`}
+            role="tabpanel"
+            aria-labelledby={`travel-tab-${activeSection}`}
+            tabIndex={0}
+            className="travel-canvas"
+          >
             {activeSection === "overview" && (
               <div className="travel-trip-overview">
                 <section className="travel-readiness" aria-labelledby="travel-readiness-title">
@@ -1136,7 +1312,7 @@ export default function Podroze() {
                     </header>
                     <div className="travel-money-summary">
                       <span><small>Plan</small><strong>{formatMoney(budgetSummary.planned, selectedTrip.baseCurrency)}</strong></span>
-                      <span><small>Wpisane</small><strong>{formatMoney(budgetSummary.actual, selectedTrip.baseCurrency)}</strong></span>
+                      <span><small>Rzeczywiste</small><strong>{formatMoney(budgetSummary.actual, selectedTrip.baseCurrency)}</strong></span>
                       <span><small>Zostaje</small><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}>{formatMoney(budgetSummary.remaining, selectedTrip.baseCurrency)}</strong></span>
                     </div>
                   </section>
@@ -1282,10 +1458,25 @@ export default function Podroze() {
               <div className="travel-budget">
                 <section className="travel-budget-summary" aria-label="Podsumowanie budżetu">
                   <div><span>Plan podróży</span><strong>{formatMoney(budgetSummary.planned, selectedTrip.baseCurrency)}</strong></div>
-                  <div><span>Wpisane wydatki</span><strong>{formatMoney(budgetSummary.actual, selectedTrip.baseCurrency)}</strong></div>
+                  <div><span>Rzeczywiste wydatki</span><strong>{formatMoney(budgetSummary.actual, selectedTrip.baseCurrency)}</strong></div>
                   <div><span>Już opłacone</span><strong>{formatMoney(budgetSummary.paid, selectedTrip.baseCurrency)}</strong></div>
                   <div><span>Do dyspozycji</span><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}>{formatMoney(budgetSummary.remaining, selectedTrip.baseCurrency)}</strong></div>
                 </section>
+                <div className="travel-budget-link-note" role="note">
+                  <ReceiptText size={14} aria-hidden="true" />
+                  <span>
+                    <strong>Rezerwacje są połączone z podsumowaniem</strong>
+                    <small>
+                      Noclegi i transport wnoszą {formatMoney(budgetSummary.reservationCommitted, selectedTrip.baseCurrency)}.
+                      Dla tych kategorii podsumowanie bierze wyższą z kwot — wpis budżetowy albo rezerwacje — aby ich nie dublować.
+                    </small>
+                  </span>
+                  {budgetSummary.unbudgetedReservations > 0 && (
+                    <Badge tone="warning">
+                      {formatMoney(budgetSummary.unbudgetedReservations, selectedTrip.baseCurrency)} poza planem
+                    </Badge>
+                  )}
+                </div>
                 <section className="travel-budget-register">
                   <div className="travel-budget-register__head">
                     <span>Kategoria</span><span>Plan</span><span>Rzeczywiście</span><span>Realizacja</span><span>Status</span><span />
@@ -1300,7 +1491,16 @@ export default function Podroze() {
                         </span>
                         <span className="travel-budget-row__value">{formatMoney(line.planned, selectedTrip.baseCurrency)}</span>
                         <span className="travel-budget-row__value">{formatMoney(line.actual, selectedTrip.baseCurrency)}</span>
-                        <span className="travel-budget-row__progress"><i><b style={{ width: `${ratio}%` }} /></i><strong>{ratio}%</strong></span>
+                        <span
+                          className="travel-budget-row__progress"
+                          role="progressbar"
+                          aria-label={`Realizacja budżetu: ${line.label}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={ratio}
+                        >
+                          <i><b style={{ width: `${ratio}%` }} /></i><strong>{ratio}%</strong>
+                        </span>
                         <Badge tone={line.paid ? "success" : line.actual > line.planned ? "danger" : "neutral"}>{line.paid ? "Opłacono" : "Plan"}</Badge>
                         <span className="travel-row-actions">
                           <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${line.label}`} onClick={() => openBudgetEditor(line)}><Pencil size={12} /></Button>
@@ -1449,8 +1649,8 @@ export default function Podroze() {
               <>
                 <Input label="Trasa / kierunek" placeholder="np. Tokio · Kioto · Osaka" value={draft.destination} onChange={(event) => setDraft((current) => ({ ...current, destination: event.target.value }))} />
                 <div className="travel-form__grid">
-                  <Input type="date" label="Początek" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
-                  <Input type="date" label="Koniec" value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
+                  <Input type="date" label="Początek" value={draft.startDate} max={draft.endDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
+                  <Input type="date" label="Koniec" value={draft.endDate} min={draft.startDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
                   <Select
@@ -1459,7 +1659,7 @@ export default function Podroze() {
                     options={Object.entries(TRIP_STATUS_LABELS).map(([value, label]) => ({ value, label }))}
                     onChange={(event) => setDraft((current) => ({ ...current, tripStatus: event.target.value as TripStatus }))}
                   />
-                  <Input label="Waluta budżetu" maxLength={3} value={draft.currency} onChange={(event) => setDraft((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+                  <Input label="Waluta budżetu" hint="Trzyliterowy kod ISO, np. PLN lub EUR." minLength={3} maxLength={3} pattern="[A-Za-z]{3}" value={draft.currency} onChange={(event) => setDraft((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
                 </div>
                 <Input label="Podróżni" hint="Oddziel osoby przecinkami." placeholder="Mateusz, Ola" value={draft.travelers} onChange={(event) => setDraft((current) => ({ ...current, travelers: event.target.value }))} />
               </>
@@ -1468,7 +1668,7 @@ export default function Podroze() {
             {editor.kind === "itinerary" && (
               <>
                 <div className="travel-form__grid">
-                  <Input type="date" label="Dzień" value={draft.date} onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))} />
+                  <Input type="date" label="Dzień" min={selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.date} onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))} />
                   <Input type="time" label="Godzina" value={draft.time} onChange={(event) => setDraft((current) => ({ ...current, time: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
@@ -1495,8 +1695,8 @@ export default function Podroze() {
                 </div>
                 <Input label="Adres" value={draft.address} onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))} />
                 <div className="travel-form__grid">
-                  <Input type="date" label="Zameldowanie" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
-                  <Input type="date" label="Wymeldowanie" value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
+                  <Input type="date" label="Zameldowanie" min={selectedTrip?.startDate} max={draft.endDate || selectedTrip?.endDate} value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
+                  <Input type="date" label="Wymeldowanie" min={draft.startDate || selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
                   <Input label="Numer rezerwacji" value={draft.bookingRef} onChange={(event) => setDraft((current) => ({ ...current, bookingRef: event.target.value }))} />
@@ -1526,8 +1726,8 @@ export default function Podroze() {
                   <Input label="Dokąd" value={draft.to} onChange={(event) => setDraft((current) => ({ ...current, to: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
-                  <Input type="datetime-local" label="Odjazd / wylot" value={draft.departure} onChange={(event) => setDraft((current) => ({ ...current, departure: event.target.value }))} />
-                  <Input type="datetime-local" label="Przyjazd / przylot" value={draft.arrival} onChange={(event) => setDraft((current) => ({ ...current, arrival: event.target.value }))} />
+                  <Input type="datetime-local" label="Odjazd / wylot" min={selectedTrip ? `${selectedTrip.startDate}T00:00` : undefined} max={draft.arrival || (selectedTrip ? `${selectedTrip.endDate}T23:59` : undefined)} value={draft.departure} onChange={(event) => setDraft((current) => ({ ...current, departure: event.target.value }))} />
+                  <Input type="datetime-local" label="Przyjazd / przylot" min={draft.departure || (selectedTrip ? `${selectedTrip.startDate}T00:00` : undefined)} max={selectedTrip ? `${selectedTrip.endDate}T23:59` : undefined} value={draft.arrival} onChange={(event) => setDraft((current) => ({ ...current, arrival: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
                   <Input label="Numer rezerwacji" value={draft.bookingRef} onChange={(event) => setDraft((current) => ({ ...current, bookingRef: event.target.value }))} />
@@ -1616,6 +1816,36 @@ export default function Podroze() {
           )}
         >
           <p className="travel-delete-note">Tej operacji nie można cofnąć.</p>
+        </Modal>
+      )}
+
+      {tripActionState && (
+        <Modal
+          eyebrow="Podróż"
+          title={tripActionState.kind === "archive"
+            ? `Archiwizować „${tripActionState.trip.name}”?`
+            : `Usunąć „${tripActionState.trip.name}”?`}
+          description={tripActionState.kind === "archive"
+            ? "Podróż zniknie z listy nadchodzących. Wszystkie rezerwacje, dokumenty i zadania pozostaną zapisane."
+            : "Cały dossier podróży zostanie usunięty z lokalnego obszaru. Bezpośrednio po operacji będzie dostępne Cofnij."}
+          onClose={() => setTripActionState(null)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setTripActionState(null)}>Anuluj</Button>
+              <Button
+                variant={tripActionState.kind === "archive" ? "primary" : "danger"}
+                onClick={confirmTripAction}
+              >
+                {tripActionState.kind === "archive" ? "Archiwizuj" : "Usuń podróż"}
+              </Button>
+            </>
+          )}
+        >
+          <p className="travel-delete-note">
+            {tripActionState.kind === "archive"
+              ? "Podróż można później przywrócić z archiwum."
+              : "Przed usunięciem możesz pobrać eksport JSON z nagłówka podróży."}
+          </p>
         </Modal>
       )}
     </ModuleShell>

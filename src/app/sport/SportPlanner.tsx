@@ -4,13 +4,11 @@ import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Copy,
   Ellipsis,
   GripVertical,
   Pencil,
   Plus,
-  Repeat2,
   Search,
   Trash2,
 } from "lucide-react";
@@ -232,6 +230,11 @@ function WeekBoard({
     () => cycle.workouts.filter((workout) => workout.week === activeWeek),
     [activeWeek, cycle.workouts],
   );
+  const focusWeekTab = (week: number) => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(`sport-week-tab-${week}`)?.focus();
+    });
+  };
 
   return (
     <section className="sport-cycle-weeks" aria-labelledby="cycle-week-heading">
@@ -272,9 +275,23 @@ function WeekBoard({
               key={week}
               type="button"
               role="tab"
+              id={`sport-week-tab-${week}`}
+              aria-controls="sport-cycle-week-panel"
               aria-selected={week === activeWeek}
+              tabIndex={week === activeWeek ? 0 : -1}
               className={`sport-week-tab ${dropTarget === `week-${week}` ? "is-drop-target" : ""}`.trim()}
               onClick={() => onWeekChange(week)}
+              onKeyDown={(event) => {
+                let nextWeek: number;
+                if (event.key === "ArrowRight" || event.key === "ArrowDown") nextWeek = week === cycle.weeks ? 1 : week + 1;
+                else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextWeek = week === 1 ? cycle.weeks : week - 1;
+                else if (event.key === "Home") nextWeek = 1;
+                else if (event.key === "End") nextWeek = cycle.weeks;
+                else return;
+                event.preventDefault();
+                onWeekChange(nextWeek);
+                focusWeekTab(nextWeek);
+              }}
               onDragOver={(event) => {
                 event.preventDefault();
                 setDropTarget(`week-${week}`);
@@ -297,7 +314,12 @@ function WeekBoard({
         })}
       </div>
 
-      <div className="sport-cycle-board-scroll">
+      <div
+        id="sport-cycle-week-panel"
+        role="tabpanel"
+        aria-labelledby={`sport-week-tab-${activeWeek}`}
+        className="sport-cycle-board-scroll"
+      >
         <div className="sport-cycle-board">
           {DAY_LABELS.map((day, dayIndex) => {
             const dateKey = cycleWeekDate(cycle, activeWeek, dayIndex);
@@ -342,9 +364,38 @@ function WeekBoard({
                       type="button"
                       draggable
                       aria-pressed={selectedWorkoutId === workout.id}
+                      aria-describedby="sport-cycle-drag-hint"
+                      aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"
                       className={`sport-cycle-workout ${selectedWorkoutId === workout.id ? "is-selected" : ""}`.trim()}
                       style={{ opacity: draggedId === workout.id ? 0.45 : 1 }}
                       onClick={() => onSelect(workout)}
+                      onKeyDown={(event) => {
+                        if (!event.altKey) return;
+                        let nextWeek = workout.week;
+                        let nextDay = workout.day;
+                        if (event.key === "ArrowLeft") {
+                          if (nextDay > 0) nextDay -= 1;
+                          else if (nextWeek > 1) {
+                            nextWeek -= 1;
+                            nextDay = 6;
+                          } else return;
+                        } else if (event.key === "ArrowRight") {
+                          if (nextDay < 6) nextDay += 1;
+                          else if (nextWeek < cycle.weeks) {
+                            nextWeek += 1;
+                            nextDay = 0;
+                          } else return;
+                        } else if (event.key === "ArrowUp") {
+                          if (nextWeek <= 1) return;
+                          nextWeek -= 1;
+                        } else if (event.key === "ArrowDown") {
+                          if (nextWeek >= cycle.weeks) return;
+                          nextWeek += 1;
+                        } else return;
+                        event.preventDefault();
+                        onMove(workout.id, nextWeek, nextDay);
+                        if (nextWeek !== activeWeek) onWeekChange(nextWeek);
+                      }}
                       onDragStart={(event) => {
                         setDraggedId(workout.id);
                         event.dataTransfer.setData("text/sport-cycle-workout", workout.id);
@@ -375,7 +426,9 @@ function WeekBoard({
           })}
         </div>
       </div>
-      <p className="sport-cycle-drag-hint">Przeciągnij trening na inny dzień albo na numer tygodnia. Kliknięcie pokazuje szczegóły.</p>
+      <p id="sport-cycle-drag-hint" className="sport-cycle-drag-hint">
+        Przeciągnij trening na inny dzień albo tydzień. Klawiatura: Alt + ←/→ zmienia dzień, Alt + ↑/↓ zmienia tydzień.
+      </p>
     </section>
   );
 }

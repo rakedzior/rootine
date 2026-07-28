@@ -1,4 +1,6 @@
-const STORAGE_KEY = "rootine.notes-workspace.v1";
+import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
+
+export const NOTES_STORAGE_KEY = "rootine.notes-workspace.v1";
 const WORKSPACE_VERSION = 1 as const;
 
 export type NoteColor = "graphite" | "blue" | "green" | "amber" | "violet" | "coral";
@@ -179,6 +181,16 @@ function isNote(value: unknown): value is NoteRecord {
     && typeof value.updatedAt === "string";
 }
 
+function isWorkspace(value: unknown): value is NotesWorkspace {
+  return isRecord(value)
+    && value.version === WORKSPACE_VERSION
+    && typeof value.updatedAt === "string"
+    && Array.isArray(value.lists)
+    && value.lists.every(isList)
+    && Array.isArray(value.notes)
+    && value.notes.every(isNote);
+}
+
 function cloneDefaultWorkspace(): NotesWorkspace {
   return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as NotesWorkspace;
 }
@@ -190,39 +202,23 @@ export function createNotesId(prefix: "note" | "list" | "item"): string {
   return `${prefix}-${suffix}`;
 }
 
-export function loadNotesWorkspace(): NotesWorkspace {
-  const fallback = cloneDefaultWorkspace();
-  if (typeof window === "undefined") return fallback;
+export function loadNotesWorkspaceResult(): LocalLoadResult<NotesWorkspace> {
+  return readLocalWorkspace({
+    key: NOTES_STORAGE_KEY,
+    fallback: cloneDefaultWorkspace,
+    validate: isWorkspace,
+  });
+}
 
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<NotesWorkspace>;
-    if (
-      parsed.version !== WORKSPACE_VERSION
-      || !Array.isArray(parsed.lists)
-      || !parsed.lists.every(isList)
-      || !Array.isArray(parsed.notes)
-      || !parsed.notes.every(isNote)
-    ) return fallback;
-    return parsed as NotesWorkspace;
-  } catch {
-    return fallback;
-  }
+export function loadNotesWorkspace(): NotesWorkspace {
+  return loadNotesWorkspaceResult().workspace;
 }
 
 export function saveNotesWorkspace(workspace: NotesWorkspace): boolean {
-  if (typeof window === "undefined") return false;
   const next: NotesWorkspace = {
     ...workspace,
     version: WORKSPACE_VERSION,
     updatedAt: new Date().toISOString(),
   };
-
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeLocalWorkspace(NOTES_STORAGE_KEY, next);
 }

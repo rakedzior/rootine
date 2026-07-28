@@ -1,4 +1,6 @@
-const STORAGE_KEY = "rootine.work-workspace.v1";
+import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
+
+export const WORK_STORAGE_KEY = "rootine.work-workspace.v1";
 const WORKSPACE_VERSION = 1 as const;
 
 export type WorkProjectStatus = "active" | "paused" | "completed";
@@ -46,13 +48,13 @@ const DEFAULT_WORKSPACE: WorkWorkspace = {
       id: "company-studio",
       name: "Studio North",
       description: "Projekty produktowe i komunikacja",
-      color: "#4772FA",
+      color: "#7FA6C9",
     },
     {
       id: "company-atlas",
       name: "Atlas",
       description: "Stała współpraca",
-      color: "#70B89F",
+      color: "#79A8A4",
     },
   ],
   projects: [
@@ -195,6 +197,18 @@ function isTask(value: unknown): value is WorkTask {
     && typeof value.createdAt === "string";
 }
 
+function isWorkspace(value: unknown): value is WorkWorkspace {
+  return isRecord(value)
+    && value.version === WORKSPACE_VERSION
+    && typeof value.updatedAt === "string"
+    && Array.isArray(value.companies)
+    && value.companies.every(isCompany)
+    && Array.isArray(value.projects)
+    && value.projects.every(isProject)
+    && Array.isArray(value.tasks)
+    && value.tasks.every(isTask);
+}
+
 function cloneDefaultWorkspace(): WorkWorkspace {
   return {
     ...DEFAULT_WORKSPACE,
@@ -204,6 +218,16 @@ function cloneDefaultWorkspace(): WorkWorkspace {
   };
 }
 
+function normalizeCompanyColor(color: string): string {
+  const normalized = color.toUpperCase();
+  if (normalized === "#4772FA" || normalized === "#809AF4") return "#7FA6C9";
+  if (normalized === "#70B89F") return "#79A8A4";
+  if (normalized === "#D4AA68") return "#B9A171";
+  if (normalized === "#CF777C") return "#BC8EA5";
+  if (normalized === "#A0A0A0") return "#8793A1";
+  return color;
+}
+
 export function createWorkId(prefix: "company" | "project" | "task"): string {
   const suffix = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -211,41 +235,33 @@ export function createWorkId(prefix: "company" | "project" | "task"): string {
   return `${prefix}-${suffix}`;
 }
 
-export function loadWorkWorkspace(): WorkWorkspace {
-  const fallback = cloneDefaultWorkspace();
-  if (typeof window === "undefined") return fallback;
+export function loadWorkWorkspaceResult(): LocalLoadResult<WorkWorkspace> {
+  const result = readLocalWorkspace({
+    key: WORK_STORAGE_KEY,
+    fallback: cloneDefaultWorkspace,
+    validate: isWorkspace,
+  });
+  return {
+    ...result,
+    workspace: {
+      ...result.workspace,
+      companies: result.workspace.companies.map((company) => ({
+        ...company,
+        color: normalizeCompanyColor(company.color),
+      })),
+    },
+  };
+}
 
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<WorkWorkspace>;
-    if (
-      parsed.version !== WORKSPACE_VERSION
-      || !Array.isArray(parsed.companies)
-      || !Array.isArray(parsed.projects)
-      || !Array.isArray(parsed.tasks)
-      || !parsed.companies.every(isCompany)
-      || !parsed.projects.every(isProject)
-      || !parsed.tasks.every(isTask)
-    ) return fallback;
-    return parsed as WorkWorkspace;
-  } catch {
-    return fallback;
-  }
+export function loadWorkWorkspace(): WorkWorkspace {
+  return loadWorkWorkspaceResult().workspace;
 }
 
 export function saveWorkWorkspace(workspace: WorkWorkspace): boolean {
-  if (typeof window === "undefined") return false;
   const next: WorkWorkspace = {
     ...workspace,
     version: WORKSPACE_VERSION,
     updatedAt: new Date().toISOString(),
   };
-
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeLocalWorkspace(WORK_STORAGE_KEY, next);
 }

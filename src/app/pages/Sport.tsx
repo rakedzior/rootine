@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Dumbbell, Play, Plus, Save, Undo2 } from "lucide-react";
+import { calendarDaysBetween } from "../data/localDate";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   ActiveSessionConflictDialog,
   SportActiveSession,
@@ -33,6 +35,7 @@ import {
   historyEntryFromSession,
   loadSportPlannerState,
   saveSportPlannerState,
+  SPORT_PLANNER_STORAGE_KEY,
   todayCycleWeek,
   cycleWorkoutDate,
   type CycleWorkout,
@@ -44,7 +47,6 @@ import {
   EXERCISE_LIBRARY,
   addDays,
   cloneExercises,
-  fromDateKey,
   toDateKey,
   type WorkoutExercise,
   type WorkoutSession,
@@ -54,6 +56,7 @@ import { SportSidebar, SPORT_VIEW_LABELS } from "../sport/SportSidebar";
 import {
   Badge,
   Button,
+  Modal,
   ModuleMain,
   ModuleShell,
   PageHeader,
@@ -78,6 +81,55 @@ interface MoveUndo {
   previousDay: number;
   message: string;
   persisted: boolean;
+}
+
+interface WorkoutDeleteState {
+  workout: CycleWorkout;
+}
+
+interface WorkoutDeleteUndo {
+  workout: CycleWorkout;
+  index: number;
+  persisted: boolean;
+}
+
+const SPORT_CYCLE_DRAFT_KEY = "rootine.sport-cycle-draft.v1";
+
+function loadStoredCycleDraft(fallback: TrainingCycle | null): TrainingCycle | null {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.sessionStorage.getItem(SPORT_CYCLE_DRAFT_KEY);
+    if (!raw) return fallback;
+    const value = JSON.parse(raw) as Partial<TrainingCycle>;
+    if (
+      typeof value.id !== "string"
+      || typeof value.name !== "string"
+      || typeof value.startDate !== "string"
+      || typeof value.weeks !== "number"
+      || !Array.isArray(value.workouts)
+    ) {
+      window.sessionStorage.removeItem(SPORT_CYCLE_DRAFT_KEY);
+      return fallback;
+    }
+    return value as TrainingCycle;
+  } catch {
+    window.sessionStorage.removeItem(SPORT_CYCLE_DRAFT_KEY);
+    return fallback;
+  }
+}
+
+function getInitialSportUrlState() {
+  if (typeof window === "undefined") return { view: "today" as PlannerView, week: 0 };
+  const params = new URLSearchParams(window.location.search);
+  const requestedView = params.get("widok");
+  const view: PlannerView = requestedView === "cycle"
+    || requestedView === "templates"
+    || requestedView === "history"
+    || requestedView === "analysis"
+    ? requestedView
+    : "today";
+  const week = Number(params.get("tydzien"));
+  return { view, week: Number.isInteger(week) && week > 0 ? week : 0 };
 }
 
 function upsertHistory(history: WorkoutHistoryEntry[], entry: WorkoutHistoryEntry) {
@@ -117,10 +169,12 @@ function finalizeSession(
 }
 
 export default function Sport() {
+  const [initialUrlState] = useState(getInitialSportUrlState);
   const [plannerState, setPlannerState] = useState(loadSportPlannerState);
-  const [cycleDraft, setCycleDraft] = useState<TrainingCycle | null>(plannerState.activeCycle);
-  const [view, setView] = useState<PlannerView>("today");
-  const [activeWeek, setActiveWeek] = useState(() => plannerState.activeCycle ? todayCycleWeek(plannerState.activeCycle) : 1);
+  const [cycleDraft, setCycleDraft] = useState<TrainingCycle | null>(() => loadStoredCycleDraft(plannerState.activeCycle));
+  const [view, setView] = useState<PlannerView>(initialUrlState.view);
+  const [activeWeek, setActiveWeek] = useState(() => initialUrlState.week
+    || (plannerState.activeCycle ? todayCycleWeek(plannerState.activeCycle) : 1));
   const [dialog, setDialog] = useState<PlannerDialog>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [workoutDialog, setWorkoutDialog] = useState<WorkoutDialogState | null>(null);
@@ -131,6 +185,8 @@ export default function Sport() {
   const [moveNotice, setMoveNotice] = useState("");
   const [autosaveNotice, setAutosaveNotice] = useState("");
   const [storageFailed, setStorageFailed] = useState(false);
+  const [workoutDeleteState, setWorkoutDeleteState] = useState<WorkoutDeleteState | null>(null);
+  const [workoutDeleteUndo, setWorkoutDeleteUndo] = useState<WorkoutDeleteUndo | null>(null);
 
   const savedCycleSignature = useMemo(
     () => JSON.stringify(plannerState.activeCycle),
@@ -169,6 +225,57 @@ export default function Sport() {
     setStorageFailed(!saveSportPlannerState(plannerState));
   }, [plannerState]);
 
+  useEffect(() => subscribeToLocalWorkspace(SPORT_PLANNER_STORAGE_KEY, () => {
+    if (cycleDirty) {
+      setAutosaveNotice("Dane sportowe zmieniły się w innej karcie. Zapisz albo odrzuć szkic i odśwież widok.");
+      return;
+    }
+    const nextState = loadSportPlannerState();
+    setPlannerState(nextState);
+    setCycleDraft(nextState.activeCycle);
+  }), [cycleDirty]);
+
+  useEffect(() => {
+    try {
+      if (cycleDirty && cycleDraft) {
+        window.sessionStorage.setItem(SPORT_CYCLE_DRAFT_KEY, JSON.stringify(cycleDraft));
+      } else {
+        window.sessionStorage.removeItem(SPORT_CYCLE_DRAFT_KEY);
+      }
+    } catch {
+      // The explicit beforeunload guard still protects the draft when session storage is unavailable.
+    }
+  }, [cycleDirty, cycleDraft]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!cycleDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [cycleDirty]);
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const next = getInitialSportUrlState();
+      setView(next.view);
+      if (next.week) setActiveWeek(next.week);
+    };
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (view === "today") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", view);
+    if (view === "cycle") url.searchParams.set("tydzien", String(activeWeek));
+    else url.searchParams.delete("tydzien");
+    if (url.href !== window.location.href) window.history.replaceState({}, "", url);
+  }, [activeWeek, view]);
+
   useEffect(() => {
     if (!moveUndo) return;
     const timer = window.setTimeout(() => setMoveUndo(null), 8000);
@@ -190,6 +297,12 @@ export default function Sport() {
   const changeView = (next: PlannerView) => {
     setView(next);
     if (next !== "today" && next !== "cycle") setSelectedWorkoutId(null);
+    const url = new URL(window.location.href);
+    if (next === "today") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", next);
+    if (next === "cycle") url.searchParams.set("tydzien", String(activeWeek));
+    else url.searchParams.delete("tydzien");
+    if (url.href !== window.location.href) window.history.pushState({}, "", url);
   };
 
   const changeWeek = (week: number) => {
@@ -246,9 +359,7 @@ export default function Sport() {
   const moveWorkoutTomorrow = (workout: CycleWorkout) => {
     if (!cycleDraft) return;
     const tomorrow = addDays(cycleWorkoutDate(cycleDraft, workout), 1);
-    const difference = Math.round(
-      (fromDateKey(tomorrow).getTime() - fromDateKey(cycleDraft.startDate).getTime()) / 86_400_000,
-    );
+    const difference = calendarDaysBetween(cycleDraft.startDate, tomorrow) ?? 0;
     const nextWeek = Math.floor(difference / 7) + 1;
     const nextDay = ((difference % 7) + 7) % 7;
     if (nextWeek < 1 || nextWeek > cycleDraft.weeks) {
@@ -363,15 +474,52 @@ export default function Sport() {
     closeDialogs();
   };
 
-  const deleteWorkout = () => {
+  const requestWorkoutDelete = () => {
     const workout = editingWorkout ?? selectedWorkout;
-    if (!workout || !cycleDraft) return;
-    applyCycleChange({
+    if (!workout) return;
+    setWorkoutDeleteState({ workout });
+  };
+
+  const confirmWorkoutDelete = () => {
+    if (!workoutDeleteState || !cycleDraft) return;
+    const workout = cycleDraft.workouts.find((item) => item.id === workoutDeleteState.workout.id);
+    if (!workout) {
+      setWorkoutDeleteState(null);
+      return;
+    }
+    const index = cycleDraft.workouts.findIndex((item) => item.id === workout.id);
+    const persisted = view === "today";
+    const nextCycle = {
       ...cycleDraft,
       workouts: cycleDraft.workouts.filter((item) => item.id !== workout.id),
-    }, "Trening usunięto i zapisano automatycznie.");
+      ...(persisted ? { updatedAt: new Date().toISOString() } : {}),
+    };
+    setCycleDraft(nextCycle);
+    if (persisted) setPlannerState((current) => ({ ...current, activeCycle: nextCycle }));
+    setWorkoutDeleteUndo({ workout, index, persisted });
+    setWorkoutDeleteState(null);
     setSelectedWorkoutId(null);
     closeDialogs();
+  };
+
+  const undoWorkoutDelete = () => {
+    if (!workoutDeleteUndo || !cycleDraft) return;
+    if (cycleDraft.workouts.some((workout) => workout.id === workoutDeleteUndo.workout.id)) {
+      setWorkoutDeleteUndo(null);
+      return;
+    }
+    const workouts = [...cycleDraft.workouts];
+    workouts.splice(Math.max(0, Math.min(workoutDeleteUndo.index, workouts.length)), 0, workoutDeleteUndo.workout);
+    const nextCycle = {
+      ...cycleDraft,
+      workouts,
+      ...(workoutDeleteUndo.persisted ? { updatedAt: new Date().toISOString() } : {}),
+    };
+    setCycleDraft(nextCycle);
+    if (workoutDeleteUndo.persisted) {
+      setPlannerState((current) => ({ ...current, activeCycle: nextCycle }));
+    }
+    setWorkoutDeleteUndo(null);
   };
 
   const toggleWorkoutDetails = (workout: CycleWorkout) => {
@@ -389,7 +537,7 @@ export default function Sport() {
 
   const openCycleView = (week: number) => {
     setActiveWeek(week);
-    setView("cycle");
+    changeView("cycle");
   };
 
   const openTodayWorkoutDialog = () => {
@@ -791,7 +939,7 @@ export default function Sport() {
           onClearOutcome={() => clearWorkoutOutcome(selectedWorkout)}
           onEditSingle={() => openWorkoutEditor(selectedWorkout, "single")}
           onEditSeries={() => openWorkoutEditor(selectedWorkout, "series")}
-          onDelete={deleteWorkout}
+          onDelete={requestWorkoutDelete}
         />
       )}
 
@@ -802,7 +950,14 @@ export default function Sport() {
         </div>
       )}
 
-      {autosaveNotice && !moveUndo && (
+      {workoutDeleteUndo && (
+        <div className="sport-undo-toast" role="status">
+          <span>Usunięto „{workoutDeleteUndo.workout.title}”.</span>
+          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={12} />} onClick={undoWorkoutDelete}>Cofnij</Button>
+        </div>
+      )}
+
+      {autosaveNotice && !moveUndo && !workoutDeleteUndo && (
         <div className="sport-undo-toast sport-autosave-toast" role="status">
           <Check size={13} aria-hidden="true" />
           <span>{autosaveNotice}</span>
@@ -840,8 +995,27 @@ export default function Sport() {
             : 1}
           onClose={closeDialogs}
           onSubmit={submitWorkouts}
-          onDelete={editingWorkout ? deleteWorkout : undefined}
+          onDelete={editingWorkout ? requestWorkoutDelete : undefined}
         />
+      )}
+
+      {workoutDeleteState && (
+        <Modal
+          eyebrow="Plan treningowy"
+          title={`Usunąć „${workoutDeleteState.workout.title}”?`}
+          description="Trening zniknie z aktywnego cyklu. Po zatwierdzeniu możesz od razu cofnąć tę zmianę."
+          onClose={() => setWorkoutDeleteState(null)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setWorkoutDeleteState(null)}>Anuluj</Button>
+              <Button variant="danger" onClick={confirmWorkoutDelete}>Usuń trening</Button>
+            </>
+          )}
+        >
+          <p className="sport-delete-note">
+            Pozostałe treningi i zapisane wyniki cyklu nie zostaną zmienione.
+          </p>
+        </Modal>
       )}
 
       {activeSession && requestedWorkout && (

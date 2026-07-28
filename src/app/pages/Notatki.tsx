@@ -14,10 +14,10 @@ import {
   Clock3,
   FileText,
   Folder,
-  FolderPlus,
   LayoutGrid,
   ListChecks,
   NotebookPen,
+  Pencil,
   Pin,
   PinOff,
   Plus,
@@ -26,10 +26,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { calendarDaysBetween, todayLocalDateKey, toLocalDateKey } from "../data/localDate";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   createNotesId,
   loadNotesWorkspace,
+  NOTES_STORAGE_KEY,
   saveNotesWorkspace,
   type NoteChecklistItem,
   type NoteColor,
@@ -51,10 +54,12 @@ import {
   Select,
   WorkspaceToolbar,
 } from "../ui";
+import "../../styles/notes.css";
 
 type NotesView = "all" | "pinned" | "recent" | "archive" | `list:${string}` | `tag:${string}`;
 type NotesSort = "updated" | "created" | "title";
 type EditorState = { mode: "add" | "edit"; id?: string };
+type ListEditorState = { mode: "add" | "edit"; id?: string };
 
 type NoteDraft = {
   title: string;
@@ -80,6 +85,70 @@ const EMPTY_DRAFT: NoteDraft = {
   archived: false,
 };
 
+const NOTE_DRAFT_STORAGE_KEY = "rootine.notes-editor-draft.v1";
+const NOTE_DRAFT_SAVE_DELAY_MS = 250;
+const NOTES_VIEWS = new Set<NotesView>(["all", "pinned", "recent", "archive"]);
+
+type StoredDraftSession = {
+  editor: EditorState;
+  draft: NoteDraft;
+  baseline: string;
+};
+
+function serializeDraft(draft: NoteDraft): string {
+  return JSON.stringify(draft);
+}
+
+function updateDraftBaseline(
+  baseline: string,
+  updater: (baselineDraft: NoteDraft) => NoteDraft,
+): string {
+  try {
+    return serializeDraft(updater(JSON.parse(baseline) as NoteDraft));
+  } catch {
+    return baseline;
+  }
+}
+
+function loadStoredDraftSession(): StoredDraftSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(NOTE_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<StoredDraftSession>;
+    if (
+      !value.editor
+      || (value.editor.mode !== "add" && value.editor.mode !== "edit")
+      || !value.draft
+      || typeof value.draft.title !== "string"
+      || typeof value.draft.body !== "string"
+      || !Array.isArray(value.draft.items)
+      || typeof value.baseline !== "string"
+    ) {
+      window.sessionStorage.removeItem(NOTE_DRAFT_STORAGE_KEY);
+      return null;
+    }
+    return value as StoredDraftSession;
+  } catch {
+    window.sessionStorage.removeItem(NOTE_DRAFT_STORAGE_KEY);
+    return null;
+  }
+}
+
+function getInitialNotesUrlState(): { view: NotesView; search: string; sort: NotesSort } {
+  if (typeof window === "undefined") return { view: "all", search: "", sort: "updated" };
+  const params = new URLSearchParams(window.location.search);
+  const requestedView = params.get("widok") ?? "all";
+  const view = NOTES_VIEWS.has(requestedView as NotesView)
+    || requestedView.startsWith("list:")
+    || requestedView.startsWith("tag:")
+    ? requestedView as NotesView
+    : "all";
+  const requestedSort = params.get("sort");
+  const sort: NotesSort = requestedSort === "created" || requestedSort === "title" ? requestedSort : "updated";
+  return { view, search: params.get("q") ?? "", sort };
+}
+
 const COLOR_OPTIONS: Array<{ value: NoteColor; label: string }> = [
   { value: "graphite", label: "Grafitowa" },
   { value: "blue", label: "Niebieska" },
@@ -92,10 +161,7 @@ const COLOR_OPTIONS: Array<{ value: NoteColor; label: string }> = [
 function formatUpdatedAt(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Nieznana data";
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const dayDiff = Math.round((startOfToday - startOfDate) / 86_400_000);
+  const dayDiff = calendarDaysBetween(toLocalDateKey(date), todayLocalDateKey()) ?? 0;
   if (dayDiff === 0) return `Dziś, ${date.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`;
   if (dayDiff === 1) return "Wczoraj";
   if (dayDiff < 7) return date.toLocaleDateString("pl-PL", { weekday: "long" });
@@ -106,7 +172,7 @@ function normalizedTags(value: string): string[] {
   return Array.from(new Set(
     value
       .split(",")
-      .map((tagName) => tagName.trim().replace(/^#/, ""))
+      .map((tagName) => tagName.trim().replace(/^#/, "").toLocaleLowerCase("pl-PL"))
       .filter(Boolean),
   ));
 }
@@ -124,24 +190,128 @@ function textPreviewLines(body: string): Array<{ text: string; bullet: boolean }
 }
 
 export default function Notatki() {
+  const [initialUrlState] = useState(getInitialNotesUrlState);
+  const [storedDraftSession] = useState(loadStoredDraftSession);
   const [workspace, setWorkspace] = useState(loadNotesWorkspace);
-  const [view, setView] = useState<NotesView>("all");
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<NotesSort>("updated");
-  const [editor, setEditor] = useState<EditorState | null>(null);
-  const [draft, setDraft] = useState<NoteDraft>(EMPTY_DRAFT);
+  const [view, setView] = useState<NotesView>(initialUrlState.view);
+  const [search, setSearch] = useState(initialUrlState.search);
+  const [sort, setSort] = useState<NotesSort>(initialUrlState.sort);
+  const [editor, setEditor] = useState<EditorState | null>(storedDraftSession?.editor ?? null);
+  const [draft, setDraft] = useState<NoteDraft>(storedDraftSession?.draft ?? EMPTY_DRAFT);
+  const [draftBaseline, setDraftBaseline] = useState(storedDraftSession?.baseline ?? serializeDraft(EMPTY_DRAFT));
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<NoteRecord | null>(null);
-  const [listModalOpen, setListModalOpen] = useState(false);
+  const [listEditor, setListEditor] = useState<ListEditorState | null>(null);
+  const [listDeleteState, setListDeleteState] = useState<{ id: string; name: string } | null>(null);
   const [listName, setListName] = useState("");
   const [listError, setListError] = useState("");
   const [storageError, setStorageError] = useState(false);
   const [listsExpanded, setListsExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [tagSearch, setTagSearch] = useState("");
+  const [dirtyPromptOpen, setDirtyPromptOpen] = useState(false);
+  const pendingEditorActionRef = useRef<null | (() => void)>(null);
+  const draftPersistenceTimerRef = useRef<number | null>(null);
+  const draftSessionRef = useRef<StoredDraftSession | null>(storedDraftSession);
+  const isEditorDirty = Boolean(editor) && serializeDraft(draft) !== draftBaseline;
+
+  const flushDraftSession = useCallback(() => {
+    if (draftPersistenceTimerRef.current !== null) {
+      window.clearTimeout(draftPersistenceTimerRef.current);
+      draftPersistenceTimerRef.current = null;
+    }
+    try {
+      const session = draftSessionRef.current;
+      if (session) {
+        window.sessionStorage.setItem(NOTE_DRAFT_STORAGE_KEY, JSON.stringify(session));
+      } else {
+        window.sessionStorage.removeItem(NOTE_DRAFT_STORAGE_KEY);
+      }
+    } catch {
+      // The editor remains dirty and the unload guard stays active if session storage is unavailable.
+    }
+  }, []);
+
+  const clearDraftSession = useCallback(() => {
+    draftSessionRef.current = null;
+    if (draftPersistenceTimerRef.current !== null) {
+      window.clearTimeout(draftPersistenceTimerRef.current);
+      draftPersistenceTimerRef.current = null;
+    }
+    try {
+      window.sessionStorage.removeItem(NOTE_DRAFT_STORAGE_KEY);
+    } catch {
+      // A failed cleanup must not block saving or closing the note itself.
+    }
+  }, []);
 
   useEffect(() => {
     setStorageError(!saveNotesWorkspace(workspace));
   }, [workspace]);
+
+  useEffect(() => subscribeToLocalWorkspace(NOTES_STORAGE_KEY, () => {
+    setWorkspace(loadNotesWorkspace());
+  }), []);
+
+  useEffect(() => {
+    if (!editor || !isEditorDirty) {
+      clearDraftSession();
+      return;
+    }
+    draftSessionRef.current = {
+      editor,
+      draft,
+      baseline: draftBaseline,
+    };
+    if (draftPersistenceTimerRef.current !== null) {
+      window.clearTimeout(draftPersistenceTimerRef.current);
+    }
+    draftPersistenceTimerRef.current = window.setTimeout(
+      flushDraftSession,
+      NOTE_DRAFT_SAVE_DELAY_MS,
+    );
+  }, [clearDraftSession, draft, draftBaseline, editor, flushDraftSession, isEditorDirty]);
+
+  useEffect(() => {
+    const onPageHide = () => flushDraftSession();
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      flushDraftSession();
+    };
+  }, [flushDraftSession]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isEditorDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isEditorDirty]);
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const next = getInitialNotesUrlState();
+      setView(next.view);
+      setSearch(next.search);
+      setSort(next.sort);
+    };
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (view === "all") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", view);
+    if (search.trim()) url.searchParams.set("q", search);
+    else url.searchParams.delete("q");
+    if (sort === "updated") url.searchParams.delete("sort");
+    else url.searchParams.set("sort", sort);
+    if (url.href !== window.location.href) window.history.replaceState({}, "", url);
+  }, [search, sort, view]);
 
   const activeNotes = useMemo(
     () => workspace.notes.filter((note) => !note.archived),
@@ -153,6 +323,10 @@ export default function Notatki() {
     activeNotes.forEach((note) => note.tags.forEach((tagName) => counts.set(tagName, (counts.get(tagName) ?? 0) + 1)));
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pl"));
   }, [activeNotes]);
+  const visibleTagCounts = useMemo(() => {
+    const query = tagSearch.trim().toLocaleLowerCase("pl-PL");
+    return query ? tagCounts.filter(([tagName]) => tagName.toLocaleLowerCase("pl-PL").includes(query)) : tagCounts;
+  }, [tagCounts, tagSearch]);
 
   const visibleNotes = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("pl-PL");
@@ -205,20 +379,42 @@ export default function Notatki() {
             ? "Notatki oznaczone tym tagiem"
             : "Szybkie zapiski, listy i pomysły";
 
-  const openNewNote = (kind: NoteKind = "text") => {
+  const closeEditorDirectly = () => {
+    clearDraftSession();
+    setEditor(null);
+    setEditorError("");
+    setDraftBaseline(serializeDraft(EMPTY_DRAFT));
+  };
+
+  const runWithEditorGuard = (action: () => void) => {
+    if (!isEditorDirty) {
+      action();
+      return;
+    }
+    pendingEditorActionRef.current = action;
+    setDirtyPromptOpen(true);
+  };
+
+  const openNewNoteDirectly = (kind: NoteKind = "text") => {
     const defaultListId = view.startsWith("list:") ? view.slice(5) : workspace.lists[0]?.id ?? "";
-    setDraft({
+    const nextDraft: NoteDraft = {
       ...EMPTY_DRAFT,
       kind,
       listId: defaultListId,
       items: kind === "checklist" ? [{ id: createNotesId("item"), text: "", checked: false }] : [],
-    });
+    };
+    setDraft(nextDraft);
+    setDraftBaseline(serializeDraft(nextDraft));
     setEditorError("");
     setEditor({ mode: "add" });
   };
 
-  const openNote = (note: NoteRecord) => {
-    setDraft({
+  const openNewNote = (kind: NoteKind = "text") => {
+    runWithEditorGuard(() => openNewNoteDirectly(kind));
+  };
+
+  const openNoteDirectly = (note: NoteRecord) => {
+    const nextDraft: NoteDraft = {
       title: note.title,
       body: note.body,
       kind: note.kind,
@@ -228,14 +424,20 @@ export default function Notatki() {
       color: note.color,
       pinned: note.pinned,
       archived: note.archived,
-    });
+    };
+    setDraft(nextDraft);
+    setDraftBaseline(serializeDraft(nextDraft));
     setEditorError("");
     setEditor({ mode: "edit", id: note.id });
   };
 
+  const openNote = (note: NoteRecord) => {
+    if (editor?.id === note.id) return;
+    runWithEditorGuard(() => openNoteDirectly(note));
+  };
+
   const closeEditor = () => {
-    setEditor(null);
-    setEditorError("");
+    runWithEditorGuard(closeEditorDirectly);
   };
 
   const updateNote = (noteId: string, updater: (note: NoteRecord) => NoteRecord) => {
@@ -245,8 +447,8 @@ export default function Notatki() {
     }));
   };
 
-  const saveNote = () => {
-    if (!editor) return;
+  const saveNote = (): boolean => {
+    if (!editor) return false;
     const title = draft.title.trim();
     const cleanedItems = draft.items
       .map((item) => ({ ...item, text: item.text.trim() }))
@@ -255,28 +457,35 @@ export default function Notatki() {
 
     if (!title) {
       setEditorError("Wpisz tytuł notatki.");
-      return;
+      return false;
     }
     if (!hasContent) {
       setEditorError("Dodaj treść albo przynajmniej jeden punkt listy.");
-      return;
+      return false;
     }
 
     const now = new Date().toISOString();
     const tags = normalizedTags(draft.tags);
+    const savedDraft: NoteDraft = {
+      ...draft,
+      title,
+      body: draft.body.trim(),
+      items: draft.kind === "checklist" ? cleanedItems : [],
+      tags: tags.join(", "),
+    };
 
     if (editor.mode === "edit" && editor.id) {
       updateNote(editor.id, (note) => ({
         ...note,
-        title,
-        body: draft.body.trim(),
-        kind: draft.kind,
-        items: draft.kind === "checklist" ? cleanedItems : [],
+        title: savedDraft.title,
+        body: savedDraft.body,
+        kind: savedDraft.kind,
+        items: savedDraft.items,
         tags,
-        listId: draft.listId,
-        color: draft.color,
-        pinned: draft.pinned,
-        archived: draft.archived,
+        listId: savedDraft.listId,
+        color: savedDraft.color,
+        pinned: savedDraft.pinned,
+        archived: savedDraft.archived,
         updatedAt: now,
       }));
     } else {
@@ -285,14 +494,14 @@ export default function Notatki() {
         ...current,
         notes: [{
           id,
-          title,
-          body: draft.body.trim(),
-          kind: draft.kind,
-          items: draft.kind === "checklist" ? cleanedItems : [],
+          title: savedDraft.title,
+          body: savedDraft.body,
+          kind: savedDraft.kind,
+          items: savedDraft.items,
           tags,
-          listId: draft.listId,
-          color: draft.color,
-          pinned: draft.pinned,
+          listId: savedDraft.listId,
+          color: savedDraft.color,
+          pinned: savedDraft.pinned,
           archived: false,
           createdAt: now,
           updatedAt: now,
@@ -300,7 +509,11 @@ export default function Notatki() {
       }));
       setEditor({ mode: "edit", id });
     }
+    setDraft(savedDraft);
+    setDraftBaseline(serializeDraft(savedDraft));
+    clearDraftSession();
     setEditorError("");
+    return true;
   };
 
   const onEditorKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -311,33 +524,52 @@ export default function Notatki() {
   };
 
   const togglePinned = (note: NoteRecord) => {
-    updateNote(note.id, (current) => ({ ...current, pinned: !current.pinned, updatedAt: new Date().toISOString() }));
-    if (editor?.id === note.id) setDraft((current) => ({ ...current, pinned: !current.pinned }));
+    const nextPinned = !note.pinned;
+    updateNote(note.id, (current) => ({ ...current, pinned: nextPinned, updatedAt: new Date().toISOString() }));
+    if (editor?.id === note.id) {
+      setDraft((current) => ({ ...current, pinned: nextPinned }));
+      setDraftBaseline((current) => updateDraftBaseline(current, (baselineDraft) => ({
+        ...baselineDraft,
+        pinned: nextPinned,
+      })));
+    }
   };
 
   const toggleArchived = (note: NoteRecord) => {
+    const nextArchived = !note.archived;
+    const nextPinned = note.archived ? note.pinned : false;
     updateNote(note.id, (current) => ({
       ...current,
-      archived: !current.archived,
-      pinned: current.archived ? current.pinned : false,
+      archived: nextArchived,
+      pinned: nextPinned,
       updatedAt: new Date().toISOString(),
     }));
     if (editor?.id === note.id) {
-      setDraft((current) => ({ ...current, archived: !note.archived, pinned: note.archived ? current.pinned : false }));
+      setDraft((current) => ({ ...current, archived: nextArchived, pinned: nextPinned }));
+      setDraftBaseline((current) => updateDraftBaseline(current, (baselineDraft) => ({
+        ...baselineDraft,
+        archived: nextArchived,
+        pinned: nextPinned,
+      })));
     }
   };
 
   const toggleChecklistItem = (note: NoteRecord, itemId: string) => {
+    const nextChecked = !note.items.find((item) => item.id === itemId)?.checked;
     updateNote(note.id, (current) => ({
       ...current,
-      items: current.items.map((item) => item.id === itemId ? { ...item, checked: !item.checked } : item),
+      items: current.items.map((item) => item.id === itemId ? { ...item, checked: nextChecked } : item),
       updatedAt: new Date().toISOString(),
     }));
     if (editor?.id === note.id) {
       setDraft((current) => ({
         ...current,
-        items: current.items.map((item) => item.id === itemId ? { ...item, checked: !item.checked } : item),
+        items: current.items.map((item) => item.id === itemId ? { ...item, checked: nextChecked } : item),
       }));
+      setDraftBaseline((current) => updateDraftBaseline(current, (baselineDraft) => ({
+        ...baselineDraft,
+        items: baselineDraft.items.map((item) => item.id === itemId ? { ...item, checked: nextChecked } : item),
+      })));
     }
   };
 
@@ -355,8 +587,21 @@ export default function Notatki() {
       setListError("Wpisz nazwę listy.");
       return;
     }
-    if (workspace.lists.some((list) => list.name.toLocaleLowerCase("pl-PL") === name.toLocaleLowerCase("pl-PL"))) {
+    if (workspace.lists.some((list) => (
+      list.id !== listEditor?.id
+      && list.name.toLocaleLowerCase("pl-PL") === name.toLocaleLowerCase("pl-PL")
+    ))) {
       setListError("Lista o tej nazwie już istnieje.");
+      return;
+    }
+    if (listEditor?.mode === "edit" && listEditor.id) {
+      setWorkspace((current) => ({
+        ...current,
+        lists: current.lists.map((list) => list.id === listEditor.id ? { ...list, name } : list),
+      }));
+      setListName("");
+      setListError("");
+      setListEditor(null);
       return;
     }
     const id = createNotesId("list");
@@ -367,7 +612,35 @@ export default function Notatki() {
     setView(`list:${id}`);
     setListName("");
     setListError("");
-    setListModalOpen(false);
+    setListEditor(null);
+  };
+
+  const openListEditor = (list?: { id: string; name: string }) => {
+    setListName(list?.name ?? "");
+    setListError("");
+    setListEditor(list ? { mode: "edit", id: list.id } : { mode: "add" });
+  };
+
+  const closeListEditor = () => {
+    setListEditor(null);
+    setListName("");
+    setListError("");
+  };
+
+  const confirmListDelete = () => {
+    if (!listDeleteState) return;
+    setWorkspace((current) => ({
+      ...current,
+      lists: current.lists.filter((list) => list.id !== listDeleteState.id),
+      notes: current.notes.map((note) => note.listId === listDeleteState.id ? { ...note, listId: "" } : note),
+    }));
+    if (draft.listId === listDeleteState.id) {
+      setDraft((current) => ({ ...current, listId: "" }));
+    }
+    if (view === `list:${listDeleteState.id}`) {
+      setView("all");
+    }
+    setListDeleteState(null);
   };
 
   const confirmDelete = () => {
@@ -376,13 +649,45 @@ export default function Notatki() {
       ...current,
       notes: current.notes.filter((note) => note.id !== deleteState.id),
     }));
-    if (editor?.id === deleteState.id) closeEditor();
+    if (editor?.id === deleteState.id) closeEditorDirectly();
     setDeleteState(null);
   };
 
   const selectView = (nextView: NotesView) => {
-    setView(nextView);
-    setSearch("");
+    runWithEditorGuard(() => {
+      closeEditorDirectly();
+      setView(nextView);
+      setSearch("");
+      const url = new URL(window.location.href);
+      if (nextView === "all") url.searchParams.delete("widok");
+      else url.searchParams.set("widok", nextView);
+      url.searchParams.delete("q");
+      window.history.pushState({}, "", url);
+    });
+  };
+
+  const cancelDirtyTransition = () => {
+    pendingEditorActionRef.current = null;
+    setDirtyPromptOpen(false);
+  };
+
+  const continueAfterDiscard = () => {
+    const action = pendingEditorActionRef.current;
+    pendingEditorActionRef.current = null;
+    setDirtyPromptOpen(false);
+    closeEditorDirectly();
+    action?.();
+  };
+
+  const continueAfterSave = () => {
+    if (!saveNote()) {
+      setDirtyPromptOpen(false);
+      return;
+    }
+    const action = pendingEditorActionRef.current;
+    pendingEditorActionRef.current = null;
+    setDirtyPromptOpen(false);
+    action?.();
   };
 
   const contextSidebar = (
@@ -423,7 +728,7 @@ export default function Notatki() {
               className="notes-sidebar__group-action"
               aria-label="Utwórz listę"
               title="Utwórz listę"
-              onClick={() => setListModalOpen(true)}
+              onClick={() => openListEditor()}
             >
               <Plus size={12} />
             </button>
@@ -431,14 +736,33 @@ export default function Notatki() {
           {listsExpanded && (
             <div id="notes-lists-panel" className="notes-sidebar__group-items">
               {workspace.lists.map((list) => (
-                <ContextNavItem
-                  key={list.id}
-                  active={view === `list:${list.id}`}
-                  icon={<Folder />}
-                  label={list.name}
-                  meta={activeNotes.filter((note) => note.listId === list.id).length}
-                  onClick={() => selectView(`list:${list.id}`)}
-                />
+                <div key={list.id} className="notes-sidebar__list-row">
+                  <ContextNavItem
+                    active={view === `list:${list.id}`}
+                    icon={<Folder />}
+                    label={list.name}
+                    meta={activeNotes.filter((note) => note.listId === list.id).length}
+                    onClick={() => selectView(`list:${list.id}`)}
+                  />
+                  <span className="notes-sidebar__list-actions">
+                    <button
+                      type="button"
+                      aria-label={`Zmień nazwę listy ${list.name}`}
+                      title="Zmień nazwę"
+                      onClick={() => openListEditor(list)}
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Usuń listę ${list.name}`}
+                      title="Usuń listę"
+                      onClick={() => setListDeleteState({ id: list.id, name: list.name })}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </span>
+                </div>
               ))}
             </div>
           )}
@@ -462,7 +786,18 @@ export default function Notatki() {
             </div>
             {tagsExpanded && (
               <div id="notes-tags-panel" className="notes-sidebar__group-items">
-                {tagCounts.slice(0, 7).map(([tagName, count]) => (
+                {tagCounts.length > 7 && (
+                  <label className="notes-sidebar__tag-search">
+                    <Search size={11} aria-hidden="true" />
+                    <span className="sr-only">Filtruj wszystkie tagi</span>
+                    <input
+                      value={tagSearch}
+                      placeholder="Filtruj tagi"
+                      onChange={(event) => setTagSearch(event.target.value)}
+                    />
+                  </label>
+                )}
+                {visibleTagCounts.map(([tagName, count]) => (
                   <ContextNavItem
                     key={tagName}
                     active={view === `tag:${tagName}`}
@@ -472,6 +807,9 @@ export default function Notatki() {
                     onClick={() => selectView(`tag:${tagName}`)}
                   />
                 ))}
+                {tagSearch && visibleTagCounts.length === 0 && (
+                  <p className="notes-sidebar__tag-empty">Brak pasujących tagów</p>
+                )}
               </div>
             )}
           </section>
@@ -492,7 +830,11 @@ export default function Notatki() {
 
     return (
       <article key={note.id} className={`notes-card notes-card--${note.color}`}>
-        <span className="notes-card__color" aria-label={`Kolor: ${COLOR_OPTIONS.find((option) => option.value === note.color)?.label}`} />
+        <span
+          className="notes-card__color"
+          role="img"
+          aria-label={`Kolor: ${COLOR_OPTIONS.find((option) => option.value === note.color)?.label}`}
+        />
         <header className="notes-card__header">
           <button type="button" className="notes-card__title" onClick={() => openNote(note)}>
             {note.title}
@@ -597,8 +939,17 @@ export default function Notatki() {
   const selectedNote = editor?.id ? workspace.notes.find((note) => note.id === editor.id) : undefined;
 
   const detailPanel = editor ? (
-    <DetailPanel label={editor.mode === "add" ? "Nowa notatka" : `Edytuj ${selectedNote?.title ?? "notatkę"}`} className="notes-detail">
-      <form className="notes-editor" onSubmit={(event) => { event.preventDefault(); saveNote(); }} onKeyDown={onEditorKeyDown}>
+    <DetailPanel
+      label={editor.mode === "add" ? "Nowa notatka" : `Edytuj ${selectedNote?.title ?? "notatkę"}`}
+      className="notes-detail"
+      onDismiss={closeEditor}
+    >
+      <form
+        className="notes-editor"
+        onSubmit={(event) => { event.preventDefault(); saveNote(); }}
+        onKeyDown={onEditorKeyDown}
+        onBlur={flushDraftSession}
+      >
         <header className="notes-editor__header">
           <div>
             <span>{editor.mode === "add" ? "Nowa notatka" : "Edycja notatki"}</span>
@@ -915,19 +1266,20 @@ export default function Notatki() {
         </div>
       </ModuleMain>
 
-      {listModalOpen && (
+      {listEditor && (
         <Modal
           eyebrow="Listy notatek"
-          title="Nowa lista"
-          description="Lista porządkuje notatki według obszaru albo kontekstu."
-          onClose={() => {
-            setListModalOpen(false);
-            setListError("");
-          }}
+          title={listEditor.mode === "edit" ? "Zmień nazwę listy" : "Nowa lista"}
+          description={listEditor.mode === "edit"
+            ? "Nowa nazwa pojawi się przy wszystkich przypisanych notatkach."
+            : "Lista porządkuje notatki według obszaru albo kontekstu."}
+          onClose={closeListEditor}
           footer={(
             <>
-              <Button variant="ghost" onClick={() => setListModalOpen(false)}>Anuluj</Button>
-              <Button variant="primary" type="submit" form="notes-list-form">Utwórz listę</Button>
+              <Button variant="ghost" onClick={closeListEditor}>Anuluj</Button>
+              <Button variant="primary" type="submit" form="notes-list-form">
+                {listEditor.mode === "edit" ? "Zapisz nazwę" : "Utwórz listę"}
+              </Button>
             </>
           )}
         >
@@ -947,6 +1299,25 @@ export default function Notatki() {
         </Modal>
       )}
 
+      {listDeleteState && (
+        <Modal
+          eyebrow="Listy notatek"
+          title={`Usunąć listę „${listDeleteState.name}”?`}
+          description="Notatki pozostaną w bibliotece i zostaną przeniesione do „Bez listy”."
+          onClose={() => setListDeleteState(null)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setListDeleteState(null)}>Anuluj</Button>
+              <Button variant="danger" onClick={confirmListDelete}>Usuń listę</Button>
+            </>
+          )}
+        >
+          <p className="notes-delete-note">
+            Dotyczy {workspace.notes.filter((note) => note.listId === listDeleteState.id).length} notatek.
+          </p>
+        </Modal>
+      )}
+
       {deleteState && (
         <Modal
           eyebrow="Potwierdzenie"
@@ -961,6 +1332,24 @@ export default function Notatki() {
           )}
         >
           <p className="notes-delete-note">Jeśli chcesz zachować treść poza głównym widokiem, użyj archiwizacji zamiast usuwania.</p>
+        </Modal>
+      )}
+
+      {dirtyPromptOpen && (
+        <Modal
+          eyebrow="Niezapisane zmiany"
+          title="Co zrobić z edytowaną notatką?"
+          description="Możesz zapisać zmiany, odrzucić je albo wrócić do edycji. Kopia robocza jest zachowana w tej sesji."
+          onClose={cancelDirtyTransition}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={cancelDirtyTransition}>Wróć do edycji</Button>
+              <Button variant="danger" onClick={continueAfterDiscard}>Odrzuć zmiany</Button>
+              <Button variant="primary" onClick={continueAfterSave}>Zapisz i kontynuuj</Button>
+            </>
+          )}
+        >
+          <p className="notes-delete-note">Niezapisana treść nie zostanie utracona bez Twojej decyzji.</p>
         </Modal>
       )}
     </ModuleShell>

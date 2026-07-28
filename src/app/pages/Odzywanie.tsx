@@ -12,6 +12,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Coffee,
@@ -40,6 +41,7 @@ import {
   Select,
   uiColors,
 } from "../ui";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   ACTIVITY_INTENSITY_OPTIONS,
   ACTIVITY_TYPE_OPTIONS,
@@ -75,6 +77,7 @@ import {
   createEmptyNutritionDay,
   createEmptyNutritionWorkspace,
   loadNutritionWorkspace,
+  NUTRITION_STORAGE_KEY,
   nutritionDateKey,
   saveNutritionWorkspace,
   type MealSlot,
@@ -94,10 +97,10 @@ const MEAL_META = [
 ];
 
 const NUTRIENT_META = [
-  { key: "calories" as const, label: "Kalorie", color: uiColors.precisionBlueText },
-  { key: "protein" as const, label: "Białko", unit: "g", color: uiColors.success },
-  { key: "carbs" as const, label: "Węglowodany", unit: "g", color: uiColors.warning },
-  { key: "fat" as const, label: "Tłuszcze", unit: "g", color: uiColors.danger },
+  { key: "calories" as const, label: "Kalorie", color: uiColors.categorySky },
+  { key: "protein" as const, label: "Białko", unit: "g", color: uiColors.categoryTeal },
+  { key: "carbs" as const, label: "Węglowodany", unit: "g", color: uiColors.categorySand },
+  { key: "fat" as const, label: "Tłuszcze", unit: "g", color: uiColors.categoryRose },
 ];
 
 const WATER_AMOUNTS = [150, 250, 330, 500];
@@ -634,6 +637,13 @@ export default function Odzywanie() {
     setSavePending(false);
   }, [savePending, workspace]);
 
+  useEffect(() => subscribeToLocalWorkspace(NUTRITION_STORAGE_KEY, () => {
+    const loaded = loadNutritionWorkspace();
+    setWorkspace(loaded.workspace);
+    setLoadStatus(loaded.status);
+    setSavePending(false);
+  }), []);
+
   useEffect(() => {
     setUndoEntry(null);
   }, [selectedDate]);
@@ -693,6 +703,7 @@ export default function Odzywanie() {
   }, []);
 
   const openEntryDialog = (meal: MealSlot = "breakfast") => {
+    if (dayClosed) return;
     setEntryDraft(createEntryDraft(meal));
     setEditingEntry(null);
     setSelectedFood(null);
@@ -702,6 +713,7 @@ export default function Odzywanie() {
   };
 
   const openEditDialog = (meal: MealSlot, entry: NutritionEntry) => {
+    if (dayClosed) return;
     setEntryDraft({
       meal,
       name: entry.name,
@@ -730,12 +742,13 @@ export default function Odzywanie() {
   ) => {
     commitWorkspace((current) => {
       const currentDay = current.days[selectedDate] ?? createEmptyNutritionDay(selectedDate);
+      if (currentDay.closedAt && !preserveClosure) return current;
       const updatedDay = updater(currentDay);
       return {
         ...current,
         days: {
           ...current.days,
-          [selectedDate]: preserveClosure ? updatedDay : { ...updatedDay, closedAt: undefined },
+          [selectedDate]: updatedDay,
         },
       };
     });
@@ -807,6 +820,10 @@ export default function Odzywanie() {
 
   const submitEntry = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (dayClosed) {
+      setEntryErrors({ name: "Ten dzień jest zamknięty. Otwórz go ponownie, aby wprowadzać zmiany." });
+      return;
+    }
     const name = entryDraft.name.trim();
     const amount = parseDraftNumber(entryDraft.amount);
     const calories = parseDraftNumber(entryDraft.calories);
@@ -849,6 +866,7 @@ export default function Odzywanie() {
   };
 
   const removeEntry = (meal: MealSlot, id: string) => {
+    if (dayClosed) return;
     const entry = day.entries[meal].find((candidate) => candidate.id === id);
     if (entry) setUndoEntry({ meal, entry });
     updateDay((current) => ({
@@ -858,7 +876,7 @@ export default function Odzywanie() {
   };
 
   const restoreEntry = () => {
-    if (!undoEntry) return;
+    if (!undoEntry || dayClosed) return;
     updateDay((current) => ({
       ...current,
       entries: {
@@ -870,6 +888,7 @@ export default function Odzywanie() {
   };
 
   const changeWater = (delta: number) => {
+    if (dayClosed) return;
     updateDay((current) => ({ ...current, waterMl: Math.max(0, Math.min(20_000, current.waterMl + delta)) }));
   };
 
@@ -1090,6 +1109,7 @@ export default function Odzywanie() {
   };
 
   const loadDemoDay = () => {
+    if (dayClosed) return;
     commitWorkspace((current) => ({
       ...current,
       days: { ...current.days, [selectedDate]: createDemoNutritionDay(selectedDate) },
@@ -1097,6 +1117,7 @@ export default function Odzywanie() {
   };
 
   const clearDemoDay = () => {
+    if (dayClosed) return;
     commitWorkspace((current) => ({
       ...current,
       days: { ...current.days, [selectedDate]: createEmptyNutritionDay(selectedDate) },
@@ -1118,14 +1139,19 @@ export default function Odzywanie() {
     setSavePending(true);
   };
 
-  const headerMeta = storageFailed ? (
-    <Badge tone="danger">Brak zapisu lokalnego</Badge>
-  ) : loadStatus === "corrupt" ? (
-    <Badge tone="danger">Zapis wymaga decyzji</Badge>
-  ) : day.source === "demo" ? (
-    <Badge tone="violet">Dane przykładowe</Badge>
-  ) : (
-    <Badge tone="neutral">Dane lokalne</Badge>
+  const headerMeta = (
+    <>
+      {dayClosed && <Badge tone="success">Dzień zamknięty</Badge>}
+      {storageFailed ? (
+        <Badge tone="danger">Brak zapisu lokalnego</Badge>
+      ) : loadStatus === "corrupt" ? (
+        <Badge tone="danger">Zapis wymaga decyzji</Badge>
+      ) : day.source === "demo" ? (
+        <Badge tone="violet">Dane przykładowe</Badge>
+      ) : (
+        <Badge tone="neutral">Dane lokalne</Badge>
+      )}
+    </>
   );
 
   const renderSuggestionGroup = (label: string, items: FoodSuggestion[]) => {
@@ -1174,7 +1200,14 @@ export default function Odzywanie() {
         leading={<Salad size={18} strokeWidth={1.5} />}
         meta={headerMeta}
         actions={loadStatus !== "corrupt" ? (
-          <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openEntryDialog()}>
+          <Button
+            variant="primary"
+            size="sm"
+            leadingIcon={<Plus size={13} />}
+            disabled={dayClosed}
+            title={dayClosed ? "Otwórz dzień, aby dodać produkt." : undefined}
+            onClick={() => openEntryDialog()}
+          >
             Dodaj produkt
           </Button>
         ) : undefined}
@@ -1219,7 +1252,7 @@ export default function Odzywanie() {
             <div className="flex flex-wrap items-center justify-end gap-2">
               <CalendarDays size={13} style={{ color: uiColors.textMuted }} />
               <span className="capitalize" style={{ color: uiColors.textSecondary, fontSize: "var(--text-meta)" }}>{formatDate(selectedDate)}</span>
-              {day.source === "demo" && <Button variant="quiet" size="sm" onClick={clearDemoDay}>Wyczyść przykład</Button>}
+              {day.source === "demo" && <Button variant="quiet" size="sm" disabled={dayClosed} onClick={clearDemoDay}>Wyczyść przykład</Button>}
               <Button
                 variant="quiet"
                 size="sm"
@@ -1241,18 +1274,25 @@ export default function Odzywanie() {
           </div>
 
           <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {dayClosed && (
+              <Card tone="input" padding="dense" className="nutrition-closed-notice" role="status">
+                <CheckCircle2 size={14} aria-hidden="true" />
+                <span>Dzień jest zamknięty. Posiłki i nawodnienie są tylko do odczytu.</span>
+                <Button variant="quiet" size="sm" onClick={toggleDayClosed}>Otwórz do edycji</Button>
+              </Card>
+            )}
             <div className="nutrition-layout w-full">
               <section className="min-w-0">
                 <SectionHeader
                   title="Rejestr posiłków"
                   description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} kcal`}
-                  action={<Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openEntryDialog()}>Dodaj</Button>}
+                  action={<Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} onClick={() => openEntryDialog()}>Dodaj</Button>}
                 />
 
                 {allEntries.length === 0 && (
                   <div className="nutrition-empty-day-note">
                     <span>Każdy posiłek jest gotowy na pierwszy produkt.</span>
-                    <Button variant="ghost" size="sm" onClick={loadDemoDay}>Wczytaj przykład</Button>
+                    <Button variant="ghost" size="sm" disabled={dayClosed} onClick={loadDemoDay}>Wczytaj przykład</Button>
                   </div>
                 )}
 
@@ -1307,7 +1347,7 @@ export default function Odzywanie() {
                                 {formatNumber(mealTotals.fat)} g
                               </td>
                               <td className="nutrition-meal-action-cell">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Dodaj produkt: ${label}`} onClick={() => openEntryDialog(id)}>
+                                <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Dodaj produkt: ${label}`} onClick={() => openEntryDialog(id)}>
                                   <Plus size={12} />
                                 </Button>
                               </td>
@@ -1329,10 +1369,10 @@ export default function Odzywanie() {
                                 <td className="nutrition-number-cell" data-label="Węglowodany">{formatNumber(entry.carbs)} g</td>
                                 <td className="nutrition-number-cell" data-label="Tłuszcze">{formatNumber(entry.fat)} g</td>
                                 <td className="nutrition-entry-actions">
-                                  <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${entry.name}`} onClick={() => openEditDialog(id, entry)}>
+                                  <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Edytuj ${entry.name}`} onClick={() => openEditDialog(id, entry)}>
                                     <Pencil size={12} />
                                   </Button>
-                                  <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${entry.name}`} onClick={() => removeEntry(id, entry.id)}>
+                                  <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Usuń ${entry.name}`} onClick={() => removeEntry(id, entry.id)}>
                                     <Trash2 size={12} />
                                   </Button>
                                 </td>
@@ -1341,7 +1381,7 @@ export default function Odzywanie() {
                               <tr className="nutrition-empty-record">
                                 <td colSpan={7} className="nutrition-empty-cell">
                                   <span>Nie dodano jeszcze produktów</span>
-                                  <Button variant="ghost" size="sm" onClick={() => openEntryDialog(id)}>Dodaj produkt</Button>
+                                  <Button variant="ghost" size="sm" disabled={dayClosed} onClick={() => openEntryDialog(id)}>Dodaj produkt</Button>
                                 </td>
                               </tr>
                             )}
@@ -1354,7 +1394,7 @@ export default function Odzywanie() {
                 {undoEntry && (
                   <Card tone="input" padding="dense" className="mt-3 flex items-center justify-between gap-3" role="status">
                     <span className="truncate text-[10px]" style={{ color: uiColors.textSecondary }}>Usunięto: {undoEntry.entry.name}</span>
-                    <Button variant="ghost" size="sm" onClick={restoreEntry}>Cofnij</Button>
+                    <Button variant="ghost" size="sm" disabled={dayClosed} onClick={restoreEntry}>Cofnij</Button>
                   </Card>
                 )}
               </section>
@@ -1390,7 +1430,16 @@ export default function Odzywanie() {
                                 {formatNumber(current)} / {formatNumber(goal)}
                               </span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(current, goal)} style={{ background: uiColors.graphiteInput }}>
+                            <div
+                              className="h-1.5 overflow-hidden rounded-full"
+                              role="progressbar"
+                              aria-label={label}
+                              aria-valuemin={0}
+                              aria-valuemax={Math.max(goal, current, 1)}
+                              aria-valuenow={current}
+                              aria-valuetext={`${formatNumber(current)} z celu ${formatNumber(goal)} ${unit ?? "kcal"}${current > goal ? `, przekroczono o ${formatNumber(current - goal)}` : ""}`}
+                              style={{ background: uiColors.graphiteInput }}
+                            >
                               <div className="h-full w-full origin-left rounded-full transition-transform duration-200" style={{ transform: `scaleX(${Math.min(1, ratio)})`, background: ratio > 1 ? uiColors.danger : color }} />
                             </div>
                           </div>
@@ -1421,15 +1470,24 @@ export default function Odzywanie() {
                       </div>
                       <span className="font-semibold" style={{ color: uiColors.precisionBlueText, fontFamily: "var(--font-data)", fontSize: "var(--text-title)" }}>{formatWater(day.waterMl)}</span>
                     </div>
-                    <div className="my-3 h-1.5 overflow-hidden rounded-full" role="progressbar" aria-label="Nawodnienie" aria-valuemin={0} aria-valuemax={workspace.goals.waterMl} aria-valuenow={Math.min(day.waterMl, workspace.goals.waterMl)} style={{ background: uiColors.graphiteInput }}>
+                    <div
+                      className="my-3 h-1.5 overflow-hidden rounded-full"
+                      role="progressbar"
+                      aria-label="Nawodnienie"
+                      aria-valuemin={0}
+                      aria-valuemax={Math.max(workspace.goals.waterMl, day.waterMl, 1)}
+                      aria-valuenow={day.waterMl}
+                      aria-valuetext={`${formatWater(day.waterMl)} z celu ${formatWater(workspace.goals.waterMl)}${day.waterMl > workspace.goals.waterMl ? `, przekroczono o ${formatWater(day.waterMl - workspace.goals.waterMl)}` : ""}`}
+                      style={{ background: uiColors.graphiteInput }}
+                    >
                       <div className="h-full w-full origin-left rounded-full transition-transform duration-200" style={{ transform: `scaleX(${Math.min(1, day.waterMl / workspace.goals.waterMl)})`, background: uiColors.precisionBlueText }} />
                     </div>
                     <div className="nutrition-water-controls">
                       {WATER_AMOUNTS.map((amount) => (
-                        <Button key={amount} variant="quiet" size="sm" onClick={() => changeWater(amount)}>+{amount} ml</Button>
+                        <Button key={amount} variant="quiet" size="sm" disabled={dayClosed} onClick={() => changeWater(amount)}>+{amount} ml</Button>
                       ))}
                     </div>
-                    <Button className="mt-2" variant="ghost" size="sm" fullWidth disabled={day.waterMl === 0} onClick={() => changeWater(-250)}>
+                    <Button className="mt-2" variant="ghost" size="sm" fullWidth disabled={dayClosed || day.waterMl === 0} onClick={() => changeWater(-250)}>
                       Odejmij 250 ml
                     </Button>
                   </Card>
@@ -1723,7 +1781,15 @@ export default function Odzywanie() {
           )}
         >
           <form id="nutrition-goals-form" onSubmit={saveNutritionGoals} className="nutrition-goal-form">
-            <section className="nutrition-calculator-section" aria-labelledby="calorie-calculator-title">
+            <details className="nutrition-goal-advanced">
+              <summary>
+                <span>
+                  <strong>Wylicz cele automatycznie</strong>
+                  <small>Profil dnia, aktywność, wzór Mifflina–St Jeora i konfiguracja makro</small>
+                </span>
+                <ChevronDown size={14} aria-hidden="true" />
+              </summary>
+              <section className="nutrition-calculator-section" aria-labelledby="calorie-calculator-title">
               <div className="nutrition-calculator-heading">
                 <div>
                   <h3 id="calorie-calculator-title">Autowyliczenie kalorii</h3>
@@ -1770,9 +1836,9 @@ export default function Odzywanie() {
                 {" "}<a href="https://pubmed.ncbi.nlm.nih.gov/2305711/" target="_blank" rel="noreferrer">Równanie Mifflina–St Jeora</a>
                 {" · "}<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10818145/" target="_blank" rel="noreferrer">Compendium MET 2024</a>
               </p>
-            </section>
+              </section>
 
-            <section className="nutrition-goal-manual" aria-labelledby="macro-calculator-title">
+              <section className="nutrition-goal-manual" aria-labelledby="macro-calculator-title">
               <div className="nutrition-calculator-heading">
                 <div>
                   <h3 id="macro-calculator-title">Konfiguracja makroskładników</h3>
@@ -1835,7 +1901,8 @@ export default function Odzywanie() {
                   {" "}<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5477153/" target="_blank" rel="noreferrer">ISSN: białko i wysiłek</a>
                 </p>
               )}
-            </section>
+              </section>
+            </details>
 
             <section className="nutrition-goal-manual" aria-labelledby="saved-goals-title">
               <div className="nutrition-calculator-heading">

@@ -114,7 +114,7 @@ type LegacyAffairsWorkspace = {
   budgets: BudgetMonth[];
 };
 
-const STORAGE_KEY = "routine.affairs.workspace.v1";
+export const AFFAIRS_STORAGE_KEY = "routine.affairs.workspace.v1";
 
 function isoDateOffset(days: number): string {
   const date = new Date();
@@ -549,28 +549,21 @@ function migrateLegacyWorkspace(workspace: LegacyAffairsWorkspace): AffairsWorks
   };
 }
 
+export function loadAffairsWorkspaceResult(): LocalLoadResult<AffairsWorkspace> {
+  return readLocalWorkspace({
+    key: AFFAIRS_STORAGE_KEY,
+    fallback: createDefaultWorkspace,
+    validate: isWorkspace,
+    migrate: (value) => hasLegacyCollections(value) ? migrateLegacyWorkspace(value) : null,
+  });
+}
+
 export function loadAffairsWorkspace(): AffairsWorkspace {
-  if (typeof window === "undefined") return createDefaultWorkspace();
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return createDefaultWorkspace();
-    const parsed: unknown = JSON.parse(raw);
-    if (isWorkspace(parsed)) return parsed;
-    if (hasLegacyCollections(parsed)) return migrateLegacyWorkspace(parsed);
-    return createDefaultWorkspace();
-  } catch {
-    return createDefaultWorkspace();
-  }
+  return loadAffairsWorkspaceResult().workspace;
 }
 
 export function saveAffairsWorkspace(workspace: AffairsWorkspace): boolean {
-  if (typeof window === "undefined") return true;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeLocalWorkspace(AFFAIRS_STORAGE_KEY, workspace);
 }
 
 export function createAffairsId(prefix: string): string {
@@ -591,13 +584,32 @@ export function createBudgetMonth(month: string, source?: BudgetMonth): BudgetMo
 }
 
 export function advancePaymentDate(value: string, cadence: PaymentCadence): string {
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
   const months = cadence === "monthly" ? 1 : cadence === "quarterly" ? 3 : 12;
-  date.setMonth(date.getMonth() + months);
-  return date.toISOString().slice(0, 10);
+  const targetMonthIndex = month - 1 + months;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDay = new Date(targetYear, targetMonth + 1, 0, 12).getDate();
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
+export function advancePaymentDateToFuture(
+  value: string,
+  cadence: PaymentCadence,
+  referenceDate = new Date(),
+): string {
+  const referenceKey = `${referenceDate.getFullYear()}-${String(referenceDate.getMonth() + 1).padStart(2, "0")}-${String(referenceDate.getDate()).padStart(2, "0")}`;
+  let next = value;
+  for (let guard = 0; guard < 240 && next <= referenceKey; guard += 1) {
+    const advanced = advancePaymentDate(next, cadence);
+    if (advanced === next) break;
+    next = advanced;
+  }
+  return next;
 }
 
 export function monthlyEquivalent(amount: number, cadence: PaymentCadence): number {
   return amount / (cadence === "monthly" ? 1 : cadence === "quarterly" ? 3 : 12);
 }
+import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";

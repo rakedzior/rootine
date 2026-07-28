@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { Tabs } from "../ui";
+import { useId, useMemo } from "react";
 import type {
   NutritionDay,
   NutritionGoals,
@@ -106,6 +105,7 @@ export function NutritionAnalysis({
   range,
   onRangeChange,
 }: NutritionAnalysisProps) {
+  const rangeName = useId();
   const points = useMemo(
     () => buildNutritionAnalysis(endDate, range, days, weightMeasurements),
     [days, endDate, range, weightMeasurements],
@@ -153,12 +153,22 @@ export function NutritionAnalysis({
           <h3>Trend diety i masy</h3>
           <p>Okres kończy się {formatDateShort(endDate)}. Brak wpisu nie jest liczony jako zero.</p>
         </div>
-        <Tabs
-          items={RANGE_OPTIONS}
-          activeId={String(range)}
-          ariaLabel="Zakres analizy"
-          onChange={(id) => onRangeChange(Number(id) as NutritionAnalysisRange)}
-        />
+        <fieldset className="nutrition-analysis__range">
+          <legend className="ui-sr-only">Zakres analizy</legend>
+          {RANGE_OPTIONS.map((option) => (
+            <label key={option.id}>
+              <input
+                className="ui-sr-only"
+                type="radio"
+                name={rangeName}
+                value={option.id}
+                checked={String(range) === option.id}
+                onChange={() => onRangeChange(Number(option.id) as NutritionAnalysisRange)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </fieldset>
       </div>
 
       <div className="nutrition-analysis__summary" aria-label="Podsumowanie wybranego okresu">

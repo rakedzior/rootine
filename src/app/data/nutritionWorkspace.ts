@@ -1,10 +1,12 @@
 import {
   DEFAULT_MACRO_CONFIGURATION,
+  isNutritionCalculatorProfile,
   normalizeMacroConfiguration,
   normalizeNutritionCalculatorProfile,
   type MacroConfiguration,
   type NutritionCalculatorProfile,
 } from "./nutritionCalculator";
+import { readLocalWorkspace, writeLocalWorkspace } from "./localRepository";
 
 export type MealSlot = "breakfast" | "lunch" | "snack" | "dinner";
 
@@ -69,7 +71,7 @@ export interface NutritionLoadResult {
   workspace: NutritionWorkspace;
 }
 
-const STORAGE_KEY = "rootine.nutrition-workspace.v1";
+export const NUTRITION_STORAGE_KEY = "rootine.nutrition-workspace.v1";
 const WORKSPACE_VERSION = 6 as const;
 
 export const DEFAULT_NUTRITION_GOALS: NutritionGoals = {
@@ -219,60 +221,135 @@ function normalizeWeightMeasurement(date: string, value: unknown): WeightMeasure
   };
 }
 
-export function loadNutritionWorkspace(): NutritionLoadResult {
-  const fallback = createEmptyNutritionWorkspace();
-  if (typeof window === "undefined") return { status: "missing", workspace: fallback };
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return { status: "missing", workspace: fallback };
-    const parsed: unknown = JSON.parse(stored);
-    if (!isRecord(parsed) || ![1, 2, 3, 4, 5, WORKSPACE_VERSION].includes(parsed.version as number) || !isRecord(parsed.goals) || !isRecord(parsed.days)) {
-      return { status: "corrupt", workspace: fallback };
-    }
-    const legacy = parsed.version === 1;
-    const goals: NutritionGoals = {
-      calories: safePositiveNumber(parsed.goals.calories, fallback.goals.calories),
-      protein: safePositiveNumber(parsed.goals.protein, fallback.goals.protein),
-      carbs: safePositiveNumber(parsed.goals.carbs, fallback.goals.carbs),
-      fat: safePositiveNumber(parsed.goals.fat, fallback.goals.fat),
-      waterMl: legacy
-        ? safePositiveNumber(parsed.goals.water, fallback.goals.waterMl / 250) * 250
-        : safePositiveNumber(parsed.goals.waterMl, fallback.goals.waterMl),
-    };
-    const days = Object.fromEntries(Object.entries(parsed.days).map(([date, value]) => [date, normalizeDay(date, value, legacy)]));
-    const storedWeightMeasurements = isRecord(parsed.weightMeasurements) ? parsed.weightMeasurements : {};
-    const weightMeasurements = Object.fromEntries(
-      Object.entries(storedWeightMeasurements)
-        .map(([date, value]) => [date, normalizeWeightMeasurement(date, value)] as const)
-        .filter((entry): entry is readonly [string, WeightMeasurement] => Boolean(entry[1])),
-    );
-    return {
-      status: "ok",
-      workspace: {
-        version: WORKSPACE_VERSION,
-        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : fallback.updatedAt,
-        goals,
-        calculatorProfile: normalizeNutritionCalculatorProfile(parsed.calculatorProfile),
-        macroConfiguration: normalizeMacroConfiguration(parsed.macroConfiguration),
-        weightMeasurements,
-        days,
-      },
-    };
-  } catch {
-    return { status: "corrupt", workspace: fallback };
+function isFiniteNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isNutritionValues(value: unknown): value is NutritionEntry["per100g"] {
+  return isRecord(value)
+    && isFiniteNonNegative(value.calories)
+    && isFiniteNonNegative(value.protein)
+    && isFiniteNonNegative(value.carbs)
+    && isFiniteNonNegative(value.fat);
+}
+
+function isNutritionEntry(value: unknown): value is NutritionEntry {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.name === "string"
+    && typeof value.portion === "string"
+    && (value.amount === undefined || isFiniteNonNegative(value.amount))
+    && (value.unit === undefined || value.unit === "g" || value.unit === "ml")
+    && isFiniteNonNegative(value.calories)
+    && isFiniteNonNegative(value.protein)
+    && isFiniteNonNegative(value.carbs)
+    && isFiniteNonNegative(value.fat)
+    && (value.brand === undefined || typeof value.brand === "string")
+    && (value.catalogId === undefined || typeof value.catalogId === "string")
+    && (value.catalogSource === undefined || value.catalogSource === "usda" || value.catalogSource === "openfoodfacts")
+    && (value.per100g === undefined || isNutritionValues(value.per100g))
+    && typeof value.createdAt === "string"
+    && (value.updatedAt === undefined || typeof value.updatedAt === "string");
+}
+
+function isNutritionDay(date: string, value: unknown): value is NutritionDay {
+  if (!isRecord(value) || value.date !== date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  if (!isFiniteNonNegative(value.waterMl) || (value.source !== "user" && value.source !== "demo")) return false;
+  if (value.closedAt !== undefined && typeof value.closedAt !== "string") return false;
+  const entries = value.entries;
+  if (!isRecord(entries)) return false;
+  return (["breakfast", "lunch", "snack", "dinner"] as const).every((meal) => (
+    Array.isArray(entries[meal]) && entries[meal].every(isNutritionEntry)
+  ));
+}
+
+function isNutritionGoals(value: unknown): value is NutritionGoals {
+  return isRecord(value)
+    && ["calories", "protein", "carbs", "fat", "waterMl"].every((key) => (
+      typeof value[key] === "number" && Number.isFinite(value[key]) && value[key] > 0
+    ));
+}
+
+function isMacroConfiguration(value: unknown): value is MacroConfiguration {
+  if (!isRecord(value)) return false;
+  const normalized = normalizeMacroConfiguration(value);
+  return value.mode === normalized.mode
+    && value.preset === normalized.preset
+    && value.proteinPercent === normalized.proteinPercent
+    && value.carbsPercent === normalized.carbsPercent
+    && value.fatPercent === normalized.fatPercent;
+}
+
+function isNutritionWorkspace(value: unknown): value is NutritionWorkspace {
+  return isRecord(value)
+    && value.version === WORKSPACE_VERSION
+    && typeof value.updatedAt === "string"
+    && isNutritionGoals(value.goals)
+    && (value.calculatorProfile === undefined || isNutritionCalculatorProfile(value.calculatorProfile))
+    && isMacroConfiguration(value.macroConfiguration)
+    && isRecord(value.weightMeasurements)
+    && Object.entries(value.weightMeasurements).every(([date, measurement]) => normalizeWeightMeasurement(date, measurement) !== null)
+    && isRecord(value.days)
+    && Object.entries(value.days).every(([date, day]) => isNutritionDay(date, day));
+}
+
+function migrateNutritionWorkspace(value: unknown): NutritionWorkspace | null {
+  if (
+    !isRecord(value)
+    || ![1, 2, 3, 4, 5].includes(value.version as number)
+    || !isRecord(value.goals)
+    || !isRecord(value.days)
+  ) {
+    return null;
   }
+  const fallback = createEmptyNutritionWorkspace();
+  const legacy = value.version === 1;
+  const goals: NutritionGoals = {
+    calories: safePositiveNumber(value.goals.calories, fallback.goals.calories),
+    protein: safePositiveNumber(value.goals.protein, fallback.goals.protein),
+    carbs: safePositiveNumber(value.goals.carbs, fallback.goals.carbs),
+    fat: safePositiveNumber(value.goals.fat, fallback.goals.fat),
+    waterMl: legacy
+      ? safePositiveNumber(value.goals.water, fallback.goals.waterMl / 250) * 250
+      : safePositiveNumber(value.goals.waterMl, fallback.goals.waterMl),
+  };
+  const days = Object.fromEntries(
+    Object.entries(value.days).map(([date, day]) => [date, normalizeDay(date, day, legacy)]),
+  );
+  const storedWeightMeasurements = isRecord(value.weightMeasurements) ? value.weightMeasurements : {};
+  const weightMeasurements = Object.fromEntries(
+    Object.entries(storedWeightMeasurements)
+      .map(([date, measurement]) => [date, normalizeWeightMeasurement(date, measurement)] as const)
+      .filter((entry): entry is readonly [string, WeightMeasurement] => Boolean(entry[1])),
+  );
+  return {
+    version: WORKSPACE_VERSION,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : fallback.updatedAt,
+    goals,
+    calculatorProfile: normalizeNutritionCalculatorProfile(value.calculatorProfile),
+    macroConfiguration: normalizeMacroConfiguration(value.macroConfiguration),
+    weightMeasurements,
+    days,
+  };
+}
+
+export function loadNutritionWorkspace(): NutritionLoadResult {
+  const result = readLocalWorkspace({
+    key: NUTRITION_STORAGE_KEY,
+    fallback: createEmptyNutritionWorkspace,
+    validate: isNutritionWorkspace,
+    migrate: migrateNutritionWorkspace,
+  });
+  return {
+    status: result.status === "migrated" ? "ok" : result.status,
+    workspace: result.workspace,
+  };
 }
 
 export function saveNutritionWorkspace(workspace: NutritionWorkspace) {
-  if (typeof window === "undefined") return false;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ...workspace,
-      version: WORKSPACE_VERSION,
-      updatedAt: new Date().toISOString(),
-    }));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeLocalWorkspace(NUTRITION_STORAGE_KEY, {
+    ...workspace,
+    version: WORKSPACE_VERSION,
+    updatedAt: new Date().toISOString(),
+  });
 }

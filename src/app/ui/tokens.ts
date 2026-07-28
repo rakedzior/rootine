@@ -28,6 +28,11 @@ export const uiColors = {
   dangerSoft: "var(--color-danger-soft)",
   violet: "var(--color-accent-violet)",
   violetSoft: "var(--color-violet-soft)",
+  categorySky: "var(--color-category-sky)",
+  categoryTeal: "var(--color-category-teal)",
+  categorySand: "var(--color-category-sand)",
+  categoryRose: "var(--color-category-rose)",
+  categorySlate: "var(--color-category-slate)",
 } as const;
 
 export const uiRadii = {

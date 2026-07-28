@@ -30,8 +30,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
-  advancePaymentDate,
+  AFFAIRS_STORAGE_KEY,
+  advancePaymentDateToFuture,
   createAffairsId,
   createBudgetMonth,
   getMonthKey,
@@ -71,6 +73,7 @@ import {
   Select,
   WorkspaceToolbar,
 } from "../ui";
+import "../../styles/affairs.css";
 
 type AffairsView =
   | "overview"
@@ -238,6 +241,7 @@ const NAV_GROUPS: Array<{
 ];
 
 const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
+const AFFAIRS_VIEWS = new Set<AffairsView>(NAV_ITEMS.map((item) => item.view));
 
 const UPCOMING_ICONS = {
   matter: ShieldCheck,
@@ -249,9 +253,9 @@ const UPCOMING_ICONS = {
 };
 
 function getInitialView(): AffairsView {
-  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("widok") === "jdg") {
-    return "jdg";
-  }
+  if (typeof window === "undefined") return "overview";
+  const requested = new URLSearchParams(window.location.search).get("widok") as AffairsView | null;
+  if (requested && AFFAIRS_VIEWS.has(requested)) return requested;
   return "overview";
 }
 
@@ -275,10 +279,12 @@ function formatMoney(value: number): string {
 }
 
 function daysUntil(value: string): number {
-  const target = new Date(`${value}T12:00:00`).getTime();
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return Number.POSITIVE_INFINITY;
+  const target = Date.UTC(year, month - 1, day);
   const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  return Math.ceil((target - today.getTime()) / 86_400_000);
+  const current = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((target - current) / 86_400_000);
 }
 
 function dueCopy(value: string): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
@@ -334,10 +340,42 @@ export default function Sprawy() {
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [storageError, setStorageError] = useState(false);
+  const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setStorageError(!saveAffairsWorkspace(workspace));
   }, [workspace]);
+
+  useEffect(() => subscribeToLocalWorkspace(AFFAIRS_STORAGE_KEY, () => {
+    setWorkspace(loadAffairsWorkspace());
+  }), []);
+
+  useEffect(() => {
+    const onPopState = () => setView(getInitialView());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    setWorkspace((current) => {
+      let changed = false;
+      const payments = current.payments.map((payment) => {
+        if (!payment.active || !payment.automatic) return payment;
+        const nextDueDate = advancePaymentDateToFuture(payment.nextDueDate, payment.cadence);
+        if (nextDueDate === payment.nextDueDate) return payment;
+        changed = true;
+        return { ...payment, nextDueDate };
+      });
+      const subscriptions = current.subscriptions.map((subscription) => {
+        if (!subscription.active || subscription.renewal !== "automatic") return subscription;
+        const nextBillingDate = advancePaymentDateToFuture(subscription.nextBillingDate, subscription.cadence);
+        if (nextBillingDate === subscription.nextBillingDate) return subscription;
+        changed = true;
+        return { ...subscription, nextBillingDate };
+      });
+      return changed ? { ...current, payments, subscriptions } : current;
+    });
+  }, []);
 
   useEffect(() => {
     if (workspace.budgets.some((budget) => budget.month === budgetMonthKey)) return;
@@ -477,12 +515,16 @@ export default function Sprawy() {
     workspace.vehicles,
   ]);
 
-  const dueSoon = activeMatters.filter((matter) => daysUntil(matter.dueDate) <= 30).length
-    + workspace.oneTimePayments.filter((payment) => !payment.paid && daysUntil(payment.dueDate) <= 30).length
-    + workspace.payments.filter((payment) => payment.active && daysUntil(payment.nextDueDate) <= 30).length
-    + workspace.subscriptions.filter((subscription) => subscription.active && daysUntil(subscription.nextBillingDate) <= 30).length
-    + documentAlerts
-    + vehicleAlerts;
+  const isWithinNext30Days = (date: string) => {
+    const days = daysUntil(date);
+    return days >= 0 && days <= 30;
+  };
+  const dueSoon = activeMatters.filter((matter) => isWithinNext30Days(matter.dueDate)).length
+    + workspace.oneTimePayments.filter((payment) => !payment.paid && isWithinNext30Days(payment.dueDate)).length
+    + workspace.payments.filter((payment) => payment.active && isWithinNext30Days(payment.nextDueDate)).length
+    + workspace.subscriptions.filter((subscription) => subscription.active && isWithinNext30Days(subscription.nextBillingDate)).length
+    + workspace.documents.filter((document) => document.expiresAt && isWithinNext30Days(document.expiresAt)).length
+    + workspace.vehicleItems.filter((item) => !item.done && item.dueDate && isWithinNext30Days(item.dueDate)).length;
 
   const openMatterEditor = (matter?: Matter) => {
     setDraft(matter ? {
@@ -848,9 +890,24 @@ export default function Sprawy() {
     }));
   };
 
-  const updateBudgetValue = (lineId: string, field: "planned" | "actual", rawValue: string) => {
+  const budgetDraftKey = (lineId: string, field: "planned" | "actual") => `${lineId}:${field}`;
+
+  const updateBudgetDraft = (lineId: string, field: "planned" | "actual", value: string) => {
+    const key = budgetDraftKey(lineId, field);
+    setBudgetDrafts((current) => ({ ...current, [key]: value }));
+  };
+
+  const commitBudgetValue = (lineId: string, field: "planned" | "actual") => {
+    const key = budgetDraftKey(lineId, field);
+    const rawValue = budgetDrafts[key];
+    if (rawValue === undefined) return;
     const value = Number(rawValue.replace(",", "."));
-    if (!Number.isFinite(value) || value < 0) return;
+    setBudgetDrafts((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    if (!rawValue.trim() || !Number.isFinite(value) || value < 0) return;
     setWorkspace((current) => ({
       ...current,
       budgets: current.budgets.map((budget) => budget.month === budgetMonthKey
@@ -869,6 +926,15 @@ export default function Sprawy() {
   const selectView = (nextView: AffairsView) => {
     setView(nextView);
     if (nextView !== "matters") setSelectedMatterId("");
+    const url = new URL(window.location.href);
+    if (nextView === "overview") {
+      url.searchParams.delete("widok");
+    } else {
+      url.searchParams.set("widok", nextView);
+    }
+    if (url.href !== window.location.href) {
+      window.history.pushState({}, "", url);
+    }
   };
 
   const renderPrimaryAction = () => {
@@ -936,7 +1002,11 @@ export default function Sprawy() {
   );
 
   const detailPanel = selectedMatter && view === "matters" ? (
-    <DetailPanel label={`Szczegóły: ${selectedMatter.title}`} className="affairs-detail">
+    <DetailPanel
+      label={`Szczegóły: ${selectedMatter.title}`}
+      className="affairs-detail"
+      onDismiss={() => setSelectedMatterId("")}
+    >
       <header className="affairs-detail__header">
         <div>
           <span>Szczegóły sprawy</span>
@@ -1161,7 +1231,7 @@ export default function Sprawy() {
                       <h2>Najbliżej na radarze</h2>
                       <p>Jeden porządek terminów dla spraw i płatności</p>
                     </div>
-                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={12} />} onClick={() => setView("matters")}>Wszystkie</Button>
+                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={12} />} onClick={() => selectView("matters")}>Wszystkie</Button>
                   </header>
                   {upcoming.length === 0 ? (
                     <EmptyState icon={<Archive size={18} />} title="Radar jest pusty" description="Dodaj sprawę albo płatność z terminem." />
@@ -1370,7 +1440,7 @@ export default function Sprawy() {
                           onClick={() => setWorkspace((current) => ({
                             ...current,
                             payments: current.payments.map((item) => item.id === payment.id
-                              ? { ...item, nextDueDate: advancePaymentDate(item.nextDueDate, item.cadence) }
+                              ? { ...item, nextDueDate: advancePaymentDateToFuture(item.nextDueDate, item.cadence) }
                               : item),
                           }))}
                         >
@@ -1441,6 +1511,21 @@ export default function Sprawy() {
                       <Badge tone={subscription.active ? due.tone : "neutral"}>{subscription.active ? due.text : "Wstrzymana"}</Badge>
                       <strong className="affairs-payment-row__amount">{formatMoney(subscription.amount)}</strong>
                       <span className="affairs-payment-row__actions">
+                        {subscription.active && subscription.renewal === "manual" && (
+                          <Button
+                            variant="quiet"
+                            size="sm"
+                            leadingIcon={<Check size={12} />}
+                            onClick={() => setWorkspace((current) => ({
+                              ...current,
+                              subscriptions: current.subscriptions.map((item) => item.id === subscription.id
+                                ? { ...item, nextBillingDate: advancePaymentDateToFuture(item.nextBillingDate, item.cadence) }
+                                : item),
+                            }))}
+                          >
+                            Odnowione
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${subscription.name}`} onClick={() => openSubscriptionEditor(subscription)}><Pencil size={12} /></Button>
                         <Button
                           variant="ghost"
@@ -1650,8 +1735,13 @@ export default function Sprawy() {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={line.planned}
-                          onChange={(event) => updateBudgetValue(line.id, "planned", event.target.value)}
+                          inputMode="decimal"
+                          value={budgetDrafts[budgetDraftKey(line.id, "planned")] ?? String(line.planned)}
+                          onChange={(event) => updateBudgetDraft(line.id, "planned", event.target.value)}
+                          onBlur={() => commitBudgetValue(line.id, "planned")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                          }}
                         />
                         <span>zł</span>
                       </label>
@@ -1661,8 +1751,13 @@ export default function Sprawy() {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={line.actual}
-                          onChange={(event) => updateBudgetValue(line.id, "actual", event.target.value)}
+                          inputMode="decimal"
+                          value={budgetDrafts[budgetDraftKey(line.id, "actual")] ?? String(line.actual)}
+                          onChange={(event) => updateBudgetDraft(line.id, "actual", event.target.value)}
+                          onBlur={() => commitBudgetValue(line.id, "actual")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                          }}
                         />
                         <span>zł</span>
                       </label>
