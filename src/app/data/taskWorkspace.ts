@@ -26,7 +26,13 @@ export type WorkspaceTask = {
   comments?: TaskComment[];
 };
 
-export type WorkspaceHabit = { id: number; name: string; streak: number; done: boolean };
+export type WorkspaceHabit = {
+  id: number;
+  name: string;
+  streak: number;
+  done: boolean;
+  completedDates?: string[];
+};
 export type WorkspaceList = { id: string; label: string; color: string };
 export type WorkspaceTag = { id: string; label: string; color: string };
 
@@ -72,10 +78,10 @@ const DEFAULT_TASKS: WorkspaceTask[] = [
 ];
 
 const DEFAULT_HABITS: WorkspaceHabit[] = [
-  { id: 1, name: "Medytacja rano", streak: 5, done: true },
-  { id: 2, name: "8 szklanek wody", streak: 2, done: false },
-  { id: 3, name: "30 min czytania", streak: 12, done: false },
-  { id: 4, name: "Spacer 20 min", streak: 0, done: false },
+  { id: 1, name: "Medytacja rano", streak: 5, done: true, completedDates: [toCalendarDateKey(new Date())] },
+  { id: 2, name: "8 szklanek wody", streak: 2, done: false, completedDates: [] },
+  { id: 3, name: "30 min czytania", streak: 12, done: false, completedDates: [] },
+  { id: 4, name: "Spacer 20 min", streak: 0, done: false, completedDates: [] },
 ];
 
 const DEFAULT_LISTS: WorkspaceList[] = [
@@ -124,7 +130,9 @@ function isWorkspaceHabit(value: unknown): value is WorkspaceHabit {
     && typeof value.id === "number"
     && typeof value.name === "string"
     && typeof value.streak === "number"
-    && typeof value.done === "boolean";
+    && typeof value.done === "boolean"
+    && (value.completedDates === undefined
+      || (Array.isArray(value.completedDates) && value.completedDates.every((date) => typeof date === "string")));
 }
 
 function isWorkspaceList(value: unknown): value is WorkspaceList {
@@ -154,11 +162,16 @@ export function loadTaskWorkspace(): TaskWorkspace {
       || !parsed.tags.every(isWorkspaceList)
     ) return fallback;
     const workspace = parsed as TaskWorkspace;
+    const todayKey = toCalendarDateKey(new Date());
     return {
       ...workspace,
       tasks: workspace.tasks.map((task) => isCalendarTask(task) && task.view === "kalendarz"
         ? { ...task, view: taskViewForCalendarDate(task.calendarDate) }
         : task),
+      habits: workspace.habits.map((habit) => {
+        const completedDates = habit.completedDates ?? (habit.done ? [todayKey] : []);
+        return { ...habit, completedDates, done: completedDates.includes(todayKey) };
+      }),
     };
   } catch {
     return fallback;
@@ -175,6 +188,18 @@ export function saveTaskWorkspace(workspace: TaskWorkspace): boolean {
   } catch {
     return false;
   }
+}
+
+export function isHabitDoneOnDate(habit: WorkspaceHabit, dateKey: string): boolean {
+  return habit.completedDates ? habit.completedDates.includes(dateKey) : habit.done;
+}
+
+export function toggleHabitOnDate(habit: WorkspaceHabit, dateKey: string): WorkspaceHabit {
+  const nextDone = !isHabitDoneOnDate(habit, dateKey);
+  const completedDates = new Set(habit.completedDates ?? []);
+  if (nextDone) completedDates.add(dateKey);
+  else completedDates.delete(dateKey);
+  return { ...habit, done: nextDone, completedDates: [...completedDates].sort() };
 }
 
 export function isCalendarTask(task: WorkspaceTask): task is WorkspaceTask & { calendarDate: string } {

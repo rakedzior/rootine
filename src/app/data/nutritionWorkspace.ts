@@ -35,6 +35,7 @@ export interface NutritionDay {
   date: string;
   waterMl: number;
   source: "user" | "demo";
+  closedAt?: string;
   entries: Record<MealSlot, NutritionEntry[]>;
 }
 
@@ -54,7 +55,7 @@ export interface WeightMeasurement {
 }
 
 export interface NutritionWorkspace {
-  version: 5;
+  version: 6;
   updatedAt: string;
   goals: NutritionGoals;
   calculatorProfile?: NutritionCalculatorProfile;
@@ -69,7 +70,7 @@ export interface NutritionLoadResult {
 }
 
 const STORAGE_KEY = "rootine.nutrition-workspace.v1";
-const WORKSPACE_VERSION = 5 as const;
+const WORKSPACE_VERSION = 6 as const;
 
 export const DEFAULT_NUTRITION_GOALS: NutritionGoals = {
   calories: 2300,
@@ -195,6 +196,7 @@ function normalizeDay(date: string, value: unknown, legacy = false): NutritionDa
     date,
     waterMl: legacy ? safeNumber(value.water) * 250 : safeNumber(value.waterMl),
     source: value.source === "demo" || inferredDemo ? "demo" : "user",
+    closedAt: typeof value.closedAt === "string" ? value.closedAt : undefined,
     entries: normalizedEntries,
   };
 }
@@ -224,7 +226,7 @@ export function loadNutritionWorkspace(): NutritionLoadResult {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return { status: "missing", workspace: fallback };
     const parsed: unknown = JSON.parse(stored);
-    if (!isRecord(parsed) || ![1, 2, 3, 4, WORKSPACE_VERSION].includes(parsed.version as number) || !isRecord(parsed.goals) || !isRecord(parsed.days)) {
+    if (!isRecord(parsed) || ![1, 2, 3, 4, 5, WORKSPACE_VERSION].includes(parsed.version as number) || !isRecord(parsed.goals) || !isRecord(parsed.days)) {
       return { status: "corrupt", workspace: fallback };
     }
     const legacy = parsed.version === 1;
