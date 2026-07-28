@@ -11,6 +11,7 @@ import {
   Apple,
   CalendarDays,
   ChartNoAxesCombined,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Coffee,
@@ -20,6 +21,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Salad,
   Save,
   Scale,
@@ -548,6 +550,7 @@ export default function Odzywanie() {
 
   const today = nutritionDateKey();
   const day = workspace.days[selectedDate] ?? createEmptyNutritionDay(selectedDate);
+  const dayClosed = Boolean(day.closedAt);
   const allEntries = useMemo(() => Object.values(day.entries).flat(), [day.entries]);
   const totals = useMemo(() => sumEntries(allEntries), [allEntries]);
   const genericResults = useMemo(() => searchGenericFoods(entryDraft.name), [entryDraft.name]);
@@ -721,10 +724,20 @@ export default function Odzywanie() {
     setSavePending(true);
   };
 
-  const updateDay = (updater: (current: ReturnType<typeof createEmptyNutritionDay>) => ReturnType<typeof createEmptyNutritionDay>) => {
+  const updateDay = (
+    updater: (current: ReturnType<typeof createEmptyNutritionDay>) => ReturnType<typeof createEmptyNutritionDay>,
+    preserveClosure = false,
+  ) => {
     commitWorkspace((current) => {
       const currentDay = current.days[selectedDate] ?? createEmptyNutritionDay(selectedDate);
-      return { ...current, days: { ...current.days, [selectedDate]: updater(currentDay) } };
+      const updatedDay = updater(currentDay);
+      return {
+        ...current,
+        days: {
+          ...current.days,
+          [selectedDate]: preserveClosure ? updatedDay : { ...updatedDay, closedAt: undefined },
+        },
+      };
     });
   };
 
@@ -858,6 +871,14 @@ export default function Odzywanie() {
 
   const changeWater = (delta: number) => {
     updateDay((current) => ({ ...current, waterMl: Math.max(0, Math.min(20_000, current.waterMl + delta)) }));
+  };
+
+  const toggleDayClosed = () => {
+    if (selectedDate > today) return;
+    updateDay((current) => ({
+      ...current,
+      closedAt: current.closedAt ? undefined : new Date().toISOString(),
+    }), true);
   };
 
   const openGoalDialog = (dialog: Exclude<GoalDialog, null>) => {
@@ -1199,6 +1220,23 @@ export default function Odzywanie() {
               <CalendarDays size={13} style={{ color: uiColors.textMuted }} />
               <span className="capitalize" style={{ color: uiColors.textSecondary, fontSize: "var(--text-meta)" }}>{formatDate(selectedDate)}</span>
               {day.source === "demo" && <Button variant="quiet" size="sm" onClick={clearDemoDay}>Wyczyść przykład</Button>}
+              <Button
+                variant="quiet"
+                size="sm"
+                className={`nutrition-day-close ${dayClosed ? "is-closed" : ""}`}
+                leadingIcon={dayClosed ? <RotateCcw size={12} /> : <CheckCircle2 size={12} />}
+                aria-pressed={dayClosed}
+                aria-label={dayClosed ? "Otwórz ponownie wybrany dzień" : "Zamknij wybrany dzień"}
+                disabled={selectedDate > today}
+                title={selectedDate > today
+                  ? "Nie można zamknąć przyszłego dnia."
+                  : dayClosed
+                    ? "Dzień jest zamknięty. Kliknij, aby otworzyć go ponownie."
+                    : "Oznacz dzień jako wykonany na ekranie Dzisiaj."}
+                onClick={toggleDayClosed}
+              >
+                {dayClosed ? "Otwórz dzień" : "Zamknij dzień"}
+              </Button>
             </div>
           </div>
 

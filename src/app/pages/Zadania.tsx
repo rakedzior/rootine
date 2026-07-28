@@ -12,8 +12,10 @@ import {
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
 import {
+  isHabitDoneOnDate,
   loadTaskWorkspace,
   saveTaskWorkspace,
+  toggleHabitOnDate,
   taskViewForCalendarDate,
   toCalendarDateKey,
   type TaskComment,
@@ -86,6 +88,7 @@ const SMART_VIEWS = [
   { id: "jutro",      label: "Jutro",           icon: Calendar   },
   { id: "7dni",       label: "Następne 7 dni",  icon: TrendingUp },
   { id: "podsumowanie", label: "Podsumowanie",  icon: BarChart2  },
+  { id: "nawyki",     label: "Nawyki",           icon: Flame      },
 ];
 
 const VIEW_LABELS: Record<string, string> = {
@@ -95,9 +98,16 @@ const VIEW_LABELS: Record<string, string> = {
   jutro:        "Jutro",
   "7dni":       "Następne 7 dni",
   podsumowanie: "Podsumowanie",
+  nawyki:       "Nawyki",
   ukonczone:    "Ukończone",
   kosz:         "Kosz",
 };
+
+function initialTaskView() {
+  if (typeof window === "undefined") return "dzis";
+  const requested = new URLSearchParams(window.location.search).get("widok");
+  return requested && VIEW_LABELS[requested] ? requested : "dzis";
+}
 
 const PALETTE = [
   C.iceBlue, C.seaGlass, C.warning, C.danger,
@@ -1590,6 +1600,104 @@ function SummaryPanel({ tasks, habits, onToggleHabit }: {
   );
 }
 
+function HabitsWorkspace({
+  habits,
+  onToggleHabit,
+  onAddHabit,
+}: {
+  habits: Habit[];
+  onToggleHabit: (id: number) => void;
+  onAddHabit: (name: string) => void;
+}) {
+  const [newHabit, setNewHabit] = useState("");
+  const todayKey = toCalendarDateKey(new Date());
+  const completed = habits.filter((habit) => isHabitDoneOnDate(habit, todayKey)).length;
+  const progress = habits.length ? Math.round(completed / habits.length * 100) : 0;
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = newHabit.trim();
+    if (!name) return;
+    onAddHabit(name);
+    setNewHabit("");
+  };
+
+  return (
+    <div className="task-habits-workspace">
+      <section className="task-habits-overview" aria-labelledby="task-habits-title">
+        <div>
+          <h2 id="task-habits-title">Nawyki na dziś</h2>
+          <p>Odhacz dzisiejszy rytm. Każdy dzień jest zapisywany osobno, więc jutro zaczniesz z czystą listą.</p>
+        </div>
+        <div className="task-habits-progress">
+          <div>
+            <span>Wykonanie</span>
+            <strong>{progress}%</strong>
+          </div>
+          <div
+            className="task-habits-progress__track"
+            role="progressbar"
+            aria-label="Dzisiejszy postęp nawyków"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          >
+            <i style={{ width: `${progress}%` }} />
+          </div>
+          <small>{completed} z {habits.length} ukończonych</small>
+        </div>
+      </section>
+
+      <form className="task-habits-add" onSubmit={submit}>
+        <input
+          value={newHabit}
+          onChange={(event) => setNewHabit(event.target.value)}
+          placeholder="Dodaj nowy nawyk"
+          aria-label="Nazwa nowego nawyku"
+        />
+        <Button type="submit" variant="primary" leadingIcon={<Plus size={13} />} disabled={!newHabit.trim()}>
+          Dodaj nawyk
+        </Button>
+      </form>
+
+      {habits.length ? (
+        <div className="task-habits-list">
+          {habits.map((habit) => {
+            const doneToday = isHabitDoneOnDate(habit, todayKey);
+            return (
+              <button
+                key={habit.id}
+                type="button"
+                className={`task-habit-row ${doneToday ? "is-done" : ""}`}
+                aria-pressed={doneToday}
+                aria-label={doneToday
+                  ? `Oznacz nawyk jako niewykonany: ${habit.name}`
+                  : `Ukończ nawyk: ${habit.name}`}
+                onClick={() => onToggleHabit(habit.id)}
+              >
+                <span className="task-habit-row__check" aria-hidden="true">
+                  {doneToday && <Check size={10} strokeWidth={2.5} />}
+                </span>
+                <span className="task-habit-row__copy">
+                  <strong>{habit.name}</strong>
+                  <small>
+                    <Flame size={11} aria-hidden="true" />
+                    {habit.streak > 0 ? `${habit.streak} dni serii` : "Nowy rytm"}
+                  </small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="task-habits-empty">
+          <span>Nie masz jeszcze nawyków. Dodaj pierwszy powyżej.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Podsumowanie: document main area ──────────────────────
 function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] }) {
   const done   = tasks.filter(t => t.done);
@@ -1793,7 +1901,7 @@ function InputFloatMenu({ anchorEl, onClose, children }: {
 // ── Main page ─────────────────────────────────────────────
 export default function Zadania() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
-  const [taskView,      setTaskView]      = useState("dzis");
+  const [taskView,      setTaskView]      = useState(initialTaskView);
   const [listFilter,    setListFilter]    = useState<string | null>(null);
   const [tagFilter,     setTagFilter]     = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
@@ -1818,6 +1926,13 @@ export default function Zadania() {
   useEffect(() => {
     setStorageFailed(!saveTaskWorkspace({ ...initialWorkspace, tasks, habits, lists: listy, tags: tagi }));
   }, [habits, initialWorkspace, listy, tagi, tasks]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (taskView === "dzis") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", taskView);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [taskView]);
 
   // Sidebar collapse state
   const [listyOpen,     setListyOpen]     = useState(false);
@@ -1867,7 +1982,7 @@ export default function Zadania() {
     if (taskView === "kosz") return Boolean(t.deleted);
     if (t.deleted) return false;
     if (taskView === "ukonczone") return t.done;
-    const viewMatch = taskView === "wszystkie" || taskView === "podsumowanie"
+    const viewMatch = taskView === "wszystkie" || taskView === "podsumowanie" || taskView === "nawyki"
       ? true : t.view === taskView;
     const listMatch = listFilter ? t.list === listFilter : true;
     const tagMatch  = tagFilter  ? (t.tags ?? []).includes(tagFilter) : true;
@@ -1888,9 +2003,11 @@ export default function Zadania() {
   const viewCounts = Object.fromEntries(
     SMART_VIEWS.map(v => [
       v.id,
-      tasks.filter(t => !t.deleted && !t.done && (
-        v.id === "wszystkie" || v.id === "podsumowanie" ? true : t.view === v.id
-      )).length,
+      v.id === "nawyki"
+        ? habits.filter((habit) => !isHabitDoneOnDate(habit, todayKey)).length
+        : tasks.filter(t => !t.deleted && !t.done && (
+          v.id === "wszystkie" || v.id === "podsumowanie" ? true : t.view === v.id
+        )).length,
     ])
   );
 
@@ -1920,7 +2037,13 @@ export default function Zadania() {
     const id = Date.now();
     const dateLabel = formatDateLabel(newDateVal);
     const calendarDate = newDateVal.date ? toCalendarDateKey(newDateVal.date) : undefined;
-    const fallbackView = taskView === "wszystkie" || taskView === "podsumowanie" || taskView === "kosz" || taskView === "ukonczone" ? "dzis" : taskView;
+    const fallbackView = taskView === "wszystkie"
+      || taskView === "podsumowanie"
+      || taskView === "nawyki"
+      || taskView === "kosz"
+      || taskView === "ukonczone"
+      ? "dzis"
+      : taskView;
     setTagi(existing => {
       const known = new Set(existing.map(tag => tag.id));
       const missing = newTaskTags.filter(tag => !known.has(tag));
@@ -1990,7 +2113,13 @@ export default function Zadania() {
     setTasks(p => p.map(t => t.id === id ? { ...t, ...patch } : t));
   };
   const deleteTask = (id: number) => { updateTask(id, { deleted: true }); setSelectedId(null); };
-  const toggleHabit = (id: number) => setHabits(p => p.map(h => h.id === id ? { ...h, done: !h.done } : h));
+  const toggleHabit = (id: number) => setHabits((current) => current.map((habit) => (
+    habit.id === id ? toggleHabitOnDate(habit, toCalendarDateKey(new Date())) : habit
+  )));
+  const addHabit = (name: string) => setHabits((current) => [
+    ...current,
+    { id: Date.now(), name, streak: 0, done: false, completedDates: [] },
+  ]);
 
   const rescheduleOverdue = () => {
     const ids = new Set(overdue.map(task => task.id));
@@ -2014,7 +2143,7 @@ export default function Zadania() {
   const flagColor = newPriority === "high" ? C.danger : newPriority === "medium" ? C.warning : newPriority === "low" ? C.iceBlue : null;
 
   const startNewTask = () => {
-    if (taskView === "podsumowanie" || taskView === "ukonczone" || taskView === "kosz") {
+    if (taskView === "podsumowanie" || taskView === "nawyki" || taskView === "ukonczone" || taskView === "kosz") {
       setTaskView("dzis");
     }
     window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -2118,7 +2247,11 @@ export default function Zadania() {
                   ) : (
                     <ContextNavItem
                       active={active}
-                      onClick={() => { setListFilter(active ? null : l.id); setTagFilter(null); }}
+                      onClick={() => {
+                        if (taskView === "podsumowanie" || taskView === "nawyki") setTaskView("wszystkie");
+                        setListFilter(active ? null : l.id);
+                        setTagFilter(null);
+                      }}
                       icon={<span className="h-2 w-2 rounded-full" style={{ background: l.color, opacity: active ? 1 : 0.7 }} />}
                       label={l.label}
                       meta={count > 0 ? count : undefined}
@@ -2221,7 +2354,11 @@ export default function Zadania() {
                   ) : (
                     <ContextNavItem
                       active={active}
-                      onClick={() => { setTagFilter(active ? null : t.id); setListFilter(null); }}
+                      onClick={() => {
+                        if (taskView === "podsumowanie" || taskView === "nawyki") setTaskView("wszystkie");
+                        setTagFilter(active ? null : t.id);
+                        setListFilter(null);
+                      }}
                       icon={<span className="h-2 w-2 rounded-full" style={{ background: t.color, opacity: active ? 1 : 0.7 }} />}
                       label={`#${t.label}`}
                     />
@@ -2302,9 +2439,39 @@ export default function Zadania() {
         </ModuleMain>
       )}
 
+      {taskView === "nawyki" && (
+        <ModuleMain>
+          <PageHeader
+            title="Zadania"
+            description={`Nawyki · ${todayStr()}`}
+            leading={<Flame size={18} strokeWidth={1.5} />}
+            meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+          />
+          <WorkspaceToolbar>
+            <Select
+              aria-label="Widok zadań"
+              fieldClassName="context-mobile-select"
+              compact
+              value={taskView}
+              options={[
+                ...SMART_VIEWS.map((item) => ({ value: item.id, label: item.label })),
+                { value: "ukonczone", label: "Ukończone" },
+                { value: "kosz", label: "Kosz" },
+              ]}
+              onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
+            />
+            <span className="workspace-context-label">Nawyki</span>
+          </WorkspaceToolbar>
+          <HabitsWorkspace habits={habits} onToggleHabit={toggleHabit} onAddHabit={addHabit} />
+        </ModuleMain>
+      )}
+
       {/* ── Task list ── */}
       <ModuleMain
-        style={{ background: C.bg, display: taskView === "podsumowanie" ? "none" : undefined }}>
+        style={{
+          background: C.bg,
+          display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
+        }}>
         <PageHeader
           title="Zadania"
           description={`${listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]} · ${todayStr()}`}
