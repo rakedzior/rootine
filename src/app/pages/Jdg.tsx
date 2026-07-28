@@ -15,20 +15,41 @@ import {
   CircleAlert,
   FileCheck2,
   Landmark,
+  LayoutTemplate,
   LockKeyhole,
   Plus,
   ReceiptText,
   RotateCcw,
+  Settings2,
   Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
+  applyJdgMonthTemplate,
   createJdgItemId,
-  createJdgMonth,
+  createJdgMonthForWorkspace,
+  createJdgTemplateFromMonth,
+  deleteJdgMonthItem,
   getJdgMonthKey,
+  JDG_ACCOUNTING_MODE_OPTIONS as ACCOUNTING_MODE_OPTIONS,
+  JDG_TAX_FORM_OPTIONS as TAX_FORM_OPTIONS,
+  JDG_VAT_CADENCE_OPTIONS as VAT_CADENCE_OPTIONS,
+  JDG_VAT_STATUS_OPTIONS as VAT_STATUS_OPTIONS,
+  JDG_ZUS_SCHEME_OPTIONS as ZUS_SCHEME_OPTIONS,
+  JDG_STORAGE_KEY,
   loadJdgWorkspace,
+  resetJdgMonth,
   saveJdgWorkspace,
+  setJdgDefaultTemplate,
+  undoJdgAuditEvent,
+  updateJdgTaxProfile,
   type JdgChecklistGroup,
+  type JdgChecklistItem,
+  type JdgMonth,
+  type JdgTaxProfile,
 } from "../data/jdgWorkspace";
 import {
   Badge,
@@ -40,6 +61,7 @@ import {
   Select,
   WorkspaceToolbar,
 } from "../ui";
+import "../../styles/affairs.css";
 
 const GROUPS: Array<{
   id: JdgChecklistGroup;
@@ -67,6 +89,19 @@ const GROUPS: Array<{
   },
 ];
 
+const EMPTY_JDG_ITEMS: JdgChecklistItem[] = [];
+
+type PendingDestructiveAction =
+  | { type: "reset"; month: JdgMonth }
+  | { type: "delete"; monthKey: string; item: JdgChecklistItem }
+  | { type: "replace-template"; monthKey: string; templateId: string; templateName: string };
+
+type UndoableAction = {
+  type: "reset" | "delete" | "replace-template";
+  eventId: string;
+  message: string;
+};
+
 function formatMonth(value: string): string {
   const date = new Date(`${value}-01T12:00:00`);
   return date.toLocaleDateString("pl-PL", { month: "long", year: "numeric" });
@@ -86,10 +121,8 @@ function dueStatus(month: string, day: number | null, done: boolean): {
   if (!day) return { label: "Bez terminu", tone: "neutral" };
   const [year, monthNumber] = month.split("-").map(Number);
   const lastDay = new Date(year, monthNumber, 0).getDate();
-  const target = new Date(year, monthNumber - 1, Math.min(day, lastDay), 12);
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const difference = Math.ceil((target.getTime() - today.getTime()) / 86_400_000);
+  const target = `${year}-${String(monthNumber).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+  const difference = calendarDaysBetween(todayLocalDateKey(), target) ?? 0;
   if (difference < 0) return { label: "Po terminie", tone: "danger" };
   if (difference <= 3) return { label: `Do ${day}. dnia`, tone: "warning" };
   return { label: `Do ${day}. dnia`, tone: "neutral" };
@@ -98,6 +131,7 @@ function dueStatus(month: string, day: number | null, done: boolean): {
 export function JdgWorkspace() {
   const [workspace, setWorkspace] = useState(loadJdgWorkspace);
   const [monthKey, setMonthKey] = useState(getJdgMonthKey);
+  const [profileDraft, setProfileDraft] = useState<JdgTaxProfile>(() => structuredClone(workspace.taxProfile));
   const [storageError, setStorageError] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
@@ -105,21 +139,28 @@ export function JdgWorkspace() {
   const [draftRequired, setDraftRequired] = useState(false);
   const [draftDueDay, setDraftDueDay] = useState("");
   const [editorError, setEditorError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsNotice, setSettingsNotice] = useState("");
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction | null>(null);
+  const [undoableAction, setUndoableAction] = useState<UndoableAction | null>(null);
 
   useEffect(() => {
     setStorageError(!saveJdgWorkspace(workspace));
   }, [workspace]);
 
+  useEffect(() => subscribeToLocalWorkspace(JDG_STORAGE_KEY, () => {
+    setWorkspace(loadJdgWorkspace());
+  }), []);
+
   useEffect(() => {
     if (workspace.months.some((month) => month.month === monthKey)) return;
-    setWorkspace((current) => ({
-      ...current,
-      months: [...current.months, createJdgMonth(monthKey, current.months.at(-1))],
-    }));
+    setWorkspace((current) => createJdgMonthForWorkspace(current, monthKey));
   }, [monthKey, workspace.months]);
 
   const currentMonth = workspace.months.find((month) => month.month === monthKey);
-  const items = currentMonth?.items ?? [];
+  const items = currentMonth?.items ?? EMPTY_JDG_ITEMS;
   const requiredItems = items.filter((item) => item.required);
   const closeItem = items.find((item) => item.id === "control-close");
   const requiredBeforeClose = requiredItems.filter((item) => item.id !== "control-close");
@@ -128,6 +169,10 @@ export function JdgWorkspace() {
   const completedCount = items.filter((item) => item.done).length;
   const requiredCompleted = requiredItems.filter((item) => item.done).length;
   const progress = items.length ? Math.round((completedCount / items.length) * 100) : 0;
+  const taxFormLabel = TAX_FORM_OPTIONS.find((option) => option.value === workspace.taxProfile.taxForm)?.label
+    ?? "Profil podatkowy";
+  const profileNeedsSetup = Object.entries(workspace.taxProfile)
+    .some(([key, value]) => key !== "updatedAt" && value === "unconfigured");
 
   const nextDeadline = useMemo(() => {
     return items
@@ -139,15 +184,13 @@ export function JdgWorkspace() {
     const nextKey = shiftMonthKey(monthKey, offset);
     setWorkspace((current) => current.months.some((month) => month.month === nextKey)
       ? current
-      : {
-          ...current,
-          months: [...current.months, createJdgMonth(nextKey, currentMonth)],
-        });
+      : createJdgMonthForWorkspace(current, nextKey));
     setMonthKey(nextKey);
   };
 
   const toggleItem = (itemId: string) => {
     if (itemId === "control-close" && !readyToClose && !closeItem?.done) return;
+    setUndoableAction(null);
     setWorkspace((current) => ({
       ...current,
       months: current.months.map((month) => month.month === monthKey
@@ -165,25 +208,55 @@ export function JdgWorkspace() {
     }));
   };
 
-  const resetMonth = () => {
-    setWorkspace((current) => ({
-      ...current,
-      months: current.months.map((month) => month.month === monthKey
-        ? {
-            ...month,
-            items: month.items.map((item) => ({ ...item, done: false, doneAt: "" })),
-          }
-        : month),
-    }));
+  const requestMonthReset = () => {
+    if (!currentMonth || completedCount === 0) return;
+    setPendingDestructiveAction({ type: "reset", month: structuredClone(currentMonth) });
   };
 
-  const deleteCustomItem = (itemId: string) => {
-    setWorkspace((current) => ({
-      ...current,
-      months: current.months.map((month) => month.month === monthKey
-        ? { ...month, items: month.items.filter((item) => item.id !== itemId) }
-        : month),
-    }));
+  const resetMonth = (snapshot: JdgMonth) => {
+    const previousEventIds = new Set(workspace.history.map((event) => event.id));
+    const next = resetJdgMonth(workspace, snapshot.month);
+    const eventId = next.history.find((event) => !previousEventIds.has(event.id))?.id ?? "";
+    setWorkspace(next);
+    setUndoableAction({
+      type: "reset",
+      eventId,
+      message: `Wyczyszczono potwierdzenia za ${formatMonth(snapshot.month)}.`,
+    });
+    setPendingDestructiveAction(null);
+  };
+
+  const requestCustomItemDeletion = (itemId: string) => {
+    if (!currentMonth) return;
+    const index = currentMonth.items.findIndex((item) => item.id === itemId);
+    const item = currentMonth.items[index];
+    if (!item || index < 0) return;
+    setPendingDestructiveAction({
+      type: "delete",
+      monthKey,
+      item: structuredClone(item),
+    });
+  };
+
+  const deleteCustomItem = (action: Extract<PendingDestructiveAction, { type: "delete" }>) => {
+    const previousEventIds = new Set(workspace.history.map((event) => event.id));
+    const next = deleteJdgMonthItem(workspace, action.monthKey, action.item.id);
+    const eventId = next.history.find((event) => !previousEventIds.has(event.id))?.id ?? "";
+    setWorkspace(next);
+    setUndoableAction({
+      type: "delete",
+      eventId,
+      message: `Usunięto punkt „${action.item.label}”.`,
+    });
+    setPendingDestructiveAction(null);
+  };
+
+  const undoLastAction = () => {
+    if (!undoableAction) return;
+    if (undoableAction.eventId) {
+      setWorkspace((current) => undoJdgAuditEvent(current, undoableAction.eventId));
+    }
+    setUndoableAction(null);
   };
 
   const openEditor = () => {
@@ -193,6 +266,64 @@ export function JdgWorkspace() {
     setDraftDueDay("");
     setEditorError("");
     setEditorOpen(true);
+  };
+
+  const openSettings = () => {
+    setProfileDraft(structuredClone(workspace.taxProfile));
+    setTemplateName("");
+    setSettingsError("");
+    setSettingsNotice("");
+    setSettingsOpen(true);
+  };
+
+  const saveTaxProfile = () => {
+    setWorkspace((current) => updateJdgTaxProfile(current, profileDraft));
+    setSettingsNotice("Profil i jego szablon zaktualizowano. Checklista z profilu jest teraz domyślna dla nowych miesięcy.");
+    setSettingsError("");
+  };
+
+  const saveCurrentMonthAsTemplate = () => {
+    const name = templateName.trim();
+    if (!name) {
+      setSettingsError("Podaj nazwę szablonu.");
+      return;
+    }
+    setWorkspace((current) => createJdgTemplateFromMonth(current, monthKey, { name }));
+    setTemplateName("");
+    setSettingsError("");
+    setSettingsNotice(`Zapisano szablon „${name}”.`);
+  };
+
+  const applyTemplate = (templateId: string, templateNameLabel: string) => {
+    const next = applyJdgMonthTemplate(workspace, monthKey, templateId, "merge");
+    setWorkspace(next);
+    if (next !== workspace) setUndoableAction(null);
+    setSettingsNotice(next === workspace
+      ? `Miesiąc ma już wszystkie punkty z szablonu „${templateNameLabel}”.`
+      : `Dodano brakujące punkty z szablonu „${templateNameLabel}”.`);
+    setSettingsError("");
+  };
+
+  const replaceMonthWithTemplate = (
+    action: Extract<PendingDestructiveAction, { type: "replace-template" }>,
+  ) => {
+    const previousEventIds = new Set(workspace.history.map((event) => event.id));
+    const next = applyJdgMonthTemplate(workspace, action.monthKey, action.templateId, "replace");
+    const eventId = next.history.find((event) => !previousEventIds.has(event.id))?.id ?? "";
+    setWorkspace(next);
+    setUndoableAction({
+      type: "replace-template",
+      eventId,
+      message: `Zastosowano szablon „${action.templateName}” do ${formatMonth(action.monthKey)}.`,
+    });
+    setSettingsOpen(false);
+    setPendingDestructiveAction(null);
+  };
+
+  const chooseDefaultTemplate = (templateId: string, templateNameLabel: string) => {
+    setWorkspace((current) => setJdgDefaultTemplate(current, templateId));
+    setSettingsNotice(`Szablon „${templateNameLabel}” będzie używany dla nowych miesięcy.`);
+    setSettingsError("");
   };
 
   const submitCustomItem = (event: FormEvent<HTMLFormElement>) => {
@@ -224,6 +355,7 @@ export function JdgWorkspace() {
           }
         : month),
     }));
+    setUndoableAction(null);
     setEditorOpen(false);
   };
 
@@ -233,15 +365,27 @@ export function JdgWorkspace() {
         title="Sprawy"
         description="JDG · Miesięczne dokumenty, podatki i zamknięcie działalności"
         leading={<Building2 size={17} />}
-        meta={storageError
-          ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
-          : closed
-            ? <Badge tone="success" dot>Miesiąc zamknięty</Badge>
-            : <Badge tone="warning" dot>W toku</Badge>}
+        meta={(
+          <div className="flex items-center gap-2">
+            {storageError
+              ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
+              : closed
+                ? <Badge tone="success" dot>Miesiąc zamknięty</Badge>
+                : <Badge tone="warning" dot>W toku</Badge>}
+            <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>
+              {profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}
+            </Badge>
+          </div>
+        )}
         actions={(
-          <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={openEditor}>
-            <span className="header-action-label">Dodaj punkt</span>
-          </Button>
+          <>
+            <Button variant="quiet" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>
+              <span className="header-action-label">Profil i szablony</span>
+            </Button>
+            <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={openEditor}>
+              <span className="header-action-label">Dodaj punkt</span>
+            </Button>
+          </>
         )}
       />
       <WorkspaceToolbar className="jdg-toolbar">
@@ -258,7 +402,7 @@ export function JdgWorkspace() {
           <span className="jdg-toolbar__divider" />
           <span>{completedCount}/{items.length} wszystkich</span>
         </div>
-        <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={12} />} onClick={resetMonth} disabled={completedCount === 0}>
+        <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={12} />} onClick={requestMonthReset} disabled={completedCount === 0}>
           Wyczyść miesiąc
         </Button>
       </WorkspaceToolbar>
@@ -340,7 +484,7 @@ export function JdgWorkspace() {
                             {closeLocked ? "Po wymaganych" : due.label}
                           </Badge>
                           {item.id.startsWith("custom-") && (
-                            <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => deleteCustomItem(item.id)}>
+                            <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
                               <Trash2 size={12} />
                             </Button>
                           )}
@@ -381,19 +525,239 @@ export function JdgWorkspace() {
               aria-label={`Notatka do rozliczenia za ${formatMonth(monthKey)}`}
               placeholder="np. Brakuje korekty faktury za hosting…"
               value={currentMonth?.note ?? ""}
-              onChange={(event) => setWorkspace((current) => ({
-                ...current,
-                months: current.months.map((month) => month.month === monthKey ? { ...month, note: event.target.value } : month),
-              }))}
+              onChange={(event) => {
+                setUndoableAction(null);
+                setWorkspace((current) => ({
+                  ...current,
+                  months: current.months.map((month) => month.month === monthKey ? { ...month, note: event.target.value } : month),
+                }));
+              }}
             />
           </Card>
       </div>
+
+      {settingsOpen && (
+        <Modal
+          title="Profil podatkowy i szablony"
+          description="Ustaw zgodnie z informacją od księgowości. Routine organizuje obowiązki, ale nie wylicza podatku."
+          onClose={() => setSettingsOpen(false)}
+          width={680}
+          footer={(
+            <>
+              <Button variant="quiet" onClick={() => setSettingsOpen(false)}>Zamknij</Button>
+              <Button variant="primary" onClick={saveTaxProfile}>Zapisz profil</Button>
+            </>
+          )}
+        >
+          <div className="jdg-settings">
+            <div className="jdg-settings-intro">
+              <LayoutTemplate size={18} aria-hidden="true" />
+              <p>
+                <strong>Profil buduje bezpieczny szablon obowiązków.</strong>
+                Bieżący rejestr pozostaje bez zmian, dopóki nie zastosujesz do niego szablonu. Nowe miesiące użyją szablonu domyślnego.
+              </p>
+            </div>
+
+            <section className="jdg-settings__section" aria-labelledby="jdg-profile-heading">
+              <div className="jdg-settings__heading">
+                <h3 id="jdg-profile-heading">Profil działalności</h3>
+                <p>Nie zakładamy automatycznie ryczałtu, VAT ani konkretnego wariantu ZUS.</p>
+              </div>
+              <div className="jdg-settings__grid">
+                <Select
+                  label="Forma opodatkowania"
+                  value={profileDraft.taxForm}
+                  options={TAX_FORM_OPTIONS}
+                  onChange={(event) => setProfileDraft((current) => ({
+                    ...current,
+                    taxForm: event.target.value as JdgTaxProfile["taxForm"],
+                  }))}
+                />
+                <Select
+                  label="Status VAT"
+                  value={profileDraft.vatStatus}
+                  options={VAT_STATUS_OPTIONS}
+                  onChange={(event) => {
+                    const vatStatus = event.target.value as JdgTaxProfile["vatStatus"];
+                    setProfileDraft((current) => ({
+                      ...current,
+                      vatStatus,
+                      vatCadence: vatStatus === "active" ? current.vatCadence ?? "monthly" : null,
+                    }));
+                  }}
+                />
+                <Select
+                  label="Okres rozliczenia VAT"
+                  value={profileDraft.vatCadence ?? "monthly"}
+                  disabled={profileDraft.vatStatus !== "active"}
+                  hint={profileDraft.vatStatus === "active" ? undefined : "Dostępne dla czynnego podatnika VAT."}
+                  options={[...VAT_CADENCE_OPTIONS]}
+                  onChange={(event) => setProfileDraft((current) => ({
+                    ...current,
+                    vatCadence: event.target.value as NonNullable<JdgTaxProfile["vatCadence"]>,
+                  }))}
+                />
+                <Select
+                  label="Schemat ZUS"
+                  value={profileDraft.zusScheme}
+                  options={ZUS_SCHEME_OPTIONS}
+                  onChange={(event) => setProfileDraft((current) => ({
+                    ...current,
+                    zusScheme: event.target.value as JdgTaxProfile["zusScheme"],
+                  }))}
+                />
+                <Select
+                  label="Sposób prowadzenia księgowości"
+                  value={profileDraft.accountingMode}
+                  options={ACCOUNTING_MODE_OPTIONS}
+                  onChange={(event) => setProfileDraft((current) => ({
+                    ...current,
+                    accountingMode: event.target.value as JdgTaxProfile["accountingMode"],
+                  }))}
+                />
+              </div>
+            </section>
+
+            <section className="jdg-settings__section" aria-labelledby="jdg-templates-heading">
+              <div className="jdg-settings__heading">
+                <h3 id="jdg-templates-heading">Szablony miesiąca</h3>
+                <p>Zapisz bieżący układ albo dodaj brakujące punkty z gotowego szablonu bez kasowania obecnych danych.</p>
+              </div>
+              <div className="jdg-template-create">
+                <Input
+                  label="Nazwa nowego szablonu"
+                  placeholder={`np. ${formatMonth(monthKey)} po korektach`}
+                  value={templateName}
+                  error={settingsError || undefined}
+                  onChange={(event) => {
+                    setTemplateName(event.target.value);
+                    if (settingsError) setSettingsError("");
+                  }}
+                />
+                <Button variant="quiet" onClick={saveCurrentMonthAsTemplate}>Zapisz bieżący miesiąc</Button>
+              </div>
+              <div className="jdg-template-list">
+                {workspace.templates.map((template) => {
+                  const isDefault = workspace.defaultTemplateId === template.id;
+                  return (
+                    <div key={template.id} className="jdg-template-row">
+                      <div>
+                        <strong>{template.name}</strong>
+                        <small>
+                          {template.items.length} {template.items.length === 1 ? "punkt" : "punktów"}
+                          {" · "}
+                          {template.source === "profile" ? "z profilu podatkowego" : "własny"}
+                        </small>
+                      </div>
+                      <div className="jdg-template-row__actions">
+                        {isDefault && <Badge tone="primary">Domyślny</Badge>}
+                        {!isDefault && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => chooseDefaultTemplate(template.id, template.name)}
+                          >
+                            Ustaw domyślny
+                          </Button>
+                        )}
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          onClick={() => applyTemplate(template.id, template.name)}
+                        >
+                          Dodaj do miesiąca
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPendingDestructiveAction({
+                            type: "replace-template",
+                            monthKey,
+                            templateId: template.id,
+                            templateName: template.name,
+                          })}
+                        >
+                          Zastąp miesiąc
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div aria-live="polite" aria-atomic="true">
+              {settingsNotice && <p className="jdg-settings__notice" role="status">{settingsNotice}</p>}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {pendingDestructiveAction && (
+        <Modal
+          title={pendingDestructiveAction.type === "reset"
+            ? "Wyczyścić potwierdzenia miesiąca?"
+            : pendingDestructiveAction.type === "delete"
+              ? "Usunąć własny punkt?"
+              : "Zastąpić układ miesiąca?"}
+          description={pendingDestructiveAction.type === "reset"
+            ? formatMonth(pendingDestructiveAction.month.month)
+            : pendingDestructiveAction.type === "delete"
+              ? pendingDestructiveAction.item.label
+              : `${pendingDestructiveAction.templateName} · ${formatMonth(pendingDestructiveAction.monthKey)}`}
+          onClose={() => setPendingDestructiveAction(null)}
+          width={460}
+          footer={(
+            <>
+              <Button variant="quiet" onClick={() => setPendingDestructiveAction(null)}>Anuluj</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  if (pendingDestructiveAction.type === "reset") resetMonth(pendingDestructiveAction.month);
+                  else if (pendingDestructiveAction.type === "delete") deleteCustomItem(pendingDestructiveAction);
+                  else replaceMonthWithTemplate(pendingDestructiveAction);
+                }}
+              >
+                {pendingDestructiveAction.type === "reset"
+                  ? "Wyczyść potwierdzenia"
+                  : pendingDestructiveAction.type === "delete"
+                    ? "Usuń punkt"
+                    : "Zastąp miesiąc"}
+              </Button>
+            </>
+          )}
+        >
+          <p className="text-[12px] leading-5" style={{ color: "var(--color-text-secondary)" }}>
+            {pendingDestructiveAction.type === "reset"
+              ? "Wszystkie oznaczenia wykonania i ich daty zostaną wyzerowane. Po operacji możesz przywrócić poprzedni stan."
+              : pendingDestructiveAction.type === "delete"
+                ? "Punkt zniknie z wybranego miesiąca wraz z jego potwierdzeniem. Po operacji możesz go przywrócić."
+                : "Obecne punkty, potwierdzenia i daty zostaną zastąpione czystym układem z szablonu. Operacja zostanie zapisana w historii i będzie możliwa do cofnięcia."}
+          </p>
+        </Modal>
+      )}
+
+      {undoableAction && (
+        <div className="jdg-undo">
+          <span role="status" aria-live="polite">{undoableAction.message}</span>
+          <Button variant="ghost" size="sm" onClick={undoLastAction}>Cofnij</Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label="Zamknij komunikat"
+            onClick={() => setUndoableAction(null)}
+          >
+            <X size={12} aria-hidden="true" />
+          </Button>
+        </div>
+      )}
 
       {editorOpen && (
         <Modal
           eyebrow={formatMonth(monthKey)}
           title="Własny punkt checklisty"
-          description="Dodaj kontrolę specyficzną dla Twojej działalności. Trafi do kolejnych nowo tworzonych miesięcy."
+          description="Dodaj kontrolę specyficzną dla Twojej działalności. Bieżący układ możesz potem zapisać jako szablon."
           onClose={() => setEditorOpen(false)}
           footer={(
             <>

@@ -22,10 +22,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   createWorkId,
   loadWorkWorkspace,
   saveWorkWorkspace,
+  WORK_STORAGE_KEY,
   type WorkCompany,
   type WorkProject,
   type WorkProjectStatus,
@@ -45,8 +47,9 @@ import {
   Select,
   WorkspaceToolbar,
 } from "../ui";
+import "../../styles/work.css";
 
-const COMPANY_COLORS = ["#4772FA", "#70B89F", "#D4AA68", "#9B8CE8", "#CF777C", "#A0A0A0"];
+const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#B9A171", "#9B8CE8", "#BC8EA5", "#8793A1"];
 
 const PROJECT_STATUS_LABELS: Record<WorkProjectStatus, string> = {
   active: "Aktywny",
@@ -70,6 +73,17 @@ type DeleteState = {
   kind: "company" | "project" | "task";
   id: string;
   name: string;
+};
+
+type CascadeState = {
+  taskId: string;
+  taskTitle: string;
+  branchIds: string[];
+};
+
+type CompletionUndo = {
+  label: string;
+  previous: Array<{ id: string; completed: boolean }>;
 };
 
 type EditorDraft = {
@@ -128,25 +142,70 @@ function taskDepth(task: WorkTask, tasks: WorkTask[]): number {
   return depth;
 }
 
+function getInitialWorkUrlState() {
+  if (typeof window === "undefined") {
+    return { companyId: "", projectId: "", search: "", showCompleted: false };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    companyId: params.get("firma") ?? "",
+    projectId: params.get("projekt") ?? "",
+    search: params.get("q") ?? "",
+    showCompleted: params.get("ukonczone") === "1",
+  };
+}
+
 export default function Praca() {
+  const [initialUrlState] = useState(getInitialWorkUrlState);
   const [workspace, setWorkspace] = useState(loadWorkWorkspace);
-  const [selectedCompanyId, setSelectedCompanyId] = useState("");
-  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [selectedCompanyId, setSelectedCompanyId] = useState(initialUrlState.companyId);
+  const [selectedProjectId, setSelectedProjectId] = useState(initialUrlState.projectId);
   const [expandedCompanyIds, setExpandedCompanyIds] = useState<Set<string>>(
     () => new Set(workspace.companies.map((company) => company.id)),
   );
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
-  const [search, setSearch] = useState("");
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [search, setSearch] = useState(initialUrlState.search);
+  const [showCompleted, setShowCompleted] = useState(initialUrlState.showCompleted);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<EditorDraft>(EMPTY_DRAFT);
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
+  const [cascadeState, setCascadeState] = useState<CascadeState | null>(null);
+  const [completionUndo, setCompletionUndo] = useState<CompletionUndo | null>(null);
   const [storageError, setStorageError] = useState(false);
 
   useEffect(() => {
     setStorageError(!saveWorkWorkspace(workspace));
   }, [workspace]);
+
+  useEffect(() => subscribeToLocalWorkspace(WORK_STORAGE_KEY, () => {
+    setWorkspace(loadWorkWorkspace());
+  }), []);
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const next = getInitialWorkUrlState();
+      setSelectedCompanyId(next.companyId);
+      setSelectedProjectId(next.projectId);
+      setSearch(next.search);
+      setShowCompleted(next.showCompleted);
+    };
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedCompanyId) url.searchParams.set("firma", selectedCompanyId);
+    else url.searchParams.delete("firma");
+    if (selectedProjectId) url.searchParams.set("projekt", selectedProjectId);
+    else url.searchParams.delete("projekt");
+    if (search.trim()) url.searchParams.set("q", search);
+    else url.searchParams.delete("q");
+    if (showCompleted) url.searchParams.set("ukonczone", "1");
+    else url.searchParams.delete("ukonczone");
+    if (url.href !== window.location.href) window.history.replaceState({}, "", url);
+  }, [search, selectedCompanyId, selectedProjectId, showCompleted]);
 
   useEffect(() => {
     if (!selectedCompanyId || workspace.companies.some((company) => company.id === selectedCompanyId)) return;
@@ -222,6 +281,15 @@ export default function Praca() {
     return counts;
   }, [workspace.projects, workspace.tasks]);
 
+  const activeProjectIds = useMemo(
+    () => new Set(workspace.projects.filter((project) => project.status === "active").map((project) => project.id)),
+    [workspace.projects],
+  );
+  const activeOpenTasks = useMemo(
+    () => workspace.tasks.filter((task) => activeProjectIds.has(task.projectId) && !task.completed),
+    [activeProjectIds, workspace.tasks],
+  );
+
   const companyProjectCounts = useMemo(() => {
     const counts = new Map<string, number>();
     workspace.companies.forEach((company) => counts.set(company.id, 0));
@@ -232,7 +300,7 @@ export default function Praca() {
   const companySummaries = useMemo(() => {
     return new Map(workspace.companies.map((company) => {
       const projects = workspace.projects.filter((project) => project.companyId === company.id);
-      const projectIds = new Set(projects.map((project) => project.id));
+      const projectIds = new Set(projects.filter((project) => project.status === "active").map((project) => project.id));
       const tasks = workspace.tasks.filter((task) => projectIds.has(task.projectId));
       const completed = tasks.filter((task) => task.completed).length;
       return [company.id, {
@@ -246,8 +314,8 @@ export default function Praca() {
 
   const overviewTasks = useMemo(() => {
     const priorityRank: Record<WorkTaskPriority, number> = { high: 0, medium: 1, low: 2, none: 3 };
-    return workspace.tasks
-      .filter((task) => !task.completed)
+    return activeOpenTasks
+      .slice()
       .sort((a, b) => {
         if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
         if (a.dueDate !== b.dueDate) return a.dueDate ? -1 : 1;
@@ -257,7 +325,7 @@ export default function Praca() {
         return a.createdAt.localeCompare(b.createdAt);
       })
       .slice(0, 6);
-  }, [workspace.tasks]);
+  }, [activeOpenTasks]);
 
   const overviewProjects = useMemo(() => {
     return workspace.projects
@@ -278,16 +346,29 @@ export default function Praca() {
     setEditor({ kind: "company", mode: company ? "edit" : "add", id: company?.id });
   };
 
+  const pushWorkLocation = (companyId: string, projectId: string) => {
+    const url = new URL(window.location.href);
+    if (companyId) url.searchParams.set("firma", companyId);
+    else url.searchParams.delete("firma");
+    if (projectId) url.searchParams.set("projekt", projectId);
+    else url.searchParams.delete("projekt");
+    url.searchParams.delete("q");
+    window.history.pushState({}, "", url);
+  };
+
   const selectCompany = (companyId: string) => {
+    const projectId = workspace.projects.find((project) => project.companyId === companyId)?.id ?? "";
     setSelectedCompanyId(companyId);
-    setSelectedProjectId(workspace.projects.find((project) => project.companyId === companyId)?.id ?? "");
+    setSelectedProjectId(projectId);
     setSearch("");
+    pushWorkLocation(companyId, projectId);
   };
 
   const selectProject = (companyId: string, projectId: string) => {
     setSelectedCompanyId(companyId);
     setSelectedProjectId(projectId);
     setSearch("");
+    pushWorkLocation(companyId, projectId);
   };
 
   const toggleCompanyExpanded = (companyId: string) => {
@@ -303,6 +384,7 @@ export default function Praca() {
     setSelectedCompanyId("");
     setSelectedProjectId("");
     setSearch("");
+    pushWorkLocation("", "");
   };
 
   const openProjectEditor = (project?: WorkProject) => {
@@ -465,15 +547,57 @@ export default function Praca() {
     setDeleteState(null);
   };
 
-  const toggleTask = (task: WorkTask) => {
-    const branch = collectTaskBranch(projectTasks, task.id);
-    const nextCompleted = !task.completed;
+  const applyTaskCompletion = (taskIds: string[], completed: boolean, label: string) => {
+    const idSet = new Set(taskIds);
+    const previous = workspace.tasks
+      .filter((candidate) => idSet.has(candidate.id))
+      .map((candidate) => ({ id: candidate.id, completed: candidate.completed }));
     setWorkspace((current) => ({
       ...current,
-      tasks: current.tasks.map((candidate) => branch.has(candidate.id)
-        ? { ...candidate, completed: nextCompleted }
+      tasks: current.tasks.map((candidate) => idSet.has(candidate.id)
+        ? { ...candidate, completed }
         : candidate),
     }));
+    setCompletionUndo({ label, previous });
+  };
+
+  const toggleTask = (task: WorkTask) => {
+    if (task.completed) {
+      applyTaskCompletion([task.id], false, `Przywrócono „${task.title}”`);
+      return;
+    }
+    const branch = collectTaskBranch(projectTasks, task.id);
+    if (branch.size > 1) {
+      setCascadeState({
+        taskId: task.id,
+        taskTitle: task.title,
+        branchIds: Array.from(branch),
+      });
+      return;
+    }
+    applyTaskCompletion([task.id], true, `Ukończono „${task.title}”`);
+  };
+
+  const confirmCascadeCompletion = () => {
+    if (!cascadeState) return;
+    applyTaskCompletion(
+      cascadeState.branchIds,
+      true,
+      `Ukończono „${cascadeState.taskTitle}” i ${cascadeState.branchIds.length - 1} podzadań`,
+    );
+    setCascadeState(null);
+  };
+
+  const undoCompletionChange = () => {
+    if (!completionUndo) return;
+    const previous = new Map(completionUndo.previous.map((item) => [item.id, item.completed]));
+    setWorkspace((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => previous.has(task.id)
+        ? { ...task, completed: previous.get(task.id) ?? task.completed }
+        : task),
+    }));
+    setCompletionUndo(null);
   };
 
   const toggleCollapsed = (taskId: string) => {
@@ -756,7 +880,7 @@ export default function Praca() {
                 <h2 id="work-overview-title">Przegląd pracy</h2>
                 <p>
                   Firmy {workspace.companies.length} · Projekty {workspace.projects.length} · Otwarte zadania{" "}
-                  {workspace.tasks.filter((task) => !task.completed).length}
+                  {activeOpenTasks.length}
                 </p>
               </div>
             </header>
@@ -804,7 +928,14 @@ export default function Praca() {
                             <strong>{summary?.openTasks ?? 0}</strong>
                             <small>z {summary?.totalTasks ?? 0} zadań</small>
                           </span>
-                          <span className="work-overview-row__progress">
+                          <span
+                            className="work-overview-row__progress"
+                            role="progressbar"
+                            aria-label={`Postęp firmy ${company.name}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={summary?.progress ?? 0}
+                          >
                             <span><i style={{ width: `${summary?.progress ?? 0}%` }} /></span>
                             <strong>{summary?.progress ?? 0}%</strong>
                           </span>
@@ -822,7 +953,7 @@ export default function Praca() {
                         <CalendarDays size={14} aria-hidden="true" />
                         <h3 id="work-next-tasks-title">Najbliższe i ważne</h3>
                       </div>
-                      <span>{workspace.tasks.filter((task) => !task.completed).length} otwartych</span>
+                      <span>{activeOpenTasks.length} w aktywnych projektach</span>
                     </header>
                     <div className="work-overview-task-list">
                       {overviewTasks.map((task) => {
@@ -881,7 +1012,14 @@ export default function Praca() {
                               <strong>{project.name}</strong>
                               <small>{company.name} · {count.total - count.completed} otwartych</small>
                             </span>
-                            <span className="work-overview-project__progress">
+                            <span
+                              className="work-overview-project__progress"
+                              role="progressbar"
+                              aria-label={`Postęp projektu ${project.name}`}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={projectProgress}
+                            >
                               <span><i style={{ width: `${projectProgress}%` }} /></span>
                               <strong>{projectProgress}%</strong>
                             </span>
@@ -923,7 +1061,7 @@ export default function Praca() {
                   value={selectedProjectId}
                   disabled={companyProjects.length === 0}
                   options={companyProjects.map((project) => ({ value: project.id, label: project.name }))}
-                  onChange={(event) => setSelectedProjectId(event.target.value)}
+                  onChange={(event) => selectProject(selectedCompanyId, event.target.value)}
                 />
               </div>
               <label className="work-search">
@@ -998,7 +1136,15 @@ export default function Praca() {
                       <span>Postęp</span>
                       <strong>{completedCount} z {projectTasks.length}</strong>
                     </div>
-                    <div className="work-project-progress__track" aria-label={`${progress}% ukończone`}>
+                    <div
+                      className="work-project-progress__track"
+                      role="progressbar"
+                      aria-label={`Postęp projektu ${selectedProject.name}`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={progress}
+                      aria-valuetext={`${completedCount} z ${projectTasks.length} zadań ukończonych`}
+                    >
                       <span style={{ width: `${progress}%` }} />
                     </div>
                     <b>{progress}%</b>
@@ -1006,6 +1152,21 @@ export default function Praca() {
                 </header>
 
                 <div className="work-task-list">
+                  {completionUndo && (
+                    <div className="work-completion-undo" role="status">
+                      <span>{completionUndo.label}</span>
+                      <Button variant="quiet" size="sm" onClick={undoCompletionChange}>Cofnij</Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        iconOnly
+                        aria-label="Zamknij komunikat"
+                        onClick={() => setCompletionUndo(null)}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  )}
                   <div className="work-task-list__heading">
                     <div>
                       <ListTree size={14} aria-hidden="true" />
@@ -1168,6 +1329,23 @@ export default function Praca() {
           )}
         >
           <p className="work-delete-note">Tej operacji nie można cofnąć.</p>
+        </Modal>
+      )}
+
+      {cascadeState && (
+        <Modal
+          title={`Ukończyć „${cascadeState.taskTitle}”?`}
+          description={`To zadanie ma ${cascadeState.branchIds.length - 1} ${cascadeState.branchIds.length - 1 === 1 ? "podzadanie" : "podzadań"}. Wszystkie zostaną oznaczone jako ukończone.`}
+          eyebrow="Zadanie nadrzędne"
+          onClose={() => setCascadeState(null)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setCascadeState(null)}>Anuluj</Button>
+              <Button variant="primary" onClick={confirmCascadeCompletion}>Ukończ całą gałąź</Button>
+            </>
+          )}
+        >
+          <p className="work-delete-note">Po zatwierdzeniu możesz cofnąć zmianę z komunikatu nad listą zadań.</p>
         </Modal>
       )}
     </ModuleShell>

@@ -1,11 +1,13 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useId,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
+  type FocusEvent,
   type KeyboardEvent,
   type SelectHTMLAttributes,
 } from "react";
@@ -36,6 +38,15 @@ type MenuPosition = {
   above: boolean;
 };
 
+const TYPEAHEAD_RESET_MS = 700;
+
+function normalizeForSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("pl-PL");
+}
+
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   {
     id,
@@ -49,16 +60,24 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     value,
     defaultValue,
     disabled,
+    required,
     onChange,
     onBlur,
+    "aria-label": ariaLabel,
+    "aria-labelledby": ariaLabelledBy,
     "aria-describedby": describedBy,
-    ...props
+    "aria-invalid": ariaInvalid,
+    "aria-required": ariaRequired,
+    ...nativeProps
   },
   forwardedRef,
 ) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
   const triggerId = `${controlId}-trigger`;
+  const labelId = `${controlId}-label`;
+  const hiddenLabelId = `${controlId}-accessible-label`;
+  const valueId = `${controlId}-value`;
   const listboxId = `${controlId}-listbox`;
   const hintId = hint ? `${controlId}-hint` : undefined;
   const errorId = error ? `${controlId}-error` : undefined;
@@ -66,6 +85,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   const selectRef = useRef<HTMLSelectElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const typeaheadBufferRef = useRef("");
+  const typeaheadTimerRef = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(() => String(defaultValue ?? options[0]?.value ?? ""));
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -76,38 +97,45 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     () => options.map((option, index) => option.disabled ? -1 : index).filter((index) => index >= 0),
     [options],
   );
+  const fallbackLabel = !label && !ariaLabelledBy && !ariaLabel ? "Wybierz opcję" : undefined;
+  const purposeLabelId = ariaLabelledBy ?? (label ? labelId : ariaLabel || fallbackLabel ? hiddenLabelId : undefined);
+  const triggerLabelledBy = [purposeLabelId, valueId].filter(Boolean).join(" ") || undefined;
+  const triggerInvalid = ariaInvalid ?? (error ? true : undefined);
+  const triggerRequired = ariaRequired ?? (required ? true : undefined);
 
   useImperativeHandle(forwardedRef, () => selectRef.current as HTMLSelectElement);
 
-  const updatePosition = () => {
+  const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
     const viewportGap = 12;
     const preferredHeight = Math.min(320, options.length * 44 + 10);
-    const below = window.innerHeight - rect.bottom - viewportGap;
-    const above = rect.top - viewportGap;
+    const below = Math.max(0, window.innerHeight - rect.bottom - viewportGap);
+    const above = Math.max(0, rect.top - viewportGap);
     const opensAbove = below < Math.min(preferredHeight, 180) && above > below;
-    const maxHeight = Math.max(120, Math.min(preferredHeight, opensAbove ? above : below));
+    const maxHeight = Math.max(48, Math.min(preferredHeight, opensAbove ? above : below));
+    const width = Math.min(rect.width, Math.max(0, window.innerWidth - viewportGap * 2));
     setPosition({
-      left: Math.max(viewportGap, Math.min(rect.left, window.innerWidth - rect.width - viewportGap)),
-      top: opensAbove ? rect.top - Math.min(preferredHeight, maxHeight) - 6 : rect.bottom + 6,
-      width: rect.width,
+      left: Math.max(viewportGap, Math.min(rect.left, window.innerWidth - width - viewportGap)),
+      top: opensAbove ? Math.max(viewportGap, rect.top - maxHeight - 6) : rect.bottom + 6,
+      width,
       maxHeight,
       above: opensAbove,
     });
-  };
+  }, [options.length]);
 
   const close = (restoreFocus = false) => {
     setOpen(false);
     setPosition(null);
+    typeaheadBufferRef.current = "";
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
-  const openMenu = () => {
-    if (disabled || !options.length) return;
+  const openMenu = (preferredIndex?: number) => {
+    if (disabled || !enabledIndexes.length) return;
     const selectedIndex = options.findIndex((option) => option.value === selectedValue && !option.disabled);
-    setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : enabledIndexes[0] ?? -1);
+    setHighlightedIndex(preferredIndex ?? (selectedIndex >= 0 ? selectedIndex : enabledIndexes[0] ?? -1));
     setOpen(true);
     requestAnimationFrame(updatePosition);
   };
@@ -115,20 +143,34 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   useEffect(() => {
     if (!open) return;
     updatePosition();
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) close();
     };
     const handleViewportChange = () => updatePosition();
-    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("resize", handleViewportChange);
     window.addEventListener("scroll", handleViewportChange, true);
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportChange, true);
     };
-  }, [open, options.length]);
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open || highlightedIndex < 0) return;
+    const frame = requestAnimationFrame(() => {
+      menuRef.current
+        ?.querySelector<HTMLElement>(`[data-option-index="${highlightedIndex}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [highlightedIndex, open]);
+
+  useEffect(() => () => {
+    if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
+  }, []);
 
   const choose = (option: SelectOption) => {
     if (option.disabled) return;
@@ -151,7 +193,36 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     setHighlightedIndex(enabledIndexes[nextPosition]);
   };
 
+  const moveToTypeaheadMatch = (key: string) => {
+    const normalizedKey = normalizeForSearch(key);
+    const previousBuffer = typeaheadBufferRef.current;
+    const repeatedCharacter = previousBuffer.length > 0
+      && previousBuffer.split("").every((character) => character === normalizedKey)
+      && previousBuffer[0] === normalizedKey;
+    const nextBuffer = repeatedCharacter ? normalizedKey : `${previousBuffer}${normalizedKey}`;
+    typeaheadBufferRef.current = nextBuffer;
+    if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
+    typeaheadTimerRef.current = window.setTimeout(() => {
+      typeaheadBufferRef.current = "";
+      typeaheadTimerRef.current = null;
+    }, TYPEAHEAD_RESET_MS);
+
+    const currentPosition = Math.max(-1, enabledIndexes.indexOf(highlightedIndex));
+    const orderedIndexes = [
+      ...enabledIndexes.slice(currentPosition + 1),
+      ...enabledIndexes.slice(0, currentPosition + 1),
+    ];
+    const match = orderedIndexes.find((index) => normalizeForSearch(options[index].label).startsWith(nextBuffer));
+    if (match === undefined) return;
+    if (!open) openMenu(match);
+    else setHighlightedIndex(match);
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Tab" && open) {
+      close();
+      return;
+    }
     if (event.key === "Escape" && open) {
       event.preventDefault();
       event.stopPropagation();
@@ -160,31 +231,46 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      if (!open) openMenu();
-      else moveHighlight(event.key === "ArrowDown" ? 1 : -1);
+      if (!open) {
+        const initialIndex = event.key === "ArrowUp" ? enabledIndexes.at(-1) : enabledIndexes[0];
+        openMenu(initialIndex);
+      } else {
+        moveHighlight(event.key === "ArrowDown" ? 1 : -1);
+      }
       return;
     }
-    if (event.key === "Home" && open) {
+    if (event.key === "Home" || event.key === "End") {
       event.preventDefault();
-      setHighlightedIndex(enabledIndexes[0] ?? -1);
-      return;
-    }
-    if (event.key === "End" && open) {
-      event.preventDefault();
-      setHighlightedIndex(enabledIndexes.at(-1) ?? -1);
+      const nextIndex = event.key === "Home" ? enabledIndexes[0] : enabledIndexes.at(-1);
+      if (nextIndex === undefined) return;
+      if (!open) openMenu(nextIndex);
+      else setHighlightedIndex(nextIndex);
       return;
     }
     if ((event.key === "Enter" || event.key === " ") && open) {
       event.preventDefault();
       const option = options[highlightedIndex];
       if (option) choose(option);
+      return;
+    }
+    if (
+      event.key.length === 1
+      && event.key !== " "
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+    ) {
+      event.preventDefault();
+      moveToTypeaheadMatch(event.key);
     }
   };
 
   return (
     <div className={`ui-field ${fieldClassName}`.trim()}>
-      {label && <label className="ui-field__label" htmlFor={triggerId}>{label}</label>}
+      {label && <label id={labelId} className="ui-field__label" htmlFor={triggerId}>{label}</label>}
+      {(ariaLabel || fallbackLabel) && <span id={hiddenLabelId} className="ui-sr-only">{ariaLabel ?? fallbackLabel}</span>}
       <select
+        {...nativeProps}
         ref={selectRef}
         id={controlId}
         className="ui-select-native"
@@ -193,9 +279,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         value={value}
         defaultValue={value === undefined ? defaultValue : undefined}
         disabled={disabled}
+        required={required}
         onChange={onChange}
         onBlur={onBlur}
-        {...props}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value} disabled={option.disabled}>
@@ -212,17 +298,22 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-activedescendant={open && highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined}
-        aria-invalid={Boolean(error)}
+        aria-labelledby={triggerLabelledBy}
+        aria-invalid={triggerInvalid}
+        aria-required={triggerRequired}
         aria-describedby={descriptionIds}
-        disabled={disabled}
+        disabled={disabled || !options.length}
         className={`ui-field__control ui-select-trigger ${compact ? "ui-select-trigger--compact" : ""} ${open ? "is-open" : ""} ${className}`.trim()}
         onClick={() => open ? close() : openMenu()}
         onKeyDown={handleKeyDown}
         onBlur={(event) => {
-          if (!open) onBlur?.(event as never);
+          if (open) close();
+          onBlur?.(event as unknown as FocusEvent<HTMLSelectElement>);
         }}
       >
-        <span className="ui-select-trigger__value">{selectedOption?.label ?? "Wybierz"}</span>
+        <span id={valueId} className="ui-select-trigger__value">
+          {selectedOption?.label ?? (options.length ? "Wybierz" : "Brak opcji")}
+        </span>
         <ChevronDown className="ui-select-trigger__chevron" size={14} aria-hidden="true" />
       </button>
       {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
@@ -233,7 +324,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           ref={menuRef}
           id={listboxId}
           role="listbox"
-          aria-labelledby={label ? triggerId : undefined}
+          aria-labelledby={purposeLabelId}
           className={`ui-select-menu ${position.above ? "ui-select-menu--above" : ""}`.trim()}
           style={{
             left: position.left,
@@ -245,16 +336,16 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           {options.map((option, index) => {
             const selected = option.value === selectedValue;
             return (
-              <button
+              <div
                 key={option.value}
                 id={`${listboxId}-option-${index}`}
-                type="button"
                 role="option"
                 aria-selected={selected}
-                disabled={option.disabled}
+                aria-disabled={option.disabled || undefined}
+                data-option-index={index}
                 className={`ui-select-option ${highlightedIndex === index ? "is-highlighted" : ""} ${selected ? "is-selected" : ""}`.trim()}
-                onMouseEnter={() => !option.disabled && setHighlightedIndex(index)}
-                onMouseDown={(event) => event.preventDefault()}
+                onPointerMove={() => !option.disabled && setHighlightedIndex(index)}
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={() => choose(option)}
               >
                 <span className="ui-select-option__copy">
@@ -262,7 +353,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
                   {option.description && <small>{option.description}</small>}
                 </span>
                 {selected && <Check size={13} aria-hidden="true" />}
-              </button>
+              </div>
             );
           })}
         </div>,

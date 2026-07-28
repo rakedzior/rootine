@@ -12,6 +12,8 @@ import {
   type WorkoutTemplate,
 } from "./model";
 import { DISCIPLINE_META } from "./theme";
+import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "../data/localRepository";
+import { calendarDaysBetween } from "../data/localDate";
 
 export type PlannerView = "today" | "cycle" | "templates" | "history" | "analysis";
 
@@ -447,7 +449,7 @@ function migrateLegacyState(legacy: LegacySportState): SportPlannerState {
   cycle.workouts = legacy.sessions
     .filter((session) => session.date >= startDate && session.date <= cycleEnd && session.status !== "completed")
     .map((session) => {
-      const difference = Math.round((fromDateKey(session.date).getTime() - fromDateKey(startDate).getTime()) / 86_400_000);
+      const difference = calendarDaysBetween(startDate, session.date) ?? 0;
       return {
         id: session.id,
         week: Math.floor(difference / 7) + 1,
@@ -490,49 +492,9 @@ export function createDefaultSportPlannerState(): SportPlannerState {
   };
 }
 
-export function loadSportPlannerState(): SportPlannerState {
+function loadLegacySportFallback(): SportPlannerState {
   if (typeof window === "undefined") return createDefaultSportPlannerState();
   try {
-    const stored = window.localStorage.getItem(SPORT_PLANNER_STORAGE_KEY);
-    if (stored) {
-      const parsed: unknown = JSON.parse(stored);
-      if (isSportPlannerState(parsed)) return enrichPlannerState(parsed);
-      if (isSportPlannerStateV2(parsed)) {
-        const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-        const legacy: unknown = legacyStored ? JSON.parse(legacyStored) : null;
-        return {
-          version: 3,
-          templates: parsed.templates,
-          activeCycle: parsed.activeCycle,
-          history: parsed.history,
-          sessions: isLegacySportState(legacy)
-            ? legacy.sessions.filter((session) => session.status !== "scheduled")
-            : [],
-          workoutOutcomes: {},
-        };
-      }
-      if (isSportPlannerStateV1(parsed)) {
-        let history = historyFromSessions(createInitialSessions());
-        let sessions: WorkoutSession[] = [];
-        const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-        if (legacyStored) {
-          const legacy: unknown = JSON.parse(legacyStored);
-          if (isLegacySportState(legacy)) {
-            history = historyFromSessions(legacy.sessions);
-            sessions = legacy.sessions.filter((session) => session.status !== "scheduled");
-          }
-        }
-        return {
-          version: 3,
-          templates: parsed.templates,
-          activeCycle: withMigratedSeries(parsed.activeCycle),
-          history,
-          sessions,
-          workoutOutcomes: {},
-        };
-      }
-    }
-
     const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyStored) {
       const legacy: unknown = JSON.parse(legacyStored);
@@ -544,14 +506,68 @@ export function loadSportPlannerState(): SportPlannerState {
   return createDefaultSportPlannerState();
 }
 
-export function saveSportPlannerState(state: SportPlannerState) {
-  if (typeof window === "undefined") return false;
-  try {
-    window.localStorage.setItem(SPORT_PLANNER_STORAGE_KEY, JSON.stringify(state));
-    return true;
-  } catch {
-    return false;
+function migratePlannerState(value: unknown): SportPlannerState | null {
+  if (isSportPlannerStateV2(value)) {
+    const legacy: unknown = (() => {
+      try {
+        const legacyStored = typeof window !== "undefined" ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null;
+        return legacyStored ? JSON.parse(legacyStored) : null;
+      } catch {
+        return null;
+      }
+    })();
+    return {
+      version: 3,
+      templates: value.templates,
+      activeCycle: value.activeCycle,
+      history: value.history,
+      sessions: isLegacySportState(legacy)
+        ? legacy.sessions.filter((session) => session.status !== "scheduled")
+        : [],
+      workoutOutcomes: {},
+    };
   }
+  if (isSportPlannerStateV1(value)) {
+    let history = historyFromSessions(createInitialSessions());
+    let sessions: WorkoutSession[] = [];
+    try {
+      const legacyStored = typeof window !== "undefined" ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null;
+      const legacy: unknown = legacyStored ? JSON.parse(legacyStored) : null;
+      if (isLegacySportState(legacy)) {
+        history = historyFromSessions(legacy.sessions);
+        sessions = legacy.sessions.filter((session) => session.status !== "scheduled");
+      }
+    } catch {
+      // Optional legacy history is ignored when the primary planner can be migrated.
+    }
+    return {
+      version: 3,
+      templates: value.templates,
+      activeCycle: withMigratedSeries(value.activeCycle),
+      history,
+      sessions,
+      workoutOutcomes: {},
+    };
+  }
+  return null;
+}
+
+export function loadSportPlannerStateResult(): LocalLoadResult<SportPlannerState> {
+  const result = readLocalWorkspace({
+    key: SPORT_PLANNER_STORAGE_KEY,
+    fallback: loadLegacySportFallback,
+    validate: isSportPlannerState,
+    migrate: migratePlannerState,
+  });
+  return { ...result, workspace: enrichPlannerState(result.workspace) };
+}
+
+export function loadSportPlannerState(): SportPlannerState {
+  return loadSportPlannerStateResult().workspace;
+}
+
+export function saveSportPlannerState(state: SportPlannerState) {
+  return writeLocalWorkspace(SPORT_PLANNER_STORAGE_KEY, state);
 }
 
 export function cycleWeekDate(cycle: TrainingCycle, week: number, day: number) {
@@ -559,8 +575,6 @@ export function cycleWeekDate(cycle: TrainingCycle, week: number, day: number) {
 }
 
 export function todayCycleWeek(cycle: TrainingCycle) {
-  const today = fromDateKey(toDateKey(new Date()));
-  const start = fromDateKey(cycle.startDate);
-  const difference = Math.floor((today.getTime() - start.getTime()) / 86_400_000);
+  const difference = calendarDaysBetween(cycle.startDate, toDateKey(new Date())) ?? 0;
   return clampInteger(Math.floor(difference / 7) + 1, 1, cycle.weeks);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   Bike,
@@ -25,7 +25,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  Badge,
   Button,
   Card,
   DetailPanel,
@@ -926,7 +925,7 @@ export function WorkoutDetailPanel({
   const date = cycleWorkoutDate(cycle, workout);
   const sessionHistory = session ? historyEntryFromSession(session) : null;
   return (
-    <DetailPanel label="Szczegóły treningu" className="sport-workout-detail">
+    <DetailPanel label="Szczegóły treningu" className="sport-workout-detail" onDismiss={onClose}>
       <div className="sport-workout-detail__header">
         <div>
           <span>Szczegóły treningu</span>

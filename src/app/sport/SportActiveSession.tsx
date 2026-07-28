@@ -344,28 +344,31 @@ function StrengthSession({
   const currentSet = currentExercise?.sets[setIndex];
 
   useEffect(() => {
-    if (!restRunning || restSeconds === null || restSeconds <= 0) return;
-    const timer = window.setInterval(() => setRestSeconds((current) => current === null ? null : Math.max(0, current - 1)), 1000);
+    if (!restRunning) return;
+    const timer = window.setInterval(() => {
+      setRestSeconds((current) => current === null ? null : Math.max(0, current - 1));
+    }, 1000);
     return () => window.clearInterval(timer);
-  }, [restRunning, restSeconds]);
+  }, [restRunning]);
 
   useEffect(() => {
-    if (restSeconds === 0) setRestRunning(false);
-    if (restSeconds === null) return;
+    if (restSeconds !== 0 || !restRunning) return;
+    setRestRunning(false);
     onUpdate({
       ...session,
-      restTimerRemaining: restSeconds,
-      restTimerRunning: restRunning,
+      restTimerRemaining: 0,
+      restTimerRunning: false,
       restTimerUpdatedAt: Date.now(),
     });
-    // Persisting each tick keeps the countdown correct after leaving and resuming the session.
+    // Persist only the transition to finished; display ticks stay local.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restSeconds, restRunning]);
+  }, [restRunning, restSeconds]);
 
-  const updateSet = (patch: Partial<WorkoutSet>) => {
+  const updateSet = (patch: Partial<WorkoutSet>, sessionPatch: Partial<WorkoutSession> = {}) => {
     if (!currentExercise || !currentSet) return;
     onUpdate({
       ...session,
+      ...sessionPatch,
       exercises: session.exercises.map((exercise, exercisePosition) => exercisePosition === exerciseIndex
         ? {
             ...exercise,
@@ -396,11 +399,18 @@ function StrengthSession({
   const completeSet = () => {
     if (!currentExercise || !currentSet) return;
     const completing = !currentSet.done;
-    updateSet({ done: completing });
     if (completing) {
-      setRestSeconds(currentExercise.restSeconds);
+      const seconds = currentExercise.restSeconds;
+      updateSet({ done: true }, {
+        restTimerRemaining: seconds,
+        restTimerRunning: true,
+        restTimerUpdatedAt: Date.now(),
+      });
+      setRestSeconds(seconds);
       setRestRunning(true);
       goToNextSet();
+    } else {
+      updateSet({ done: false });
     }
   };
 
@@ -560,10 +570,26 @@ function StrengthSession({
         <RestTimer
           seconds={restSeconds}
           running={restRunning}
-          onToggle={() => setRestRunning((current) => !current)}
+          onToggle={() => {
+            const nextRunning = !restRunning;
+            setRestRunning(nextRunning);
+            onUpdate({
+              ...session,
+              restTimerRemaining: restSeconds,
+              restTimerRunning: nextRunning,
+              restTimerUpdatedAt: Date.now(),
+            });
+          }}
           onAdd={(seconds) => {
-            setRestSeconds((current) => (current ?? 0) + seconds);
+            const nextSeconds = (restSeconds ?? 0) + seconds;
+            setRestSeconds(nextSeconds);
             setRestRunning(true);
+            onUpdate({
+              ...session,
+              restTimerRemaining: nextSeconds,
+              restTimerRunning: true,
+              restTimerUpdatedAt: Date.now(),
+            });
           }}
           onSkip={() => {
             setRestSeconds(null);

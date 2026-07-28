@@ -4,7 +4,16 @@ export { Card, type CardProps } from "./components/Card";
 export { DatePicker, type DatePickerProps } from "./components/DatePicker";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { Input, type InputProps } from "./components/Input";
-export { Menu, MenuItem, type MenuItemProps, type MenuItemTone, type MenuProps } from "./components/Menu";
+export {
+  Menu,
+  MenuItem,
+  MenuTrigger,
+  type MenuInitialFocus,
+  type MenuItemProps,
+  type MenuItemTone,
+  type MenuProps,
+  type MenuTriggerProps,
+} from "./components/Menu";
 export { Modal, type ModalProps } from "./components/Modal";
 export { PageHeader, type PageHeaderProps } from "./components/PageHeader";
 export { SectionHeader, type SectionHeaderProps } from "./components/SectionHeader";

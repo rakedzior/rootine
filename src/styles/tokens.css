@@ -18,12 +18,13 @@
   --color-chalk-white: #f0f0f0;
   --color-text-secondary: #a0a0a0;
   --color-text-muted: #969696;
-  --color-text-disabled: #444444;
+  /* Still visibly unavailable at control opacity, but readable when legacy copy uses the token. */
+  --color-text-disabled: #8c8c8c;
   --color-success-seaglass: #70b89f;
   --color-success-soft: rgba(112, 184, 159, 0.11);
   --color-warning-ochre: #d4aa68;
   --color-warning-soft: rgba(212, 170, 104, 0.1);
-  --color-danger-coral: #cf777c;
+  --color-danger-coral: #dc858a;
   --color-danger-soft: rgba(207, 119, 124, 0.1);
   --color-accent-violet: #9b8ce8;
   --color-violet-soft: rgba(155, 140, 232, 0.11);
@@ -67,4 +68,13 @@
   --motion-fast: 140ms;
   --motion-normal: 180ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  --color-category-sky: #7fa6c9;
+  --color-category-teal: #79a8a4;
+  --color-category-sand: #b9a171;
+  --color-category-rose: #bc8ea5;
+  --color-category-slate: #8793a1;
+  --task-checkbox-color: var(--color-border-strong);
 }

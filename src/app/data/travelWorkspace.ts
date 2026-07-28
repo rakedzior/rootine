@@ -1,5 +1,7 @@
-const STORAGE_KEY = "rootine.travel-workspace.v1";
-const WORKSPACE_VERSION = 1 as const;
+import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
+
+export const TRAVEL_STORAGE_KEY = "rootine.travel-workspace.v1";
+const WORKSPACE_VERSION = 2 as const;
 
 export type TripStatus = "idea" | "planning" | "ready" | "completed";
 export type ReservationStatus = "planned" | "booked" | "paid";
@@ -81,6 +83,7 @@ export type TravelTrip = {
   travelers: string[];
   baseCurrency: string;
   note: string;
+  archivedAt: string | null;
   stays: TravelStay[];
   transports: TravelTransport[];
   itinerary: ItineraryItem[];
@@ -93,6 +96,21 @@ export type TravelWorkspace = {
   version: typeof WORKSPACE_VERSION;
   updatedAt: string;
   trips: TravelTrip[];
+};
+
+type LegacyTravelTrip = Omit<TravelTrip, "archivedAt">;
+type LegacyTravelWorkspace = Omit<TravelWorkspace, "version" | "trips"> & {
+  version: 1;
+  trips: LegacyTravelTrip[];
+};
+
+export type TravelBudgetSummary = {
+  planned: number;
+  actual: number;
+  paid: number;
+  remaining: number;
+  reservationCommitted: number;
+  unbudgetedReservations: number;
 };
 
 const DEFAULT_WORKSPACE: TravelWorkspace = {
@@ -109,6 +127,7 @@ const DEFAULT_WORKSPACE: TravelWorkspace = {
       travelers: ["Mateusz", "Ola"],
       baseCurrency: "PLN",
       note: "Spokojne tempo, połączenie dużych miast z jednodniowym wypadem do Nary.",
+      archivedAt: null,
       stays: [
         {
           id: "stay-tokyo",
@@ -280,6 +299,7 @@ const DEFAULT_WORKSPACE: TravelWorkspace = {
       travelers: ["Mateusz"],
       baseCurrency: "PLN",
       note: "Krótki wyjazd z jednym pełnym dniem w Sintrze.",
+      archivedAt: null,
       stays: [
         {
           id: "stay-lisbon",
@@ -337,6 +357,7 @@ const DEFAULT_WORKSPACE: TravelWorkspace = {
       travelers: ["Mateusz", "Ola"],
       baseCurrency: "PLN",
       note: "Zakończona podróż samochodowa.",
+      archivedAt: "2026-06-19T12:00:00.000Z",
       stays: [],
       transports: [],
       itinerary: [],
@@ -416,6 +437,7 @@ function isTrip(value: unknown): value is TravelTrip {
     && value.travelers.every((traveler) => typeof traveler === "string")
     && typeof value.baseCurrency === "string"
     && typeof value.note === "string"
+    && (value.archivedAt === null || typeof value.archivedAt === "string")
     && Array.isArray(value.stays)
     && value.stays.every(isStay)
     && Array.isArray(value.transports)
@@ -430,8 +452,35 @@ function isTrip(value: unknown): value is TravelTrip {
     && value.tasks.every(isTask);
 }
 
+function isWorkspace(value: unknown): value is TravelWorkspace {
+  return isRecord(value)
+    && value.version === WORKSPACE_VERSION
+    && typeof value.updatedAt === "string"
+    && Array.isArray(value.trips)
+    && value.trips.every(isTrip);
+}
+
 function cloneDefaultWorkspace(): TravelWorkspace {
   return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as TravelWorkspace;
+}
+
+function migrateLegacyWorkspace(value: unknown): TravelWorkspace | null {
+  if (!isRecord(value) || value.version !== 1 || typeof value.updatedAt !== "string" || !Array.isArray(value.trips)) {
+    return null;
+  }
+  const migratedAt = value.updatedAt;
+  const candidate: TravelWorkspace = {
+    ...(value as LegacyTravelWorkspace),
+    version: WORKSPACE_VERSION,
+    trips: value.trips.map((trip) => {
+      const legacyTrip = isRecord(trip) ? trip as LegacyTravelTrip : {} as LegacyTravelTrip;
+      return {
+        ...legacyTrip,
+        archivedAt: legacyTrip.status === "completed" ? migratedAt : null,
+      };
+    }),
+  };
+  return isWorkspace(candidate) ? candidate : null;
 }
 
 export function createTravelId(prefix: string): string {
@@ -441,37 +490,104 @@ export function createTravelId(prefix: string): string {
   return `${prefix}-${suffix}`;
 }
 
-export function loadTravelWorkspace(): TravelWorkspace {
-  const fallback = cloneDefaultWorkspace();
-  if (typeof window === "undefined") return fallback;
-
+export function normalizeIsoCurrency(value: string): string | null {
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) return null;
+  const supportedValuesOf = (Intl as unknown as {
+    supportedValuesOf?: (key: "currency") => string[];
+  }).supportedValuesOf;
+  if (supportedValuesOf) {
+    try {
+      if (!supportedValuesOf("currency").includes(code)) return null;
+    } catch {
+      return null;
+    }
+  }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<TravelWorkspace>;
-    if (
-      parsed.version !== WORKSPACE_VERSION
-      || !Array.isArray(parsed.trips)
-      || !parsed.trips.every(isTrip)
-    ) return fallback;
-    return parsed as TravelWorkspace;
+    new Intl.NumberFormat("pl-PL", { style: "currency", currency: code }).format(0);
+    return code;
   } catch {
-    return fallback;
+    return null;
   }
 }
 
+export function isDateWithinTrip(date: string, trip: Pick<TravelTrip, "startDate" | "endDate">): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date)
+    && date >= trip.startDate
+    && date <= trip.endDate;
+}
+
+export function summarizeTravelBudget(trip: TravelTrip): TravelBudgetSummary {
+  const categories: BudgetCategory[] = [
+    "transport",
+    "stay",
+    "food",
+    "attractions",
+    "shopping",
+    "insurance",
+    "other",
+  ];
+  const reservationByCategory: Partial<Record<BudgetCategory, { total: number; paid: number }>> = {
+    stay: {
+      total: trip.stays.reduce((sum, stay) => sum + stay.amount, 0),
+      paid: trip.stays.filter((stay) => stay.status === "paid").reduce((sum, stay) => sum + stay.amount, 0),
+    },
+    transport: {
+      total: trip.transports.reduce((sum, transport) => sum + transport.amount, 0),
+      paid: trip.transports.filter((transport) => transport.status === "paid").reduce((sum, transport) => sum + transport.amount, 0),
+    },
+  };
+
+  let planned = 0;
+  let actual = 0;
+  let paid = 0;
+  let unbudgetedReservations = 0;
+
+  categories.forEach((category) => {
+    const lines = trip.budget.filter((line) => line.category === category);
+    const categoryPlanned = lines.reduce((sum, line) => sum + line.planned, 0);
+    const categoryActual = lines.reduce((sum, line) => sum + line.actual, 0);
+    const categoryPaid = lines.filter((line) => line.paid).reduce((sum, line) => sum + line.actual, 0);
+    const reservations = reservationByCategory[category];
+    const reservationTotal = reservations?.total ?? 0;
+    const reservationPaid = reservations?.paid ?? 0;
+
+    planned += Math.max(categoryPlanned, reservationTotal);
+    actual += Math.max(categoryActual, reservationTotal);
+    paid += Math.max(categoryPaid, reservationPaid);
+    unbudgetedReservations += Math.max(0, reservationTotal - categoryPlanned);
+  });
+
+  const reservationCommitted = (reservationByCategory.stay?.total ?? 0)
+    + (reservationByCategory.transport?.total ?? 0);
+  return {
+    planned,
+    actual,
+    paid,
+    remaining: planned - actual,
+    reservationCommitted,
+    unbudgetedReservations,
+  };
+}
+
+export function loadTravelWorkspaceResult(): LocalLoadResult<TravelWorkspace> {
+  return readLocalWorkspace({
+    key: TRAVEL_STORAGE_KEY,
+    fallback: cloneDefaultWorkspace,
+    validate: isWorkspace,
+    migrate: migrateLegacyWorkspace,
+  });
+}
+
+export function loadTravelWorkspace(): TravelWorkspace {
+  return loadTravelWorkspaceResult().workspace;
+}
+
 export function saveTravelWorkspace(workspace: TravelWorkspace): boolean {
-  if (typeof window === "undefined") return false;
   const next: TravelWorkspace = {
     ...workspace,
     version: WORKSPACE_VERSION,
     updatedAt: new Date().toISOString(),
   };
-
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeLocalWorkspace(TRAVEL_STORAGE_KEY, next);
 }

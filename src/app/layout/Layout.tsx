@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router";
 import {
-  BriefcaseBusiness,
-  CalendarDays,
-  CheckSquare,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { NavLink, Outlet, useLocation } from "react-router";
+import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Clock3,
@@ -13,53 +17,51 @@ import {
   CloudRain,
   CloudSnow,
   CloudSun,
-  Dumbbell,
   LocateFixed,
-  Map,
-  NotebookPen,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
   RotateCcw,
-  Salad,
   Settings,
-  ShieldCheck,
   SunMedium,
-  Target,
   UserRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  createDefaultModulePreferences,
+  getOrderedModules,
+  getVisibleModules,
+  loadModulePreferences,
+  saveModulePreferences,
+  subscribeToModulePreferences,
+  type ModulePreferences,
+} from "../data/modulePreferences";
+import {
+  getTodayWeatherLabel,
+  loadTodayWeather,
+  TODAY_WEATHER_LOCATION,
+  type TodayWeather,
+} from "../data/todayWeather";
+import { toLocalDateKey } from "../data/localDate";
+import {
+  APP_MODULES,
+  findModuleForPath,
+  type AppModule,
+} from "../moduleRegistry";
+import { RecoveryCenterButton } from "../recovery/RecoveryCenter";
+import { RouteLoadingState } from "../RouteStates";
+import { Modal } from "../ui";
 
 const SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
-const MODULES_STORAGE_KEY = "routine.sidebar.modules";
 
-type NavItem = { id: string; label: string; icon: LucideIcon; to: string };
+type WeatherState =
+  | { status: "loading" }
+  | { status: "ready"; data: TodayWeather }
+  | { status: "error"; message: string };
 
-const NAV: NavItem[] = [
-  { id: "today", label: "Dzisiaj", icon: SunMedium, to: "/dzisiaj" },
-  { id: "tasks", label: "Zadania", icon: CheckSquare, to: "/zadania" },
-  { id: "calendar", label: "Kalendarz", icon: CalendarDays, to: "/kalendarz" },
-  { id: "nutrition", label: "Odżywianie", icon: Salad, to: "/odzywianie" },
-  { id: "sport", label: "Sport", icon: Dumbbell, to: "/sport" },
-  { id: "work", label: "Praca", icon: BriefcaseBusiness, to: "/praca" },
-  { id: "goals", label: "Cele", icon: Target, to: "/cele" },
-  { id: "affairs", label: "Sprawy", icon: ShieldCheck, to: "/sprawy" },
-  { id: "notes", label: "Notatki", icon: NotebookPen, to: "/notatki" },
-  { id: "travel", label: "Podróże", icon: Map, to: "/podroze" },
-];
-
-type ModulePreferences = {
-  order: string[];
-  disabled: string[];
-};
-
-type WeatherState = {
-  status: "idle" | "loading" | "success" | "error";
-  temperature?: number;
-  code?: number;
-  isDay?: boolean;
-  message?: string;
-};
+type OpenMenu = "settings" | "profile" | "mobileMore" | "mobileSettings" | "mobileProfile" | null;
 
 const TIME_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   hour: "2-digit",
@@ -80,108 +82,165 @@ function getInitialSidebarState() {
   }
 }
 
-function getDefaultModulePreferences(): ModulePreferences {
-  return { order: NAV.map((item) => item.id), disabled: [] };
-}
-
-function normalizeModulePreferences(value: unknown): ModulePreferences {
-  const defaults = getDefaultModulePreferences();
-  if (!value || typeof value !== "object") {
-    return defaults;
-  }
-
-  const candidate = value as { order?: unknown; disabled?: unknown };
-  const validIds = new Set(defaults.order);
-  const savedOrder = Array.isArray(candidate.order)
-    ? candidate.order.filter((id): id is string => typeof id === "string" && validIds.has(id))
-    : [];
-  const order = [...new Set(savedOrder)];
-
-  defaults.order.forEach((id) => {
-    if (!order.includes(id)) {
-      order.push(id);
-    }
-  });
-
-  const savedDisabled = Array.isArray(candidate.disabled)
-    ? candidate.disabled.filter((id): id is string => typeof id === "string" && validIds.has(id))
-    : [];
-  const disabled = [...new Set(savedDisabled)];
-
-  return {
-    order,
-    disabled: disabled.length < order.length ? disabled : [],
-  };
-}
-
-function getInitialModulePreferences(): ModulePreferences {
-  try {
-    const stored = window.localStorage.getItem(MODULES_STORAGE_KEY);
-    return stored ? normalizeModulePreferences(JSON.parse(stored) as unknown) : getDefaultModulePreferences();
-  } catch {
-    return getDefaultModulePreferences();
-  }
-}
-
 function getInitialCompactViewport() {
   return window.matchMedia("(max-width: 980px)").matches;
 }
 
-function getWeatherMeta(code = -1, isDay = true): { icon: LucideIcon; label: string } {
-  if (code === 0) {
-    return { icon: isDay ? SunMedium : CloudSun, label: "Bezchmurnie" };
-  }
-
-  if ([1, 2].includes(code)) {
-    return { icon: CloudSun, label: "Małe zachmurzenie" };
-  }
-
-  if (code === 3) {
-    return { icon: Cloud, label: "Pochmurno" };
-  }
-
-  if ([45, 48].includes(code)) {
-    return { icon: CloudFog, label: "Mgła" };
-  }
-
-  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
-    return { icon: CloudRain, label: "Opady deszczu" };
-  }
-
-  if ([71, 73, 75, 77, 85, 86].includes(code)) {
-    return { icon: CloudSnow, label: "Opady śniegu" };
-  }
-
-  if ([95, 96, 99].includes(code)) {
-    return { icon: CloudLightning, label: "Burza" };
-  }
-
-  return { icon: LocateFixed, label: "Włącz pogodę" };
+function getWeatherIcon(code = -1, isLoading = false): LucideIcon {
+  if (isLoading) return RefreshCw;
+  if (code === 0) return SunMedium;
+  if (code === 1 || code === 2) return CloudSun;
+  if (code === 3) return Cloud;
+  if (code === 45 || code === 48) return CloudFog;
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return CloudRain;
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return CloudSnow;
+  if (code >= 95) return CloudLightning;
+  return LocateFixed;
 }
 
-function PrimaryNavItem({ label, icon: Icon, to, mobile = false }: { label: string; icon: LucideIcon; to: string; mobile?: boolean }) {
+function PrimaryNavItem({
+  item,
+  mobile = false,
+}: {
+  item: AppModule;
+  mobile?: boolean;
+}) {
+  const Icon = item.icon;
   return (
     <NavLink
-      to={to}
-      title={label}
+      to={item.to}
+      title={item.label}
       className={({ isActive }) => [
         mobile ? "app-mobile-nav__item" : "app-nav-item",
         isActive ? "is-active" : "",
       ].filter(Boolean).join(" ")}
     >
       <Icon size={mobile ? 18 : 15} strokeWidth={1.7} aria-hidden="true" />
-      <span className={mobile ? "app-mobile-nav__label" : "app-nav-label"}>{label}</span>
+      <span className={mobile ? "app-mobile-nav__label" : "app-nav-label"}>{item.label}</span>
     </NavLink>
   );
 }
 
+type ModuleSettingsProps = {
+  orderedModules: AppModule[];
+  enabledModuleCount: number;
+  preferences: ModulePreferences;
+  onMove: (moduleId: AppModule["id"], direction: -1 | 1) => void;
+  onToggle: (moduleId: AppModule["id"]) => void;
+  onReset: () => void;
+  idPrefix: string;
+};
+
+function ModuleSettings({
+  orderedModules,
+  enabledModuleCount,
+  preferences,
+  onMove,
+  onToggle,
+  onReset,
+  idPrefix,
+}: ModuleSettingsProps) {
+  const titleId = `${idPrefix}-module-settings-title`;
+  return (
+    <section className="app-module-settings" aria-labelledby={titleId}>
+      <div className="app-module-settings__heading">
+        <span>
+          <strong id={titleId}>Moduły</strong>
+          <small>Ustal kolejność i widoczność</small>
+        </span>
+        <small>{enabledModuleCount}/{APP_MODULES.length} aktywne</small>
+      </div>
+
+      <div className="app-module-settings__list">
+        {orderedModules.map((item, index) => {
+          const ModuleIcon = item.icon;
+          const isEnabled = !preferences.disabled.includes(item.id);
+          const isLastEnabledModule = isEnabled && enabledModuleCount === 1;
+
+          return (
+            <div
+              key={item.id}
+              className={`app-module-settings__row${isEnabled ? "" : " is-disabled"}`}
+            >
+              <ModuleIcon size={14} strokeWidth={1.7} aria-hidden="true" />
+              <span className="app-module-settings__label">{item.label}</span>
+              <label
+                className="app-module-toggle"
+                title={isLastEnabledModule ? "Co najmniej jeden moduł musi pozostać aktywny" : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={isEnabled}
+                  disabled={isLastEnabledModule}
+                  aria-label={`${isEnabled ? "Dezaktywuj" : "Aktywuj"} moduł ${item.label}`}
+                  onChange={() => onToggle(item.id)}
+                />
+                <span aria-hidden="true" />
+              </label>
+              <span className="app-module-settings__move">
+                <button
+                  type="button"
+                  disabled={index === 0}
+                  aria-label={`Przenieś ${item.label} wyżej`}
+                  title="Przenieś wyżej"
+                  onClick={() => onMove(item.id, -1)}
+                >
+                  <ChevronUp size={13} strokeWidth={1.8} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={index === orderedModules.length - 1}
+                  aria-label={`Przenieś ${item.label} niżej`}
+                  title="Przenieś niżej"
+                  onClick={() => onMove(item.id, 1)}
+                >
+                  <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
+                </button>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <button type="button" className="app-module-settings__reset" onClick={onReset}>
+        <RotateCcw size={13} strokeWidth={1.7} aria-hidden="true" />
+        Przywróć domyślny układ
+      </button>
+    </section>
+  );
+}
+
+function ProfileSummary() {
+  return (
+    <>
+      <div className="app-sidebar-popover__profile">
+        <span className="app-sidebar-profile__avatar" aria-hidden="true">
+          <UserRound size={15} strokeWidth={1.8} />
+        </span>
+        <span>
+          <strong>Użytkownik lokalny</strong>
+          <small>Profil nie jest jeszcze połączony z kontem.</small>
+        </span>
+      </div>
+      <p>Dane Routine są obecnie zapisywane tylko na tym urządzeniu.</p>
+      <div className="app-recovery-entry">
+        <RecoveryCenterButton />
+      </div>
+    </>
+  );
+}
+
 export default function Layout() {
+  const location = useLocation();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
   const [isCompactViewport, setIsCompactViewport] = useState(getInitialCompactViewport);
-  const [modulePreferences, setModulePreferences] = useState(getInitialModulePreferences);
+  const [modulePreferences, setModulePreferences] = useState(loadModulePreferences);
   const [now, setNow] = useState(() => new Date());
-  const [weather, setWeather] = useState<WeatherState>({ status: "idle" });
-  const [openMenu, setOpenMenu] = useState<"settings" | "profile" | null>(null);
+  const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const weatherRequestId = useRef(0);
+  const mobileMoreButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 980px)");
@@ -203,31 +262,47 @@ export default function Layout() {
     }
   }, [isSidebarCollapsed]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(MODULES_STORAGE_KEY, JSON.stringify(modulePreferences));
-    } catch {
-      // Module preferences remain available until the current page is closed.
-    }
-  }, [modulePreferences]);
+  useEffect(() => subscribeToModulePreferences(() => {
+    setModulePreferences(loadModulePreferences());
+  }), []);
+
+  const todayKey = toLocalDateKey(now);
+  const requestWeather = useCallback((forceRefresh = false) => {
+    const requestId = ++weatherRequestId.current;
+    setWeather({ status: "loading" });
+    void loadTodayWeather(todayKey, undefined, { forceRefresh })
+      .then((data) => {
+        if (weatherRequestId.current === requestId) setWeather({ status: "ready", data });
+      })
+      .catch(() => {
+        if (weatherRequestId.current === requestId) {
+          setWeather({ status: "error", message: "Pogoda jest chwilowo niedostępna" });
+        }
+      });
+  }, [todayKey]);
 
   useEffect(() => {
-    if (!openMenu) {
-      return;
-    }
+    requestWeather();
+    return () => {
+      weatherRequestId.current += 1;
+    };
+  }, [requestWeather]);
+
+  useEffect(() => {
+    if (!openMenu?.startsWith("mobile")) return;
 
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpenMenu(null);
-      }
+      if (event.key !== "Escape") return;
+      setOpenMenu(null);
+      window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
     };
 
     const closeOnOutsideClick = (event: PointerEvent) => {
       const target = event.target;
       if (
         target instanceof Element
-        && !target.closest("[data-sidebar-popover]")
-        && !target.closest("[data-sidebar-menu-trigger]")
+        && !target.closest("[data-app-popover]")
+        && !target.closest("[data-app-menu-trigger]")
       ) {
         setOpenMenu(null);
       }
@@ -235,131 +310,99 @@ export default function Layout() {
 
     document.addEventListener("keydown", closeOnEscape);
     document.addEventListener("pointerdown", closeOnOutsideClick);
-
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
       document.removeEventListener("pointerdown", closeOnOutsideClick);
     };
   }, [openMenu]);
 
-  const requestWeather = useCallback(() => {
-    if (!navigator.geolocation) {
-      setWeather({ status: "error", message: "Lokalizacja jest niedostępna" });
-      return;
-    }
-
-    setWeather({ status: "loading" });
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        try {
-          const params = new URLSearchParams({
-            latitude: coords.latitude.toFixed(4),
-            longitude: coords.longitude.toFixed(4),
-            current: "temperature_2m,weather_code,is_day",
-            timezone: "auto",
-          });
-          const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
-
-          if (!response.ok) {
-            throw new Error("Weather request failed");
-          }
-
-          const payload = await response.json() as {
-            current?: { temperature_2m?: number; weather_code?: number; is_day?: number };
-          };
-          const current = payload.current;
-
-          if (
-            typeof current?.temperature_2m !== "number"
-            || typeof current.weather_code !== "number"
-          ) {
-            throw new Error("Weather response is incomplete");
-          }
-
-          setWeather({
-            status: "success",
-            temperature: Math.round(current.temperature_2m),
-            code: current.weather_code,
-            isDay: current.is_day !== 0,
-          });
-        } catch {
-          setWeather({ status: "error", message: "Nie udało się pobrać pogody" });
-        }
-      },
-      (error) => {
-        setWeather({
-          status: "error",
-          message: error.code === error.PERMISSION_DENIED
-            ? "Zezwól na lokalizację"
-            : "Nie udało się ustalić lokalizacji",
-        });
-      },
-      { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 10_000 },
-    );
-  }, []);
+  useEffect(() => {
+    if (!openMenu?.startsWith("mobile")) return;
+    const frame = window.requestAnimationFrame(() => {
+      mobileMenuRef.current
+        ?.querySelector<HTMLElement>("[data-mobile-menu-focus]")
+        ?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [openMenu]);
 
   useEffect(() => {
-    if (!navigator.permissions) {
-      return;
-    }
-
-    void navigator.permissions.query({ name: "geolocation" }).then((permission) => {
-      if (permission.state === "granted") {
-        requestWeather();
-      }
-    }).catch(() => {
-      // Permission querying is not supported consistently; manual activation remains available.
-    });
-  }, [requestWeather]);
+    setOpenMenu(null);
+  }, [location.pathname, location.search]);
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed((collapsed) => !collapsed);
     setOpenMenu(null);
   };
 
-  const moveModule = (moduleId: string, direction: -1 | 1) => {
-    setModulePreferences((current) => {
-      const currentIndex = current.order.indexOf(moduleId);
-      const targetIndex = currentIndex + direction;
-      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= current.order.length) {
-        return current;
-      }
+  const moveModule = (moduleId: AppModule["id"], direction: -1 | 1) => {
+    const currentIndex = modulePreferences.order.indexOf(moduleId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= modulePreferences.order.length) return;
 
-      const nextOrder = [...current.order];
-      [nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]];
-      return { ...current, order: nextOrder };
-    });
+    const nextOrder = [...modulePreferences.order];
+    [nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]];
+    const nextPreferences = { ...modulePreferences, order: nextOrder };
+    setModulePreferences(nextPreferences);
+    saveModulePreferences(nextPreferences);
   };
 
-  const toggleModule = (moduleId: string) => {
-    setModulePreferences((current) => {
-      const isDisabled = current.disabled.includes(moduleId);
-      if (!isDisabled && current.disabled.length === current.order.length - 1) {
-        return current;
-      }
+  const toggleModule = (moduleId: AppModule["id"]) => {
+    const isDisabled = modulePreferences.disabled.includes(moduleId);
+    if (!isDisabled && modulePreferences.disabled.length === modulePreferences.order.length - 1) return;
 
-      return {
-        ...current,
-        disabled: isDisabled
-          ? current.disabled.filter((id) => id !== moduleId)
-          : [...current.disabled, moduleId],
-      };
-    });
+    const nextPreferences = {
+      ...modulePreferences,
+      disabled: isDisabled
+        ? modulePreferences.disabled.filter((id) => id !== moduleId)
+        : [...modulePreferences.disabled, moduleId],
+    };
+    setModulePreferences(nextPreferences);
+    saveModulePreferences(nextPreferences);
   };
 
-  const orderedNav = modulePreferences.order
-    .map((id) => NAV.find((item) => item.id === id))
-    .filter((item): item is NavItem => Boolean(item));
-  const visibleNav = orderedNav.filter((item) => !modulePreferences.disabled.includes(item.id));
+  const orderedNav = getOrderedModules(modulePreferences);
+  const visibleNav = getVisibleModules(modulePreferences);
   const enabledModuleCount = visibleNav.length;
+  const mobilePrimaryNav = [...visibleNav]
+    .sort((left, right) => (
+      (left.mobilePriority ?? Number.POSITIVE_INFINITY)
+      - (right.mobilePriority ?? Number.POSITIVE_INFINITY)
+    ))
+    .slice(0, 4);
+  const currentModule = findModuleForPath(location.pathname);
+  const moreIsActive = Boolean(
+    currentModule && !mobilePrimaryNav.some((item) => item.id === currentModule.id),
+  );
   const showCollapsedBrandControl = isSidebarCollapsed && !isCompactViewport;
-  const weatherMeta = getWeatherMeta(weather.code, weather.isDay);
-  const WeatherIcon = weather.status === "loading" ? RefreshCw : weatherMeta.icon;
   const timeLabel = TIME_FORMATTER.format(now);
   const dateLabel = DATE_FORMATTER.format(now);
-  const weatherLabel = weather.status === "success"
-    ? weatherMeta.label
-    : weather.message ?? weatherMeta.label;
+  const WeatherIcon = getWeatherIcon(
+    weather.status === "ready" ? weather.data.weatherCode : -1,
+    weather.status === "loading",
+  );
+  const weatherLabel = weather.status === "ready"
+    ? getTodayWeatherLabel(weather.data.weatherCode)
+    : weather.status === "loading"
+      ? "Pobieranie prognozy"
+      : weather.message;
+  const closeMobileMenu = () => {
+    setOpenMenu(null);
+    window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
+  };
+  const resetModules = () => {
+    const nextPreferences = createDefaultModulePreferences();
+    setModulePreferences(nextPreferences);
+    saveModulePreferences(nextPreferences);
+  };
+  const settingsProps = {
+    orderedModules: orderedNav,
+    enabledModuleCount,
+    preferences: modulePreferences,
+    onMove: moveModule,
+    onToggle: toggleModule,
+    onReset: resetModules,
+  };
 
   return (
     <div className="app-shell">
@@ -409,15 +452,12 @@ export default function Layout() {
         </div>
 
         <nav className="app-primary-nav" aria-label="Obszary aplikacji">
-          {visibleNav.map((item) => <PrimaryNavItem key={item.id} {...item} />)}
+          {visibleNav.map((item) => <PrimaryNavItem key={item.id} item={item} />)}
         </nav>
 
         <div className="app-sidebar__bottom">
           <div className="app-sidebar-glance" aria-label="Data, godzina i pogoda" aria-live="polite">
-            <div
-              className="app-sidebar-glance__row"
-              title={`${timeLabel} · ${dateLabel}`}
-            >
+            <div className="app-sidebar-glance__row" title={`${timeLabel} · ${dateLabel}`}>
               <Clock3 size={16} strokeWidth={1.7} aria-hidden="true" />
               <span className="app-sidebar-glance__copy">
                 <strong>{timeLabel}</strong>
@@ -428,10 +468,10 @@ export default function Layout() {
             <button
               type="button"
               className="app-sidebar-glance__row app-sidebar-weather"
-              title={`${weatherLabel}${weather.temperature !== undefined ? ` · ${weather.temperature}°C` : ""}`}
-              aria-label={weather.status === "loading" ? "Pobieranie pogody" : `${weatherLabel}. Pobierz aktualną pogodę`}
+              title={`${weatherLabel}${weather.status === "ready" ? ` · ${Math.round(weather.data.temperature)}°C` : ""}`}
+              aria-label={`${weatherLabel}. Odśwież pogodę dla ${TODAY_WEATHER_LOCATION.label}`}
               disabled={weather.status === "loading"}
-              onClick={requestWeather}
+              onClick={() => requestWeather(true)}
             >
               <WeatherIcon
                 className={weather.status === "loading" ? "is-spinning" : ""}
@@ -441,7 +481,7 @@ export default function Layout() {
               />
               <span className="app-sidebar-glance__copy">
                 <strong>
-                  {weather.temperature !== undefined ? `${weather.temperature}°C` : "Pogoda"}
+                  {weather.status === "ready" ? `${Math.round(weather.data.temperature)}°C` : "Pogoda"}
                 </strong>
                 <small>{weatherLabel}</small>
               </span>
@@ -451,9 +491,9 @@ export default function Layout() {
           <button
             type="button"
             className="app-sidebar-action"
-            data-sidebar-menu-trigger
+            data-app-menu-trigger
+            aria-haspopup="dialog"
             aria-expanded={openMenu === "settings"}
-            aria-controls="sidebar-settings"
             title="Ustawienia"
             onClick={() => setOpenMenu((current) => current === "settings" ? null : "settings")}
           >
@@ -464,9 +504,9 @@ export default function Layout() {
           <button
             type="button"
             className="app-sidebar-profile"
-            data-sidebar-menu-trigger
+            data-app-menu-trigger
+            aria-haspopup="dialog"
             aria-expanded={openMenu === "profile"}
-            aria-controls="sidebar-profile"
             title="Profil użytkownika"
             onClick={() => setOpenMenu((current) => current === "profile" ? null : "profile")}
           >
@@ -478,18 +518,14 @@ export default function Layout() {
           </button>
 
           {openMenu === "settings" && (
-            <div
-              id="sidebar-settings"
-              className="app-sidebar-popover app-sidebar-popover--settings"
-              data-sidebar-popover
-              role="group"
-              aria-label="Ustawienia panelu"
+            <Modal
+              title="Ustawienia"
+              description="Dostosuj panel, kolejność obszarów i wspólną prognozę aplikacji."
+              width={520}
+              bodyClassName="app-settings-dialog"
+              onClose={() => setOpenMenu(null)}
             >
-              <div className="app-sidebar-popover__heading">
-                <Settings size={15} strokeWidth={1.7} aria-hidden="true" />
-                <strong>Ustawienia</strong>
-              </div>
-              <button type="button" onClick={toggleSidebar}>
+              <button type="button" data-autofocus onClick={toggleSidebar}>
                 {isSidebarCollapsed
                   ? <PanelLeftOpen size={15} strokeWidth={1.7} aria-hidden="true" />
                   : <PanelLeftClose size={15} strokeWidth={1.7} aria-hidden="true" />}
@@ -501,86 +537,23 @@ export default function Layout() {
               <button
                 type="button"
                 disabled={weather.status === "loading"}
-                onClick={() => {
-                  requestWeather();
-                  setOpenMenu(null);
-                }}
+                onClick={() => requestWeather(true)}
               >
-                <LocateFixed size={15} strokeWidth={1.7} aria-hidden="true" />
+                <RefreshCw
+                  className={weather.status === "loading" ? "is-spinning" : ""}
+                  size={15}
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
                 <span>
-                  <strong>{weather.status === "success" ? "Odśwież pogodę" : "Włącz pogodę"}</strong>
-                  <small>Używa lokalizacji tego urządzenia</small>
+                  <strong>Odśwież pogodę</strong>
+                  <small>{TODAY_WEATHER_LOCATION.label} · wspólna prognoza aplikacji</small>
                 </span>
               </button>
-              <section className="app-module-settings" aria-labelledby="module-settings-title">
-                <div className="app-module-settings__heading">
-                  <span>
-                    <strong id="module-settings-title">Moduły</strong>
-                    <small>Ustal kolejność i widoczność</small>
-                  </span>
-                  <small>{enabledModuleCount}/{NAV.length} aktywne</small>
-                </div>
-
-                <div className="app-module-settings__list">
-                  {orderedNav.map((item, index) => {
-                    const ModuleIcon = item.icon;
-                    const isEnabled = !modulePreferences.disabled.includes(item.id);
-                    const isLastEnabledModule = isEnabled && enabledModuleCount === 1;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`app-module-settings__row${isEnabled ? "" : " is-disabled"}`}
-                      >
-                        <ModuleIcon size={14} strokeWidth={1.7} aria-hidden="true" />
-                        <span className="app-module-settings__label">{item.label}</span>
-                        <label
-                          className="app-module-toggle"
-                          title={isLastEnabledModule ? "Co najmniej jeden moduł musi pozostać aktywny" : undefined}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isEnabled}
-                            disabled={isLastEnabledModule}
-                            aria-label={`${isEnabled ? "Dezaktywuj" : "Aktywuj"} moduł ${item.label}`}
-                            onChange={() => toggleModule(item.id)}
-                          />
-                          <span aria-hidden="true" />
-                        </label>
-                        <span className="app-module-settings__move">
-                          <button
-                            type="button"
-                            disabled={index === 0}
-                            aria-label={`Przenieś ${item.label} wyżej`}
-                            title="Przenieś wyżej"
-                            onClick={() => moveModule(item.id, -1)}
-                          >
-                            <ChevronUp size={13} strokeWidth={1.8} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={index === orderedNav.length - 1}
-                            aria-label={`Przenieś ${item.label} niżej`}
-                            title="Przenieś niżej"
-                            onClick={() => moveModule(item.id, 1)}
-                          >
-                            <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
-                          </button>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <button
-                  type="button"
-                  className="app-module-settings__reset"
-                  onClick={() => setModulePreferences(getDefaultModulePreferences())}
-                >
-                  <RotateCcw size={13} strokeWidth={1.7} aria-hidden="true" />
-                  Przywróć domyślny układ
-                </button>
-              </section>
+              <ModuleSettings {...settingsProps} idPrefix="sidebar" />
+              <div className="app-recovery-entry">
+                <RecoveryCenterButton />
+              </div>
               <a
                 className="app-sidebar-popover__source"
                 href="https://open-meteo.com/"
@@ -589,38 +562,180 @@ export default function Layout() {
               >
                 Dane pogodowe: Open-Meteo
               </a>
-            </div>
+            </Modal>
           )}
 
           {openMenu === "profile" && (
-            <div
-              id="sidebar-profile"
-              className="app-sidebar-popover app-sidebar-popover--profile"
-              data-sidebar-popover
-              role="group"
-              aria-label="Profil użytkownika"
+            <Modal
+              title="Profil lokalny"
+              description="Informacje o profilu i sposobie przechowywania danych."
+              width={460}
+              bodyClassName="app-profile-dialog"
+              onClose={() => setOpenMenu(null)}
             >
-              <div className="app-sidebar-popover__profile">
-                <span className="app-sidebar-profile__avatar" aria-hidden="true">
-                  <UserRound size={15} strokeWidth={1.8} />
-                </span>
-                <span>
-                  <strong>Użytkownik lokalny</strong>
-                  <small>Profil nie jest jeszcze połączony z kontem.</small>
-                </span>
-              </div>
-              <p>Dane Routine są obecnie zapisywane tylko na tym urządzeniu.</p>
-            </div>
+              <ProfileSummary />
+            </Modal>
           )}
         </div>
       </aside>
 
       <div className="app-shell__body">
         <div className="app-shell__content">
-          <Outlet />
+          <Suspense fallback={<RouteLoadingState />}>
+            <Outlet />
+          </Suspense>
         </div>
+
+        {openMenu?.startsWith("mobile") && (
+          <section
+            ref={mobileMenuRef}
+            id="mobile-more-menu"
+            className="app-mobile-menu"
+            data-app-popover
+            aria-label={
+              openMenu === "mobileSettings"
+                ? "Ustawienia aplikacji"
+                : openMenu === "mobileProfile"
+                  ? "Profil użytkownika"
+                  : "Wszystkie obszary aplikacji"
+            }
+          >
+            <header className="app-mobile-menu__header">
+              {openMenu !== "mobileMore" ? (
+                <button
+                  type="button"
+                  className="app-mobile-menu__icon-button"
+                  data-mobile-menu-focus
+                  aria-label="Wróć do wszystkich obszarów"
+                  onClick={() => setOpenMenu("mobileMore")}
+                >
+                  <ArrowLeft size={17} aria-hidden="true" />
+                </button>
+              ) : (
+                <span className="app-mobile-menu__mark" aria-hidden="true">R</span>
+              )}
+              <span>
+                <strong>
+                  {openMenu === "mobileSettings"
+                    ? "Ustawienia"
+                    : openMenu === "mobileProfile"
+                      ? "Profil"
+                      : "Routine"}
+                </strong>
+                <small>
+                  {openMenu === "mobileSettings"
+                    ? "Nawigacja i prognoza"
+                    : openMenu === "mobileProfile"
+                      ? "Dane lokalne"
+                      : "Wszystkie obszary"}
+                </small>
+              </span>
+              <button
+                type="button"
+                className="app-mobile-menu__icon-button"
+                aria-label="Zamknij menu"
+                onClick={closeMobileMenu}
+              >
+                <X size={17} aria-hidden="true" />
+              </button>
+            </header>
+
+            {openMenu === "mobileMore" && (
+              <>
+                <nav className="app-mobile-menu__modules" aria-label="Wszystkie obszary">
+                  {orderedNav.map((item, index) => {
+                    const Icon = item.icon;
+                    const hiddenByPreference = modulePreferences.disabled.includes(item.id);
+                    return (
+                      <NavLink
+                        key={item.id}
+                        to={item.to}
+                        data-mobile-menu-focus={index === 0 ? "" : undefined}
+                        className={({ isActive }) => [
+                          "app-mobile-menu__module",
+                          isActive ? "is-active" : "",
+                          hiddenByPreference ? "is-preference-hidden" : "",
+                        ].filter(Boolean).join(" ")}
+                      >
+                        <Icon size={16} strokeWidth={1.7} aria-hidden="true" />
+                        <span>
+                          <strong>{item.label}</strong>
+                          {hiddenByPreference && <small>Ukryty w pasku nawigacji</small>}
+                        </span>
+                      </NavLink>
+                    );
+                  })}
+                </nav>
+                <div className="app-mobile-menu__actions">
+                  <button type="button" onClick={() => setOpenMenu("mobileSettings")}>
+                    <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
+                    <span>
+                      <strong>Ustawienia</strong>
+                      <small>Kolejność, widoczność i pogoda</small>
+                    </span>
+                  </button>
+                  <button type="button" onClick={() => setOpenMenu("mobileProfile")}>
+                    <UserRound size={16} strokeWidth={1.7} aria-hidden="true" />
+                    <span>
+                      <strong>Profil lokalny</strong>
+                      <small>Informacje o przechowywaniu danych</small>
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {openMenu === "mobileSettings" && (
+              <div className="app-mobile-menu__settings">
+                <button
+                  type="button"
+                  className="app-mobile-menu__weather"
+                  disabled={weather.status === "loading"}
+                  onClick={() => requestWeather(true)}
+                >
+                  <WeatherIcon
+                    className={weather.status === "loading" ? "is-spinning" : ""}
+                    size={16}
+                    strokeWidth={1.7}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <strong>Odśwież pogodę</strong>
+                    <small>{TODAY_WEATHER_LOCATION.label} · {weatherLabel}</small>
+                  </span>
+                </button>
+                <ModuleSettings {...settingsProps} idPrefix="mobile" />
+                <div className="app-recovery-entry">
+                  <RecoveryCenterButton />
+                </div>
+                <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
+                  Dane pogodowe: Open-Meteo
+                </a>
+              </div>
+            )}
+
+            {openMenu === "mobileProfile" && (
+              <div className="app-mobile-menu__profile">
+                <ProfileSummary />
+              </div>
+            )}
+          </section>
+        )}
+
         <nav className="app-mobile-nav" aria-label="Główna nawigacja mobilna">
-          {visibleNav.map((item) => <PrimaryNavItem key={item.id} {...item} mobile />)}
+          {mobilePrimaryNav.map((item) => <PrimaryNavItem key={item.id} item={item} mobile />)}
+          <button
+            ref={mobileMoreButtonRef}
+            type="button"
+            className={`app-mobile-nav__item${moreIsActive || openMenu?.startsWith("mobile") ? " is-active" : ""}`}
+            data-app-menu-trigger
+            aria-expanded={Boolean(openMenu?.startsWith("mobile"))}
+            aria-controls="mobile-more-menu"
+            onClick={() => setOpenMenu((current) => current?.startsWith("mobile") ? null : "mobileMore")}
+          >
+            <MoreHorizontal size={19} strokeWidth={1.7} aria-hidden="true" />
+            <span className="app-mobile-nav__label">Więcej</span>
+          </button>
         </nav>
       </div>
     </div>

@@ -14,49 +14,63 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router";
 import {
-  BriefcaseBusiness,
   CheckCircle2,
   ChevronRight,
   CircleMinus,
-  CircleDollarSign,
   Cloud,
   CloudFog,
   CloudLightning,
   CloudRain,
   CloudSnow,
   CloudSun,
-  Dumbbell,
   Flame,
-  ListChecks,
   LoaderCircle,
   MapPin,
   Plus,
-  Salad,
   Snowflake,
   Sun,
-  Target,
   type LucideIcon,
 } from "lucide-react";
 import {
+  AFFAIRS_STORAGE_KEY,
   getMonthKey,
   loadAffairsWorkspace,
   type AffairsWorkspace,
 } from "../data/affairsWorkspace";
+import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
+  loadModulePreferences,
+  subscribeToModulePreferences,
+  type ModulePreferences,
+} from "../data/modulePreferences";
+import {
+  NUTRITION_STORAGE_KEY,
   loadNutritionWorkspace,
   type NutritionEntry,
 } from "../data/nutritionWorkspace";
 import {
   isHabitDoneOnDate,
   loadTaskWorkspace,
+  TASK_STORAGE_KEY,
   toCalendarDateKey,
   type WorkspaceHabit,
   type WorkspaceTask,
 } from "../data/taskWorkspace";
-import { loadTodayWeather, type TodayWeather } from "../data/todayWeather";
-import { loadWorkWorkspace } from "../data/workWorkspace";
+import {
+  getTodayWeatherLabel,
+  loadTodayWeather,
+  TODAY_WEATHER_LOCATION,
+  type TodayWeather,
+} from "../data/todayWeather";
+import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
+import { loadWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
 import { useGoalsStore, type Goal } from "../goals/goalsStore";
-import { cycleWorkoutDate, loadSportPlannerState } from "../sport/plannerModel";
+import { APP_MODULE_BY_ID, type AppModuleId } from "../moduleRegistry";
+import {
+  cycleWorkoutDate,
+  loadSportPlannerState,
+  SPORT_PLANNER_STORAGE_KEY,
+} from "../sport/plannerModel";
 import { toDateKey } from "../sport/model";
 import {
   Badge,
@@ -65,6 +79,7 @@ import {
   ModuleShell,
   PageHeader,
 } from "../ui";
+import "../../styles/today.css";
 
 type TodayAffair = {
   id: string;
@@ -83,6 +98,7 @@ type SummaryTone = "neutral" | "warning" | "danger";
 type ModuleState = "active" | "complete" | "empty";
 
 type ModuleSummaryProps = {
+  moduleId: AppModuleId;
   to: string;
   icon: ReactNode;
   title: string;
@@ -109,7 +125,7 @@ function inspectDashboardSources(): DashboardSourceSummary {
     {
       keys: ["rootine.task-workspace.v1"],
       valid: (value: unknown) => isRecord(value)
-        && value.version === 1
+        && (value.version === 1 || value.version === 2)
         && Array.isArray(value.tasks)
         && Array.isArray(value.habits),
     },
@@ -246,11 +262,22 @@ function taskIsForToday(task: WorkspaceTask, todayKey: string) {
   return task.view === "dzis";
 }
 
-function goalNeedsAttention(goal: Goal, todayKey: string) {
+function goalHasAttentionSignal(goal: Goal, todayKey: string) {
   if (goal.status !== "active") return false;
   const hasDueMilestone = goal.milestones.some((item) => !item.done && item.dueDate <= todayKey);
-  const isDailyRegularity = goal.progressMode === "regularity" && goal.frequencyPeriod === "day";
-  return goal.health === "risk" || hasDueMilestone || isDailyRegularity;
+  return goal.health === "risk" || hasDueMilestone;
+}
+
+function isDailyRegularGoal(goal: Goal, todayKey: string) {
+  return goal.status === "active"
+    && goal.progressMode === "regularity"
+    && goal.frequencyPeriod === "day"
+    && goal.startDate <= todayKey
+    && goal.dueDate >= todayKey;
+}
+
+function regularGoalCompletedToday(goal: Goal, todayKey: string) {
+  return goal.progressEntries.some((entry) => entry.date === todayKey && entry.value > 0);
 }
 
 function collectAffairs(workspace: AffairsWorkspace): TodayAffair[] {
@@ -276,17 +303,17 @@ function collectAffairs(workspace: AffairsWorkspace): TodayAffair[] {
   ].sort((left, right) => left.date.localeCompare(right.date));
 }
 
-function weatherPresentation(code: number): { label: string; Icon: LucideIcon } {
-  if (code === 0) return { label: "Bezchmurnie", Icon: Sun };
-  if (code === 1 || code === 2) return { label: "Częściowe zachmurzenie", Icon: CloudSun };
-  if (code === 3) return { label: "Pochmurno", Icon: Cloud };
-  if (code === 45 || code === 48) return { label: "Mgła", Icon: CloudFog };
-  if (code >= 51 && code <= 67) return { label: "Opady deszczu", Icon: CloudRain };
-  if (code >= 71 && code <= 77) return { label: "Opady śniegu", Icon: Snowflake };
-  if (code >= 80 && code <= 82) return { label: "Przelotne opady", Icon: CloudRain };
-  if (code === 85 || code === 86) return { label: "Przelotny śnieg", Icon: CloudSnow };
-  if (code >= 95) return { label: "Burza", Icon: CloudLightning };
-  return { label: "Zmienna pogoda", Icon: CloudSun };
+function weatherIcon(code: number): LucideIcon {
+  if (code === 0) return Sun;
+  if (code === 1 || code === 2) return CloudSun;
+  if (code === 3) return Cloud;
+  if (code === 45 || code === 48) return CloudFog;
+  if (code >= 51 && code <= 67) return CloudRain;
+  if (code >= 71 && code <= 77) return Snowflake;
+  if (code >= 80 && code <= 82) return CloudRain;
+  if (code === 85 || code === 86) return CloudSnow;
+  if (code >= 95) return CloudLightning;
+  return CloudSun;
 }
 
 function sumNutrition(entries: NutritionEntry[]) {
@@ -357,17 +384,60 @@ export default function Dzisiaj() {
   const goalsStore = useGoalsStore();
   const [today, setToday] = useState(() => new Date());
   const todayKey = useMemo(() => toCalendarDateKey(today), [today]);
-  const [taskWorkspace] = useState(loadTaskWorkspace);
-  const [workWorkspace] = useState(loadWorkWorkspace);
-  const [affairsWorkspace] = useState(loadAffairsWorkspace);
-  const [sportPlanner] = useState(loadSportPlannerState);
-  const [nutritionLoad] = useState(loadNutritionWorkspace);
-  const [sourceSummary] = useState(inspectDashboardSources);
+  const [taskWorkspace, setTaskWorkspace] = useState(loadTaskWorkspace);
+  const [workWorkspace, setWorkWorkspace] = useState(loadWorkWorkspace);
+  const [affairsWorkspace, setAffairsWorkspace] = useState(loadAffairsWorkspace);
+  const [sportPlanner, setSportPlanner] = useState(loadSportPlannerState);
+  const [nutritionLoad, setNutritionLoad] = useState(loadNutritionWorkspace);
+  const [modulePreferences, setModulePreferences] = useState<ModulePreferences>(loadModulePreferences);
+  const [sourceSummary, setSourceSummary] = useState(inspectDashboardSources);
   const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
 
   useEffect(() => {
     const timer = window.setInterval(() => setToday(new Date()), 60_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const refreshSourceSummary = () => setSourceSummary(inspectDashboardSources());
+    const unsubscribeTasks = subscribeToLocalWorkspace(TASK_STORAGE_KEY, () => {
+      setTaskWorkspace(loadTaskWorkspace());
+      refreshSourceSummary();
+    });
+    const unsubscribeWork = subscribeToLocalWorkspace(WORK_STORAGE_KEY, () => {
+      setWorkWorkspace(loadWorkWorkspace());
+      setTaskWorkspace(loadTaskWorkspace());
+      refreshSourceSummary();
+    });
+    const unsubscribeTravel = subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, () => {
+      setTaskWorkspace(loadTaskWorkspace());
+      refreshSourceSummary();
+    });
+    const unsubscribeAffairs = subscribeToLocalWorkspace(AFFAIRS_STORAGE_KEY, () => {
+      setAffairsWorkspace(loadAffairsWorkspace());
+      refreshSourceSummary();
+    });
+    const unsubscribeSport = subscribeToLocalWorkspace(SPORT_PLANNER_STORAGE_KEY, () => {
+      setSportPlanner(loadSportPlannerState());
+      refreshSourceSummary();
+    });
+    const unsubscribeNutrition = subscribeToLocalWorkspace(NUTRITION_STORAGE_KEY, () => {
+      setNutritionLoad(loadNutritionWorkspace());
+      refreshSourceSummary();
+    });
+    const unsubscribePreferences = subscribeToModulePreferences(() => {
+      setModulePreferences(loadModulePreferences());
+    });
+
+    return () => {
+      unsubscribeTasks();
+      unsubscribeWork();
+      unsubscribeTravel();
+      unsubscribeAffairs();
+      unsubscribeSport();
+      unsubscribeNutrition();
+      unsubscribePreferences();
+    };
   }, []);
 
   useEffect(() => {
@@ -414,13 +484,31 @@ export default function Dzisiaj() {
   const workProgress = percentage(completedWorkTasks, workTasksForToday.length);
   const workState = moduleState(workTasksForToday.length, todayWorkTasks.length);
 
-  const attentionGoals = useMemo(
-    () => goalsStore.goals.filter((goal) => goalNeedsAttention(goal, todayKey)),
+  const dailyRegularGoals = useMemo(
+    () => goalsStore.goals.filter((goal) => isDailyRegularGoal(goal, todayKey)),
     [goalsStore.goals, todayKey],
   );
-  const riskGoals = attentionGoals.filter((goal) => goal.health === "risk");
-  const goalsComplete = attentionGoals.length === 0;
-  const goalsState: ModuleState = goalsComplete ? "empty" : "active";
+  const attentionGoals = useMemo(
+    () => goalsStore.goals.filter((goal) => goalHasAttentionSignal(goal, todayKey)),
+    [goalsStore.goals, todayKey],
+  );
+  const todayGoals = useMemo(() => {
+    const goals = new Map<string, Goal>();
+    dailyRegularGoals.forEach((goal) => goals.set(goal.id, goal));
+    attentionGoals.forEach((goal) => goals.set(goal.id, goal));
+    return [...goals.values()];
+  }, [attentionGoals, dailyRegularGoals]);
+  const completedTodayGoals = todayGoals.filter((goal) => (
+    isDailyRegularGoal(goal, todayKey)
+    && regularGoalCompletedToday(goal, todayKey)
+    && !goalHasAttentionSignal(goal, todayKey)
+  )).length;
+  const remainingTodayGoals = todayGoals.length - completedTodayGoals;
+  const riskGoals = todayGoals.filter((goal) => (
+    goal.health === "risk" && !regularGoalCompletedToday(goal, todayKey)
+  ));
+  const goalsProgress = percentage(completedTodayGoals, todayGoals.length);
+  const goalsState = moduleState(todayGoals.length, remainingTodayGoals);
 
   const todayWorkouts = useMemo(() => {
     if (!sportPlanner.activeCycle) return [];
@@ -460,28 +548,34 @@ export default function Dzisiaj() {
   const calorieProgress = percentage(nutritionTotals.calories, calorieGoal, 0);
   const nutritionOverTarget = nutritionTotals.calories > calorieGoal * 1.1;
   const nutritionClosed = Boolean(nutritionDay?.closedAt);
-  const nutritionState: ModuleState = nutritionClosed
-    ? "complete"
-    : nutritionEntries.length === 0
-      ? "empty"
-      : "active";
+  const nutritionState: ModuleState = nutritionClosed ? "complete" : "active";
   const calorieRemaining = Math.max(0, calorieGoal - nutritionTotals.calories);
   const waterRemaining = Math.max(0, waterGoal - (nutritionDay?.waterMl ?? 0));
   const caloriesInTargetRange = nutritionTotals.calories >= calorieGoal * 0.9
     && nutritionTotals.calories <= calorieGoal * 1.1;
 
-  const totalDailyItems = taskModuleTotal
-    + taskWorkspace.habits.length
-    + workTasksForToday.length
-    + attentionGoals.length
-    + todayWorkouts.length
-    + todayAffairs.length;
-  const completedDailyItems = completedTodayTasks
-    + completedHabits
-    + completedWorkTasks
-    + completedWorkouts;
+  const visibleModuleIds = new Set(
+    modulePreferences.order.filter((moduleId) => !modulePreferences.disabled.includes(moduleId)),
+  );
+  const totalDailyItems = (visibleModuleIds.has("tasks")
+    ? taskModuleTotal + taskWorkspace.habits.length
+    : 0)
+    + (visibleModuleIds.has("work") ? workTasksForToday.length : 0)
+    + (visibleModuleIds.has("goals") ? todayGoals.length : 0)
+    + (visibleModuleIds.has("sport") ? todayWorkouts.length : 0)
+    + (visibleModuleIds.has("affairs") ? todayAffairs.length : 0)
+    + (visibleModuleIds.has("nutrition") ? 1 : 0);
+  const completedDailyItems = (visibleModuleIds.has("tasks")
+    ? completedTodayTasks + completedHabits
+    : 0)
+    + (visibleModuleIds.has("work") ? completedWorkTasks : 0)
+    + (visibleModuleIds.has("goals") ? completedTodayGoals : 0)
+    + (visibleModuleIds.has("sport") ? completedWorkouts : 0)
+    + (visibleModuleIds.has("nutrition") && nutritionClosed ? 1 : 0);
   const remainingDailyItems = Math.max(0, totalDailyItems - completedDailyItems);
-  const overdueItems = overdueTasks.length + overdueWorkTasks.length;
+  const overdueItems = (visibleModuleIds.has("tasks") ? overdueTasks.length : 0)
+    + (visibleModuleIds.has("work") ? overdueWorkTasks.length : 0);
+  const attentionGoalCount = visibleModuleIds.has("goals") ? remainingTodayGoals : 0;
   const dailyProgress = percentage(completedDailyItems, totalDailyItems);
   const dayComplete = remainingDailyItems === 0;
 
@@ -491,10 +585,12 @@ export default function Dzisiaj() {
   const hasDemoData = sourceSummary.hasDemoData
     || nutritionDay?.source === "demo";
 
-  const weatherView = weather.status === "ready"
-    ? weatherPresentation(weather.data.weatherCode)
-    : { label: "", Icon: CloudSun };
-  const WeatherIcon = weatherView.Icon;
+  const WeatherIcon = weather.status === "ready"
+    ? weatherIcon(weather.data.weatherCode)
+    : CloudSun;
+  const weatherLabel = weather.status === "ready"
+    ? getTodayWeatherLabel(weather.data.weatherCode)
+    : "";
   const ringStyle = {
     background: `conic-gradient(var(--today-ring-color) ${dailyProgress}%, var(--color-border-subtle) ${dailyProgress}%)`,
   } as CSSProperties;
@@ -503,11 +599,18 @@ export default function Dzisiaj() {
     : caloriesInTargetRange && waterRemaining > 0
       ? `${formatNumber(waterRemaining)} ml zostało`
       : `${formatNumber(calorieRemaining)} kcal zostało`;
+  const TasksIcon = APP_MODULE_BY_ID.tasks.icon;
+  const GoalsIcon = APP_MODULE_BY_ID.goals.icon;
+  const WorkIcon = APP_MODULE_BY_ID.work.icon;
+  const SportIcon = APP_MODULE_BY_ID.sport.icon;
+  const AffairsIcon = APP_MODULE_BY_ID.affairs.icon;
+  const NutritionIcon = APP_MODULE_BY_ID.nutrition.icon;
   const moduleRows: ModuleSummaryProps[] = [
     {
-      to: "/zadania?widok=dzis",
-      icon: <ListChecks size={17} />,
-      title: "Zadania",
+      moduleId: "tasks",
+      to: `${APP_MODULE_BY_ID.tasks.to}?widok=dzis`,
+      icon: <TasksIcon size={17} />,
+      title: APP_MODULE_BY_ID.tasks.label,
       count: tasksState === "active" ? remainingLabel(taskModuleRemaining) : tasksState === "complete" ? "Gotowe" : "—",
       status: tasksState === "complete"
         ? "Wszystko zrobione"
@@ -528,7 +631,8 @@ export default function Dzisiaj() {
       ),
     },
     {
-      to: "/zadania?widok=nawyki",
+      moduleId: "tasks",
+      to: `${APP_MODULE_BY_ID.tasks.to}?widok=nawyki`,
       icon: <Flame size={17} />,
       title: "Nawyki",
       count: habitsState === "active" ? remainingLabel(remainingHabits, "pozostał") : habitsState === "complete" ? "Gotowe" : "—",
@@ -548,23 +652,40 @@ export default function Dzisiaj() {
       ),
     },
     {
-      to: "/cele",
-      icon: <Target size={17} />,
-      title: "Cele",
-      count: goalsState === "active" ? remainingLabel(attentionGoals.length, "pozostał") : "—",
-      status: goalsState === "empty"
-        ? "Brak celów wymagających uwagi"
+      moduleId: "goals",
+      to: APP_MODULE_BY_ID.goals.to,
+      icon: <GoalsIcon size={17} />,
+      title: APP_MODULE_BY_ID.goals.label,
+      count: goalsState === "active"
+        ? remainingLabel(remainingTodayGoals, "pozostał")
+        : goalsState === "complete"
+          ? "Gotowe"
+          : "—",
+      status: goalsState === "complete"
+        ? "Dzisiejsza regularność zapisana"
+        : goalsState === "empty"
+          ? "Brak celów wymagających uwagi"
         : riskGoals.length
           ? `${riskGoals.length} zagrożonych`
-          : `${attentionGoals.length} wymaga uwagi`,
+          : `${remainingTodayGoals} wymaga uwagi`,
       accent: goalsState === "active" ? "warning" : "neutral",
       state: goalsState,
-      progressLabel: goalsState === "active" ? "Sprawdź priorytety" : "Nic nie wymaga reakcji",
+      progress: goalsProgress,
+      progressLabel: goalsState === "empty"
+        ? "Nic nie wymaga reakcji"
+        : completedProgressLabel(
+          completedTodayGoals,
+          todayGoals.length,
+          "wykonany",
+          "wykonane",
+          "wykonanych",
+        ),
     },
     {
-      to: "/praca",
-      icon: <BriefcaseBusiness size={17} />,
-      title: "Praca",
+      moduleId: "work",
+      to: APP_MODULE_BY_ID.work.to,
+      icon: <WorkIcon size={17} />,
+      title: APP_MODULE_BY_ID.work.label,
       count: workState === "active" ? remainingLabel(todayWorkTasks.length) : workState === "complete" ? "Gotowe" : "—",
       status: workState === "complete"
         ? "Wszystko zrobione"
@@ -585,9 +706,10 @@ export default function Dzisiaj() {
       ),
     },
     {
-      to: "/sport",
-      icon: <Dumbbell size={17} />,
-      title: "Sport",
+      moduleId: "sport",
+      to: APP_MODULE_BY_ID.sport.to,
+      icon: <SportIcon size={17} />,
+      title: APP_MODULE_BY_ID.sport.label,
       count: sportState === "active" ? remainingLabel(remainingWorkouts, "pozostał") : sportState === "complete" ? "Gotowe" : "—",
       status: sportState === "complete"
         ? "Wszystko zrobione"
@@ -607,9 +729,10 @@ export default function Dzisiaj() {
         ),
     },
     {
-      to: "/sprawy",
-      icon: <CircleDollarSign size={17} />,
-      title: "Sprawy i finanse",
+      moduleId: "affairs",
+      to: APP_MODULE_BY_ID.affairs.to,
+      icon: <AffairsIcon size={17} />,
+      title: APP_MODULE_BY_ID.affairs.label,
       count: affairsState === "active" ? remainingLabel(todayAffairs.length, "pozostała") : "—",
       status: affairsState === "empty"
         ? "Brak spraw na dziś"
@@ -621,14 +744,15 @@ export default function Dzisiaj() {
       progressLabel: affairsState === "empty" ? "Nic nie wymaga reakcji" : `Zostaje ${formatMoney(budgetBalance)}`,
     },
     {
-      to: "/odzywianie",
-      icon: <Salad size={17} />,
-      title: "Odżywianie",
+      moduleId: "nutrition",
+      to: APP_MODULE_BY_ID.nutrition.to,
+      icon: <NutritionIcon size={17} />,
+      title: APP_MODULE_BY_ID.nutrition.label,
       count: nutritionState === "active" ? nutritionMetric : nutritionState === "complete" ? "Gotowe" : "—",
       status: nutritionState === "complete"
         ? "Dzień zamknięty"
-        : nutritionState === "empty"
-          ? "Brak wpisów"
+        : nutritionEntries.length === 0
+          ? "Dodaj pierwszy posiłek"
           : nutritionOverTarget
             ? "Cel kalorii przekroczony"
             : caloriesInTargetRange && waterRemaining > 0
@@ -640,10 +764,9 @@ export default function Dzisiaj() {
       progressLabel: `${formatNumber(nutritionTotals.calories)} / ${formatNumber(calorieGoal)} kcal`,
     },
   ];
-  const stateRank: Record<ModuleState, number> = { active: 0, empty: 1, complete: 2 };
-  const sortedModuleRows = [...moduleRows].sort(
-    (left, right) => stateRank[left.state] - stateRank[right.state],
-  );
+  const sortedModuleRows = modulePreferences.order
+    .filter((moduleId) => visibleModuleIds.has(moduleId))
+    .flatMap((moduleId) => moduleRows.filter((module) => module.moduleId === moduleId));
 
   return (
     <ModuleShell className="today-module">
@@ -671,12 +794,12 @@ export default function Dzisiaj() {
                 <span className="today-header-weather__copy">
                   <strong>
                     <MapPin size={10} aria-hidden="true" />
-                    Warszawa
+                    {TODAY_WEATHER_LOCATION.label}
                     {weather.status === "ready" && <> · {Math.round(weather.data.temperature)}°</>}
                   </strong>
                   <small>
                     {weather.status === "ready"
-                      ? weatherView.label
+                      ? weatherLabel
                       : weather.status === "loading"
                         ? "Pobieranie pogody"
                         : "Pogoda niedostępna"}
@@ -689,7 +812,16 @@ export default function Dzisiaj() {
                 variant="primary"
                 leadingIcon={<Plus size={13} aria-hidden="true" />}
                 aria-label="Utwórz nowe zadanie"
-                onClick={() => navigate("/zadania")}
+                onClick={() => navigate(
+                  `${APP_MODULE_BY_ID.tasks.to}?widok=dzis&akcja=nowe-zadanie`,
+                  {
+                    state: {
+                      intent: "create-task",
+                      focus: "task-composer",
+                      source: "dzisiaj",
+                    },
+                  },
+                )}
               >
                 <span className="header-action-label">Nowe zadanie</span>
               </Button>
@@ -718,8 +850,8 @@ export default function Dzisiaj() {
                   <span>{counted(totalDailyItems, "zaplanowana", "zaplanowane", "zaplanowanych")}</span>
                   <span>{counted(completedDailyItems, "wykonana", "wykonane", "wykonanych")}</span>
                   <span className={overdueItems ? "is-danger" : ""}>{overdueItems} po terminie</span>
-                  <span className={attentionGoals.length ? "is-warning" : ""}>
-                    {counted(attentionGoals.length, "wymaga uwagi", "wymagają uwagi", "wymaga uwagi")}
+                  <span className={attentionGoalCount ? "is-warning" : ""}>
+                    {counted(attentionGoalCount, "wymaga uwagi", "wymagają uwagi", "wymaga uwagi")}
                   </span>
                 </div>
                 <div className="today-day-balance__progress">
@@ -740,8 +872,8 @@ export default function Dzisiaj() {
                     ? "Plan na dziś wykonany."
                     : overdueItems
                       ? `Najpierw zajmij się ${counted(overdueItems, "pozycją", "pozycjami", "pozycjami")} po terminie.`
-                      : attentionGoals.length
-                        ? `Uwagi ${polishForm(attentionGoals.length, "wymaga", "wymagają", "wymaga")} ${counted(attentionGoals.length, "cel", "cele", "celów")}.`
+                      : attentionGoalCount
+                        ? `Uwagi ${polishForm(attentionGoalCount, "wymaga", "wymagają", "wymaga")} ${counted(attentionGoalCount, "cel", "cele", "celów")}.`
                         : `Pozostało ${remainingDailyItems} z ${totalDailyItems} zaplanowanych pozycji.`}
                 </p>
               </div>
