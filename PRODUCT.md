@@ -20,7 +20,7 @@ Routine ma być jednym spójnym miejscem do pracy z powiązanymi obszarami życi
 
 ## Operating Context
 
-Obecny interfejs obejmuje moduły zadań, kalendarza, celów, sportu, odżywiania, pracy oraz spraw. JDG jest wydzielonym podwidokiem modułu Sprawy. Rozbudowane sekcje korzystają ze wspólnego systemu interfejsu i lokalnych obszarów roboczych dopasowanych do charakteru danych.
+Obecny interfejs obejmuje moduły zadań, kalendarza, celów, sportu, odżywiania, pracy, spraw oraz podróży. JDG jest wydzielonym podwidokiem modułu Sprawy. Rozbudowane sekcje korzystają ze wspólnego systemu interfejsu i lokalnych obszarów roboczych dopasowanych do charakteru danych.
 
 ## Capabilities and Constraints
 
@@ -28,6 +28,7 @@ Obecny interfejs obejmuje moduły zadań, kalendarza, celów, sportu, odżywiani
 - Obecnie nie ma kont użytkowników ani backendu; stan jest lokalny, a część modułów korzysta z `localStorage`.
 - Aktualny zakres funkcjonalny obejmuje przede wszystkim zadania, kalendarz, cele, sport i dziennik odżywiania oraz prostsze wersje pozostałych modułów.
 - Sprawy są centrum prywatnych zobowiązań: łączą poważne formalności, płatności jednorazowe i cykliczne, subskrypcje, ważność dokumentów, rejestr pojazdów z terminami datowymi i przebiegowymi oraz miesięczny budżet plan-versus-actual. Wspólny radar porządkuje najbliższe ryzyka między tymi rejestrami.
+- Podróże łączą ogólny przegląd wyjazdów z osobną teczką każdej podróży: planem dzień po dniu, noclegami, transportem, budżetem plan-versus-actual, wymaganymi dokumentami oraz listą przygotowań. Dane i stan gotowości pozostają lokalne.
 - Podwidok JDG w module Sprawy prowadzi miesięczną checklistę dokumentów, podatków, składek, dowodów wysyłki i zamknięcia miesiąca; wymagane punkty blokują przedwczesne zamknięcie, a własne punkty przechodzą do nowo tworzonych miesięcy.
 - Planowanie w module Sport składa się z biblioteki szablonów przypisanych do kategorii oraz jednego aktywnego cyklu. Cykl pozwala rozłożyć treningi na tygodnie i dni, powtarzać je co tydzień albo tylko w wybranych tygodniach, przesuwać, edytować pojedynczo lub seriami, usuwać i zapisać jako jeden plan. Widok Dzisiaj uruchamia pełną aktywną sesję z ćwiczeniami, seriami, obciążeniem, powtórzeniami, RIR lub bólem, notatkami i trwałym timerem przerw; zakończenie automatycznie aktualizuje Historię i Analizę.
 - Dziennik odżywiania łączy lokalny katalog podstawowych produktów USDA z odczytem publicznego katalogu Open Food Facts; zapisane posiłki nadal pozostają wyłącznie lokalne.

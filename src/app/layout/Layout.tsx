@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckSquare,
   Dumbbell,
+  Map,
   Salad,
   ShieldCheck,
   Target,
@@ -18,6 +19,7 @@ const NAV: Array<{ label: string; icon: LucideIcon; to: string }> = [
   { label: "Odżywianie", icon: Salad, to: "/odzywianie" },
   { label: "Praca", icon: BriefcaseBusiness, to: "/praca" },
   { label: "Sprawy", icon: ShieldCheck, to: "/sprawy" },
+  { label: "Podróże", icon: Map, to: "/podroze" },
 ];
 
 function PrimaryNavItem({ label, icon: Icon, to, mobile = false }: { label: string; icon: LucideIcon; to: string; mobile?: boolean }) {

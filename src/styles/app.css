@@ -3,6 +3,7 @@
 @import "./ui.css";
 @import "./work.css";
 @import "./affairs.css";
+@import "./travel.css";
 @import "tailwindcss" source(none);
 @source "../**/*.{js,ts,jsx,tsx}";
 
