@@ -230,7 +230,7 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 
 ## Layout
 
-Aplikacja używa jednego `AppShell` ze stałą globalną nawigacją o szerokości 204px. W aktualnym MVP globalna nawigacja zawiera Zadania, Kalendarz, Cele, Sport, Odżywianie, Pracę i Sprawy. `ModuleShell` może dodać kontekstowy sidebar 200px wyłącznie wtedy, gdy moduł ma prawdziwe podwidoki, tak jak Zadania, Cele, Sport i Sprawy. JDG jest podwidokiem Spraw, nie osobnym modułem globalnym. Kalendarz oraz Odżywianie pozostają pojedynczym canvasem bez lokalnego sidebara.
+Aplikacja używa jednego `AppShell` ze stałą globalną nawigacją o szerokości 204px. W aktualnym MVP globalna nawigacja zawiera Zadania, Kalendarz, Cele, Sport, Odżywianie, Pracę i Sprawy. `ModuleShell` może dodać kontekstowy sidebar 250px wyłącznie wtedy, gdy moduł ma prawdziwe podwidoki, tak jak Zadania, Cele, Sport i Sprawy. JDG jest podwidokiem Spraw, nie osobnym modułem globalnym. Kalendarz oraz Odżywianie pozostają pojedynczym canvasem bez lokalnego sidebara.
 
 Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Filtry i sortowanie należą do `WorkspaceToolbar`. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i toolbarze. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
@@ -349,7 +349,7 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 ### ModuleShell
 
 - **Structure:** opcjonalny `ContextSidebar`, elastyczny `ModuleMain` oraz opcjonalny `DetailPanel`.
-- **ContextSidebar:** 200px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
+- **ContextSidebar:** 250px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
 - **WorkspaceToolbar:** minimum 52px, padding 12px × 28px, filtry, sortowanie i kontrolki widoku.
 - **DetailPanel:** 370px, Grafit panelu bocznego; dockowany na szerokim ekranie i nakładany poniżej 1380px.
 - **Mobile:** sidebar kontekstowy znika, toolbar pokazuje Select podwidoku, a główna nawigacja przechodzi na dół ekranu.
