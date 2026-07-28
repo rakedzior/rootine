@@ -1,0 +1,248 @@
+import {
+  BarChart2,
+  Circle,
+  Flame,
+  Inbox,
+  LayoutGrid,
+  Calendar,
+  TrendingUp,
+} from "lucide-react";
+import {
+  calendarDaysBetween,
+  shiftLocalDateKey,
+  todayLocalDateKey,
+} from "../../data/localDate";
+import {
+  projectTaskOccurrences,
+  type TaskOccurrence,
+} from "../../data/taskSchedule";
+import {
+  type TaskPriority,
+  type TaskRecurrence,
+  type TaskSchedule,
+  type TaskSubtask,
+  type WorkspaceHabit,
+  type WorkspaceList,
+  type WorkspaceTag,
+  type WorkspaceTask,
+} from "../../data/taskWorkspace";
+import { uiColors, uiShadows } from "../../ui";
+
+export const C = {
+  bg:           uiColors.graphiteCanvas,
+  subSidebar:   uiColors.graphiteSidebar,
+  elevated:     uiColors.graphiteHover,
+  card:         uiColors.graphiteCard,
+  cardHover:    uiColors.graphiteHover,
+  inputBg:      uiColors.graphiteInput,
+  borderSubtle: uiColors.borderSubtle,
+  borderStrong: uiColors.borderStrong,
+  textPrimary:  uiColors.chalkWhite,
+  textSecond:   uiColors.textSecondary,
+  textMuted:    uiColors.textMuted,
+  textDisabled: uiColors.textDisabled,
+  iceBlue:      uiColors.precisionBlueText,
+  iceBlueSolid: uiColors.precisionBlueStrong,
+  iceBlueBg:    uiColors.precisionBlueSoft,
+  seaGlass:     uiColors.success,
+  seaGlassBg:   uiColors.successSoft,
+  warning:      uiColors.warning,
+  danger:       uiColors.danger,
+  dangerBg:     uiColors.dangerSoft,
+  blueBorder:   "color-mix(in srgb, var(--color-precision-blue) 35%, transparent)",
+  floatingShadow: uiShadows.floating,
+} as const;
+
+export type Priority = TaskPriority;
+export type Subtask = TaskSubtask;
+export type Task = WorkspaceTask;
+export type Habit = WorkspaceHabit;
+export type ListItem = WorkspaceList;
+export type TagItem = WorkspaceTag;
+
+export const PRIORITY_COLOR: Record<Priority, string> = {
+  high: C.danger, medium: C.warning, low: C.iceBlue,
+};
+
+export const SMART_VIEWS = [
+  { id: "dzis",       label: "Dziś",            icon: LayoutGrid },
+  { id: "wszystkie",   label: "Wszystkie",      icon: Circle     },
+  { id: "skrzynka",   label: "Skrzynka",       icon: Inbox      },
+  { id: "jutro",      label: "Jutro",           icon: Calendar   },
+  { id: "7dni",       label: "Następne 7 dni",  icon: TrendingUp },
+  { id: "podsumowanie", label: "Podsumowanie",  icon: BarChart2  },
+  { id: "nawyki",     label: "Nawyki",           icon: Flame      },
+];
+
+export const VIEW_LABELS: Record<string, string> = {
+  wszystkie:    "Wszystkie zadania",
+  skrzynka:     "Skrzynka zadań",
+  dzis:         "Dziś",
+  jutro:        "Jutro",
+  "7dni":       "Następne 7 dni",
+  podsumowanie: "Podsumowanie",
+  nawyki:       "Nawyki",
+  ukonczone:    "Ukończone",
+  kosz:         "Kosz",
+};
+
+export function initialTaskView() {
+  if (typeof window === "undefined") return "dzis";
+  const requested = new URLSearchParams(window.location.search).get("widok");
+  return requested && VIEW_LABELS[requested] ? requested : "dzis";
+}
+
+export const PALETTE = [
+  C.iceBlue, C.seaGlass, C.warning, C.danger,
+  C.textSecond, uiColors.violet,
+];
+export const VISIBLE_TAG_LIMIT = 6;
+
+
+
+export const PL_MONTHS_SHORT = ["sty","lut","mar","kwi","maj","cze","lip","sie","wrz","paź","lis","gru"];
+
+export function getWeekRangeLabel(): string {
+  const today = new Date();
+  const dow = today.getDay();
+  const mon = new Date(today); mon.setDate(today.getDate() - ((dow + 6) % 7));
+  const sun = new Date(mon);  sun.setDate(mon.getDate() + 6);
+  const fmt = (d: Date) => `${d.getDate()} ${PL_MONTHS_SHORT[d.getMonth()]}`;
+  return `${fmt(mon)} - ${fmt(sun)}`;
+}
+
+export function fmtTaskDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${PL_MONTHS_SHORT[d.getMonth()]}`;
+}
+
+export type DateVal = {
+  date: Date | null;
+  time: string;
+  reminder: string;
+  repeat: string;
+  startTime: string;
+  endTime: string;
+  duration: boolean;
+  allDay: boolean;
+};
+
+export const DEFAULT_DATE_VAL: DateVal = {
+  date: null, time: "", reminder: "", repeat: "",
+  startTime: "09:00", endTime: "10:00", duration: false, allDay: true,
+};
+
+export function formatDateLabel(val: DateVal): string {
+  if (!val.date) return "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tmrw  = new Date(today); tmrw.setDate(tmrw.getDate() + 1);
+  const d     = new Date(val.date); d.setHours(0, 0, 0, 0);
+  if (d.getTime() === today.getTime()) return "Dziś";
+  if (d.getTime() === tmrw.getTime())  return "Jutro";
+  return d.toLocaleDateString("pl-PL", { day: "numeric", month: "short" });
+}
+
+export function todayStr() {
+  const d = new Date();
+  const w = d.toLocaleDateString("pl-PL", { weekday: "long" });
+  const r = d.toLocaleDateString("pl-PL", { day: "numeric", month: "long" });
+  return (w[0].toUpperCase() + w.slice(1)) + ", " + r;
+}
+
+export function viewedTaskDayHeading(view: string) {
+  if (view !== "dzis" && view !== "jutro") return null;
+  const date = new Date();
+  if (view === "jutro") date.setDate(date.getDate() + 1);
+  const weekday = date.toLocaleDateString("pl-PL", { weekday: "long" });
+  return `${weekday}, ${view === "dzis" ? "Dziś" : "Jutro"}`;
+}
+
+export function overdueDateLabel(calendarDate: string): string {
+  const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
+  if (daysAgo === null) return "Po terminie";
+  if (daysAgo === 1) return "Wczoraj";
+  if (daysAgo > 1) return `${daysAgo} dni temu`;
+  return "Po terminie";
+}
+
+export function getMiniWeek() {
+  const today = new Date();
+  const dow = today.getDay();
+  const mon = new Date(today);
+  mon.setDate(today.getDate() - ((dow + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    return { n: d.getDate(), today: d.toDateString() === today.toDateString() };
+  });
+}
+
+// ── Shared dropdown options ───────────────────────────────
+export const REMINDER_OPTIONS = [
+  { value: "",     label: "Brak"           },
+  { value: "0",    label: "W momencie"     },
+  { value: "5",    label: "5 minut przed"  },
+  { value: "10",   label: "10 minut przed" },
+  { value: "30",   label: "30 minut przed" },
+  { value: "60",   label: "1 godzina przed"},
+  { value: "1440", label: "1 dzień przed"  },
+];
+
+export const REPEAT_OPTIONS = [
+  { value: "",        label: "Nie powtarzaj" },
+  { value: "daily",   label: "Codziennie"    },
+  { value: "weekly",  label: "Co tydzień"    },
+  { value: "monthly", label: "Co miesiąc"    },
+  { value: "yearly",  label: "Co rok"        },
+];
+
+export function browserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Warsaw";
+  } catch {
+    return "Europe/Warsaw";
+  }
+}
+
+export function smartDateViewRange(view: string, todayKey: string): [string, string] | null {
+  if (view === "dzis") return [todayKey, todayKey];
+  if (view === "jutro") {
+    const tomorrow = shiftLocalDateKey(todayKey, 1);
+    return [tomorrow, tomorrow];
+  }
+  if (view === "7dni") return [shiftLocalDateKey(todayKey, 2), shiftLocalDateKey(todayKey, 7)];
+  return null;
+}
+
+export function tasksForSmartDateView(tasks: readonly Task[], view: string, todayKey: string) {
+  const range = smartDateViewRange(view, todayKey);
+  if (!range) return { tasks: [...tasks], occurrences: [] as TaskOccurrence[] };
+  const occurrences = projectTaskOccurrences(tasks, range[0], range[1])
+    .filter((task) => !task.deleted);
+  const byId = new Map<number, Task>();
+  for (const task of tasks) {
+    if (task.deleted) continue;
+    if (!task.calendarDate && task.view === view) byId.set(task.id, task);
+    if (view === "dzis" && task.calendarDate && task.calendarDate < todayKey && !task.done) {
+      byId.set(task.id, task);
+    }
+  }
+  for (const occurrence of occurrences) byId.set(occurrence.id, occurrence);
+  return { tasks: [...byId.values()], occurrences };
+}
+
+export function scheduleFromDateValue(value: DateVal, completedDates?: string[]): TaskSchedule | undefined {
+  if (!value.date) return undefined;
+  const hasTime = value.duration ? Boolean(value.startTime && value.endTime) : Boolean(value.time);
+  const allDay = value.allDay || !hasTime;
+  return {
+    allDay,
+    startTime: allDay ? "" : value.duration ? value.startTime : value.time,
+    endTime: !allDay && value.duration ? value.endTime : undefined,
+    reminderMinutes: allDay || value.reminder === "" ? undefined : Number(value.reminder),
+    recurrence: (value.repeat || undefined) as TaskRecurrence | undefined,
+    completedDates: completedDates?.length ? [...completedDates].sort() : undefined,
+    timezone: browserTimezone(),
+  };
+}
+
+// ── Custom select (themed) ────────────────────────────────

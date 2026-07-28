@@ -4,7 +4,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   test: {
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    include: [
+      "src/**/*.{test,spec}.{ts,tsx}",
+      "api/**/*.{test,spec}.ts",
+    ],
     environment: "jsdom",
     setupFiles: ["src/test/setup.ts"],
     css: true,

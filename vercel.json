@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/dzisiaj", "destination": "/index.html" },
+    { "source": "/zadania", "destination": "/index.html" },
+    { "source": "/kalendarz", "destination": "/index.html" },
+    { "source": "/notatki", "destination": "/index.html" },
+    { "source": "/cele", "destination": "/index.html" },
+    { "source": "/cele/:goalId", "destination": "/index.html" },
+    { "source": "/sport", "destination": "/index.html" },
+    { "source": "/odzywianie", "destination": "/index.html" },
+    { "source": "/praca", "destination": "/index.html" },
+    { "source": "/sprawy", "destination": "/index.html" },
+    { "source": "/podroze", "destination": "/index.html" },
+    { "source": "/podroze/:tripId", "destination": "/index.html" },
+    { "source": "/biuro", "destination": "/index.html" },
+    { "source": "/finanse", "destination": "/index.html" },
+    { "source": "/jdg", "destination": "/index.html" }
+  ]
+}

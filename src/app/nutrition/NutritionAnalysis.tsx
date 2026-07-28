@@ -62,7 +62,7 @@ function sumDay(day?: NutritionDay) {
   }), { calories: 0, protein: 0, carbs: 0, fat: 0, hasDietEntry: false });
 }
 
-export function buildNutritionAnalysis(
+function buildNutritionAnalysis(
   endDate: string,
   range: NutritionAnalysisRange,
   days: Record<string, NutritionDay>,

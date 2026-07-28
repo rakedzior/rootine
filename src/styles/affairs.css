@@ -1,44 +1,31 @@
 .affairs-sidebar {
-  background: var(--color-graphite-shell);
-}
-
-.affairs-sidebar__heading {
-  display: grid;
-  min-height: var(--page-header-height);
-  align-content: center;
-  gap: 3px;
-  padding: 0 var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.affairs-sidebar__heading span {
-  color: var(--color-text-muted);
-  font-size: var(--text-micro);
-}
-
-.affairs-sidebar__heading strong {
-  color: var(--color-chalk-white);
-  font-size: var(--text-body);
-  font-weight: 600;
+  background: var(--color-graphite-sidebar);
 }
 
 .affairs-sidebar__nav {
   display: grid;
   align-content: start;
-  gap: var(--space-xl);
-  padding: var(--space-md) var(--space-sm);
+  gap: var(--space-2xl);
+  padding: var(--space-lg) var(--space-sm) var(--space-md);
   overflow-y: auto;
 }
 
 .affairs-sidebar__nav > section,
 .affairs-sidebar__nav > section > div {
   display: grid;
-  gap: 2px;
+}
+
+.affairs-sidebar__nav > section {
+  gap: 0;
+}
+
+.affairs-sidebar__nav > section > div {
+  gap: 1px;
 }
 
 .affairs-sidebar__nav .ui-section-header {
   min-height: 0;
-  padding: 0 6px var(--space-xs);
+  padding: 0 6px var(--space-sm);
 }
 
 .affairs-sidebar__footer {
@@ -50,7 +37,6 @@
   padding: 0 var(--space-xl);
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-muted);
-  font-family: var(--font-data);
   font-size: var(--text-micro);
 }
 
@@ -108,9 +94,9 @@
 .affairs-budget {
   display: grid;
   width: 100%;
-  max-width: 1180px;
+  max-width: none;
   gap: var(--space-xl);
-  margin: 0 auto;
+  margin: 0;
 }
 
 .affairs-overview__summary,
@@ -182,6 +168,30 @@
 .affairs-agenda,
 .affairs-budget-snapshot {
   overflow: hidden;
+}
+
+@media (min-width: 761px) {
+  .affairs-overview,
+  .affairs-budget {
+    min-height: 100%;
+    grid-template-rows: auto minmax(min-content, 1fr);
+  }
+
+  .affairs-overview__grid {
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .affairs-agenda,
+  .affairs-budget-snapshot {
+    height: 100%;
+  }
+
+  .affairs-ledger,
+  .affairs-vehicle-list,
+  .jdg-canvas > * {
+    min-height: 100%;
+  }
 }
 
 .affairs-section-heading {
@@ -394,8 +404,8 @@
 .affairs-ledger,
 .affairs-budget-table {
   width: 100%;
-  max-width: 1120px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
@@ -587,9 +597,9 @@
 .affairs-vehicle-list {
   display: grid;
   width: 100%;
-  max-width: 1120px;
+  max-width: none;
   gap: var(--space-xl);
-  margin: 0 auto;
+  margin: 0;
 }
 
 .affairs-vehicle-list > .ui-empty-state {
@@ -1047,9 +1057,9 @@
 
 .jdg-canvas > * {
   width: 100%;
-  max-width: 1040px;
-  margin-right: auto;
-  margin-left: auto;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
 }
 
 .jdg-month-state {

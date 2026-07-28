@@ -1,15 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, HardDriveDownload, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import {
+  AlertTriangle,
+  Database,
+  Download,
+  HardDriveDownload,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import {
+  deleteLocalRecoveryRecord,
+  dismissLocalPersistenceIssue,
   estimateOriginStorage,
   exportAllLocalWorkspaces,
+  exportLocalPersistenceIssueDraft,
   exportLocalRecoveryRecord,
+  getPersistentStorageStatus,
+  getWorkspaceStorageTierStatus,
   importAllLocalWorkspaces,
   inspectFullLocalBackup,
+  listLocalPersistenceIssues,
   listLocalRecoveryRecords,
+  requestPersistentStorage,
   restoreLocalRecoveryRecord,
+  retryLocalPersistenceIssue,
+  subscribeToLocalPersistenceIssues,
   type FullLocalBackup,
+  type LocalPersistenceIssue,
   type OriginStorageEstimate,
+  type PersistentStorageStatus,
 } from "../data/localRepository";
 import { Badge, Button, Modal } from "../ui";
 
@@ -19,6 +40,7 @@ type PendingImport = {
 };
 
 type StorageEstimateState = OriginStorageEstimate | { status: "idle" | "loading" };
+type PersistentStorageState = PersistentStorageStatus | { status: "idle" | "loading" };
 
 function downloadText(fileName: string, contents: string, type = "application/json") {
   const blob = new Blob([contents], { type });
@@ -61,16 +83,30 @@ function formatUsageRatio(ratio: number) {
   }).format(ratio);
 }
 
+function issueLabel(kind: LocalPersistenceIssue["kind"]) {
+  if (kind === "quota") return "Brak miejsca";
+  if (kind === "conflict") return "Konflikt kart";
+  if (kind === "permission") return "Brak uprawnień";
+  if (kind === "unavailable") return "Tryb zgodności";
+  if (kind === "corrupt") return "Błąd danych";
+  return "Błąd zapisu";
+}
+
 export function RecoveryCenterButton() {
   const [open, setOpen] = useState(false);
   const [records, setRecords] = useState(() => listLocalRecoveryRecords());
+  const [issues, setIssues] = useState<LocalPersistenceIssue[]>(() => listLocalPersistenceIssues());
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimateState>({ status: "idle" });
+  const [persistentStorage, setPersistentStorage] = useState<PersistentStorageState>({ status: "idle" });
+  const [busyAction, setBusyAction] = useState("");
   const [message, setMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const storageRequestRef = useRef(0);
+  const storageTier = getWorkspaceStorageTierStatus();
 
-  const refreshRecords = () => setRecords(listLocalRecoveryRecords());
+  const refreshRecords = useCallback(() => setRecords(listLocalRecoveryRecords()), []);
+  const refreshIssues = useCallback(() => setIssues(listLocalPersistenceIssues()), []);
   const refreshStorageEstimate = useCallback(() => {
     const requestId = storageRequestRef.current + 1;
     storageRequestRef.current = requestId;
@@ -80,21 +116,37 @@ export function RecoveryCenterButton() {
     });
   }, []);
 
+  const refreshPersistentStorage = useCallback(() => {
+    setPersistentStorage({ status: "loading" });
+    void getPersistentStorageStatus().then(setPersistentStorage);
+  }, []);
+
+  useEffect(() => subscribeToLocalPersistenceIssues(refreshIssues), [refreshIssues]);
+
   useEffect(() => {
     if (!open) return;
     refreshStorageEstimate();
+    refreshPersistentStorage();
     return () => {
       storageRequestRef.current += 1;
     };
-  }, [open, refreshStorageEstimate]);
+  }, [open, refreshPersistentStorage, refreshStorageEstimate]);
 
-  const exportAll = () => {
-    const backup = exportAllLocalWorkspaces();
-    downloadText(
-      `routine-backup-${backup.exportedAt.slice(0, 10)}.json`,
-      JSON.stringify(backup, null, 2),
-    );
-    setMessage(`Wyeksportowano ${Object.keys(backup.workspaces).length} obszarów danych.`);
+  const exportAll = async () => {
+    setBusyAction("export");
+    setMessage("");
+    try {
+      const backup = await exportAllLocalWorkspaces();
+      downloadText(
+        `routine-backup-${backup.exportedAt.slice(0, 10)}.json`,
+        JSON.stringify(backup, null, 2),
+      );
+      setMessage(`Wyeksportowano ${Object.keys(backup.workspaces).length} obszarów danych.`);
+    } catch {
+      setMessage("Nie udało się utworzyć pełnej kopii. Spróbuj ponownie po odświeżeniu magazynu.");
+    } finally {
+      setBusyAction("");
+    }
   };
 
   const selectImport = async (file: File | undefined) => {
@@ -115,17 +167,74 @@ export function RecoveryCenterButton() {
     }
   };
 
-  const restoreImport = () => {
+  const restoreImport = async () => {
     if (!pendingImport) return;
-    const result = importAllLocalWorkspaces(pendingImport.backup);
-    if (result.ok) {
-      setMessage(`Przywrócono ${result.restored} obszarów. Odśwież aplikację, aby wczytać dane.`);
-      setPendingImport(null);
-      refreshRecords();
-      refreshStorageEstimate();
-    } else {
-      setMessage(result.error ?? "Nie udało się przywrócić kopii.");
+    setBusyAction("import");
+    try {
+      const result = await importAllLocalWorkspaces(pendingImport.backup);
+      if (result.ok) {
+        setMessage(`Przywrócono ${result.restored} obszarów. Odśwież aplikację, aby wczytać dane.`);
+        setPendingImport(null);
+        refreshRecords();
+        refreshStorageEstimate();
+      } else {
+        setMessage(result.error ?? "Nie udało się przywrócić kopii.");
+      }
+    } finally {
+      setBusyAction("");
     }
+  };
+
+  const retryIssue = async (issue: LocalPersistenceIssue) => {
+    setBusyAction(`issue:${issue.id}`);
+    const retried = await retryLocalPersistenceIssue(issue.id);
+    setMessage(retried
+      ? `Ponowiono zapis „${issue.key}”.`
+      : `Zapis „${issue.key}” nadal się nie powiódł. Pobierz szkic i sprawdź dostępne miejsce.`);
+    refreshIssues();
+    refreshStorageEstimate();
+    setBusyAction("");
+  };
+
+  const requestProtection = async () => {
+    setBusyAction("persist");
+    setPersistentStorage({ status: "loading" });
+    const result = await requestPersistentStorage();
+    setPersistentStorage(result);
+    setMessage(result.message);
+    setBusyAction("");
+  };
+
+  const restoreRecord = async (id: string) => {
+    setBusyAction(`restore:${id}`);
+    const restored = await restoreLocalRecoveryRecord(id);
+    setMessage(restored
+      ? "Przywrócono zapis. Odśwież aplikację, aby go wczytać."
+      : "Nie udało się przywrócić zapisu.");
+    refreshRecords();
+    refreshIssues();
+    refreshStorageEstimate();
+    setBusyAction("");
+  };
+
+  const exportRecord = async (id: string) => {
+    const raw = await exportLocalRecoveryRecord(id);
+    if (raw !== null) {
+      downloadText(`routine-recovery-${id}.json`, raw);
+      return;
+    }
+    setMessage("Nie udało się odczytać zabezpieczonego zapisu.");
+  };
+
+  const deleteRecord = async (id: string) => {
+    setBusyAction(`delete:${id}`);
+    const removed = await deleteLocalRecoveryRecord(id);
+    setMessage(removed
+      ? "Usunięto zabezpieczony zapis."
+      : "Nie udało się usunąć zabezpieczonego zapisu.");
+    refreshRecords();
+    refreshStorageEstimate();
+    setBusyAction("");
   };
 
   return (
@@ -136,10 +245,11 @@ export function RecoveryCenterButton() {
         leadingIcon={<ShieldCheck size={13} aria-hidden="true" />}
         onClick={() => {
           refreshRecords();
+          refreshIssues();
           setOpen(true);
         }}
       >
-        Kopia i odzyskiwanie
+        Kopia i odzyskiwanie{issues.length ? ` · ${issues.length}` : ""}
       </Button>
 
       {open && (
@@ -161,6 +271,82 @@ export function RecoveryCenterButton() {
           )}
         >
           <div className="flex flex-col gap-5">
+            {issues.length > 0 && (
+              <section
+                aria-labelledby="persistence-issues-title"
+                className="rounded-xl border border-[var(--color-danger-coral)] bg-[var(--color-danger-soft)] p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 id="persistence-issues-title" className="flex items-center gap-2 text-[13px] font-semibold text-[var(--color-chalk-white)]">
+                      <AlertTriangle size={14} aria-hidden="true" />
+                      Zmiany wymagające uwagi
+                    </h3>
+                    <p className="mt-1 max-w-[70ch] text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                      Routine zatrzymał ryzykowny zapis. Trwała wersja nie została po cichu nadpisana; szkic możesz pobrać przed ponowieniem.
+                    </p>
+                  </div>
+                  <Badge tone="danger">{issues.length} {issues.length === 1 ? "problem" : "problemy"}</Badge>
+                </div>
+                <ul className="mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto" aria-label="Problemy trwałego zapisu">
+                  {issues.map((issue) => (
+                    <li key={issue.id} className="rounded-lg bg-[var(--color-graphite-input)] p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <strong className="block truncate text-[12px] font-medium text-[var(--color-chalk-white)]">
+                            {issue.key}
+                          </strong>
+                          <p className="mt-1 max-w-[60ch] text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
+                            {issue.message}
+                          </p>
+                        </div>
+                        <Badge tone={issue.kind === "unavailable" ? "warning" : "danger"}>
+                          {issueLabel(issue.kind)}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 flex flex-wrap justify-end gap-1">
+                        {issue.hasDraft && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            leadingIcon={<Download size={12} aria-hidden="true" />}
+                            onClick={() => {
+                              const draft = exportLocalPersistenceIssueDraft(issue.id);
+                              if (draft !== null) downloadText(`routine-unsaved-${issue.id}.json`, draft);
+                            }}
+                          >
+                            Pobierz szkic
+                          </Button>
+                        )}
+                        {issue.retryable && (
+                          <Button
+                            variant="quiet"
+                            size="sm"
+                            disabled={Boolean(busyAction)}
+                            leadingIcon={<RotateCcw size={12} aria-hidden="true" />}
+                            onClick={() => void retryIssue(issue)}
+                          >
+                            {busyAction === `issue:${issue.id}` ? "Ponawianie…" : "Ponów zapis"}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            dismissLocalPersistenceIssue(issue.id);
+                            refreshIssues();
+                            setMessage("Ukryto komunikat. Trwała wersja danych pozostała bez zmian.");
+                          }}
+                        >
+                          Ukryj
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <section aria-labelledby="backup-actions-title" className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-graphite-panel)] p-4">
               <h3 id="backup-actions-title" className="text-[13px] font-semibold text-[var(--color-chalk-white)]">
                 Pełna kopia urządzenia
@@ -169,8 +355,13 @@ export function RecoveryCenterButton() {
                 Plik zawiera dane wszystkich modułów zapisane w tej przeglądarce. Przechowuj go jak prywatny dokument.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="quiet" leadingIcon={<Download size={13} />} onClick={exportAll}>
-                  Eksportuj kopię
+                <Button
+                  variant="quiet"
+                  leadingIcon={<Download size={13} />}
+                  disabled={Boolean(busyAction)}
+                  onClick={() => void exportAll()}
+                >
+                  {busyAction === "export" ? "Tworzenie kopii…" : "Eksportuj kopię"}
                 </Button>
                 <Button variant="quiet" leadingIcon={<Upload size={13} />} onClick={() => inputRef.current?.click()}>
                   Wybierz kopię
@@ -188,7 +379,7 @@ export function RecoveryCenterButton() {
 
             <section
               aria-labelledby="storage-estimate-title"
-              aria-busy={storageEstimate.status === "loading"}
+              aria-busy={storageEstimate.status === "loading" || persistentStorage.status === "loading"}
               className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-graphite-panel)] p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -257,6 +448,52 @@ export function RecoveryCenterButton() {
                   Odśwież pomiar
                 </Button>
               </div>
+
+              <div className="mt-4 border-t border-[var(--color-border-subtle)] pt-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="flex items-center gap-2 text-[12px] font-semibold text-[var(--color-chalk-white)]">
+                      <Database size={13} aria-hidden="true" />
+                      Trwałość danych
+                    </h4>
+                    <p className="mt-1 max-w-[70ch] text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
+                      {storageTier.message}
+                    </p>
+                  </div>
+                  <Badge tone={storageTier.status === "indexeddb" ? "success" : "warning"}>
+                    {storageTier.status === "indexeddb" ? "IndexedDB" : "Tryb zgodności"}
+                  </Badge>
+                </div>
+
+                {persistentStorage.status === "ready" ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <p className="max-w-[56ch] text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
+                      {persistentStorage.message} Ochrona nie zwiększa limitu i nie zastępuje własnej kopii.
+                    </p>
+                    {persistentStorage.persisted ? (
+                      <Badge tone="success">Ochrona włączona</Badge>
+                    ) : (
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        disabled={Boolean(busyAction)}
+                        leadingIcon={<ShieldCheck size={12} aria-hidden="true" />}
+                        onClick={() => void requestProtection()}
+                      >
+                        {busyAction === "persist" ? "Wysyłanie prośby…" : "Poproś o ochronę"}
+                      </Button>
+                    )}
+                  </div>
+                ) : persistentStorage.status === "unsupported" || persistentStorage.status === "error" ? (
+                  <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
+                    {persistentStorage.message}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-[10px] text-[var(--color-text-muted)]" role="status">
+                    Sprawdzanie ochrony danych…
+                  </p>
+                )}
+              </div>
             </section>
 
             {pendingImport && (
@@ -274,7 +511,13 @@ export function RecoveryCenterButton() {
                 </div>
                 <div className="mt-3 flex justify-end gap-2">
                   <Button variant="ghost" onClick={() => setPendingImport(null)}>Anuluj</Button>
-                  <Button variant="primary" onClick={restoreImport}>Przywróć kopię</Button>
+                  <Button
+                    variant="primary"
+                    disabled={Boolean(busyAction)}
+                    onClick={() => void restoreImport()}
+                  >
+                    {busyAction === "import" ? "Przywracanie…" : "Przywróć kopię"}
+                  </Button>
                 </div>
               </section>
             )}
@@ -318,25 +561,26 @@ export function RecoveryCenterButton() {
                           variant="ghost"
                           size="sm"
                           leadingIcon={<HardDriveDownload size={12} />}
-                          onClick={() => {
-                            const raw = exportLocalRecoveryRecord(record.id);
-                            if (raw !== null) downloadText(`routine-recovery-${record.id}.json`, raw);
-                          }}
+                          onClick={() => void exportRecord(record.id)}
                         >
                           Pobierz
                         </Button>
                         <Button
                           variant="quiet"
                           size="sm"
-                          onClick={() => {
-                            const restored = restoreLocalRecoveryRecord(record.id);
-                            setMessage(restored
-                              ? "Przywrócono zapis. Odśwież aplikację, aby go wczytać."
-                              : "Nie udało się przywrócić zapisu.");
-                            refreshRecords();
-                          }}
+                          disabled={Boolean(busyAction)}
+                          onClick={() => void restoreRecord(record.id)}
                         >
-                          Przywróć
+                          {busyAction === `restore:${record.id}` ? "Przywracanie…" : "Przywróć"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={Boolean(busyAction)}
+                          leadingIcon={<Trash2 size={12} aria-hidden="true" />}
+                          onClick={() => void deleteRecord(record.id)}
+                        >
+                          {busyAction === `delete:${record.id}` ? "Usuwanie…" : "Usuń"}
                         </Button>
                       </div>
                     </li>

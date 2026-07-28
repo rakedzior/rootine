@@ -64,7 +64,8 @@ import {
 } from "../data/todayWeather";
 import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
 import { loadWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
-import { useGoalsStore, type Goal } from "../goals/goalsStore";
+import { useGoalsStore } from "../goals/goalsContext";
+import type { Goal } from "../goals/goalsModel";
 import { APP_MODULE_BY_ID, type AppModuleId } from "../moduleRegistry";
 import {
   cycleWorkoutDate,
@@ -119,13 +120,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isWorkspaceManifest(value: unknown) {
+  return isRecord(value)
+    && value.__rootineWorkspaceManifest === 1
+    && value.storage === "indexeddb"
+    && typeof value.key === "string"
+    && typeof value.revision === "number"
+    && typeof value.contentHash === "string";
+}
+
 function inspectDashboardSources(): DashboardSourceSummary {
   if (typeof window === "undefined") return { hasDemoData: true, hasCorruptData: false };
   const sources = [
     {
       keys: ["rootine.task-workspace.v1"],
       valid: (value: unknown) => isRecord(value)
-        && (value.version === 1 || value.version === 2)
+        && (value.version === 1 || value.version === 2 || value.version === 3)
         && Array.isArray(value.tasks)
         && Array.isArray(value.habits),
     },
@@ -167,7 +177,8 @@ function inspectDashboardSources(): DashboardSourceSummary {
         hasDemoData = true;
         return;
       }
-      if (!source.valid(JSON.parse(raw) as unknown)) hasCorruptData = true;
+      const parsed = JSON.parse(raw) as unknown;
+      if (!isWorkspaceManifest(parsed) && !source.valid(parsed)) hasCorruptData = true;
     } catch {
       hasCorruptData = true;
     }

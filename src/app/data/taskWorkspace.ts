@@ -7,6 +7,7 @@ import {
   type CommitmentTaskSource,
 } from "./commitmentRepository";
 import { hydrateTaskCompletion } from "./taskCompletion";
+import { isLocalDateKey } from "./localDate";
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
 
 export const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
@@ -22,6 +23,7 @@ export type TaskSchedule = {
   endTime?: string;
   reminderMinutes?: number;
   recurrence?: TaskRecurrence;
+  completedDates?: string[];
   timezone: string;
 };
 
@@ -168,6 +170,10 @@ function isTaskSchedule(value: unknown): value is TaskSchedule {
         && Number.isInteger(value.reminderMinutes)
         && value.reminderMinutes >= 0))
     && (value.recurrence === undefined || ["daily", "weekly", "monthly", "yearly"].includes(String(value.recurrence)))
+    && (value.completedDates === undefined
+      || (Array.isArray(value.completedDates)
+        && value.completedDates.every(isLocalDateKey)
+        && new Set(value.completedDates).size === value.completedDates.length))
     && typeof value.timezone === "string"
     && value.timezone.trim().length > 0;
 }
@@ -272,6 +278,23 @@ function withProjectedCommitments(workspace: TaskWorkspace): TaskWorkspace {
   };
 }
 
+function stripRuntimeTaskOccurrences(tasks: readonly WorkspaceTask[]): WorkspaceTask[] {
+  const sourceTasks = new Map<number, WorkspaceTask>();
+  for (const task of tasks) {
+    const candidate = task as WorkspaceTask & {
+      occurrence?: { virtual?: unknown };
+    };
+    if (candidate.occurrence?.virtual === true) continue;
+    if (!candidate.occurrence) {
+      sourceTasks.set(task.id, task);
+      continue;
+    }
+    const { occurrence: _occurrence, ...sourceTask } = candidate;
+    sourceTasks.set(sourceTask.id, sourceTask);
+  }
+  return [...sourceTasks.values()];
+}
+
 export function loadTaskWorkspaceResult(): LocalLoadResult<TaskWorkspace> {
   const result = readLocalWorkspace({
     key: TASK_STORAGE_KEY,
@@ -290,12 +313,13 @@ export function loadTaskWorkspace(): TaskWorkspace {
 }
 
 export function saveTaskWorkspace(workspace: TaskWorkspace): boolean {
-  const sourceSaved = propagateCommitmentEdits(workspace.tasks);
+  const sourceTasks = stripRuntimeTaskOccurrences(workspace.tasks);
+  const sourceSaved = propagateCommitmentEdits(sourceTasks);
   const next: TaskWorkspace = {
     ...workspace,
     version: WORKSPACE_VERSION,
     updatedAt: new Date().toISOString(),
-    tasks: stripProjectedCommitments(workspace.tasks),
+    tasks: stripProjectedCommitments(sourceTasks),
   };
   return writeLocalWorkspace(TASK_STORAGE_KEY, next) && sourceSaved;
 }

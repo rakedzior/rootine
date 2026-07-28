@@ -17,20 +17,40 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "desktop",
-      grep: /@shared|@desktop/,
+      name: "desktop-1440",
+      grep: /@shared|@desktop|@viewport/,
       use: {
         ...devices["Desktop Chrome"],
         channel: localBrowserChannel,
+        viewport: { width: 1440, height: 900 },
       },
     },
     {
-      name: "mobile",
-      grep: /@shared|@mobile/,
+      name: "tablet-1024",
+      grep: /@viewport/,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: localBrowserChannel,
+        viewport: { width: 1024, height: 768 },
+      },
+    },
+    {
+      name: "tablet-768",
+      grep: /@viewport/,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: localBrowserChannel,
+        viewport: { width: 768, height: 1024 },
+      },
+    },
+    {
+      name: "mobile-390",
+      grep: /@shared|@mobile|@viewport/,
       use: {
         ...devices["iPhone 13"],
         browserName: "chromium",
         channel: localBrowserChannel,
+        viewport: { width: 390, height: 844 },
       },
     },
   ],

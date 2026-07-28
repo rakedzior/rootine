@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inspectGoalsImport } from "./goalsStore";
+import { inspectGoalsImport } from "./goalsModel";
 
 const validWorkspace = {
   version: 1,

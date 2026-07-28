@@ -4,7 +4,7 @@ import {
   GOAL_ACCENT_OPTIONS,
   getGoalCurrentValue,
   normalizeGoalAccentColor,
-} from "./goalsStore";
+} from "./goalsModel";
 import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
 import { Button, Input, Modal, Select, uiColors } from "../ui";
 import type {
@@ -19,7 +19,7 @@ import type {
   GoalRegularityMode,
   GoalRegularityPeriod,
   GoalStatus,
-} from "./goalsStore";
+} from "./goalsModel";
 
 const C = {
   input: uiColors.graphiteInput,

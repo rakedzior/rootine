@@ -7,19 +7,13 @@
  */
 import {
   Archive,
-  Building2,
   Car,
   Check,
   ChevronLeft,
   ChevronRight,
-  CircleDollarSign,
   Clock3,
   CreditCard,
   FileText,
-  HeartPulse,
-  Home,
-  Landmark,
-  LayoutDashboard,
   Pencil,
   Plus,
   ReceiptText,
@@ -75,258 +69,33 @@ import {
 } from "../ui";
 import "../../styles/affairs.css";
 
-type AffairsView =
-  | "overview"
-  | "matters"
-  | "oneTime"
-  | "payments"
-  | "subscriptions"
-  | "documents"
-  | "vehicles"
-  | "budget"
-  | "jdg";
-type EditorState =
-  | { kind: "matter"; mode: "add" | "edit"; id?: string }
-  | { kind: "payment"; mode: "add" | "edit"; id?: string }
-  | { kind: "oneTime"; mode: "add" | "edit"; id?: string }
-  | { kind: "subscription"; mode: "add" | "edit"; id?: string }
-  | { kind: "document"; mode: "add" | "edit"; id?: string }
-  | { kind: "vehicle"; mode: "add" | "edit"; id?: string }
-  | { kind: "vehicleItem"; mode: "add" | "edit"; id?: string; vehicleId: string }
-  | { kind: "budget"; mode: "add" };
-type DeleteState = {
-  kind: "matter" | "payment" | "oneTime" | "subscription" | "document" | "vehicle" | "vehicleItem" | "budget";
-  id: string;
-  label: string;
-};
-
-type Draft = {
-  title: string;
-  category: string;
-  priority: MatterPriority;
-  status: MatterStatus;
-  dueDate: string;
-  note: string;
-  amount: string;
-  cadence: PaymentCadence;
-  automatic: boolean;
-  renewal: SubscriptionRenewal;
-  secondaryDate: string;
-  holder: string;
-  reminderDays: string;
-  registration: string;
-  mileage: string;
-  dueMileage: string;
-  vehicleId: string;
-  vehicleType: VehicleItemType;
-  budgetKind: BudgetLineKind;
-  planned: string;
-  actual: string;
-};
-
-const EMPTY_DRAFT: Draft = {
-  title: "",
-  category: "urzedy",
-  priority: "normal",
-  status: "open",
-  dueDate: "",
-  note: "",
-  amount: "",
-  cadence: "monthly",
-  automatic: false,
-  renewal: "automatic",
-  secondaryDate: "",
-  holder: "Ja",
-  reminderDays: "90",
-  registration: "",
-  mileage: "",
-  dueMileage: "",
-  vehicleId: "",
-  vehicleType: "service",
-  budgetKind: "fixed",
-  planned: "",
-  actual: "",
-};
-
-const VIEW_COPY: Record<AffairsView, { title: string; description: string }> = {
-  overview: { title: "Sprawy", description: "Najbliższe zobowiązania i plan miesiąca" },
-  matters: { title: "Sprawy", description: "Prywatne formalności, decyzje i ważne terminy" },
-  oneTime: { title: "Sprawy", description: "Jednorazowe rachunki, opłaty i zobowiązania" },
-  payments: { title: "Sprawy", description: "Stałe rachunki i płatności cykliczne" },
-  subscriptions: { title: "Sprawy", description: "Subskrypcje, członkostwa i kończące się umowy" },
-  documents: { title: "Sprawy", description: "Ważność dokumentów, polis, kart i gwarancji" },
-  vehicles: { title: "Sprawy", description: "OC, przeglądy, serwis i terminy pojazdów" },
-  budget: { title: "Sprawy", description: "Miesięczny plan wpływów, wydatków i oszczędności" },
-  jdg: { title: "Sprawy", description: "JDG · Miesięczne dokumenty, podatki i zamknięcie działalności" },
-};
-
-const CATEGORY_META: Record<MatterCategory, { label: string; icon: typeof Landmark }> = {
-  urzedy: { label: "Urzędy", icon: Landmark },
-  zdrowie: { label: "Zdrowie", icon: HeartPulse },
-  dom: { label: "Dom", icon: Home },
-  auto: { label: "Auto", icon: Car },
-  finanse: { label: "Finanse", icon: CircleDollarSign },
-  dokumenty: { label: "Dokumenty", icon: FileText },
-};
-
-const STATUS_LABELS: Record<MatterStatus, string> = {
-  open: "Do zrobienia",
-  waiting: "Oczekuje",
-  done: "Załatwione",
-};
-
-const CADENCE_LABELS: Record<PaymentCadence, string> = {
-  monthly: "Co miesiąc",
-  quarterly: "Co kwartał",
-  yearly: "Co rok",
-};
-
-const BUDGET_KIND_LABELS: Record<BudgetLineKind, string> = {
-  income: "Wpływy",
-  fixed: "Stałe",
-  flexible: "Elastyczne",
-  savings: "Oszczędności",
-};
-
-const DOCUMENT_LABELS: Record<DocumentCategory, string> = {
-  identity: "Tożsamość",
-  driving: "Uprawnienia",
-  insurance: "Polisa",
-  health: "Zdrowie",
-  agreement: "Umowa / gwarancja",
-  other: "Inne",
-};
-
-const VEHICLE_ITEM_LABELS: Record<VehicleItemType, string> = {
-  insurance: "Ubezpieczenie",
-  inspection: "Przegląd",
-  service: "Serwis",
-  tires: "Opony",
-  lease: "Leasing",
-  warranty: "Gwarancja",
-  other: "Inne",
-};
-
-const NAV_GROUPS: Array<{
-  label: string;
-  items: Array<{ view: AffairsView; label: string; icon: typeof LayoutDashboard }>;
-}> = [
-  {
-    label: "Główne",
-    items: [
-      { view: "overview", label: "Przegląd", icon: LayoutDashboard },
-      { view: "matters", label: "Sprawy", icon: ShieldCheck },
-    ],
-  },
-  {
-    label: "Finanse",
-    items: [
-      { view: "oneTime", label: "Jednorazowe", icon: ReceiptText },
-      { view: "payments", label: "Cykliczne", icon: RefreshCw },
-      { view: "subscriptions", label: "Subskrypcje", icon: CreditCard },
-      { view: "budget", label: "Budżet", icon: WalletCards },
-    ],
-  },
-  {
-    label: "Rejestry",
-    items: [
-      { view: "documents", label: "Dokumenty", icon: FileText },
-      { view: "vehicles", label: "Pojazdy", icon: Car },
-    ],
-  },
-  {
-    label: "Firma",
-    items: [{ view: "jdg", label: "JDG", icon: Building2 }],
-  },
-];
-
-const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
-const AFFAIRS_VIEWS = new Set<AffairsView>(NAV_ITEMS.map((item) => item.view));
-
-const UPCOMING_ICONS = {
-  matter: ShieldCheck,
-  oneTime: ReceiptText,
-  payment: RefreshCw,
-  subscription: CreditCard,
-  document: FileText,
-  vehicle: Car,
-};
-
-function getInitialView(): AffairsView {
-  if (typeof window === "undefined") return "overview";
-  const requested = new URLSearchParams(window.location.search).get("widok") as AffairsView | null;
-  if (requested && AFFAIRS_VIEWS.has(requested)) return requested;
-  return "overview";
-}
-
-function formatDate(value: string): string {
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value || "Bez terminu";
-  return date.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatMonth(value: string): string {
-  const date = new Date(`${value}-01T12:00:00`);
-  return date.toLocaleDateString("pl-PL", { month: "long", year: "numeric" });
-}
-
-function formatMoney(value: number): string {
-  return new Intl.NumberFormat("pl-PL", {
-    style: "currency",
-    currency: "PLN",
-    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
-  }).format(value);
-}
-
-function daysUntil(value: string): number {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return Number.POSITIVE_INFINITY;
-  const target = Date.UTC(year, month - 1, day);
-  const today = new Date();
-  const current = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.round((target - current) / 86_400_000);
-}
-
-function dueCopy(value: string): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
-  const days = daysUntil(value);
-  if (days < 0) return { text: `${Math.abs(days)} dni po terminie`, tone: "danger" };
-  if (days === 0) return { text: "Dzisiaj", tone: "danger" };
-  if (days === 1) return { text: "Jutro", tone: "warning" };
-  if (days <= 7) return { text: `Za ${days} dni`, tone: "warning" };
-  return { text: formatDate(value), tone: "neutral" };
-}
-
-function documentDueCopy(document: DocumentRecord): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
-  if (!document.expiresAt) return { text: "Bezterminowy", tone: "neutral" };
-  const days = daysUntil(document.expiresAt);
-  if (days < 0) return { text: `Nieważny od ${Math.abs(days)} dni`, tone: "danger" };
-  if (days === 0) return { text: "Wygasa dzisiaj", tone: "danger" };
-  if (days <= document.reminderDays) return { text: days === 1 ? "Wygasa jutro" : `Wygasa za ${days} dni`, tone: "warning" };
-  return { text: formatDate(document.expiresAt), tone: "neutral" };
-}
-
-function formatMileage(value: number): string {
-  return `${new Intl.NumberFormat("pl-PL").format(value)} km`;
-}
-
-function vehicleItemDueCopy(item: VehicleItem, vehicle: Vehicle): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
-  if (item.done) return { text: "Zrobione", tone: "success" };
-  const dateDays = item.dueDate ? daysUntil(item.dueDate) : Number.POSITIVE_INFINITY;
-  const mileageLeft = item.dueMileage === null ? Number.POSITIVE_INFINITY : item.dueMileage - vehicle.mileage;
-
-  if (dateDays < 0) return { text: `${Math.abs(dateDays)} dni po terminie`, tone: "danger" };
-  if (mileageLeft <= 0) return { text: "Przebieg przekroczony", tone: "danger" };
-  if (dateDays <= 30) return dueCopy(item.dueDate);
-  if (mileageLeft <= 1_000) return { text: `Za ${formatMileage(mileageLeft)}`, tone: "warning" };
-  if (item.dueDate) return { text: formatDate(item.dueDate), tone: "neutral" };
-  return { text: `Przy ${formatMileage(item.dueMileage ?? 0)}`, tone: "neutral" };
-}
-
-function shiftMonthKey(value: string, offset: number): string {
-  const date = new Date(`${value}-01T12:00:00`);
-  date.setMonth(date.getMonth() + offset);
-  return getMonthKey(date);
-}
+import {
+  BUDGET_KIND_LABELS,
+  CADENCE_LABELS,
+  CATEGORY_META,
+  DOCUMENT_LABELS,
+  EMPTY_DRAFT,
+  NAV_GROUPS,
+  NAV_ITEMS,
+  STATUS_LABELS,
+  UPCOMING_ICONS,
+  VEHICLE_ITEM_LABELS,
+  VIEW_COPY,
+  daysUntil,
+  documentDueCopy,
+  dueCopy,
+  formatDate,
+  formatMileage,
+  formatMoney,
+  formatMonth,
+  getInitialView,
+  shiftMonthKey,
+  vehicleItemDueCopy,
+  type AffairsView,
+  type DeleteState,
+  type Draft,
+  type EditorState,
+} from "../affairs/affairsPresentation";
 
 export default function Sprawy() {
   const [workspace, setWorkspace] = useState(loadAffairsWorkspace);
@@ -971,10 +740,6 @@ export default function Sprawy() {
 
   const contextSidebar = (
     <ContextSidebar label="Widoki spraw" className="affairs-sidebar">
-      <div className="affairs-sidebar__heading">
-        <span>Organizacja</span>
-        <strong>Sprawy i JDG</strong>
-      </div>
       <nav className="affairs-sidebar__nav">
         {NAV_GROUPS.map((group) => (
           <section key={group.label}>

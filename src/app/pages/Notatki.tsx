@@ -692,16 +692,6 @@ export default function Notatki() {
 
   const contextSidebar = (
     <ContextSidebar label="Widoki notatek" className="notes-sidebar">
-      <div className="notes-sidebar__heading">
-        <div>
-          <span>Biblioteka</span>
-          <strong>{activeNotes.length} aktywnych</strong>
-        </div>
-        <Button variant="ghost" size="sm" iconOnly aria-label="Nowa notatka" onClick={() => openNewNote()}>
-          <Plus size={13} />
-        </Button>
-      </div>
-
       <div className="notes-sidebar__nav">
         <p className="notes-sidebar__label">Główne</p>
         <ContextNavItem active={view === "all"} icon={<LayoutGrid />} label="Wszystkie" meta={activeNotes.length} onClick={() => selectView("all")} />

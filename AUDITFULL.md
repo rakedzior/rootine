@@ -1,5 +1,9 @@
 # Rootine full product, UX, design-system, and frontend audit
 
+## Current IA decision (2026-07-28)
+
+`Biuro` and `Finanse` are retired as top-level tabs. Their capabilities live in the canonical `Praca` and `Sprawy` workspaces, so neither label is present in the app navigation or module settings. Legacy URLs remain as invisible compatibility redirects (`/biuro` → `/praca`, `/finanse` → `/sprawy?widok=budget`) to protect existing bookmarks.
+
 **Audit date:** 2026-07-28  
 **Branch:** `AUDITFULL`  
 **Audited revision:** `cb3cad38002be22d5c6a56910360623d0a777461`  
@@ -797,26 +801,31 @@ These are high-leverage changes that do not require the full architecture progra
 
 ## 11. Remediation addendum
 
-Implementation completed on branch `AUDITFULL` on 2026-07-28.
+Local implementation was completed on branch `AUDITFULL` on 2026-07-28.
 
 ### Outcome
 
-- **52 findings resolved:** `AUD-001`–`AUD-019`, `AUD-021`–`AUD-024`, and `AUD-026`–`AUD-054`.
-- **2 findings materially mitigated:** `AUD-020` and `AUD-055`.
-- **1 deployment verification pending:** `AUD-025`.
+- **54 findings fully resolved locally.**
+- **`AUD-025` implementation complete; production verification pending.**
+- **All code-side work from the 55 findings is complete.**
 
-`AUD-020` is mitigated through route-level loading/error ownership, removal of orphan and duplicate sources, shared primitives, normalized tokens, and stronger lint/test coverage. Further decomposition of the largest page modules and the remaining global CSS is a maintainability follow-up, not a release blocker.
+`AUD-020` is now resolved rather than mitigated. The largest route entrypoints were decomposed into domain models and view modules, every audited page entrypoint is below the enforced 1,800-line ceiling, and route-owned CSS is emitted with lazy route chunks. `Zadania.tsx` fell from more than 3,100 lines to 1,354, `Cele.tsx` to 600, and the global `app.css` from 5,954 lines to 1,288 lines (27,970 bytes). `npm run architecture:audit` enforces these budgets and route CSS ownership in CI.
 
-`AUD-055` is mitigated through deduplicated writes, debounced editor persistence with lifecycle flushes, timer isolation, quota/error visibility, and transactional backup/recovery. IndexedDB migration remains a future scaling option for substantially larger histories or binary data.
+`AUD-055` is now resolved. Canonical large workspace payloads live in IndexedDB behind atomic compare-and-swap revisions and content hashes. LocalStorage contains compact manifests and preferences. The repository includes legacy migration, conflict drafts, late-hydration protection, quota/permission classification, cleanup of evicted recovery payloads, transactional backup/import, persistent-storage controls, and coalesced Sport writes with lifecycle flushes.
 
-`AUD-025` is code-complete: a production API proxy, environment contract, failure handling, and supporting documentation are present. The final production smoke test requires the target hosting environment and therefore cannot be certified from this local workspace.
+The final independent diff review also closed five race/semantics gaps: queued edits are serialized and rebased per workspace, chained IndexedDB fallbacks retain the newest inline draft, lifecycle and export paths drain pending writes, timestamps with offsets are compared chronologically, and recurring-task details distinguish one occurrence from the whole series for completion, editing, and deletion.
+
+`AUD-025` is code-complete: the repository includes a tested Vercel Edge proxy, validation, cache policy, per-client throttling, explicit online search UX, environment and deployment contracts, and `npm run smoke:production -- <url>`. The remaining acceptance step is to run that smoke test against the real deployment URL; no production target or credentials were available in this workspace.
 
 ### Verification evidence
 
-- `npm run check`: passed, including ESLint, TypeScript, CSS lint, 59 unit/component tests, and production build.
-- Playwright: 30/30 end-to-end tests passed across desktop and mobile, including strict axe accessibility checks, navigation, focus management, drawers/modals, and persistence.
-- `npm audit --omit=dev`: 0 known vulnerabilities.
-- CI workflow added for the same quality and end-to-end gates.
-- Recovery import is validated transactionally, with rollback, corrupt-data quarantine, quota feedback, and full-workspace export.
+- `npm run check`: passed with zero ESLint warnings, TypeScript checks for app and API, Stylelint, architecture budgets, 99 unit/component/API tests, and the production build.
+- Playwright: **40/40** end-to-end tests passed at 1440, 1024, 768, and 390 px, including axe checks, overflow, navigation, focus management, offline/429 behavior, chunk failure, corrupt storage, write failure, and native IndexedDB persistence.
+- The persistence reload test additionally passed **5/5 repeated Chrome runs** after the hydration-race fix.
+- Open Food Facts proxy tests: **9/9**.
+- `npm audit --omit=dev`: **0 known vulnerabilities**.
+- `git diff --check`: passed.
+- Local development server: `http://localhost:5173` returned HTTP 200.
+- CI runs the same lint, type, CSS, architecture, test, build, and browser gates.
 
-The original findings and recommendations above remain as the pre-remediation audit record; this addendum is the implementation ledger.
+The original findings and recommendations above remain as the pre-remediation audit record; this addendum is the final local implementation ledger.
