@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { formatDate as formatPolishDate } from "../formatters";
 import {
   AFFAIRS_STORAGE_KEY,
   advancePaymentDateToFuture,
@@ -66,6 +67,7 @@ import {
   SectionHeader,
   Select,
   WorkspaceToolbar,
+  AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
 
@@ -791,7 +793,7 @@ export default function Sprawy() {
         <dl className="affairs-detail__facts">
           <div><dt>Obszar</dt><dd>{CATEGORY_META[selectedMatter.category].label}</dd></div>
           <div><dt>Termin</dt><dd>{formatDate(selectedMatter.dueDate)}</dd></div>
-          <div><dt>Dodano</dt><dd>{new Date(selectedMatter.createdAt).toLocaleDateString("pl-PL")}</dd></div>
+          <div><dt>Dodano</dt><dd>{formatPolishDate(selectedMatter.createdAt)}</dd></div>
         </dl>
         <section className="affairs-detail__note">
           <h3>Kontekst</h3>
@@ -877,17 +879,41 @@ export default function Sprawy() {
     };
   })() : null;
 
+  if (view === "jdg") {
+    return (
+      <JdgWorkspace
+        layout={(header, content) => (
+          <ModuleShell
+            contextSidebar={contextSidebar}
+            className="affairs-module"
+            pageWidth="wide"
+            header={header}
+          >
+            <ModuleMain>{content}</ModuleMain>
+          </ModuleShell>
+        )}
+      />
+    );
+  }
+
+  const pageHeader = (
+    <PageHeader
+      title={VIEW_COPY[view].title}
+      description={VIEW_COPY[view].description}
+      meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+      actions={renderPrimaryAction()}
+    />
+  );
+
   return (
-    <ModuleShell contextSidebar={contextSidebar} detailPanel={detailPanel} className="affairs-module">
+    <ModuleShell
+      contextSidebar={contextSidebar}
+      detailPanel={detailPanel}
+      className="affairs-module"
+      pageWidth="wide"
+      header={pageHeader}
+    >
       <ModuleMain>
-        {view === "jdg" ? <JdgWorkspace /> : (
-          <>
-        <PageHeader
-          title={VIEW_COPY[view].title}
-          description={VIEW_COPY[view].description}
-          meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={renderPrimaryAction()}
-        />
         <WorkspaceToolbar className="affairs-toolbar">
           <Select
             compact
@@ -1099,7 +1125,17 @@ export default function Sprawy() {
                     <Badge tone={matter.status === "done" ? "success" : matter.status === "waiting" ? "warning" : matter.priority === "high" ? "danger" : "primary"} dot>
                       {STATUS_LABELS[matter.status]}
                     </Badge>
-                    <ChevronRight size={13} aria-hidden="true" />
+                    <AddToTasksButton compact input={{
+                      source: { kind: "affairs", entity: `${encodeURIComponent(matter.id)}/matter`, context: "Sprawy", href: "/sprawy?widok=matters" },
+                      text: matter.title,
+                      done: matter.status === "done",
+                      calendarDate: matter.dueDate || undefined,
+                      date: matter.dueDate || undefined,
+                      priority: matter.priority === "normal" ? undefined : matter.priority,
+                      list: "sprawy",
+                      tags: ["sprawy"],
+                      notes: matter.note,
+                    }} />
                   </div>
                 );
               })}
@@ -1138,6 +1174,16 @@ export default function Sprawy() {
                       <Badge tone={payment.paid ? "success" : due.tone}>{payment.paid ? "Opłacone" : due.text}</Badge>
                       <strong className="affairs-payment-row__amount">{formatMoney(payment.amount)}</strong>
                       <span className="affairs-payment-row__actions">
+                        <AddToTasksButton compact input={{
+                          source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Sprawy", href: "/sprawy?widok=oneTime" },
+                          text: payment.title,
+                          done: payment.paid,
+                          calendarDate: payment.dueDate,
+                          date: payment.dueDate,
+                          list: "sprawy",
+                          tags: ["sprawy", "płatność"],
+                          notes: payment.note,
+                        }} />
                         <Button
                           variant="quiet"
                           size="sm"
@@ -1197,6 +1243,15 @@ export default function Sprawy() {
                     <Badge tone={payment.active ? due.tone : "neutral"}>{payment.active ? due.text : "Wstrzymana"}</Badge>
                     <strong className="affairs-payment-row__amount">{formatMoney(payment.amount)}</strong>
                     <span className="affairs-payment-row__actions">
+                      <AddToTasksButton compact input={{
+                        source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/recurring`, context: "Sprawy", href: "/sprawy?widok=payments" },
+                        text: payment.name,
+                        done: false,
+                        calendarDate: payment.nextDueDate,
+                        date: payment.nextDueDate,
+                        list: "sprawy",
+                        tags: ["sprawy", "płatność"],
+                      }} />
                       {payment.active && !payment.automatic && (
                         <Button
                           variant="quiet"
@@ -1276,6 +1331,15 @@ export default function Sprawy() {
                       <Badge tone={subscription.active ? due.tone : "neutral"}>{subscription.active ? due.text : "Wstrzymana"}</Badge>
                       <strong className="affairs-payment-row__amount">{formatMoney(subscription.amount)}</strong>
                       <span className="affairs-payment-row__actions">
+                        <AddToTasksButton compact input={{
+                          source: { kind: "affairs", entity: `${encodeURIComponent(subscription.id)}/subscription`, context: "Sprawy", href: "/sprawy?widok=subscriptions" },
+                          text: subscription.name,
+                          done: false,
+                          calendarDate: subscription.nextBillingDate,
+                          date: subscription.nextBillingDate,
+                          list: "sprawy",
+                          tags: ["sprawy", "subskrypcja"],
+                        }} />
                         {subscription.active && subscription.renewal === "manual" && (
                           <Button
                             variant="quiet"
@@ -1550,8 +1614,6 @@ export default function Sprawy() {
             </div>
           )}
         </div>
-          </>
-        )}
       </ModuleMain>
 
       {editor && (

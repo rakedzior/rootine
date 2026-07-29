@@ -2,20 +2,22 @@
 
 .nutrition-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   align-items: start;
-  gap: var(--space-xl);
+  gap: var(--space-lg);
   width: 100%;
 }
 
 .nutrition-summary {
+  position: sticky;
+  top: var(--space-lg);
   display: grid;
   gap: var(--space-xl);
 }
 
 .nutrition-ledger-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 820px;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -958,12 +960,13 @@
   background: var(--color-danger-coral);
 }
 
-@media (max-width: 1500px) {
+@media (max-width: 1380px) {
   .nutrition-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .nutrition-summary {
+    position: static;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

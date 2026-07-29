@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -37,16 +38,35 @@ function useMediaQuery(query: string) {
 }
 
 export interface ModuleShellProps extends HTMLAttributes<HTMLDivElement> {
+  header?: ReactNode;
   contextSidebar?: ReactNode;
   detailPanel?: ReactNode;
+  pageWidth?: PageWidth;
 }
 
-export function ModuleShell({ contextSidebar, detailPanel, children, className, ...props }: ModuleShellProps) {
+export type PageWidth = "reading" | "standard" | "wide" | "canvas";
+
+export function ModuleShell({
+  header,
+  contextSidebar,
+  detailPanel,
+  pageWidth = "standard",
+  children,
+  className,
+  ...props
+}: ModuleShellProps) {
   return (
-    <div className={cx("ui-module-shell", className)} {...props}>
-      {contextSidebar}
-      {children}
-      {detailPanel}
+    <div
+      className={cx("ui-module-shell", className)}
+      data-page-width={pageWidth}
+      {...props}
+    >
+      {header && <div className="ui-module-shell__header">{header}</div>}
+      <div className="ui-module-shell__body">
+        {contextSidebar}
+        {children}
+        {detailPanel}
+      </div>
     </div>
   );
 }
@@ -57,12 +77,90 @@ export function ModuleMain({ className, ...props }: ModuleMainProps) {
   return <main className={cx("ui-module-main", className)} {...props} />;
 }
 
-export interface ContextSidebarProps extends HTMLAttributes<HTMLElement> {
-  label: string;
+export interface PageContainerProps extends HTMLAttributes<HTMLDivElement> {
+  width?: PageWidth;
+  padding?: "none" | "compact" | "default";
 }
 
-export function ContextSidebar({ label, className, ...props }: ContextSidebarProps) {
-  return <aside aria-label={label} className={cx("ui-context-sidebar", className)} {...props} />;
+export function PageContainer({
+  width = "standard",
+  padding = "default",
+  className,
+  ...props
+}: PageContainerProps) {
+  return (
+    <div
+      className={cx("ui-page-container", className)}
+      data-page-width={width}
+      data-page-padding={padding}
+      {...props}
+    />
+  );
+}
+
+export type PageLayoutProps = PageContainerProps;
+
+export function PageLayout(props: PageLayoutProps) {
+  return <PageContainer {...props} />;
+}
+
+export interface ContextSidebarProps extends HTMLAttributes<HTMLElement> {
+  label: string;
+  collapsible?: boolean;
+  storageKey?: string;
+}
+
+export function ContextSidebar({
+  label,
+  collapsible = true,
+  storageKey,
+  className,
+  children,
+  ...props
+}: ContextSidebarProps) {
+  const preferenceKey = storageKey ?? `routine.context-sidebar.${encodeURIComponent(label)}.collapsed`;
+  const [collapsed, setCollapsed] = useState(() => {
+    if (!collapsible || typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(preferenceKey) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (!collapsible) return;
+    try {
+      window.localStorage.setItem(preferenceKey, String(collapsed));
+    } catch {
+      // The preference is optional; navigation remains available without storage.
+    }
+  }, [collapsed, collapsible, preferenceKey]);
+
+  const CollapseIcon = collapsed ? ChevronRight : ChevronLeft;
+
+  return (
+    <aside
+      aria-label={label}
+      className={cx("ui-context-sidebar", collapsed && "is-collapsed", className)}
+      data-collapsed={collapsed || undefined}
+      {...props}
+    >
+      {collapsible && (
+        <button
+          type="button"
+          className="ui-context-sidebar__collapse"
+          aria-label={collapsed ? `Rozwiń: ${label}` : `Zwiń: ${label}`}
+          title={collapsed ? `Rozwiń: ${label}` : `Zwiń: ${label}`}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((current) => !current)}
+        >
+          <CollapseIcon size={14} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      )}
+      {children}
+    </aside>
+  );
 }
 
 export interface ContextNavItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {

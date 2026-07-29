@@ -32,6 +32,7 @@ import {
   Input,
   SectionHeader,
   Select,
+  AddToTasksButton,
 } from "../ui";
 import {
   DAY_LABELS,
@@ -846,7 +847,7 @@ export function SportAnalysis({ history }: { history: WorkoutHistoryEntry[] }) {
                 {weeks.map((week) => (
                   <div key={week.key} title={`${formatShortDate(week.key)}–${formatShortDate(week.end)}: ${week.minutes} min, ${week.count} treningów`}>
                     <span>{week.minutes || "0"}</span>
-                    <div><i style={{ height: `${Math.max(week.minutes ? 8 : 2, (week.minutes / maxMinutes) * 100)}%` }} /></div>
+                    <div><i style={{ transform: `scaleY(${Math.max(week.minutes ? 8 : 2, (week.minutes / maxMinutes) * 100) / 100})` }} /></div>
                     <small>{formatShortDate(week.key)}</small>
                   </div>
                 ))}
@@ -990,6 +991,22 @@ export function WorkoutDetailPanel({
         )}
       </div>
       <div className="sport-workout-detail__actions">
+        <AddToTasksButton compact input={{
+          source: {
+            kind: "sport",
+            entity: `${encodeURIComponent(cycle.id)}/${encodeURIComponent(workout.id)}`,
+            context: `${cycle.name} · tydzień ${workout.week}`,
+            href: `/sport?widok=cycle&tydzien=${workout.week}`,
+          },
+          text: workout.title,
+          done: outcome?.status === "completed",
+          calendarDate: date,
+          date,
+          time: workout.time,
+          list: "sport",
+          tags: ["sport"],
+          notes: workout.note,
+        }} />
         {active ? (
           <Button variant="primary" leadingIcon={<Play size={13} />} onClick={onStart}>
             Wznów trening

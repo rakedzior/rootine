@@ -65,7 +65,17 @@ export default function CelSzczegoly() {
   const menuId = useId();
 
   if (!goal) {
-    return <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}><Target size={38} strokeWidth={1.2} /><h1 className="text-[22px] font-semibold" style={{ color: C.textPrimary }}>Nie znaleziono celu</h1><Button variant="primary" onClick={() => navigate("/cele")}>Wróć do celów</Button></div>;
+    return (
+      <ModuleShell pageWidth="reading">
+        <ModuleMain>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}>
+            <Target size={38} strokeWidth={1.2} />
+            <h1 className="text-[22px] font-semibold" style={{ color: C.textPrimary }}>Nie znaleziono celu</h1>
+            <Button variant="primary" onClick={() => navigate("/cele")}>Wróć do celów</Button>
+          </div>
+        </ModuleMain>
+      </ModuleShell>
+    );
   }
 
   const progress = getGoalProgress(goal);
@@ -86,10 +96,8 @@ export default function CelSzczegoly() {
 
   const submitEdit = (data: GoalEditorData) => { store.updateGoal(goal.id, data); setEditOpen(false); };
 
-  return (
-    <ModuleShell>
-      <ModuleMain>
-      <PageHeader
+  const pageHeader = (
+    <PageHeader
         title={goal.title}
         description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
         leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
@@ -100,7 +108,12 @@ export default function CelSzczegoly() {
           <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-44"><MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "archived" ? "active" : "archived" }); setMenuOpen(false); }} leadingIcon={goal.status === "archived" ? <RotateCcw /> : <Archive />}>{goal.status === "archived" ? "Przywróć" : "Archiwizuj"}</MenuItem><MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem><MenuItem tone="danger" onClick={() => { setDeleteGoalOpen(true); setMenuOpen(false); }} leadingIcon={<Trash2 />}>Usuń</MenuItem></Menu>}</div>
         </>}
         below={<Tabs id="goal-detail-tabs" ariaLabel="Sekcje celu" activeId={tab} onChange={(id) => setTab(id as TabId)} items={tabs.map(({ id, label, icon: Icon, count }) => ({ id, tabId: `goal-tab-${id}`, panelId: `goal-panel-${id}`, label: <span className="flex items-center gap-1.5"><Icon size={12} />{label}{count !== undefined && <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: C.inputBg }}>{count}</span>}</span> }))} />}
-      />
+    />
+  );
+
+  return (
+    <ModuleShell pageWidth="reading" header={pageHeader}>
+      <ModuleMain>
 
       <div className="goals-content flex-1 overflow-y-auto px-7 py-5">
         <div className="mx-auto max-w-[1100px]">

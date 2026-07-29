@@ -2,6 +2,7 @@ import { test, expect, openRoutineRoute } from "./fixtures";
 
 const NUTRITION_STORAGE_KEY = "rootine.nutrition-workspace.v1";
 const RECOVERY_INDEX_KEY = "rootine.recovery.index.v1";
+const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
 
 async function expectNoDocumentOverflow(page: Parameters<typeof openRoutineRoute>[0]) {
   await expect.poll(
@@ -40,6 +41,47 @@ test.describe("production viewport matrix", { tag: "@viewport" }, () => {
 });
 
 test.describe("browser runtime validation", { tag: "@desktop" }, () => {
+  test("task workspace remains usable for 0, 1, 5, 20 and 100 long records", async ({ routinePage: page }) => {
+    await openRoutineRoute(page, "/zadania");
+
+    for (const count of [0, 1, 5, 20, 100]) {
+      await test.step(`${count} records`, async () => {
+        await page.evaluate(({ key, recordCount }) => {
+          const tasks = Array.from({ length: recordCount }, (_, index) => ({
+            id: 900_000 + index,
+            text: `Wolumen ${String(index + 1).padStart(3, "0")} · ${"bardzo-długi-tytuł-zadania-".repeat(index === recordCount - 1 ? 5 : 1)}`,
+            done: false,
+            view: "dzis",
+            priority: index % 3 === 0 ? "high" : index % 3 === 1 ? "medium" : "low",
+            tags: index % 2 === 0 ? ["wolumen-testowy-z-bardzo-długą-nazwą"] : [],
+            notes: index === recordCount - 1 ? "Długi opis ".repeat(20) : "",
+          }));
+          window.localStorage.setItem(key, JSON.stringify({
+            version: 2,
+            updatedAt: new Date().toISOString(),
+            tasks,
+            habits: [],
+            lists: [],
+            tags: [{ id: "wolumen-testowy-z-bardzo-długą-nazwą", label: "wolumen-testowy-z-bardzo-długą-nazwą", color: "#A0A0A0" }],
+          }));
+        }, { key: TASK_STORAGE_KEY, recordCount: count });
+        await page.reload();
+        await expect(page.locator(".ui-page-header__title")).toHaveText("Zadania");
+        await expect(page.getByRole("button", { name: /^Otwórz szczegóły zadania: Wolumen/ })).toHaveCount(count);
+        await expectNoDocumentOverflow(page);
+
+        if (count > 0) {
+          const lastTask = page.getByRole("button", { name: /^Otwórz szczegóły zadania: Wolumen/ }).last();
+          await lastTask.scrollIntoViewIfNeeded();
+          await expect(lastTask).toBeVisible();
+          await lastTask.click();
+          await expect(page.getByRole("complementary", { name: "Szczegóły zadania" })).toBeVisible();
+          await page.keyboard.press("Escape");
+        }
+      });
+    }
+  });
+
   test("representative routes render without console or uncaught runtime errors", async ({ routinePage: page }) => {
     const runtimeErrors: string[] = [];
     page.on("console", (message) => {

@@ -70,10 +70,12 @@
 
 .task-habits-progress__track > i {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--color-precision-blue);
-  transition: width 500ms var(--ease-out);
+  transform-origin: left center;
+  transition: transform 500ms var(--ease-out);
 }
 
 .task-habits-add {

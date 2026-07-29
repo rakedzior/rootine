@@ -27,6 +27,10 @@ import {
   type VehicleItem,
   type VehicleItemType,
 } from "../data/affairsWorkspace";
+import {
+  formatCurrency,
+  formatDate as formatPolishDate,
+} from "../formatters";
 
 export type AffairsView =
   | "overview"
@@ -213,9 +217,9 @@ export function getInitialView(): AffairsView {
 }
 
 export function formatDate(value: string): string {
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value || "Bez terminu";
-  return date.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
+  if (!value) return "Bez terminu";
+  const formatted = formatPolishDate(value);
+  return formatted === "—" ? value : formatted;
 }
 
 export function formatMonth(value: string): string {
@@ -224,11 +228,7 @@ export function formatMonth(value: string): string {
 }
 
 export function formatMoney(value: number): string {
-  return new Intl.NumberFormat("pl-PL", {
-    style: "currency",
-    currency: "PLN",
-    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
-  }).format(value);
+  return formatCurrency(value);
 }
 
 export function daysUntil(value: string): number {

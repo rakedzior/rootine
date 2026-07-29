@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   CalendarDays, ChevronLeft, ChevronRight,
-  Plus, Printer,
+  Plus, Printer, X,
 } from "lucide-react";
 import { TaskDetail } from "./tasks/TaskViews";
+import {
+  CALENDAR_SOURCE_STORAGE_KEYS,
+  loadCalendarOccurrenceSources,
+  selectCalendarOccurrences,
+  type CalendarOccurrence,
+  type CalendarOccurrenceStatusKey,
+} from "../data/calendarOccurrences";
 import { persistTaskCompletion } from "../data/taskCompletion";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
@@ -11,15 +18,12 @@ import {
   setTaskOccurrenceCompletion,
   type TaskOccurrence,
 } from "../data/taskSchedule";
-import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
-import { WORK_STORAGE_KEY } from "../data/workWorkspace";
 import {
   isCalendarTask,
   loadTaskWorkspace,
   replaceCalendarTasks,
   restoreTask,
   saveTaskWorkspace,
-  TASK_STORAGE_KEY,
   taskViewForCalendarDate,
   trashTask,
   type WorkspaceList as ListItem,
@@ -53,6 +57,7 @@ const C = {
   blueSignal: uiColors.precisionBlue,
   blueText: uiColors.precisionBlueText,
   blueSoft: uiColors.precisionBlueSoft,
+  panel: uiColors.graphitePanel,
   hover: uiColors.graphiteHover,
 } as const;
 
@@ -63,7 +68,6 @@ const MONTHS = [
 const WEEKDAYS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
 
 type CalendarEvent = Task & { calendarDate: string };
-type CalendarOccurrence = TaskOccurrence;
 
 const dateKey = (year: number, month: number, day: number) =>
   `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -110,55 +114,73 @@ function shiftCalendarDate(calendarDate: string, amount: number) {
   return dateKey(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
+function occurrenceStatusTone(status: CalendarOccurrenceStatusKey) {
+  if (status === "completed") return "success" as const;
+  if (status === "incomplete" || status === "waiting" || status === "in_progress") return "warning" as const;
+  if (status === "missed") return "danger" as const;
+  if (status === "automatic") return "neutral" as const;
+  return "primary" as const;
+}
+
+const currencyFormatter = new Intl.NumberFormat("pl-PL", {
+  style: "currency",
+  currency: "PLN",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onDragStart, onDragEnd }: {
   event: CalendarOccurrence;
   dragging: boolean;
   onClick: (trigger: HTMLButtonElement) => void;
-  onToggle: () => void;
-  onMoveByDay: (amount: number) => void;
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
+  onToggle?: () => void;
+  onMoveByDay?: (amount: number) => void;
+  onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
 }) {
-  const sourceLabel = event.source?.kind === "work" ? "Praca" : event.source ? "Podróże" : null;
-  const virtual = event.occurrence.virtual;
+  const task = event.kind === "task" ? event.task : null;
+  const virtual = task?.occurrence.virtual ?? false;
+  const draggable = Boolean(task && !virtual);
   return (
     <div
       role="group"
-      aria-label={`Zadanie: ${event.text || "bez nazwy"}${virtual ? "; wystąpienie zadania cyklicznego" : ""}${event.source ? `; źródło ${sourceLabel}: ${event.source.context}` : ""}`}
-      className="calendar-event"
-      draggable={!virtual}
-      aria-grabbed={virtual ? undefined : dragging}
-      onDragStart={virtual ? undefined : onDragStart}
-      onDragEnd={virtual ? undefined : onDragEnd}
+      aria-label={`${event.source.label}: ${event.title || "bez nazwy"}; status ${event.status.label}${virtual ? "; wystąpienie cykliczne" : ""}${event.source.context ? `; ${event.source.context}` : ""}`}
+      className={`calendar-event ${task ? "" : "calendar-event--readonly"}`}
+      draggable={draggable}
+      aria-grabbed={draggable ? dragging : undefined}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
       style={{
         width: "100%", minWidth: 0, display: "flex", alignItems: "center", gap: 4,
         border: "none", borderRadius: 4, padding: "0 5px",
-        background: C.blueSoft, color: C.text, textAlign: "left",
-        fontSize: 11, lineHeight: 1.25, overflow: "hidden", cursor: virtual ? "default" : dragging ? "grabbing" : "grab",
+        background: task ? C.blueSoft : C.panel, color: C.text, textAlign: "left",
+        fontSize: 11, lineHeight: 1.25, overflow: "hidden", cursor: draggable ? dragging ? "grabbing" : "grab" : "default",
         opacity: dragging ? 0.48 : 1, transition: "background-color 140ms ease-out, opacity 140ms ease-out",
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = C.hover; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = C.blueSoft; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = task ? C.blueSoft : C.panel; }}
     >
+      {task && onToggle && (
+        <button
+          type="button"
+          aria-label={event.status.completed ? "Oznacz jako niewykonane" : "Oznacz jako wykonane"}
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          onKeyDown={(e) => e.stopPropagation()}
+          className={`task-checkbox task-checkbox--compact ${event.status.completed ? "is-checked" : ""}`}
+          style={{ "--task-checkbox-color": event.status.completed ? C.blueText : C.second } as React.CSSProperties}
+        >
+          {event.status.completed && <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+        </button>
+      )}
       <button
         type="button"
-        aria-label={event.done ? "Oznacz jako niewykonane" : "Oznacz jako wykonane"}
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        onKeyDown={(e) => e.stopPropagation()}
-        className={`task-checkbox task-checkbox--compact ${event.done ? "is-checked" : ""}`}
-        style={{ "--task-checkbox-color": event.done ? C.blueText : C.second } as React.CSSProperties}
-      >
-        {event.done && <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700 }}>✓</span>}
-      </button>
-      <button
-        type="button"
-        data-calendar-event-id={event.id}
-        aria-label={`Otwórz zadanie ${event.text || "bez nazwy"}`}
-        aria-describedby={virtual ? undefined : "calendar-keyboard-move-instructions"}
-        aria-keyshortcuts={virtual ? undefined : "Alt+ArrowLeft Alt+ArrowRight"}
+        data-calendar-event-id={task?.id ?? event.key}
+        aria-label={`Otwórz szczegóły: ${event.title || "bez nazwy"}`}
+        aria-describedby={draggable ? "calendar-keyboard-move-instructions" : undefined}
+        aria-keyshortcuts={draggable ? "Alt+ArrowLeft Alt+ArrowRight" : undefined}
         onClick={(e) => { e.stopPropagation(); onClick(e.currentTarget); }}
         onKeyDown={(keyboardEvent) => {
-          if (virtual) return;
+          if (!draggable || !onMoveByDay) return;
           if (!keyboardEvent.altKey || (keyboardEvent.key !== "ArrowLeft" && keyboardEvent.key !== "ArrowRight")) return;
           keyboardEvent.preventDefault();
           keyboardEvent.stopPropagation();
@@ -167,9 +189,9 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
         className="flex min-h-6 min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left"
         style={{ color: "inherit", cursor: "pointer" }}
       >
-        <span title={event.text} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.done ? "line-through" : "none", opacity: event.done ? 0.6 : 1 }}>{event.text}</span>
+        <span title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
         {virtual && <span aria-hidden="true" title="Wystąpienie cykliczne" style={{ color: C.blueText, flexShrink: 0 }}>↻</span>}
-        {sourceLabel && <span style={{ flexShrink: 0, fontSize: 8, color: C.muted }}>{sourceLabel}</span>}
+        <span style={{ flexShrink: 0, fontSize: 9, color: C.second }}>{event.source.label}</span>
         {event.time && <span style={{ fontFamily: "var(--font-data)", fontSize: 9, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
       </button>
     </div>
@@ -179,12 +201,14 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
 export default function Kalendarz() {
   const now = new Date();
   const [initialWorkspace] = useState(loadTaskWorkspace);
+  const [occurrenceSources, setOccurrenceSources] = useState(loadCalendarOccurrenceSources);
   const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isCalendarTask));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedOccurrenceDate, setSelectedOccurrenceDate] = useState<string | null>(null);
+  const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [anchorDateKey, setAnchorDateKey] = useState<string | null>(null);
   const [detailPosition, setDetailPosition] = useState({ left: 8, top: 73, width: 440, height: 400, ready: false });
@@ -199,7 +223,7 @@ export default function Kalendarz() {
   const agendaMenuRef = useRef<HTMLDivElement>(null);
   const agendaTriggerRef = useRef<HTMLButtonElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
-  const detailInitialFocusIdRef = useRef<number | null>(null);
+  const detailInitialFocusIdRef = useRef<string | null>(null);
   const pendingKeyboardMoveRef = useRef<{ id: number; dateKey: string } | null>(null);
   const trashUndoTimerRef = useRef<number | null>(null);
   const workspaceRef = useRef(initialWorkspace);
@@ -221,17 +245,16 @@ export default function Kalendarz() {
   useEffect(() => {
     const syncWorkspace = () => {
       const nextWorkspace = loadTaskWorkspace();
+      setOccurrenceSources(loadCalendarOccurrenceSources());
       workspaceRef.current = nextWorkspace;
       setEvents(nextWorkspace.tasks.filter(isCalendarTask));
       setLists(nextWorkspace.lists);
       setTags(nextWorkspace.tags);
       setSelectedId((current) => current !== null && nextWorkspace.tasks.some((task) => task.id === current && isCalendarTask(task)) ? current : null);
     };
-    const unsubscribers = [
-      subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace),
-      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkspace),
-      subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, syncWorkspace),
-    ];
+    const unsubscribers = CALENDAR_SOURCE_STORAGE_KEYS.map((key) => (
+      subscribeToLocalWorkspace(key, syncWorkspace)
+    ));
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, []);
 
@@ -244,18 +267,21 @@ export default function Kalendarz() {
     const first = cells[0];
     const last = cells.at(-1);
     if (!first || !last) return [] as CalendarOccurrence[];
-    return projectTaskOccurrences(
-      events,
+    return selectCalendarOccurrences(
+      { ...occurrenceSources, tasks: events },
       dateKey(first.year, first.month, first.day),
       dateKey(last.year, last.month, last.day),
-    ).filter((event) => !event.deleted);
-  }, [cells, events]);
+    );
+  }, [cells, events, occurrenceSources]);
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarOccurrence[]>();
     visibleOccurrences.forEach((event) => grouped.set(event.calendarDate, [...(grouped.get(event.calendarDate) ?? []), event]));
     return grouped;
   }, [visibleOccurrences]);
   const selectedTask = selectedId === null ? null : events.find((event) => event.id === selectedId && !event.deleted) ?? null;
+  const selectedExternalOccurrence = selectedExternalKey === null
+    ? null
+    : visibleOccurrences.find((occurrence) => occurrence.kind !== "task" && occurrence.key === selectedExternalKey) ?? null;
   const selectedVirtualOccurrence = useMemo(() => {
     if (!selectedTask || !selectedOccurrenceDate) return null;
     return projectTaskOccurrences(
@@ -264,7 +290,9 @@ export default function Kalendarz() {
       selectedOccurrenceDate,
     ).find((occurrence) => occurrence.occurrence.virtual) ?? null;
   }, [selectedOccurrenceDate, selectedTask]);
-  const selectedTaskId = selectedTask?.id ?? null;
+  const selectedDetailId = selectedTask
+    ? `task:${selectedTask.id}`
+    : selectedExternalOccurrence?.key ?? null;
 
   useLayoutEffect(() => {
     if (!agendaDateKey) return;
@@ -356,7 +384,7 @@ export default function Kalendarz() {
   };
 
   useLayoutEffect(() => {
-    if (!selectedTask || !anchorDateKey) return;
+    if ((!selectedTask && !selectedExternalOccurrence) || !anchorDateKey) return;
     const repositionDetail = () => {
       const cell = calendarRootRef.current?.querySelector<HTMLElement>(`[data-calendar-cell="${anchorDateKey}"]`);
       if (!cell) return;
@@ -383,7 +411,7 @@ export default function Kalendarz() {
       window.removeEventListener("resize", repositionDetail);
       window.removeEventListener("scroll", repositionDetail, true);
     };
-  }, [selectedTask, anchorDateKey, viewDate]);
+  }, [selectedExternalOccurrence, selectedTask, anchorDateKey, viewDate]);
 
   const closeTaskDetail = useCallback((restoreFocus = true) => {
     if (draftId !== null) {
@@ -392,26 +420,38 @@ export default function Kalendarz() {
     }
     setSelectedId(null);
     setSelectedOccurrenceDate(null);
+    setSelectedExternalKey(null);
     setAnchorDateKey(null);
     setDetailPosition((current) => ({ ...current, ready: false }));
     if (restoreFocus) requestAnimationFrame(() => detailReturnFocusRef.current?.focus());
   }, [draftId]);
 
   const selectEvent = (event: CalendarOccurrence, trigger?: HTMLElement) => {
-    const id = event.occurrence.sourceTaskId;
     if (trigger) detailReturnFocusRef.current = trigger;
+    if (event.kind !== "task") {
+      if (selectedExternalKey === event.key) {
+        closeTaskDetail();
+        return;
+      }
+      closeTaskDetail(false);
+      setAnchorDateKey(event.calendarDate);
+      setSelectedExternalKey(event.key);
+      return;
+    }
+    const id = event.task.occurrence.sourceTaskId;
     if (draftId !== null && draftId !== id) closeTaskDetail();
     if (draftId === id) {
       closeTaskDetail();
       return;
     }
     setAnchorDateKey(event.calendarDate);
+    setSelectedExternalKey(null);
     setSelectedId(id);
-    setSelectedOccurrenceDate(event.occurrence.virtual ? event.occurrence.date : null);
+    setSelectedOccurrenceDate(event.task.occurrence.virtual ? event.task.occurrence.date : null);
   };
 
   useEffect(() => {
-    if (selectedTaskId === null) {
+    if (selectedDetailId === null) {
       detailInitialFocusIdRef.current = null;
       return;
     }
@@ -431,8 +471,8 @@ export default function Kalendarz() {
     };
     document.addEventListener("mousedown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
-    const shouldMoveFocus = detailInitialFocusIdRef.current !== selectedTaskId;
-    detailInitialFocusIdRef.current = selectedTaskId;
+    const shouldMoveFocus = detailInitialFocusIdRef.current !== selectedDetailId;
+    detailInitialFocusIdRef.current = selectedDetailId;
     const frame = shouldMoveFocus
       ? requestAnimationFrame(() => {
         detailRef.current?.querySelector<HTMLElement>("input, textarea, button:not([disabled])")?.focus();
@@ -443,7 +483,7 @@ export default function Kalendarz() {
       document.removeEventListener("mousedown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [closeTaskDetail, selectedTaskId]);
+  }, [closeTaskDetail, selectedDetailId]);
 
   const moveMonth = (amount: number) => {
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
@@ -495,7 +535,7 @@ export default function Kalendarz() {
         : event
     )));
   };
-  const toggleOccurrence = (occurrence: CalendarOccurrence) => {
+  const toggleOccurrence = (occurrence: TaskOccurrence) => {
     if (!occurrence.occurrence.virtual) {
       updateTask(occurrence.occurrence.sourceTaskId, { done: !occurrence.done });
       return;
@@ -587,16 +627,19 @@ export default function Kalendarz() {
   };
 
   return (
-    <ModuleShell>
-      <ModuleMain>
+    <ModuleShell
+      pageWidth="canvas"
+      header={(
         <PageHeader
           title="Kalendarz"
           description={formatHeaderDate(viewDate)}
           leading={<CalendarDays size={18} strokeWidth={1.5} />}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Nowe zadanie</span></Button>}
+          actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>}
         />
-
+      )}
+    >
+      <ModuleMain>
         <WorkspaceToolbar>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
@@ -660,7 +703,7 @@ export default function Kalendarz() {
                 if (event.key === "Enter" || event.key === " ") {
                   if (event.target !== event.currentTarget) return;
                   event.preventDefault();
-                  if (selectedTask) closeTaskDetail();
+                  if (selectedTask || selectedExternalOccurrence) closeTaskDetail();
                   else createDraft(key);
                   return;
                 }
@@ -709,22 +752,26 @@ export default function Kalendarz() {
               <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
                 {dayEvents.slice(0, 3).map((event) => (
                   <CalendarEventBar
-                    key={event.occurrence.key}
+                    key={event.key}
                     event={event}
-                    dragging={draggedId === event.id}
+                    dragging={event.kind === "task" && draggedId === event.task.id}
                     onClick={(trigger) => selectEvent(event, trigger)}
-                    onToggle={() => toggleOccurrence(event)}
-                    onMoveByDay={(amount) => moveTaskByDays(event, amount)}
-                    onDragStart={(dragEvent) => {
-                      dragEvent.stopPropagation();
-                      dragEvent.dataTransfer.effectAllowed = "move";
-                      dragEvent.dataTransfer.setData("application/x-rootine-task-id", String(event.occurrence.sourceTaskId));
-                      setDraggedId(event.occurrence.sourceTaskId);
-                    }}
-                    onDragEnd={() => {
-                      setDraggedId(null);
-                      setDragOverDateKey(null);
-                    }}
+                    onToggle={event.kind === "task" ? () => toggleOccurrence(event.task) : undefined}
+                    onMoveByDay={event.kind === "task" ? (amount) => moveTaskByDays(event.task, amount) : undefined}
+                    onDragStart={event.kind === "task"
+                      ? (dragEvent) => {
+                          dragEvent.stopPropagation();
+                          dragEvent.dataTransfer.effectAllowed = "move";
+                          dragEvent.dataTransfer.setData("application/x-rootine-task-id", String(event.task.occurrence.sourceTaskId));
+                          setDraggedId(event.task.occurrence.sourceTaskId);
+                        }
+                      : undefined}
+                    onDragEnd={event.kind === "task"
+                      ? () => {
+                          setDraggedId(null);
+                          setDragOverDateKey(null);
+                        }
+                      : undefined}
                   />
                 ))}
                 {dayEvents.length > 3 && (
@@ -733,7 +780,7 @@ export default function Kalendarz() {
                       id={`calendar-overflow-trigger-${key}`}
                       type="button"
                       className="calendar-overflow-trigger"
-                      aria-label={`Pokaż pozostałe zadania z ${cell.day} ${MONTHS[cell.month]}: ${dayEvents.length - 3}`}
+                      aria-label={`Pokaż pozostałe wpisy z ${cell.day} ${MONTHS[cell.month]}: ${dayEvents.length - 3}`}
                       aria-haspopup="menu"
                       aria-expanded={agendaDateKey === key}
                       aria-controls={agendaDateKey === key ? `calendar-agenda-${key}` : undefined}
@@ -762,37 +809,33 @@ export default function Kalendarz() {
                         onClick={(menuEvent) => menuEvent.stopPropagation()}
                       >
                         {dayEvents.slice(3).map((hiddenEvent) => {
-                          const sourceLabel = hiddenEvent.source?.kind === "work"
-                            ? "Praca"
-                            : hiddenEvent.source
-                              ? "Podróże"
-                              : null;
+                          const task = hiddenEvent.kind === "task" ? hiddenEvent.task : null;
                           return (
                             <MenuItem
-                              key={hiddenEvent.occurrence.key}
-                              data-calendar-event-id={hiddenEvent.id}
-                              aria-describedby={hiddenEvent.occurrence.virtual ? undefined : "calendar-keyboard-move-instructions"}
-                              aria-keyshortcuts={hiddenEvent.occurrence.virtual ? undefined : "Alt+ArrowLeft Alt+ArrowRight"}
+                              key={hiddenEvent.key}
+                              data-calendar-event-id={task?.id ?? hiddenEvent.key}
+                              aria-describedby={task && !task.occurrence.virtual ? "calendar-keyboard-move-instructions" : undefined}
+                              aria-keyshortcuts={task && !task.occurrence.virtual ? "Alt+ArrowLeft Alt+ArrowRight" : undefined}
                               onClick={() => {
                                 const returnTarget = agendaTriggerRef.current;
                                 setAgendaDateKey(null);
                                 selectEvent(hiddenEvent, returnTarget ?? undefined);
                               }}
                               onKeyDown={(keyboardEvent) => {
-                                if (hiddenEvent.occurrence.virtual) return;
+                                if (!task || task.occurrence.virtual) return;
                                 if (!keyboardEvent.altKey || (keyboardEvent.key !== "ArrowLeft" && keyboardEvent.key !== "ArrowRight")) return;
                                 keyboardEvent.preventDefault();
                                 keyboardEvent.stopPropagation();
-                                moveTaskByDays(hiddenEvent, keyboardEvent.key === "ArrowLeft" ? -1 : 1);
+                                moveTaskByDays(task, keyboardEvent.key === "ArrowLeft" ? -1 : 1);
                               }}
                             >
                               <span className="calendar-agenda-item">
                                 <span className="calendar-agenda-item__title">
-                                  {hiddenEvent.text || "Zadanie bez nazwy"}
+                                  {hiddenEvent.title || "Wpis bez nazwy"}
                                 </span>
-                                {(hiddenEvent.time || hiddenEvent.occurrence.virtual || sourceLabel) && (
+                                {(hiddenEvent.time || task?.occurrence.virtual || hiddenEvent.source.label) && (
                                   <span className="calendar-agenda-item__meta">
-                                    {[hiddenEvent.time, hiddenEvent.occurrence.virtual ? "Cykliczne" : null, sourceLabel].filter(Boolean).join(" · ")}
+                                    {[hiddenEvent.time, task?.occurrence.virtual ? "Cykliczne" : null, hiddenEvent.source.label, hiddenEvent.status.label].filter(Boolean).join(" · ")}
                                   </span>
                                 )}
                               </span>
@@ -855,6 +898,82 @@ export default function Kalendarz() {
             listy={lists}
             tagi={tags}
           />
+        </div>
+      )}
+
+      {selectedExternalOccurrence && (
+        <div
+          ref={detailRef}
+          className="calendar-task-detail calendar-source-detail"
+          role="dialog"
+          aria-modal="false"
+          aria-label={`Szczegóły: ${selectedExternalOccurrence.title}`}
+          style={{
+            position: "fixed", zIndex: 40, left: detailPosition.left, top: detailPosition.top,
+            visibility: detailPosition.ready ? "visible" : "hidden",
+            width: detailPosition.width, maxHeight: detailPosition.height, overflow: "auto",
+            border: `1px solid ${C.border}`, borderRadius: 15,
+            boxShadow: "0 12px 36px rgba(0,0,0,.38)",
+          }}
+        >
+          <header className="calendar-source-detail__header">
+            <div className="calendar-source-detail__heading">
+              <span>{selectedExternalOccurrence.source.label}</span>
+              <strong>{selectedExternalOccurrence.title}</strong>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              aria-label="Zamknij szczegóły"
+              onClick={() => closeTaskDetail()}
+            >
+              <X size={14} />
+            </Button>
+          </header>
+          <div className="calendar-source-detail__body">
+            <Badge tone={occurrenceStatusTone(selectedExternalOccurrence.status.key)} dot>
+              {selectedExternalOccurrence.status.label}
+            </Badge>
+            <dl className="calendar-source-detail__facts">
+              <div>
+                <dt>Data</dt>
+                <dd>{formatTaskDate(selectedExternalOccurrence.calendarDate)}</dd>
+              </div>
+              {selectedExternalOccurrence.time && (
+                <div>
+                  <dt>Godzina</dt>
+                  <dd>{selectedExternalOccurrence.time}</dd>
+                </div>
+              )}
+              {selectedExternalOccurrence.source.context && (
+                <div>
+                  <dt>Kontekst</dt>
+                  <dd>{selectedExternalOccurrence.source.context}</dd>
+                </div>
+              )}
+              {selectedExternalOccurrence.kind === "affair" && selectedExternalOccurrence.amount !== undefined && (
+                <div>
+                  <dt>Kwota</dt>
+                  <dd>{currencyFormatter.format(selectedExternalOccurrence.amount)}</dd>
+                </div>
+              )}
+              {selectedExternalOccurrence.metadata.map((item) => (
+                <div key={item}>
+                  <dt>Informacja</dt>
+                  <dd>{item}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="calendar-source-detail__notice">
+              Ten wpis zachowuje dane modułu źródłowego. Edycja jest dostępna w module {selectedExternalOccurrence.source.label}.
+            </p>
+          </div>
+          <footer className="calendar-source-detail__footer">
+            <a className="ui-button ui-button--primary" href={selectedExternalOccurrence.source.href}>
+              Otwórz w module {selectedExternalOccurrence.source.label}
+            </a>
+          </footer>
         </div>
       )}
     </ModuleShell>

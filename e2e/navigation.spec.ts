@@ -73,7 +73,7 @@ test.describe("mobile navigation", { tag: "@mobile" }, () => {
 
     const moreButton = mobileNavigation.getByRole("button", { name: "Więcej" });
     await moreButton.click();
-    const drawer = page.getByRole("region", { name: "Wszystkie obszary aplikacji" });
+    const drawer = page.getByRole("dialog", { name: "Wszystkie obszary aplikacji" });
     await expect(drawer).toBeVisible();
     await expect(moreButton).toHaveAttribute("aria-expanded", "true");
     await expect(drawer.getByRole("link", { name: "Notatki" })).toBeVisible();

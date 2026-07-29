@@ -1,4 +1,5 @@
 export { Badge, type BadgeProps, type BadgeTone } from "./components/Badge";
+export { AddToTasksButton } from "./components/AddToTasksButton";
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./components/Button";
 export { Card, type CardProps } from "./components/Card";
 export { DatePicker, type DatePickerProps } from "./components/DatePicker";
@@ -24,12 +25,17 @@ export {
   DetailPanel,
   ModuleMain,
   ModuleShell,
+  PageContainer,
+  PageLayout,
   WorkspaceToolbar,
   type ContextSidebarProps,
   type ContextNavItemProps,
   type DetailPanelProps,
   type ModuleMainProps,
   type ModuleShellProps,
+  type PageContainerProps,
+  type PageLayoutProps,
+  type PageWidth,
   type WorkspaceToolbarProps,
 } from "./components/Shell";
 export { Tabs, type TabItem, type TabsProps } from "./components/Tabs";

@@ -873,6 +873,16 @@ export default function Sport() {
   return (
     <ModuleShell
       className="sport-module sport-planner-module"
+      pageWidth={view === "cycle" ? "canvas" : "wide"}
+      header={(
+        <PageHeader
+          title="Sport"
+          description={viewMeta.description}
+          leading={<Dumbbell size={18} strokeWidth={1.5} />}
+          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+          actions={headerAction}
+        />
+      )}
       contextSidebar={(
         <SportSidebar
           view={view}
@@ -885,14 +895,6 @@ export default function Sport() {
       )}
     >
       <ModuleMain>
-        <PageHeader
-          title="Sport"
-          description={viewMeta.description}
-          leading={<Dumbbell size={18} strokeWidth={1.5} />}
-          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={headerAction}
-        />
-
         <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}>
           <Select
             compact

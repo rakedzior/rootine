@@ -278,7 +278,7 @@
   margin: 0 0 var(--space-xl);
 }
 
-.notes-canvas__heading h1 {
+.notes-canvas__heading h2 {
   margin: 0;
   color: var(--color-chalk-white);
   font-size: var(--text-headline);
@@ -338,8 +338,9 @@
 
 .notes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 360px));
   gap: var(--space-md);
+  justify-content: start;
 }
 
 @media (min-width: 761px) {
@@ -944,7 +945,7 @@
 
 @media (max-width: 1180px) {
   .notes-grid {
-    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 340px));
   }
 
   .notes-card__actions {
@@ -980,7 +981,7 @@
     padding: var(--space-lg);
   }
 
-  .notes-canvas__heading h1 {
+  .notes-canvas__heading h2 {
     font-size: var(--text-title);
   }
 

@@ -32,13 +32,13 @@
 
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-data: "DM Mono", monospace;
-  --text-micro: 9px;
-  --text-label: 10px;
-  --text-meta: 11px;
-  --text-body: 12px;
-  --text-body-emphasis: 13px;
-  --text-title: 16px;
-  --text-headline: 22px;
+  --text-micro: 11px;
+  --text-label: 11px;
+  --text-meta: 12px;
+  --text-body: 13px;
+  --text-body-emphasis: 14px;
+  --text-title: 20px;
+  --text-headline: 24px;
 
   --radius-xs: 3px;
   --radius-sm: 6px;
@@ -59,7 +59,7 @@
   --control-height-md: 40px;
   --page-header-height: 70px;
   --app-sidebar-width: 204px;
-  --context-sidebar-width: 250px;
+  --context-sidebar-width: 240px;
   --detail-panel-width: 370px;
 
   --shadow-floating: 0 12px 30px rgba(0, 0, 0, 0.45);
@@ -71,6 +71,9 @@
 }
 
 :root {
+  --page-width-reading: 1040px;
+  --page-width-standard: 1440px;
+  --page-width-wide: 1560px;
   --color-category-sky: #7fa6c9;
   --color-category-teal: #79a8a4;
   --color-category-sand: #b9a171;

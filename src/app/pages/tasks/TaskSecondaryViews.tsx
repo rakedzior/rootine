@@ -55,7 +55,7 @@ export function SummaryPanel({ tasks, habits, onToggleHabit }: {
             <span className="text-[16px] font-semibold leading-none" style={{ fontFamily: "'DM Mono',monospace", color: pct === 100 ? C.seaGlass : C.iceBlue }}>{pct}%</span>
           </div>
           <div className="h-[4px] rounded-full overflow-hidden" style={{ background: C.borderSubtle }}>
-            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: pct === 100 ? C.seaGlass : C.iceBlueSolid }} />
+            <div className="h-full w-full origin-left rounded-full transition-transform duration-700" style={{ transform: `scaleX(${pct / 100})`, background: pct === 100 ? C.seaGlass : C.iceBlueSolid }} />
           </div>
         </div>
       </section>
@@ -165,7 +165,7 @@ export function HabitsWorkspace({
             aria-valuemax={100}
             aria-valuenow={progress}
           >
-            <i style={{ width: `${progress}%` }} />
+            <i style={{ transform: `scaleX(${progress / 100})` }} />
           </div>
           <small>{completed} z {habits.length} ukończonych</small>
         </div>

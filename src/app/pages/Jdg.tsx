@@ -24,9 +24,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { formatShortDate } from "../formatters";
 import {
   applyJdgMonthTemplate,
   createJdgItemId,
@@ -60,6 +61,7 @@ import {
   PageHeader,
   Select,
   WorkspaceToolbar,
+  AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
 
@@ -128,7 +130,11 @@ function dueStatus(month: string, day: number | null, done: boolean): {
   return { label: `Do ${day}. dnia`, tone: "neutral" };
 }
 
-export function JdgWorkspace() {
+export function JdgWorkspace({
+  layout,
+}: {
+  layout?: (header: ReactNode, content: ReactNode) => ReactNode;
+} = {}) {
   const [workspace, setWorkspace] = useState(loadJdgWorkspace);
   const [monthKey, setMonthKey] = useState(getJdgMonthKey);
   const [profileDraft, setProfileDraft] = useState<JdgTaxProfile>(() => structuredClone(workspace.taxProfile));
@@ -359,9 +365,8 @@ export function JdgWorkspace() {
     setEditorOpen(false);
   };
 
-  return (
-    <>
-      <PageHeader
+  const header = (
+    <PageHeader
         title="Sprawy"
         description="JDG · Miesięczne dokumenty, podatki i zamknięcie działalności"
         leading={<Building2 size={17} />}
@@ -387,7 +392,11 @@ export function JdgWorkspace() {
             </Button>
           </>
         )}
-      />
+    />
+  );
+
+  const content = (
+    <>
       <WorkspaceToolbar className="jdg-toolbar">
         <div className="jdg-month-switcher">
           <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
@@ -454,6 +463,7 @@ export function JdgWorkspace() {
                       const due = dueStatus(monthKey, item.dueDay, item.done);
                       const isClose = item.id === "control-close";
                       const closeLocked = isClose && !readyToClose && !item.done;
+                      const dueDate = item.dueDay ? `${monthKey}-${String(item.dueDay).padStart(2, "0")}` : undefined;
                       return (
                         <div key={item.id} className={`jdg-check-row ${item.done ? "is-done" : ""} ${isClose ? "is-final" : ""}`}>
                           <button
@@ -476,13 +486,27 @@ export function JdgWorkspace() {
                             <strong>{item.label}</strong>
                             <small>
                               {item.doneAt
-                                ? `Potwierdzono ${new Date(item.doneAt).toLocaleDateString("pl-PL", { day: "numeric", month: "short" })}`
+                                ? `Potwierdzono ${formatShortDate(item.doneAt)}`
                                 : item.required ? "Punkt wymagany" : "Punkt kontrolny"}
                             </small>
                           </button>
                           <Badge tone={closeLocked ? "warning" : due.tone}>
                             {closeLocked ? "Po wymaganych" : due.label}
                           </Badge>
+                          <AddToTasksButton compact input={{
+                            source: {
+                              kind: "affairs",
+                              entity: `${encodeURIComponent(monthKey)}/${encodeURIComponent(item.id)}`,
+                              context: `JDG · ${monthKey}`,
+                              href: `/sprawy?widok=jdg&month=${encodeURIComponent(monthKey)}`,
+                            },
+                            text: item.label,
+                            done: item.done,
+                            calendarDate: dueDate,
+                            date: dueDate,
+                            list: "sprawy",
+                            tags: ["sprawy", "jdg"],
+                          }} />
                           {item.id.startsWith("custom-") && (
                             <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
                               <Trash2 size={12} />
@@ -807,4 +831,6 @@ export function JdgWorkspace() {
       )}
     </>
   );
+
+  return layout ? layout(header, content) : <>{header}{content}</>;
 }

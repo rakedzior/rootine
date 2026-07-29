@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  assignTaskToWorkProject,
   commitmentTaskId,
   projectCommitments,
 } from "./commitmentRepository";
@@ -21,7 +22,7 @@ import {
 
 function workFixture(): WorkWorkspace {
   return {
-    version: 1,
+    version: 2,
     updatedAt: "2026-07-28T08:00:00.000Z",
     companies: [
       { id: "company-a", name: "Acme", description: "", color: "#4772fa" },
@@ -59,6 +60,7 @@ function workFixture(): WorkWorkspace {
         priority: "high",
         dueDate: "2026-07-28",
         createdAt: "2026-07-20T08:00:00.000Z",
+        linkedTask: { originTaskId: 101, view: "dzis" },
       },
       {
         id: "work-done",
@@ -69,6 +71,7 @@ function workFixture(): WorkWorkspace {
         priority: "none",
         dueDate: "",
         createdAt: "2026-07-20T09:00:00.000Z",
+        linkedTask: { originTaskId: 102, view: "skrzynka" },
       },
       {
         id: "work-paused",
@@ -101,6 +104,7 @@ function travelTask(overrides: Partial<TravelTask> = {}): TravelTask {
     category: "booking",
     dueDate: "2026-07-29",
     completed: false,
+    linkedTask: { originTaskId: 201, view: "jutro" },
     ...overrides,
   };
 }
@@ -201,6 +205,17 @@ describe("commitment projection", () => {
       },
     });
     expect(tripTask).not.toHaveProperty("priority");
+  });
+
+  it("does not project unlinked Work or Travel items by default", () => {
+    const work = workFixture();
+    work.tasks = work.tasks.map((task) => ({ ...task, linkedTask: undefined }));
+    const travel = travelFixture();
+    travel.trips = travel.trips.map((trip) => ({
+      ...trip,
+      tasks: trip.tasks.map((task) => ({ ...task, linkedTask: undefined })),
+    }));
+    expect(projectCommitments({ work, travel })).toEqual([]);
   });
 
   it("uses deterministic, distinct, negative safe-integer IDs", () => {
@@ -385,5 +400,141 @@ describe("commitment projection", () => {
       completed: true,
       dueDate: "2026-09-01",
     });
+  });
+
+  it("promotes an assigned native task to canonical Work storage without duplicates after reload", () => {
+    const work = workFixture();
+    const travel = travelFixture();
+    const nativeWorkspace: TaskWorkspace = {
+      version: 2,
+      updatedAt: "2026-07-28T08:00:00.000Z",
+      tasks: [{
+        id: 501,
+        text: "Spotkanie z klientem",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-28",
+        date: "Dziś",
+        time: "09:00",
+        endTime: "10:00",
+        notes: "Omówić zakres",
+        priority: "high",
+        schedule: {
+          allDay: false,
+          startTime: "09:00",
+          endTime: "10:00",
+          reminderMinutes: 15,
+          timezone: "Europe/Warsaw",
+        },
+      }],
+      habits: [],
+      lists: [],
+      tags: [],
+    };
+    window.localStorage.setItem(WORK_STORAGE_KEY, JSON.stringify(work));
+    window.localStorage.setItem(TRAVEL_STORAGE_KEY, JSON.stringify(travel));
+    window.localStorage.setItem("rootine.task-workspace.v1", JSON.stringify(nativeWorkspace));
+
+    const nativeTask = loadTaskWorkspace().tasks.find((task) => task.id === 501);
+    expect(nativeTask).toBeDefined();
+    const assignment = assignTaskToWorkProject(nativeTask!, "project-active");
+    expect(assignment.status).toBe("ok");
+
+    const reloaded = loadTaskWorkspace();
+    const assigned = reloaded.tasks.filter((task) => task.source?.originTaskId === 501);
+    expect(assigned).toHaveLength(1);
+    expect(reloaded.tasks.some((task) => task.id === 501)).toBe(false);
+    expect(assigned[0]).toMatchObject({
+      text: "Spotkanie z klientem",
+      calendarDate: "2026-07-28",
+      time: "09:00",
+      endTime: "10:00",
+      notes: "Omówić zakres",
+      priority: "high",
+      source: {
+        kind: "work",
+        context: "Acme · Launch",
+        href: "/praca?firma=company-a&projekt=project-active",
+        originTaskId: 501,
+      },
+    });
+
+    const storedWork = JSON.parse(
+      window.localStorage.getItem(WORK_STORAGE_KEY) ?? "",
+    ) as WorkWorkspace;
+    expect(storedWork.tasks.filter((task) => task.linkedTask?.originTaskId === 501)).toHaveLength(1);
+    expect(storedWork.tasks.find((task) => task.linkedTask?.originTaskId === 501)).toMatchObject({
+      projectId: "project-active",
+      title: "Spotkanie z klientem",
+      dueDate: "2026-07-28",
+      linkedTask: {
+        originTaskId: 501,
+        notes: "Omówić zakres",
+        schedule: {
+          reminderMinutes: 15,
+          timezone: "Europe/Warsaw",
+        },
+      },
+    });
+
+    const withCompletedOccurrence: TaskWorkspace = {
+      ...reloaded,
+      tasks: reloaded.tasks.map((task) => task.source?.originTaskId === 501
+        ? {
+            ...task,
+            schedule: task.schedule
+              ? { ...task.schedule, completedDates: ["2026-08-28"] }
+              : undefined,
+          }
+        : task),
+    };
+    expect(saveTaskWorkspace(withCompletedOccurrence)).toBe(true);
+    const storedNative = JSON.parse(
+      window.localStorage.getItem("rootine.task-workspace.v1") ?? "",
+    ) as TaskWorkspace;
+    expect(storedNative.tasks).toEqual([]);
+    const storedWorkAfterTaskEdit = JSON.parse(
+      window.localStorage.getItem(WORK_STORAGE_KEY) ?? "",
+    ) as WorkWorkspace;
+    expect(storedWorkAfterTaskEdit.tasks.find((task) => task.linkedTask?.originTaskId === 501)
+      ?.linkedTask?.schedule?.completedDates).toEqual(["2026-08-28"]);
+    expect(loadTaskWorkspace().tasks.filter((task) => task.source?.originTaskId === 501)).toHaveLength(1);
+  });
+
+  it("moves an assigned task between active projects without creating a second Work task", () => {
+    const work = workFixture();
+    work.projects = work.projects.map((project) => project.id === "project-paused"
+      ? { ...project, status: "active" }
+      : project);
+    window.localStorage.setItem(WORK_STORAGE_KEY, JSON.stringify(work));
+    window.localStorage.setItem(TRAVEL_STORAGE_KEY, JSON.stringify(travelFixture()));
+    window.localStorage.setItem("rootine.task-workspace.v1", JSON.stringify({
+      version: 2,
+      updatedAt: "",
+      tasks: [],
+      habits: [],
+      lists: [],
+      tags: [],
+    } satisfies TaskWorkspace));
+
+    const projected = loadTaskWorkspace().tasks.find((task) => (
+      task.source?.entity === "project-active/work-open"
+    ));
+    expect(projected).toBeDefined();
+    expect(assignTaskToWorkProject(projected!, "project-paused")).toMatchObject({ status: "ok" });
+
+    const storedWork = JSON.parse(
+      window.localStorage.getItem(WORK_STORAGE_KEY) ?? "",
+    ) as WorkWorkspace;
+    expect(storedWork.tasks.filter((task) => task.id === "work-open")).toHaveLength(1);
+    expect(storedWork.tasks.find((task) => task.id === "work-open")?.projectId).toBe("project-paused");
+
+    const reloaded = loadTaskWorkspace();
+    expect(reloaded.tasks.filter((task) => task.source?.entity.endsWith("/work-open"))).toHaveLength(1);
+    expect(reloaded.tasks.find((task) => task.source?.entity === "project-paused/work-open")?.source)
+      .toMatchObject({
+        context: "Acme · Later",
+        href: "/praca?firma=company-a&projekt=project-paused",
+      });
   });
 });

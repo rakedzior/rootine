@@ -1,6 +1,7 @@
 import { CALENDAR_TASKS } from "./calendarTasks";
 import {
   isCommitmentTaskSource,
+  linkedWorkTaskOriginIds,
   projectCommitments,
   propagateCommitmentEdits,
   stripProjectedCommitments,
@@ -269,11 +270,14 @@ function normalizeLoadedWorkspace(workspace: TaskWorkspace): TaskWorkspace {
 }
 
 function withProjectedCommitments(workspace: TaskWorkspace): TaskWorkspace {
+  const projected = projectCommitments();
+  const linkedOriginIds = linkedWorkTaskOriginIds();
   return {
     ...workspace,
     tasks: [
-      ...stripProjectedCommitments(workspace.tasks),
-      ...projectCommitments(),
+      ...stripProjectedCommitments(workspace.tasks)
+        .filter((task) => !linkedOriginIds.has(task.id)),
+      ...projected,
     ],
   };
 }

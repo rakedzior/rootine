@@ -32,6 +32,8 @@ import {
   Card,
   Input,
   Modal,
+  ModuleMain,
+  ModuleShell,
   PageHeader,
   SectionHeader,
   Select,
@@ -819,26 +821,31 @@ export default function Odzywanie() {
   };
 
   return (
-    <main className="nutrition-module flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: uiColors.graphiteCanvas, color: uiColors.chalkWhite }}>
-      <PageHeader
-        title="Odżywianie"
-        description="Dzienny rejestr posiłków, makroskładników i nawodnienia"
-        leading={<Salad size={18} strokeWidth={1.5} />}
-        meta={headerMeta}
-        actions={loadStatus !== "corrupt" ? (
-          <Button
-            variant="primary"
-            size="sm"
-            leadingIcon={<Plus size={13} />}
-            disabled={dayClosed}
-            title={dayClosed ? "Otwórz dzień, aby dodać produkt." : undefined}
-            onClick={() => openEntryDialog()}
-          >
-            Dodaj produkt
-          </Button>
-        ) : undefined}
-      />
-
+    <ModuleShell
+      className="nutrition-module"
+      pageWidth="wide"
+      header={(
+        <PageHeader
+          title="Odżywianie"
+          description="Dzienny rejestr posiłków, makroskładników i nawodnienia"
+          leading={<Salad size={18} strokeWidth={1.5} />}
+          meta={headerMeta}
+          actions={loadStatus !== "corrupt" ? (
+            <Button
+              variant="primary"
+              size="sm"
+              leadingIcon={<Plus size={13} />}
+              disabled={dayClosed}
+              title={dayClosed ? "Otwórz dzień, aby dodać produkt." : undefined}
+              onClick={() => openEntryDialog()}
+            >
+              Dodaj produkt
+            </Button>
+          ) : undefined}
+        />
+      )}
+    >
+      <ModuleMain className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: uiColors.graphiteCanvas, color: uiColors.chalkWhite }}>
       {loadStatus === "corrupt" ? (
         <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5">
           <Card as="section" tone="panel" padding="spacious" className="mx-auto max-w-[680px]" role="alert">
@@ -1692,6 +1699,7 @@ export default function Odzywanie() {
           </form>
         </Modal>
       )}
-    </main>
+      </ModuleMain>
+    </ModuleShell>
   );
 }

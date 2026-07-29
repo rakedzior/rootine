@@ -1747,11 +1747,12 @@
 .sport-analysis-bars i {
   display: block;
   width: min(30px, 66%);
-  min-height: 2px;
+  height: 100%;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: var(--color-precision-blue-text);
   opacity: 0.82;
-  transition: height var(--motion-normal) var(--ease-out);
+  transform-origin: center bottom;
+  transition: transform var(--motion-normal) var(--ease-out);
 }
 
 .sport-analysis-disciplines {

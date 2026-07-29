@@ -240,6 +240,41 @@
   outline-offset: 2px;
 }
 
+.task-work-project-field {
+  width: clamp(160px, 20vw, 240px);
+}
+
+.task-work-assignment {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.task-work-assignment .ui-field {
+  width: 100%;
+}
+
+.task-assignment-error {
+  margin: 0;
+  padding: 0 var(--space-lg) 10px;
+  color: var(--color-danger-coral);
+  font-size: var(--text-meta);
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .task-entry-controls {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .task-work-project-field {
+    width: min(180px, 100%);
+    margin-inline-end: auto;
+  }
+}
+
 input.task-entry-input:focus,
 input.task-entry-input:focus-visible {
   outline: none !important;
@@ -318,8 +353,7 @@ input.task-entry-input:focus-visible {
   gap: var(--space-md);
   align-items: center;
   padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--color-border-strong);
-  border-left: 2px solid var(--color-precision-blue);
+  border: 1px solid color-mix(in srgb, var(--color-precision-blue) 28%, var(--color-border-strong));
   border-radius: var(--radius-lg);
   background: var(--color-graphite-panel);
   box-shadow: var(--shadow-floating);
