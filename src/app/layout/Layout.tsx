@@ -53,6 +53,7 @@ import {
 import { RecoveryCenterButton } from "../recovery/RecoveryCenter";
 import { RouteLoadingState } from "../RouteStates";
 import { Modal } from "../ui";
+import { maxWidthQuery } from "../ui/breakpoints";
 
 const SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
 
@@ -92,7 +93,7 @@ function getInitialSidebarState() {
 }
 
 function getInitialCompactViewport() {
-  return window.matchMedia("(max-width: 980px)").matches;
+  return window.matchMedia(maxWidthQuery("columns")).matches;
 }
 
 function getWeatherIcon(code = -1, isLoading = false): LucideIcon {
@@ -252,7 +253,7 @@ export default function Layout() {
   const mobileMenuRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 980px)");
+    const mediaQuery = window.matchMedia(maxWidthQuery("columns"));
     const updateViewport = () => setIsCompactViewport(mediaQuery.matches);
     mediaQuery.addEventListener("change", updateViewport);
     return () => mediaQuery.removeEventListener("change", updateViewport);

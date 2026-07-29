@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { maxWidthQuery } from "../breakpoints";
+
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -75,33 +77,6 @@ export type ModuleMainProps = HTMLAttributes<HTMLElement>;
 
 export function ModuleMain({ className, ...props }: ModuleMainProps) {
   return <main className={cx("ui-module-main", className)} {...props} />;
-}
-
-export interface PageContainerProps extends HTMLAttributes<HTMLDivElement> {
-  width?: PageWidth;
-  padding?: "none" | "compact" | "default";
-}
-
-export function PageContainer({
-  width = "standard",
-  padding = "default",
-  className,
-  ...props
-}: PageContainerProps) {
-  return (
-    <div
-      className={cx("ui-page-container", className)}
-      data-page-width={width}
-      data-page-padding={padding}
-      {...props}
-    />
-  );
-}
-
-export type PageLayoutProps = PageContainerProps;
-
-export function PageLayout(props: PageLayoutProps) {
-  return <PageContainer {...props} />;
 }
 
 export interface ContextSidebarProps extends HTMLAttributes<HTMLElement> {
@@ -210,7 +185,7 @@ export const DetailPanel = forwardRef<HTMLElement, DetailPanelProps>(function De
 ) {
   const panelRef = useRef<HTMLElement>(null);
   const onDismissRef = useRef(onDismiss);
-  const isResponsiveDrawer = useMediaQuery("(max-width: 1380px)");
+  const isResponsiveDrawer = useMediaQuery(maxWidthQuery("detail"));
   const managedDrawer = isResponsiveDrawer && Boolean(onDismiss);
 
   useImperativeHandle(forwardedRef, () => panelRef.current as HTMLElement);

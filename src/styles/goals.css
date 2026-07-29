@@ -182,7 +182,7 @@
   }
 }
 
-@media (max-width: 620px) {
+@media ((max-width: 760px)) {
 
   .goals-card-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -201,8 +201,14 @@
   }
 }
 
-@media (max-width: 1100px) {
+@media ((max-width: 1180px)) {
   .goal-full-overview {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* overflow-y:auto promotes overflow-x to auto; without this the goal card action cluster
+   produced a 41px horizontal scrollbar at 1024px. */
+.goals-content {
+  overflow-x: hidden;
 }

@@ -63,32 +63,20 @@ function TimePicker({
   label?: string;
 }) {
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8,
-      padding: "8px 10px", borderRadius: "var(--radius-lg)",
-      border: `1px solid ${C.borderStrong}`,
-      background: C.inputBg,
-    }}>
-      <Clock size={13} strokeWidth={1.5} aria-hidden="true" style={{ color: C.iceBlue, flexShrink: 0 }} />
+    <div className="task-sched__time">
+      <Clock size={13} strokeWidth={1.5} aria-hidden="true" />
       <input
         type="time"
         step={1800}
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
-        style={{
-          flex: 1, minWidth: 0, padding: "4px 6px",
-          border: "none", borderRadius: 6, background: "transparent",
-          color: C.iceBlue, fontSize: "13px",
-          fontFamily: "'DM Mono', monospace",
-        }}
       />
       {value && (
         <button
           type="button"
           aria-label={`Wyczyść: ${label.toLocaleLowerCase("pl-PL")}`}
           onClick={() => onChange("")}
-          style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 4 }}
         >
           <X size={12} strokeWidth={1.75} aria-hidden="true" />
         </button>
@@ -253,12 +241,6 @@ export function DatePickerPopup({
     setStartTime("09:00"); setEndTime("10:00"); setAllDay(true);
   };
 
-  const rowBtn = {
-    width: "100%", display: "flex" as const, alignItems: "center" as const,
-    gap: "10px", padding: "9px 2px", background: "none", border: "none",
-    cursor: "pointer", color: C.textMuted,
-  };
-
   return (
     <div
       ref={popRef}
@@ -300,7 +282,7 @@ export function DatePickerPopup({
           style={{ padding: "12px" }}
         >
           {/* ── Quick shortcuts ── */}
-          <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
+          <div className="task-sched__quick">
             {quickDates.map(({ label, icon: Icon, date: qd }) => {
               const active = isSame(selDate, qd.getFullYear(), qd.getMonth(), qd.getDate());
               return (
@@ -309,17 +291,10 @@ export function DatePickerPopup({
                   type="button"
                   aria-pressed={active}
                   onClick={() => setSelDate(new Date(qd))}
-                  style={{
-                    flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-                    gap: "5px", padding: "9px 4px", borderRadius: "var(--radius-md)",
-                    background: active ? C.iceBlueBg : C.elevated,
-                    color: active ? C.iceBlue : C.textMuted,
-                    border: `1px solid ${active ? C.blueBorder : "transparent"}`,
-                    cursor: "pointer",
-                  }}
+                  className={`task-sched__quick-btn${active ? " is-active" : ""}`}
                 >
                   <Icon size={15} strokeWidth={1.5} />
-                  <span style={{ fontSize: "9px", lineHeight: 1, whiteSpace: "nowrap" }}>{label}</span>
+                  <span>{label}</span>
                 </button>
               );
             })}
@@ -332,7 +307,7 @@ export function DatePickerPopup({
           />
 
           {dateOnly ? (
-            <p style={{ margin: "10px 0 0", color: C.textMuted, fontSize: 10, lineHeight: 1.45 }}>
+            <p style={{ margin: "10px 0 0", color: C.textMuted, fontSize: 11, lineHeight: "var(--leading-normal)" }}>
               Godzinę, przypomnienie i powtarzanie edytuj w module źródłowym.
             </p>
           ) : (
@@ -366,40 +341,32 @@ export function DatePickerPopup({
               content: <CustomSelect value={repeat} onChange={setRepeat} options={REPEAT_OPTIONS} placeholder="Powtarzanie" />,
             },
           ].map(({ key, label, Icon, show, toggle, content }) => (
-            <div key={key} style={{ borderTop: `1px solid ${C.borderSubtle}`, marginTop: "8px" }}>
-              <button onClick={toggle} style={rowBtn}>
+            <div key={key} className="task-sched__row">
+              <button type="button" onClick={toggle} aria-expanded={show} className="task-sched__row-btn">
                 <Icon size={13} strokeWidth={1.5} />
-                <span style={{ flex: 1, textAlign: "left", fontSize: "12px" }}>{label}</span>
+                <span className="task-sched__row-label">{label}</span>
                 {key === "time" && time && !allDay && (
-                  <span style={{ fontSize: "11px", fontFamily: "'DM Mono', monospace", color: C.iceBlue }}>{time}</span>
+                  <span className="task-sched__row-value">{time}</span>
                 )}
-                <ChevronRight size={11} strokeWidth={1.5}
-                  style={{ transform: show ? "rotate(90deg)" : "none", transition: "transform .2s", color: C.textDisabled }} />
+                <ChevronRight size={11} strokeWidth={1.5} className="task-sched__row-chevron" />
               </button>
-              {show && <div style={{ paddingBottom: "8px" }}>{content}</div>}
+              {show && <div className="task-sched__row-body">{content}</div>}
             </div>
           ))}
-          <div style={{ borderTop: `1px solid ${C.borderSubtle}`, marginTop: "8px" }}>
+          <div className="task-sched__row">
             <button
               type="button"
               role="switch"
               aria-checked={allDay}
               onClick={() => { setAllDay(v => !v); setShowTime(false); }}
-              style={{ ...rowBtn, justifyContent: "space-between" }}>
-              <span style={{ fontSize: "12px" }}>Cały dzień</span>
-              <span style={{
-                width: "34px", height: "18px", borderRadius: "var(--radius-pill)", position: "relative", display: "block",
-                background: allDay ? C.iceBlueSolid : C.elevated, transition: "background .2s",
-              }}>
-                <span style={{
-                  position: "absolute", top: "3px", left: allDay ? "17px" : "3px", width: "12px", height: "12px",
-                  borderRadius: "50%", background: C.textPrimary, transition: "left .2s",
-                }} />
-              </span>
+              className="task-sched__row-btn task-sched__row-btn--split"
+            >
+              <span>Cały dzień</span>
+              <span className={`task-sched__switch${allDay ? " is-on" : ""}`} aria-hidden="true"><span /></span>
             </button>
           </div>
-          <p style={{ margin: "8px 0 0", color: C.textMuted, fontSize: 10 }}>
-            Strefa urządzenia: <span style={{ color: C.textSecond, fontFamily: "var(--font-data)" }}>{browserTimezone()}</span>
+          <p className="task-sched__hint">
+            Strefa urządzenia: <strong>{browserTimezone()}</strong>
           </p>
           </>
           )}
@@ -408,45 +375,30 @@ export function DatePickerPopup({
         /* ── Czas trwania tab ── */
         <div id="task-date-duracja-panel" role="tabpanel" aria-labelledby="task-date-duracja-tab">
           {/* Cały dzień — ustawione przed godziną rozpoczęcia */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px" }}>
-            <span style={{ fontSize: "13px", color: C.textSecond }}>Cały dzień</span>
+          <div className="task-sched__dur-row">
+            <span>Cały dzień</span>
             <button
               type="button"
               role="switch"
               aria-checked={allDay}
               aria-label="Cały dzień"
               onClick={() => { setAllDay(v => !v); setOpenTimeField(null); }}
-              style={{
-                width: "36px", height: "20px", borderRadius: "var(--radius-pill)", border: "none",
-                background: allDay ? C.iceBlueSolid : C.elevated,
-                cursor: "pointer", position: "relative" as const, transition: "background .2s",
-                flexShrink: 0,
-              }}
+              className={`task-sched__switch task-sched__switch--lg${allDay ? " is-on" : ""}`}
             >
-              <div style={{
-                position: "absolute" as const, top: "3px",
-                left: allDay ? "17px" : "3px",
-                width: "14px", height: "14px", borderRadius: "50%",
-                background: C.textPrimary, transition: "left .2s",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-              }} />
+              <span />
             </button>
           </div>
 
-          <div style={{ height: "1px", background: C.borderSubtle, margin: "2px 0" }} />
+          <div className="task-sched__divider" />
 
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            margin: "8px 12px 2px", padding: "8px 10px",
-            borderRadius: 8, background: C.inputBg, border: `1px solid ${C.borderSubtle}`,
-          }}>
-            <Calendar size={13} aria-hidden="true" style={{ color: C.iceBlue, flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 12, color: C.textSecond }}>
+          <div className="task-sched__summary">
+            <Calendar size={13} aria-hidden="true" />
+            <span className="task-sched__summary-date">
               {selDate
                 ? selDate.toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" })
                 : "Nie wybrano daty"}
             </span>
-            <span style={{ fontSize: 10, color: C.textMuted }}>ten sam dzień</span>
+            <span className="task-sched__summary-note">ten sam dzień</span>
           </div>
 
           {/* Rozpocznij / Koniec rows */}
@@ -457,28 +409,21 @@ export function DatePickerPopup({
             const open    = openTimeField === field;
             return (
               <div key={field}>
-                <div style={{ display: "flex", alignItems: "center", gap: "7px", padding: "9px 12px" }}>
-                  <span style={{ width: "68px", fontSize: "12px", color: C.textSecond, flexShrink: 0 }}>{label}</span>
+                <div className="task-sched__field">
+                  <span className="task-sched__field-label">{label}</span>
                   {/* Time chip — toggles picker */}
                   <button
                     type="button"
                     disabled={allDay}
                     onClick={() => { if (!allDay) setOpenTimeField(open ? null : field); }}
-                    style={{
-                      flex: 1, padding: "6px 10px", borderRadius: "8px", textAlign: "center" as const,
-                      background: open ? C.iceBlueBg : C.inputBg,
-                      border: `1px solid ${open ? C.blueBorder : C.borderSubtle}`,
-                      color: open ? C.iceBlue : timeVal ? C.textPrimary : C.textMuted,
-                      fontSize: "12px", fontFamily: "'DM Mono', monospace",
-                      cursor: allDay ? "default" : "pointer", opacity: allDay ? 0.55 : 1,
-                    }}
+                    className={`task-sched__chip${open ? " is-open" : ""}${timeVal ? " has-value" : ""}`}
                   >
                     {timeVal || "--:--"}
                   </button>
                 </div>
                 {/* Inline time picker */}
                 {open && !allDay && (
-                  <div style={{ padding: "0 12px 8px" }}>
+                  <div className="task-sched__field-body">
                     <TimePicker
                       value={timeVal}
                       label={field === "start" ? "Godzina rozpoczęcia" : "Godzina zakończenia"}
@@ -494,31 +439,27 @@ export function DatePickerPopup({
           })}
 
           {/* Timezone */}
-          <div style={{
-            margin: "0 12px 4px",
-            borderRadius: "8px", background: C.inputBg, border: `1px solid ${C.borderSubtle}`,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "9px 12px",
-          }}>
-            <span style={{ fontSize: "12px", color: C.textSecond }}>{browserTimezone()}</span>
-            <span style={{ fontSize: "10px", color: C.textMuted }}>strefa urządzenia</span>
+          <div className="task-sched__tz">
+            <span>{browserTimezone()}</span>
+            <span className="task-sched__summary-note">strefa urządzenia</span>
           </div>
 
           {/* O godzinie (przypomnienie) */}
-          <div style={{ borderTop: `1px solid ${C.borderSubtle}`, margin: "8px 12px 0" }}>
-            <button onClick={() => { setShowDurRem(v => !v); setShowDurRep(false); }} style={{
-              width: "100%", display: "flex", alignItems: "center", gap: "10px",
-              padding: "10px 0", background: "none", border: "none", cursor: "pointer",
-            }}>
-              <Bell size={13} strokeWidth={1.5} style={{ color: reminder ? C.iceBlue : C.iceBlue }} />
-              <span style={{ flex: 1, textAlign: "left" as const, fontSize: "12px", color: C.iceBlue }}>
+          <div className="task-sched__row task-sched__row--inset">
+            <button
+              type="button"
+              aria-expanded={showDurRem}
+              onClick={() => { setShowDurRem(v => !v); setShowDurRep(false); }}
+              className="task-sched__row-btn is-set"
+            >
+              <Bell size={13} strokeWidth={1.5} />
+              <span className="task-sched__row-label">
                 {reminder ? (REMINDER_OPTIONS.find(o => o.value === reminder)?.label ?? "O godzinie") : "O godzinie"}
               </span>
-              <ChevronRight size={11} strokeWidth={1.5}
-                style={{ color: C.textDisabled, transform: showDurRem ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+              <ChevronRight size={11} strokeWidth={1.5} className="task-sched__row-chevron" />
             </button>
             {showDurRem && (
-              <div style={{ paddingBottom: 10 }}>
+              <div className="task-sched__row-body">
                 <CustomSelect
                   value={reminder}
                   onChange={setReminder}
@@ -534,20 +475,21 @@ export function DatePickerPopup({
           </div>
 
           {/* Powtarzaj */}
-          <div style={{ borderTop: `1px solid ${C.borderSubtle}`, margin: "0 12px" }}>
-            <button onClick={() => { setShowDurRep(v => !v); setShowDurRem(false); }} style={{
-              width: "100%", display: "flex", alignItems: "center", gap: "10px",
-              padding: "10px 0", background: "none", border: "none", cursor: "pointer",
-            }}>
-              <RotateCcw size={13} strokeWidth={1.5} style={{ color: repeat ? C.iceBlue : C.textMuted }} />
-              <span style={{ flex: 1, textAlign: "left" as const, fontSize: "12px", color: repeat ? C.iceBlue : C.textMuted }}>
+          <div className="task-sched__row task-sched__row--inset">
+            <button
+              type="button"
+              aria-expanded={showDurRep}
+              onClick={() => { setShowDurRep(v => !v); setShowDurRem(false); }}
+              className={`task-sched__row-btn${repeat ? " is-set" : ""}`}
+            >
+              <RotateCcw size={13} strokeWidth={1.5} />
+              <span className="task-sched__row-label">
                 {repeat ? (REPEAT_OPTIONS.find(o => o.value === repeat)?.label ?? "Powtarzaj") : "Powtarzaj"}
               </span>
-              <ChevronRight size={11} strokeWidth={1.5}
-                style={{ color: C.textDisabled, transform: showDurRep ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+              <ChevronRight size={11} strokeWidth={1.5} className="task-sched__row-chevron" />
             </button>
             {showDurRep && (
-              <div style={{ paddingBottom: 10 }}>
+              <div className="task-sched__row-body">
                 <CustomSelect value={repeat} onChange={setRepeat} options={REPEAT_OPTIONS} placeholder="Powtarzanie" />
               </div>
             )}
@@ -559,7 +501,7 @@ export function DatePickerPopup({
         <p
           id="task-schedule-error"
           role="alert"
-          style={{ margin: 0, padding: "8px 12px", color: C.danger, fontSize: 11, lineHeight: 1.45 }}
+          style={{ margin: 0, padding: "8px 12px", color: C.danger, fontSize: 11, lineHeight: "var(--leading-normal)" }}
         >
           {scheduleError}
         </p>

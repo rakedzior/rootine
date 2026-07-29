@@ -377,10 +377,10 @@ export function GoalFormDialog({
                   : <ImageIcon size={16} aria-hidden="true" style={{ color: C.muted }} />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px]" style={{ color: C.second }}>PNG lub WebP z przezroczystym tłem</p>
+                <p className="text-[11px]" style={{ color: C.second }}>PNG lub WebP z przezroczystym tłem</p>
                 <p
                   id={`${uploadId}-help`}
-                  className="mt-0.5 text-[9px]"
+                  className="mt-0.5 text-[11px]"
                   style={{ color: iconError ? C.danger : C.muted }}
                 >
                   {iconError || "Maks. 2 MB · zapis do 128×128 px"}
@@ -407,7 +407,7 @@ export function GoalFormDialog({
               />
               <label
                 htmlFor={uploadId}
-                className="file-upload-trigger flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px]"
+                className="file-upload-trigger flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px]"
                 style={{ color: C.blueText, borderColor: C.blue }}
               >
                 <Upload size={11} aria-hidden="true" />
@@ -610,7 +610,7 @@ export function GoalFormDialog({
                         type="button"
                         aria-pressed={selected}
                         onClick={() => set("color", option.value)}
-                        className="flex min-h-11 items-center gap-2 rounded-lg border px-2.5 text-left text-[10px]"
+                        className="flex min-h-11 items-center gap-2 rounded-lg border px-2.5 text-left text-[11px]"
                         style={{
                           color: selected ? C.primary : C.second,
                           borderColor: selected ? option.value : C.border,

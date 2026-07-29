@@ -4,6 +4,7 @@ import { test, expect, openRoutineRoute } from "./fixtures";
 const ROUTES = [
   { name: "Dzisiaj", path: "/dzisiaj" },
   { name: "Zadania", path: "/zadania" },
+  { name: "Kalendarz", path: "/kalendarz" },
   { name: "Notatki", path: "/notatki" },
   { name: "Cele", path: "/cele" },
   { name: "Sport", path: "/sport" },
@@ -164,6 +165,15 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
     });
     await page.keyboard.press("Tab");
     await expect(skipLink).toBeFocused();
+
+    // The link slides in over --motion-fast. Reading its box immediately caught it
+    // mid-transition (y was still negative), so settle on the resting position first.
+    await expect
+      .poll(async () => {
+        const box = await skipLink.boundingBox();
+        return box ? Math.round(box.y) : -1;
+      }, { message: "focused skip link finishes sliding into the viewport" })
+      .toBeGreaterThanOrEqual(0);
 
     const viewport = page.viewportSize();
     const skipLinkBox = await skipLink.boundingBox();

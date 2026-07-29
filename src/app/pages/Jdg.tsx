@@ -7,16 +7,13 @@
  */
 import {
   Archive,
-  Building2,
   CalendarCheck,
-  Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
   FileCheck2,
   Landmark,
   LayoutTemplate,
-  LockKeyhole,
   Plus,
   ReceiptText,
   RotateCcw,
@@ -56,6 +53,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Input,
   Modal,
   PageHeader,
@@ -369,7 +367,6 @@ export function JdgWorkspace({
     <PageHeader
         title="Sprawy"
         description="JDG · Miesięczne dokumenty, podatki i zamknięcie działalności"
-        leading={<Building2 size={17} />}
         meta={(
           <div className="flex items-center gap-2">
             {storageError
@@ -466,17 +463,14 @@ export function JdgWorkspace({
                       const dueDate = item.dueDay ? `${monthKey}-${String(item.dueDay).padStart(2, "0")}` : undefined;
                       return (
                         <div key={item.id} className={`jdg-check-row ${item.done ? "is-done" : ""} ${isClose ? "is-final" : ""}`}>
-                          <button
-                            type="button"
-                            className="jdg-check"
-                            aria-pressed={item.done}
+                          <Checkbox
+                            size="sm"
+                            checked={item.done}
                             aria-label={item.done ? `Cofnij: ${item.label}` : `Potwierdź: ${item.label}`}
                             disabled={closeLocked}
                             title={closeLocked ? "Najpierw ukończ pozostałe wymagane punkty." : undefined}
-                            onClick={() => toggleItem(item.id)}
-                          >
-                            {item.done ? <Check size={10} /> : closeLocked ? <LockKeyhole size={9} /> : null}
-                          </button>
+                            onChange={() => toggleItem(item.id)}
+                          />
                           <button
                             type="button"
                             className="jdg-check-row__label"

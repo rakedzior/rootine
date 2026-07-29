@@ -1,0 +1,214 @@
+import type { Page } from "@playwright/test";
+import { test, expect, openRoutineRoute } from "./fixtures";
+
+/**
+ * Guards the invariants that the July 2026 UI audit established. Each test here failed
+ * against the pre-audit build; the baseline it caught is recorded in the assertion message
+ * so a future regression is recognisable rather than just red.
+ */
+
+const ROUTES = [
+  "/dzisiaj",
+  "/zadania",
+  "/kalendarz",
+  "/odzywianie",
+  "/sport",
+  "/cele",
+  "/sprawy",
+  "/praca",
+  "/notatki",
+  "/podroze",
+] as const;
+
+/**
+ * --control-height-* plus --row-height-compact, which the context sidebar nav uses.
+ *
+ * The invariant covers controls that render as controls — anything wearing a shared
+ * design-system class. Clickable rows and cards (a goal card, a travel board row) size to
+ * their content by design and are deliberately out of scope; forcing a card to 40px would
+ * be a worse layout, not a more consistent one.
+ */
+const ALLOWED_CONTROL_HEIGHTS = [24, 28, 36, 40, 48];
+const CONTROL_HEIGHT_TOLERANCE = 1.5;
+const SYSTEM_CONTROL_SELECTOR = [
+  ".ui-button",
+  ".ui-field__control",
+  ".ui-select-trigger",
+  ".ui-date-trigger",
+  ".context-nav-item",
+  ".ui-tab",
+].join(",");
+
+async function collectRouteMetrics(page: Page) {
+  return page.evaluate((selector) => {
+    const round = (value: number) => Math.round(value * 100) / 100;
+    const heading = document.querySelector("h1");
+    const controls = new Set<number>();
+    const typography = new Set<string>();
+    let smallestText = Number.POSITIVE_INFINITY;
+
+    for (const element of document.querySelectorAll<HTMLElement>("main *, .ui-module-shell__header *, .ui-context-sidebar *")) {
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+      const style = getComputedStyle(element);
+
+      if (element.matches(selector) && rect.height > 0) {
+        controls.add(round(rect.height));
+      }
+
+      // Screen-reader-only copy and the hidden native <select> mirror inherit the browser
+      // default of 16px. They are never seen, so they are not part of the visual scale.
+      const visuallyHidden = style.clip === "rect(0px, 0px, 0px, 0px)"
+        || style.clipPath === "inset(50%)"
+        || element.closest(".ui-sr-only, .ui-select-native") !== null;
+
+      if (!visuallyHidden && element.children.length === 0 && element.textContent?.trim()) {
+        const size = parseFloat(style.fontSize);
+        if (Number.isFinite(size)) smallestText = Math.min(smallestText, size);
+        typography.add([
+          style.fontSize,
+          style.fontWeight,
+          style.lineHeight,
+          style.letterSpacing,
+          style.fontFamily.split(",")[0].trim(),
+        ].join("|"));
+      }
+    }
+
+    return {
+      headingX: heading ? round(heading.getBoundingClientRect().x) : null,
+      controlHeights: [...controls].sort((left, right) => left - right),
+      typography: [...typography],
+      smallestText: Number.isFinite(smallestText) ? smallestText : null,
+    };
+  }, SYSTEM_CONTROL_SELECTOR);
+}
+
+test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
+  test("the page title starts at the same x on every route", async ({ routinePage: page }) => {
+    const positions: Array<{ route: string; x: number | null }> = [];
+
+    for (const route of ROUTES) {
+      await openRoutineRoute(page, route);
+      const { headingX } = await collectRouteMetrics(page);
+      positions.push({ route, x: headingX });
+    }
+
+    const values = positions.map((entry) => entry.x);
+    expect(values.every((value) => value !== null), "every route renders an h1").toBe(true);
+
+    const first = values[0]!;
+    for (const { route, x } of positions) {
+      expect(
+        Math.abs(x! - first),
+        // Pre-audit this was 232 / 260 / 262px because PageHeader's `leading` slot was used
+        // by six modules, skipped by four and sized differently again in Praca.
+        `${route}: page title must not shift horizontally between tabs (got ${x}, expected ${first})`,
+      ).toBeLessThanOrEqual(1);
+    }
+  });
+
+  for (const route of ROUTES) {
+    test(`${route} uses only tokenised control heights`, async ({ routinePage: page }) => {
+      await openRoutineRoute(page, route);
+      const { controlHeights } = await collectRouteMetrics(page);
+
+      const offenders = controlHeights.filter((height) => !ALLOWED_CONTROL_HEIGHTS.some(
+        (allowed) => Math.abs(height - allowed) <= CONTROL_HEIGHT_TOLERANCE,
+      ));
+
+      expect(
+        offenders,
+        // Notatki reported 12 distinct heights pre-audit, including 22.5 and 98.88.
+        `${route}: control heights must come from --control-height-* (${ALLOWED_CONTROL_HEIGHTS.join(", ")}px)`,
+      ).toEqual([]);
+    });
+
+    test(`${route} keeps every text run at 11px or larger`, async ({ routinePage: page }) => {
+      await openRoutineRoute(page, route);
+      const { smallestText } = await collectRouteMetrics(page);
+
+      expect(
+        smallestText,
+        // Kalendarz, Odżywianie and Cele rendered 9px copy before the audit.
+        `${route}: smallest rendered font-size`,
+      ).toBeGreaterThanOrEqual(11);
+    });
+  }
+
+  test("no route lets content escape the viewport", async ({ routinePage: page }) => {
+    for (const route of ROUTES) {
+      await openRoutineRoute(page, route);
+      const escaping = await page.evaluate(() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const offenders: string[] = [];
+
+        for (const element of document.querySelectorAll<HTMLElement>("body *")) {
+          const style = getComputedStyle(element);
+          if (style.display === "none" || style.visibility === "hidden") continue;
+          // Visually hidden helpers are clipped and cannot produce a scrollbar.
+          if (style.clip === "rect(0px, 0px, 0px, 0px)" || style.clipPath === "inset(50%)") continue;
+          if (style.overflowX !== "visible") continue;
+
+          const rect = element.getBoundingClientRect();
+          if (rect.width === 0 || rect.right <= viewportWidth + 1) continue;
+
+          let clipped = false;
+          for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+            if (getComputedStyle(parent).overflowX !== "visible") { clipped = true; break; }
+          }
+          if (!clipped) {
+            offenders.push(`${element.tagName.toLowerCase()}.${String(element.className).split(" ")[0]}`);
+          }
+        }
+        return offenders.slice(0, 5);
+      });
+
+      expect(escaping, `${route}: no element may extend past the viewport`).toEqual([]);
+    }
+  });
+
+  test("the whole app shares one small typographic scale", async ({ routinePage: page }) => {
+    const combinations = new Set<string>();
+
+    for (const route of ROUTES) {
+      await openRoutineRoute(page, route);
+      const { typography } = await collectRouteMetrics(page);
+      typography.forEach((entry) => combinations.add(entry));
+    }
+
+    /*
+     * A ratchet, not a target. 48 combinations pre-audit, 42 once line-height,
+     * letter-spacing and font-weight were tokenised. Much of what remains is legitimate
+     * (7 sizes x 3 leadings x 3 weights x 2 families). Closing the rest depends on
+     * migrating Zadania and Cele off inline styles onto the shared classes, so lower this
+     * number as that work lands rather than relaxing it.
+     */
+    expect(
+      combinations.size,
+      `unique typography combinations across all routes:\n${[...combinations].sort().join("\n")}`,
+    ).toBeLessThanOrEqual(42);
+  });
+});
+
+test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
+  test("the primary sidebar and page header keep fixed dimensions", async ({ routinePage: page }) => {
+    for (const route of ROUTES) {
+      await openRoutineRoute(page, route);
+      const box = await page.evaluate(() => {
+        const sidebar = document.querySelector(".app-sidebar");
+        const header = document.querySelector(".ui-module-shell__header");
+        return {
+          sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : null,
+          headerHeight: header ? Math.round(header.getBoundingClientRect().height) : null,
+        };
+      });
+
+      const viewport = page.viewportSize()!;
+      if (viewport.width > 980) {
+        expect(box.sidebarWidth, `${route}: --app-sidebar-width`).toBe(204);
+      }
+      expect(box.headerHeight, `${route}: --page-header-height plus its border`).toBe(71);
+    }
+  });
+});

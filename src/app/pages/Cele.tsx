@@ -265,7 +265,6 @@ export default function Cele() {
     <PageHeader
       title="Cele"
       description="Przegląd Twoich celów i postępów"
-      leading={<Target size={18} strokeWidth={1.5} />}
       meta={storageFailed
         ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
         : loadStatus === "corrupt"
@@ -559,8 +558,8 @@ export default function Cele() {
                 ["Wpisy postępu", importCandidate.preview.progressCount],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border p-3" style={{ background: C.inputBg, borderColor: C.borderSubtle }}>
-                  <dt className="text-[10px]" style={{ color: C.textMuted }}>{label}</dt>
-                  <dd className="mt-1 text-[16px] font-semibold tabular-nums" style={{ color: C.textPrimary }}>{value}</dd>
+                  <dt className="text-[11px]" style={{ color: C.textMuted }}>{label}</dt>
+                  <dd className="mt-1 text-[var(--text-section)] font-semibold tabular-nums" style={{ color: C.textPrimary }}>{value}</dd>
                 </div>
               ))}
             </dl>
@@ -578,7 +577,7 @@ export default function Cele() {
         >
           <div className="space-y-5">
             <fieldset>
-              <legend className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: C.textMuted }}>Domyślny widok</legend>
+              <legend className="mb-2 text-[11px] uppercase tracking-wider" style={{ color: C.textMuted }}>Domyślny widok</legend>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"

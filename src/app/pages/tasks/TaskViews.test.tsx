@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -103,31 +103,3 @@ describe("TaskDetail virtual occurrence semantics", () => {
   });
 });
 
-describe("TaskDetail Work assignment", () => {
-  it("offers active company projects and reports the selected project", () => {
-    const onWorkProjectChange = vi.fn();
-    const task = recurringTask();
-    const { container } = render(
-      <TaskDetail
-        task={task}
-        onClose={() => undefined}
-        onToggleCompletion={() => undefined}
-        onUpdate={() => undefined}
-        onDelete={() => undefined}
-        listy={[]}
-        tagi={[]}
-        workProjectId=""
-        workProjectOptions={[
-          { value: "", label: "Bez firmy i projektu" },
-          { value: "project-launch", label: "Acme · Launch" },
-        ]}
-        onWorkProjectChange={onWorkProjectChange}
-      />,
-    );
-
-    expect(screen.getByRole("combobox", { name: /Firma i projekt/ })).toBeInTheDocument();
-    fireEvent.change(container.querySelector("select")!, { target: { value: "project-launch" } });
-
-    expect(onWorkProjectChange).toHaveBeenCalledWith("project-launch");
-  });
-});

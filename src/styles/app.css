@@ -68,12 +68,12 @@
   background: var(--color-precision-blue-strong);
   color: var(--color-chalk-white);
   font-size: var(--text-label);
-  font-weight: 700;
+  font-weight: var(--weight-semibold);
 }
 
 .app-route-state__brand strong {
   font-size: var(--text-body);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .app-route-state__icon {
@@ -97,8 +97,8 @@
   margin-bottom: var(--space-sm);
   color: var(--color-text-muted);
   font-size: var(--text-label);
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -106,9 +106,9 @@
   max-width: 24ch;
   color: var(--color-chalk-white);
   font-size: var(--text-headline);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
 }
 
 .app-route-state__description {
@@ -116,7 +116,7 @@
   margin-top: var(--space-md);
   color: var(--color-text-secondary);
   font-size: var(--text-body);
-  line-height: 1.6;
+  line-height: var(--leading-normal);
   overflow-wrap: anywhere;
 }
 
@@ -218,15 +218,15 @@
   background: var(--color-precision-blue-strong);
   color: var(--color-chalk-white);
   font-size: var(--text-body);
-  font-weight: 700;
+  font-weight: var(--weight-semibold);
 }
 
 .app-brand-label {
   min-width: 0;
   color: var(--color-chalk-white);
   font-size: var(--text-body);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-normal);
   white-space: nowrap;
 }
 
@@ -265,7 +265,7 @@
   background: var(--color-graphite-card);
   color: var(--color-chalk-white);
   font-size: var(--text-body-emphasis);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   text-decoration: none;
   transform: translateY(calc(-100% - var(--space-xl)));
   transition: transform var(--motion-fast) var(--ease-out);
@@ -379,7 +379,7 @@
 .app-nav-item.is-active {
   background: var(--color-precision-blue-soft);
   color: var(--color-precision-blue-text);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .app-sidebar.is-collapsed .app-nav-item {
@@ -473,7 +473,7 @@ button.app-sidebar-glance__row:disabled {
   font-family: var(--font-data);
   font-size: var(--text-label);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .app-sidebar-glance__copy small {
@@ -504,13 +504,13 @@ button.app-sidebar-glance__row:disabled {
   background: var(--color-graphite-panel);
   color: var(--color-chalk-white);
   font-size: var(--text-label);
-  font-weight: 700;
+  font-weight: var(--weight-semibold);
 }
 
 .app-sidebar-profile__copy strong {
   color: var(--color-text-secondary);
   font-size: var(--text-label);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .app-sidebar-profile__copy small {
@@ -577,7 +577,7 @@ button.app-sidebar-glance__row:disabled {
 
 .app-sidebar-popover__heading strong {
   font-size: var(--text-label);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .app-sidebar-popover > button,
@@ -625,7 +625,7 @@ button.app-sidebar-glance__row:disabled {
 .app-sidebar-popover__profile strong {
   color: var(--color-text-secondary);
   font-size: var(--text-label);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .app-sidebar-popover > button small,
@@ -633,7 +633,7 @@ button.app-sidebar-glance__row:disabled {
 .app-sidebar-popover__profile small {
   color: var(--color-text-muted);
   font-size: var(--text-micro);
-  line-height: 1.4;
+  line-height: var(--leading-snug);
 }
 
 .app-module-settings {
@@ -660,7 +660,7 @@ button.app-sidebar-glance__row:disabled {
 .app-module-settings__heading strong {
   color: var(--color-text-secondary);
   font-size: var(--text-label);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .app-module-settings__heading small {
@@ -841,7 +841,7 @@ button.app-sidebar-glance__row:disabled {
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-muted);
   font-size: var(--text-micro);
-  line-height: 1.55;
+  line-height: var(--leading-normal);
 }
 
 .app-recovery-entry {
@@ -877,7 +877,21 @@ button.app-sidebar-glance__row:disabled {
   }
 }
 
+/*
+ * Global reduced-motion guard. Individual stylesheets may still opt specific elements out,
+ * but this catch-all means a new module cannot ship an unguarded animation: previously only
+ * 8 of 12 animated stylesheets honoured the preference.
+ */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .app-sidebar {
     transition: none;
   }
@@ -1064,7 +1078,7 @@ button.app-sidebar-glance__row:disabled {
   .app-mobile-menu__header strong {
     color: var(--color-chalk-white);
     font-size: var(--text-body);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .app-mobile-menu__header small {
@@ -1142,7 +1156,7 @@ button.app-sidebar-glance__row:disabled {
   .app-mobile-menu__module strong {
     color: inherit;
     font-size: var(--text-label);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .app-mobile-menu__module small {
@@ -1190,7 +1204,7 @@ button.app-sidebar-glance__row:disabled {
 .app-mobile-menu__weather strong {
     color: var(--color-text-secondary);
     font-size: var(--text-label);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .app-mobile-menu__actions small,
@@ -1227,7 +1241,7 @@ button.app-sidebar-glance__row:disabled {
     border-top: 1px solid var(--color-border-subtle);
     color: var(--color-text-muted);
     font-size: var(--text-body);
-    line-height: 1.6;
+    line-height: var(--leading-normal);
   }
 }
 
