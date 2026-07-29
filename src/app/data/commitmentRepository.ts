@@ -6,8 +6,10 @@ import {
   type TravelWorkspace,
 } from "./travelWorkspace";
 import {
+  createWorkId,
   loadWorkWorkspace,
   saveWorkWorkspace,
+  type WorkLinkedTaskDetails,
   type WorkProject,
   type WorkTask,
   type WorkTaskPriority,
@@ -15,14 +17,20 @@ import {
 } from "./workWorkspace";
 import type { TaskPriority, WorkspaceTask } from "./taskWorkspace";
 
-export type CommitmentSourceKind = "work" | "travel";
+export type CommitmentSourceKind = "work" | "travel" | "sport" | "goals" | "affairs" | "notes";
 
 export type CommitmentTaskSource = {
   kind: CommitmentSourceKind;
   entity: string;
   context: string;
   href: string;
+  originTaskId?: number;
+  managed?: "projection" | "native";
 };
+
+export type WorkTaskAssignmentResult =
+  | { status: "ok"; entity: string }
+  | { status: "invalid-project" | "unsupported-source" | "save-failed" };
 
 type ProjectionWorkspaces = {
   work: WorkWorkspace;
@@ -59,9 +67,12 @@ function isInternalSourceHref(kind: CommitmentSourceKind, value: string): boolea
   try {
     const parsed = new URL(value, "https://rootine.local");
     if (parsed.origin !== "https://rootine.local") return false;
-    return kind === "work"
-      ? parsed.pathname === "/praca"
-      : /^\/podroze\/[^/]+$/.test(parsed.pathname);
+    if (kind === "work") return parsed.pathname === "/praca";
+    if (kind === "travel") return /^\/podroze\/[^/]+$/.test(parsed.pathname);
+    if (kind === "sport") return parsed.pathname === "/sport";
+    if (kind === "goals") return parsed.pathname === "/cele" || /^\/cele\/[^/]+$/.test(parsed.pathname);
+    if (kind === "affairs") return parsed.pathname === "/sprawy";
+    return parsed.pathname === "/notatki";
   } catch {
     return false;
   }
@@ -69,17 +80,32 @@ function isInternalSourceHref(kind: CommitmentSourceKind, value: string): boolea
 
 export function isCommitmentTaskSource(value: unknown): value is CommitmentTaskSource {
   return isRecord(value)
-    && (value.kind === "work" || value.kind === "travel")
+    && ["work", "travel", "sport", "goals", "affairs", "notes"].includes(String(value.kind))
     && typeof value.entity === "string"
     && isValidEntity(value.entity)
     && typeof value.context === "string"
     && value.context.trim().length > 0
     && typeof value.href === "string"
-    && isInternalSourceHref(value.kind, value.href);
+    && isInternalSourceHref(value.kind as CommitmentSourceKind, value.href)
+    && (value.originTaskId === undefined
+      || (typeof value.originTaskId === "number" && Number.isSafeInteger(value.originTaskId)))
+    && (value.managed === undefined || value.managed === "projection" || value.managed === "native");
 }
 
 function encodeEntity(parentId: string, taskId: string): string {
   return `${encodeURIComponent(parentId)}/${encodeURIComponent(taskId)}`;
+}
+
+function decodeEntity(entity: string): [parentId: string, taskId: string] | null {
+  const parts = entity.split("/");
+  if (parts.length !== 2) return null;
+  try {
+    const parentId = decodeURIComponent(parts[0]);
+    const taskId = decodeURIComponent(parts[1]);
+    return parentId && taskId ? [parentId, taskId] : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -148,6 +174,26 @@ function workContext(
   return company ? `${company.name} · ${project.name}` : project.name;
 }
 
+function linkedTaskProjectionFields(task: WorkTask): Partial<WorkspaceTask> {
+  const linked = task.linkedTask;
+  if (!linked) return {};
+  return {
+    time: linked.time,
+    endTime: linked.endTime,
+    notes: linked.notes,
+    subtasks: linked.subtasks?.map((subtask) => ({ ...subtask })),
+    comments: linked.comments?.map((comment) => ({ ...comment })),
+    schedule: linked.schedule
+      ? {
+          ...linked.schedule,
+          completedDates: linked.schedule.completedDates
+            ? [...linked.schedule.completedDates]
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
 function baselineKey(kind: CommitmentSourceKind, entity: string): string {
   return `${kind}\u0000${entity}`;
 }
@@ -176,16 +222,19 @@ function projectWorkTask(
     id: commitmentTaskId("work", entity),
     text: task.title,
     done: task.completed,
+    ...linkedTaskProjectionFields(task),
     ...(priority ? { priority } : {}),
     list: "praca",
     tags: ["praca"],
-    view: "skrzynka",
+    view: task.linkedTask?.view ?? "skrzynka",
     ...calendarFields(task.dueDate, referenceDate),
     source: {
       kind: "work",
       entity,
       context: workContext(workspace, project),
       href: `/praca?firma=${encodeURIComponent(project.companyId)}&projekt=${encodeURIComponent(project.id)}`,
+      originTaskId: task.linkedTask?.originTaskId,
+      managed: "projection",
     },
   };
 }
@@ -218,6 +267,8 @@ function projectTravelTask(
       entity,
       context: travelContext(trip),
       href: `/podroze/${encodeURIComponent(trip.id)}?sekcja=tasks`,
+      originTaskId: task.linkedTask?.originTaskId,
+      managed: "projection",
     },
   };
 }
@@ -237,14 +288,126 @@ export function projectCommitments(
   );
   const workTasks = workspaces.work.tasks.flatMap((task) => {
     const project = activeProjects.get(task.projectId);
-    return project ? [projectWorkTask(workspaces.work, project, task, referenceDate)] : [];
+    return project && task.linkedTask
+      ? [projectWorkTask(workspaces.work, project, task, referenceDate)]
+      : [];
   });
 
   const travelTasks = workspaces.travel.trips
     .filter((trip) => trip.status !== "completed" && trip.archivedAt === null)
-    .flatMap((trip) => trip.tasks.map((task) => projectTravelTask(trip, task, referenceDate)));
+    .flatMap((trip) => trip.tasks
+      .filter((task) => task.linkedTask)
+      .map((task) => projectTravelTask(trip, task, referenceDate)));
 
   return [...workTasks, ...travelTasks];
+}
+
+export function linkedWorkTaskOriginIds(workspace = loadWorkWorkspace()): Set<number> {
+  return new Set(workspace.tasks.flatMap((task) => (
+    task.linkedTask ? [task.linkedTask.originTaskId] : []
+  )));
+}
+
+function taskPriorityForWork(priority: TaskPriority | undefined): WorkTaskPriority {
+  return priority ?? "none";
+}
+
+function linkedDetailsFromTask(task: WorkspaceTask): WorkLinkedTaskDetails {
+  return {
+    originTaskId: task.id,
+    view: task.view,
+    time: task.time,
+    endTime: task.endTime,
+    notes: task.notes,
+    tags: task.tags ? [...task.tags] : undefined,
+    list: task.list,
+    subtasks: task.subtasks?.map((subtask) => ({ ...subtask })),
+    comments: task.comments?.map((comment) => ({ ...comment })),
+    schedule: task.schedule
+      ? {
+          ...task.schedule,
+          completedDates: task.schedule.completedDates
+            ? [...task.schedule.completedDates]
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
+function updateLinkedDetailsFromTask(
+  linkedTask: WorkLinkedTaskDetails,
+  task: WorkspaceTask,
+): WorkLinkedTaskDetails {
+  return {
+    ...linkedTask,
+    view: task.view,
+    time: task.time,
+    endTime: task.endTime,
+    notes: task.notes,
+    subtasks: task.subtasks?.map((subtask) => ({ ...subtask })),
+    comments: task.comments?.map((comment) => ({ ...comment })),
+    schedule: task.schedule
+      ? {
+          ...task.schedule,
+          completedDates: task.schedule.completedDates
+            ? [...task.schedule.completedDates]
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
+export function workProjectIdForTask(task: WorkspaceTask): string | null {
+  if (task.source?.kind !== "work") return null;
+  return decodeEntity(task.source.entity)?.[0] ?? null;
+}
+
+/**
+ * Work remains canonical for assigned tasks. linkedTask preserves the global
+ * task details that Work does not edit, while originTaskId makes retries and
+ * cross-workspace recovery idempotent.
+ */
+export function assignTaskToWorkProject(
+  task: WorkspaceTask,
+  projectId: string,
+): WorkTaskAssignmentResult {
+  if (task.source?.kind === "travel") return { status: "unsupported-source" };
+  const workspace = loadWorkWorkspace();
+  const project = workspace.projects.find((candidate) => (
+    candidate.id === projectId && candidate.status === "active"
+  ));
+  if (!project) return { status: "invalid-project" };
+
+  const sourceEntity = task.source?.kind === "work" ? decodeEntity(task.source.entity) : null;
+  const sourceTaskId = sourceEntity?.[1];
+  const existing = sourceTaskId
+    ? workspace.tasks.find((candidate) => candidate.id === sourceTaskId)
+    : workspace.tasks.find((candidate) => candidate.linkedTask?.originTaskId === task.id);
+  if (task.source?.kind === "work" && !existing) return { status: "unsupported-source" };
+
+  const workTaskId = existing?.id ?? createWorkId("task");
+  const nextTask: WorkTask = {
+    id: workTaskId,
+    projectId,
+    parentId: existing?.projectId === projectId ? existing.parentId : null,
+    title: task.text,
+    completed: task.done,
+    priority: taskPriorityForWork(task.priority),
+    dueDate: task.calendarDate ?? "",
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    linkedTask: existing?.linkedTask
+      ? updateLinkedDetailsFromTask(existing.linkedTask, task)
+      : linkedDetailsFromTask(task),
+  };
+  const nextWorkspace: WorkWorkspace = {
+    ...workspace,
+    tasks: existing
+      ? workspace.tasks.map((candidate) => candidate.id === existing.id ? nextTask : candidate)
+      : [...workspace.tasks, nextTask],
+  };
+
+  if (!saveWorkWorkspace(nextWorkspace)) return { status: "save-failed" };
+  return { status: "ok", entity: encodeEntity(project.id, workTaskId) };
 }
 
 function mapProjectedByKind(tasks: WorkspaceTask[], kind: CommitmentSourceKind) {
@@ -278,11 +441,15 @@ function applyWorkEdits(
     const completed = candidate.done !== baseline.done ? candidate.done : task.completed;
     const priority = candidatePriority !== baselinePriority ? candidatePriority : task.priority;
     const dueDate = projectedDueDate !== baseline.dueDate ? projectedDueDate : task.dueDate;
+    const linkedTask = task.linkedTask
+      ? updateLinkedDetailsFromTask(task.linkedTask, candidate)
+      : undefined;
     if (
       task.title === title
       && task.completed === completed
       && task.priority === priority
       && task.dueDate === dueDate
+      && JSON.stringify(task.linkedTask) === JSON.stringify(linkedTask)
     ) {
       return task;
     }
@@ -293,6 +460,7 @@ function applyWorkEdits(
       completed,
       priority,
       dueDate,
+      ...(linkedTask ? { linkedTask } : {}),
     };
   });
   return {
@@ -372,5 +540,23 @@ export function propagateCommitmentEdits(tasks: WorkspaceTask[]): boolean {
 }
 
 export function stripProjectedCommitments(tasks: WorkspaceTask[]): WorkspaceTask[] {
-  return tasks.filter((task) => task.source === undefined);
+  return tasks.filter((task) => {
+    const source = task.source;
+    if (!source) return true;
+    if (source.managed === "projection") return false;
+    // Migrate projections written by older versions before the managed marker existed.
+    if (source.managed === undefined && task.id < 0 && (source.kind === "work" || source.kind === "travel")) return false;
+    return true;
+  });
+}
+
+export function commitmentSourceLabel(kind: CommitmentSourceKind): string {
+  return {
+    work: "Praca",
+    travel: "Podróże",
+    sport: "Sport",
+    goals: "Cele",
+    affairs: "Sprawy",
+    notes: "Notatki",
+  }[kind];
 }

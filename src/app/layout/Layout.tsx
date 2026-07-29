@@ -63,6 +63,15 @@ type WeatherState =
 
 type OpenMenu = "settings" | "profile" | "mobileMore" | "mobileSettings" | "mobileProfile" | null;
 
+const MOBILE_MENU_FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
 const TIME_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   hour: "2-digit",
   minute: "2-digit",
@@ -291,10 +300,30 @@ export default function Layout() {
   useEffect(() => {
     if (!openMenu?.startsWith("mobile")) return;
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpenMenu(null);
-      window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
+    const handleMenuKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMenu(null);
+        window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
+        return;
+      }
+      if (event.key !== "Tab" || !mobileMenuRef.current) return;
+      const focusable = Array.from(
+        mobileMenuRef.current.querySelectorAll<HTMLElement>(MOBILE_MENU_FOCUSABLE),
+      ).filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) {
+        event.preventDefault();
+        mobileMenuRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
     const closeOnOutsideClick = (event: PointerEvent) => {
@@ -308,10 +337,10 @@ export default function Layout() {
       }
     };
 
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", handleMenuKeyDown);
     document.addEventListener("pointerdown", closeOnOutsideClick);
     return () => {
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", handleMenuKeyDown);
       document.removeEventListener("pointerdown", closeOnOutsideClick);
     };
   }, [openMenu]);
@@ -406,6 +435,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      <a className="app-skip-link" href="#primary-workspace">Przejdź do treści</a>
       <aside
         id="primary-sidebar"
         className={`app-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
@@ -456,7 +486,7 @@ export default function Layout() {
         </nav>
 
         <div className="app-sidebar__bottom">
-          <div className="app-sidebar-glance" aria-label="Data, godzina i pogoda" aria-live="polite">
+          <div className="app-sidebar-glance" aria-label="Data, godzina i pogoda">
             <div className="app-sidebar-glance__row" title={`${timeLabel} · ${dateLabel}`}>
               <Clock3 size={16} strokeWidth={1.7} aria-hidden="true" />
               <span className="app-sidebar-glance__copy">
@@ -580,7 +610,7 @@ export default function Layout() {
       </aside>
 
       <div className="app-shell__body">
-        <div className="app-shell__content">
+        <div id="primary-workspace" className="app-shell__content" tabIndex={-1}>
           <Suspense fallback={<RouteLoadingState />}>
             <Outlet />
           </Suspense>
@@ -592,6 +622,9 @@ export default function Layout() {
             id="mobile-more-menu"
             className="app-mobile-menu"
             data-app-popover
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
             aria-label={
               openMenu === "mobileSettings"
                 ? "Ustawienia aplikacji"

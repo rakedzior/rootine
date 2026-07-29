@@ -7,6 +7,10 @@ import {
   PenLine, Hash, List, CheckSquare,
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
+import {
+  assignTaskToWorkProject,
+  workProjectIdForTask,
+} from "../data/commitmentRepository";
 import { todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
@@ -15,7 +19,10 @@ import {
   type TaskOccurrence,
 } from "../data/taskSchedule";
 import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
-import { WORK_STORAGE_KEY } from "../data/workWorkspace";
+import {
+  loadWorkWorkspace,
+  WORK_STORAGE_KEY,
+} from "../data/workWorkspace";
 import {
   isHabitDoneOnDate,
   emptyTaskTrash,
@@ -82,6 +89,7 @@ import {
 
 export default function Zadania() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
+  const [workWorkspace, setWorkWorkspace] = useState(loadWorkWorkspace);
   const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(initialTaskView);
   const [listFilter,    setListFilter]    = useState<string | null>(null);
@@ -95,6 +103,7 @@ export default function Zadania() {
   const [newTask,       setNewTask]       = useState("");
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
   const [newTaskList,   setNewTaskList]   = useState<string | null>(null);
+  const [newTaskProjectId, setNewTaskProjectId] = useState("");
   const [inputFocused,  setInputFocused]  = useState(false);
   const [newPriority,   setNewPriority]   = useState<Priority | null>(null);
   const [newDateVal,    setNewDateVal]    = useState<DateVal>(DEFAULT_DATE_VAL);
@@ -104,6 +113,8 @@ export default function Zadania() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
+  const [newTaskAssignmentError, setNewTaskAssignmentError] = useState("");
+  const [detailAssignmentError, setDetailAssignmentError] = useState("");
   const [taxonomyDelete, setTaxonomyDelete] = useState<{
     kind: "list" | "tag";
     id: string;
@@ -132,9 +143,13 @@ export default function Zadania() {
         || !Number.isInteger(current)
       ) ? current : null);
     };
+    const syncWorkWorkspace = () => {
+      setWorkWorkspace(loadWorkWorkspace());
+      syncWorkspace();
+    };
     const unsubscribers = [
       subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace),
-      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkspace),
+      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkWorkspace),
       subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, syncWorkspace),
     ];
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -202,6 +217,18 @@ export default function Zadania() {
   const selectedTask = selectedSourceId === null
     ? null
     : tasks.find((task) => task.id === selectedSourceId) ?? null;
+  const workProjectOptions = useMemo(() => {
+    const companies = new Map(workWorkspace.companies.map((company) => [company.id, company]));
+    return [
+      { value: "", label: "Bez firmy i projektu" },
+      ...workWorkspace.projects
+        .filter((project) => project.status === "active" && companies.has(project.companyId))
+        .map((project) => ({
+          value: project.id,
+          label: `${companies.get(project.companyId)!.name} · ${project.name}`,
+        })),
+    ];
+  }, [workWorkspace.companies, workWorkspace.projects]);
   const tagUsage = tasks.reduce<Record<string, number>>((counts, task) => {
     for (const tag of task.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
     return counts;
@@ -288,6 +315,7 @@ export default function Zadania() {
   const addTask = () => {
     const text = newTask.trim();
     if (!text) return;
+    setNewTaskAssignmentError("");
     const id = Date.now();
     const dateLabel = formatDateLabel(newDateVal);
     const calendarDate = newDateVal.date ? toCalendarDateKey(newDateVal.date) : undefined;
@@ -298,18 +326,7 @@ export default function Zadania() {
       || taskView === "ukonczone"
       ? "dzis"
       : taskView;
-    setTagi(existing => {
-      const known = new Set(existing.map(tag => tag.id));
-      const missing = newTaskTags.filter(tag => !known.has(tag));
-      return missing.length === 0
-        ? existing
-        : [...existing, ...missing.map((tag, index) => ({
-            id: tag,
-            label: tag,
-            color: PALETTE[(existing.length + index) % PALETTE.length],
-          }))];
-    });
-    setTasks(p => [...p, {
+    const task: Task = {
       id, text, done: false, view: calendarDate ? taskViewForCalendarDate(calendarDate) : fallbackView,
       tags: newTaskTags.length > 0 ? newTaskTags : undefined,
       list: newTaskList ?? undefined,
@@ -319,10 +336,46 @@ export default function Zadania() {
       schedule: scheduleFromDateValue(newDateVal),
       date: dateLabel || undefined,
       calendarDate,
-    }]);
+    };
+    if (newTaskProjectId) {
+      const assignment = assignTaskToWorkProject(task, newTaskProjectId);
+      if (assignment.status !== "ok") {
+        setStorageFailed(assignment.status === "save-failed");
+        setNewTaskAssignmentError(
+          assignment.status === "invalid-project"
+            ? "Projekt nie jest już aktywny. Wybierz inny projekt i spróbuj ponownie."
+            : "Nie udało się przypisać zadania. Dane formularza zostały zachowane.",
+        );
+        return;
+      }
+      const nextWorkspace = loadTaskWorkspace();
+      workspaceRef.current = nextWorkspace;
+      setTasks(nextWorkspace.tasks);
+      setHabits(nextWorkspace.habits);
+      setListy(nextWorkspace.lists);
+      setTagi(nextWorkspace.tags);
+      setWorkWorkspace(loadWorkWorkspace());
+      setSelectedId(
+        nextWorkspace.tasks.find((candidate) => candidate.source?.entity === assignment.entity)?.id ?? null,
+      );
+    } else {
+      setTagi((existing) => {
+        const known = new Set(existing.map((tag) => tag.id));
+        const missing = newTaskTags.filter((tag) => !known.has(tag));
+        return missing.length === 0
+          ? existing
+          : [...existing, ...missing.map((tag, index) => ({
+              id: tag,
+              label: tag,
+              color: PALETTE[(existing.length + index) % PALETTE.length],
+            }))];
+      });
+      setTasks((current) => [...current, task]);
+      setSelectedId(id);
+    }
     setNewTask(""); setNewPriority(null); setNewTaskTags([]); setNewTaskList(null);
+    setNewTaskProjectId("");
     setNewDateVal(DEFAULT_DATE_VAL); setInputDropdown(null);
-    setSelectedId(id);
   };
 
   // List CRUD
@@ -401,6 +454,31 @@ export default function Zadania() {
       };
     }));
   };
+  const assignExistingTaskToProject = (id: number, projectId: string) => {
+    const task = tasks.find((candidate) => candidate.id === id);
+    if (!task || !projectId) return;
+    setDetailAssignmentError("");
+    const assignment = assignTaskToWorkProject(task, projectId);
+    if (assignment.status !== "ok") {
+      setStorageFailed(assignment.status === "save-failed");
+      setDetailAssignmentError(
+        assignment.status === "invalid-project"
+          ? "Projekt nie jest już aktywny. Wybierz inny projekt."
+          : "Nie udało się zmienić przypisania. Spróbuj ponownie.",
+      );
+      return;
+    }
+    const nextWorkspace = loadTaskWorkspace();
+    workspaceRef.current = nextWorkspace;
+    setTasks(nextWorkspace.tasks);
+    setHabits(nextWorkspace.habits);
+    setListy(nextWorkspace.lists);
+    setTagi(nextWorkspace.tags);
+    setWorkWorkspace(loadWorkWorkspace());
+    setSelectedId(
+      nextWorkspace.tasks.find((candidate) => candidate.source?.entity === assignment.entity)?.id ?? null,
+    );
+  };
   const workspaceWithTasks = (nextTasks: Task[]) => ({
     ...workspaceRef.current,
     tasks: nextTasks,
@@ -453,6 +531,7 @@ export default function Zadania() {
   const closeDatePicker = useCallback(() => setDatePickerOpen(false), []);
 
   useEffect(() => { setSelectedId(null); }, [taskView, listFilter, tagFilter]);
+  useEffect(() => { setDetailAssignmentError(""); }, [selectedId]);
 
   const getPlaceholder = () => {
     if (listFilter) return `Dodaj zadanie do "${listy.find(l => l.id === listFilter)?.label}"`;
@@ -470,8 +549,43 @@ export default function Zadania() {
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
+  const pageHeader = taskView === "podsumowanie" ? (
+    <PageHeader
+      title="Zadania"
+      description={`Podsumowanie · ${todayStr()}`}
+      leading={<CheckSquare size={18} strokeWidth={1.5} />}
+      meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+      actions={<Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}><span className="header-action-label">Dodaj zadanie</span></Button>}
+    />
+  ) : taskView === "nawyki" ? (
+    <PageHeader
+      title="Zadania"
+      description={`Nawyki · ${todayStr()}`}
+      leading={<Flame size={18} strokeWidth={1.5} />}
+      meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+    />
+  ) : (
+    <PageHeader
+      title="Zadania"
+      description={`${listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]} · ${todayStr()}`}
+      leading={<CheckSquare size={18} strokeWidth={1.5} />}
+      meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+      actions={(
+        taskView === "kosz" && visible.length > 0 ? (
+          <Button variant="danger" leadingIcon={<Trash2 size={14} />} onClick={() => setEmptyTrashOpen(true)}>
+            Opróżnij kosz
+          </Button>
+        ) : (
+          <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
+            <span className="header-action-label">Dodaj zadanie</span>
+          </Button>
+        )
+      )}
+    />
+  );
+
   return (
-    <ModuleShell>
+    <ModuleShell pageWidth="wide" header={pageHeader}>
 
       {/* ── Sub-sidebar ── */}
       <ContextSidebar label="Widoki i listy zadań" className="overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -734,13 +848,6 @@ export default function Zadania() {
       {/* ── Summary document (replaces task list in podsumowanie mode) ── */}
       {taskView === "podsumowanie" && (
         <ModuleMain>
-          <PageHeader
-            title="Zadania"
-            description={`Podsumowanie · ${todayStr()}`}
-            leading={<CheckSquare size={18} strokeWidth={1.5} />}
-            meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-            actions={<Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}><span className="header-action-label">Nowe zadanie</span></Button>}
-          />
           <WorkspaceToolbar>
             <Select
               aria-label="Widok zadań"
@@ -762,12 +869,6 @@ export default function Zadania() {
 
       {taskView === "nawyki" && (
         <ModuleMain>
-          <PageHeader
-            title="Zadania"
-            description={`Nawyki · ${todayStr()}`}
-            leading={<Flame size={18} strokeWidth={1.5} />}
-            meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          />
           <WorkspaceToolbar>
             <Select
               aria-label="Widok zadań"
@@ -793,24 +894,6 @@ export default function Zadania() {
           background: C.bg,
           display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
         }}>
-        <PageHeader
-          title="Zadania"
-          description={`${listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]} · ${todayStr()}`}
-          leading={<CheckSquare size={18} strokeWidth={1.5} />}
-          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={(
-            taskView === "kosz" && visible.length > 0 ? (
-              <Button variant="danger" leadingIcon={<Trash2 size={14} />} onClick={() => setEmptyTrashOpen(true)}>
-                Opróżnij kosz
-              </Button>
-            ) : (
-              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
-                <span className="header-action-label">Nowe zadanie</span>
-              </Button>
-            )
-          )}
-        />
-
         <WorkspaceToolbar className="task-workspace-toolbar">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Select
@@ -923,7 +1006,20 @@ export default function Zadania() {
               />
 
               {/* Controls */}
-              <div className="flex items-center gap-0.5 flex-shrink-0">
+              <div className="task-entry-controls flex items-center gap-0.5 flex-shrink-0">
+                <Select
+                  aria-label="Firma i projekt nowego zadania"
+                  fieldClassName="task-work-project-field"
+                  compact
+                  value={newTaskProjectId}
+                  options={workProjectOptions}
+                  disabled={workProjectOptions.length === 1}
+                  onChange={(event) => {
+                    setNewTaskProjectId(event.target.value);
+                    setNewTaskAssignmentError("");
+                  }}
+                />
+
                 {/* Flag — priority */}
                 <button
                   ref={flagBtnInputRef}
@@ -1005,6 +1101,9 @@ export default function Zadania() {
                 )}
               </div>
             </div>
+            {newTaskAssignmentError && (
+              <p className="task-assignment-error" role="alert">{newTaskAssignmentError}</p>
+            )}
           </form>
 
           {overdue.length > 0 && (
@@ -1197,6 +1296,10 @@ export default function Zadania() {
             onDelete={selectedTask.deleted ? (id) => setPurgeTaskId(id) : deleteTask}
             listy={listy}
             tagi={tagi}
+            workProjectOptions={workProjectOptions}
+            workProjectId={workProjectIdForTask(selectedTask) ?? ""}
+            workAssignmentError={detailAssignmentError}
+            onWorkProjectChange={(projectId) => assignExistingTaskToProject(selectedTask.id, projectId)}
           />
         ) : (
           <SummaryPanel tasks={visible} habits={habits} onToggleHabit={toggleHabit} />

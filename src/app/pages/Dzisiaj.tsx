@@ -2,7 +2,7 @@
  * THESIS: Widok Dzisiaj prowadzi od jednego bilansu dnia do szczegółowych sygnałów modułów.
  * OWN-WORLD: Grafitowe powierzchnie, precyzyjny błękit dla postępu i morskie szkło dla domkniętych obszarów.
  * STORY: Użytkownik najpierw widzi liczbę pozostałych rzeczy, potem skanuje zwarte wiersze źródłowych modułów.
- * FIRST VIEWPORT: Kompaktowa pogoda w nagłówku, jeden dominujący bilans dnia i pionowy rejestr modułów.
+ * FIRST VIEWPORT: Jeden dominujący bilans dnia i pionowy rejestr modułów wymagających reakcji.
  * FORM: Operacyjny dzienny bilans — seed 55ea3e9c.
  */
 import {
@@ -17,19 +17,8 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleMinus,
-  Cloud,
-  CloudFog,
-  CloudLightning,
-  CloudRain,
-  CloudSnow,
-  CloudSun,
   Flame,
-  LoaderCircle,
-  MapPin,
   Plus,
-  Snowflake,
-  Sun,
-  type LucideIcon,
 } from "lucide-react";
 import {
   AFFAIRS_STORAGE_KEY,
@@ -56,12 +45,6 @@ import {
   type WorkspaceHabit,
   type WorkspaceTask,
 } from "../data/taskWorkspace";
-import {
-  getTodayWeatherLabel,
-  loadTodayWeather,
-  TODAY_WEATHER_LOCATION,
-  type TodayWeather,
-} from "../data/todayWeather";
 import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
 import { loadWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
 import { useGoalsStore } from "../goals/goalsContext";
@@ -111,11 +94,6 @@ type ModuleSummaryProps = {
   progressLabel?: string;
 };
 
-type WeatherState =
-  | { status: "loading" }
-  | { status: "ready"; data: TodayWeather }
-  | { status: "error" };
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -142,7 +120,7 @@ function inspectDashboardSources(): DashboardSourceSummary {
     {
       keys: ["rootine.work-workspace.v1"],
       valid: (value: unknown) => isRecord(value)
-        && value.version === 1
+        && (value.version === 1 || value.version === 2)
         && Array.isArray(value.companies)
         && Array.isArray(value.projects)
         && Array.isArray(value.tasks),
@@ -314,19 +292,6 @@ function collectAffairs(workspace: AffairsWorkspace): TodayAffair[] {
   ].sort((left, right) => left.date.localeCompare(right.date));
 }
 
-function weatherIcon(code: number): LucideIcon {
-  if (code === 0) return Sun;
-  if (code === 1 || code === 2) return CloudSun;
-  if (code === 3) return Cloud;
-  if (code === 45 || code === 48) return CloudFog;
-  if (code >= 51 && code <= 67) return CloudRain;
-  if (code >= 71 && code <= 77) return Snowflake;
-  if (code >= 80 && code <= 82) return CloudRain;
-  if (code === 85 || code === 86) return CloudSnow;
-  if (code >= 95) return CloudLightning;
-  return CloudSun;
-}
-
 function sumNutrition(entries: NutritionEntry[]) {
   return entries.reduce((totals, entry) => ({
     calories: totals.calories + entry.calories,
@@ -377,7 +342,7 @@ function ModuleSummary({
               aria-valuemax={100}
               aria-valuenow={progress}
             >
-              <i style={{ width: `${progress}%` }} />
+              <i style={{ transform: `scaleX(${progress / 100})` }} />
             </span>
             {progressLabel && <small>{progressLabel}</small>}
           </>
@@ -402,7 +367,6 @@ export default function Dzisiaj() {
   const [nutritionLoad, setNutritionLoad] = useState(loadNutritionWorkspace);
   const [modulePreferences, setModulePreferences] = useState<ModulePreferences>(loadModulePreferences);
   const [sourceSummary, setSourceSummary] = useState(inspectDashboardSources);
-  const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
 
   useEffect(() => {
     const timer = window.setInterval(() => setToday(new Date()), 60_000);
@@ -451,18 +415,6 @@ export default function Dzisiaj() {
     };
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setWeather({ status: "loading" });
-    loadTodayWeather(todayKey, controller.signal)
-      .then((data) => setWeather({ status: "ready", data }))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setWeather({ status: "error" });
-      });
-    return () => controller.abort();
-  }, [todayKey]);
-
   const habitDoneToday = (habit: WorkspaceHabit) => isHabitDoneOnDate(habit, todayKey);
   const completedHabits = taskWorkspace.habits.filter(habitDoneToday).length;
   const remainingHabits = taskWorkspace.habits.length - completedHabits;
@@ -470,12 +422,18 @@ export default function Dzisiaj() {
   const habitsState = moduleState(taskWorkspace.habits.length, remainingHabits);
 
   const todayTasks = useMemo(
-    () => taskWorkspace.tasks.filter((task) => taskIsForToday(task, todayKey)),
+    () => taskWorkspace.tasks.filter((task) => (
+      task.source?.kind !== "work" && taskIsForToday(task, todayKey)
+    )),
     [taskWorkspace.tasks, todayKey],
   );
   const completedTodayTasks = todayTasks.filter((task) => task.done).length;
   const overdueTasks = taskWorkspace.tasks.filter((task) => (
-    !task.deleted && !task.done && Boolean(task.calendarDate) && task.calendarDate! < todayKey
+    task.source?.kind !== "work"
+    && !task.deleted
+    && !task.done
+    && Boolean(task.calendarDate)
+    && task.calendarDate! < todayKey
   ));
   const taskModuleTotal = todayTasks.length + overdueTasks.length;
   const taskModuleRemaining = taskModuleTotal - completedTodayTasks;
@@ -596,12 +554,6 @@ export default function Dzisiaj() {
   const hasDemoData = sourceSummary.hasDemoData
     || nutritionDay?.source === "demo";
 
-  const WeatherIcon = weather.status === "ready"
-    ? weatherIcon(weather.data.weatherCode)
-    : CloudSun;
-  const weatherLabel = weather.status === "ready"
-    ? getTodayWeatherLabel(weather.data.weatherCode)
-    : "";
   const ringStyle = {
     background: `conic-gradient(var(--today-ring-color) ${dailyProgress}%, var(--color-border-subtle) ${dailyProgress}%)`,
   } as CSSProperties;
@@ -777,69 +729,57 @@ export default function Dzisiaj() {
   ];
   const sortedModuleRows = modulePreferences.order
     .filter((moduleId) => visibleModuleIds.has(moduleId))
-    .flatMap((moduleId) => moduleRows.filter((module) => module.moduleId === moduleId));
+    .flatMap((moduleId) => moduleRows.filter((module) => module.moduleId === moduleId))
+    .map((module, preferenceIndex) => ({ module, preferenceIndex }))
+    .sort((left, right) => {
+      const stateRank: Record<ModuleState, number> = {
+        active: 0,
+        complete: 1,
+        empty: 2,
+      };
+      return stateRank[left.module.state] - stateRank[right.module.state]
+        || left.preferenceIndex - right.preferenceIndex;
+    })
+    .map(({ module }) => module);
+
+  const pageHeader = (
+    <PageHeader
+      title="Dzisiaj"
+      description={formatFullDate(today)}
+      meta={(
+        <Badge tone={hasStorageIssue ? "danger" : hasDemoData ? "violet" : "neutral"}>
+          {hasStorageIssue
+            ? "Część danych wymaga sprawdzenia"
+            : hasDemoData
+              ? "Część danych przykładowa"
+              : "Dane lokalne"}
+        </Badge>
+      )}
+      actions={(
+        <Button
+          variant="primary"
+          leadingIcon={<Plus size={13} aria-hidden="true" />}
+          aria-label="Dodaj zadanie"
+          onClick={() => navigate(
+            `${APP_MODULE_BY_ID.tasks.to}?widok=dzis&akcja=nowe-zadanie`,
+            {
+              state: {
+                intent: "create-task",
+                focus: "task-composer",
+                source: "dzisiaj",
+              },
+            },
+          )}
+        >
+          <span className="header-action-label">Dodaj zadanie</span>
+        </Button>
+      )}
+    />
+  );
 
   return (
-    <ModuleShell className="today-module">
+    <ModuleShell className="today-module" pageWidth="standard" header={pageHeader}>
       <ModuleMain>
-        <PageHeader
-          title="Dzisiaj"
-          description={formatFullDate(today)}
-          meta={(
-            <Badge tone={hasStorageIssue ? "danger" : hasDemoData ? "violet" : "neutral"}>
-              {hasStorageIssue
-                ? "Część danych wymaga sprawdzenia"
-                : hasDemoData
-                  ? "Część danych przykładowa"
-                  : "Dane lokalne"}
-            </Badge>
-          )}
-          actions={(
-            <>
-              <div className="today-header-weather" aria-live="polite">
-                <span className="today-header-weather__icon" aria-hidden="true">
-                  {weather.status === "loading"
-                    ? <LoaderCircle size={16} className="today-weather-spinner" />
-                    : <WeatherIcon size={17} />}
-                </span>
-                <span className="today-header-weather__copy">
-                  <strong>
-                    <MapPin size={10} aria-hidden="true" />
-                    {TODAY_WEATHER_LOCATION.label}
-                    {weather.status === "ready" && <> · {Math.round(weather.data.temperature)}°</>}
-                  </strong>
-                  <small>
-                    {weather.status === "ready"
-                      ? weatherLabel
-                      : weather.status === "loading"
-                        ? "Pobieranie pogody"
-                        : "Pogoda niedostępna"}
-                    {" · "}
-                    <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
-                  </small>
-                </span>
-              </div>
-              <Button
-                variant="primary"
-                leadingIcon={<Plus size={13} aria-hidden="true" />}
-                aria-label="Utwórz nowe zadanie"
-                onClick={() => navigate(
-                  `${APP_MODULE_BY_ID.tasks.to}?widok=dzis&akcja=nowe-zadanie`,
-                  {
-                    state: {
-                      intent: "create-task",
-                      focus: "task-composer",
-                      source: "dzisiaj",
-                    },
-                  },
-                )}
-              >
-                <span className="header-action-label">Nowe zadanie</span>
-              </Button>
-            </>
-          )}
-        />
-
         <div className="today-scroll">
           <div className="today-content">
             <section
@@ -864,19 +804,6 @@ export default function Dzisiaj() {
                   <span className={attentionGoalCount ? "is-warning" : ""}>
                     {counted(attentionGoalCount, "wymaga uwagi", "wymagają uwagi", "wymaga uwagi")}
                   </span>
-                </div>
-                <div className="today-day-balance__progress">
-                  <div
-                    className="today-day-track"
-                    role="progressbar"
-                    aria-label="Łączny postęp dnia"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={dailyProgress}
-                  >
-                    <span style={{ width: `${dailyProgress}%` }} />
-                  </div>
-                  <strong>{dailyProgress}% wykonane</strong>
                 </div>
                 <p>
                   {dayComplete

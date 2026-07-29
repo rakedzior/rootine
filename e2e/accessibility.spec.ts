@@ -106,7 +106,7 @@ test.describe("mobile accessibility matrix", { tag: "@mobile" }, () => {
       .getByRole("button", { name: "Więcej" })
       .click();
     await expect(
-      page.getByRole("region", { name: "Wszystkie obszary aplikacji" }),
+      page.getByRole("dialog", { name: "Wszystkie obszary aplikacji" }),
     ).toBeVisible();
     await expectNoWcagViolations(page, testInfo);
   });

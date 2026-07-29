@@ -1,6 +1,13 @@
 import { Bus, Car, Plane, Route, Ship, Train } from "lucide-react";
 import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import {
+  formatCurrency,
+  formatDate as formatPolishDate,
+  formatShortDate,
+  formatTime,
+  pluralize,
+} from "../formatters";
+import {
   normalizeIsoCurrency,
   type BudgetCategory,
   type DocumentStatus,
@@ -196,37 +203,19 @@ export function isTravelSection(value: string | null): value is TravelSection {
 
 export function formatDate(value: string, withYear = true): string {
   if (!value) return "Bez daty";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("pl-PL", {
-    day: "numeric",
-    month: "short",
-    ...(withYear ? { year: "numeric" } : {}),
-  });
+  const formatted = withYear ? formatPolishDate(value) : formatShortDate(value);
+  return formatted === "—" ? value : formatted;
 }
 
 export function formatDateTime(value: string): string {
   if (!value) return "Nie ustalono";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value.replace("T", " · ");
-  return date.toLocaleString("pl-PL", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return `${formatShortDate(value)} · ${formatTime(value)}`;
 }
 
 export function formatMoney(value: number, currency = "PLN"): string {
-  try {
-    return new Intl.NumberFormat("pl-PL", {
-      style: "currency",
-      currency: normalizeIsoCurrency(currency) ?? "PLN",
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${Math.round(value).toLocaleString("pl-PL")} ${currency}`;
-  }
+  return formatCurrency(value, normalizeIsoCurrency(currency) ?? "PLN");
 }
 
 export function tripDuration(trip: TravelTrip): number {
@@ -244,7 +233,7 @@ export function tripCountdown(trip: TravelTrip): string {
   if (days < 0) return "W trakcie";
   if (days === 0) return "Wyjazd dzisiaj";
   if (days === 1) return "Wyjazd jutro";
-  return `Za ${days} dni`;
+  return `Za ${pluralize(days, "dzień", "dni", "dni")}`;
 }
 
 export function readinessParts(trip: TravelTrip) {
@@ -273,7 +262,7 @@ export function readinessParts(trip: TravelTrip) {
       id: "budget" as TravelSection,
       label: "Budżet",
       value: budgetReady,
-      meta: budgetReady ? `${trip.budget.length} pozycji` : "Brak planu",
+      meta: budgetReady ? pluralize(trip.budget.length, "pozycja", "pozycje", "pozycji") : "Brak planu",
     },
     {
       id: "documents" as TravelSection,

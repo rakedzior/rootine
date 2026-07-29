@@ -26,7 +26,7 @@ test.describe("mobile drawer keyboard behavior", { tag: "@mobile" }, () => {
       .getByRole("button", { name: "Więcej" });
     await moreButton.click();
 
-    const drawer = page.getByRole("region", { name: "Wszystkie obszary aplikacji" });
+    const drawer = page.getByRole("dialog", { name: "Wszystkie obszary aplikacji" });
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole("link").first()).toBeFocused();
 

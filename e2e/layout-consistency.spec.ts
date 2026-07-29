@@ -1,132 +1,177 @@
+import type { Locator, Page } from "@playwright/test";
 import { test, expect, openRoutineRoute } from "./fixtures";
 
 const ROUTES = [
-  {
-    name: "Dzisiaj",
-    path: "/dzisiaj",
-    surfaceSelector: ".today-content",
-    contentSelector: ".today-module-register",
-    heightContentSelector: ".today-module-register",
-  },
-  {
-    name: "Zadania",
-    path: "/zadania",
-    surfaceSelector: ".task-content",
-    contentSelector: ".task-entry",
-    tolerance: 10,
-  },
-  {
-    name: "Kalendarz",
-    path: "/kalendarz",
-    surfaceSelector: ".calendar-page",
-    contentSelector: ".calendar-page",
-    heightContentSelector: ".calendar-page",
-  },
-  {
-    name: "Notatki",
-    path: "/notatki",
-    surfaceSelector: ".notes-canvas",
-    contentSelector: ".notes-canvas__heading",
-    heightContentSelector: ".notes-shelf:last-child",
-  },
-  {
-    name: "Cele",
-    path: "/cele",
-    surfaceSelector: ".goals-content",
-    contentSelector: ".goals-content > div",
-  },
-  {
-    name: "Sport",
-    path: "/sport",
-    surfaceSelector: ".sport-planner-scroll",
-    contentSelector: ".sport-planner-content",
-    heightContentSelector: ".sport-planner-content",
-  },
-  {
-    name: "Odżywianie",
-    path: "/odzywianie",
-    surfaceSelector: ".nutrition-content",
-    contentSelector: ".nutrition-layout",
-  },
-  {
-    name: "Praca",
-    path: "/praca",
-    surfaceSelector: ".work-overview",
-    contentSelector: ".work-overview__header",
-    heightContentSelector: ".work-overview-insights",
-  },
-  {
-    name: "Sprawy",
-    path: "/sprawy",
-    surfaceSelector: ".affairs-canvas",
-    contentSelector: ".affairs-overview",
-    heightContentSelector: ".affairs-overview",
-  },
-  {
-    name: "Podróże",
-    path: "/podroze",
-    surfaceSelector: ".travel-overview",
-    contentSelector: ".travel-board",
-    heightContentSelector: ".travel-board",
-  },
+  { name: "Dzisiaj", path: "/dzisiaj" },
+  { name: "Zadania", path: "/zadania" },
+  { name: "Notatki", path: "/notatki" },
+  { name: "Cele", path: "/cele" },
+  { name: "Sport", path: "/sport" },
+  { name: "Odżywianie", path: "/odzywianie" },
+  { name: "Praca", path: "/praca" },
+  { name: "Sprawy", path: "/sprawy" },
+  { name: "Podróże", path: "/podroze" },
 ] as const;
 
-test.describe("module layout consistency", { tag: "@viewport" }, () => {
-  for (const route of ROUTES) {
-    test(`${route.name} fills the available workspace`, async ({ routinePage: page }, testInfo) => {
-      if (testInfo.project.name === "desktop-1440") {
-        await page.setViewportSize({ width: 1920, height: 1080 });
-      }
+type Rectangle = NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
 
+function expectInsideViewport(
+  rectangle: Rectangle,
+  viewport: { width: number; height: number },
+  description: string,
+) {
+  expect(rectangle.x, `${description}: left edge`).toBeGreaterThanOrEqual(-1);
+  expect(rectangle.y, `${description}: top edge`).toBeGreaterThanOrEqual(-1);
+  expect(rectangle.x + rectangle.width, `${description}: right edge`)
+    .toBeLessThanOrEqual(viewport.width + 1);
+  expect(rectangle.y, `${description}: starts below viewport`)
+    .toBeLessThan(viewport.height);
+}
+
+async function expectNoGlobalHorizontalOverflow(page: Page, routeName: string) {
+  const overflow = await page.evaluate(() => ({
+    viewportWidth: document.documentElement.clientWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    bodyWidth: document.body.scrollWidth,
+  }));
+
+  expect(
+    overflow.documentWidth,
+    `${routeName}: document creates a horizontal page scrollbar`,
+  ).toBeLessThanOrEqual(overflow.viewportWidth + 1);
+  expect(
+    overflow.bodyWidth,
+    `${routeName}: body creates a horizontal page scrollbar`,
+  ).toBeLessThanOrEqual(overflow.viewportWidth + 1);
+}
+
+test.describe("responsive shell and module invariants", { tag: "@viewport-matrix" }, () => {
+  for (const route of ROUTES) {
+    test(`${route.name} reflows without shifting the module header`, async ({
+      routinePage: page,
+    }) => {
       await openRoutineRoute(page, route.path);
 
-      const shellContent = page.locator(".app-shell__content");
-      const moduleRoot = page.locator(
-        ".app-shell__content > .ui-module-shell, .app-shell__content > .nutrition-module",
-      );
-      await expect(moduleRoot).toHaveCount(1);
+      const viewport = page.viewportSize();
+      expect(viewport).not.toBeNull();
 
-      const shellBox = await shellContent.boundingBox();
-      const rootBox = await moduleRoot.boundingBox();
+      const workspace = page.locator("#primary-workspace");
+      const moduleShell = workspace.locator(":scope > .ui-module-shell");
+      const moduleHeader = moduleShell.locator(":scope > .ui-module-shell__header");
+      const headerRow = moduleHeader.locator(".ui-page-header__row");
+      const visibleMain = workspace.locator("main:visible");
+      const visibleH1 = workspace.locator("h1:visible");
+
+      await expect(workspace).toHaveCount(1);
+      await expect(moduleShell).toHaveCount(1);
+      await expect(moduleHeader).toBeVisible();
+      await expect(headerRow).toBeVisible();
+      await expect(visibleMain).toHaveCount(1);
+      await expect(visibleH1).toHaveCount(1);
+
+      const [workspaceBox, shellBox, headerBox, headerRowBox, headingBox] = await Promise.all([
+        workspace.boundingBox(),
+        moduleShell.boundingBox(),
+        moduleHeader.boundingBox(),
+        headerRow.boundingBox(),
+        visibleH1.boundingBox(),
+      ]);
+      expect(workspaceBox).not.toBeNull();
       expect(shellBox).not.toBeNull();
-      expect(rootBox).not.toBeNull();
-      expect(Math.abs(rootBox!.x - shellBox!.x)).toBeLessThanOrEqual(1);
-      expect(Math.abs(rootBox!.y - shellBox!.y)).toBeLessThanOrEqual(1);
-      expect(Math.abs(rootBox!.width - shellBox!.width)).toBeLessThanOrEqual(1);
-      expect(Math.abs(rootBox!.height - shellBox!.height)).toBeLessThanOrEqual(1);
+      expect(headerBox).not.toBeNull();
+      expect(headerRowBox).not.toBeNull();
+      expect(headingBox).not.toBeNull();
 
-      const surface = page.locator(route.surfaceSelector).first();
-      const content = page.locator(route.contentSelector).first();
-      await expect(surface).toBeVisible();
-      await expect(content).toBeVisible();
+      expectInsideViewport(workspaceBox!, viewport!, `${route.name} workspace`);
+      expectInsideViewport(shellBox!, viewport!, `${route.name} module shell`);
+      expectInsideViewport(headerBox!, viewport!, `${route.name} module header`);
+      expectInsideViewport(headingBox!, viewport!, `${route.name} h1`);
 
-      const surfaceBox = await surface.boundingBox();
-      const contentBox = await content.boundingBox();
-      const horizontalPadding = await surface.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
-      });
-      const tolerance = "tolerance" in route ? route.tolerance : 2;
-      const availableContentWidth = surfaceBox!.width - horizontalPadding;
+      expect(
+        Math.abs(headerBox!.x - shellBox!.x),
+        `${route.name}: a context sidebar must not shift the page header`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(headerBox!.width - shellBox!.width),
+        `${route.name}: the page header must span the module shell`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(headerRowBox!.x - shellBox!.x),
+        `${route.name}: the page header row must use the shared left gutter`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(headerRowBox!.width - shellBox!.width),
+        `${route.name}: the page header row must not be centered by content width`,
+      ).toBeLessThanOrEqual(1);
+      await expect(visibleH1).toHaveCSS("text-align", "left");
 
-      expect(contentBox!.width).toBeGreaterThanOrEqual(availableContentWidth - tolerance);
+      if (route.path === "/zadania") {
+        const contextSidebar = moduleShell.locator(".ui-context-sidebar");
+        const collapseButton = contextSidebar.locator(".ui-context-sidebar__collapse");
+        const firstSection = contextSidebar.locator(".ui-section-header").first();
+        await expect(collapseButton).toBeVisible();
+        await expect(collapseButton.locator("svg")).toBeVisible();
+        await expect(collapseButton).not.toContainText("Zwiń panel");
+        await expect(firstSection).toBeVisible();
 
-      if (
-        testInfo.project.name !== "mobile-390"
-        && "heightContentSelector" in route
-      ) {
-        const heightContent = page.locator(route.heightContentSelector).first();
-        await expect(heightContent).toBeVisible();
+        const [sidebarBox, collapseBox, sectionBox] = await Promise.all([
+          contextSidebar.boundingBox(),
+          collapseButton.boundingBox(),
+          firstSection.boundingBox(),
+        ]);
+        expect(sidebarBox).not.toBeNull();
+        expect(collapseBox).not.toBeNull();
+        expect(sectionBox).not.toBeNull();
 
-        const heightContentBox = await heightContent.boundingBox();
-        const bottomPadding = await surface.evaluate((element) => (
-          Number.parseFloat(getComputedStyle(element).paddingBottom)
-        ));
-        const availableBottom = surfaceBox!.y + surfaceBox!.height - bottomPadding;
-        const contentBottom = heightContentBox!.y + heightContentBox!.height;
+        expect(
+          collapseBox!.x + collapseBox!.width,
+          "Zadania: collapse control is aligned to the sidebar's right edge",
+        ).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width - 8);
+        expect(
+          Math.abs(
+            collapseBox!.y + collapseBox!.height / 2
+              - (sectionBox!.y + sectionBox!.height / 2),
+          ),
+          "Zadania: collapse control shares the first sidebar section's vertical rhythm",
+        ).toBeLessThanOrEqual(7);
 
-        expect(contentBottom).toBeGreaterThanOrEqual(availableBottom - 2);
+        const expandedIconPath = await collapseButton.locator("svg path").getAttribute("d");
+        await collapseButton.click();
+        await expect(collapseButton).toHaveAttribute("aria-expanded", "false");
+        const collapsedIconPath = await collapseButton.locator("svg path").getAttribute("d");
+        expect(collapsedIconPath).not.toBe(expandedIconPath);
+        await collapseButton.click();
+        await expect(collapseButton).toHaveAttribute("aria-expanded", "true");
       }
+
+      await expectNoGlobalHorizontalOverflow(page, route.name);
     });
   }
+
+  test("skip link bypasses navigation and moves keyboard focus to the workspace", async ({
+    routinePage: page,
+  }) => {
+    await openRoutineRoute(page, "/dzisiaj");
+
+    const skipLink = page.getByRole("link", { name: "Przejdź do treści" });
+    const workspace = page.locator("#primary-workspace");
+    await expect(skipLink).toHaveAttribute("href", "#primary-workspace");
+    await expect(workspace).toHaveAttribute("tabindex", "-1");
+
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      window.scrollTo(0, 0);
+    });
+    await page.keyboard.press("Tab");
+    await expect(skipLink).toBeFocused();
+
+    const viewport = page.viewportSize();
+    const skipLinkBox = await skipLink.boundingBox();
+    expect(viewport).not.toBeNull();
+    expect(skipLinkBox).not.toBeNull();
+    expectInsideViewport(skipLinkBox!, viewport!, "focused skip link");
+
+    await page.keyboard.press("Enter");
+    await expect(workspace).toBeFocused();
+  });
 });

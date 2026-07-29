@@ -23,11 +23,13 @@ import {
   SectionHeader,
   Select,
 } from "../ui";
+import { AddToTasksButton } from "../ui";
 import {
   DAY_LABELS,
   createPlannerId,
   cycleDateRange,
   cycleWeekDate,
+  cycleWorkoutDate,
   type CycleWorkout,
   type TrainingCycle,
 } from "./plannerModel";
@@ -866,6 +868,22 @@ export function WorkoutDialog({
               Usuń trening
             </Button>
           )}
+          {workout && <AddToTasksButton compact input={{
+            source: {
+              kind: "sport",
+              entity: `${encodeURIComponent(cycle.id)}/${encodeURIComponent(workout.id)}`,
+              context: `${cycle.name} · tydzień ${workout.week}`,
+              href: `/sport?widok=cycle&tydzien=${workout.week}`,
+            },
+            text: title || workout.title,
+            done: false,
+            calendarDate: cycleWorkoutDate(cycle, workout),
+            date: cycleWorkoutDate(cycle, workout),
+            time: time || workout.time,
+            list: "sport",
+            tags: ["sport"],
+            notes: note || workout.note,
+          }} />}
           <Button variant="ghost" onClick={onClose}>Anuluj</Button>
           <Button type="submit" form="sport-workout-form" variant="primary">
             {workout

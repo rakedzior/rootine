@@ -15,6 +15,8 @@
     "test:api": "vitest run api/openfoodfacts/search.test.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:viewport": "playwright test --grep @viewport-matrix",
+    "test:e2e:zoom": "playwright test --grep @zoom-matrix",
     "smoke:production": "node scripts/smoke-production.mjs",
     "css:lint": "stylelint \"src/**/*.{css,scss}\"",
     "css:lint:fix": "stylelint \"src/**/*.{css,scss}\" --fix",

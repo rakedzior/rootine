@@ -29,6 +29,8 @@ import {
   MenuItem,
   SectionHeader,
 } from "../ui";
+import { AddToTasksButton } from "../ui";
+import type { ExternalTaskInput } from "../data/taskLinks";
 import {
   Archive,
   BarChart3,
@@ -271,7 +273,7 @@ export function GoalSubSidebar({
         <div className="space-y-px">
           <ContextNavItem onClick={() => setCategoriesOpen(true)} icon={<FolderCog />} label="Kategorie" />
           <ContextNavItem active={activeFilter === "archived"} onClick={() => onFilter("archived")} icon={<Archive />} label="Archiwum" />
-          <ContextNavItem onClick={onSettings} icon={<Settings2 />} label="Ustawienia" />
+          <ContextNavItem onClick={onSettings} icon={<Settings2 />} label="Ustawienia celów" />
         </div>
       </div>
     </ContextSidebar>
@@ -505,6 +507,7 @@ export function GoalDetail({
   onAddMilestone,
   onToggleMilestone,
   onOpen,
+  addToTasksInput,
 }: {
   goal: Goal;
   rawGoal: StoredGoal;
@@ -517,6 +520,7 @@ export function GoalDetail({
   onAddMilestone: () => void;
   onToggleMilestone: (id: string, done: boolean) => void;
   onOpen: () => void;
+  addToTasksInput?: ExternalTaskInput;
 }) {
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
@@ -633,6 +637,7 @@ export function GoalDetail({
       </div>
 
       <div className="border-t p-4" style={{ borderColor: C.borderSubtle, background: C.subSidebar }}>
+        {addToTasksInput && <div className="mb-2"><AddToTasksButton input={addToTasksInput} /></div>}
         <Button type="button" variant="quiet" fullWidth onClick={onOpen}>
           Otwórz pełny widok celu
         </Button>

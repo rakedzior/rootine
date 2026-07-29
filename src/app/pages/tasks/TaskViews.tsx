@@ -22,7 +22,8 @@ import {
   toCalendarDateKey,
   type TaskComment,
 } from "../../data/taskWorkspace";
-import { Button, Menu, MenuItem, Modal } from "../../ui";
+import { commitmentSourceLabel } from "../../data/commitmentRepository";
+import { Button, Menu, MenuItem, Modal, Select } from "../../ui";
 import { DatePickerPopup } from "./TaskSchedulePicker";
 import {
   C,
@@ -51,7 +52,7 @@ export function TaskRow({
     : (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const priorityColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.seaGlass : null;
   const timeLabel = task.time ? `${task.time}${task.endTime ? `–${task.endTime}` : ""}` : null;
-  const sourceLabel = task.source?.kind === "work" ? "Praca" : task.source ? "Podróże" : null;
+  const sourceLabel = task.source ? commitmentSourceLabel(task.source.kind) : null;
 
   return (
     <div
@@ -329,6 +330,10 @@ export function TaskDetail({
   onDelete,
   listy,
   tagi,
+  workProjectOptions = [],
+  workProjectId = "",
+  workAssignmentError,
+  onWorkProjectChange = () => undefined,
 }: {
   task: Task; onClose: () => void;
   occurrence?: VirtualTaskOccurrenceContext;
@@ -337,6 +342,10 @@ export function TaskDetail({
   onDelete: (id: number) => void;
   listy: ListItem[];
   tagi: TagItem[];
+  workProjectOptions?: Array<{ value: string; label: string; disabled?: boolean }>;
+  workProjectId?: string;
+  workAssignmentError?: string;
+  onWorkProjectChange?: (projectId: string) => void;
 }) {
   const [showPriority,  setShowPriority]  = useState(false);
   const [showListPick,  setShowListPick]  = useState(false);
@@ -398,7 +407,7 @@ export function TaskDetail({
   const taskTagDefs = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const dateStr   = task.date ?? "Bez terminu";
   const timeStr   = task.time ? `, ${task.time}${task.endTime ? `–${task.endTime}` : ""}` : "";
-  const sourceLabel = task.source?.kind === "work" ? "Praca" : task.source ? "Podróże" : null;
+  const sourceLabel = task.source ? commitmentSourceLabel(task.source.kind) : null;
   const occurrenceDateLabel = occurrence ? formatVirtualOccurrenceDate(occurrence.date) : null;
   const completionDone = occurrence?.done ?? task.done;
 
@@ -508,6 +517,28 @@ export function TaskDetail({
             Otwórz źródło
           </Link>
         </div>
+      )}
+
+      {task.source?.kind !== "travel" && workProjectOptions.length > 0 && (
+        <section className="task-work-assignment" aria-label="Przypisanie do pracy">
+          <Select
+            label="Firma i projekt"
+            value={workProjectId}
+            options={workProjectOptions.map((option) => (
+              option.value === "" && task.source?.kind === "work"
+                ? { ...option, disabled: true }
+                : option
+            ))}
+            disabled={workProjectOptions.length === 1}
+            error={workAssignmentError}
+            hint={task.source?.kind === "work"
+              ? "Zmiana przeniesie zadanie do wybranego aktywnego projektu."
+              : "Po przypisaniu moduł Praca stanie się źródłem zadania."}
+            onChange={(event) => {
+              if (event.target.value) onWorkProjectChange(event.target.value);
+            }}
+          />
+        </section>
       )}
 
       {/* ── Main content ── */}

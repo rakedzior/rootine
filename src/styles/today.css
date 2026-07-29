@@ -1,76 +1,22 @@
 .today-scroll {
   min-height: 0;
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .today-content {
   display: grid;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: clamp(138px, 20vh, 156px) minmax(0, 1fr);
-  gap: clamp(10px, 1.6vh, var(--space-lg));
-  padding: clamp(10px, 1.8vh, var(--space-lg)) var(--space-3xl) clamp(12px, 2vh, var(--space-xl));
-}
-
-.today-header-weather {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-sm);
-  padding-right: var(--space-md);
-  border-right: 1px solid var(--color-border-subtle);
-}
-
-.today-header-weather__icon {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  place-items: center;
-  color: var(--color-text-secondary);
-}
-
-.today-header-weather__copy {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.today-header-weather__copy strong,
-.today-header-weather__copy small {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-xs);
-  white-space: nowrap;
-}
-
-.today-header-weather__copy strong {
-  color: var(--color-text-secondary);
-  font-size: var(--text-label);
-  font-weight: 500;
-}
-
-.today-header-weather__copy small {
-  color: var(--color-text-muted);
-  font-size: var(--text-micro);
-}
-
-.today-header-weather__copy a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.today-header-weather__copy a:hover {
-  color: var(--color-text-secondary);
+  width: min(100%, calc(var(--page-width-standard) + (2 * var(--space-3xl))));
+  margin-inline: auto;
+  grid-template-rows: auto auto;
+  gap: var(--space-lg);
+  padding: var(--space-lg) var(--space-3xl) var(--space-xl);
 }
 
 .today-day-balance {
   display: grid;
-  height: 100%;
-  min-height: 0;
+  min-height: 148px;
   grid-template-columns: 132px minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2xl);
@@ -189,44 +135,6 @@
   color: var(--color-danger-coral);
 }
 
-.today-day-balance__progress {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
-}
-
-.today-day-balance__progress > strong {
-  min-width: 86px;
-  color: var(--color-text-secondary);
-  font-family: var(--font-data);
-  font-size: var(--text-label);
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  text-align: right;
-}
-
-.today-day-track {
-  height: 5px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: var(--color-border-subtle);
-}
-
-.today-day-track > span {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--color-precision-blue);
-  transition: width 500ms var(--ease-out);
-}
-
-.today-day-balance.is-complete .today-day-track > span {
-  background: var(--color-success-seaglass);
-}
-
 .today-day-balance__body p {
   margin-top: var(--space-sm);
   color: var(--color-text-muted);
@@ -235,9 +143,7 @@
 }
 
 .today-module-register {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
 }
 
 .today-module-register__header {
@@ -264,15 +170,12 @@
 
 .today-module-list {
   display: grid;
-  min-height: 0;
-  grid-template-rows: repeat(7, minmax(44px, 1fr));
-  gap: clamp(4px, 0.7vh, 7px);
+  gap: var(--space-sm);
 }
 
 .today-module-row {
   display: grid;
-  height: 100%;
-  min-height: 0;
+  min-height: 68px;
   grid-template-areas: "identity count status visual arrow";
   grid-template-columns:
     minmax(180px, 1.22fr)
@@ -282,7 +185,7 @@
     16px;
   align-items: center;
   gap: var(--space-lg);
-  padding: clamp(5px, 0.8vh, 8px) var(--space-xl);
+  padding: var(--space-sm) var(--space-xl);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   outline: 0;
@@ -407,10 +310,12 @@
 
 .today-module-row__track > i {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--color-precision-blue);
-  transition: width 500ms var(--ease-out);
+  transform-origin: left center;
+  transition: transform 500ms var(--ease-out);
 }
 
 .today-module-row__state {
@@ -447,95 +352,6 @@
   transform: translateX(2px);
 }
 
-.today-weather-spinner {
-  animation: today-spin 900ms linear infinite;
-}
-
-@keyframes today-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (min-width: 941px) and (max-height: 700px) {
-  .today-content {
-    grid-template-rows: clamp(110px, 19vh, 132px) minmax(0, 1fr);
-    gap: var(--space-sm);
-    padding-top: var(--space-sm);
-    padding-bottom: var(--space-sm);
-  }
-
-  .today-day-balance {
-    grid-template-columns: 102px minmax(0, 1fr);
-    gap: var(--space-xl);
-    padding: var(--space-sm) var(--space-xl);
-  }
-
-  .today-day-ring {
-    width: 88px;
-    height: 88px;
-  }
-
-  .today-day-ring strong {
-    font-size: var(--text-headline);
-  }
-
-  .today-day-balance__signals {
-    margin-top: var(--space-xs);
-    font-size: var(--text-meta);
-  }
-
-  .today-day-balance__progress {
-    margin-top: var(--space-sm);
-  }
-
-  .today-day-balance__body p {
-    display: none;
-  }
-
-  .today-module-register__header {
-    min-height: 18px;
-    margin-bottom: var(--space-xs);
-  }
-
-  .today-module-list {
-    gap: var(--space-xs);
-  }
-
-  .today-module-row {
-    padding-top: var(--space-xs);
-    padding-bottom: var(--space-xs);
-  }
-}
-
-@media (min-width: 941px) and (max-height: 600px) {
-  .today-content {
-    grid-template-rows: 96px minmax(0, 1fr);
-    gap: 6px;
-    padding-top: 6px;
-    padding-bottom: 6px;
-  }
-
-  .today-day-balance {
-    grid-template-columns: 86px minmax(0, 1fr);
-  }
-
-  .today-day-ring {
-    width: 76px;
-    height: 76px;
-  }
-
-  .today-day-balance__progress {
-    margin-top: 6px;
-  }
-
-  .today-module-row__icon {
-    width: 26px;
-    height: 26px;
-    flex-basis: 26px;
-  }
-}
-
 @media (max-width: 1180px) {
   .today-content {
     padding-right: var(--space-xl);
@@ -554,14 +370,8 @@
 }
 
 @media (max-width: 940px) {
-  .today-scroll {
-    overflow-y: auto;
-    scrollbar-width: thin;
-  }
-
   .today-content {
     display: block;
-    height: auto;
     padding: var(--space-lg);
   }
 
@@ -605,10 +415,6 @@
 }
 
 @media (max-width: 760px) {
-  .today-header-weather {
-    display: none;
-  }
-
   .today-day-balance {
     min-height: 0;
     grid-template-columns: 1fr;
@@ -653,14 +459,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .today-day-track > span,
   .today-module-row,
   .today-module-row__track > i,
   .today-module-row__arrow {
     transition: none;
-  }
-
-  .today-weather-spinner {
-    animation: none;
   }
 }

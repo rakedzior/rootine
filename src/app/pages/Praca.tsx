@@ -34,6 +34,7 @@ import {
   type WorkTask,
   type WorkTaskPriority,
 } from "../data/workWorkspace";
+import { formatShortDate } from "../formatters";
 import {
   Button,
   ContextNavItem,
@@ -46,6 +47,7 @@ import {
   PageHeader,
   Select,
   WorkspaceToolbar,
+  AddToTasksButton,
 } from "../ui";
 import "../../styles/work.css";
 
@@ -108,9 +110,8 @@ const EMPTY_DRAFT: EditorDraft = {
 
 function formatDueDate(value: string): string {
   if (!value) return "";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("pl-PL", { day: "numeric", month: "short" });
+  const formatted = formatShortDate(value);
+  return formatted === "—" ? value : formatted;
 }
 
 function collectTaskBranch(tasks: WorkTask[], taskId: string): Set<string> {
@@ -685,6 +686,24 @@ export default function Praca() {
             )}
           </div>
           <div className="work-task-row__actions">
+            <AddToTasksButton
+              compact
+              input={{
+                source: {
+                  kind: "work",
+                  entity: `${encodeURIComponent(task.projectId)}/${encodeURIComponent(task.id)}`,
+                  context: `${selectedCompany?.name ?? "Praca"} · ${selectedProject?.name ?? "Projekt"}`,
+                  href: `/praca?firma=${encodeURIComponent(selectedCompanyId)}&projekt=${encodeURIComponent(task.projectId)}`,
+                },
+                text: task.title,
+                done: task.completed,
+                calendarDate: task.dueDate || undefined,
+                date: task.dueDate || undefined,
+                priority: task.priority === "none" ? undefined : task.priority,
+                list: "praca",
+                tags: ["praca"],
+              }}
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -725,6 +744,32 @@ export default function Praca() {
   return (
     <ModuleShell
       className="work-module"
+      pageWidth="wide"
+      header={(
+        <PageHeader
+          title="Praca"
+          description="Firmy, projekty i zadania w jednym osobistym widoku"
+          leading={<Building2 size={16} />}
+          actions={selectedCompany ? (
+            <>
+              <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>
+                <span className="header-action-label">Dodaj firmę</span>
+              </Button>
+              <Button
+                variant="primary"
+                leadingIcon={<Plus size={13} />}
+                onClick={() => openProjectEditor()}
+              >
+                <span className="header-action-label">Dodaj projekt</span>
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>
+              <span className="header-action-label">Dodaj firmę</span>
+            </Button>
+          )}
+        />
+      )}
       contextSidebar={(
         <ContextSidebar label="Nawigacja pracy" className="work-company-sidebar">
           <nav className="work-company-list" aria-label="Widoki pracy i firmy">
@@ -820,30 +865,6 @@ export default function Praca() {
       )}
     >
       <ModuleMain>
-        <PageHeader
-          title="Praca"
-          description="Firmy, projekty i zadania w jednym osobistym widoku"
-          leading={<Building2 size={16} />}
-          actions={selectedCompany ? (
-            <>
-              <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>
-                <span className="header-action-label">Firma</span>
-              </Button>
-              <Button
-                variant="primary"
-                leadingIcon={<Plus size={13} />}
-                onClick={() => openProjectEditor()}
-              >
-                <span className="header-action-label">Projekt</span>
-              </Button>
-            </>
-          ) : (
-            <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>
-              <span className="header-action-label">Firma</span>
-            </Button>
-          )}
-        />
-
         {storageError && (
           <div className="work-storage-error" role="alert">
             Nie udało się zapisać zmian lokalnie. Sprawdź ustawienia pamięci przeglądarki.
@@ -1122,7 +1143,7 @@ export default function Praca() {
                       aria-valuenow={progress}
                       aria-valuetext={`${completedCount} z ${projectTasks.length} zadań ukończonych`}
                     >
-                      <span style={{ width: `${progress}%` }} />
+                      <span style={{ transform: `scaleX(${progress / 100})` }} />
                     </div>
                     <b>{progress}%</b>
                   </div>

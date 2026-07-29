@@ -28,6 +28,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { formatPercent, pluralize } from "../formatters";
 import {
   createTravelId,
   isDateWithinTrip,
@@ -65,6 +66,7 @@ import {
   Select,
   Tabs,
   WorkspaceToolbar,
+  AddToTasksButton,
 } from "../ui";
 import "../../styles/travel.css";
 
@@ -755,12 +757,15 @@ export default function Podroze() {
   );
 
   return (
-    <ModuleShell contextSidebar={contextSidebar} className="travel-module">
-      <ModuleMain>
+    <ModuleShell
+      contextSidebar={contextSidebar}
+      className="travel-module"
+      pageWidth="wide"
+      header={(
         <PageHeader
-          title={selectedTrip?.name ?? "Podróże"}
+          title="Podróże"
           description={selectedTrip
-            ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}`
+            ? `${selectedTrip.name} · ${SECTION_COPY[activeSection]} · ${selectedTrip.destination}`
             : "Przegląd zaplanowanych i zakończonych wyjazdów"}
           meta={(
             <>
@@ -780,6 +785,9 @@ export default function Podroze() {
             />
           ) : undefined}
         />
+      )}
+    >
+      <ModuleMain>
 
         <WorkspaceToolbar className="travel-toolbar">
           <div className="travel-toolbar__mobile">
@@ -799,12 +807,12 @@ export default function Podroze() {
               <div className="travel-toolbar__route">
                 <CalendarDays size={13} aria-hidden="true" />
                 <strong>{formatDate(selectedTrip.startDate)} — {formatDate(selectedTrip.endDate)}</strong>
-                <span>{tripDuration(selectedTrip)} dni</span>
+                <span>{pluralize(tripDuration(selectedTrip), "dzień", "dni", "dni")}</span>
               </div>
               <div className="travel-toolbar__readiness">
                 <span>Gotowość</span>
-                <i><b style={{ width: `${readinessScore(selectedTrip)}%` }} /></i>
-                <strong>{readinessScore(selectedTrip)}%</strong>
+                <i><b style={{ transform: `scaleX(${readinessScore(selectedTrip) / 100})` }} /></i>
+                <strong>{formatPercent(readinessScore(selectedTrip))}</strong>
               </div>
             </>
           ) : (
@@ -869,7 +877,7 @@ export default function Podroze() {
                     <span className="travel-next-departure__progress">
                       <small>Gotowość</small>
                       <span><i style={{ width: `${readinessScore(filteredTrips[0])}%` }} /></span>
-                      <strong>{readinessScore(filteredTrips[0])}%</strong>
+                      <strong>{formatPercent(readinessScore(filteredTrips[0]))}</strong>
                     </span>
                     <ChevronRight size={15} />
                   </button>
@@ -909,7 +917,7 @@ export default function Podroze() {
                         </span>
                         <span className="travel-board__progress">
                           <span><i style={{ width: `${score}%` }} /></span>
-                          <strong>{score}%</strong>
+                          <strong>{formatPercent(score)}</strong>
                         </span>
                         <span className="travel-board__next">
                           <strong>{nextAction(trip)}</strong>
@@ -943,9 +951,9 @@ export default function Podroze() {
                       <h2 id="travel-readiness-title">Gotowość do wyjazdu</h2>
                       <p>{tripCountdown(selectedTrip)} · następny krok: {nextAction(selectedTrip)}</p>
                     </div>
-                    <strong>{readinessScore(selectedTrip)}%</strong>
+                    <strong>{formatPercent(readinessScore(selectedTrip))}</strong>
                   </header>
-                  <div className="travel-readiness__track"><span style={{ width: `${readinessScore(selectedTrip)}%` }} /></div>
+                  <div className="travel-readiness__track"><span style={{ transform: `scaleX(${readinessScore(selectedTrip) / 100})` }} /></div>
                   <div className="travel-readiness__parts">
                     {readinessParts(selectedTrip).map((part) => (
                       <button key={part.id} type="button" onClick={() => setSection(part.id)}>
@@ -1215,7 +1223,7 @@ export default function Podroze() {
                           aria-valuemax={100}
                           aria-valuenow={ratio}
                         >
-                          <i><b style={{ width: `${ratio}%` }} /></i><strong>{ratio}%</strong>
+                          <i><b style={{ width: `${ratio}%` }} /></i><strong>{formatPercent(ratio)}</strong>
                         </span>
                         <Badge tone={line.paid ? "success" : line.actual > line.planned ? "danger" : "neutral"}>{line.paid ? "Opłacono" : "Plan"}</Badge>
                         <span className="travel-row-actions">
@@ -1319,6 +1327,23 @@ export default function Podroze() {
                             {task.dueDate ? formatDate(task.dueDate) : "Bez terminu"}
                           </span>
                           <span className="travel-row-actions">
+                            <AddToTasksButton
+                              compact
+                              input={{
+                                source: {
+                                  kind: "travel",
+                                  entity: `${encodeURIComponent(selectedTrip.id)}/${encodeURIComponent(task.id)}`,
+                                  context: `${selectedTrip.name} · ${selectedTrip.destination}`,
+                                  href: `/podroze/${encodeURIComponent(selectedTrip.id)}?sekcja=tasks`,
+                                },
+                                text: task.title,
+                                done: task.completed,
+                                calendarDate: task.dueDate || undefined,
+                                date: task.dueDate || undefined,
+                                list: "podroze",
+                                tags: ["podroze"],
+                              }}
+                            />
                             <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={12} /></Button>
                             <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={12} /></Button>
                           </span>

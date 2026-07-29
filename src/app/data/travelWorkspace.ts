@@ -71,6 +71,10 @@ export type TravelTask = {
   category: TravelTaskCategory;
   dueDate: string;
   completed: boolean;
+  linkedTask?: {
+    originTaskId: number;
+    view: string;
+  };
 };
 
 export type TravelTrip = {
@@ -422,7 +426,12 @@ function isTask(value: unknown): value is TravelTask {
     && typeof value.title === "string"
     && ["booking", "documents", "health", "packing", "money", "other"].includes(String(value.category))
     && typeof value.dueDate === "string"
-    && typeof value.completed === "boolean";
+    && typeof value.completed === "boolean"
+    && (value.linkedTask === undefined
+      || (isRecord(value.linkedTask)
+        && typeof value.linkedTask.originTaskId === "number"
+        && Number.isSafeInteger(value.linkedTask.originTaskId)
+        && typeof value.linkedTask.view === "string"));
 }
 
 function isTrip(value: unknown): value is TravelTrip {

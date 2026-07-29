@@ -744,10 +744,12 @@
 
 .work-project-progress__track span {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--color-precision-blue);
-  transition: width var(--motion-normal) var(--ease-out);
+  transform-origin: left center;
+  transition: transform var(--motion-normal) var(--ease-out);
 }
 
 .work-task-list {

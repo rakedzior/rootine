@@ -261,9 +261,57 @@ export default function Cele() {
           ? categories.find((category) => category.id === activeFilter.slice("category:".length))?.label ?? "Kategoria"
           : FILTER_ITEMS.find((item) => item.id === activeFilter)?.label ?? "Cele";
 
-  return (
-    <ModuleShell>
-      <GoalSubSidebar
+  const pageHeader = (
+    <PageHeader
+      title="Cele"
+      description="Przegląd Twoich celów i postępów"
+      leading={<Target size={18} strokeWidth={1.5} />}
+      meta={storageFailed
+        ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
+        : loadStatus === "corrupt"
+          ? <Badge tone="danger">Oryginał danych zabezpieczony</Badge>
+          : importNotice
+            ? <Badge tone={importNotice.tone}>{importNotice.tone === "success" ? "Import zakończony" : "Błąd importu"}</Badge>
+            : undefined}
+      actions={<>
+        <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={15} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
+        <div className="relative">
+          <Button
+            ref={headerMenuTriggerRef}
+            variant="quiet"
+            iconOnly
+            onClick={() => setHeaderMenuOpen((open) => !open)}
+            aria-label="Więcej opcji"
+            aria-haspopup="menu"
+            aria-expanded={headerMenuOpen}
+            aria-controls={headerMenuId}
+          >
+            <Ellipsis size={17} />
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            aria-label="Wybierz plik danych celów do importu"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void inspectImportFile(file);
+              event.currentTarget.value = "";
+            }}
+          />
+          {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} className="absolute right-0 top-12 z-40 w-48">
+            <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
+            <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
+            <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
+          </Menu>}
+        </div>
+      </>}
+    />
+  );
+
+  const contextSidebar = (
+    <GoalSubSidebar
         activeFilter={activeFilter}
         onFilter={handleFilter}
         goals={goals}
@@ -272,55 +320,12 @@ export default function Cele() {
         onUpdateCategory={updateCategory}
         onDeleteCategory={setDeleteCategoryId}
         onSettings={() => setSettingsOpen(true)}
-      />
+    />
+  );
 
+  return (
+    <ModuleShell pageWidth="standard" header={pageHeader} contextSidebar={contextSidebar}>
       <ModuleMain>
-        <PageHeader
-          title="Cele"
-          description="Przegląd Twoich celów i postępów"
-          leading={<Target size={18} strokeWidth={1.5} />}
-          meta={storageFailed
-            ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
-            : loadStatus === "corrupt"
-              ? <Badge tone="danger">Oryginał danych zabezpieczony</Badge>
-              : importNotice
-                ? <Badge tone={importNotice.tone}>{importNotice.tone === "success" ? "Import zakończony" : "Błąd importu"}</Badge>
-                : undefined}
-          actions={<>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={15} strokeWidth={2} />}><span className="header-action-label">Nowy cel</span></Button>
-            <div className="relative">
-              <Button
-                ref={headerMenuTriggerRef}
-                variant="quiet"
-                iconOnly
-                onClick={() => setHeaderMenuOpen((open) => !open)}
-                aria-label="Więcej opcji"
-                aria-haspopup="menu"
-                aria-expanded={headerMenuOpen}
-                aria-controls={headerMenuId}
-              >
-                <Ellipsis size={17} />
-              </Button>
-              <input
-                ref={importInputRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                aria-label="Wybierz plik danych celów do importu"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void inspectImportFile(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-              {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} className="absolute right-0 top-12 z-40 w-48">
-                <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
-                <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
-                <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
-              </Menu>}
-            </div>
-          </>}
-        />
         {importNotice && (
           <div
             role={importNotice.tone === "danger" ? "alert" : "status"}
@@ -449,6 +454,22 @@ export default function Cele() {
             onAddMilestone={() => setMilestoneGoalId(String(selectedGoal.id))}
             onToggleMilestone={(id, done) => updateMilestone(String(selectedGoal.id), id, { done })}
             onOpen={() => navigate(`/cele/${selectedGoal.id}`)}
+            addToTasksInput={{
+              source: {
+                kind: "goals",
+                entity: `${encodeURIComponent(String(selectedGoal.id))}/goal`,
+                context: selectedGoal.title,
+                href: `/cele/${encodeURIComponent(String(selectedGoal.id))}`,
+              },
+              text: selectedGoal.title,
+              done: selectedGoal.status === "completed",
+              calendarDate: storedGoals.find((goal) => goal.id === String(selectedGoal.id))?.dueDate,
+              date: storedGoals.find((goal) => goal.id === String(selectedGoal.id))?.dueDate,
+              priority: selectedGoal.priority,
+              list: "cele",
+              tags: ["cele"],
+              notes: selectedGoal.note,
+            }}
           />
         </DetailPanel>
       )}

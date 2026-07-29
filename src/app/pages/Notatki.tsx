@@ -30,6 +30,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { calendarDaysBetween, todayLocalDateKey, toLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
+  POLISH_TIME_ZONE,
+  formatDate,
+  formatTime,
+} from "../formatters";
+import {
   createNotesId,
   loadNotesWorkspace,
   NOTES_STORAGE_KEY,
@@ -53,6 +58,7 @@ import {
   PageHeader,
   Select,
   WorkspaceToolbar,
+  AddToTasksButton,
 } from "../ui";
 import "../../styles/notes.css";
 
@@ -162,10 +168,15 @@ function formatUpdatedAt(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Nieznana data";
   const dayDiff = calendarDaysBetween(toLocalDateKey(date), todayLocalDateKey()) ?? 0;
-  if (dayDiff === 0) return `Dziś, ${date.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}`;
+  if (dayDiff === 0) return `Dziś, ${formatTime(date)}`;
   if (dayDiff === 1) return "Wczoraj";
-  if (dayDiff < 7) return date.toLocaleDateString("pl-PL", { weekday: "long" });
-  return date.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
+  if (dayDiff < 7) {
+    return new Intl.DateTimeFormat("pl-PL", {
+      weekday: "long",
+      timeZone: POLISH_TIME_ZONE,
+    }).format(date);
+  }
+  return formatDate(date);
 }
 
 function normalizedTags(value: string): string[] {
@@ -830,6 +841,22 @@ export default function Notatki() {
             {note.title}
           </button>
           <div className="notes-card__actions">
+            <AddToTasksButton
+              compact
+              input={{
+                source: {
+                  kind: "notes",
+                  entity: `${encodeURIComponent(note.id)}/note`,
+                  context: list?.name ?? "Notatki",
+                  href: `/notatki?notatka=${encodeURIComponent(note.id)}`,
+                },
+                text: note.title,
+                done: false,
+                list: "notatki",
+                tags: note.tags,
+                notes: note.body,
+              }}
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -1163,8 +1190,12 @@ export default function Notatki() {
   ) : undefined;
 
   return (
-    <ModuleShell contextSidebar={contextSidebar} detailPanel={detailPanel} className="notes-module">
-      <ModuleMain>
+    <ModuleShell
+      contextSidebar={contextSidebar}
+      detailPanel={detailPanel}
+      className="notes-module"
+      pageWidth="standard"
+      header={(
         <PageHeader
           title="Notatki"
           description={`${viewTitle} · ${viewDescription}`}
@@ -1172,15 +1203,17 @@ export default function Notatki() {
           actions={(
             <>
               <Button variant="quiet" leadingIcon={<CheckSquare size={13} />} onClick={() => openNewNote("checklist")}>
-                Nowa checklista
+                Dodaj checklistę
               </Button>
               <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
-                Nowa notatka
+                Dodaj notatkę
               </Button>
             </>
           )}
         />
-
+      )}
+    >
+      <ModuleMain>
         <WorkspaceToolbar className="notes-toolbar">
           <div className="notes-toolbar__mobile">
             <Select
@@ -1224,7 +1257,7 @@ export default function Notatki() {
         <div className="notes-canvas">
           <div className="notes-canvas__heading">
             <div>
-              <h1>{viewTitle}</h1>
+              <h2>{viewTitle}</h2>
               <p>{viewDescription}</p>
             </div>
             {view.startsWith("list:") && (

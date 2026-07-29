@@ -1,7 +1,7 @@
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
 
 export const WORK_STORAGE_KEY = "rootine.work-workspace.v1";
-const WORKSPACE_VERSION = 1 as const;
+const WORKSPACE_VERSION = 2 as const;
 
 export type WorkProjectStatus = "active" | "paused" | "completed";
 export type WorkTaskPriority = "none" | "low" | "medium" | "high";
@@ -21,6 +21,29 @@ export type WorkProject = {
   status: WorkProjectStatus;
 };
 
+export type WorkLinkedTaskSchedule = {
+  allDay: boolean;
+  startTime: string;
+  endTime?: string;
+  reminderMinutes?: number;
+  recurrence?: "daily" | "weekly" | "monthly" | "yearly";
+  completedDates?: string[];
+  timezone: string;
+};
+
+export type WorkLinkedTaskDetails = {
+  originTaskId: number;
+  view: string;
+  time?: string;
+  endTime?: string;
+  notes?: string;
+  tags?: string[];
+  list?: string;
+  subtasks?: Array<{ id: number; text: string; done: boolean }>;
+  comments?: Array<{ id: number; author: string; text: string; time: string }>;
+  schedule?: WorkLinkedTaskSchedule;
+};
+
 export type WorkTask = {
   id: string;
   projectId: string;
@@ -30,6 +53,7 @@ export type WorkTask = {
   priority: WorkTaskPriority;
   dueDate: string;
   createdAt: string;
+  linkedTask?: WorkLinkedTaskDetails;
 };
 
 export type WorkWorkspace = {
@@ -38,6 +62,10 @@ export type WorkWorkspace = {
   companies: WorkCompany[];
   projects: WorkProject[];
   tasks: WorkTask[];
+};
+
+type LegacyWorkWorkspace = Omit<WorkWorkspace, "version"> & {
+  version: 1;
 };
 
 const DEFAULT_WORKSPACE: WorkWorkspace = {
@@ -185,6 +213,59 @@ function isProject(value: unknown): value is WorkProject {
     && ["active", "paused", "completed"].includes(String(value.status));
 }
 
+function isClockTime(value: string) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function isLinkedTaskSchedule(value: unknown): value is WorkLinkedTaskSchedule {
+  if (!isRecord(value)) return false;
+  if (typeof value.allDay !== "boolean" || typeof value.startTime !== "string") return false;
+  const validTimeRange = value.allDay
+    ? value.startTime === "" && value.endTime === undefined
+    : isClockTime(value.startTime)
+      && (value.endTime === undefined
+        || (typeof value.endTime === "string" && isClockTime(value.endTime) && value.endTime > value.startTime));
+  return validTimeRange
+    && (value.reminderMinutes === undefined
+      || (typeof value.reminderMinutes === "number"
+        && Number.isInteger(value.reminderMinutes)
+        && value.reminderMinutes >= 0))
+    && (value.recurrence === undefined
+      || ["daily", "weekly", "monthly", "yearly"].includes(String(value.recurrence)))
+    && (value.completedDates === undefined
+      || (Array.isArray(value.completedDates)
+        && value.completedDates.every((date) => typeof date === "string")
+        && new Set(value.completedDates).size === value.completedDates.length))
+    && typeof value.timezone === "string"
+    && value.timezone.trim().length > 0;
+}
+
+function isLinkedTaskDetails(value: unknown): value is WorkLinkedTaskDetails {
+  return isRecord(value)
+    && typeof value.originTaskId === "number"
+    && Number.isSafeInteger(value.originTaskId)
+    && typeof value.view === "string"
+    && value.view.trim().length > 0
+    && (value.time === undefined || typeof value.time === "string")
+    && (value.endTime === undefined || typeof value.endTime === "string")
+    && (value.notes === undefined || typeof value.notes === "string")
+    && (value.tags === undefined
+      || (Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === "string")))
+    && (value.list === undefined || typeof value.list === "string")
+    && (value.subtasks === undefined
+      || (Array.isArray(value.subtasks) && value.subtasks.every((subtask) => isRecord(subtask)
+        && typeof subtask.id === "number"
+        && typeof subtask.text === "string"
+        && typeof subtask.done === "boolean")))
+    && (value.comments === undefined
+      || (Array.isArray(value.comments) && value.comments.every((comment) => isRecord(comment)
+        && typeof comment.id === "number"
+        && typeof comment.author === "string"
+        && typeof comment.text === "string"
+        && typeof comment.time === "string")))
+    && (value.schedule === undefined || isLinkedTaskSchedule(value.schedule));
+}
+
 function isTask(value: unknown): value is WorkTask {
   return isRecord(value)
     && typeof value.id === "string"
@@ -194,12 +275,13 @@ function isTask(value: unknown): value is WorkTask {
     && typeof value.completed === "boolean"
     && ["none", "low", "medium", "high"].includes(String(value.priority))
     && typeof value.dueDate === "string"
-    && typeof value.createdAt === "string";
+    && typeof value.createdAt === "string"
+    && (value.linkedTask === undefined || isLinkedTaskDetails(value.linkedTask));
 }
 
-function isWorkspace(value: unknown): value is WorkWorkspace {
+function hasWorkspaceShape(value: unknown): value is Omit<WorkWorkspace, "version"> & { version: number } {
   return isRecord(value)
-    && value.version === WORKSPACE_VERSION
+    && typeof value.version === "number"
     && typeof value.updatedAt === "string"
     && Array.isArray(value.companies)
     && value.companies.every(isCompany)
@@ -207,6 +289,22 @@ function isWorkspace(value: unknown): value is WorkWorkspace {
     && value.projects.every(isProject)
     && Array.isArray(value.tasks)
     && value.tasks.every(isTask);
+}
+
+function isWorkspace(value: unknown): value is WorkWorkspace {
+  return hasWorkspaceShape(value) && value.version === WORKSPACE_VERSION;
+}
+
+function migrateLegacyWorkspace(value: unknown): WorkWorkspace | null {
+  if (!hasWorkspaceShape(value) || value.version !== 1) return null;
+  const legacy = value as LegacyWorkWorkspace;
+  return {
+    ...legacy,
+    version: WORKSPACE_VERSION,
+    companies: legacy.companies.map((company) => ({ ...company })),
+    projects: legacy.projects.map((project) => ({ ...project })),
+    tasks: legacy.tasks.map((task) => ({ ...task })),
+  };
 }
 
 function cloneDefaultWorkspace(): WorkWorkspace {
@@ -240,6 +338,7 @@ export function loadWorkWorkspaceResult(): LocalLoadResult<WorkWorkspace> {
     key: WORK_STORAGE_KEY,
     fallback: cloneDefaultWorkspace,
     validate: isWorkspace,
+    migrate: migrateLegacyWorkspace,
   });
   return {
     ...result,
