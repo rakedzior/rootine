@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "quiet" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md";
+export type ButtonSize = "xs" | "sm" | "md";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -30,7 +30,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const classes = [
     "ui-button",
     `ui-button--${variant}`,
-    size === "sm" ? "ui-button--sm" : "",
+    size === "md" ? "" : `ui-button--${size}`,
     iconOnly ? "ui-button--icon" : "",
     fullWidth ? "ui-button--full" : "",
     className,

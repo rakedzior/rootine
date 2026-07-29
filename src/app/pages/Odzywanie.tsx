@@ -20,7 +20,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
-  Salad,
+
   Save,
   Scale,
   Settings,
@@ -30,6 +30,7 @@ import {
   Badge,
   Button,
   Card,
+  DatePicker,
   Input,
   Modal,
   ModuleMain,
@@ -828,7 +829,6 @@ export default function Odzywanie() {
         <PageHeader
           title="Odżywianie"
           description="Dzienny rejestr posiłków, makroskładników i nawodnienia"
-          leading={<Salad size={18} strokeWidth={1.5} />}
           meta={headerMeta}
           actions={loadStatus !== "corrupt" ? (
             <Button
@@ -870,12 +870,14 @@ export default function Odzywanie() {
               <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}>
                 <ChevronLeft size={14} />
               </Button>
-              <Input
-                type="date"
+              {/* A toolbar sits among custom-styled controls, so it uses the shared DatePicker.
+                  The native <Input type="date"> widget stays in modal forms, where the OS
+                  picker is an advantage on touch devices. */}
+              <DatePicker
                 value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value || today)}
+                onChange={(value) => setSelectedDate(value || today)}
                 aria-label="Wybrany dzień"
-                className="nutrition-date-input"
+                fieldClassName="nutrition-date-input"
               />
               <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}>
                 <ChevronRight size={14} />
@@ -1026,7 +1028,7 @@ export default function Odzywanie() {
                 </Card>
                 {undoEntry && (
                   <Card tone="input" padding="dense" className="mt-3 flex items-center justify-between gap-3" role="status">
-                    <span className="truncate text-[10px]" style={{ color: uiColors.textSecondary }}>Usunięto: {undoEntry.entry.name}</span>
+                    <span className="truncate text-[11px]" style={{ color: uiColors.textSecondary }}>Usunięto: {undoEntry.entry.name}</span>
                     <Button variant="ghost" size="sm" disabled={dayClosed} onClick={restoreEntry}>Cofnij</Button>
                   </Card>
                 )}
@@ -1054,7 +1056,7 @@ export default function Odzywanie() {
                           <div key={key}>
                             <div className="mb-1.5 flex items-start justify-between gap-3">
                               <div>
-                                <p className="text-[10px] font-medium" style={{ color: uiColors.textSecondary }}>{label}</p>
+                                <p className="text-[11px] font-medium" style={{ color: uiColors.textSecondary }}>{label}</p>
                                 <p className="mt-0.5" style={{ color: remaining < 0 ? uiColors.danger : uiColors.textMuted, fontSize: "var(--text-micro)" }}>
                                   {remaining < 0 ? `Przekroczono o ${formatNumber(Math.abs(remaining))} ${unit ?? "kcal"}` : `Pozostało ${formatNumber(remaining)} ${unit ?? "kcal"}`}
                                 </p>
@@ -1252,7 +1254,7 @@ export default function Odzywanie() {
               {entryDraft.name.trim().length >= 2 && !selectedFood && (
                 <div
                   className="mt-1 flex min-h-9 items-center justify-between gap-2"
-                  style={{ color: uiColors.textMuted, fontSize: "var(--text-micro)", lineHeight: 1.35 }}
+                  style={{ color: uiColors.textMuted, fontSize: "var(--text-micro)", lineHeight: "var(--leading-snug)" }}
                 >
                   <span>Produkty marek pobieramy dopiero na Twoje żądanie.</span>
                   <Button
@@ -1609,7 +1611,7 @@ export default function Odzywanie() {
                 />
               </div>
             </section>
-            {goalError && <p className="mt-3 text-[10px]" role="alert" style={{ color: uiColors.danger }}>{goalError}</p>}
+            {goalError && <p className="mt-3 text-[11px]" role="alert" style={{ color: uiColors.danger }}>{goalError}</p>}
           </form>
         </Modal>
       )}

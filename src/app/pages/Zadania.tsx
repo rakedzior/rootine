@@ -1,16 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-  Plus, Check, Flame, Trash2, RotateCcw,
+  Plus, Check, Trash2, RotateCcw,
   ChevronDown, ChevronRight,
   Calendar, X, Circle,
   Flag, Search,
-  PenLine, Hash, List, CheckSquare,
+  PenLine, Hash, List,
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
-import {
-  assignTaskToWorkProject,
-  workProjectIdForTask,
-} from "../data/commitmentRepository";
 import { todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
@@ -19,10 +15,7 @@ import {
   type TaskOccurrence,
 } from "../data/taskSchedule";
 import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
-import {
-  loadWorkWorkspace,
-  WORK_STORAGE_KEY,
-} from "../data/workWorkspace";
+import { WORK_STORAGE_KEY } from "../data/workWorkspace";
 import {
   isHabitDoneOnDate,
   emptyTaskTrash,
@@ -66,6 +59,8 @@ import {
   formatDateLabel,
   initialTaskView,
   overdueDateLabel,
+  overdueRailLabel,
+  sortByScheduledTime,
   scheduleFromDateValue,
   smartDateViewRange,
   tasksForSmartDateView,
@@ -89,7 +84,6 @@ import {
 
 export default function Zadania() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
-  const [workWorkspace, setWorkWorkspace] = useState(loadWorkWorkspace);
   const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(initialTaskView);
   const [listFilter,    setListFilter]    = useState<string | null>(null);
@@ -103,8 +97,6 @@ export default function Zadania() {
   const [newTask,       setNewTask]       = useState("");
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
   const [newTaskList,   setNewTaskList]   = useState<string | null>(null);
-  const [newTaskProjectId, setNewTaskProjectId] = useState("");
-  const [inputFocused,  setInputFocused]  = useState(false);
   const [newPriority,   setNewPriority]   = useState<Priority | null>(null);
   const [newDateVal,    setNewDateVal]    = useState<DateVal>(DEFAULT_DATE_VAL);
   const [inputDropdown, setInputDropdown] = useState<"priority" | "list" | "tags" | null>(null);
@@ -113,8 +105,6 @@ export default function Zadania() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
-  const [newTaskAssignmentError, setNewTaskAssignmentError] = useState("");
-  const [detailAssignmentError, setDetailAssignmentError] = useState("");
   const [taxonomyDelete, setTaxonomyDelete] = useState<{
     kind: "list" | "tag";
     id: string;
@@ -143,13 +133,9 @@ export default function Zadania() {
         || !Number.isInteger(current)
       ) ? current : null);
     };
-    const syncWorkWorkspace = () => {
-      setWorkWorkspace(loadWorkWorkspace());
-      syncWorkspace();
-    };
     const unsubscribers = [
       subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace),
-      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkWorkspace),
+      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkspace),
       subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, syncWorkspace),
     ];
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -217,18 +203,6 @@ export default function Zadania() {
   const selectedTask = selectedSourceId === null
     ? null
     : tasks.find((task) => task.id === selectedSourceId) ?? null;
-  const workProjectOptions = useMemo(() => {
-    const companies = new Map(workWorkspace.companies.map((company) => [company.id, company]));
-    return [
-      { value: "", label: "Bez firmy i projektu" },
-      ...workWorkspace.projects
-        .filter((project) => project.status === "active" && companies.has(project.companyId))
-        .map((project) => ({
-          value: project.id,
-          label: `${companies.get(project.companyId)!.name} · ${project.name}`,
-        })),
-    ];
-  }, [workWorkspace.companies, workWorkspace.projects]);
   const tagUsage = tasks.reduce<Record<string, number>>((counts, task) => {
     for (const tag of task.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
     return counts;
@@ -271,7 +245,9 @@ export default function Zadania() {
     ? pending.filter(t => Boolean(t.calendarDate) && t.calendarDate! < todayKey)
     : [];
   const overdueIds = new Set(overdue.map(task => task.id));
-  const currentPending = pending.filter(task => !overdueIds.has(task.id));
+  // Every task below belongs to one day, so a clock time is a real position in sequence.
+  // The overdue group above spans many days and stays ordered by how late it is.
+  const currentPending = sortByScheduledTime(pending.filter(task => !overdueIds.has(task.id)));
   const dayHeading = viewedTaskDayHeading(taskView);
   const dayHeadingCount = currentPending.length + completed.length;
 
@@ -315,7 +291,6 @@ export default function Zadania() {
   const addTask = () => {
     const text = newTask.trim();
     if (!text) return;
-    setNewTaskAssignmentError("");
     const id = Date.now();
     const dateLabel = formatDateLabel(newDateVal);
     const calendarDate = newDateVal.date ? toCalendarDateKey(newDateVal.date) : undefined;
@@ -337,44 +312,20 @@ export default function Zadania() {
       date: dateLabel || undefined,
       calendarDate,
     };
-    if (newTaskProjectId) {
-      const assignment = assignTaskToWorkProject(task, newTaskProjectId);
-      if (assignment.status !== "ok") {
-        setStorageFailed(assignment.status === "save-failed");
-        setNewTaskAssignmentError(
-          assignment.status === "invalid-project"
-            ? "Projekt nie jest już aktywny. Wybierz inny projekt i spróbuj ponownie."
-            : "Nie udało się przypisać zadania. Dane formularza zostały zachowane.",
-        );
-        return;
-      }
-      const nextWorkspace = loadTaskWorkspace();
-      workspaceRef.current = nextWorkspace;
-      setTasks(nextWorkspace.tasks);
-      setHabits(nextWorkspace.habits);
-      setListy(nextWorkspace.lists);
-      setTagi(nextWorkspace.tags);
-      setWorkWorkspace(loadWorkWorkspace());
-      setSelectedId(
-        nextWorkspace.tasks.find((candidate) => candidate.source?.entity === assignment.entity)?.id ?? null,
-      );
-    } else {
-      setTagi((existing) => {
-        const known = new Set(existing.map((tag) => tag.id));
-        const missing = newTaskTags.filter((tag) => !known.has(tag));
-        return missing.length === 0
-          ? existing
-          : [...existing, ...missing.map((tag, index) => ({
-              id: tag,
-              label: tag,
-              color: PALETTE[(existing.length + index) % PALETTE.length],
-            }))];
-      });
-      setTasks((current) => [...current, task]);
-      setSelectedId(id);
-    }
+    setTagi((existing) => {
+      const known = new Set(existing.map((tag) => tag.id));
+      const missing = newTaskTags.filter((tag) => !known.has(tag));
+      return missing.length === 0
+        ? existing
+        : [...existing, ...missing.map((tag, index) => ({
+            id: tag,
+            label: tag,
+            color: PALETTE[(existing.length + index) % PALETTE.length],
+          }))];
+    });
+    setTasks((current) => [...current, task]);
+    setSelectedId(id);
     setNewTask(""); setNewPriority(null); setNewTaskTags([]); setNewTaskList(null);
-    setNewTaskProjectId("");
     setNewDateVal(DEFAULT_DATE_VAL); setInputDropdown(null);
   };
 
@@ -454,31 +405,6 @@ export default function Zadania() {
       };
     }));
   };
-  const assignExistingTaskToProject = (id: number, projectId: string) => {
-    const task = tasks.find((candidate) => candidate.id === id);
-    if (!task || !projectId) return;
-    setDetailAssignmentError("");
-    const assignment = assignTaskToWorkProject(task, projectId);
-    if (assignment.status !== "ok") {
-      setStorageFailed(assignment.status === "save-failed");
-      setDetailAssignmentError(
-        assignment.status === "invalid-project"
-          ? "Projekt nie jest już aktywny. Wybierz inny projekt."
-          : "Nie udało się zmienić przypisania. Spróbuj ponownie.",
-      );
-      return;
-    }
-    const nextWorkspace = loadTaskWorkspace();
-    workspaceRef.current = nextWorkspace;
-    setTasks(nextWorkspace.tasks);
-    setHabits(nextWorkspace.habits);
-    setListy(nextWorkspace.lists);
-    setTagi(nextWorkspace.tags);
-    setWorkWorkspace(loadWorkWorkspace());
-    setSelectedId(
-      nextWorkspace.tasks.find((candidate) => candidate.source?.entity === assignment.entity)?.id ?? null,
-    );
-  };
   const workspaceWithTasks = (nextTasks: Task[]) => ({
     ...workspaceRef.current,
     tasks: nextTasks,
@@ -531,7 +457,6 @@ export default function Zadania() {
   const closeDatePicker = useCallback(() => setDatePickerOpen(false), []);
 
   useEffect(() => { setSelectedId(null); }, [taskView, listFilter, tagFilter]);
-  useEffect(() => { setDetailAssignmentError(""); }, [selectedId]);
 
   const getPlaceholder = () => {
     if (listFilter) return `Dodaj zadanie do "${listy.find(l => l.id === listFilter)?.label}"`;
@@ -553,7 +478,6 @@ export default function Zadania() {
     <PageHeader
       title="Zadania"
       description={`Podsumowanie · ${todayStr()}`}
-      leading={<CheckSquare size={18} strokeWidth={1.5} />}
       meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
       actions={<Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}><span className="header-action-label">Dodaj zadanie</span></Button>}
     />
@@ -561,14 +485,12 @@ export default function Zadania() {
     <PageHeader
       title="Zadania"
       description={`Nawyki · ${todayStr()}`}
-      leading={<Flame size={18} strokeWidth={1.5} />}
       meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
     />
   ) : (
     <PageHeader
       title="Zadania"
       description={`${listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]} · ${todayStr()}`}
-      leading={<CheckSquare size={18} strokeWidth={1.5} />}
       meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
       actions={(
         taskView === "kosz" && visible.length > 0 ? (
@@ -592,7 +514,7 @@ export default function Zadania() {
 
         {/* Smart views */}
         <div className="px-2 pb-4 pt-4">
-          <SectionHeader title="Główne" level={3} variant="label" className="px-1.5" />
+          <SectionHeader title="Główne" level={2} variant="label" className="px-1.5" />
           <div className="space-y-px">
             {SMART_VIEWS.map(v => {
             const Icon = v.icon;
@@ -612,16 +534,15 @@ export default function Zadania() {
           </div>
         </div>
 
-        <div className="mx-3 my-2 h-px" style={{ background: C.borderSubtle }} />
+        <div className="task-nav__divider" />
 
         {/* Listy */}
         <div className="px-2 mb-2">
           <div className="flex items-center justify-between px-1.5 mb-1.5">
             <button onClick={() => setListyOpen(v => !v)}
-              className="flex items-center gap-1.5 flex-1"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              <ChevronRight size={10} strokeWidth={2} style={{ color: C.textDisabled, transform: listyOpen ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }} />
-              <span className="text-[10px] uppercase tracking-[0.16em] font-semibold" style={{ color: C.textMuted }}>Listy</span>
+              className="task-nav__group-toggle">
+              <ChevronRight size={10} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
+              <span className="task-nav__group-label">Listy</span>
             </button>
             {listyOpen && (
               <div className="task-taxonomy-header-actions flex items-center gap-1">
@@ -629,7 +550,7 @@ export default function Zadania() {
                   onClick={() => { setListSearchOpen(open => !open); setListSearch(""); }}
                   aria-label="Szukaj listy"
                   title="Szukaj listy"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: listSearchOpen ? C.iceBlue : C.textMuted, display: "flex", padding: 2 }}
+                  className={`task-nav__group-action${listSearchOpen ? " is-active" : ""}`}
                   onMouseEnter={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}
                   onMouseLeave={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}>
                   <Search size={11} strokeWidth={1.8} />
@@ -637,7 +558,7 @@ export default function Zadania() {
                 <button onClick={() => { setAddingList(true); setAddingTag(false); setListSearchOpen(false); }}
                   aria-label="Dodaj listę"
                   title="Dodaj listę"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 2 }}
+                  className="task-nav__group-action"
                   onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
                   onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}>
                   <Plus size={11} strokeWidth={2} />
@@ -647,8 +568,8 @@ export default function Zadania() {
           </div>
           {listyOpen && <div className="space-y-px">
             {listSearchOpen && (
-              <div className="flex items-center gap-1.5 mx-1 mb-1 px-2 py-1 rounded-md" style={{ background: C.inputBg, border: `1px solid ${C.borderSubtle}` }}>
-                <Search size={11} strokeWidth={1.7} style={{ color: C.textDisabled, flexShrink: 0 }} />
+              <div className="task-nav__search">
+                <Search size={11} strokeWidth={1.7} />
                 <input
                   autoFocus
                   value={listSearch}
@@ -656,15 +577,15 @@ export default function Zadania() {
                   placeholder="Szukaj listy"
                   aria-label="Szukaj listy"
                   className="tag-search-input flex-1 min-w-0 bg-transparent outline-none"
-                  style={{ border: "none", fontSize: 10, color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}
+
                 />
               </div>
             )}
             {listy.length === 0 && !addingList && (
-              <p style={{ fontSize: 11, color: C.textMuted, padding: "4px 12px" }}>Brak list. Kliknij + aby dodać.</p>
+              <p className="task-nav__empty">Brak list. Kliknij + aby dodać.</p>
             )}
             {listy.length > 0 && visibleLists.length === 0 && (
-              <p style={{ fontSize: 10, color: C.textMuted, padding: "4px 12px" }}>Brak pasujących list.</p>
+              <p className="task-nav__empty">Brak pasujących list.</p>
             )}
             {visibleLists.map(l => {
               const active = listFilter === l.id;
@@ -672,12 +593,12 @@ export default function Zadania() {
               return (
                 <div key={l.id} className="group relative">
                   {editingListId === l.id ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 6px" }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
+                    <div className="task-nav__edit-row">
+                      <span className="task-nav__dot" style={{ background: l.color }} />
                       <input autoFocus value={editListLabel} onChange={e => setEditListLabel(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") saveList(l.id); if (e.key === "Escape") setEditingListId(null); }}
                         onBlur={() => saveList(l.id)}
-                        style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
+                        className="task-nav__edit-input" />
                     </div>
                   ) : (
                     <ContextNavItem
@@ -696,11 +617,11 @@ export default function Zadania() {
                   {editingListId !== l.id && (
                     <div className="task-taxonomy-actions absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
                       <button type="button" aria-label={`Edytuj listę ${l.label}`} onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
-                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
+                        className="task-nav__row-action">
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
                       <button type="button" aria-label={`Usuń listę ${l.label}`} onClick={e => { e.stopPropagation(); deleteList(l.id); }}
-                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
+                        className="task-nav__row-action task-nav__row-action--danger">
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
                     </div>
@@ -709,27 +630,26 @@ export default function Zadania() {
               );
             })}
             {addingList && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 6px" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: PALETTE[listy.length % PALETTE.length], flexShrink: 0 }} />
+              <div className="task-nav__edit-row">
+                <span className="task-nav__dot" style={{ background: PALETTE[listy.length % PALETTE.length] }} />
                 <input autoFocus placeholder="Nazwa listy" value={newListLabel} onChange={e => setNewListLabel(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addList(); if (e.key === "Escape") { setAddingList(false); setNewListLabel(""); } }}
                   onBlur={() => { if (newListLabel.trim()) addList(); else { setAddingList(false); setNewListLabel(""); } }}
-                  style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
+                  className="task-nav__edit-input" />
               </div>
             )}
           </div>}
         </div>
 
-        <div className="mx-3 my-2 h-px" style={{ background: C.borderSubtle }} />
+        <div className="task-nav__divider" />
 
         {/* Tagi */}
         <div className="px-2 mb-2">
           <div className="flex items-center justify-between px-1.5 mb-1.5">
             <button onClick={() => setTagiOpen(v => !v)}
-              className="flex items-center gap-1.5 flex-1"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              <ChevronRight size={10} strokeWidth={2} style={{ color: C.textDisabled, transform: tagiOpen ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }} />
-              <span className="text-[10px] uppercase tracking-[0.16em] font-semibold" style={{ color: C.textMuted }}>Tagi</span>
+              className="task-nav__group-toggle">
+              <ChevronRight size={10} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
+              <span className="task-nav__group-label">Tagi</span>
             </button>
             {tagiOpen && (
               <div className="task-taxonomy-header-actions flex items-center gap-1">
@@ -737,7 +657,7 @@ export default function Zadania() {
                   onClick={() => { setTagSearchOpen(open => !open); setTagSearch(""); }}
                   aria-label="Szukaj tagu"
                   title="Szukaj tagu"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: tagSearchOpen ? C.iceBlue : C.textMuted, display: "flex", padding: 2 }}
+                  className={`task-nav__group-action${tagSearchOpen ? " is-active" : ""}`}
                   onMouseEnter={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}
                   onMouseLeave={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}>
                   <Search size={11} strokeWidth={1.8} />
@@ -745,7 +665,7 @@ export default function Zadania() {
                 <button onClick={() => { setAddingTag(true); setAddingList(false); setTagSearchOpen(false); }}
                   aria-label="Dodaj tag"
                   title="Dodaj tag"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 2 }}
+                  className="task-nav__group-action"
                   onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
                   onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}>
                   <Plus size={11} strokeWidth={2} />
@@ -755,8 +675,8 @@ export default function Zadania() {
           </div>
           {tagiOpen && <div className="space-y-px">
             {tagSearchOpen && (
-              <div className="flex items-center gap-1.5 mx-1 mb-1 px-2 py-1 rounded-md" style={{ background: C.inputBg, border: `1px solid ${C.borderSubtle}` }}>
-                <Search size={11} strokeWidth={1.7} style={{ color: C.textDisabled, flexShrink: 0 }} />
+              <div className="task-nav__search">
+                <Search size={11} strokeWidth={1.7} />
                 <input
                   autoFocus
                   value={tagSearch}
@@ -764,27 +684,27 @@ export default function Zadania() {
                   placeholder="Szukaj tagu"
                   aria-label="Szukaj tagu"
                   className="tag-search-input flex-1 min-w-0 bg-transparent outline-none"
-                  style={{ border: "none", fontSize: 10, color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}
+
                 />
               </div>
             )}
             {tagi.length === 0 && !addingTag && (
-              <p style={{ fontSize: 11, color: C.textMuted, padding: "4px 12px" }}>Brak tagów.</p>
+              <p className="task-nav__empty">Brak tagów.</p>
             )}
             {tagi.length > 0 && visibleTags.length === 0 && (
-              <p style={{ fontSize: 10, color: C.textMuted, padding: "4px 12px" }}>Brak pasujących tagów.</p>
+              <p className="task-nav__empty">Brak pasujących tagów.</p>
             )}
             {visibleTags.map(t => {
               const active = tagFilter === t.id;
               return (
                 <div key={t.id} className="group relative">
                   {editingTagId === t.id ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 6px" }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: t.color, flexShrink: 0 }} />
+                    <div className="task-nav__edit-row">
+                      <span className="task-nav__dot" style={{ background: t.color }} />
                       <input autoFocus value={editTagLabel} onChange={e => setEditTagLabel(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") saveTag(t.id); if (e.key === "Escape") setEditingTagId(null); }}
                         onBlur={() => saveTag(t.id)}
-                        style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
+                        className="task-nav__edit-input" />
                     </div>
                   ) : (
                     <ContextNavItem
@@ -801,11 +721,11 @@ export default function Zadania() {
                   {editingTagId !== t.id && (
                     <div className="task-taxonomy-actions absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
                       <button type="button" aria-label={`Edytuj tag #${t.label}`} onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
-                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.textMuted, display: "flex" }}>
+                        className="task-nav__row-action">
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
                       <button type="button" aria-label={`Usuń tag #${t.label}`} onClick={e => { e.stopPropagation(); deleteTag(t.id); }}
-                        style={{ background: C.elevated, border: "none", borderRadius: 4, cursor: "pointer", padding: "2px 4px", color: C.danger, display: "flex" }}>
+                        className="task-nav__row-action task-nav__row-action--danger">
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
                     </div>
@@ -814,19 +734,19 @@ export default function Zadania() {
               );
             })}
             {addingTag && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 6px" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: PALETTE[tagi.length % PALETTE.length], flexShrink: 0 }} />
+              <div className="task-nav__edit-row">
+                <span className="task-nav__dot" style={{ background: PALETTE[tagi.length % PALETTE.length] }} />
                 <input autoFocus placeholder="#tag" value={newTagLabel} onChange={e => setNewTagLabel(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addTagItem(); if (e.key === "Escape") { setAddingTag(false); setNewTagLabel(""); } }}
                   onBlur={() => { if (newTagLabel.trim()) addTagItem(); else { setAddingTag(false); setNewTagLabel(""); } }}
-                  style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.blueBorder}`, borderRadius: 6, outline: "none", fontSize: 12, color: C.textPrimary, padding: "3px 7px", fontFamily: "var(--font-sans)" }} />
+                  className="task-nav__edit-input" />
               </div>
             )}
           </div>}
         </div>
 
         <div className="flex-1" />
-        <div className="px-2 py-3 border-t space-y-px" style={{ borderColor: C.borderSubtle }}>
+        <div className="task-nav__footer">
           {([
             { icon: RotateCcw, label: "Ukończone", view: "ukonczone" },
             { icon: Trash2,    label: "Kosz",      view: "kosz" },
@@ -970,7 +890,7 @@ export default function Zadania() {
               boxShadow: "none",
             }}>
             <div className="flex items-center gap-2 px-3.5 py-2.5 flex-wrap">
-              <Plus size={13} strokeWidth={1.75} style={{ color: inputFocused ? C.iceBlue : C.textMuted, flexShrink: 0 }} />
+              <Plus size={13} strokeWidth={1.75} className="task-entry__lead" />
               {/* Tag chips in input */}
               {newTaskTags.map(tagId => {
                 const td = tagi.find(t => t.id === tagId);
@@ -986,7 +906,7 @@ export default function Zadania() {
                       type="button"
                       aria-label={`Usuń tag #${td?.label ?? tagId} z nowego zadania`}
                       onClick={() => setNewTaskTags(p => p.filter(id => id !== tagId))}
-                      style={{ background: "none", border: "none", cursor: "pointer", color, display: "flex", padding: 0 }}>
+                    >
                       <X size={8} strokeWidth={2.5} />
                     </button>
                   </span>
@@ -998,28 +918,12 @@ export default function Zadania() {
                 placeholder={newTaskTags.length === 0 ? getPlaceholder() : "Dodaj więcej…"}
                 value={newTask}
                 onChange={handleTaskInput}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
                 onKeyDown={handleTaskKeyDown}
-                className="task-entry-input flex-1 bg-transparent outline-none text-[13px] min-w-0"
-                style={{ color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", minWidth: 80 }}
+                className="task-entry-input task-entry__input flex-1 bg-transparent outline-none text-[13px] min-w-0"
               />
 
               {/* Controls */}
               <div className="task-entry-controls flex items-center gap-0.5 flex-shrink-0">
-                <Select
-                  aria-label="Firma i projekt nowego zadania"
-                  fieldClassName="task-work-project-field"
-                  compact
-                  value={newTaskProjectId}
-                  options={workProjectOptions}
-                  disabled={workProjectOptions.length === 1}
-                  onChange={(event) => {
-                    setNewTaskProjectId(event.target.value);
-                    setNewTaskAssignmentError("");
-                  }}
-                />
-
                 {/* Flag — priority */}
                 <button
                   ref={flagBtnInputRef}
@@ -1086,7 +990,7 @@ export default function Zadania() {
                   }}>
                   <Calendar size={12} strokeWidth={1.5} />
                   {dateLabel && (
-                    <span style={{ fontSize: "10px", fontWeight: 500 }}>{dateLabel}</span>
+                    <span style={{ fontSize: "11px", fontWeight: 500 }}>{dateLabel}</span>
                   )}
                 </button>
 
@@ -1094,16 +998,13 @@ export default function Zadania() {
                   <button
                     type="submit"
                     aria-label="Dodaj zadanie"
-                    className="text-[10px] font-semibold px-2 h-7 rounded-md flex-shrink-0"
+                    className="text-[11px] font-semibold px-2 h-7 rounded-md flex-shrink-0"
                     style={{ background: C.iceBlueSolid, color: C.textPrimary }}>
                     ↵
                   </button>
                 )}
               </div>
             </div>
-            {newTaskAssignmentError && (
-              <p className="task-assignment-error" role="alert">{newTaskAssignmentError}</p>
-            )}
           </form>
 
           {overdue.length > 0 && (
@@ -1139,6 +1040,7 @@ export default function Zadania() {
                       key={task.id}
                       task={task}
                       tagi={tagi}
+                      railLabel={overdueRailLabel(task.calendarDate!)}
                       deadlineLabel={overdueDateLabel(task.calendarDate!)}
                       selected={selectedId === task.id}
                       onToggle={id => updateTask(id, { done: true })}
@@ -1163,7 +1065,7 @@ export default function Zadania() {
             /* Ukończone view — flat list of all done tasks */
             <div className="space-y-px">
               {visible.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textMuted }}>
+                <div className="task-empty">
                   <RotateCcw size={28} strokeWidth={1} />
                   <span className="text-[13px]">Brak ukończonych zadań</span>
                 </div>
@@ -1179,7 +1081,7 @@ export default function Zadania() {
           ) : taskView === "kosz" ? (
             <div className="space-y-px">
               {visible.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textMuted }}>
+                <div className="task-empty">
                   <Trash2 size={28} strokeWidth={1} />
                   <span className="text-[13px]">Kosz jest pusty</span>
                 </div>
@@ -1254,7 +1156,7 @@ export default function Zadania() {
           )}
 
           {taskView !== "kosz" && pending.length === 0 && completed.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: C.textMuted }}>
+            <div className="task-empty">
               <Circle size={28} strokeWidth={1} />
               <span className="text-[13px]">Brak zadań</span>
               <button onClick={() => inputRef.current?.focus()} className="text-[11px] mt-1" style={{ color: C.iceBlue }}>
@@ -1296,10 +1198,6 @@ export default function Zadania() {
             onDelete={selectedTask.deleted ? (id) => setPurgeTaskId(id) : deleteTask}
             listy={listy}
             tagi={tagi}
-            workProjectOptions={workProjectOptions}
-            workProjectId={workProjectIdForTask(selectedTask) ?? ""}
-            workAssignmentError={detailAssignmentError}
-            onWorkProjectChange={(projectId) => assignExistingTaskToProject(selectedTask.id, projectId)}
           />
         ) : (
           <SummaryPanel tasks={visible} habits={habits} onToggleHabit={toggleHabit} />
@@ -1350,7 +1248,7 @@ export default function Zadania() {
             </>
           )}
         >
-          <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="text-[12px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
             Tej operacji nie można cofnąć, dlatego zależności zostaną zaktualizowane w tym samym zapisie.
           </p>
         </Modal>

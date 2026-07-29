@@ -6,6 +6,7 @@ import {
   toCalendarDateKey,
 } from "../../data/taskWorkspace";
 import { Button, Menu } from "../../ui";
+import { SummaryEditor } from "./SummaryEditor";
 import {
   C,
   fmtTaskDate,
@@ -25,97 +26,90 @@ export function SummaryPanel({ tasks, habits, onToggleHabit }: {
   const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
   const week  = getMiniWeek();
   const todayIdx = week.findIndex(d => d.today);
-  const panelBg = C.card;
-  const panelBorder = C.borderSubtle;
-  const headingColor = C.textMuted;
-  const secondaryText = C.textMuted;
   const DL = ["Pn","Wt","Śr","Cz","Pt","So","Nd"];
 
   return (
-    <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-4 py-5 space-y-6">
+    <div className="task-summary">
       <section>
-        <p className="text-[10px] uppercase tracking-widest font-semibold mb-3" style={{ color: headingColor }}>Podsumowanie dnia</p>
-        <div className="grid grid-cols-2 gap-2 mb-3">
+        <p className="task-summary__label">Podsumowanie dnia</p>
+        <div className="task-summary__grid">
           {[
-            { label: "Zadania", done, total, accent: done > 0 ? C.seaGlass : C.textPrimary },
-            { label: "Nawyki", done: doneH, total: habits.length, accent: doneH > 0 ? C.seaGlass : C.textPrimary },
+            { label: "Zadania", done, total },
+            { label: "Nawyki", done: doneH, total: habits.length },
           ].map((s, i) => (
-            <div key={i} className="rounded-xl p-3 text-center" style={{ background: panelBg, border: `1px solid ${panelBorder}` }}>
-              <div className="font-semibold leading-none" style={{ fontFamily: "'DM Mono',monospace", color: s.accent }}>
-                <span className="text-[22px]">{s.done}</span>
-                <span className="text-[22px]" style={{ color: secondaryText }}>/{s.total}</span>
+            <div key={i} className="task-summary__card task-summary__stat">
+              <div className={`task-summary__stat-value${s.done > 0 ? " is-positive" : ""}`}>
+                {s.done}<span>/{s.total}</span>
               </div>
-              <div className="text-[9px] mt-1.5 uppercase tracking-widest" style={{ color: secondaryText }}>{s.label} · wykonane</div>
+              <div className="task-summary__stat-label">{s.label} · wykonane</div>
             </div>
           ))}
         </div>
-        <div className="rounded-xl p-3.5" style={{ background: panelBg, border: `1px solid ${panelBorder}` }}>
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[11px]" style={{ color: headingColor }}>Postęp dnia</span>
-            <span className="text-[16px] font-semibold leading-none" style={{ fontFamily: "'DM Mono',monospace", color: pct === 100 ? C.seaGlass : C.iceBlue }}>{pct}%</span>
+        <div className="task-summary__card">
+          <div className="task-summary__progress-head">
+            <span className="task-summary__meta">Postęp dnia</span>
+            <span className={`task-summary__progress-value${pct === 100 ? " is-complete" : ""}`}>{pct}%</span>
           </div>
-          <div className="h-[4px] rounded-full overflow-hidden" style={{ background: C.borderSubtle }}>
-            <div className="h-full w-full origin-left rounded-full transition-transform duration-700" style={{ transform: `scaleX(${pct / 100})`, background: pct === 100 ? C.seaGlass : C.iceBlueSolid }} />
+          <div className="task-progress-track">
+            <div
+              className={`task-progress-fill${pct === 100 ? " is-complete" : ""}`}
+              style={{ transform: `scaleX(${pct / 100})` }}
+            />
           </div>
         </div>
       </section>
 
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: headingColor }}>Nawyki na dziś</p>
-          <span className="text-[10px]" style={{ fontFamily: "'DM Mono',monospace", color: secondaryText }}>{doneH}/{habits.length}</span>
+        <div className="task-summary__heading">
+          <p className="task-summary__label">Nawyki na dziś</p>
+          <span className="task-summary__meta">{doneH}/{habits.length}</span>
         </div>
-        <div className="space-y-1.5">
+        <div>
           {habits.map(h => (
-            <button key={h.id} type="button" aria-pressed={h.done} onClick={() => onToggleHabit(h.id)}
-              className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer text-left transition-all duration-150"
-              style={{ background: panelBg, border: `1px solid ${panelBorder}` }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = C.cardHover)}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = panelBg)}>
-              <div className="w-[14px] h-[14px] rounded-full flex items-center justify-center flex-shrink-0 transition-all"
-                style={{ border: `1.5px solid ${h.done ? C.seaGlass : C.borderStrong}`, background: h.done ? C.seaGlassBg : "transparent" }}>
-                {h.done && <Check size={7} strokeWidth={2.5} style={{ color: C.seaGlass }} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] leading-none" style={{ color: h.done ? C.textMuted : C.textSecond, textDecoration: h.done ? "line-through" : "none" }}>{h.name}</div>
+            <button
+              key={h.id}
+              type="button"
+              aria-pressed={h.done}
+              onClick={() => onToggleHabit(h.id)}
+              className={`task-summary__habit${h.done ? " is-done" : ""}`}
+            >
+              <span className="task-summary__habit-check">
+                {h.done && <Check size={11} strokeWidth={2.5} />}
+              </span>
+              <span className="task-summary__habit-copy">
+                <span className="task-summary__habit-name">{h.name}</span>
                 {h.streak > 0 && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <Flame size={9} strokeWidth={1.5} style={{ color: C.warning }} />
-                    <span className="text-[10px]" style={{ color: secondaryText }}>{h.streak} dni</span>
-                  </div>
+                  <span className="task-summary__habit-streak">
+                    <Flame size={11} strokeWidth={1.5} />
+                    {h.streak} dni
+                  </span>
                 )}
-              </div>
-              {h.done && <Star size={10} strokeWidth={1.5} style={{ color: C.warning, flexShrink: 0 }} />}
+              </span>
+              {h.done && <Star size={11} strokeWidth={1.5} className="task-summary__streak" />}
             </button>
           ))}
         </div>
       </section>
 
       <section>
-        <p className="text-[10px] uppercase tracking-widest font-semibold mb-3" style={{ color: headingColor }}>Ten tydzień</p>
-        <div className="rounded-xl p-3.5" style={{ background: panelBg, border: `1px solid ${panelBorder}` }}>
-          <div className="flex gap-1.5">
+        <p className="task-summary__label">Ten tydzień</p>
+        <div className="task-summary__card">
+          <div className="task-week">
             {week.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className="w-full flex items-center justify-center rounded-lg text-[10px] font-medium transition-all"
-                  style={{
-                    aspectRatio: "1",
-                    background: d.today ? C.iceBlueBg : i < todayIdx ? C.seaGlassBg : "transparent",
-                    color: d.today ? C.iceBlue : i < todayIdx ? C.seaGlass : secondaryText,
-                    border: `1px solid ${d.today ? C.blueBorder : "transparent"}`,
-                  }}>
-                  {i < todayIdx ? <Check size={8} strokeWidth={2.5} /> : d.n}
+              <div key={i} className={`task-week__day${d.today ? " is-today" : ""}`}>
+                <div className={`task-week__cell${d.today ? " is-today" : i < todayIdx ? " is-past" : ""}`}>
+                  {i < todayIdx ? <Check size={11} strokeWidth={2.5} /> : d.n}
                 </div>
-                <span className="text-[9px]" style={{ color: d.today ? C.iceBlue : secondaryText }}>{DL[i]}</span>
+                <span className="task-week__label">{DL[i]}</span>
               </div>
             ))}
           </div>
-          <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: panelBorder }}>
-            <span className="text-[11px]" style={{ color: headingColor }}>Seria aktywna</span>
-            <div className="flex items-center gap-1">
-              <Flame size={11} strokeWidth={1.5} style={{ color: C.warning }} />
-              <span className="text-[11px] font-medium" style={{ fontFamily: "'DM Mono',monospace", color: C.warning }}>{todayIdx} dni</span>
-            </div>
+          <div className="task-summary__footer">
+            <span>Seria aktywna</span>
+            <span className="task-summary__streak">
+              <Flame size={11} strokeWidth={1.5} />
+              {todayIdx} dni
+            </span>
           </div>
         </div>
       </section>
@@ -227,93 +221,47 @@ export function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListIt
   const undone = tasks.filter(t => !t.done);
   const weekLabel = getWeekRangeLabel();
 
-  const tbBtns = [
-    "H1","H2","H3","|","B","I","U","S","|","🔗","</>","«»",
-  ];
-
   function Line({ task, showDate }: { task: Task; showDate: boolean }) {
+    // The dot carries the list's own colour, so it stays inline.
     const col = listy.find(l => l.id === task.list)?.color ?? C.danger;
     return (
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "3.5px 0" }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: col, flexShrink: 0, marginTop: 6, opacity: 0.9 }} />
-        {showDate && task.date && (
-          <span style={{ fontSize: 12, color: C.textMuted, flexShrink: 0 }}>[{fmtTaskDate(task.date)}]</span>
-        )}
-        <span style={{ fontSize: 12, color: C.textSecond, lineHeight: 1.55 }}>{task.text}</span>
+      <div className="task-doc__line">
+        <span className="task-doc__dot" style={{ background: col }} />
+        {showDate && task.date && <span className="task-doc__date">[{fmtTaskDate(task.date)}]</span>}
+        <span className="task-doc__text">{task.text}</span>
       </div>
     );
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: C.bg }}>
-      {/* Header */}
-      <div style={{ padding: "18px 26px 0", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 3.5, flexShrink: 0 }}>
-              {[0,1,2].map(i => <div key={i} style={{ width: 14, height: 1.5, background: C.textMuted, borderRadius: 1 }} />)}
-            </div>
-            <span style={{ fontSize: 16, fontWeight: 600, color: C.textPrimary, fontFamily: "var(--font-sans)" }}>
-              Podsumowanie
-            </span>
-          </div>
-          <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "var(--font-data)" }}>{weekLabel}</span>
-        </div>
-        {/* Toolbar */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 1,
-          padding: "5px 8px", marginBottom: 18,
-          background: C.card, borderRadius: 10,
-          border: `1px solid ${C.borderSubtle}`,
-        }}>
-          {tbBtns.map((b, i) => b === "|" ? (
-            <div key={i} style={{ width: 1, height: 13, background: C.borderStrong, margin: "0 4px" }} />
-          ) : (
-            <button key={i} style={{
-              background: "none", border: "none", cursor: "pointer",
-              padding: "3px 7px", borderRadius: 5,
-              fontSize: 10.5, fontWeight: 700, color: C.textMuted,
-              fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", lineHeight: 1,
-            }}
-            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = C.elevated)}
-            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "none")}>
-              {b}
-            </button>
-          ))}
+    <div className="task-doc">
+      <div className="task-doc__head">
+        <div className="task-doc__title-row">
+          <span className="task-doc__title">
+            <span className="task-doc__glyph" aria-hidden="true"><i /><i /><i /></span>
+            Podsumowanie
+          </span>
+          <span className="task-doc__week">{weekLabel}</span>
         </div>
       </div>
 
-      {/* Date range hero */}
-      <div style={{ padding: "0 26px 16px", flexShrink: 0 }}>
-        <div style={{ fontSize: 22, fontWeight: 600, color: C.textPrimary, fontFamily: "var(--font-sans)" }}>
-          {weekLabel}
-        </div>
-      </div>
+      <div className="task-doc__hero">{weekLabel}</div>
 
-      {/* Scrollable content */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 26px 16px", scrollbarWidth: "none" }}>
-        {/* Ukończone */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.seaGlass, marginBottom: 8, fontFamily: "var(--font-sans)" }}>
-            Ukończone
-          </div>
+      <div className="task-doc__body">
+        <SummaryEditor />
+        <section className="task-doc__section">
+          <h3 className="task-doc__section-title is-done">Ukończone</h3>
           {done.length === 0
-            ? <p style={{ fontSize: 12, color: C.textMuted, paddingLeft: 14 }}>Brak ukończonych zadań w tym okresie.</p>
-            : done.map(t => <Line key={t.id} task={t} showDate={true} />)
-          }
-        </div>
-        {/* Niewykonane */}
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.danger, marginBottom: 8, fontFamily: "var(--font-sans)" }}>
-            Niewykonane
-          </div>
+            ? <p className="task-doc__empty">Brak ukończonych zadań w tym okresie.</p>
+            : done.map(t => <Line key={t.id} task={t} showDate={true} />)}
+        </section>
+        <section className="task-doc__section">
+          <h3 className="task-doc__section-title is-open">Niewykonane</h3>
           {undone.length === 0
-            ? <p style={{ fontSize: 12, color: C.textMuted, paddingLeft: 14 }}>Brak niewykonanych. Świetna robota!</p>
-            : undone.map(t => <Line key={t.id} task={t} showDate={false} />)
-          }
-        </div>
+            ? <p className="task-doc__empty">Brak niewykonanych. Świetna robota!</p>
+            : undone.map(t => <Line key={t.id} task={t} showDate={false} />)}
+        </section>
       </div>
-
     </div>
   );
 }

@@ -34,27 +34,25 @@ import {
   getMonthKey,
   loadAffairsWorkspace,
   saveAffairsWorkspace,
-  type BudgetLineKind,
   type DocumentCategory,
   type DocumentRecord,
   type Matter,
   type MatterCategory,
-  type MatterPriority,
   type MatterStatus,
   type OneTimePayment,
-  type PaymentCadence,
   type Subscription,
-  type SubscriptionRenewal,
   type Vehicle,
   type VehicleItem,
-  type VehicleItemType,
   monthlyEquivalent,
 } from "../data/affairsWorkspace";
+import { AffairsEditorFields } from "../affairs/AffairsEditorFields";
 import { JdgWorkspace } from "./Jdg";
 import {
   Badge,
   Button,
   Card,
+  Checkbox,
+  ConfirmDialog,
   ContextNavItem,
   ContextSidebar,
   DetailPanel,
@@ -64,8 +62,11 @@ import {
   ModuleMain,
   ModuleShell,
   PageHeader,
+  ProgressBar,
   SectionHeader,
   Select,
+  StatCard,
+  StatGrid,
   WorkspaceToolbar,
   AddToTasksButton,
 } from "../ui";
@@ -745,7 +746,7 @@ export default function Sprawy() {
       <nav className="affairs-sidebar__nav">
         {NAV_GROUPS.map((group) => (
           <section key={group.label}>
-            <SectionHeader title={group.label} level={3} variant="label" />
+            <SectionHeader title={group.label} level={2} variant="label" />
             <div>
               {group.items.map(({ view: itemView, label, icon: Icon }) => (
                 <ContextNavItem
@@ -992,28 +993,25 @@ export default function Sprawy() {
         <div className="affairs-canvas">
           {view === "overview" && (
             <div className="affairs-overview">
-              <section className="affairs-overview__summary" aria-label="Podsumowanie miesiąca">
-                <div>
-                  <span>Najbliższe 30 dni</span>
-                  <strong>{dueSoon}</strong>
-                  <small>wszystkie zobowiązania na radarze</small>
-                </div>
-                <div>
-                  <span>Płatności jednorazowe</span>
-                  <strong>{formatMoney(unpaidOneTimeTotal)}</strong>
-                  <small>{workspace.oneTimePayments.filter((payment) => !payment.paid).length} nieopłaconych pozycji</small>
-                </div>
-                <div>
-                  <span>Stałe zobowiązania</span>
-                  <strong>{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</strong>
-                  <small>cykliczne i subskrypcje / mies.</small>
-                </div>
-                <div>
-                  <span>Dokumenty i pojazdy</span>
-                  <strong className={documentAlerts + vehicleAlerts ? "is-negative" : ""}>{documentAlerts + vehicleAlerts}</strong>
-                  <small>wymaga uwagi lub zbliża się</small>
-                </div>
-              </section>
+              <StatGrid className="affairs-overview__summary" aria-label="Podsumowanie miesiąca">
+                <StatCard label="Najbliższe 30 dni" value={dueSoon} hint="wszystkie zobowiązania na radarze" />
+                <StatCard
+                  label="Płatności jednorazowe"
+                  value={formatMoney(unpaidOneTimeTotal)}
+                  hint={`${workspace.oneTimePayments.filter((payment) => !payment.paid).length} nieopłaconych pozycji`}
+                />
+                <StatCard
+                  label="Stałe zobowiązania"
+                  value={formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}
+                  hint="cykliczne i subskrypcje / mies."
+                />
+                <StatCard
+                  label="Dokumenty i pojazdy"
+                  value={documentAlerts + vehicleAlerts}
+                  tone={documentAlerts + vehicleAlerts ? "danger" : "default"}
+                  hint="wymaga uwagi lub zbliża się"
+                />
+              </StatGrid>
 
               <div className="affairs-overview__grid">
                 <Card as="section" tone="panel" padding="none" className="affairs-agenda">
@@ -1071,9 +1069,12 @@ export default function Sprawy() {
                       <span>Miesięcznie zarezerwowane</span>
                       <strong>{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</strong>
                     </div>
-                    <div className="affairs-budget-flow" aria-label="Udział stałych zobowiązań w planowanych wpływach">
-                      <span style={{ width: `${budgetSummary.income ? Math.min(100, ((monthlyPaymentTotal + monthlySubscriptionTotal) / budgetSummary.income) * 100) : 0}%` }} />
-                    </div>
+                    <ProgressBar
+                      label="Udział stałych zobowiązań w planowanych wpływach"
+                      value={budgetSummary.income
+                        ? ((monthlyPaymentTotal + monthlySubscriptionTotal) / budgetSummary.income) * 100
+                        : 0}
+                    />
                     <dl>
                       <div><dt>Cykliczne</dt><dd>{formatMoney(monthlyPaymentTotal)}</dd></div>
                       <div><dt>Subskrypcje</dt><dd>{formatMoney(monthlySubscriptionTotal)}</dd></div>
@@ -1107,15 +1108,12 @@ export default function Sprawy() {
                 const due = dueCopy(matter.dueDate);
                 return (
                   <div key={matter.id} className={`affairs-matter-row ${selectedMatterId === matter.id ? "is-selected" : ""} ${matter.status === "done" ? "is-done" : ""}`}>
-                    <button
-                      type="button"
-                      className="affairs-check"
-                      aria-pressed={matter.status === "done"}
+                    <Checkbox
+                      size="sm"
+                      checked={matter.status === "done"}
                       aria-label={matter.status === "done" ? `Przywróć: ${matter.title}` : `Oznacz jako załatwione: ${matter.title}`}
-                      onClick={() => toggleMatter(matter.id)}
-                    >
-                      {matter.status === "done" && <Check size={10} />}
-                    </button>
+                      onChange={() => toggleMatter(matter.id)}
+                    />
                     <button type="button" className="affairs-matter-row__title" onClick={() => setSelectedMatterId(matter.id)}>
                       <strong>{matter.title}</strong>
                       <small>{matter.note || "Bez dodatkowej notatki"}</small>
@@ -1485,18 +1483,15 @@ export default function Sprawy() {
                           const due = vehicleItemDueCopy(item, vehicle);
                           return (
                             <div key={item.id} className={`affairs-vehicle-row ${item.done ? "is-done" : ""}`}>
-                              <button
-                                type="button"
-                                className="affairs-check"
-                                aria-pressed={item.done}
+                              <Checkbox
+                                size="sm"
+                                checked={item.done}
                                 aria-label={item.done ? `Przywróć ${item.title}` : `Oznacz jako zrobione: ${item.title}`}
-                                onClick={() => setWorkspace((current) => ({
+                                onChange={() => setWorkspace((current) => ({
                                   ...current,
                                   vehicleItems: current.vehicleItems.map((candidate) => candidate.id === item.id ? { ...candidate, done: !candidate.done } : candidate),
                                 }))}
-                              >
-                                {item.done && <Check size={10} />}
-                              </button>
+                              />
                               <span className="affairs-vehicle-row__title">
                                 <strong>{item.title}</strong>
                                 <small>{VEHICLE_ITEM_LABELS[item.type]}{item.note ? ` · ${item.note}` : ""}</small>
@@ -1644,192 +1639,18 @@ export default function Sprawy() {
               }}
             />
 
-            {editor.kind === "matter" && (
-              <>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Obszar"
-                    value={draft.category}
-                    options={Object.entries(CATEGORY_META).map(([value, meta]) => ({ value, label: meta.label }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
-                  />
-                  <Input type="date" label="Termin" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
-                </div>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Priorytet"
-                    value={draft.priority}
-                    options={[
-                      { value: "normal", label: "Normalny" },
-                      { value: "high", label: "Ważny" },
-                    ]}
-                    onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as MatterPriority }))}
-                  />
-                  <Select
-                    label="Status"
-                    value={draft.status}
-                    options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as MatterStatus }))}
-                  />
-                </div>
-              </>
-            )}
-
-            {editor.kind === "payment" && (
-              <>
-                <div className="affairs-form__grid">
-                  <Input label="Kategoria" placeholder="np. Mieszkanie" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} />
-                  <Input label="Kwota" inputMode="decimal" placeholder="0,00" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} />
-                </div>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Cykl"
-                    value={draft.cadence}
-                    options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({ value, label }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, cadence: event.target.value as PaymentCadence }))}
-                  />
-                  <Input type="date" label="Następna płatność" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
-                </div>
-                <label className="affairs-form__check">
-                  <input type="checkbox" checked={draft.automatic} onChange={(event) => setDraft((current) => ({ ...current, automatic: event.target.checked }))} />
-                  <span><strong>Płatność automatyczna</strong><small>Nie będzie wymagała ręcznego oznaczania jako opłacona.</small></span>
-                </label>
-              </>
-            )}
-
-            {editor.kind === "oneTime" && (
-              <>
-                <div className="affairs-form__grid">
-                  <Input label="Kategoria" placeholder="np. Dokumenty" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} />
-                  <Input label="Kwota" inputMode="decimal" placeholder="0,00" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} />
-                </div>
-                <Input type="date" label="Termin płatności" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
-              </>
-            )}
-
-            {editor.kind === "subscription" && (
-              <>
-                <div className="affairs-form__grid">
-                  <Input label="Kategoria" placeholder="np. Rozrywka" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} />
-                  <Input label="Kwota" inputMode="decimal" placeholder="0,00" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} />
-                </div>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Cykl"
-                    value={draft.cadence}
-                    options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({ value, label }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, cadence: event.target.value as PaymentCadence }))}
-                  />
-                  <Input type="date" label="Następne rozliczenie" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
-                </div>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Odnowienie"
-                    value={draft.renewal}
-                    options={[
-                      { value: "automatic", label: "Automatyczne" },
-                      { value: "manual", label: "Ręczne" },
-                    ]}
-                    onChange={(event) => setDraft((current) => ({ ...current, renewal: event.target.value as SubscriptionRenewal }))}
-                  />
-                  <Input type="date" label="Koniec zobowiązania (opcjonalnie)" value={draft.secondaryDate} onChange={(event) => setDraft((current) => ({ ...current, secondaryDate: event.target.value }))} />
-                </div>
-              </>
-            )}
-
-            {editor.kind === "document" && (
-              <>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Rodzaj dokumentu"
-                    value={draft.category}
-                    options={Object.entries(DOCUMENT_LABELS).map(([value, label]) => ({ value, label }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
-                  />
-                  <Input label="Właściciel / obszar" placeholder="np. Ja, Dziecko, Dom" value={draft.holder} onChange={(event) => setDraft((current) => ({ ...current, holder: event.target.value }))} />
-                </div>
-                <div className="affairs-form__grid">
-                  <Input type="date" label="Ważny do (opcjonalnie)" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
-                  <Input type="number" min="0" max="730" label="Przypomnij wcześniej (dni)" value={draft.reminderDays} onChange={(event) => setDraft((current) => ({ ...current, reminderDays: event.target.value }))} />
-                </div>
-              </>
-            )}
-
-            {editor.kind === "vehicle" && (
-              <div className="affairs-form__grid">
-                <Input label="Numer rejestracyjny" placeholder="np. KR 0000A" value={draft.registration} onChange={(event) => setDraft((current) => ({ ...current, registration: event.target.value }))} />
-                <Input type="number" min="0" label="Aktualny przebieg (km)" placeholder="0" value={draft.mileage} onChange={(event) => setDraft((current) => ({ ...current, mileage: event.target.value }))} />
-              </div>
-            )}
-
-            {editor.kind === "vehicleItem" && (
-              <>
-                <div className="affairs-form__grid">
-                  <Select
-                    label="Pojazd"
-                    value={draft.vehicleId}
-                    options={workspace.vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.name }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, vehicleId: event.target.value }))}
-                  />
-                  <Select
-                    label="Rodzaj terminu"
-                    value={draft.vehicleType}
-                    options={Object.entries(VEHICLE_ITEM_LABELS).map(([value, label]) => ({ value, label }))}
-                    onChange={(event) => setDraft((current) => ({ ...current, vehicleType: event.target.value as VehicleItemType }))}
-                  />
-                </div>
-                <div className="affairs-form__grid">
-                  <Input type="date" label="Termin (opcjonalnie)" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
-                  <Input type="number" min="0" label="Przebieg graniczny (opcjonalnie)" placeholder="np. 90000" value={draft.dueMileage} onChange={(event) => setDraft((current) => ({ ...current, dueMileage: event.target.value }))} />
-                </div>
-              </>
-            )}
-
-            {editor.kind === "budget" && (
-              <>
-                <Select
-                  label="Typ pozycji"
-                  value={draft.budgetKind}
-                  options={Object.entries(BUDGET_KIND_LABELS).map(([value, label]) => ({ value, label }))}
-                  onChange={(event) => setDraft((current) => ({ ...current, budgetKind: event.target.value as BudgetLineKind }))}
-                />
-                <div className="affairs-form__grid">
-                  <Input label="Kwota planowana" inputMode="decimal" placeholder="0,00" value={draft.planned} onChange={(event) => setDraft((current) => ({ ...current, planned: event.target.value }))} />
-                  <Input label="Kwota rzeczywista" inputMode="decimal" placeholder="0,00" value={draft.actual} onChange={(event) => setDraft((current) => ({ ...current, actual: event.target.value }))} />
-                </div>
-              </>
-            )}
-
-            {editor.kind !== "budget" && editor.kind !== "vehicle" && (
-              <label className="ui-field">
-                <span className="ui-field__label">Notatka <span className="affairs-optional">opcjonalnie</span></span>
-                <textarea
-                  className="ui-field__control affairs-textarea"
-                  placeholder="Dokumenty, decyzje albo kontekst do zachowania"
-                  value={draft.note}
-                  onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
-                />
-              </label>
-            )}
+            <AffairsEditorFields editor={editor} draft={draft} setDraft={setDraft} workspace={workspace} />
           </form>
         </Modal>
       )}
 
       {deleteState && (
-        <Modal
-          eyebrow="Potwierdzenie"
+        <ConfirmDialog
           title={`Usunąć „${deleteState.label}”?`}
           description="Ta pozycja zniknie z lokalnego rejestru."
-          onClose={() => setDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmDelete}>Usuń</Button>
-            </>
-          )}
-        >
-          <p className="affairs-delete-note">Tej operacji nie można cofnąć.</p>
-        </Modal>
+          onCancel={() => setDeleteState(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </ModuleShell>
   );

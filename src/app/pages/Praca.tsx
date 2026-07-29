@@ -749,7 +749,6 @@ export default function Praca() {
         <PageHeader
           title="Praca"
           description="Firmy, projekty i zadania w jednym osobistym widoku"
-          leading={<Building2 size={16} />}
           actions={selectedCompany ? (
             <>
               <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>

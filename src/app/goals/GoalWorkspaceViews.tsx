@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <SectionHeader title={children} level={3} variant="label" className="px-1.5" />;
+  return <SectionHeader title={children} level={2} variant="label" className="px-1.5" />;
 }
 
 export function GoalSubSidebar({
@@ -132,7 +132,7 @@ export function GoalSubSidebar({
             style={{ color: C.textMuted }}
           >
             <ChevronRight size={11} strokeWidth={2} style={{ transform: categoriesOpen ? "rotate(90deg)" : "none", transition: "transform 150ms" }} />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Kategorie</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">Kategorie</span>
           </button>
           <div className="flex items-center gap-1">
             <button
@@ -363,7 +363,7 @@ export function GoalCard({
             </div>
             <div className="order-1 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
               <div
-                className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[10px]"
+                className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px]"
                 style={{ color: dueColor, borderColor: dueColor === C.textSecond ? C.borderStrong : `${dueColor}35`, background: C.inputBg }}
               >
                 <CalendarDays size={12} strokeWidth={1.7} aria-hidden="true" />
@@ -411,7 +411,7 @@ export function GoalCard({
             )}
           </div>
 
-          <div className="goal-card-date flex items-center gap-2 text-[10px] font-medium" style={{ color: dueColor }}>
+          <div className="goal-card-date flex items-center gap-2 text-[11px] font-medium" style={{ color: dueColor }}>
             <CalendarDays size={13} strokeWidth={1.7} aria-hidden="true" />
             <span>{goal.due}</span>
           </div>
@@ -461,7 +461,7 @@ export function GoalCard({
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.textMuted }}>{title}</h3>
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.textMuted }}>{title}</h3>
       {children}
     </section>
   );
@@ -547,8 +547,8 @@ export function GoalDetail({
             {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={19} strokeWidth={1.55} />}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[16px] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
-            <p className="mt-1.5 flex items-center gap-1 text-[10px]" style={{ color: C.textSecond }}>
+            <h2 className="text-[var(--text-section)] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
+            <p className="mt-1.5 flex items-center gap-1 text-[11px]" style={{ color: C.textSecond }}>
               <CategoryIcon size={10} /> {goal.category}
               <span style={{ color: C.textDisabled }}>•</span>
               <span style={{ color: C.textMuted }}>{goal.rhythm}</span>
@@ -560,12 +560,12 @@ export function GoalDetail({
         <div className="my-5 border-y py-4" style={{ borderColor: C.borderSubtle }}>
           <div className="mb-3 flex items-end justify-between">
             <span className="text-[22px] font-semibold" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace" }}>{goal.progress}%</span>
-            <span className="text-[10px]" style={{ color: C.textMuted }}>{goal.progressLabel}</span>
+            <span className="text-[11px]" style={{ color: C.textMuted }}>{goal.progressLabel}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
             <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: goal.color }} />
           </div>
-          <button type="button" onClick={onProgress} className="mt-3 flex items-center gap-1.5 text-[10px] font-medium" style={{ color: C.iceBlueText }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj kamień milowy" : "Dodaj aktualizację postępu"}</button>
+          <button type="button" onClick={onProgress} className="mt-3 flex items-center gap-1.5 text-[11px] font-medium" style={{ color: C.iceBlueText }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj kamień milowy" : "Dodaj aktualizację postępu"}</button>
         </div>
 
         <div className="mb-5">
@@ -597,7 +597,7 @@ export function GoalDetail({
                     <p className="text-[11px] font-medium leading-4" style={{ color: C.textPrimary }}>{goal.nextMilestone.title}</p>
                     <span className="text-[11px]" style={{ color: C.iceBlueText, fontFamily: "'DM Mono', monospace" }}>{goal.nextMilestone.progress}%</span>
                   </div>
-                  <p className="mt-1 text-[9px]" style={{ color: C.textMuted }}>Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
+                  <p className="mt-1 text-[11px]" style={{ color: C.textMuted }}>Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
                 </div>
               </div>
             </button>
@@ -615,7 +615,7 @@ export function GoalDetail({
             ].map((stat) => (
               <div key={stat.label} className="rounded-lg border p-2.5" style={{ background: C.panel, borderColor: C.borderSubtle }}>
                 <p className="text-[13px] font-medium" style={{ color: stat.color, fontFamily: "'DM Mono', monospace" }}>{stat.value}</p>
-                <p className="mt-1 text-[9px]" style={{ color: C.textMuted }}>{stat.label}</p>
+                <p className="mt-1 text-[11px]" style={{ color: C.textMuted }}>{stat.label}</p>
               </div>
             ))}
           </div>

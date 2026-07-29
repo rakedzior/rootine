@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
-  CalendarDays, ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight,
   Plus, Printer, X,
 } from "lucide-react";
 import { TaskDetail } from "./tasks/TaskViews";
@@ -154,7 +154,7 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
         width: "100%", minWidth: 0, display: "flex", alignItems: "center", gap: 4,
         border: "none", borderRadius: 4, padding: "0 5px",
         background: task ? C.blueSoft : C.panel, color: C.text, textAlign: "left",
-        fontSize: 11, lineHeight: 1.25, overflow: "hidden", cursor: draggable ? dragging ? "grabbing" : "grab" : "default",
+        fontSize: 11, lineHeight: "var(--leading-tight)", overflow: "hidden", cursor: draggable ? dragging ? "grabbing" : "grab" : "default",
         opacity: dragging ? 0.48 : 1, transition: "background-color 140ms ease-out, opacity 140ms ease-out",
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = C.hover; }}
@@ -169,7 +169,7 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
           className={`task-checkbox task-checkbox--compact ${event.status.completed ? "is-checked" : ""}`}
           style={{ "--task-checkbox-color": event.status.completed ? C.blueText : C.second } as React.CSSProperties}
         >
-          {event.status.completed && <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+          {event.status.completed && <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 600 }}>✓</span>}
         </button>
       )}
       <button
@@ -191,8 +191,8 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
       >
         <span title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
         {virtual && <span aria-hidden="true" title="Wystąpienie cykliczne" style={{ color: C.blueText, flexShrink: 0 }}>↻</span>}
-        <span style={{ flexShrink: 0, fontSize: 9, color: C.second }}>{event.source.label}</span>
-        {event.time && <span style={{ fontFamily: "var(--font-data)", fontSize: 9, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
+        <span style={{ flexShrink: 0, fontSize: 11, color: C.second }}>{event.source.label}</span>
+        {event.time && <span style={{ fontFamily: "var(--font-data)", fontSize: 11, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
       </button>
     </div>
   );
@@ -218,7 +218,7 @@ export default function Kalendarz() {
   const [agendaPosition, setAgendaPosition] = useState({ left: 8, top: 8 });
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
   const [trashedTask, setTrashedTask] = useState<CalendarEvent | null>(null);
-  const calendarRootRef = useRef<HTMLElement>(null);
+  const calendarRootRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const agendaMenuRef = useRef<HTMLDivElement>(null);
   const agendaTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -633,7 +633,6 @@ export default function Kalendarz() {
         <PageHeader
           title="Kalendarz"
           description={formatHeaderDate(viewDate)}
-          leading={<CalendarDays size={18} strokeWidth={1.5} />}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>}
         />
@@ -668,7 +667,9 @@ export default function Kalendarz() {
           </div>
         )}
 
-        <section
+        {/* A <div> rather than <section>: ARIA does not allow role="grid" on a sectioning
+            element, and the grid already carries its own accessible name. */}
+        <div
           ref={calendarRootRef}
           role="grid"
           aria-label={`Kalendarz: ${formatHeaderDate(viewDate)}`}
@@ -853,7 +854,7 @@ export default function Kalendarz() {
           </div>
         ))}
           </div>
-        </section>
+        </div>
       </ModuleMain>
 
       <TaskReminderCenter tasks={events} />

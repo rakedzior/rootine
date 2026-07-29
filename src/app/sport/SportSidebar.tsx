@@ -68,7 +68,7 @@ export function SportSidebar({
       <div className="sport-context-sidebar__nav">
         {GROUPS.map((group) => (
           <section key={group.label}>
-            <SectionHeader title={group.label} level={3} variant="label" />
+            <SectionHeader title={group.label} level={2} variant="label" />
             <div>
               {group.items.map((item) => (
                 <ContextNavItem

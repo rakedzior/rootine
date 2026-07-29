@@ -18,7 +18,11 @@
   --color-chalk-white: #f0f0f0;
   --color-text-secondary: #a0a0a0;
   --color-text-muted: #969696;
-  /* Still visibly unavailable at control opacity, but readable when legacy copy uses the token. */
+  /*
+   * :disabled controls and non-text affordances only. At 4.27:1 on --color-graphite-panel
+   * and 4.04:1 on --color-graphite-card this fails WCAG AA for body copy, so content text
+   * must use --color-text-muted (4.59:1 on card) instead.
+   */
   --color-text-disabled: #8c8c8c;
   --color-success-seaglass: #70b89f;
   --color-success-soft: rgba(112, 184, 159, 0.11);
@@ -80,4 +84,58 @@
   --color-category-rose: #bc8ea5;
   --color-category-slate: #8793a1;
   --task-checkbox-color: var(--color-border-strong);
+}
+
+/*
+ * Vertical rhythm, control sizing and layout constants.
+ * These axes were previously untokenised, so every module invented its own values:
+ * 12 literal line-heights, 9 letter-spacings, 38 heights and 58 min-heights.
+ * Anything outside these scales is a bug, not a design decision.
+ */
+:root {
+  --leading-tight: 1.2;    /* headings, numerals, single-line labels */
+  --leading-snug: 1.35;    /* card titles, list rows */
+  --leading-normal: 1.5;   /* body copy, descriptions */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-label: 0.16em;  /* UPPERCASE SECTION LABELS */
+  --tracking-tight: -0.02em; /* headings >= 20px */
+  --tracking-normal: 0;
+
+  --text-section: 15px;      /* h2 / SectionHeader — must stay below --text-title */
+
+  /* A control whose height is not one of these four is a bug. */
+  --control-height-xs: 24px;
+  --control-height-sm: 28px;
+  --control-height-md: 40px;
+  --control-height-lg: 48px;
+
+  --row-height-compact: 36px;
+  --row-height-default: 44px;
+  --row-height-comfortable: 56px;
+
+  /* Width of the "when" column in ListRow. Sized for the longest label it carries: "Wczoraj". */
+  --list-rail-width: 64px;
+
+  --rail-width: 320px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+
+  /*
+   * The only four breakpoints. Media queries must use these pixel values verbatim —
+   * custom properties are not allowed inside media query conditions.
+   *   1380px  detail panel  -> drawer
+   *   1180px  context sidebar -> collapsed
+   *    980px  multi-column  -> single column
+   *    760px  mobile
+   * Kept as tokens so JS (Layout.tsx, Shell.tsx) reads the same source of truth.
+   */
+  --bp-detail: 1380px;
+  --bp-context: 1180px;
+  --bp-columns: 980px;
+  --bp-mobile: 760px;
 }

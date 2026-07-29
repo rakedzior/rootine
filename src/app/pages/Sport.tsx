@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Dumbbell, Play, Plus, Save, Undo2 } from "lucide-react";
+import { Check, Play, Plus, Save, Undo2 } from "lucide-react";
 import { calendarDaysBetween } from "../data/localDate";
 import {
   listLocalPersistenceIssues,
@@ -878,7 +878,6 @@ export default function Sport() {
         <PageHeader
           title="Sport"
           description={viewMeta.description}
-          leading={<Dumbbell size={18} strokeWidth={1.5} />}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={headerAction}
         />

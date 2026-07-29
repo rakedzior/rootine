@@ -1198,7 +1198,9 @@ export default function Notatki() {
       header={(
         <PageHeader
           title="Notatki"
-          description={`${viewTitle} · ${viewDescription}`}
+          // The current view is already named by the in-canvas section heading; repeating it
+          // here printed the same sentence twice, 120px apart.
+          description="Szybkie zapiski, listy i pomysły"
           meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={(
             <>

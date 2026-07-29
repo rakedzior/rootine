@@ -4,7 +4,6 @@ import { Link } from "react-router";
 import {
   Calendar,
   Check,
-  Clock,
   Flag,
   Inbox,
   ListPlus,
@@ -23,7 +22,7 @@ import {
   type TaskComment,
 } from "../../data/taskWorkspace";
 import { commitmentSourceLabel } from "../../data/commitmentRepository";
-import { Button, Menu, MenuItem, Modal, Select } from "../../ui";
+import { Button, ListRow, Menu, MenuItem, Modal } from "../../ui";
 import { DatePickerPopup } from "./TaskSchedulePicker";
 import {
   C,
@@ -38,7 +37,7 @@ import {
 } from "./taskPageModel";
 
 export function TaskRow({
-  task, selected, onToggle, onSelect, onUpdate, tagi, deadlineLabel,
+  task, selected, onToggle, onSelect, onUpdate, tagi, deadlineLabel, railLabel,
 }: {
   task: Task; selected: boolean;
   onToggle: (id: number) => void;
@@ -46,103 +45,80 @@ export function TaskRow({
   onUpdate: (id: number, patch: Partial<Task>) => void;
   tagi: TagItem[];
   deadlineLabel?: string;
+  /**
+   * Value for the fixed-width "when" rail. A clock time inside a single day, "9 dni" in the
+   * overdue group. Pass an empty string to keep the row aligned without showing a value.
+   */
+  railLabel?: string;
 }) {
   const taskTags = task.source
     ? []
     : (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const priorityColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.seaGlass : null;
-  const timeLabel = task.time ? `${task.time}${task.endTime ? `–${task.endTime}` : ""}` : null;
   const sourceLabel = task.source ? commitmentSourceLabel(task.source.kind) : null;
 
+  const subtitle = task.source
+    ? `${sourceLabel} · ${task.source.context}`
+    : task.date && !deadlineLabel
+      ? task.date
+      : undefined;
+
   return (
-    <div
-      className="flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-100 group"
-      style={{
-        background: selected ? C.card : "transparent",
-        borderLeft: selected ? `2px solid ${C.iceBlue}` : "2px solid transparent",
-      }}
-      onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLElement).style.background = C.card + "88"; }}
-      onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-    >
-      <button
-        type="button"
-        aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
-        onClick={e => { e.stopPropagation(); onToggle(task.id); }}
-        className={`task-checkbox mt-[2px] ${task.done ? "is-checked" : ""}`}
-        style={{ "--task-checkbox-color": task.done ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
-      >
-        {task.done && <Check size={8} strokeWidth={2.5} />}
-      </button>
-      <button
-        type="button"
-        aria-pressed={selected}
-        aria-label={`Otwórz szczegóły zadania: ${task.text}`}
-        onClick={() => onSelect(task.id)}
-        className="flex-1 min-w-0 border-0 bg-transparent p-0 text-left"
-      >
-        <span className="text-[13px] leading-snug block" style={{
-          color: task.done ? C.textMuted : C.textPrimary,
-          textDecoration: task.done ? "line-through" : "none",
-        }}>
-          {task.text}
-        </span>
-        {task.date && !deadlineLabel && (
-          <div className="flex items-center gap-1 mt-1">
-            <Calendar size={9} strokeWidth={1.5} style={{ color: C.textMuted }} />
-            <span style={{ fontSize: "10px", color: C.textMuted }}>{task.date}</span>
-          </div>
-        )}
-        {task.source && (
-          <span className="mt-1 block truncate text-[10px]" style={{ color: C.textMuted }}>
-            {sourceLabel} · {task.source.context}
-          </span>
-        )}
-      </button>
-      {(taskTags.length > 0 || timeLabel || deadlineLabel || task.source) && (
-        <div className="flex items-center gap-1.5 flex-shrink-0 self-center ml-2">
+    <ListRow
+      className="task-row"
+      // Start time only: the rail answers "when does this begin", and a full range would not
+      // fit the fixed width without pushing every checkbox out of line.
+      rail={railLabel ?? (task.time || "")}
+      density="compact"
+      divided={false}
+      selected={selected}
+      completed={task.done}
+      title={task.text}
+      subtitle={subtitle}
+      // The rail shows the start; a finish time only appears when one is set.
+      meta={task.time && task.endTime ? <span className="task-row__range">do {task.endTime}</span> : undefined}
+      leading={(
+        <button
+          type="button"
+          aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
+          onClick={e => { e.stopPropagation(); onToggle(task.id); }}
+          className={`task-checkbox ${task.done ? "is-checked" : ""}`}
+          style={{ "--task-checkbox-color": task.done ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
+        >
+          {task.done && <Check size={8} strokeWidth={2.5} />}
+        </button>
+      )}
+      onTitleClick={() => onSelect(task.id)}
+      titleLabel={`Otwórz szczegóły zadania: ${task.text}`}
+      trailing={(taskTags.length > 0 || task.source) ? (
+        <>
           {taskTags.map(td => (
             <button
               type="button"
               key={td.id}
               onClick={e => { e.stopPropagation(); onUpdate(task.id, { tags: (task.tags ?? []).filter(id => id !== td.id) }); }}
               title={`Usuń tag #${td.label}`}
-              className="task-tag-control flex items-center gap-0.5 rounded-md"
-              style={{
-                fontSize: "10px", color: C.textSecond, background: C.inputBg,
-                border: `1px solid ${C.borderSubtle}`, boxShadow: `inset 2px 0 0 ${td.color}`,
-                padding: "3px 5px 3px 7px", cursor: "pointer", whiteSpace: "nowrap",
-              }}>
+              className="task-tag-control task-row__tag"
+              // Only the stripe is data-driven; the rest lives in tasks.css.
+              style={{ boxShadow: `inset 2px 0 0 ${td.color}` }}>
               #{td.label}
               <X size={7} strokeWidth={2.2} />
             </button>
           ))}
-          {timeLabel && (
-            <div className="flex items-center gap-1" style={{ paddingLeft: taskTags.length > 0 ? 4 : 0 }}>
-              <Clock size={9} strokeWidth={1.5} style={{ color: C.iceBlue }} />
-              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "10px", color: C.iceBlue, whiteSpace: "nowrap" }}>
-                {timeLabel}
-              </span>
-            </div>
-          )}
-          {deadlineLabel && (
-            <div className="task-overdue-deadline">
-              <Calendar size={9} strokeWidth={1.6} aria-hidden="true" />
-              <span>{deadlineLabel}</span>
-            </div>
-          )}
+          {/* Neither the clock time nor the overdue age is repeated here: the rail carries it. */}
           {task.source && (
             <Link
               to={task.source.href}
               aria-label={`Otwórz zadanie w module ${sourceLabel}: ${task.source.context}`}
-              className="task-source-link rounded-md px-1.5 text-[10px] no-underline"
+              className="task-source-link rounded-md px-1.5 text-[11px] no-underline"
               style={{ color: C.iceBlue, background: C.iceBlueBg }}
             >
               {sourceLabel}
             </Link>
           )}
-        </div>
-      )}
-    </div>
+        </>
+      ) : undefined}
+    />
   );
 }
 
@@ -216,11 +192,10 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
       position: "fixed", bottom: window.innerHeight - rect.top + 4, left: rect.left,
       width: 210, zIndex: 9999,
     }}>
-      <div style={{ padding: "8px", borderBottom: `1px solid ${C.borderSubtle}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, background: C.inputBg, borderRadius: 7, padding: "5px 9px" }}>
-          <Search size={11} strokeWidth={1.5} style={{ color: C.textDisabled, flexShrink: 0 }} />
-          <input autoFocus placeholder="Szukaj" value={q} onChange={e => setQ(e.target.value)}
-            style={{ background: "none", border: "none", outline: "none", fontSize: 10, color: C.textPrimary, flex: 1, fontFamily: "var(--font-sans)" }} />
+      <div className="task-menu__search">
+        <div>
+          <Search size={11} strokeWidth={1.5} />
+          <input autoFocus placeholder="Szukaj" value={q} onChange={e => setQ(e.target.value)} />
         </div>
       </div>
       {all.map(l => (
@@ -228,15 +203,16 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
           key={String(l.id)}
           selected={current === l.id}
           onClick={() => onSelect(l.id)}
-          leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: l.color }} />}
+          // The dot carries each list's own colour, so it stays inline.
+          leadingIcon={<span className="task-menu__dot" style={{ background: l.color }} />}
           trailingIcon={current === l.id ? <Check /> : undefined}
         >
           {l.label}
         </MenuItem>
       ))}
-      <div style={{ borderTop: `1px solid ${C.borderSubtle}`, padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}>
-        <Inbox size={11} strokeWidth={1.5} style={{ color: C.textDisabled }} />
-        <span style={{ fontSize: 11, color: C.textMuted }}>{currentLabel}</span>
+      <div className="task-menu__footer">
+        <Inbox size={11} strokeWidth={1.5} />
+        <span>{currentLabel}</span>
       </div>
     </Menu>
   );
@@ -293,7 +269,7 @@ function MoreMenu({ anchorEl, onAction, onClose, seriesScoped = false }: {
     }}>
       {moreItems(seriesScoped).map((item, i) =>
         item === null
-          ? <div key={i} style={{ height: 1, background: C.borderSubtle, margin: "3px 0" }} />
+          ? <div key={i} className="task-menu__separator" />
           : (
             <MenuItem key={item.action} tone={item.danger ? "danger" : "default"} onClick={() => onAction(item.action)} leadingIcon={<item.icon />}>
               {item.label}
@@ -330,10 +306,6 @@ export function TaskDetail({
   onDelete,
   listy,
   tagi,
-  workProjectOptions = [],
-  workProjectId = "",
-  workAssignmentError,
-  onWorkProjectChange = () => undefined,
 }: {
   task: Task; onClose: () => void;
   occurrence?: VirtualTaskOccurrenceContext;
@@ -342,10 +314,6 @@ export function TaskDetail({
   onDelete: (id: number) => void;
   listy: ListItem[];
   tagi: TagItem[];
-  workProjectOptions?: Array<{ value: string; label: string; disabled?: boolean }>;
-  workProjectId?: string;
-  workAssignmentError?: string;
-  onWorkProjectChange?: (projectId: string) => void;
 }) {
   const [showPriority,  setShowPriority]  = useState(false);
   const [showListPick,  setShowListPick]  = useState(false);
@@ -428,17 +396,11 @@ export function TaskDetail({
     onUpdate(task.id, { subtasks: updated });
   };
 
-  const D = {
-    bg:     C.subSidebar,
-    border: C.borderSubtle,
-    hover:  C.elevated,
-  };
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: D.bg, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
+    <div className={`task-detail${completionDone ? " is-completed" : ""}`}>
 
       {/* ── Top toolbar ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+      <div className="task-detail__toolbar">
         {/* Done checkbox (square) */}
         <button
           type="button"
@@ -455,7 +417,7 @@ export function TaskDetail({
         </button>
 
         {/* Divider */}
-        <div style={{ width: 1, height: 14, background: D.border, flexShrink: 0 }} />
+        <div className="task-detail__divider" />
 
         {/* Date chip — opens DatePickerPopup */}
         <button
@@ -463,12 +425,10 @@ export function TaskDetail({
           type="button"
           aria-label={occurrence ? "Edytuj harmonogram całej serii" : "Zmień termin zadania"}
           onClick={() => { setShowDatePicker(v => !v); closeAll(); }}
-          style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, overflow: "hidden", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
+          className="task-detail__date"
         >
-          <Calendar size={12} strokeWidth={1.5} style={{ color: C.iceBlue, flexShrink: 0 }} />
-          <span style={{ fontSize: 11.5, color: C.iceBlue, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {occurrence ? `Harmonogram serii: ${dateStr}${timeStr}` : `${dateStr}${timeStr}`}
-          </span>
+          <Calendar size={12} strokeWidth={1.5} />
+          <span>{occurrence ? `Harmonogram serii: ${dateStr}${timeStr}` : `${dateStr}${timeStr}`}</span>
         </button>
 
         {/* Priority flag */}
@@ -478,8 +438,9 @@ export function TaskDetail({
           aria-label={task.source?.kind === "travel" ? "Priorytet jest zarządzany w module źródłowym" : "Zmień priorytet zadania"}
           disabled={task.source?.kind === "travel"}
           onClick={() => { setShowPriority(v => !v); setShowListPick(false); setShowMore(false); }}
-          style={{ background: "none", border: "none", cursor: task.source?.kind === "travel" ? "not-allowed" : "pointer", padding: 3, display: "flex", flexShrink: 0, opacity: task.source?.kind === "travel" ? 0.55 : 1 }}
+          className="task-detail__icon-btn"
         >
+          {/* Priority colour is data, so it stays inline. */}
           <Flag size={15} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
         </button>
 
@@ -487,7 +448,7 @@ export function TaskDetail({
           type="button"
           aria-label="Zamknij szczegóły zadania"
           onClick={onClose}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex", flexShrink: 0, color: C.textMuted }}
+          className="task-detail__icon-btn"
         >
           <X size={15} strokeWidth={1.5} />
         </button>
@@ -509,43 +470,17 @@ export function TaskDetail({
       )}
 
       {task.source && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderBottom: `1px solid ${D.border}`, background: C.iceBlueBg }}>
-          <span style={{ minWidth: 0, flex: 1, fontSize: 10.5, color: C.textSecond, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            Źródło: {sourceLabel} · {task.source.context}
-          </span>
-          <Link to={task.source.href} style={{ flexShrink: 0, fontSize: 10.5, color: C.iceBlue, textDecoration: "none" }}>
-            Otwórz źródło
-          </Link>
+        <div className="task-detail__source">
+          <span>Źródło: {sourceLabel} · {task.source.context}</span>
+          <Link to={task.source.href}>Otwórz źródło</Link>
         </div>
       )}
 
-      {task.source?.kind !== "travel" && workProjectOptions.length > 0 && (
-        <section className="task-work-assignment" aria-label="Przypisanie do pracy">
-          <Select
-            label="Firma i projekt"
-            value={workProjectId}
-            options={workProjectOptions.map((option) => (
-              option.value === "" && task.source?.kind === "work"
-                ? { ...option, disabled: true }
-                : option
-            ))}
-            disabled={workProjectOptions.length === 1}
-            error={workAssignmentError}
-            hint={task.source?.kind === "work"
-              ? "Zmiana przeniesie zadanie do wybranego aktywnego projektu."
-              : "Po przypisaniu moduł Praca stanie się źródłem zadania."}
-            onChange={(event) => {
-              if (event.target.value) onWorkProjectChange(event.target.value);
-            }}
-          />
-        </section>
-      )}
-
       {/* ── Main content ── */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none", padding: "14px 14px 8px", display: "flex", flexDirection: "column" }}>
+      <div className="task-detail__body">
 
         {/* Title row — auto-height */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 8, flexShrink: 0 }}>
+        <div className="task-detail__title-row">
           <textarea
             aria-label={occurrence ? "Tytuł całej serii" : "Tytuł zadania"}
             aria-describedby={occurrence ? "task-occurrence-scope" : undefined}
@@ -560,12 +495,7 @@ export function TaskDetail({
             onBlur={() => onUpdate(task.id, { text: editTitle })}
             ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
             rows={1}
-            style={{
-              flex: 1, background: "none", border: "none", outline: "none", resize: "none", overflow: "hidden",
-              fontSize: 16, fontWeight: 600, color: C.textPrimary, lineHeight: 1.3,
-              fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", padding: 0,
-              textDecoration: completionDone ? "line-through" : "none",
-            }}
+            className="task-detail__title"
           />
         </div>
 
@@ -578,30 +508,22 @@ export function TaskDetail({
           onChange={e => { if (!task.source) setEditNotes(e.target.value); }}
           onBlur={() => { if (!task.source) onUpdate(task.id, { notes: editNotes }); }}
           placeholder={task.source ? "Notatki są zarządzane w module źródłowym." : "Wpisz treść lub wpisz /, aby wyświetlić menu"}
-          style={{
-            flex: 1, minHeight: 80, width: "100%", background: "none", border: "none", outline: "none", resize: "none",
-            fontSize: 12, color: C.textSecond, lineHeight: 1.6,
-            fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", padding: 0,
-          }}
+          className="task-detail__notes"
         />
 
         {/* Tags */}
         {!task.source && (taskTagDefs.length > 0 || showTagInput) && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12, alignItems: "center" }}>
+          <div className="task-detail__tags">
             {taskTagDefs.map(td => (
-              <span key={td.id} style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                fontSize: 11, fontWeight: 500, padding: "3px 8px", borderRadius: 20,
-                color: C.textSecond, background: C.inputBg,
-                border: `1px solid ${C.borderSubtle}`, boxShadow: `inset 2px 0 0 ${td.color}`,
-              }}>
+              // The inset stripe carries the tag's own colour, so it stays inline.
+              <span key={td.id} className="task-detail__tag" style={{ boxShadow: `inset 2px 0 0 ${td.color}` }}>
                 #{td.label}
                 <button
                   type="button"
                   aria-label={`Usuń tag ${td.label} z zadania`}
                   className="task-tag-control"
                   onClick={() => onUpdate(task.id, { tags: (task.tags ?? []).filter(id => id !== td.id) })}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", padding: 0, lineHeight: 1 }}>
+                >
                   <X size={9} strokeWidth={2.5} />
                 </button>
               </span>
@@ -628,18 +550,14 @@ export function TaskDetail({
                 }}
                 onBlur={() => { setTagInput(""); setShowTagInput(false); }}
                 placeholder="#tag"
-                style={{
-                  background: C.subSidebar, border: `1px solid ${C.blueBorder}`, borderRadius: 20,
-                  outline: "none", fontSize: 11, color: C.textSecond, padding: "3px 8px",
-                  fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", width: 72,
-                }}
+                className="task-detail__tag-input"
               />
             ) : (
               <button
                 type="button"
-                className="task-tag-control"
+                className="task-tag-control task-detail__tag-add"
                 onClick={() => setShowTagInput(true)}
-                style={{ background: "none", border: `1px dashed ${C.borderStrong}`, borderRadius: 20, cursor: "pointer", fontSize: 11, color: C.textMuted, padding: "3px 8px", display: "flex", alignItems: "center", gap: 3 }}>
+              >
                 <Plus size={9} strokeWidth={2} /> tag
               </button>
             )}
@@ -648,18 +566,18 @@ export function TaskDetail({
         {!task.source && taskTagDefs.length === 0 && !showTagInput && (
           <button
             type="button"
-            className="task-tag-control"
+            className="task-tag-control task-detail__tag-empty"
             onClick={() => setShowTagInput(true)}
-            style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8, background: "none", border: "none", cursor: "pointer", color: C.textMuted, fontSize: 11, padding: 0 }}>
+          >
             <Tag size={11} strokeWidth={1.5} /> Dodaj tag
           </button>
         )}
 
         {/* Subtasks */}
         {!task.source && (task.subtasks ?? []).length > 0 && (
-          <div style={{ marginTop: 14, borderTop: `1px solid ${D.border}`, paddingTop: 12 }}>
+          <div className="task-detail__subtasks">
             {(task.subtasks ?? []).map(st => (
-              <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <div key={st.id} className={`task-detail__subtask${st.done ? " is-done" : ""}`}>
                 <button
                   type="button"
                   aria-label={st.done ? `Oznacz podzadanie ${st.text || "bez nazwy"} jako niewykonane` : `Oznacz podzadanie ${st.text || "bez nazwy"} jako wykonane`}
@@ -669,31 +587,29 @@ export function TaskDetail({
                 >
                   {st.done && <Check size={7} strokeWidth={2.5} />}
                 </button>
-                <span style={{ fontSize: 12, color: st.done ? C.textMuted : C.textSecond, textDecoration: st.done ? "line-through" : "none" }}>{st.text || "Nowe podzadanie"}</span>
+                <span>{st.text || "Nowe podzadanie"}</span>
               </div>
             ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
-              <div style={{ width: 14, height: 14, borderRadius: 3, border: `1px solid ${C.borderSubtle}`, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: C.textMuted }}>Naciśnij klawisz "Enter", aby dodać pozycję do listy</span>
+            <div className="task-detail__subtask-hint">
+              <i aria-hidden="true" />
+              <span>Naciśnij klawisz "Enter", aby dodać pozycję do listy</span>
             </div>
           </div>
         )}
 
         {/* Comments section */}
         {!task.source && showComments && comments.length > 0 && (
-          <div style={{ marginTop: 18 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.textPrimary, marginBottom: 12 }}>Komentarze {comments.length}</p>
+          <div className="task-detail__comments">
+            <p className="task-detail__comments-title">Komentarze {comments.length}</p>
             {comments.map(c => (
-              <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 12 }}>
-                <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: C.iceBlueBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: C.iceBlue }}>
-                  {c.author[0]}
-                </div>
+              <div key={c.id} className="task-detail__comment">
+                <div className="task-detail__avatar">{c.author[0]}</div>
                 <div>
-                  <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: C.textPrimary }}>{c.author}</span>
-                    <span style={{ fontSize: 10, color: C.textMuted }}>{c.time}</span>
+                  <div className="task-detail__comment-head">
+                    <span className="task-detail__comment-author">{c.author}</span>
+                    <span className="task-detail__comment-time">{c.time}</span>
                   </div>
-                  <p style={{ fontSize: 12, color: C.textSecond, marginTop: 2 }}>{c.text}</p>
+                  <p className="task-detail__comment-text">{c.text}</p>
                 </div>
               </div>
             ))}
@@ -703,15 +619,14 @@ export function TaskDetail({
 
       {/* ── Comment input ── */}
       {!task.source && showComments && (
-        <div style={{ borderTop: `1px solid ${D.border}`, padding: "8px 12px", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, border: `1px solid ${newComment ? C.iceBlue : C.borderSubtle}`, borderRadius: 8, padding: "7px 10px", transition: "border-color .2s" }}>
+        <div className="task-detail__composer">
+          <div>
             <input
               aria-label="Nowy komentarz"
               placeholder="Napisz komentarz"
               value={newComment}
               onChange={e => setNewComment(e.target.value)}
               onKeyDown={e => e.key === "Enter" && addComment()}
-              style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 12, color: C.textPrimary, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}
             />
           </div>
         </div>
@@ -719,26 +634,27 @@ export function TaskDetail({
 
       {/* ── Footer bar ── */}
       {task.source && (
-        <div style={{ borderTop: `1px solid ${D.border}`, padding: "9px 12px", fontSize: 10, lineHeight: 1.45, color: C.textMuted }}>
+        <div className="task-detail__note">
           Tytuł, ukończenie i termin synchronizują się ze źródłem. Pozostałe pola edytuj w module {sourceLabel}.
         </div>
       )}
-      <div style={{ borderTop: `1px solid ${D.border}`, display: task.source ? "none" : "flex", alignItems: "center", padding: "7px 10px", flexShrink: 0, gap: 4 }}>
+      <div className={`task-detail__footer${task.source ? " is-hidden" : ""}`}>
         {/* List picker */}
         <button ref={listBtnRef}
           onClick={() => { setShowListPick(v => !v); setShowMore(false); setShowPriority(false); }}
-          style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0, padding: "2px 0" }}
+          className="task-detail__list-btn"
         >
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: listColor, flexShrink: 0 }} />
-          <span style={{ fontSize: 11.5, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{listLabel}</span>
+          {/* The dot carries the list's own colour. */}
+          <span className="task-detail__list-dot" style={{ background: listColor }} />
+          <span>{listLabel}</span>
         </button>
 
-        <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
+        <div className="task-detail__footer-actions">
           {/* Comments toggle */}
           <button type="button" aria-label="Pokaż komentarze" aria-expanded={showComments} onClick={() => setShowComments(v => !v)}
-            style={{ padding: "4px 6px", borderRadius: 6, background: showComments ? C.iceBlueBg : "none", border: "none", cursor: "pointer", color: showComments ? C.iceBlue : C.textMuted, display: "flex", alignItems: "center", gap: 3 }}>
+            className="task-detail__toggle">
             <MessageSquare size={13} strokeWidth={1.5} />
-            {comments.length > 0 && <span style={{ fontSize: 9, color: C.iceBlue, fontWeight: 700 }}>{comments.length}</span>}
+            {comments.length > 0 && <span>{comments.length}</span>}
           </button>
           {/* More (...) */}
           <button
@@ -747,7 +663,7 @@ export function TaskDetail({
             aria-label={occurrence ? "Więcej akcji całej serii" : "Więcej akcji zadania"}
             aria-expanded={showMore}
             onClick={() => { setShowMore(v => !v); setShowListPick(false); setShowPriority(false); }}
-            style={{ padding: "4px 5px", borderRadius: 6, background: showMore ? C.elevated : "none", border: "none", cursor: "pointer", color: C.textMuted, display: "flex", alignItems: "center" }}>
+            className="task-detail__toggle task-detail__toggle--plain">
             <MoreHorizontal size={15} strokeWidth={1.5} />
           </button>
         </div>

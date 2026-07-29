@@ -165,6 +165,33 @@ export function overdueDateLabel(calendarDate: string): string {
   return "Po terminie";
 }
 
+/**
+ * Short form of {@link overdueDateLabel} for the fixed-width ListRow rail.
+ * The rail is 56px, so "9 dni temu" is trimmed to "9 dni".
+ */
+export function overdueRailLabel(calendarDate: string): string {
+  const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
+  if (daysAgo === null) return "";
+  if (daysAgo === 1) return "Wczoraj";
+  if (daysAgo > 1) return `${daysAgo} dni`;
+  return "";
+}
+
+/**
+ * Chronological order inside a single day: earliest first, untimed tasks last.
+ *
+ * Only meaningful when every task shares a day — across days a time of day says nothing
+ * about sequence, which is why the overdue group is ordered by how late it is instead.
+ */
+export function sortByScheduledTime<T extends { time?: string | null }>(tasks: T[]): T[] {
+  return [...tasks].sort((left, right) => {
+    if (left.time && right.time) return left.time.localeCompare(right.time);
+    if (left.time) return -1;
+    if (right.time) return 1;
+    return 0;
+  });
+}
+
 export function getMiniWeek() {
   const today = new Date();
   const dow = today.getDay();
