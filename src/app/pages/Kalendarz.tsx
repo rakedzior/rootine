@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   ChevronLeft, ChevronRight,
-  CalendarDays, Flag, List, Plus, Printer, X,
+  CalendarDays, List, Plus, Printer, RotateCcw, Trash2, X,
 } from "lucide-react";
 import { TaskDetail } from "./tasks/TaskViews";
 import {
@@ -20,6 +20,8 @@ import {
 } from "../data/taskSchedule";
 import {
   isCalendarTask,
+  isHabitDoneOnDate,
+  isHabitScheduledOnDate,
   loadTaskWorkspace,
   replaceCalendarTasks,
   restoreTask,
@@ -45,6 +47,17 @@ import {
   WorkspaceToolbar,
   uiColors,
 } from "../ui";
+import {
+  loadTaskSidebarState,
+  saveTaskSidebarState,
+  SMART_VIEWS,
+  PRIMARY_SMART_VIEWS,
+  SPECIAL_SMART_VIEWS,
+  VISIBLE_TAG_LIMIT,
+  formatOpenTaskCount,
+  smartDateViewRange,
+  tasksForSmartDateView,
+} from "./tasks/taskPageModel";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
 import "../../styles/calendar.css";
 import "../../styles/tasks.css";
@@ -228,12 +241,23 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
 export default function Kalendarz() {
   const now = new Date();
   const [initialWorkspace] = useState(loadTaskWorkspace);
+  const initialSidebarState = loadTaskSidebarState();
   const [occurrenceSources, setOccurrenceSources] = useState(loadCalendarOccurrenceSources);
   const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isCalendarTask));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
-  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>({ kind: "all" });
+  const [listyOpen, setListyOpen] = useState(initialSidebarState.listyOpen);
+  const [tagiOpen, setTagiOpen] = useState(initialSidebarState.tagiOpen);
+  const [showAllLists, setShowAllLists] = useState(false);
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>(() => (
+    initialSidebarState.listFilter
+      ? { kind: "list", id: initialSidebarState.listFilter }
+      : initialSidebarState.tagFilter
+        ? { kind: "tag", id: initialSidebarState.tagFilter }
+        : { kind: "all" }
+  ));
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedOccurrenceDate, setSelectedOccurrenceDate] = useState<string | null>(null);
   const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null);
@@ -295,6 +319,10 @@ export default function Kalendarz() {
     () => events.filter((event) => taskMatchesCalendarFilter(event, calendarFilter)),
     [calendarFilter, events],
   );
+  const openCalendarCount = useMemo(
+    () => filteredEvents.filter((event) => !event.deleted && !event.done).length,
+    [filteredEvents],
+  );
   const calendarFilterChoices = useMemo(() => [
     { value: "all", label: "Wszystkie zadania", filter: { kind: "all" } as CalendarFilter },
     ...lists.map((list) => ({
@@ -313,6 +341,41 @@ export default function Kalendarz() {
       filter: { kind: "priority", id: priority.id } as CalendarFilter,
     })),
   ], [lists, tags]);
+  const listUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => {
+    if (!event.deleted && event.list) counts[event.list] = (counts[event.list] ?? 0) + 1;
+    return counts;
+  }, {}), [events]);
+  const tagUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => {
+    if (!event.deleted) for (const tag of event.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
+    return counts;
+  }, {}), [events]);
+  const sidebarTasks = workspaceRef.current.tasks;
+  const sidebarViewCounts = useMemo(() => {
+    const habits = workspaceRef.current.habits;
+    const currentDay = todayKey();
+    return Object.fromEntries(SMART_VIEWS.map((view) => {
+      if (view.id === "nawyki") {
+        return [view.id, habits.filter((habit) => isHabitScheduledOnDate(habit, currentDay) && !isHabitDoneOnDate(habit, currentDay)).length];
+      }
+      const taskSource = smartDateViewRange(view.id, currentDay)
+        ? tasksForSmartDateView(sidebarTasks, view.id, currentDay).tasks
+        : sidebarTasks;
+      return [
+        view.id,
+        taskSource.filter((task) => !task.deleted && !task.done && (
+          view.id === "wszystkie" || view.id === "podsumowanie" || smartDateViewRange(view.id, currentDay)
+            ? true
+            : task.view === view.id
+        )).length,
+      ];
+    }));
+  }, [sidebarTasks]);
+  const visibleLists = useMemo(() => [...lists]
+    .sort((a, b) => (listUsage[b.id] ?? 0) - (listUsage[a.id] ?? 0))
+    .slice(0, showAllLists ? undefined : VISIBLE_TAG_LIMIT), [listUsage, lists, showAllLists]);
+  const visibleTags = useMemo(() => [...tags]
+    .sort((a, b) => (tagUsage[b.id] ?? 0) - (tagUsage[a.id] ?? 0))
+    .slice(0, showAllTags ? undefined : VISIBLE_TAG_LIMIT), [showAllTags, tagUsage, tags]);
   const visibleOccurrences = useMemo(() => {
     const first = cells[0];
     const last = cells.at(-1);
@@ -476,8 +539,24 @@ export default function Kalendarz() {
     if (restoreFocus) requestAnimationFrame(() => detailReturnFocusRef.current?.focus());
   }, [draftId]);
 
+  const switchRoute = (path: string) => {
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+
+  const openTaskView = (view: string, resetFilters = true) => {
+    saveTaskSidebarState(resetFilters
+      ? { taskView: view, listFilter: null, tagFilter: null }
+      : { taskView: view });
+    switchRoute(view === "dzis" ? "/zadania" : `/zadania?widok=${view}`);
+  };
+
   const applyCalendarFilter = (nextFilter: CalendarFilter) => {
     setCalendarFilter(nextFilter);
+    saveTaskSidebarState({
+      listFilter: nextFilter.kind === "list" ? nextFilter.id : null,
+      tagFilter: nextFilter.kind === "tag" ? nextFilter.id : null,
+    });
     setAgendaDateKey(null);
     closeTaskDetail(false);
   };
@@ -688,6 +767,7 @@ export default function Kalendarz() {
   return (
     <ModuleShell
       pageWidth="canvas"
+      className="task-module calendar-module"
       header={(
         <PageHeader
           title="Zadania"
@@ -698,30 +778,61 @@ export default function Kalendarz() {
       )}
     >
       <ContextSidebar
-        label="Filtry kalendarza"
+        label="Widoki i listy zadań"
         collapsible={false}
-        className="calendar-context-sidebar"
+        className="task-context-sidebar calendar-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="px-2 pb-4 pt-4">
           <SectionHeader title="Główne" level={2} variant="label" className="px-1.5" />
-          <ContextNavItem
-            active={calendarFilter.kind === "all"}
-            onClick={() => applyCalendarFilter({ kind: "all" })}
-            icon={<CalendarDays />}
-            label="Wszystkie zadania"
-            meta={events.filter((event) => !event.deleted).length || undefined}
-          />
+          <div className="space-y-px">
+            {PRIMARY_SMART_VIEWS.map(view => {
+              const Icon = view.icon;
+              return (
+                <ContextNavItem
+                  key={view.id}
+                  active={initialSidebarState.taskView === view.id && !initialSidebarState.listFilter && !initialSidebarState.tagFilter}
+                  onClick={() => openTaskView(view.id)}
+                  icon={<Icon />}
+                  label={view.label}
+                  meta={view.id !== "podsumowanie" && Number(sidebarViewCounts[view.id] ?? 0) > 0 ? Number(sidebarViewCounts[view.id]) : undefined}
+                />
+              );
+            })}
+          </div>
         </div>
 
-        {lists.length > 0 && (
-          <>
-            <div className="task-nav__divider" />
-            <div className="px-2 py-2">
-              <SectionHeader title="Listy" level={2} variant="label" className="px-1.5" />
-              <div className="space-y-px">
-                {lists.map((list) => {
+        <div className="task-nav__divider" />
+        <div className="px-2 pb-2 pt-2">
+          <SectionHeader title="Widoki specjalne" level={2} variant="label" className="px-1.5" />
+          <div className="space-y-px">
+            {SPECIAL_SMART_VIEWS.map(view => {
+              const Icon = view.icon;
+              return (
+                <ContextNavItem
+                  key={view.id}
+                  active={initialSidebarState.taskView === view.id && !initialSidebarState.listFilter && !initialSidebarState.tagFilter}
+                  onClick={() => openTaskView(view.id)}
+                  icon={<Icon />}
+                  label={view.label}
+                  meta={view.id !== "podsumowanie" && Number(sidebarViewCounts[view.id] ?? 0) > 0 ? Number(sidebarViewCounts[view.id]) : undefined}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="task-nav__divider" />
+            <div className="px-2 mb-2">
+              <div className="flex items-center justify-between px-1.5 mb-1.5">
+                <button type="button" className="task-nav__group-toggle" aria-expanded={listyOpen} onClick={() => setListyOpen((open) => { const next = !open; saveTaskSidebarState({ listyOpen: next }); return next; })}>
+                  <ChevronRight size={10} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
+                  <span className="task-nav__group-label">Listy</span>
+                </button>
+              </div>
+              {listyOpen && <div className="space-y-px">
+                {visibleLists.map((list) => {
                   const filter: CalendarFilter = { kind: "list", id: list.id };
-                  const count = events.filter((event) => !event.deleted && event.list === list.id).length;
+                  const count = sidebarTasks.filter((task) => !task.deleted && !task.done && task.list === list.id).length;
                   return (
                     <ContextNavItem
                       key={list.id}
@@ -733,20 +844,25 @@ export default function Kalendarz() {
                     />
                   );
                 })}
-              </div>
+                {lists.length > VISIBLE_TAG_LIMIT && (
+                  <button type="button" className="task-nav__show-all" onClick={() => setShowAllLists(open => !open)}>
+                    {showAllLists ? "Pokaż mniej" : "Pokaż wszystkie"}
+                  </button>
+                )}
+              </div>}
             </div>
-          </>
-        )}
-
-        {tags.length > 0 && (
-          <>
-            <div className="task-nav__divider" />
-            <div className="px-2 py-2">
-              <SectionHeader title="Tagi" level={2} variant="label" className="px-1.5" />
-              <div className="space-y-px">
-                {tags.map((tag) => {
+        <div className="task-nav__divider" />
+            <div className="px-2 mb-2">
+              <div className="flex items-center justify-between px-1.5 mb-1.5">
+                <button type="button" className="task-nav__group-toggle" aria-expanded={tagiOpen} onClick={() => setTagiOpen((open) => { const next = !open; saveTaskSidebarState({ tagiOpen: next }); return next; })}>
+                  <ChevronRight size={10} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
+                  <span className="task-nav__group-label">Tagi</span>
+                </button>
+              </div>
+              {tagiOpen && <div className="space-y-px">
+                {visibleTags.map((tag) => {
                   const filter: CalendarFilter = { kind: "tag", id: tag.id };
-                  const count = events.filter((event) => !event.deleted && event.tags?.includes(tag.id)).length;
+                  const count = sidebarTasks.filter((task) => !task.deleted && !task.done && task.tags?.includes(tag.id)).length;
                   return (
                     <ContextNavItem
                       key={tag.id}
@@ -758,30 +874,17 @@ export default function Kalendarz() {
                     />
                   );
                 })}
-              </div>
+                {tags.length > VISIBLE_TAG_LIMIT && (
+                  <button type="button" className="task-nav__show-all" onClick={() => setShowAllTags(open => !open)}>
+                    {showAllTags ? "Pokaż mniej" : "Pokaż wszystkie"}
+                  </button>
+                )}
+              </div>}
             </div>
-          </>
-        )}
-
-        <div className="task-nav__divider" />
-        <div className="px-2 py-2">
-          <SectionHeader title="Priorytet" level={2} variant="label" className="px-1.5" />
-          <div className="space-y-px">
-            {CALENDAR_PRIORITIES.map((priority) => {
-              const filter: CalendarFilter = { kind: "priority", id: priority.id };
-              const count = events.filter((event) => !event.deleted && event.priority === priority.id).length;
-              return (
-                <ContextNavItem
-                  key={priority.id}
-                  active={calendarFilterKey(calendarFilter) === calendarFilterKey(filter)}
-                  onClick={() => applyCalendarFilter(filter)}
-                  icon={<Flag />}
-                  label={priority.label}
-                  meta={count || undefined}
-                />
-              );
-            })}
-          </div>
+        <div className="flex-1" />
+        <div className="task-nav__footer">
+          <ContextNavItem label="Ukończone" icon={<RotateCcw />} onClick={() => openTaskView("ukonczone")} />
+          <ContextNavItem label="Kosz" icon={<Trash2 />} onClick={() => openTaskView("kosz")} />
         </div>
       </ContextSidebar>
 
@@ -804,8 +907,30 @@ export default function Kalendarz() {
             <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={15} strokeWidth={1.5} /></Button>
             <span className="calendar-toolbar-period workspace-context-label capitalize">{formatHeaderDate(viewDate)}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge tone="neutral">Miesiąc</Badge>
+          <div className="task-toolbar-actions">
+            <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
+              {CALENDAR_PRIORITIES.map((item) => {
+                const active = calendarFilter.kind === "priority" && calendarFilter.id === item.id;
+                const color = item.id === "high" ? uiColors.danger : item.id === "medium" ? uiColors.warning : C.blueText;
+                return (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={active}
+                    onClick={() => applyCalendarFilter(active ? { kind: "all" } : { kind: "priority", id: item.id })}
+                    style={{ color: active ? color : C.muted, background: active ? `${color}14` : undefined }}
+                  >
+                    {item.label}
+                  </Button>
+                );
+              })}
+              {openCalendarCount > 0 && (
+                <Badge tone="neutral">
+                  {formatOpenTaskCount(openCalendarCount)}
+                </Badge>
+              )}
+            </div>
             <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={15} strokeWidth={1.5} /></Button>
             <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
@@ -815,7 +940,7 @@ export default function Kalendarz() {
                 aria-label="Widok listy"
                 aria-pressed="false"
                 title="Lista"
-                onClick={() => window.location.assign("/zadania")}
+                onClick={() => openTaskView("dzis", false)}
               >
                 <List size={14} strokeWidth={1.7} />
               </Button>
@@ -1038,7 +1163,7 @@ export default function Kalendarz() {
         </div>
       </ModuleMain>
 
-      <TaskReminderCenter tasks={events} />
+      <TaskReminderCenter tasks={events} habits={workspaceRef.current.habits} />
 
       {selectedTask && (
         <div

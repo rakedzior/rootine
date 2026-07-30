@@ -19,11 +19,14 @@ import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
 import { WORK_STORAGE_KEY } from "../data/workWorkspace";
 import {
   isHabitDoneOnDate,
+  isHabitScheduledOnDate,
   emptyTaskTrash,
+  normalizeHabitState,
   loadTaskWorkspace,
   purgeTask,
   restoreTask,
   saveTaskWorkspace,
+  setHabitCompletionOnDate,
   trashTask,
   toggleHabitOnDate,
   taskViewForCalendarDate,
@@ -55,11 +58,16 @@ import {
   PALETTE,
   PRIORITY_COLOR,
   SMART_VIEWS,
+  PRIMARY_SMART_VIEWS,
+  SPECIAL_SMART_VIEWS,
   VIEW_LABELS,
   VISIBLE_TAG_LIMIT,
+  formatOpenTaskCount,
   formatDateLabel,
   initialTaskView,
+  loadTaskSidebarState,
   overdueDateLabel,
+  saveTaskSidebarState,
   overdueRailLabel,
   sortByScheduledTime,
   scheduleFromDateValue,
@@ -78,24 +86,31 @@ import { DatePickerPopup } from "./tasks/TaskSchedulePicker";
 import { TaskDetail, TaskRow } from "./tasks/TaskViews";
 import {
   HabitsWorkspace,
+  HabitDetail,
   InputFloatMenu,
   SummaryDocument,
   SummaryPanel,
 } from "./tasks/TaskSecondaryViews";
+import type { HabitMetaDraft } from "./tasks/TaskSecondaryViews";
 
 export default function Zadania() {
   const navigate = useNavigate();
   const [initialWorkspace] = useState(loadTaskWorkspace);
+  const initialSidebarState = loadTaskSidebarState();
   const workspaceRef = useRef(initialWorkspace);
-  const [taskView,      setTaskView]      = useState(initialTaskView);
-  const [listFilter,    setListFilter]    = useState<string | null>(null);
-  const [tagFilter,     setTagFilter]     = useState<string | null>(null);
+  const [taskView,      setTaskView]      = useState(() => {
+    const requestedView = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("widok") : null;
+    return requestedView ? initialTaskView() : initialSidebarState.taskView;
+  });
+  const [listFilter,    setListFilter]    = useState<string | null>(initialSidebarState.listFilter);
+  const [tagFilter,     setTagFilter]     = useState<string | null>(initialSidebarState.tagFilter);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
   const [tasks,         setTasks]         = useState<Task[]>(initialWorkspace.tasks);
   const [habits,        setHabits]        = useState<Habit[]>(initialWorkspace.habits);
   const [listy,         setListy]         = useState<ListItem[]>(initialWorkspace.lists);
   const [tagi,          setTagi]          = useState<TagItem[]>(initialWorkspace.tags);
   const [selectedId,    setSelectedId]    = useState<number | null>(null);
+  const [selectedHabitId, setSelectedHabitId] = useState<number | null>(null);
   const [newTask,       setNewTask]       = useState("");
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
   const [newTaskList,   setNewTaskList]   = useState<string | null>(null);
@@ -151,8 +166,10 @@ export default function Zadania() {
   }, [taskView]);
 
   // Sidebar collapse state
-  const [listyOpen,     setListyOpen]     = useState(false);
-  const [tagiOpen,      setTagiOpen]      = useState(false);
+  const [listyOpen,     setListyOpen]     = useState(initialSidebarState.listyOpen);
+  const [tagiOpen,      setTagiOpen]      = useState(initialSidebarState.tagiOpen);
+  const [showAllLists,  setShowAllLists]  = useState(false);
+  const [showAllTags,   setShowAllTags]   = useState(false);
 
   // Sidebar CRUD state
   const [addingList,    setAddingList]    = useState(false);
@@ -167,6 +184,10 @@ export default function Zadania() {
   const [editTagLabel,  setEditTagLabel]  = useState("");
   const [tagSearchOpen, setTagSearchOpen] = useState(false);
   const [tagSearch,     setTagSearch]     = useState("");
+
+  useEffect(() => {
+    saveTaskSidebarState({ taskView, listFilter, tagFilter, listyOpen, tagiOpen });
+  }, [listFilter, listyOpen, tagFilter, tagiOpen, taskView]);
 
   const inputRef        = useRef<HTMLInputElement>(null);
   const dateButtonRef   = useRef<HTMLButtonElement>(null);
@@ -205,11 +226,16 @@ export default function Zadania() {
   const selectedTask = selectedSourceId === null
     ? null
     : tasks.find((task) => task.id === selectedSourceId) ?? null;
+  const selectedHabit = selectedHabitId === null
+    ? null
+    : habits.find((habit) => habit.id === selectedHabitId) ?? null;
   const tagUsage = tasks.reduce<Record<string, number>>((counts, task) => {
+    if (task.deleted) return counts;
     for (const tag of task.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
     return counts;
   }, {});
   const listUsage = tasks.reduce<Record<string, number>>((counts, task) => {
+    if (task.deleted) return counts;
     if (task.list) counts[task.list] = (counts[task.list] ?? 0) + 1;
     return counts;
   }, {});
@@ -217,12 +243,12 @@ export default function Zadania() {
   const visibleLists = listy
     .filter(list => !normalizedListSearch || list.label.toLowerCase().includes(normalizedListSearch))
     .sort((a, b) => (listUsage[b.id] ?? 0) - (listUsage[a.id] ?? 0))
-    .slice(0, normalizedListSearch ? undefined : VISIBLE_TAG_LIMIT);
+    .slice(0, normalizedListSearch || showAllLists ? undefined : VISIBLE_TAG_LIMIT);
   const normalizedTagSearch = tagSearch.trim().toLowerCase().replace(/^#/, "");
   const visibleTags = tagi
     .filter(tag => !normalizedTagSearch || tag.label.includes(normalizedTagSearch))
     .sort((a, b) => (tagUsage[b.id] ?? 0) - (tagUsage[a.id] ?? 0))
-    .slice(0, normalizedTagSearch ? undefined : VISIBLE_TAG_LIMIT);
+    .slice(0, normalizedTagSearch || showAllTags ? undefined : VISIBLE_TAG_LIMIT);
 
   const hasSmartDateRange = smartDateViewRange(taskView, todayKey) !== null;
   const taskPool = hasSmartDateRange
@@ -261,7 +287,7 @@ export default function Zadania() {
       return [
         v.id,
         v.id === "nawyki"
-        ? habits.filter((habit) => !isHabitDoneOnDate(habit, todayKey)).length
+        ? habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey) && !isHabitDoneOnDate(habit, todayKey)).length
         : countTasks.filter(t => !t.deleted && !t.done && (
           v.id === "wszystkie" || v.id === "podsumowanie" || smartDateViewRange(v.id, todayKey)
             ? true
@@ -432,13 +458,37 @@ export default function Zadania() {
     setEmptyTrashOpen(false);
     setSelectedId(null);
   };
-  const toggleHabit = (id: number) => setHabits((current) => current.map((habit) => (
-    habit.id === id ? toggleHabitOnDate(habit, toCalendarDateKey(new Date())) : habit
+  const setHabitCompletion = (id: number, dateKey: string, done: boolean) => setHabits((current) => current.map((habit) => (
+    habit.id === id ? setHabitCompletionOnDate(habit, dateKey, done) : habit
   )));
-  const addHabit = (name: string) => setHabits((current) => [
+  const toggleHabit = (id: number) => {
+    const today = toCalendarDateKey(new Date());
+    setHabits((current) => current.map((habit) => (
+      habit.id === id ? toggleHabitOnDate(habit, today) : habit
+    )));
+  };
+  const updateHabit = (id: number, patch: Partial<Habit>) => setHabits((current) => current.map((habit) => (
+    habit.id === id ? normalizeHabitState({ ...habit, ...patch }) : habit
+  )));
+  const addHabit = (name: string, draft: HabitMetaDraft) => setHabits((current) => [
     ...current,
-    { id: Date.now(), name, streak: 0, done: false, completedDates: [] },
+    normalizeHabitState({
+      id: Date.now(),
+      name,
+      streak: 0,
+      done: false,
+      completedDates: [],
+      schedule: draft.schedule,
+      priority: draft.priority,
+      time: draft.time,
+      timeOfDay: draft.timeOfDay,
+      reminderMinutes: draft.reminderMinutes,
+    }),
   ]);
+  const deleteHabit = (id: number) => {
+    setHabits((current) => current.filter((habit) => habit.id !== id));
+    setSelectedHabitId(null);
+  };
 
   const rescheduleOverdue = () => {
     const ids = new Set(overdue.map(task => task.id));
@@ -458,7 +508,7 @@ export default function Zadania() {
 
   const closeDatePicker = useCallback(() => setDatePickerOpen(false), []);
 
-  useEffect(() => { setSelectedId(null); }, [taskView, listFilter, tagFilter]);
+  useEffect(() => { setSelectedId(null); setSelectedHabitId(null); }, [taskView, listFilter, tagFilter]);
 
   const getPlaceholder = () => {
     if (listFilter) return `Dodaj zadanie do "${listy.find(l => l.id === listFilter)?.label}"`;
@@ -509,16 +559,16 @@ export default function Zadania() {
   );
 
   return (
-    <ModuleShell pageWidth="wide" header={pageHeader}>
+    <ModuleShell pageWidth="canvas" header={pageHeader} className="task-module">
 
       {/* ── Sub-sidebar ── */}
-      <ContextSidebar label="Widoki i listy zadań" className="overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ContextSidebar label="Widoki i listy zadań" collapsible={false} className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* Smart views */}
         <div className="px-2 pb-4 pt-4">
           <SectionHeader title="Główne" level={2} variant="label" className="px-1.5" />
           <div className="space-y-px">
-            {SMART_VIEWS.map(v => {
+            {PRIMARY_SMART_VIEWS.map(v => {
             const Icon = v.icon;
             const active = taskView === v.id && !listFilter && !tagFilter;
             const count = viewCounts[v.id];
@@ -532,6 +582,29 @@ export default function Zadania() {
                 meta={v.id !== "podsumowanie" && count > 0 ? count : undefined}
               />
             );
+            })}
+          </div>
+        </div>
+
+        <div className="task-nav__divider" />
+
+        <div className="px-2 pb-2 pt-2">
+          <SectionHeader title="Widoki specjalne" level={2} variant="label" className="px-1.5" />
+          <div className="space-y-px">
+            {SPECIAL_SMART_VIEWS.map(v => {
+              const Icon = v.icon;
+              const active = taskView === v.id && !listFilter && !tagFilter;
+              const count = viewCounts[v.id];
+              return (
+                <ContextNavItem
+                  key={v.id}
+                  active={active}
+                  onClick={() => { setTaskView(v.id); setListFilter(null); setTagFilter(null); }}
+                  icon={<Icon />}
+                  label={v.label}
+                  meta={v.id !== "podsumowanie" && count > 0 ? count : undefined}
+                />
+              );
             })}
           </div>
         </div>
@@ -593,7 +666,7 @@ export default function Zadania() {
               const active = listFilter === l.id;
               const count = tasks.filter(t => !t.done && t.list === l.id).length;
               return (
-                <div key={l.id} className="group relative">
+                <div key={l.id} className="task-nav__taxonomy-row group">
                   {editingListId === l.id ? (
                     <div className="task-nav__edit-row">
                       <span className="task-nav__dot" style={{ background: l.color }} />
@@ -617,7 +690,7 @@ export default function Zadania() {
                   )}
                   {/* Hover actions */}
                   {editingListId !== l.id && (
-                    <div className="task-taxonomy-actions absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
+                    <div className="task-taxonomy-actions absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
                       <button type="button" aria-label={`Edytuj listę ${l.label}`} onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
                         className="task-nav__row-action">
                         <PenLine size={9} strokeWidth={1.5} />
@@ -639,6 +712,15 @@ export default function Zadania() {
                   onBlur={() => { if (newListLabel.trim()) addList(); else { setAddingList(false); setNewListLabel(""); } }}
                   className="task-nav__edit-input" />
               </div>
+            )}
+            {!normalizedListSearch && listy.length > VISIBLE_TAG_LIMIT && (
+              <button
+                type="button"
+                className="task-nav__show-all"
+                onClick={() => setShowAllLists(open => !open)}
+              >
+                {showAllLists ? "Pokaż mniej" : "Pokaż wszystkie"}
+              </button>
             )}
           </div>}
         </div>
@@ -699,7 +781,7 @@ export default function Zadania() {
             {visibleTags.map(t => {
               const active = tagFilter === t.id;
               return (
-                <div key={t.id} className="group relative">
+                <div key={t.id} className="task-nav__taxonomy-row group">
                   {editingTagId === t.id ? (
                     <div className="task-nav__edit-row">
                       <span className="task-nav__dot" style={{ background: t.color }} />
@@ -718,10 +800,11 @@ export default function Zadania() {
                       }}
                       icon={<span className="h-2 w-2 rounded-full" style={{ background: t.color, opacity: active ? 1 : 0.7 }} />}
                       label={`#${t.label}`}
+                      meta={tagUsage[t.id] > 0 ? tagUsage[t.id] : undefined}
                     />
                   )}
                   {editingTagId !== t.id && (
-                    <div className="task-taxonomy-actions absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
+                    <div className="task-taxonomy-actions absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
                       <button type="button" aria-label={`Edytuj tag #${t.label}`} onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
                         className="task-nav__row-action">
                         <PenLine size={9} strokeWidth={1.5} />
@@ -743,6 +826,15 @@ export default function Zadania() {
                   onBlur={() => { if (newTagLabel.trim()) addTagItem(); else { setAddingTag(false); setNewTagLabel(""); } }}
                   className="task-nav__edit-input" />
               </div>
+            )}
+            {!normalizedTagSearch && tagi.length > VISIBLE_TAG_LIMIT && (
+              <button
+                type="button"
+                className="task-nav__show-all"
+                onClick={() => setShowAllTags(open => !open)}
+              >
+                {showAllTags ? "Pokaż mniej" : "Pokaż wszystkie"}
+              </button>
             )}
           </div>}
         </div>
@@ -790,7 +882,7 @@ export default function Zadania() {
       )}
 
       {taskView === "nawyki" && (
-        <ModuleMain>
+        <ModuleMain className="task-module-main">
           <WorkspaceToolbar>
             <Select
               aria-label="Widok zadań"
@@ -806,12 +898,18 @@ export default function Zadania() {
             />
             <span className="workspace-context-label">Nawyki</span>
           </WorkspaceToolbar>
-          <HabitsWorkspace habits={habits} onToggleHabit={toggleHabit} onAddHabit={addHabit} />
+          <HabitsWorkspace
+            habits={habits}
+            onToggleHabit={toggleHabit}
+            onSelectHabit={(id) => { setSelectedHabitId((current) => current === id ? null : id); setSelectedId(null); }}
+            onAddHabit={addHabit}
+          />
         </ModuleMain>
       )}
 
       {/* ── Task list ── */}
       <ModuleMain
+        className="task-module-main"
         style={{
           background: C.bg,
           display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
@@ -874,7 +972,7 @@ export default function Zadania() {
                   {item.label}
                 </Button>
               ))}
-              {pending.length > 0 && <Badge tone="neutral">{pending.length} otwartych</Badge>}
+              {pending.length > 0 && <Badge tone="neutral">{formatOpenTaskCount(pending.length)}</Badge>}
             </div>
             <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
@@ -902,10 +1000,10 @@ export default function Zadania() {
           </div>
         </WorkspaceToolbar>
 
-        <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-7 py-5">
+        <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* Add task input */}
           <form
-            className="task-entry mx-1 mb-3 rounded-xl transition-all duration-200"
+            className="task-entry"
             aria-label="Dodaj zadanie"
             onSubmit={(event) => {
               event.preventDefault();
@@ -1061,7 +1159,7 @@ export default function Zadania() {
                 </Button>
               </div>
               {showOverdue && (
-                <div id="task-overdue-list" className="space-y-px">
+                <div id="task-overdue-list" className="task-list">
                   {overdue.map(task => (
                     <TaskRow
                       key={task.id}
@@ -1090,7 +1188,7 @@ export default function Zadania() {
 
           {taskView === "ukonczone" ? (
             /* Ukończone view — flat list of all done tasks */
-            <div className="space-y-px">
+            <div className="task-list">
               {visible.length === 0 && (
                 <div className="task-empty">
                   <RotateCcw size={28} strokeWidth={1} />
@@ -1106,7 +1204,7 @@ export default function Zadania() {
               ))}
             </div>
           ) : taskView === "kosz" ? (
-            <div className="space-y-px">
+            <div className="task-list">
               {visible.length === 0 ? (
                 <div className="task-empty">
                   <Trash2 size={28} strokeWidth={1} />
@@ -1145,7 +1243,7 @@ export default function Zadania() {
             <>
               {/* Pending tasks */}
               {currentPending.length > 0 && (
-                <div className="space-y-px mb-2">
+                <div className="task-list task-list--pending">
                   {currentPending.map(t => (
                     <TaskRow key={t.id} task={t} tagi={tagi}
                       selected={selectedId === t.id}
@@ -1158,7 +1256,7 @@ export default function Zadania() {
 
               {/* Completed */}
               {completed.length > 0 && (
-                <div className="mt-2">
+                <div className="task-completed">
                   <button onClick={() => setShowDone(v => !v)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] transition-colors mb-1"
                     style={{ color: C.textMuted }}>
@@ -1167,7 +1265,7 @@ export default function Zadania() {
                     Ukończone · {completed.length}
                   </button>
                   {showDone && (
-                    <div className="space-y-px">
+                    <div className="task-list">
                       {completed.map(t => (
                         <TaskRow key={t.id} task={t} tagi={tagi}
                           selected={selectedId === t.id}
@@ -1194,18 +1292,20 @@ export default function Zadania() {
         </div>
       </ModuleMain>
 
-      <TaskReminderCenter tasks={tasks} />
+      <TaskReminderCenter tasks={tasks} habits={habits} />
 
       {/* ── Right panel ── */}
-      {(selectedTask || taskView === "podsumowanie") && (
+      {(selectedTask || selectedHabit || taskView === "podsumowanie") && (
         <DetailPanel
-          className={selectedTask ? "task-detail-panel" : "task-summary-detail"}
+          className={selectedTask ? "task-detail-panel" : selectedHabit ? "task-habit-detail-panel" : "task-summary-detail"}
           label={selectedTask
             ? selectedVirtualOccurrence
               ? "Szczegóły wystąpienia"
               : "Szczegóły zadania"
-            : "Podsumowanie zadań"}
-          onDismiss={() => selectedTask ? setSelectedId(null) : setTaskView("dzis")}
+            : selectedHabit
+              ? "Szczegóły nawyku"
+              : "Podsumowanie zadań"}
+          onDismiss={() => selectedTask ? setSelectedId(null) : selectedHabit ? setSelectedHabitId(null) : setTaskView("dzis")}
         >
         {selectedTask ? (
           <TaskDetail
@@ -1225,6 +1325,14 @@ export default function Zadania() {
             onDelete={selectedTask.deleted ? (id) => setPurgeTaskId(id) : deleteTask}
             listy={listy}
             tagi={tagi}
+          />
+        ) : selectedHabit ? (
+          <HabitDetail
+            habit={selectedHabit}
+            onClose={() => setSelectedHabitId(null)}
+            onUpdate={updateHabit}
+            onSetCompletion={setHabitCompletion}
+            onDelete={deleteHabit}
           />
         ) : (
           <SummaryPanel tasks={visible} habits={habits} onToggleHabit={toggleHabit} />

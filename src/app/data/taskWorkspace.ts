@@ -8,7 +8,12 @@ import {
   type CommitmentTaskSource,
 } from "./commitmentRepository";
 import { hydrateTaskCompletion } from "./taskCompletion";
-import { isLocalDateKey } from "./localDate";
+import {
+  calendarDaysBetween,
+  isLocalDateKey,
+  parseLocalDateKey,
+  shiftLocalDateKey,
+} from "./localDate";
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
 
 export const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
@@ -54,7 +59,23 @@ export type WorkspaceHabit = {
   streak: number;
   done: boolean;
   completedDates?: string[];
+  schedule?: HabitSchedule;
+  priority?: TaskPriority;
+  time?: string;
+  timeOfDay?: HabitTimeOfDay;
+  reminderMinutes?: number;
+  color?: string;
+  pausePeriods?: HabitPause[];
 };
+export type HabitTimeOfDay = "morning" | "afternoon" | "evening";
+export type HabitSchedule = {
+  type: "daily" | "weekly" | "interval";
+  weekdays?: number[];
+  interval?: number;
+  startDate: string;
+  endDate?: string;
+};
+export type HabitPause = { startDate: string; endDate?: string };
 export type WorkspaceList = { id: string; label: string; color: string };
 export type WorkspaceTag = { id: string; label: string; color: string };
 
@@ -103,10 +124,15 @@ const DEFAULT_TASKS: WorkspaceTask[] = [
   ...CALENDAR_TASKS.map(({ dateLabel, ...task }) => ({ ...task, date: dateLabel, view: taskViewForCalendarDate(task.calendarDate) })),
 ];
 
+function recentHabitDates(length: number, includeToday = true): string[] {
+  const startOffset = includeToday ? 0 : 1;
+  return Array.from({ length }, (_, index) => toCalendarDateKey(new Date(Date.now() - (index + startOffset) * 86_400_000))).sort();
+}
+
 const DEFAULT_HABITS: WorkspaceHabit[] = [
-  { id: 1, name: "Medytacja rano", streak: 5, done: true, completedDates: [toCalendarDateKey(new Date())] },
-  { id: 2, name: "8 szklanek wody", streak: 2, done: false, completedDates: [] },
-  { id: 3, name: "30 min czytania", streak: 12, done: false, completedDates: [] },
+  { id: 1, name: "Medytacja rano", streak: 5, done: true, completedDates: recentHabitDates(5) },
+  { id: 2, name: "8 szklanek wody", streak: 2, done: false, completedDates: recentHabitDates(2, false) },
+  { id: 3, name: "30 min czytania", streak: 12, done: false, completedDates: recentHabitDates(12, false) },
   { id: 4, name: "Spacer 20 min", streak: 0, done: false, completedDates: [] },
 ];
 
@@ -186,7 +212,38 @@ function isWorkspaceHabit(value: unknown): value is WorkspaceHabit {
     && typeof value.streak === "number"
     && typeof value.done === "boolean"
     && (value.completedDates === undefined
-      || (Array.isArray(value.completedDates) && value.completedDates.every((date) => typeof date === "string")));
+      || (Array.isArray(value.completedDates) && value.completedDates.every(isLocalDateKey)))
+    && (value.schedule === undefined || isHabitSchedule(value.schedule))
+    && (value.priority === undefined || ["high", "medium", "low"].includes(String(value.priority)))
+    && (value.time === undefined || (typeof value.time === "string" && isClockTime(value.time)))
+    && (value.timeOfDay === undefined || ["morning", "afternoon", "evening"].includes(String(value.timeOfDay)))
+    && (value.reminderMinutes === undefined
+      || (typeof value.reminderMinutes === "number" && Number.isInteger(value.reminderMinutes) && value.reminderMinutes >= 0))
+    && (value.color === undefined || typeof value.color === "string")
+    && (value.pausePeriods === undefined
+      || (Array.isArray(value.pausePeriods) && value.pausePeriods.every(isHabitPause)));
+}
+
+function isHabitSchedule(value: unknown): value is HabitSchedule {
+  if (!isRecord(value) || !["daily", "weekly", "interval"].includes(String(value.type))) return false;
+  if (!isLocalDateKey(value.startDate)) return false;
+  if (value.endDate !== undefined && !isLocalDateKey(value.endDate)) return false;
+  if (value.endDate !== undefined && value.endDate < value.startDate) return false;
+  if (value.weekdays !== undefined && (
+    !Array.isArray(value.weekdays)
+    || value.weekdays.length === 0
+    || value.weekdays.some((day) => typeof day !== "number" || !Number.isInteger(day) || day < 1 || day > 7)
+  )) return false;
+  if (value.interval !== undefined && (typeof value.interval !== "number" || !Number.isInteger(value.interval) || value.interval < 1)) return false;
+  if (value.type === "weekly" && (!Array.isArray(value.weekdays) || value.weekdays.length === 0)) return false;
+  return value.type !== "interval" || value.interval !== undefined;
+}
+
+function isHabitPause(value: unknown): value is HabitPause {
+  return isRecord(value)
+    && isLocalDateKey(value.startDate)
+    && (value.endDate === undefined || isLocalDateKey(value.endDate))
+    && (value.endDate === undefined || value.endDate >= value.startDate);
 }
 
 function isWorkspaceList(value: unknown): value is WorkspaceList {
@@ -262,10 +319,7 @@ function normalizeLoadedWorkspace(workspace: TaskWorkspace): TaskWorkspace {
       tasks: workspace.tasks.map((task) => isCalendarTask(task) && task.view === "kalendarz"
         ? { ...task, view: taskViewForCalendarDate(task.calendarDate) }
         : task),
-      habits: workspace.habits.map((habit) => {
-        const completedDates = habit.completedDates ?? (habit.done ? [todayKey] : []);
-        return { ...habit, completedDates, done: completedDates.includes(todayKey) };
-      }),
+      habits: workspace.habits.map((habit) => normalizeHabitState(habit, todayKey)),
     };
 }
 
@@ -328,16 +382,143 @@ export function saveTaskWorkspace(workspace: TaskWorkspace): boolean {
   return writeLocalWorkspace(TASK_STORAGE_KEY, next) && sourceSaved;
 }
 
+function defaultHabitSchedule(startDate: string): HabitSchedule {
+  return { type: "daily", startDate };
+}
+
+function habitSchedule(habit: WorkspaceHabit): HabitSchedule {
+  return habit.schedule ?? defaultHabitSchedule(habit.completedDates?.[0] ?? toCalendarDateKey(new Date()));
+}
+
+function habitWeekday(dateKey: string): number {
+  const date = parseLocalDateKey(dateKey);
+  if (!date) return 0;
+  const day = date.getDay();
+  return day === 0 ? 7 : day;
+}
+
+function habitWeekStart(dateKey: string): string {
+  const date = parseLocalDateKey(dateKey);
+  if (!date) return dateKey;
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return toCalendarDateKey(date);
+}
+
+export function isHabitPausedOnDate(habit: WorkspaceHabit, dateKey: string): boolean {
+  return (habit.pausePeriods ?? []).some((period) => (
+    dateKey >= period.startDate && (period.endDate === undefined || dateKey <= period.endDate)
+  ));
+}
+
+function isHabitActiveOnDate(habit: WorkspaceHabit, dateKey: string): boolean {
+  const schedule = habitSchedule(habit);
+  return dateKey >= schedule.startDate && (schedule.endDate === undefined || dateKey <= schedule.endDate);
+}
+
+export function isHabitScheduledOnDate(habit: WorkspaceHabit, dateKey: string): boolean {
+  if (!isHabitActiveOnDate(habit, dateKey) || isHabitPausedOnDate(habit, dateKey)) return false;
+  const schedule = habitSchedule(habit);
+  if (schedule.type === "daily") return true;
+  if (schedule.type === "weekly") {
+    const weekdays = schedule.weekdays ?? [];
+    if (!weekdays.includes(habitWeekday(dateKey))) return false;
+    const startWeek = habitWeekStart(schedule.startDate);
+    const currentWeek = habitWeekStart(dateKey);
+    const days = calendarDaysBetween(startWeek, currentWeek);
+    const interval = schedule.interval ?? 1;
+    return days !== null && days >= 0 && Math.floor(days / 7) % interval === 0;
+  }
+  const days = calendarDaysBetween(schedule.startDate, dateKey);
+  const interval = schedule.interval ?? 1;
+  return days !== null && days >= 0 && days % interval === 0;
+}
+
+export type HabitDayState = "completed" | "scheduled" | "paused" | "rest" | "inactive";
+
+export function habitDayState(habit: WorkspaceHabit, dateKey: string): HabitDayState {
+  if (isHabitPausedOnDate(habit, dateKey)) return "paused";
+  // A completion entered from history is intentional even when the date was
+  // outside the original active range or an otherwise free day.
+  if (isHabitDoneOnDate(habit, dateKey) && dateKey <= toCalendarDateKey(new Date())) return "completed";
+  if (!isHabitActiveOnDate(habit, dateKey)) return "inactive";
+  if (!isHabitScheduledOnDate(habit, dateKey)) return "rest";
+  return "scheduled";
+}
+
 export function isHabitDoneOnDate(habit: WorkspaceHabit, dateKey: string): boolean {
-  return habit.completedDates ? habit.completedDates.includes(dateKey) : habit.done;
+  return habit.completedDates ? habit.completedDates.includes(dateKey) : habit.done && dateKey === toCalendarDateKey(new Date());
+}
+
+export function getHabitCurrentStreak(habit: WorkspaceHabit, referenceDate = toCalendarDateKey(new Date())): number {
+  let streak = 0;
+  for (let offset = 0; offset < 3660; offset += 1) {
+    const dateKey = shiftLocalDateKey(referenceDate, -offset);
+    if (dateKey < habitSchedule(habit).startDate) break;
+    if (isHabitPausedOnDate(habit, dateKey)) continue;
+    if (!isHabitScheduledOnDate(habit, dateKey)) continue;
+    if (!isHabitDoneOnDate(habit, dateKey)) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+export function getHabitBestStreak(habit: WorkspaceHabit, referenceDate = toCalendarDateKey(new Date())): number {
+  const start = habitSchedule(habit).startDate;
+  let best = 0;
+  let current = 0;
+  for (let dateKey = start; dateKey <= referenceDate; dateKey = shiftLocalDateKey(dateKey, 1)) {
+    if (isHabitPausedOnDate(habit, dateKey)) continue;
+    if (!isHabitScheduledOnDate(habit, dateKey)) continue;
+    if (isHabitDoneOnDate(habit, dateKey)) {
+      current += 1;
+      best = Math.max(best, current);
+    } else {
+      current = 0;
+    }
+  }
+  return best;
+}
+
+export function getHabitCompletionStats(habit: WorkspaceHabit, startDate: string, endDate: string) {
+  let scheduled = 0;
+  let completed = 0;
+  for (let dateKey = startDate; dateKey <= endDate; dateKey = shiftLocalDateKey(dateKey, 1)) {
+    if (!isHabitScheduledOnDate(habit, dateKey)) continue;
+    scheduled += 1;
+    if (isHabitDoneOnDate(habit, dateKey)) completed += 1;
+  }
+  return { scheduled, completed };
+}
+
+export function normalizeHabitState(habit: WorkspaceHabit, referenceDate = toCalendarDateKey(new Date())): WorkspaceHabit {
+  const legacyEndDate = habit.done ? referenceDate : shiftLocalDateKey(referenceDate, -1);
+  const legacyDates = !habit.schedule && habit.streak > 0
+    ? Array.from({ length: habit.streak }, (_, index) => shiftLocalDateKey(legacyEndDate, -index))
+    : [];
+  const sourceDates = [...(habit.completedDates ?? []), ...legacyDates];
+  const completedDates = [...new Set(sourceDates.filter(isLocalDateKey))].sort();
+  const schedule = habit.schedule && isHabitSchedule(habit.schedule)
+    ? { ...habit.schedule, weekdays: habit.schedule.weekdays ? [...new Set(habit.schedule.weekdays)].sort() : undefined }
+    : defaultHabitSchedule(completedDates[0] ?? referenceDate);
+  const pausePeriods = (habit.pausePeriods ?? []).filter(isHabitPause).map((period) => ({ ...period }));
+  const next = { ...habit, completedDates, schedule, pausePeriods };
+  return {
+    ...next,
+    done: isHabitScheduledOnDate(next, referenceDate) && isHabitDoneOnDate(next, referenceDate),
+    streak: getHabitCurrentStreak(next, referenceDate),
+  };
+}
+
+export function setHabitCompletionOnDate(habit: WorkspaceHabit, dateKey: string, done: boolean): WorkspaceHabit {
+  if (done && (dateKey > toCalendarDateKey(new Date()) || isHabitPausedOnDate(habit, dateKey))) return habit;
+  const completedDates = new Set(habit.completedDates ?? []);
+  if (done) completedDates.add(dateKey);
+  else completedDates.delete(dateKey);
+  return normalizeHabitState({ ...habit, completedDates: [...completedDates].sort() });
 }
 
 export function toggleHabitOnDate(habit: WorkspaceHabit, dateKey: string): WorkspaceHabit {
-  const nextDone = !isHabitDoneOnDate(habit, dateKey);
-  const completedDates = new Set(habit.completedDates ?? []);
-  if (nextDone) completedDates.add(dateKey);
-  else completedDates.delete(dateKey);
-  return { ...habit, done: nextDone, completedDates: [...completedDates].sort() };
+  return setHabitCompletionOnDate(habit, dateKey, !isHabitDoneOnDate(habit, dateKey));
 }
 
 export function isCalendarTask(task: WorkspaceTask): task is WorkspaceTask & { calendarDate: string } {

@@ -102,7 +102,7 @@
   color: var(--color-text-muted);
 }
 
-.task-habits-add input:focus-visible {
+.task-habits-add > input:focus-visible {
   border-color: var(--color-precision-blue);
   box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
 }
@@ -197,6 +197,868 @@
   text-align: center;
 }
 
+/* The habits view uses the same working-list rhythm as regular tasks. */
+.task-habits-workspace--list {
+  padding: var(--space-xl) var(--space-3xl) var(--space-2xl);
+}
+
+.task-habits-workspace--list .task-habits-add {
+  align-items: center;
+  min-height: 46px;
+  margin-top: 0;
+  margin-bottom: var(--space-xl);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-lg);
+}
+
+.task-habits-workspace--list .task-habits-add input {
+  height: 34px;
+  border: 0;
+  background: transparent;
+}
+
+/* The quick-add row follows the task composer: the name is the primary field,
+   while habit settings stay compact, icon-led controls. */
+.task-habits-workspace--list .task-habits-add {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.task-habits-workspace--list .task-habits-add__name {
+  min-width: 80px;
+  flex: 1 1 auto;
+  padding-inline: var(--space-sm);
+  color: var(--color-chalk-white);
+}
+
+.task-habits-workspace--list .task-habits-add__name:focus,
+.task-habits-workspace--list .task-habits-add__name:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.task-habits-workspace--list .task-habits-add__controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.task-habits-workspace--list .task-habit-setting--icon {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  justify-content: center;
+  gap: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.task-habits-workspace--list .task-habit-setting--icon:hover,
+.task-habits-workspace--list .task-habit-setting--icon:focus-within {
+  background: var(--color-graphite-hover);
+  color: var(--color-chalk-white);
+}
+
+.task-habits-workspace--list .task-habit-setting--icon.is-set {
+  background: var(--color-precision-blue-soft);
+  color: var(--color-precision-blue-text);
+}
+
+.task-habits-workspace--list .task-habit-setting--icon > svg,
+.task-habits-workspace--list .task-habit-setting--icon > .task-habit-setting__daypart {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.task-habits-workspace--list .task-habit-setting--icon .task-habit-setting__daypart {
+  display: none;
+}
+
+.task-habits-workspace--list .task-habit-setting--icon > input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+}
+
+.task-habits-workspace--list .task-habit-setting--icon > input:focus,
+.task-habits-workspace--list .task-habit-setting--icon > input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.task-habits-workspace--list .task-habit-setting > .ui-field {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.task-habits-workspace--list .task-habit-setting--icon > .task-habit-select-field--icon {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+}
+
+.task-habits-workspace--list .task-habit-select-trigger--icon {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+
+.task-habits-workspace--list .task-habit-select-trigger--icon:hover,
+.task-habits-workspace--list .task-habit-select-trigger--icon:focus-visible,
+.task-habits-workspace--list .task-habit-select-trigger--icon.is-open {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.task-habits-workspace--list .task-habit-select-trigger--icon .ui-select-trigger__value,
+.task-habits-workspace--list .task-habit-select-trigger--icon .ui-select-trigger__chevron {
+  display: none;
+}
+
+.task-habits-workspace--list .task-habit-setting:not(.task-habit-setting--icon) > .ui-field .ui-select-trigger {
+  height: 30px;
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-meta);
+}
+
+.task-habit-time-field {
+  position: relative;
+}
+
+.task-habit-time-trigger {
+  min-width: 0;
+  height: 30px;
+  flex: 1 1 auto;
+  padding: 0 var(--space-xs);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-graphite-input);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-meta);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.task-habit-time-trigger:hover,
+.task-habit-time-trigger:focus-visible,
+.task-habit-time-field:focus-within .task-habit-time-trigger {
+  border-color: var(--color-precision-blue);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+}
+
+.task-habits-workspace--list .task-habit-time-field.task-habit-setting--icon > .task-habit-time-trigger {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+  box-shadow: none;
+}
+
+.task-habits-workspace--list .task-habit-time-field.task-habit-setting--icon > .task-habit-time-trigger:hover,
+.task-habits-workspace--list .task-habit-time-field.task-habit-setting--icon > .task-habit-time-trigger:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.task-habit-time-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 220px;
+}
+
+.task-habits-workspace--list .task-habits-add .task-habit-setting:focus-within select,
+.task-habits-workspace--list .task-habits-add .task-habit-setting:focus-within input {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.task-habits-workspace--list .task-habit-schedule-fields.is-compact .task-habit-weekday-picker {
+  flex-basis: 100%;
+  justify-content: flex-end;
+}
+
+.task-habits-workspace--list .task-habits-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  margin-top: 0;
+}
+
+.task-habits-workspace--list .task-habits-list .task-row {
+  min-height: 52px;
+}
+
+.task-habits-workspace--list .task-habits-list .ui-list-row__trailing {
+  color: var(--color-text-muted);
+}
+
+.task-habits-add__controls,
+.task-habit-schedule-fields,
+.task-habit-meta-fields {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.task-habits-add__controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.task-habit-schedule-fields {
+  flex-wrap: wrap;
+}
+
+.task-habit-schedule-fields.is-compact,
+.task-habit-meta-fields.is-compact {
+  gap: 2px;
+}
+
+.task-habit-setting,
+.task-habit-date-setting,
+.task-habit-pause-form label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.task-habit-setting select,
+.task-habit-setting input,
+.task-habit-date-setting input,
+.task-habit-pause-form input,
+.task-habit-interval-input input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--color-graphite-input);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-meta);
+}
+
+.task-habit-setting select {
+  max-width: 142px;
+  padding: 0 var(--space-xs);
+}
+
+.task-habit-setting input {
+  width: 96px;
+  padding: 0 var(--space-xs);
+}
+
+.task-habits-add .task-habit-setting select,
+.task-habits-add .task-habit-setting input {
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.task-habit-setting:focus-within select,
+.task-habit-setting:focus-within input,
+.task-habit-date-setting:focus-within input,
+.task-habit-pause-form label:focus-within input,
+.task-habit-interval-input:focus-within input {
+  border-color: var(--color-precision-blue);
+  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+}
+
+.task-habit-setting__daypart {
+  display: inline-grid;
+  width: 13px;
+  height: 13px;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.task-habit-weekday-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.task-habit-day-chip {
+  display: inline-grid;
+  width: 28px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  cursor: pointer;
+}
+
+.task-habit-day-chip:hover,
+.task-habit-day-chip:focus-visible {
+  background: var(--color-graphite-hover);
+  color: var(--color-chalk-white);
+}
+
+.task-habit-day-chip.is-selected {
+  border-color: var(--color-precision-blue);
+  background: var(--color-precision-blue-soft);
+  color: var(--color-precision-blue-text);
+}
+
+.task-habit-interval-input {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.task-habit-interval-input input {
+  width: 42px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.task-habit-row__schedule {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-habit-detail-panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.task-habit-detail {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  color: var(--color-text-secondary);
+}
+
+.task-habit-detail__toolbar {
+  display: flex;
+  position: relative;
+  min-height: 48px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.task-habit-detail__actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.task-habit-detail__actions-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 190px;
+}
+
+.task-habit-detail__status {
+  min-width: 0;
+  flex: 1;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.task-habit-detail__body {
+  min-height: 0;
+  height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xl) var(--space-lg);
+  scrollbar-width: thin;
+}
+
+.task-habit-detail__title {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-chalk-white);
+  font: inherit;
+  font-size: var(--text-title);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.task-habit-detail__title:focus-visible {
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+}
+
+.task-habit-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+  margin-top: var(--space-lg);
+}
+
+.task-habit-detail__stats > div {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-panel);
+}
+
+.task-habit-detail__stats strong {
+  color: var(--color-chalk-white);
+  font-family: var(--font-data);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+}
+
+.task-habit-detail__stats span {
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+}
+
+.task-habit-detail__section {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.task-habit-detail__section-head {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.task-habit-detail__section-head h3 {
+  margin: 0;
+  color: var(--color-chalk-white);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+}
+
+.task-habit-detail__section-head > span {
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+}
+
+.task-habit-detail__section-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-habit-detail__section-toggle > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.task-habit-detail__section-toggle strong {
+  color: var(--color-chalk-white);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+}
+
+.task-habit-detail__section-toggle small {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-habit-detail__section-toggle > svg {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.task-habit-detail__section-toggle > svg.is-expanded {
+  transform: rotate(90deg);
+}
+
+.task-habit-detail__section-toggle:hover strong,
+.task-habit-detail__section-toggle:focus-visible strong {
+  color: var(--color-precision-blue-text);
+}
+
+.task-habit-history {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.task-habit-settings-content {
+  margin-top: var(--space-md);
+}
+
+.task-habit-settings-content .task-habit-schedule-fields,
+.task-habit-settings-content .task-habit-meta-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.task-habit-detail .task-habit-settings-content .task-habit-setting {
+  width: 100%;
+  min-height: 34px;
+  flex: none;
+}
+
+.task-habit-settings-content .task-habit-setting > svg {
+  flex: 0 0 14px;
+  color: var(--color-text-muted);
+}
+
+/* Settings are a quiet inline editor, not a stack of boxed inputs. */
+.task-habit-settings-content .task-habit-setting > .ui-field .ui-select-trigger,
+.task-habit-settings-content .task-habit-setting > input,
+.task-habit-settings-content .task-habit-time-trigger,
+.task-habit-settings-content .task-habit-date-setting input {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.task-habit-settings-content .task-habit-setting > .ui-field .ui-select-trigger:hover,
+.task-habit-settings-content .task-habit-setting > input:hover,
+.task-habit-settings-content .task-habit-time-trigger:hover,
+.task-habit-settings-content .task-habit-date-setting input:hover {
+  border-color: transparent;
+  background: var(--color-graphite-hover);
+}
+
+.task-habit-settings-content .task-habit-setting > .ui-field .ui-select-trigger:focus-visible,
+.task-habit-settings-content .task-habit-setting > input:focus-visible,
+.task-habit-settings-content .task-habit-time-trigger:focus-visible,
+.task-habit-settings-content .task-habit-date-setting input:focus-visible {
+  border-color: transparent;
+  box-shadow: var(--focus-ring);
+}
+
+.task-habit-settings-content .task-habit-setting:focus-within > input {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.task-habit-detail__pause-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--color-warning-ochre) 32%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-ochre);
+  font-size: var(--text-meta);
+}
+
+.task-habit-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.task-habit-week__day {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+  gap: 4px;
+  padding: 5px 2px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-graphite-panel);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.task-habit-week__day > span {
+  font-size: var(--text-micro);
+}
+
+.task-habit-week__day > strong {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+}
+
+.task-habit-week__day.is-completed > strong,
+.task-habit-month__day.is-completed {
+  background: var(--color-precision-blue);
+  color: var(--color-chalk-white);
+}
+
+.task-habit-week__day.is-scheduled > strong,
+.task-habit-month__day.is-scheduled {
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+}
+
+.task-habit-week__day.is-paused,
+.task-habit-month__day.is-paused {
+  opacity: 0.42;
+}
+
+.task-habit-week__day.is-today,
+.task-habit-month__day.is-today {
+  border-color: var(--color-precision-blue);
+}
+
+.task-habit-week__day:disabled,
+.task-habit-month__day:disabled {
+  cursor: default;
+}
+
+.task-habit-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.task-habit-month-nav button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.task-habit-month-nav button:hover,
+.task-habit-month-nav button:focus-visible {
+  background: var(--color-graphite-hover);
+  color: var(--color-chalk-white);
+}
+
+.task-habit-month__labels,
+.task-habit-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.task-habit-month__labels {
+  margin-bottom: 4px;
+}
+
+.task-habit-month__labels span {
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  text-align: center;
+}
+
+.task-habit-month__day,
+.task-habit-month__empty {
+  display: grid;
+  min-height: 30px;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+}
+
+.task-habit-month__day {
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.task-habit-month__day.is-scheduled {
+  border-color: var(--color-precision-blue);
+  background: var(--color-precision-blue-soft);
+  color: var(--color-precision-blue-text);
+}
+
+.task-habit-month__day.is-scheduled.is-past {
+  border-color: var(--color-danger-coral);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-coral);
+}
+
+.task-habit-month__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+}
+
+.task-habit-month__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-habit-month__legend i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.task-habit-month__legend i.is-completed { background: var(--color-precision-blue); }
+.task-habit-month__legend i.is-scheduled { border: 1px solid var(--color-border-strong); background: transparent; }
+.task-habit-month__legend i.is-overdue { background: var(--color-danger-coral); }
+.task-habit-month__legend i.is-paused { opacity: 0.42; }
+
+.task-habit-detail .task-habit-schedule-fields,
+.task-habit-detail .task-habit-meta-fields {
+  flex-wrap: wrap;
+  margin-bottom: var(--space-sm);
+}
+
+.task-habit-detail .task-habit-setting {
+  flex: 1 1 138px;
+}
+
+.task-habit-detail .task-habit-setting > .ui-field {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.task-habit-detail .task-habit-setting > .ui-field .ui-select-trigger {
+  height: 30px;
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-meta);
+}
+
+.task-habit-detail .task-habit-setting select,
+.task-habit-detail .task-habit-setting input {
+  width: 100%;
+  max-width: none;
+  flex: 1;
+}
+
+.task-habit-date-setting,
+.task-habit-pause-form {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.task-habit-date-setting span,
+.task-habit-pause-form label span {
+  flex: 1;
+  color: var(--color-text-muted);
+}
+
+.task-habit-date-setting input,
+.task-habit-pause-form input {
+  width: 142px;
+  padding: 0 var(--space-xs);
+}
+
+.task-habit-pause-form {
+  flex-wrap: wrap;
+}
+
+.task-habit-pause-form label {
+  flex: 1 1 122px;
+}
+
+.task-habit-pause-form label input {
+  width: 100%;
+}
+
+.task-habit-detail__hint {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+}
+
+.task-habit-detail__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
 @media ((max-width: 980px)) {
   .task-habits-overview {
     grid-template-columns: 1fr;
@@ -204,6 +1066,14 @@
 
   .task-habits-list {
     grid-template-columns: 1fr;
+  }
+
+  .task-habits-workspace--list {
+    padding: var(--space-lg);
+  }
+
+  .task-habits-add__controls {
+    justify-content: flex-start;
   }
 }
 
@@ -220,6 +1090,21 @@
 @media ((max-width: 760px)) {
   .task-habits-add {
     flex-direction: column;
+  }
+
+  .task-habits-add__controls,
+  .task-habit-schedule-fields,
+  .task-habit-meta-fields {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .task-habit-detail__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .task-habit-detail__body {
+    padding: var(--space-lg);
   }
 }
 

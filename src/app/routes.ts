@@ -2,10 +2,10 @@ import { lazy } from "react";
 import { createBrowserRouter, redirect } from "react-router";
 import Layout from "./layout/Layout";
 import { RouteErrorState, RouteLoadingState, RouteNotFoundState } from "./RouteStates";
+import ZadaniaPage from "./pages/Zadania";
+import KalendarzPage from "./pages/Kalendarz";
 
 const DzisiajPage = lazy(() => import("./pages/Dzisiaj"));
-const ZadaniaPage = lazy(() => import("./pages/Zadania"));
-const KalendarzPage = lazy(() => import("./pages/Kalendarz"));
 const NotatkiPage = lazy(() => import("./pages/Notatki"));
 const CelePage = lazy(() => import("./pages/Cele"));
 const CelSzczegolyPage = lazy(() => import("./pages/CelSzczegoly"));

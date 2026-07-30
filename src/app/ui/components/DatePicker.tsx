@@ -14,6 +14,7 @@ export interface DatePickerProps {
   required?: boolean;
   min?: string;
   max?: string;
+  portalZIndex?: number;
   fieldClassName?: string;
   "aria-label"?: string;
   "aria-labelledby"?: string;
@@ -99,6 +100,7 @@ export function DatePicker({
   required,
   min,
   max,
+  portalZIndex,
   fieldClassName = "",
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
@@ -296,7 +298,7 @@ export function DatePicker({
           aria-modal="false"
           aria-labelledby={`${dialogLabelId} ${monthHeadingId}`}
           className={`ui-date-picker ${position.above ? "ui-date-picker--above" : ""}`.trim()}
-          style={{ left: position.left, top: position.top }}
+          style={{ left: position.left, top: position.top, ...(portalZIndex ? { zIndex: portalZIndex } : {}) }}
           onKeyDown={handleDialogKeyDown}
         >
           <span id={dialogLabelId} className="ui-sr-only">

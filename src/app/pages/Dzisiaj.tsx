@@ -40,6 +40,7 @@ import {
 } from "../data/nutritionWorkspace";
 import {
   isHabitDoneOnDate,
+  isHabitScheduledOnDate,
   loadTaskWorkspace,
   TASK_STORAGE_KEY,
   toCalendarDateKey,
@@ -302,11 +303,12 @@ export default function Dzisiaj() {
     };
   }, []);
 
+  const habitsForToday = taskWorkspace.habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey));
   const habitDoneToday = (habit: WorkspaceHabit) => isHabitDoneOnDate(habit, todayKey);
-  const completedHabits = taskWorkspace.habits.filter(habitDoneToday).length;
-  const remainingHabits = taskWorkspace.habits.length - completedHabits;
-  const habitsProgress = percentage(completedHabits, taskWorkspace.habits.length);
-  const habitsState = moduleState(taskWorkspace.habits.length, remainingHabits);
+  const completedHabits = habitsForToday.filter(habitDoneToday).length;
+  const remainingHabits = habitsForToday.length - completedHabits;
+  const habitsProgress = percentage(completedHabits, habitsForToday.length);
+  const habitsState = moduleState(habitsForToday.length, remainingHabits);
 
   const todayTasks = useMemo(
     () => taskWorkspace.tasks.filter((task) => (
@@ -420,7 +422,7 @@ export default function Dzisiaj() {
     modulePreferences.order.filter((moduleId) => !modulePreferences.disabled.includes(moduleId)),
   );
   const totalDailyItems = (visibleModuleIds.has("tasks")
-    ? taskModuleTotal + taskWorkspace.habits.length
+    ? taskModuleTotal + habitsForToday.length
     : 0)
     + (visibleModuleIds.has("work") ? workTasksForToday.length : 0)
     + (visibleModuleIds.has("goals") ? todayGoals.length : 0)

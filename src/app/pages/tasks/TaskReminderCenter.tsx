@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, X } from "lucide-react";
 import { dueTaskReminders, type DueTaskReminder } from "../../data/taskSchedule";
-import type { WorkspaceTask } from "../../data/taskWorkspace";
+import { isHabitDoneOnDate, isHabitScheduledOnDate, type WorkspaceHabit, type WorkspaceTask } from "../../data/taskWorkspace";
+import { todayLocalDateKey } from "../../data/localDate";
 import { Button } from "../../ui";
 import "../../../styles/tasks.css";
 
@@ -21,7 +22,26 @@ function reminderTiming(reminder: DueTaskReminder) {
   return `Rozpoczyna się za ${minutes} min`;
 }
 
-export function TaskReminderCenter({ tasks }: { tasks: readonly WorkspaceTask[] }) {
+function dueHabitReminders(habits: readonly WorkspaceHabit[], fromExclusive: Date, throughInclusive: Date): DueTaskReminder[] {
+  const todayKey = todayLocalDateKey();
+  return habits.flatMap((habit) => {
+    if (!habit.time || habit.reminderMinutes === undefined || isHabitDoneOnDate(habit, todayKey) || !isHabitScheduledOnDate(habit, todayKey)) return [];
+    const startsAt = new Date(`${todayKey}T${habit.time}:00`);
+    if (Number.isNaN(startsAt.getTime())) return [];
+    const triggersAt = new Date(startsAt.getTime() - habit.reminderMinutes * 60_000);
+    if (triggersAt <= fromExclusive || triggersAt > throughInclusive) return [];
+    return [{
+      key: `habit:${habit.id}:${todayKey}:${habit.reminderMinutes}`,
+      taskId: habit.id,
+      taskText: habit.name,
+      occurrenceDate: todayKey,
+      startsAt,
+      triggersAt,
+    }];
+  });
+}
+
+export function TaskReminderCenter({ tasks, habits = [] }: { tasks: readonly WorkspaceTask[]; habits?: readonly WorkspaceHabit[] }) {
   const [reminders, setReminders] = useState<DueTaskReminder[]>([]);
   const [permission, setPermission] = useState<NotificationPermissionState>(notificationPermission);
   const [permissionPromptDismissed, setPermissionPromptDismissed] = useState(false);
@@ -32,10 +52,11 @@ export function TaskReminderCenter({ tasks }: { tasks: readonly WorkspaceTask[] 
     && !task.schedule?.allDay
     && task.schedule?.reminderMinutes !== undefined
   ));
+  const hasConfiguredHabitReminder = habits.some((habit) => habit.time !== undefined && habit.reminderMinutes !== undefined);
 
   const checkReminders = useCallback(() => {
     const now = new Date();
-    const due = dueTaskReminders(tasks, previousCheckRef.current, now)
+    const due = [...dueTaskReminders(tasks, previousCheckRef.current, now), ...dueHabitReminders(habits, previousCheckRef.current, now)]
       .filter((reminder) => !deliveredRef.current.has(reminder.key));
     previousCheckRef.current = now;
     if (!due.length) return;
@@ -53,7 +74,7 @@ export function TaskReminderCenter({ tasks }: { tasks: readonly WorkspaceTask[] 
       }
     }
     setReminders((current) => [...current, ...due].slice(-3));
-  }, [tasks]);
+  }, [habits, tasks]);
 
   useEffect(() => {
     const timer = window.setInterval(checkReminders, 15_000);
@@ -79,12 +100,12 @@ export function TaskReminderCenter({ tasks }: { tasks: readonly WorkspaceTask[] 
 
   if (
     reminders.length === 0
-    && (!hasConfiguredReminder || permission !== "default" || permissionPromptDismissed)
+    && (!hasConfiguredReminder && !hasConfiguredHabitReminder || permission !== "default" || permissionPromptDismissed)
   ) return null;
 
   return (
     <aside className="task-reminder-stack" aria-label="Przypomnienia o zadaniach">
-      {hasConfiguredReminder && permission === "default" && !permissionPromptDismissed && (
+      {(hasConfiguredReminder || hasConfiguredHabitReminder) && permission === "default" && !permissionPromptDismissed && (
         <div className="task-reminder-toast">
           <div>
             <strong>Powiadomienia systemowe są wyłączone</strong>

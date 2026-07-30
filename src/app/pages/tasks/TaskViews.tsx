@@ -73,6 +73,11 @@ export function TaskRow({
       divided={false}
       selected={selected}
       completed={task.done}
+      onClick={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest("button, a, input, textarea, select")) return;
+        onSelect(task.id);
+      }}
       title={task.text}
       subtitle={subtitle}
       // The rail shows the start; a finish time only appears when one is set.

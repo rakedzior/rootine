@@ -4,13 +4,18 @@ import { setWorkspacePayloadStoreForTests } from "./localRepository";
 import { projectTaskOccurrences } from "./taskSchedule";
 import {
   emptyTaskTrash,
+  getHabitCurrentStreak,
+  habitDayState,
+  isHabitScheduledOnDate,
   loadTaskWorkspaceResult,
   purgeTask,
   restoreTask,
   saveTaskWorkspace,
+  setHabitCompletionOnDate,
   taskViewForCalendarDate,
   trashTask,
   type TaskWorkspace,
+  type WorkspaceHabit,
 } from "./taskWorkspace";
 
 describe("task workspace", () => {
@@ -217,5 +222,39 @@ describe("task workspace", () => {
     expect(restoreTask(trashed, 1).tasks.find((task) => task.id === 1)?.deleted).toBe(false);
     expect(purgeTask(trashed, 2).tasks.map((task) => task.id)).toEqual([1]);
     expect(emptyTaskTrash(trashed).tasks).toEqual([]);
+  });
+
+  it("schedules habits on selected weekdays and counts streaks by planned days", () => {
+    const habit: WorkspaceHabit = {
+      id: 1,
+      name: "Czytanie",
+      streak: 0,
+      done: false,
+      completedDates: ["2026-07-27", "2026-07-29"],
+      schedule: { type: "weekly", weekdays: [1, 3], interval: 1, startDate: "2026-07-27" },
+    };
+
+    expect(isHabitScheduledOnDate(habit, "2026-07-28")).toBe(false);
+    expect(isHabitScheduledOnDate(habit, "2026-07-29")).toBe(true);
+    expect(getHabitCurrentStreak(habit, "2026-07-29")).toBe(2);
+  });
+
+  it("keeps paused days out of the streak and allows correcting history", () => {
+    const habit: WorkspaceHabit = {
+      id: 2,
+      name: "Spacer",
+      streak: 0,
+      done: false,
+      completedDates: ["2026-07-27", "2026-07-30"],
+      schedule: { type: "daily", startDate: "2026-07-25" },
+      pausePeriods: [{ startDate: "2026-07-28", endDate: "2026-07-29" }],
+    };
+
+    expect(habitDayState(habit, "2026-07-28")).toBe("paused");
+    expect(getHabitCurrentStreak(habit, "2026-07-30")).toBe(2);
+    const corrected = setHabitCompletionOnDate(habit, "2026-07-26", true);
+    expect(corrected.completedDates).toContain("2026-07-26");
+    const historical = setHabitCompletionOnDate(habit, "2026-07-24", true);
+    expect(habitDayState(historical, "2026-07-24")).toBe("completed");
   });
 });

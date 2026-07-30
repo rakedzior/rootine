@@ -1,5 +1,67 @@
 /* Route-owned tasks styles. Loaded only by the relevant lazy route. */
 
+/*
+ * The task list is a working surface, not a full-bleed canvas. Keep the toolbar,
+ * composer and every group on the same readable axis so the eye never has to
+ * follow three different left edges.
+ */
+.task-module-main {
+  --task-content-width: 100%;
+}
+
+.task-module-main .task-workspace-toolbar {
+  padding-inline: var(--space-3xl);
+}
+
+.task-module-main .task-content {
+  padding: var(--space-xl) var(--space-3xl) var(--space-2xl);
+  scrollbar-width: none;
+}
+
+.task-module-main .task-content::-webkit-scrollbar { display: none; }
+
+.task-module-main .task-content > * {
+  width: min(100%, var(--task-content-width));
+  margin-inline: auto;
+}
+
+.task-module-main .task-entry {
+  margin: 0 0 var(--space-xl);
+  border-radius: var(--radius-lg);
+}
+
+.task-module-main .task-list {
+  display: grid;
+  gap: 2px;
+}
+
+.task-module-main .task-list--pending { margin-bottom: var(--space-md); }
+
+.task-module-main .task-completed { margin-top: var(--space-md); }
+
+.task-module-main .task-completed > button {
+  margin: 0 4px var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.task-module-main .task-row {
+  min-height: 52px;
+  padding-block: var(--space-sm);
+  border-radius: var(--radius-md);
+}
+
+.task-module-main .task-row:hover {
+  background: var(--color-graphite-hover);
+}
+
+.task-module-main .task-row.ui-list-row--meta-inline > .ui-list-row__copy {
+  flex: 1 1 auto;
+}
+
+.task-module-main .task-row .ui-list-row__trailing {
+  justify-content: flex-end;
+}
+
 .task-toolbar-actions,
 .task-view-switch {
   display: flex;
@@ -22,11 +84,6 @@
 .task-view-switch .ui-button {
   min-width: 28px;
   height: 28px;
-}
-
-.task-content > * {
-  width: min(100%, 1200px);
-  margin-inline: auto;
 }
 
 .task-detail-panel {
@@ -69,6 +126,14 @@
 
   .task-content {
     padding: var(--space-lg) !important;
+  }
+
+  .task-module-main .task-workspace-toolbar {
+    padding-inline: var(--space-lg);
+  }
+
+  .task-module-main .task-content > * {
+    width: 100%;
   }
 }
 
@@ -227,13 +292,13 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--color-danger-coral);
   cursor: pointer;
 }
 
 .task-overdue-toggle:hover {
-  background: var(--color-graphite-hover);
-  color: var(--color-chalk-white);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-coral);
 }
 
 .task-overdue-toggle svg {
@@ -242,14 +307,14 @@
 
 .task-overdue-title {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-danger-coral);
   font-size: 13px;
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }
 
 .task-overdue-count {
-  color: var(--color-text-muted);
+  color: var(--color-danger-coral);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   line-height: 1;
@@ -954,6 +1019,69 @@ input.task-entry-input:focus-visible {
 
 .task-sched__field-body { padding: 0 var(--space-md) var(--space-sm); }
 
+.task-sched__time-menu {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+}
+
+.task-sched__time-options {
+  display: grid;
+  max-height: 176px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  overflow-y: auto;
+  padding: var(--space-xs);
+  scrollbar-width: thin;
+}
+
+.task-sched__time-options button {
+  min-height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.task-sched__time-options button:hover,
+.task-sched__time-options button:focus-visible {
+  outline: 0;
+  background: var(--color-graphite-hover);
+  color: var(--color-chalk-white);
+}
+
+.task-sched__time-options button.is-selected {
+  background: var(--color-precision-blue-soft);
+  color: var(--color-precision-blue-text);
+}
+
+.task-sched__time-menu-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 10px;
+}
+
+.task-sched__time-menu-input > svg { flex: 0 0 auto; color: var(--color-precision-blue-text); }
+
+.task-sched__time-menu-input input {
+  min-width: 0;
+  flex: 1;
+  padding: var(--space-xs) 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-precision-blue-text);
+  font-family: var(--font-data);
+  font-size: var(--text-body);
+}
+
+.task-sched__time-menu-input input:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+
 .task-sched__tz {
   display: flex;
   align-items: center;
@@ -1471,16 +1599,50 @@ input.task-entry-input:focus-visible {
   padding: 2px var(--space-xs);
   border: 0;
   border-radius: var(--radius-xs);
-  background: var(--color-graphite-card);
+  background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
 }
+
+.task-nav__row-action:hover { background: var(--color-graphite-hover); }
 
 .task-nav__row-action--danger { color: var(--color-danger-coral); }
 
 .task-nav__footer { padding: var(--space-md) var(--space-sm); border-top: 1px solid var(--color-border-subtle); }
 
 .task-nav__group-toggle > svg.is-open { transform: rotate(90deg); }
+
+.task-nav__taxonomy-row {
+  position: relative;
+}
+
+.task-nav__taxonomy-row > .context-nav-item {
+  padding-right: 62px;
+}
+
+.task-nav__taxonomy-row > .task-taxonomy-actions {
+  right: var(--space-sm);
+}
+
+.task-nav__show-all {
+  display: block;
+  width: calc(100% - var(--space-md));
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-md);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-precision-blue-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-nav__show-all:hover {
+  background: var(--color-precision-blue-soft);
+  color: var(--color-chalk-white);
+}
 
 /* Task entry composer. */
 

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Bell,
   Calendar,
@@ -86,6 +87,58 @@ function TimePicker({
 }
 
 // ── Date Picker Popup ─────────────────────────────────────
+const HALF_HOUR_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const minutes = index * 30;
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+});
+
+export function DurationTimePicker({
+  value,
+  label,
+  editMode,
+  onChange,
+  onClose,
+}: {
+  value: string;
+  label: string;
+  editMode: "options" | "manual";
+  onChange: (value: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="task-sched__time-menu" role="group" aria-label={`${label} — wybór godziny`}>
+      {editMode === "options" ? (
+        <div className="task-sched__time-options" role="listbox" aria-label={`${label} — co pół godziny`}>
+          {HALF_HOUR_OPTIONS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="option"
+              aria-selected={option === value}
+              className={option === value ? "is-selected" : undefined}
+              onClick={() => { onChange(option); onClose(); }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="task-sched__time-menu-input">
+          <Clock size={13} strokeWidth={1.5} aria-hidden="true" />
+          <input
+            type="time"
+            step={1800}
+            aria-label={label}
+            value={value}
+            onChange={(event) => onChange(event.currentTarget.value)}
+            autoFocus
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DatePickerPopup({
   value, onConfirm, onClose, anchorEl, placementAnchorEl, dateOnly = false,
 }: {
@@ -112,6 +165,7 @@ export function DatePickerPopup({
   const [showRem,        setShowRem]        = useState(false);
   const [showRep,        setShowRep]        = useState(false);
   const [openTimeField,  setOpenTimeField]  = useState<"start" | "koniec" | null>(null);
+  const [timeEditMode,   setTimeEditMode]   = useState<"options" | "manual">("options");
   const [allDay,         setAllDay]         = useState(value.allDay);
   const [showDurRem,     setShowDurRem]     = useState(false);
   const [showDurRep,     setShowDurRep]     = useState(false);
@@ -241,7 +295,7 @@ export function DatePickerPopup({
     setStartTime("09:00"); setEndTime("10:00"); setAllDay(true);
   };
 
-  return (
+  return createPortal((
     <div
       ref={popRef}
       role="dialog"
@@ -304,6 +358,7 @@ export function DatePickerPopup({
             label="Data zadania"
             value={selDate ? toCalendarDateKey(selDate) : ""}
             onChange={(dateKey) => setSelDate(dateKey ? new Date(`${dateKey}T12:00:00`) : null)}
+            portalZIndex={10001}
           />
 
           {dateOnly ? (
@@ -403,7 +458,7 @@ export function DatePickerPopup({
 
           {/* Rozpocznij / Koniec rows */}
           {([
-            { label: "Rozpocznij", timeVal: startTime, field: "start" as const },
+            { label: "Start", timeVal: startTime, field: "start" as const },
             { label: "Koniec", timeVal: endTime, field: "koniec" as const },
           ]).map(({ label, timeVal, field }) => {
             const open    = openTimeField === field;
@@ -415,7 +470,15 @@ export function DatePickerPopup({
                   <button
                     type="button"
                     disabled={allDay}
-                    onClick={() => { if (!allDay) setOpenTimeField(open ? null : field); }}
+                    onClick={() => {
+                      if (allDay) return;
+                      if (!open) {
+                        setOpenTimeField(field);
+                        setTimeEditMode("options");
+                      } else {
+                        setTimeEditMode(mode => mode === "options" ? "manual" : "options");
+                      }
+                    }}
                     className={`task-sched__chip${open ? " is-open" : ""}${timeVal ? " has-value" : ""}`}
                   >
                     {timeVal || "--:--"}
@@ -424,13 +487,15 @@ export function DatePickerPopup({
                 {/* Inline time picker */}
                 {open && !allDay && (
                   <div className="task-sched__field-body">
-                    <TimePicker
+                    <DurationTimePicker
                       value={timeVal}
-                      label={field === "start" ? "Godzina rozpoczęcia" : "Godzina zakończenia"}
+                      editMode={timeEditMode}
+                      label={field === "start" ? "Godzina startu" : "Godzina zakończenia"}
                       onChange={v => {
                         if (field === "start") { setStartTime(v); setTime(v); }
                         else setEndTime(v);
                       }}
+                      onClose={() => setOpenTimeField(null)}
                     />
                   </div>
                 )}
@@ -536,7 +601,7 @@ export function DatePickerPopup({
         </button>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 // ── Task row ──────────────────────────────────────────────

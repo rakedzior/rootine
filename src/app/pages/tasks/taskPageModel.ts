@@ -74,6 +74,9 @@ export const SMART_VIEWS = [
   { id: "podsumowanie", label: "Podsumowanie",  icon: BarChart2  },
 ];
 
+export const PRIMARY_SMART_VIEWS = SMART_VIEWS.filter((view) => view.id !== "nawyki" && view.id !== "podsumowanie");
+export const SPECIAL_SMART_VIEWS = SMART_VIEWS.filter((view) => view.id === "nawyki" || view.id === "podsumowanie");
+
 export const VIEW_LABELS: Record<string, string> = {
   wszystkie:    "Wszystkie zadania",
   skrzynka:     "Skrzynka zadań",
@@ -96,7 +99,67 @@ export const PALETTE = [
   C.iceBlue, C.seaGlass, C.warning, C.danger,
   C.textSecond, uiColors.violet,
 ];
-export const VISIBLE_TAG_LIMIT = 6;
+export const VISIBLE_TAG_LIMIT = 4;
+
+export function formatOpenTaskCount(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  const adjective = count === 1 || (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14))
+    ? "otwarte"
+    : "otwartych";
+  return `${count} ${adjective}`;
+}
+
+export type TaskSidebarState = {
+  taskView: string;
+  listFilter: string | null;
+  tagFilter: string | null;
+  listyOpen: boolean;
+  tagiOpen: boolean;
+};
+
+const TASK_SIDEBAR_STATE_KEY = "rootine.tasks.sidebar.v1";
+const DEFAULT_TASK_SIDEBAR_STATE: TaskSidebarState = {
+  taskView: "dzis",
+  listFilter: null,
+  tagFilter: null,
+  // Keep both taxonomy groups visible on first visit. Once the user changes
+  // either group, the explicit preference is persisted and shared by both
+  // task views.
+  listyOpen: true,
+  tagiOpen: true,
+};
+
+export function loadTaskSidebarState(): TaskSidebarState {
+  if (typeof window === "undefined") return DEFAULT_TASK_SIDEBAR_STATE;
+  try {
+    const raw = window.localStorage.getItem(TASK_SIDEBAR_STATE_KEY);
+    if (!raw) return DEFAULT_TASK_SIDEBAR_STATE;
+    const parsed = JSON.parse(raw) as Partial<TaskSidebarState>;
+    return {
+      ...DEFAULT_TASK_SIDEBAR_STATE,
+      ...parsed,
+      listFilter: typeof parsed.listFilter === "string" ? parsed.listFilter : null,
+      tagFilter: typeof parsed.tagFilter === "string" ? parsed.tagFilter : null,
+      listyOpen: parsed.listyOpen === true,
+      tagiOpen: parsed.tagiOpen === true,
+    };
+  } catch {
+    return DEFAULT_TASK_SIDEBAR_STATE;
+  }
+}
+
+export function saveTaskSidebarState(patch: Partial<TaskSidebarState>): TaskSidebarState {
+  const next = { ...loadTaskSidebarState(), ...patch };
+  if (typeof window === "undefined") return next;
+  try {
+    window.localStorage.setItem(TASK_SIDEBAR_STATE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("rootine:task-sidebar-change", { detail: next }));
+  } catch {
+    // Sidebar preferences are optional; navigation must continue without storage.
+  }
+  return next;
+}
 
 
 
