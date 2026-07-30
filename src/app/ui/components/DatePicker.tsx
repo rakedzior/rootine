@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./Button";
@@ -14,6 +14,7 @@ export interface DatePickerProps {
   required?: boolean;
   min?: string;
   max?: string;
+  displayValue?: ReactNode;
   portalZIndex?: number;
   fieldClassName?: string;
   "aria-label"?: string;
@@ -100,6 +101,7 @@ export function DatePicker({
   required,
   min,
   max,
+  displayValue: customDisplayValue,
   portalZIndex,
   fieldClassName = "",
   "aria-label": ariaLabel,
@@ -131,7 +133,7 @@ export function DatePicker({
   const [position, setPosition] = useState({ left: 0, top: 0, above: false });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
-  const displayValue = selectedDate ? dateFormatter.format(selectedDate) : "Wybierz datę";
+  const displayValue = customDisplayValue ?? (selectedDate ? dateFormatter.format(selectedDate) : "Wybierz datę");
   const fallbackLabel = !label && !ariaLabelledBy && !ariaLabel ? "Data" : undefined;
   const purposeLabelId = ariaLabelledBy
     ?? (label ? labelId : ariaLabel || fallbackLabel ? hiddenTriggerLabelId : undefined);

@@ -52,8 +52,18 @@ export interface NutritionGoals {
 export interface WeightMeasurement {
   date: string;
   weightKg: number;
+  note?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface BodyMeasurement {
+  id: string;
+  date: string;
+  type: string;
+  valueCm: number;
+  note?: string;
+  createdAt: string;
 }
 
 export interface NutritionWorkspace {
@@ -63,6 +73,7 @@ export interface NutritionWorkspace {
   calculatorProfile?: NutritionCalculatorProfile;
   macroConfiguration: MacroConfiguration;
   weightMeasurements: Record<string, WeightMeasurement>;
+  bodyMeasurements?: Record<string, BodyMeasurement[]>;
   days: Record<string, NutritionDay>;
 }
 
@@ -105,6 +116,7 @@ export function createEmptyNutritionWorkspace(): NutritionWorkspace {
     goals: { ...DEFAULT_NUTRITION_GOALS },
     macroConfiguration: { ...DEFAULT_MACRO_CONFIGURATION },
     weightMeasurements: {},
+    bodyMeasurements: {},
     days: {},
   };
 }
@@ -216,9 +228,32 @@ function normalizeWeightMeasurement(date: string, value: unknown): WeightMeasure
   return {
     date,
     weightKg: value.weightKg,
+    note: typeof value.note === "string" ? value.note : undefined,
     createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date(0).toISOString(),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
   };
+}
+
+function normalizeBodyMeasurements(value: unknown): Record<string, BodyMeasurement[]> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([type, measurements]) => {
+      const normalized = Array.isArray(measurements)
+        ? measurements.flatMap((measurement) => {
+          if (!isRecord(measurement) || typeof measurement.id !== "string" || typeof measurement.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(measurement.date) || typeof measurement.type !== "string" || typeof measurement.valueCm !== "number" || !Number.isFinite(measurement.valueCm) || measurement.valueCm <= 0 || measurement.valueCm > 300) return [];
+          return [{
+            id: measurement.id,
+            date: measurement.date,
+            type: measurement.type,
+            valueCm: measurement.valueCm,
+            note: typeof measurement.note === "string" ? measurement.note : undefined,
+            createdAt: typeof measurement.createdAt === "string" ? measurement.createdAt : new Date(0).toISOString(),
+          } satisfies BodyMeasurement];
+        })
+        : [];
+      return [type, normalized] as const;
+    }),
+  );
 }
 
 function isFiniteNonNegative(value: unknown): value is number {
@@ -289,6 +324,7 @@ function isNutritionWorkspace(value: unknown): value is NutritionWorkspace {
     && isMacroConfiguration(value.macroConfiguration)
     && isRecord(value.weightMeasurements)
     && Object.entries(value.weightMeasurements).every(([date, measurement]) => normalizeWeightMeasurement(date, measurement) !== null)
+    && (value.bodyMeasurements === undefined || isRecord(value.bodyMeasurements))
     && isRecord(value.days)
     && Object.entries(value.days).every(([date, day]) => isNutritionDay(date, day));
 }
@@ -329,6 +365,7 @@ function migrateNutritionWorkspace(value: unknown): NutritionWorkspace | null {
     calculatorProfile: normalizeNutritionCalculatorProfile(value.calculatorProfile),
     macroConfiguration: normalizeMacroConfiguration(value.macroConfiguration),
     weightMeasurements,
+    bodyMeasurements: normalizeBodyMeasurements(value.bodyMeasurements),
     days,
   };
 }

@@ -90,7 +90,6 @@ export interface MacroDraft {
 export interface CalculationSyncState {
   calories: boolean;
   macros: boolean;
-  water: boolean;
 }
 
 export type CalculatorErrorField = "equationVariant" | "age" | "weightKg" | "heightCm" | "workActivity" | "activities" | "dietAdjustmentMode" | "dietAdjustmentValue";

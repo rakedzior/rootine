@@ -8,7 +8,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
-  CalendarDays,
   ChartNoAxesCombined,
   CheckCircle2,
   ChevronDown,
@@ -25,6 +24,7 @@ import {
   Scale,
   Settings,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   Badge,
@@ -55,7 +55,6 @@ import {
   type NutritionValues,
 } from "../data/nutritionCatalog";
 import {
-  createDemoNutritionDay,
   createEmptyNutritionDay,
   createEmptyNutritionWorkspace,
   loadNutritionWorkspace,
@@ -135,13 +134,19 @@ export default function Odzywanie() {
   const [calculationSync, setCalculationSync] = useState<CalculationSyncState>({
     calories: false,
     macros: false,
-    water: false,
   });
   const [goalError, setGoalError] = useState("");
   const [weightDialog, setWeightDialog] = useState<WeightDialog>(null);
-  const [weightDraft, setWeightDraft] = useState({ date: nutritionDateKey(), weightKg: "" });
+  const [weightInlineOpen, setWeightInlineOpen] = useState(false);
+  const [weightDraft, setWeightDraft] = useState({ date: nutritionDateKey(), weightKg: "", note: "" });
   const [weightError, setWeightError] = useState("");
   const [analysisRange, setAnalysisRange] = useState<NutritionAnalysisRange>(30);
+  const [waterCustomAmount, setWaterCustomAmount] = useState("");
+  const [waterEditOpen, setWaterEditOpen] = useState(false);
+  const [waterEditDraft, setWaterEditDraft] = useState("");
+  const [waterEditError, setWaterEditError] = useState("");
+  const [waterCalculatorMode, setWaterCalculatorMode] = useState<"simple" | "advanced">("simple");
+  const [waterSimpleWeight, setWaterSimpleWeight] = useState("");
   const [storageFailed, setStorageFailed] = useState(false);
   const [undoEntry, setUndoEntry] = useState<{ meal: MealSlot; entry: NutritionEntry } | null>(null);
 
@@ -174,10 +179,13 @@ export default function Odzywanie() {
     [analysisEndDate, workspace.weightMeasurements],
   );
   const latestWeight = weightHistory[weightHistory.length - 1];
-  const previousWeight = weightHistory[weightHistory.length - 2];
-  const latestWeightChange = latestWeight && previousWeight
-    ? latestWeight.weightKg - previousWeight.weightKg
-    : null;
+  const simpleWaterWeightValue = parseDraftNumber(waterSimpleWeight);
+  const simpleWaterMin = simpleWaterWeightValue >= 20 && simpleWaterWeightValue <= 500
+    ? Math.round((simpleWaterWeightValue * 30) / 50) * 50
+    : 0;
+  const simpleWaterMax = simpleWaterWeightValue >= 20 && simpleWaterWeightValue <= 500
+    ? Math.round((simpleWaterWeightValue * 35) / 50) * 50
+    : 0;
 
   useEffect(() => {
     if (!goalDialog) return;
@@ -205,17 +213,12 @@ export default function Odzywanie() {
         }
       }
 
-      if (goalDialog === "water" && calculationSync.water && calculatorResult) {
-        updates.waterMl = String(calculatorResult.waterTargetMl);
-      }
-
       const changed = Object.entries(updates).some(([field, value]) => current[field as keyof typeof current] !== value);
       return changed ? { ...current, ...updates } : current;
     });
   }, [
     calculationSync.calories,
     calculationSync.macros,
-    calculationSync.water,
     calculatorProfile,
     calculatorResult,
     goalDialog,
@@ -521,6 +524,31 @@ export default function Odzywanie() {
     updateDay((current) => ({ ...current, waterMl: Math.max(0, Math.min(20_000, current.waterMl + delta)) }));
   };
 
+  const openWaterEdit = () => {
+    if (dayClosed) return;
+    setWaterEditDraft(String(day.waterMl));
+    setWaterEditError("");
+    setWaterEditOpen(true);
+  };
+
+  const saveWaterEdit = () => {
+    const amount = Math.round(parseDraftNumber(waterEditDraft));
+    if (!Number.isFinite(amount) || amount < 0 || amount > 20_000) {
+      setWaterEditError("Wpisz ilość od 0 do 20 000 ml.");
+      return;
+    }
+    updateDay((current) => ({ ...current, waterMl: amount }));
+    setWaterEditOpen(false);
+    setWaterEditError("");
+  };
+
+  const addCustomWater = () => {
+    const amount = Math.round(parseDraftNumber(waterCustomAmount));
+    if (amount <= 0) return;
+    changeWater(amount);
+    setWaterCustomAmount("");
+  };
+
   const toggleDayClosed = () => {
     if (selectedDate > today) return;
     updateDay((current) => ({
@@ -539,24 +567,49 @@ export default function Odzywanie() {
     });
     setCalculatorDraft(createCalculatorDraft(workspace.calculatorProfile));
     setMacroDraft(createMacroDraft(workspace.macroConfiguration));
-    setCalculationSync({ calories: false, macros: false, water: false });
+    setCalculationSync({ calories: false, macros: false });
     setCalculatorErrors({});
     setGoalError("");
+    if (dialog === "water") {
+      setWaterCalculatorMode("simple");
+      setWaterSimpleWeight(String(latestWeight?.weightKg ?? workspace.calculatorProfile?.weightKg ?? "").replace(".", ","));
+    }
     setGoalDialog(dialog);
   };
 
   const openWeightMeasurement = () => {
     const measurementDate = selectedDate > today ? today : selectedDate;
     const existing = workspace.weightMeasurements[measurementDate];
-    const suggestedWeight = existing?.weightKg
-      ?? latestWeight?.weightKg
-      ?? workspace.calculatorProfile?.weightKg;
     setWeightDraft({
       date: measurementDate,
-      weightKg: suggestedWeight ? String(suggestedWeight) : "",
+      weightKg: existing ? String(existing.weightKg).replace(".", ",") : "",
+      note: existing?.note ?? "",
     });
     setWeightError("");
-    setWeightDialog("measurement");
+    setWeightInlineOpen(true);
+  };
+
+  const editLatestWeight = () => {
+    if (!latestWeight) return;
+    const existing = workspace.weightMeasurements[latestWeight.date];
+    setWeightDraft({
+      date: latestWeight.date,
+      weightKg: String(latestWeight.weightKg).replace(".", ","),
+      note: existing?.note ?? "",
+    });
+    setWeightError("");
+    setWeightInlineOpen(true);
+  };
+
+  const removeLatestWeight = () => {
+    if (!latestWeight) return;
+    commitWorkspace((current) => {
+      const nextMeasurements = { ...current.weightMeasurements };
+      delete nextMeasurements[latestWeight.date];
+      return { ...current, weightMeasurements: nextMeasurements };
+    });
+    setWeightInlineOpen(false);
+    setWeightError("");
   };
 
   const saveWeightMeasurement = (event: FormEvent<HTMLFormElement>) => {
@@ -581,13 +634,15 @@ export default function Odzywanie() {
           [weightDraft.date]: {
             date: weightDraft.date,
             weightKg: Math.round(weightKg * 10) / 10,
+            note: weightDraft.note.trim() || undefined,
             createdAt: existing?.createdAt ?? now,
             updatedAt: existing ? now : undefined,
           },
         },
       };
     });
-    closeWeightDialog();
+    setWeightInlineOpen(false);
+    setWeightError("");
   };
 
   const changeCalculatorField = (field: Exclude<keyof CalculatorDraft, "activities">, value: string) => {
@@ -639,8 +694,10 @@ export default function Odzywanie() {
     value: string,
   ) => {
     setGoalDraft((current) => ({ ...current, [field]: value }));
-    const syncGroup = field === "calories" ? "calories" : field === "waterMl" ? "water" : "macros";
-    setCalculationSync((current) => current[syncGroup] ? { ...current, [syncGroup]: false } : current);
+    if (field === "calories" || field === "protein" || field === "carbs" || field === "fat") {
+      const syncGroup = field === "calories" ? "calories" : "macros";
+      setCalculationSync((current) => current[syncGroup] ? { ...current, [syncGroup]: false } : current);
+    }
     setGoalError("");
   };
 
@@ -684,16 +741,6 @@ export default function Odzywanie() {
     setGoalError("");
   };
 
-  const useCalculatedWater = () => {
-    const parsed = parseCalculatorDraft(calculatorDraft);
-    setCalculatorErrors(parsed.errors);
-    if (!parsed.profile) return;
-    const result = calculateNutritionTargets(parsed.profile);
-    setGoalDraft((current) => ({ ...current, waterMl: String(result.waterTargetMl) }));
-    setCalculationSync((current) => ({ ...current, water: true }));
-    setGoalError("");
-  };
-
   const saveNutritionGoals = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const next = {
@@ -732,17 +779,11 @@ export default function Odzywanie() {
     commitWorkspace((current) => ({
       ...current,
       goals: { ...current.goals, waterMl },
-      calculatorProfile: parsedCalculator.profile ?? current.calculatorProfile,
+      calculatorProfile: waterCalculatorMode === "advanced"
+        ? parsedCalculator.profile ?? current.calculatorProfile
+        : current.calculatorProfile,
     }));
     closeGoalDialog();
-  };
-
-  const loadDemoDay = () => {
-    if (dayClosed) return;
-    commitWorkspace((current) => ({
-      ...current,
-      days: { ...current.days, [selectedDate]: createDemoNutritionDay(selectedDate) },
-    }));
   };
 
   const clearDemoDay = () => {
@@ -825,18 +866,6 @@ export default function Odzywanie() {
           title="Odżywianie"
           description="Dzienny rejestr posiłków, makroskładników i nawodnienia"
           meta={headerMeta}
-          actions={loadStatus !== "corrupt" ? (
-            <Button
-              variant="primary"
-              size="sm"
-              leadingIcon={<Plus size={13} />}
-              disabled={dayClosed}
-              title={dayClosed ? "Otwórz dzień, aby dodać produkt." : undefined}
-              onClick={() => openEntryDialog()}
-            >
-              Dodaj produkt
-            </Button>
-          ) : undefined}
         />
       )}
     >
@@ -860,18 +889,16 @@ export default function Odzywanie() {
         </div>
       ) : (
         <>
-          <div className="nutrition-toolbar flex flex-wrap items-center justify-between gap-3 border-b px-7 py-3" style={{ borderColor: uiColors.borderSubtle, background: uiColors.graphiteCanvas }}>
-            <div className="flex items-center gap-2">
+          <div className="nutrition-toolbar" style={{ borderColor: uiColors.borderSubtle, background: uiColors.graphiteCanvas }}>
+            <div className="nutrition-toolbar__date">
               <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}>
                 <ChevronLeft size={14} />
               </Button>
-              {/* A toolbar sits among custom-styled controls, so it uses the shared DatePicker.
-                  The native <Input type="date"> widget stays in modal forms, where the OS
-                  picker is an advantage on touch devices. */}
               <DatePicker
                 value={selectedDate}
                 onChange={(value) => setSelectedDate(value || today)}
                 aria-label="Wybrany dzień"
+                displayValue={formatDate(selectedDate)}
                 fieldClassName="nutrition-date-input"
               />
               <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}>
@@ -879,9 +906,10 @@ export default function Odzywanie() {
               </Button>
               {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => setSelectedDate(today)}>Dzisiaj</Button>}
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <CalendarDays size={13} style={{ color: uiColors.textMuted }} />
-              <span className="capitalize" style={{ color: uiColors.textSecondary, fontSize: "var(--text-meta)" }}>{formatDate(selectedDate)}</span>
+            <div className="nutrition-toolbar__actions">
+              <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={13} />} onClick={() => setWeightDialog("analysis")}>
+                Analiza
+              </Button>
               {day.source === "demo" && <Button variant="quiet" size="sm" disabled={dayClosed} onClick={clearDemoDay}>Wyczyść przykład</Button>}
               <Button
                 variant="quiet"
@@ -912,115 +940,73 @@ export default function Odzywanie() {
               </Card>
             )}
             <div className="nutrition-layout w-full">
-              <section className="min-w-0">
+              <section className="nutrition-meals-panel min-w-0">
                 <SectionHeader
-                  title="Rejestr posiłków"
+                  title="Posiłki"
                   description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} kcal`}
-                  action={<Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} onClick={() => openEntryDialog()}>Dodaj</Button>}
+                  action={<Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} onClick={() => openEntryDialog()}>Dodaj produkt</Button>}
                 />
 
-                {allEntries.length === 0 && (
-                  <div className="nutrition-empty-day-note">
-                    <span>Każdy posiłek jest gotowy na pierwszy produkt.</span>
-                    <Button variant="ghost" size="sm" disabled={dayClosed} onClick={loadDemoDay}>Wczytaj przykład</Button>
-                  </div>
-                )}
+                <div className="nutrition-meal-list">
+                  {MEAL_META.map(({ id, label, icon: Icon }) => {
+                    const mealEntries = day.entries[id];
+                    const mealTotals = sumEntries(mealEntries);
+                    return (
+                      <section key={id} className="nutrition-meal-card" aria-labelledby={`meal-${id}`}>
+                        <div className="nutrition-meal-card__header">
+                          <div className="nutrition-meal-card__identity">
+                            <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
+                            <h3 id={`meal-${id}`}>{label}</h3>
+                            <Badge tone="neutral">{mealEntries.length}</Badge>
+                          </div>
+                          <div className="nutrition-meal-summary" aria-label={`Podsumowanie ${label}`}>
+                            <span className="nutrition-meal-summary__metric is-portion"><small>Porcja</small></span>
+                            <span className="nutrition-meal-summary__metric is-protein"><small>B</small>{formatNumber(mealTotals.protein)} g</span>
+                            <span className="nutrition-meal-summary__metric is-carbs"><small>W</small>{formatNumber(mealTotals.carbs)} g</span>
+                            <span className="nutrition-meal-summary__metric is-fat"><small>T</small>{formatNumber(mealTotals.fat)} g</span>
+                            <span className="nutrition-meal-summary__metric is-calories"><small>kcal</small>{formatNumber(mealTotals.calories)}</span>
+                          </div>
+                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
+                            <Plus size={13} />
+                          </Button>
+                        </div>
 
-                <Card padding="none" tone="panel" className="overflow-hidden">
-                  <div className="nutrition-ledger-scroll overflow-x-auto [scrollbar-width:thin]">
-                    <table className="nutrition-ledger-table">
-                      <caption className="sr-only">Produkty i makroskładniki dla dnia {formatDate(selectedDate)}</caption>
-                      <colgroup>
-                        <col className="nutrition-col-product" />
-                        <col className="nutrition-col-portion" />
-                        <col className="nutrition-col-calories" />
-                        <col className="nutrition-col-protein" />
-                        <col className="nutrition-col-carbs" />
-                        <col className="nutrition-col-fat" />
-                        <col className="nutrition-col-actions" />
-                      </colgroup>
-                      <thead>
-                        <tr>
-                          <th scope="col">Produkt</th>
-                          <th scope="col">Porcja</th>
-                          <th scope="col">Kalorie</th>
-                          <th scope="col">Białko</th>
-                          <th scope="col">Węglowodany</th>
-                          <th scope="col">Tłuszcze</th>
-                          <th scope="col"><span className="sr-only">Akcje</span></th>
-                        </tr>
-                      </thead>
-
-                      {MEAL_META.map(({ id, label, icon: Icon }) => {
-                        const mealEntries = day.entries[id];
-                        const mealTotals = sumEntries(mealEntries);
-                        return (
-                          <tbody key={id} className="nutrition-meal-group">
-                            <tr className="nutrition-meal-header">
-                              <th id={`meal-${id}`} scope="rowgroup" colSpan={2} className="nutrition-meal-title-cell">
-                                <div className="nutrition-meal-title">
-                                  <Icon size={13} strokeWidth={1.5} style={{ color: uiColors.textSecondary }} />
-                                  <span className="text-[12px] font-semibold" style={{ color: uiColors.chalkWhite }}>{label}</span>
-                                  <Badge tone="neutral">{mealEntries.length}</Badge>
+                        {mealEntries.length ? (
+                          <div className="nutrition-entry-list">
+                            {mealEntries.map((entry) => (
+                              <div key={entry.id} className="nutrition-entry-item">
+                                <div className="nutrition-entry-item__main">
+                                  <span className="nutrition-entry-item__name" title={entry.name}>{entry.name}</span>
+                                  {entry.brand && <span className="nutrition-product-brand">{entry.brand}</span>}
+                                  <p>{entry.portion} · Białko {formatNumber(entry.protein)} g · Węglowodany {formatNumber(entry.carbs)} g · Tłuszcze {formatNumber(entry.fat)} g</p>
                                 </div>
-                              </th>
-                              <td className="nutrition-meal-total-cell" data-label="Kcal" aria-label={`Kalorie: ${formatNumber(mealTotals.calories)} kilokalorii`}>
-                                {formatNumber(mealTotals.calories)} kcal
-                              </td>
-                              <td className="nutrition-meal-total-cell" data-label="B" aria-label={`Białko: ${formatNumber(mealTotals.protein)} gramów`}>
-                                {formatNumber(mealTotals.protein)} g
-                              </td>
-                              <td className="nutrition-meal-total-cell" data-label="W" aria-label={`Węglowodany: ${formatNumber(mealTotals.carbs)} gramów`}>
-                                {formatNumber(mealTotals.carbs)} g
-                              </td>
-                              <td className="nutrition-meal-total-cell" data-label="T" aria-label={`Tłuszcze: ${formatNumber(mealTotals.fat)} gramów`}>
-                                {formatNumber(mealTotals.fat)} g
-                              </td>
-                              <td className="nutrition-meal-action-cell">
-                                <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Dodaj produkt: ${label}`} onClick={() => openEntryDialog(id)}>
-                                  <Plus size={12} />
-                                </Button>
-                              </td>
-                            </tr>
-
-                            {mealEntries.length ? mealEntries.map((entry) => (
-                              <tr key={entry.id} className="nutrition-entry-record">
-                                <td className="nutrition-product-cell" data-label="Produkt">
-                                  <span className="nutrition-product-identity">
-                                    <span className="truncate text-[12px] font-medium" title={entry.name} style={{ color: uiColors.textSecondary }}>{entry.name}</span>
-                                    {entry.brand && <span className="nutrition-product-brand">{entry.brand}</span>}
-                                  </span>
-                                </td>
-                                <td className="nutrition-portion-cell" data-label="Porcja">
-                                  <span className="truncate" title={entry.portion}>{entry.portion}</span>
-                                </td>
-                                <td className="nutrition-number-cell" data-label="Kalorie">{formatNumber(entry.calories)}</td>
-                                <td className="nutrition-number-cell" data-label="Białko">{formatNumber(entry.protein)} g</td>
-                                <td className="nutrition-number-cell" data-label="Węglowodany">{formatNumber(entry.carbs)} g</td>
-                                <td className="nutrition-number-cell" data-label="Tłuszcze">{formatNumber(entry.fat)} g</td>
-                                <td className="nutrition-entry-actions">
+                                <span className="nutrition-entry-item__portion">{entry.portion}</span>
+                                <span className="nutrition-entry-item__metric">{formatNumber(entry.protein)} g</span>
+                                <span className="nutrition-entry-item__metric">{formatNumber(entry.carbs)} g</span>
+                                <span className="nutrition-entry-item__metric">{formatNumber(entry.fat)} g</span>
+                                <span className="nutrition-entry-item__calories">{formatNumber(entry.calories)} kcal</span>
+                                <div className="nutrition-entry-item__actions">
                                   <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Edytuj ${entry.name}`} onClick={() => openEditDialog(id, entry)}>
                                     <Pencil size={12} />
                                   </Button>
                                   <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Usuń ${entry.name}`} onClick={() => removeEntry(id, entry.id)}>
                                     <Trash2 size={12} />
                                   </Button>
-                                </td>
-                              </tr>
-                            )) : (
-                              <tr className="nutrition-empty-record">
-                                <td colSpan={7} className="nutrition-empty-cell">
-                                  <span>Nie dodano jeszcze produktów</span>
-                                  <Button variant="ghost" size="sm" disabled={dayClosed} onClick={() => openEntryDialog(id)}>Dodaj produkt</Button>
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        );
-                      })}
-                    </table>
-                  </div>
-                </Card>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="nutrition-meal-card__empty">
+                            <span>Nie dodano produktów</span>
+                            <Button variant="ghost" size="sm" disabled={dayClosed} onClick={() => openEntryDialog(id)}>Dodaj</Button>
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+
                 {undoEntry && (
                   <Card tone="input" padding="dense" className="mt-3 flex items-center justify-between gap-3" role="status">
                     <span className="truncate text-[11px]" style={{ color: uiColors.textSecondary }}>Usunięto: {undoEntry.entry.name}</span>
@@ -1032,7 +1018,7 @@ export default function Odzywanie() {
               <aside className="nutrition-summary min-w-0">
                 <section>
                   <SectionHeader
-                    title="Budżet dnia"
+                    title="Bilans dnia"
                     variant="label"
                     action={(
                       <Button variant="ghost" size="sm" iconOnly aria-label="Ustaw cele kalorii i makroskładników" onClick={() => openGoalDialog("nutrition")}>
@@ -1040,42 +1026,48 @@ export default function Odzywanie() {
                       </Button>
                     )}
                   />
-                  <Card tone="card" padding="default">
-                    <div className="space-y-4">
-                      {NUTRIENT_META.map(({ key, label, unit, color }) => {
-                        const current = totals[key];
-                        const goal = workspace.goals[key];
-                        const ratio = goal > 0 ? current / goal : 0;
-                        const remaining = goal - current;
-                        return (
-                          <div key={key}>
-                            <div className="mb-1.5 flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-[11px] font-medium" style={{ color: uiColors.textSecondary }}>{label}</p>
-                                <p className="mt-0.5" style={{ color: remaining < 0 ? uiColors.danger : uiColors.textMuted, fontSize: "var(--text-micro)" }}>
-                                  {remaining < 0 ? `Przekroczono o ${formatNumber(Math.abs(remaining))} ${unit ?? "kcal"}` : `Pozostało ${formatNumber(remaining)} ${unit ?? "kcal"}`}
-                                </p>
-                              </div>
-                              <span className="flex-shrink-0" style={{ color: ratio > 1 ? uiColors.danger : uiColors.chalkWhite, fontFamily: "var(--font-data)", fontSize: "var(--text-meta)" }}>
-                                {formatNumber(current)} / {formatNumber(goal)}
-                              </span>
+                  <Card tone="card" padding="default" className="nutrition-budget-card">
+                    {(() => {
+                      const calorieGoal = workspace.goals.calories;
+                      const calorieRatio = calorieGoal > 0 ? totals.calories / calorieGoal : 0;
+                      const calorieRemaining = calorieGoal - totals.calories;
+                      return (
+                        <>
+                          <div className="nutrition-budget-card__primary">
+                            <div>
+                              <span>Kalorie</span>
+                              <strong>{formatNumber(totals.calories)} / {formatNumber(calorieGoal)} kcal</strong>
                             </div>
-                            <div
-                              className="h-1.5 overflow-hidden rounded-full"
-                              role="progressbar"
-                              aria-label={label}
-                              aria-valuemin={0}
-                              aria-valuemax={Math.max(goal, current, 1)}
-                              aria-valuenow={current}
-                              aria-valuetext={`${formatNumber(current)} z celu ${formatNumber(goal)} ${unit ?? "kcal"}${current > goal ? `, przekroczono o ${formatNumber(current - goal)}` : ""}`}
-                              style={{ background: uiColors.graphiteInput }}
-                            >
-                              <div className="h-full w-full origin-left rounded-full transition-transform duration-200" style={{ transform: `scaleX(${Math.min(1, ratio)})`, background: ratio > 1 ? uiColors.danger : color }} />
+                            <p className={calorieRemaining < 0 ? "is-over" : ""}>
+                              {calorieRemaining < 0 ? `Przekroczono o ${formatNumber(Math.abs(calorieRemaining))} kcal` : `Pozostało ${formatNumber(calorieRemaining)} kcal`}
+                            </p>
+                            <div className="nutrition-budget-card__bar" role="progressbar" aria-label="Kalorie" aria-valuemin={0} aria-valuemax={Math.max(calorieGoal, totals.calories, 1)} aria-valuenow={totals.calories}>
+                              <i style={{ transform: `scaleX(${Math.min(1, calorieRatio)})` }} />
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div className="nutrition-budget-card__macro-list">
+                            {NUTRIENT_META.filter(({ key }) => key !== "calories").map(({ key, label, unit, color }) => {
+                              const current = totals[key];
+                              const goal = workspace.goals[key];
+                              const remaining = goal - current;
+                              const ratio = goal > 0 ? current / goal : 0;
+                              return (
+                                <div key={key} className="nutrition-budget-card__macro">
+                                  <div className="nutrition-budget-card__macro-head">
+                                    <span>{label}</span>
+                                    <strong>{formatNumber(current)} / {formatNumber(goal)} {unit}</strong>
+                                  </div>
+                                  <p className={remaining < 0 ? "is-over" : ""}>{remaining < 0 ? `Przekroczono o ${formatNumber(Math.abs(remaining))} ${unit}` : `Pozostało ${formatNumber(remaining)} ${unit}`}</p>
+                                  <div className="nutrition-budget-card__bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={Math.max(goal, current, 1)} aria-valuenow={current}>
+                                    <i style={{ transform: `scaleX(${Math.min(1, ratio)})`, background: ratio > 1 ? uiColors.danger : color }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </Card>
                 </section>
 
@@ -1090,16 +1082,56 @@ export default function Odzywanie() {
                     )}
                   />
                   <Card tone="panel" padding="default">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
+                    <div className="nutrition-water-card__summary">
+                      <div className="nutrition-water-card__label">
                         <Droplets size={15} strokeWidth={1.5} style={{ color: uiColors.precisionBlueText }} />
-                        <div>
-                          <p className="text-[12px] font-medium" style={{ color: uiColors.textSecondary }}>Wypita woda</p>
-                          <p className="mt-0.5" style={{ color: uiColors.textMuted, fontSize: "var(--text-micro)" }}>Cel: {formatWater(workspace.goals.waterMl)}</p>
-                        </div>
+                        <span>Wypita woda</span>
                       </div>
-                      <span className="font-semibold" style={{ color: uiColors.precisionBlueText, fontFamily: "var(--font-data)", fontSize: "var(--text-title)" }}>{formatWater(day.waterMl)}</span>
+                      <div className="nutrition-water-card__value">
+                        {waterEditOpen ? (
+                          <div className="nutrition-water-card__editor">
+                            <input
+                              aria-label="Edytuj wypitą wodę"
+                              className="nutrition-inline-number"
+                              inputMode="decimal"
+                              type="text"
+                              value={waterEditDraft}
+                              onChange={(event) => {
+                                setWaterEditDraft(event.target.value.replace(/\./g, ","));
+                                setWaterEditError("");
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") saveWaterEdit();
+                                if (event.key === "Escape") setWaterEditOpen(false);
+                              }}
+                            />
+                            <Button variant="ghost" size="sm" iconOnly aria-label="Zapisz ilość wypitej wody" onClick={saveWaterEdit}>
+                              <CheckCircle2 size={13} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              iconOnly
+                              aria-label="Anuluj edycję wypitej wody"
+                              onClick={() => {
+                                setWaterEditOpen(false);
+                                setWaterEditError("");
+                              }}
+                            >
+                              <X size={13} />
+                            </Button>
+                          </div>
+                        ) : (
+                          <strong>{day.waterMl.toLocaleString("pl-PL")} ml / {workspace.goals.waterMl.toLocaleString("pl-PL")} ml</strong>
+                        )}
+                        {!waterEditOpen && (
+                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Edytuj wypitą wodę" onClick={openWaterEdit}>
+                            <Pencil size={12} />
+                          </Button>
+                        )}
+                      </div>
                     </div>
+                    {waterEditError && <p className="nutrition-inline-error" role="alert">{waterEditError}</p>}
                     <div
                       className="my-3 h-1.5 overflow-hidden rounded-full"
                       role="progressbar"
@@ -1112,47 +1144,25 @@ export default function Odzywanie() {
                     >
                       <div className="h-full w-full origin-left rounded-full transition-transform duration-200" style={{ transform: `scaleX(${Math.min(1, day.waterMl / workspace.goals.waterMl)})`, background: uiColors.precisionBlueText }} />
                     </div>
-                    <div className="nutrition-water-controls">
-                      {WATER_AMOUNTS.map((amount) => (
-                        <Button key={amount} variant="quiet" size="sm" disabled={dayClosed} onClick={() => changeWater(amount)}>+{amount} ml</Button>
-                      ))}
+                    <div className="nutrition-water-actions">
+                      <div className="nutrition-water-controls">
+                        {WATER_AMOUNTS.map((amount) => (
+                          <Button key={amount} variant="quiet" size="sm" disabled={dayClosed} onClick={() => changeWater(amount)}>+{amount} ml</Button>
+                        ))}
+                      </div>
+                      <div className="nutrition-water-custom__form">
+                        <Input aria-label="Inna ilość wody" type="number" min="1" step="50" placeholder="Własna ilość (ml)" value={waterCustomAmount} onChange={(event) => setWaterCustomAmount(event.target.value)} />
+                        <Button variant="ghost" size="sm" disabled={dayClosed || !waterCustomAmount} onClick={addCustomWater}>Dodaj</Button>
+                      </div>
                     </div>
-                    <Button className="mt-2" variant="ghost" size="sm" fullWidth disabled={dayClosed || day.waterMl === 0} onClick={() => changeWater(-250)}>
-                      Odejmij 250 ml
-                    </Button>
                   </Card>
                 </section>
 
                 <section>
-                  <SectionHeader
-                    title="Masa ciała"
-                    variant="label"
-                    action={(
-                      <div className="nutrition-section-actions">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          aria-label="Dodaj lub popraw pomiar masy ciała"
-                          onClick={openWeightMeasurement}
-                        >
-                          <Plus size={13} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          iconOnly
-                          aria-label="Analizuj dietę i masę ciała"
-                          onClick={() => setWeightDialog("analysis")}
-                        >
-                          <ChartNoAxesCombined size={13} />
-                        </Button>
-                      </div>
-                    )}
-                  />
-                  <Card tone="input" padding="default">
+                  <SectionHeader title="Masa ciała" variant="label" />
+                  <Card tone="panel" padding="default">
                     {latestWeight ? (
-                      <div className="nutrition-weight-card">
+                      <div className="nutrition-weight-card nutrition-weight-card--compact">
                         <div className="nutrition-weight-card__primary">
                           <div className="nutrition-weight-card__identity">
                             <Scale size={15} strokeWidth={1.5} />
@@ -1162,20 +1172,16 @@ export default function Odzywanie() {
                             </div>
                           </div>
                           <strong>{formatNumber(latestWeight.weightKg)} kg</strong>
+                          <div className="nutrition-weight-card__actions">
+                            <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Edytuj ostatni pomiar masy" onClick={editLatestWeight}>
+                              <Pencil size={12} />
+                            </Button>
+                            <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Usuń ostatni pomiar masy" onClick={removeLatestWeight}>
+                              <Trash2 size={12} />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="nutrition-weight-card__change">
-                          <span>Zmiana od poprzedniego pomiaru</span>
-                          <strong>
-                            {latestWeightChange === null
-                              ? "—"
-                              : `${latestWeightChange > 0 ? "+" : ""}${formatNumber(latestWeightChange)} kg`}
-                          </strong>
-                        </div>
-                        <p>
-                          {previousWeight
-                            ? `Poprzedni wpis: ${formatCompactDate(previousWeight.date)}`
-                            : "Dodaj kolejny pomiar, aby zobaczyć zmianę."}
-                        </p>
+                        <Button variant="quiet" size="sm" fullWidth onClick={openWeightMeasurement}>Zarejestruj wagę</Button>
                       </div>
                     ) : (
                       <div className="nutrition-weight-card nutrition-weight-card--empty">
@@ -1184,11 +1190,44 @@ export default function Odzywanie() {
                           <strong>Brak pomiaru</strong>
                           <p>Dodaj wagę, aby rozpocząć śledzenie trendu.</p>
                         </div>
-                        <Button variant="quiet" size="sm" onClick={openWeightMeasurement}>Dodaj wagę</Button>
+                        <Button variant="quiet" size="sm" onClick={openWeightMeasurement}>Zarejestruj wagę</Button>
                       </div>
+                    )}
+                    {weightInlineOpen && (
+                      <form className="nutrition-weight-inline-form" onSubmit={(event) => { event.preventDefault(); saveWeightMeasurement(event); }}>
+                        <div>
+                          <label htmlFor="nutrition-inline-weight">Waga (kg)</label>
+                          <input
+                            id="nutrition-inline-weight"
+                            autoFocus
+                            inputMode="decimal"
+                            type="text"
+                            placeholder="np. 81,9"
+                            value={weightDraft.weightKg}
+                            onChange={(event) => {
+                              setWeightDraft((current) => ({ ...current, weightKg: event.target.value.replace(/\./g, ",") }));
+                              setWeightError("");
+                            }}
+                          />
+                        </div>
+                        <Button type="submit" variant="quiet" size="sm" disabled={dayClosed || !weightDraft.weightKg}>Zapisz</Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setWeightInlineOpen(false);
+                            setWeightError("");
+                          }}
+                        >
+                          Anuluj
+                        </Button>
+                        {weightError && <p role="alert">{weightError}</p>}
+                      </form>
                     )}
                   </Card>
                 </section>
+
               </aside>
             </div>
           </div>
@@ -1377,6 +1416,7 @@ export default function Odzywanie() {
                 setWeightDraft((current) => ({
                   date: event.target.value,
                   weightKg: existing ? String(existing.weightKg) : current.weightKg,
+                  note: existing?.note ?? current.note,
                 }));
                 setWeightError("");
               }}
@@ -1398,18 +1438,27 @@ export default function Odzywanie() {
                 setWeightError("");
               }}
             />
+            <label className="nutrition-textarea-field">
+              <span>Notatka <small>(opcjonalnie)</small></span>
+              <textarea
+                value={weightDraft.note}
+                rows={3}
+                placeholder="Np. rano, po treningu…"
+                onChange={(event) => setWeightDraft((current) => ({ ...current, note: event.target.value }))}
+              />
+            </label>
           </form>
         </Modal>
       )}
 
       {weightDialog === "analysis" && (
         <Modal
-          title="Analiza diety i masy"
+          title="Analiza odżywiania"
           eyebrow="Trendy"
           description="Porównaj zapisane posiłki z pomiarami masy w wybranym okresie."
-          width={920}
+          width={1180}
+          bodyClassName="nutrition-analysis-modal"
           onClose={closeWeightDialog}
-          footer={<Button variant="ghost" onClick={closeWeightDialog}>Zamknij</Button>}
         >
           <NutritionAnalysis
             endDate={analysisEndDate}
@@ -1626,6 +1675,40 @@ export default function Odzywanie() {
           )}
         >
           <form id="water-goal-form" onSubmit={saveWaterGoal} className="nutrition-goal-form">
+            <div className="nutrition-water-calculator-switch" role="group" aria-label="Sposób wyliczenia celu wody">
+              <Button type="button" variant={waterCalculatorMode === "simple" ? "primary" : "quiet"} size="sm" aria-pressed={waterCalculatorMode === "simple"} onClick={() => setWaterCalculatorMode("simple")}>Prosty kalkulator</Button>
+              <Button type="button" variant={waterCalculatorMode === "advanced" ? "primary" : "quiet"} size="sm" aria-pressed={waterCalculatorMode === "advanced"} onClick={() => setWaterCalculatorMode("advanced")}>Zaawansowany</Button>
+            </div>
+            {waterCalculatorMode === "simple" ? (
+              <section className="nutrition-water-simple-calculator" aria-labelledby="water-simple-calculator-title">
+                <div className="nutrition-calculator-heading">
+                  <div>
+                    <h3 id="water-simple-calculator-title">Rekomendacja dzienna</h3>
+                    <p>Orientacyjnie 30–35 ml wody na kilogram masy ciała.</p>
+                  </div>
+                  <span className="nutrition-calculator-method">30–35 ml / kg</span>
+                </div>
+                <Input
+                  label="Masa ciała (kg)"
+                  type="text"
+                  inputMode="decimal"
+                  value={waterSimpleWeight}
+                  placeholder="np. 81,9"
+                  onChange={(event) => setWaterSimpleWeight(event.target.value.replace(/\./g, ","))}
+                />
+                {simpleWaterMin && simpleWaterMax ? (
+                  <div className="nutrition-water-simple-result" aria-live="polite">
+                    <div>
+                      <span>Rekomendowany zakres</span>
+                      <strong>{formatWater(simpleWaterMin)} – {formatWater(simpleWaterMax)}</strong>
+                    </div>
+                    <small>Wybierz własny cel poniżej.</small>
+                  </div>
+                ) : (
+                  <div className="nutrition-calculation-empty">Podaj masę ciała, aby zobaczyć wynik.</div>
+                )}
+              </section>
+            ) : (
             <section className="nutrition-calculator-section" aria-labelledby="water-calculator-title">
               <div className="nutrition-calculator-heading">
                 <div>
@@ -1650,14 +1733,6 @@ export default function Odzywanie() {
                     <div><span>Przelicznik nawodnienia</span><strong>1 ml / kcal</strong></div>
                     <div className="is-total"><span>Orientacyjny cel płynów</span><strong>{formatWater(calculatorResult.waterTargetMl)}</strong></div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    aria-pressed={calculationSync.water}
-                    onClick={useCalculatedWater}
-                  >
-                    {calculationSync.water ? "Cel synchronizowany" : "Ustaw i synchronizuj"}
-                  </Button>
                 </div>
               ) : (
                 <div className="nutrition-calculation-empty">
@@ -1671,6 +1746,7 @@ export default function Odzywanie() {
                 {" · "}<a href="https://pubmed.ncbi.nlm.nih.gov/17277604/" target="_blank" rel="noreferrer">ACSM: wysiłek i płyny</a>
               </p>
             </section>
+            )}
 
             <section className="nutrition-goal-manual" aria-labelledby="saved-water-title">
               <div className="nutrition-calculator-heading">
@@ -1687,9 +1763,7 @@ export default function Odzywanie() {
                 step="50"
                 value={goalDraft.waterMl}
                 error={goalError}
-                hint={calculationSync.water
-                  ? "Synchronizacja z kalkulatorem jest aktywna."
-                  : `Obecna wartość: ${formatWater(parseDraftNumber(goalDraft.waterMl))}`}
+                hint={`Obecna wartość: ${formatWater(parseDraftNumber(goalDraft.waterMl))}`}
                 onChange={(event) => changeGoalDraftField("waterMl", event.target.value)}
               />
             </section>
