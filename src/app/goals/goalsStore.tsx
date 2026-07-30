@@ -26,7 +26,7 @@ import {
   type GoalsStoreValue,
 } from "./goalsContext";
 
-const STORAGE_KEY = "routine.goals.v1";
+const STORAGE_KEY = "rootine.goals.v1";
 const nowIso = () => new Date().toISOString();
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 

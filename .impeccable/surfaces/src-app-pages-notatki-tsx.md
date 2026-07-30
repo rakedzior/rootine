@@ -24,7 +24,7 @@ Operate. This surface is a fast, local-first capture desk for short notes and ac
 
 ## Visual direction
 
-The surface uses Routine's graphite workshop language as a pinned desk with a live detail editor. Color remains metadata, expressed as a narrow top marker and subtle tint rather than decorative sticky-note styling.
+The surface uses Rootine's graphite workshop language as a pinned desk with a live detail editor. Color remains metadata, expressed as a narrow top marker and subtle tint rather than decorative sticky-note styling.
 
 ## Memorable element
 

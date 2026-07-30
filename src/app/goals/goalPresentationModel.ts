@@ -219,7 +219,9 @@ export const countForFilter = (id: FilterId, goals: Goal[]) => {
 
 export function readLayoutPreference(): GoalLayout {
   try {
-    return localStorage.getItem("routine.goals.layout") === "grid" ? "grid" : "list";
+    const saved = localStorage.getItem("rootine.goals.layout")
+      ?? localStorage.getItem("routine.goals.layout");
+    return saved === "grid" ? "grid" : "list";
   } catch {
     return "list";
   }
@@ -227,7 +229,8 @@ export function readLayoutPreference(): GoalLayout {
 
 export function readSortPreference(): GoalSortKey {
   try {
-    const saved = localStorage.getItem("routine.goals.sort");
+    const saved = localStorage.getItem("rootine.goals.sort")
+      ?? localStorage.getItem("routine.goals.sort");
     return saved === "due" || saved === "progress" || saved === "updated" || saved === "name"
       ? saved
       : "priority";

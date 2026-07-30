@@ -1,10 +1,10 @@
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 const NUTRITION_STORAGE_KEY = "rootine.nutrition-workspace.v1";
 const RECOVERY_INDEX_KEY = "rootine.recovery.index.v1";
 const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
 
-async function expectNoDocumentOverflow(page: Parameters<typeof openRoutineRoute>[0]) {
+async function expectNoDocumentOverflow(page: Parameters<typeof openRootineRoute>[0]) {
   await expect.poll(
     () => page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
@@ -14,14 +14,14 @@ async function expectNoDocumentOverflow(page: Parameters<typeof openRoutineRoute
 }
 
 test.describe("production viewport matrix", { tag: "@viewport" }, () => {
-  test("uses the configured viewport and contains long task content", async ({ routinePage: page }, testInfo) => {
+  test("uses the configured viewport and contains long task content", async ({ rootinePage: page }, testInfo) => {
     const configuredViewport = testInfo.project.use.viewport;
     expect(page.viewportSize()).toEqual(configuredViewport);
 
-    await openRoutineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/dzisiaj");
     await expectNoDocumentOverflow(page);
 
-    await openRoutineRoute(page, "/zadania");
+    await openRootineRoute(page, "/zadania");
     const taskTitle = `E2E długi tytuł — ${"bardzo-długi-fragment-".repeat(8)}`;
     const taskInput = page.getByRole("textbox", { name: "Nazwa nowego zadania" });
     await taskInput.fill(taskTitle);
@@ -41,8 +41,8 @@ test.describe("production viewport matrix", { tag: "@viewport" }, () => {
 });
 
 test.describe("browser runtime validation", { tag: "@desktop" }, () => {
-  test("task workspace remains usable for 0, 1, 5, 20 and 100 long records", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/zadania");
+  test("task workspace remains usable for 0, 1, 5, 20 and 100 long records", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/zadania");
 
     for (const count of [0, 1, 5, 20, 100]) {
       await test.step(`${count} records`, async () => {
@@ -82,7 +82,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     }
   });
 
-  test("representative routes render without console or uncaught runtime errors", async ({ routinePage: page }) => {
+  test("representative routes render without console or uncaught runtime errors", async ({ rootinePage: page }) => {
     const runtimeErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") runtimeErrors.push(`console: ${message.text()}`);
@@ -90,14 +90,14 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
 
     for (const path of ["/dzisiaj", "/zadania", "/odzywianie"]) {
-      await openRoutineRoute(page, path);
+      await openRootineRoute(page, path);
       await expectNoDocumentOverflow(page);
     }
 
     expect(runtimeErrors).toEqual([]);
   });
 
-  test("online nutrition search waits for an explicit action and explains Retry-After", async ({ routinePage: page }) => {
+  test("online nutrition search waits for an explicit action and explains Retry-After", async ({ rootinePage: page }) => {
     let requestCount = 0;
     await page.route("**/api/openfoodfacts/search**", async (route) => {
       requestCount += 1;
@@ -109,7 +109,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
       });
     });
 
-    await openRoutineRoute(page, "/odzywianie");
+    await openRootineRoute(page, "/odzywianie");
     await page.getByRole("button", { name: "Dodaj produkt", exact: true }).first().click();
     const dialog = page.getByRole("dialog", { name: "Dodaj produkt" });
     const productInput = dialog.getByRole("combobox", { name: "Produkt lub danie" });
@@ -123,8 +123,8 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     await expect(dialog.getByRole("spinbutton", { name: "Kalorie" })).toBeEnabled();
   });
 
-  test("offline catalog failure leaves manual nutrition entry available", async ({ routinePage: page, context }) => {
-    await openRoutineRoute(page, "/odzywianie");
+  test("offline catalog failure leaves manual nutrition entry available", async ({ rootinePage: page, context }) => {
+    await openRootineRoute(page, "/odzywianie");
     await page.getByRole("button", { name: "Dodaj produkt", exact: true }).first().click();
     const dialog = page.getByRole("dialog", { name: "Dodaj produkt" });
     await dialog.getByRole("combobox", { name: "Produkt lub danie" }).fill("Produkt bez sieci E2E");
@@ -140,9 +140,9 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     }
   });
 
-  test("a failed lazy route module is contained by the route error state", async ({ routinePage: page }) => {
+  test("a failed lazy route module is contained by the route error state", async ({ rootinePage: page }) => {
     let failedRequests = 0;
-    await openRoutineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/dzisiaj");
     await page.route(/\/src\/app\/pages\/Praca\.tsx(?:\?.*)?$/, async (route) => {
       failedRequests += 1;
       await route.abort("failed");
@@ -161,7 +161,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     await expect(page.getByRole("link", { name: "Wróć do Dzisiaj" })).toBeVisible();
   });
 
-  test("corrupt nutrition data is preserved and can be replaced deliberately", async ({ routinePage: page }) => {
+  test("corrupt nutrition data is preserved and can be replaced deliberately", async ({ rootinePage: page }) => {
     const corruptRaw = "{not-valid-json";
     await page.addInitScript(() => {
       Object.defineProperty(globalThis, "indexedDB", {
@@ -169,13 +169,13 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
         value: undefined,
       });
     });
-    await openRoutineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/dzisiaj");
     await page.evaluate(
       ({ key, raw }) => window.localStorage.setItem(key, raw),
       { key: NUTRITION_STORAGE_KEY, raw: corruptRaw },
     );
 
-    await openRoutineRoute(page, "/odzywianie");
+    await openRootineRoute(page, "/odzywianie");
     await expect(page.getByRole("alert")).toContainText("Nie udało się odczytać lokalnego dziennika");
     await expect.poll(() => page.evaluate(
       (key) => window.localStorage.getItem(key),
@@ -208,7 +208,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     }, NUTRITION_STORAGE_KEY)).toBe(6);
   });
 
-  test("a local write failure is surfaced without discarding the in-memory change", async ({ routinePage: page }) => {
+  test("a local write failure is surfaced without discarding the in-memory change", async ({ rootinePage: page }) => {
     await page.addInitScript((blockedKey) => {
       Object.defineProperty(globalThis, "indexedDB", {
         configurable: true,
@@ -221,7 +221,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
       };
     }, NUTRITION_STORAGE_KEY);
 
-    await openRoutineRoute(page, "/odzywianie");
+    await openRootineRoute(page, "/odzywianie");
     await page.getByRole("button", { name: "+250 ml", exact: true }).click();
 
     await expect(page.getByText("Brak zapisu lokalnego", { exact: true })).toBeVisible();

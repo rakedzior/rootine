@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page, TestInfo } from "@playwright/test";
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 const DESKTOP_A11Y_ROUTES = [
   { name: "shell and Today", path: "/dzisiaj" },
@@ -84,8 +84,8 @@ async function expectNoWcagViolations(page: Page, testInfo: TestInfo) {
 
 test.describe("desktop accessibility matrix", { tag: "@desktop" }, () => {
   for (const route of DESKTOP_A11Y_ROUTES) {
-    test(`axe: ${route.name}`, async ({ routinePage: page }, testInfo) => {
-      await openRoutineRoute(page, route.path);
+    test(`axe: ${route.name}`, async ({ rootinePage: page }, testInfo) => {
+      await openRootineRoute(page, route.path);
       await expectNoWcagViolations(page, testInfo);
     });
   }
@@ -93,14 +93,14 @@ test.describe("desktop accessibility matrix", { tag: "@desktop" }, () => {
 
 test.describe("mobile accessibility matrix", { tag: "@mobile" }, () => {
   for (const route of MOBILE_A11Y_ROUTES) {
-    test(`axe: ${route.name}`, async ({ routinePage: page }, testInfo) => {
-      await openRoutineRoute(page, route.path);
+    test(`axe: ${route.name}`, async ({ rootinePage: page }, testInfo) => {
+      await openRootineRoute(page, route.path);
       await expectNoWcagViolations(page, testInfo);
     });
   }
 
-  test("axe: open More drawer", async ({ routinePage: page }, testInfo) => {
-    await openRoutineRoute(page, "/dzisiaj");
+  test("axe: open More drawer", async ({ rootinePage: page }, testInfo) => {
+    await openRootineRoute(page, "/dzisiaj");
     await page
       .getByRole("navigation", { name: "Główna nawigacja mobilna" })
       .getByRole("button", { name: "Więcej" })

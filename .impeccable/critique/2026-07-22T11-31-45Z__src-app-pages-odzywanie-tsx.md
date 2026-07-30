@@ -17,7 +17,7 @@ Method: dual-agent (A: critique_design_review · B: critique_detector_evidence)
 | 1 | Widoczność stanu systemu | 3/4 | Bilans, walidacja, undo i błąd zapisu są widoczne; brakuje potwierdzenia dodania i drogi naprawy zapisu. |
 | 2 | Zgodność z modelem rzeczywistym | 3/4 | Posiłki, porcje i makro są naturalne; skróty B/W/T oraz objętość „szklanki” nie są wyjaśnione. |
 | 3 | Kontrola i swoboda użytkownika | 3/4 | Działa anulowanie, Escape, zmiana dnia i undo; wpisu nie można edytować, przenieść ani powielić. |
-| 4 | Spójność i standardy | 4/4 | Ekran konsekwentnie korzysta ze wspólnych komponentów i tokenów Routine. |
+| 4 | Spójność i standardy | 4/4 | Ekran konsekwentnie korzysta ze wspólnych komponentów i tokenów Rootine. |
 | 5 | Zapobieganie błędom | 2/4 | Są minima, walidacja i normalizacja, ale uszkodzony zapis może zostać cicho zastąpiony danymi demo. |
 | 6 | Rozpoznawanie zamiast pamiętania | 2/4 | Kontekst jest widoczny, lecz brak ostatnich produktów, ulubionych i kopiowania poprzedniego dnia. |
 | 7 | Elastyczność i efektywność | 1/4 | Każdy produkt wymaga pełnego formularza; brak szybkiego ponowienia, edycji i skrótu. |
@@ -28,7 +28,7 @@ Method: dual-agent (A: critique_design_review · B: critique_detector_evidence)
 
 ## Design Specificity Verdict
 
-**Ocena projektowa:** „Dzienny arkusz budżetu żywieniowego” jest wyraźnie zaprojektowany dla Routine. Cztery grupy posiłków, stabilne kolumny i boczny bilans tworzą mocniejszą tożsamość niż typowy układ wielkich kart KPI. Największa utrata specyfiki pojawia się w powtarzalnym użyciu: codzienne żywienie wymaga korekty, ponawiania i pamięci ostatnich produktów, a ekran obsługuje dziś tylko ręczne dodanie i usunięcie.
+**Ocena projektowa:** „Dzienny arkusz budżetu żywieniowego” jest wyraźnie zaprojektowany dla Rootine. Cztery grupy posiłków, stabilne kolumny i boczny bilans tworzą mocniejszą tożsamość niż typowy układ wielkich kart KPI. Największa utrata specyfiki pojawia się w powtarzalnym użyciu: codzienne żywienie wymaga korekty, ponawiania i pamięci ostatnich produktów, a ekran obsługuje dziś tylko ręczne dodanie i usunięcie.
 
 **Skan deterministyczny:** `src/app/pages/Odzywanie.tsx` uzyskał **0 findings**. Nie wykryto lokalnych kolorów, radiusów, komponentów zastępczych ani naruszeń `DESIGN.md`. Skan źródłowy nie potrafi jednak wykryć problemów semantycznych takich jak nieoznaczone dane demo, brak ponawiania produktu czy niesemantyczna tabela.
 
@@ -84,7 +84,7 @@ To jest dobry pierwszy moduł zbudowany na wspólnym systemie: spokojny, zwarty 
 
 ## Minor Observations
 
-- Klucz storage nadal używa nazwy `rootine`, a nie `routine`.
+- Klucz storage używa nazwy `rootine`.
 - Polska odmiana „pozycja/pozycji” jest błędna dla wartości 2–4 i 22–24.
 - Undo jest jednopoziomowe, bez zamknięcia/wygaśnięcia, i przywraca produkt na końcu grupy.
 - `updatedAt` jest zapisany, ale nie służy do pokazania czasu ostatniego zapisu.

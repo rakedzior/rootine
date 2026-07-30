@@ -15,7 +15,7 @@ describe("Recovery Center", () => {
   });
 
   it("surfaces an ordinary quota failure and lets the user retry the retained draft", async () => {
-    const key = "routine.sidebar.modules";
+    const key = "rootine.sidebar.modules";
     const originalSetItem = Storage.prototype.setItem;
     const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function mockedSetItem(
       this: Storage,

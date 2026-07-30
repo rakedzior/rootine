@@ -55,7 +55,8 @@ import { RouteLoadingState } from "../RouteStates";
 import { Modal } from "../ui";
 import { maxWidthQuery } from "../ui/breakpoints";
 
-const SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
+const SIDEBAR_STORAGE_KEY = "rootine.sidebar.collapsed";
+const LEGACY_SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
 
 type WeatherState =
   | { status: "loading" }
@@ -86,7 +87,18 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
 
 function getInitialSidebarState() {
   try {
-    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    const legacySaved = saved === null
+      ? window.localStorage.getItem(LEGACY_SIDEBAR_STORAGE_KEY)
+      : null;
+    if (saved === null && legacySaved !== null) {
+      try {
+        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, legacySaved);
+      } catch {
+        // Keep using the legacy preference if the new key cannot be written yet.
+      }
+    }
+    return (saved ?? legacySaved) === "true";
   } catch {
     return false;
   }

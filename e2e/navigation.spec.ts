@@ -1,4 +1,4 @@
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 const ROUTES = [
   { name: "Dzisiaj", path: "/dzisiaj" },
@@ -12,8 +12,8 @@ const ROUTES = [
 
 test.describe("route smoke", { tag: "@shared" }, () => {
   for (const route of ROUTES) {
-    test(`${route.name} renders in the application shell`, async ({ routinePage: page, isMobile }) => {
-      await openRoutineRoute(page, route.path);
+    test(`${route.name} renders in the application shell`, async ({ rootinePage: page, isMobile }) => {
+      await openRootineRoute(page, route.path);
 
       if (isMobile) {
         await expect(
@@ -29,16 +29,16 @@ test.describe("route smoke", { tag: "@shared" }, () => {
 });
 
 test.describe("legacy navigation aliases", { tag: "@shared" }, () => {
-  test("old Biuro bookmark redirects to the canonical Praca module", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/biuro");
+  test("old Biuro bookmark redirects to the canonical Praca module", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/biuro");
 
     await expect(page).toHaveURL(/\/praca$/);
     await expect(page.locator(".ui-page-header__title")).toHaveText("Praca");
     await expect(page.getByRole("link", { name: "Biuro", exact: true })).toHaveCount(0);
   });
 
-  test("old Finanse bookmark redirects to the canonical Sprawy budget view", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/finanse");
+  test("old Finanse bookmark redirects to the canonical Sprawy budget view", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/finanse");
 
     await expect(page).toHaveURL(/\/sprawy\?widok=budget$/);
     await expect(page.locator(".ui-page-header__title")).toHaveText("Sprawy");
@@ -47,8 +47,8 @@ test.describe("legacy navigation aliases", { tag: "@shared" }, () => {
 });
 
 test.describe("desktop sidebar", { tag: "@desktop" }, () => {
-  test("loads another module and marks it current", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/dzisiaj");
+  test("loads another module and marks it current", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/dzisiaj");
 
     const primaryNavigation = page.getByRole("navigation", { name: "Obszary aplikacji" });
     const calendarLink = primaryNavigation.getByRole("link", { name: "Kalendarz" });
@@ -61,8 +61,8 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
 });
 
 test.describe("mobile navigation", { tag: "@mobile" }, () => {
-  test("primary links and More drawer expose every module", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/dzisiaj");
+  test("primary links and More drawer expose every module", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/dzisiaj");
 
     const mobileNavigation = page.getByRole("navigation", {
       name: "Główna nawigacja mobilna",

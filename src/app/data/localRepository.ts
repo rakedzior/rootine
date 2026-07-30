@@ -133,10 +133,10 @@ const rollbackOrigin = `${repositoryOrigin}-rollback`;
 const hydrationOrigin = `${repositoryOrigin}-hydrate`;
 
 const INLINE_STORAGE_KEYS = new Set([
-  "routine.sidebar.collapsed",
-  "routine.sidebar.modules",
-  "routine.goals.layout",
-  "routine.goals.sort",
+  "rootine.sidebar.collapsed",
+  "rootine.sidebar.modules",
+  "rootine.goals.layout",
+  "rootine.goals.sort",
   "rootine.task-completion.v1",
 ]);
 
@@ -739,6 +739,43 @@ function scheduleHydration(key: string, manifest?: WorkspaceManifest) {
   return promise;
 }
 
+function getLegacyWorkspaceKey(key: string) {
+  if (key.startsWith("rootine.")) return `routine.${key.slice("rootine.".length)}`;
+  if (key.startsWith("rootine-")) return `routine-${key.slice("rootine-".length)}`;
+  return null;
+}
+
+function scheduleLegacyWorkspaceMigration(key: string, legacyKey: string) {
+  const existing = hydrationPromises.get(key);
+  if (existing) return existing;
+  if (!blockedWrites.has(key)) blockedWrites.set(key, mutationSequence);
+
+  const promise = payloadStore.read(legacyKey)
+    .then(async (record) => {
+      if (!record) {
+        knownMissingKeys.add(key);
+        blockedWrites.delete(key);
+        notifyLocalHydration(key);
+        return;
+      }
+      await migrateLegacyRaw(key, record.raw);
+      notifyLocalHydration(key);
+    })
+    .catch((error) => {
+      reportPersistenceIssue({
+        key,
+        kind: classifyStorageError(error),
+        retryOperation: { type: "hydrate", key },
+      });
+    })
+    .finally(() => {
+      hydrationPromises.delete(key);
+    });
+
+  hydrationPromises.set(key, promise);
+  return promise;
+}
+
 async function migrateLegacyRaw(key: string, raw: string) {
   const contentHash = hashRaw(raw);
   const updatedAt = updatedAtFromRaw(raw);
@@ -901,7 +938,39 @@ export function readLocalWorkspace<T>({
 
   try {
     const raw = window.localStorage.getItem(key);
+    const legacyKey = raw === null ? getLegacyWorkspaceKey(key) : null;
+    const legacyRaw = legacyKey ? window.localStorage.getItem(legacyKey) : null;
     const manifest = parseWorkspaceManifest(raw, key);
+
+    if (!raw && legacyRaw && legacyKey) {
+      const legacyManifest = parseWorkspaceManifest(legacyRaw, legacyKey);
+      if (legacyManifest && shouldUseIndexedDb(key)) {
+        scheduleLegacyWorkspaceMigration(key, legacyKey);
+        return { status: "missing", workspace: safeFallback };
+      }
+      const legacyParsed: unknown = JSON.parse(legacyRaw);
+      recordInlineBaseline(key, legacyRaw);
+      if (validate(legacyParsed)) {
+        try {
+          window.localStorage.setItem(key, legacyRaw);
+        } catch {
+          // Keep the legacy copy available if the new key cannot be written yet.
+        }
+        if (shouldUseIndexedDb(key)) scheduleLegacyMigration(key, legacyRaw);
+        return { status: "ok", workspace: legacyParsed };
+      }
+      const migratedLegacy = migrate?.(legacyParsed) ?? null;
+      if (migratedLegacy && validate(migratedLegacy)) {
+        const migratedRaw = JSON.stringify(migratedLegacy);
+        try {
+          window.localStorage.setItem(key, migratedRaw);
+        } catch {
+          // Keep the legacy copy available if the new key cannot be written yet.
+        }
+        if (shouldUseIndexedDb(key)) scheduleLegacyMigration(key, migratedRaw);
+        return { status: "migrated", workspace: migratedLegacy };
+      }
+    }
 
     if (manifest) {
       const cached = workspaceCache.get(key);
@@ -1376,7 +1445,7 @@ export async function deleteLocalRecoveryRecord(id: string): Promise<boolean> {
 }
 
 function isRootineWorkspaceKey(key: string) {
-  return (key.startsWith("rootine.") || key.startsWith("routine.") || key.startsWith("routine-"))
+  return (key.startsWith("rootine.") || key.startsWith("rootine-") || key.startsWith("routine.") || key.startsWith("routine-"))
     && key !== RECOVERY_INDEX_KEY
     && !key.startsWith(BACKUP_PREFIX);
 }
@@ -1431,13 +1500,16 @@ type LocalBackupValidationResult =
   | { ok: false; error: string };
 
 const RAW_VALUE_VALIDATORS: Record<string, (raw: string) => boolean> = {
-  "routine.sidebar.collapsed": (raw) => raw === "true" || raw === "false",
-  "routine.goals.layout": (raw) => raw === "list" || raw === "grid",
-  "routine.goals.sort": (raw) => ["priority", "due", "progress", "updated", "name"].includes(raw),
+  "rootine.sidebar.collapsed": (raw) => raw === "true" || raw === "false",
+  "rootine.goals.layout": (raw) => raw === "list" || raw === "grid",
+  "rootine.goals.sort": (raw) => ["priority", "due", "progress", "updated", "name"].includes(raw),
 };
 
 function validateStoredWorkspaceValue(key: string, raw: string) {
-  const rawValidator = RAW_VALUE_VALIDATORS[key];
+  const normalizedKey = key.startsWith("routine.") || key.startsWith("routine-")
+    ? key.replace(/^routine([.-])/, "rootine$1")
+    : key;
+  const rawValidator = RAW_VALUE_VALIDATORS[key] ?? RAW_VALUE_VALIDATORS[normalizedKey];
   if (rawValidator) return rawValidator(raw);
   try {
     JSON.parse(raw);

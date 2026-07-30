@@ -1,4 +1,4 @@
-# Routine — plan kompleksowej refaktoryzacji i QA
+# Rootine — plan kompleksowej refaktoryzacji i QA
 
 Aktualizacja: 2026-07-29  
 Gałąź robocza: `AUDITFULL`

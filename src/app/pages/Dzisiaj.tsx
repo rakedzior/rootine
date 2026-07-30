@@ -126,7 +126,7 @@ function inspectDashboardSources(): DashboardSourceSummary {
         && Array.isArray(value.tasks),
     },
     {
-      keys: ["routine.affairs.workspace.v1"],
+      keys: ["rootine.affairs.workspace.v1"],
       valid: (value: unknown) => isRecord(value)
         && (value.version === 1 || value.version === 2)
         && Array.isArray(value.matters)
@@ -134,7 +134,7 @@ function inspectDashboardSources(): DashboardSourceSummary {
         && Array.isArray(value.budgets),
     },
     {
-      keys: ["routine-sport-planner-v1", "routine-sport-v3"],
+      keys: ["rootine-sport-planner-v1", "routine-sport-v3"],
       valid: (value: unknown) => isRecord(value)
         && Array.isArray(value.templates)
         && (

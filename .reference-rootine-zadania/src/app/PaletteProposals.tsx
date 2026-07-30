@@ -110,7 +110,7 @@ function MiniMockup({ p }: { p: typeof PALETTES[number] }) {
           >
             <span className="text-[8px] font-bold text-white">R</span>
           </div>
-          <span className="text-[10px] font-semibold" style={{ color: p.tPrimary }}>Routine</span>
+          <span className="text-[10px] font-semibold" style={{ color: p.tPrimary }}>Rootine</span>
         </div>
         {[
           { label: "Dzisiaj",  active: false },
@@ -284,7 +284,7 @@ export default function PaletteProposals() {
         {/* Header */}
         <div className="mb-10">
           <p className="text-[10px] uppercase tracking-widest font-semibold mb-2" style={{ color: "#3A4248" }}>
-            Routine OS · Propozycje palety
+            Rootine OS · Propozycje palety
           </p>
           <h1 className="text-[22px] font-semibold mb-2.5" style={{ color: "#F0F0F0" }}>
             Pure Graphite · 4 warianty

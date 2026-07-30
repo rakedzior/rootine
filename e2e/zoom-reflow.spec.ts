@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from "@playwright/test";
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 const REFLOW_ROUTES = [
   { name: "Dzisiaj", path: "/dzisiaj" },
@@ -53,10 +53,10 @@ async function expectReflowAtCurrentScale(page: Page, routeName: string) {
 
 test.describe("browser zoom and reflow", { tag: "@zoom-matrix" }, () => {
   test("emulates browser zoom with a scaled CSS viewport", async ({
-    routinePage: page,
+    rootinePage: page,
   }, testInfo) => {
     const profile = zoomMetadata(testInfo);
-    await openRoutineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/dzisiaj");
 
     expect(page.viewportSize()).toEqual({
       width: profile.effectiveWidth,
@@ -70,13 +70,13 @@ test.describe("browser zoom and reflow", { tag: "@zoom-matrix" }, () => {
   });
 
   test("core modules reflow without global overflow or duplicate landmarks", async ({
-    routinePage: page,
+    rootinePage: page,
   }, testInfo) => {
     const profile = zoomMetadata(testInfo);
 
     for (const route of REFLOW_ROUTES) {
       await test.step(`${route.name} at ${profile.zoomPercent}%`, async () => {
-        await openRoutineRoute(page, route.path);
+        await openRootineRoute(page, route.path);
         await expect(page.locator("#primary-workspace main:visible")).toHaveCount(1);
         await expect(page.locator("#primary-workspace h1:visible")).toHaveCount(1);
         await expect(page.locator(".ui-module-shell__header")).toBeVisible();
@@ -86,9 +86,9 @@ test.describe("browser zoom and reflow", { tag: "@zoom-matrix" }, () => {
   });
 
   test("keyboard focus remains visible while traversing the scaled workspace", async ({
-    routinePage: page,
+    rootinePage: page,
   }) => {
-    await openRoutineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/dzisiaj");
 
     await page.evaluate(() => {
       (document.activeElement as HTMLElement | null)?.blur();

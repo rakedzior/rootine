@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 /**
  * Guards the invariants that the July 2026 UI audit established. Each test here failed
@@ -85,11 +85,11 @@ async function collectRouteMetrics(page: Page) {
 }
 
 test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
-  test("the page title starts at the same x on every route", async ({ routinePage: page }) => {
+  test("the page title starts at the same x on every route", async ({ rootinePage: page }) => {
     const positions: Array<{ route: string; x: number | null }> = [];
 
     for (const route of ROUTES) {
-      await openRoutineRoute(page, route);
+      await openRootineRoute(page, route);
       const { headingX } = await collectRouteMetrics(page);
       positions.push({ route, x: headingX });
     }
@@ -109,8 +109,8 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
   });
 
   for (const route of ROUTES) {
-    test(`${route} uses only tokenised control heights`, async ({ routinePage: page }) => {
-      await openRoutineRoute(page, route);
+    test(`${route} uses only tokenised control heights`, async ({ rootinePage: page }) => {
+      await openRootineRoute(page, route);
       const { controlHeights } = await collectRouteMetrics(page);
 
       const offenders = controlHeights.filter((height) => !ALLOWED_CONTROL_HEIGHTS.some(
@@ -124,8 +124,8 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
       ).toEqual([]);
     });
 
-    test(`${route} keeps every text run at 11px or larger`, async ({ routinePage: page }) => {
-      await openRoutineRoute(page, route);
+    test(`${route} keeps every text run at 11px or larger`, async ({ rootinePage: page }) => {
+      await openRootineRoute(page, route);
       const { smallestText } = await collectRouteMetrics(page);
 
       expect(
@@ -136,9 +136,9 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
     });
   }
 
-  test("no route lets content escape the viewport", async ({ routinePage: page }) => {
+  test("no route lets content escape the viewport", async ({ rootinePage: page }) => {
     for (const route of ROUTES) {
-      await openRoutineRoute(page, route);
+      await openRootineRoute(page, route);
       const escaping = await page.evaluate(() => {
         const viewportWidth = document.documentElement.clientWidth;
         const offenders: string[] = [];
@@ -168,11 +168,11 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
     }
   });
 
-  test("the whole app shares one small typographic scale", async ({ routinePage: page }) => {
+  test("the whole app shares one small typographic scale", async ({ rootinePage: page }) => {
     const combinations = new Set<string>();
 
     for (const route of ROUTES) {
-      await openRoutineRoute(page, route);
+      await openRootineRoute(page, route);
       const { typography } = await collectRouteMetrics(page);
       typography.forEach((entry) => combinations.add(entry));
     }
@@ -192,9 +192,9 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
 });
 
 test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
-  test("the primary sidebar and page header keep fixed dimensions", async ({ routinePage: page }) => {
+  test("the primary sidebar and page header keep fixed dimensions", async ({ rootinePage: page }) => {
     for (const route of ROUTES) {
-      await openRoutineRoute(page, route);
+      await openRootineRoute(page, route);
       const box = await page.evaluate(() => {
         const sidebar = document.querySelector(".app-sidebar");
         const header = document.querySelector(".ui-module-shell__header");

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGoalsStore } from "./goalsContext";
 import { GoalsProvider } from "./goalsStore";
 
-const STORAGE_KEY = "routine.goals.v1";
+const STORAGE_KEY = "rootine.goals.v1";
 const GOAL_ID = "rehab-app";
 
 function StoreHarness() {

@@ -139,8 +139,8 @@ export default function Cele() {
     }
   }, [searchParams, selectedId, setSearchParams, viewState]);
 
-  useEffect(() => { try { localStorage.setItem("routine.goals.layout", layout); } catch { /* preference persistence is best-effort */ } }, [layout]);
-  useEffect(() => { try { localStorage.setItem("routine.goals.sort", sortKey); } catch { /* preference persistence is best-effort */ } }, [sortKey]);
+  useEffect(() => { try { localStorage.setItem("rootine.goals.layout", layout); } catch { /* preference persistence is best-effort */ } }, [layout]);
+  useEffect(() => { try { localStorage.setItem("rootine.goals.sort", sortKey); } catch { /* preference persistence is best-effort */ } }, [sortKey]);
 
   const visibleGoals = useMemo(() => {
     let result: Goal[];
@@ -204,7 +204,7 @@ export default function Cele() {
   };
 
   const exportGoals = () => {
-    downloadJson(exportStore(), `routine-cele-${todayLocalDateKey()}.json`);
+    downloadJson(exportStore(), `rootine-cele-${todayLocalDateKey()}.json`);
     setHeaderMenuOpen(false);
   };
 
@@ -232,7 +232,7 @@ export default function Cele() {
     if (!importCandidate) return;
     downloadJson(
       exportStore(),
-      `routine-cele-kopia-przed-importem-${todayLocalDateKey()}.json`,
+      `rootine-cele-kopia-przed-importem-${todayLocalDateKey()}.json`,
     );
     const result = importStore(importCandidate.raw);
     if (!result.ok) {

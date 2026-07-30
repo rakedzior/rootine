@@ -93,11 +93,25 @@ export function ContextSidebar({
   children,
   ...props
 }: ContextSidebarProps) {
-  const preferenceKey = storageKey ?? `routine.context-sidebar.${encodeURIComponent(label)}.collapsed`;
+  const preferenceKey = storageKey ?? `rootine.context-sidebar.${encodeURIComponent(label)}.collapsed`;
+  const legacyPreferenceKey = preferenceKey.startsWith("rootine.")
+    ? `routine.${preferenceKey.slice("rootine.".length)}`
+    : null;
   const [collapsed, setCollapsed] = useState(() => {
     if (!collapsible || typeof window === "undefined") return false;
     try {
-      return window.localStorage.getItem(preferenceKey) === "true";
+      const saved = window.localStorage.getItem(preferenceKey);
+      const legacySaved = saved === null && legacyPreferenceKey
+        ? window.localStorage.getItem(legacyPreferenceKey)
+        : null;
+      if (saved === null && legacySaved !== null) {
+        try {
+          window.localStorage.setItem(preferenceKey, legacySaved);
+        } catch {
+          // Keep using the legacy preference if the new key cannot be written yet.
+        }
+      }
+      return (saved ?? legacySaved) === "true";
     } catch {
       return false;
     }

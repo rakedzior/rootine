@@ -64,7 +64,7 @@ export default function Layout() {
               <span className="text-[11px] font-bold text-white">R</span>
             </div>
             <span className="text-[13px] font-semibold tracking-wide" style={{ color: T.primaryText }}>
-              Routine
+              Rootine
             </span>
           </div>
         </div>

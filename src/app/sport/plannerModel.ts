@@ -93,7 +93,7 @@ interface LegacySportState {
   templates: WorkoutTemplate[];
 }
 
-export const SPORT_PLANNER_STORAGE_KEY = "routine-sport-planner-v1";
+export const SPORT_PLANNER_STORAGE_KEY = "rootine-sport-planner-v1";
 const LEGACY_STORAGE_KEY = "routine-sport-v3";
 
 export const DAY_LABELS = [

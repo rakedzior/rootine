@@ -7,7 +7,7 @@ related_targets: ["src/app/data/travelWorkspace.ts","src/styles/travel.css"]
 
 # Podróże
 
-- Scope and mode: global Routine module for planning and maintaining trips; Operate.
+- Scope and mode: global Rootine module for planning and maintaining trips; Operate.
 - Audience and job: a small set of users needs to scan upcoming travel, open one journey, and close preparation gaps without switching tools.
 - Primary task: select a trip, then maintain its day plan, bookings, budget, documents, and preparation list.
 - Content and constraints: local-only MVP, Polish UI, realistic demonstration data, validated `localStorage`, no account, sync, or file upload.

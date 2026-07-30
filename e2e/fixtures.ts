@@ -13,12 +13,12 @@ const WEATHER_RESPONSE = {
   },
 };
 
-type RoutineFixtures = {
-  routinePage: Page;
+type RootineFixtures = {
+  rootinePage: Page;
 };
 
-export const test = base.extend<RoutineFixtures>({
-  routinePage: async ({ page }, provide) => {
+export const test = base.extend<RootineFixtures>({
+  rootinePage: async ({ page }, provide) => {
     await page.route("https://api.open-meteo.com/**", async (route) => {
       await route.fulfill({
         status: 200,
@@ -46,7 +46,7 @@ export const test = base.extend<RoutineFixtures>({
     });
 
     await page.addInitScript(() => {
-      const marker = "routine:e2e:storage-initialized";
+      const marker = "rootine:e2e:storage-initialized";
       try {
         if (window.sessionStorage.getItem(marker) === "true") return;
         window.localStorage.clear();
@@ -63,7 +63,7 @@ export const test = base.extend<RoutineFixtures>({
 
 export { expect };
 
-export async function openRoutineRoute(page: Page, path: string) {
+export async function openRootineRoute(page: Page, path: string) {
   await page.goto(path);
   const pageTitle = page.locator(".ui-page-header__title");
   await expect(pageTitle).toBeVisible();

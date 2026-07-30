@@ -194,22 +194,22 @@ describe("local repository", () => {
     expect(repository.listLocalRecoveryRecords()).toHaveLength(2);
   });
 
-  it("accepts raw app preferences and routine-dash workspace keys in a full backup", async () => {
+  it("accepts raw app preferences and rootine-dash workspace keys in a full backup", async () => {
     const repository = await import("./localRepository");
     const result = await repository.importAllLocalWorkspaces({
       version: 1,
       exportedAt: new Date().toISOString(),
       workspaces: {
-        "routine.sidebar.collapsed": "true",
-        "routine.goals.layout": "grid",
-        "routine-sport-planner-v1": JSON.stringify({ version: 1 }),
+        "rootine.sidebar.collapsed": "true",
+        "rootine.goals.layout": "grid",
+        "rootine-sport-planner-v1": JSON.stringify({ version: 1 }),
       },
     });
 
     expect(result).toEqual({ ok: true, restored: 3 });
-    expect(window.localStorage.getItem("routine.sidebar.collapsed")).toBe("true");
-    expect(window.localStorage.getItem("routine.goals.layout")).toBe("grid");
-    expect(window.localStorage.getItem("routine-sport-planner-v1")).toBe(JSON.stringify({ version: 1 }));
+    expect(window.localStorage.getItem("rootine.sidebar.collapsed")).toBe("true");
+    expect(window.localStorage.getItem("rootine.goals.layout")).toBe("grid");
+    expect(window.localStorage.getItem("rootine-sport-planner-v1")).toBe(JSON.stringify({ version: 1 }));
   });
 
   it("reports origin storage usage and handles unavailable estimates", async () => {
@@ -688,7 +688,7 @@ describe("local repository", () => {
 
   it("classifies an ordinary quota failure and retries the retained draft", async () => {
     const repository = await import("./localRepository");
-    const key = "routine.sidebar.modules";
+    const key = "rootine.sidebar.modules";
     const originalSetItem = Storage.prototype.setItem;
     const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function mockedSetItem(
       this: Storage,

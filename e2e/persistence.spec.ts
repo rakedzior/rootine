@@ -1,10 +1,10 @@
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
 
 test.describe("task persistence", { tag: "@desktop" }, () => {
-  test("a newly created task survives a page reload", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/zadania");
+  test("a newly created task survives a page reload", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/zadania");
     await page.evaluate((key) => {
       window.addEventListener("rootine:workspace-change", (event) => {
         const detail = (event as CustomEvent<{ key?: string; origin?: string }>).detail;

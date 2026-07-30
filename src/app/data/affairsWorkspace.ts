@@ -114,7 +114,7 @@ type LegacyAffairsWorkspace = {
   budgets: BudgetMonth[];
 };
 
-export const AFFAIRS_STORAGE_KEY = "routine.affairs.workspace.v1";
+export const AFFAIRS_STORAGE_KEY = "rootine.affairs.workspace.v1";
 
 function isoDateOffset(days: number): string {
   const date = new Date();

@@ -9,9 +9,9 @@ import {
   writeLocalWorkspace,
 } from "./localRepository";
 
-export const MODULE_PREFERENCES_STORAGE_KEY = "routine.sidebar.modules";
+export const MODULE_PREFERENCES_STORAGE_KEY = "rootine.sidebar.modules";
 const MODULE_PREFERENCES_VERSION = 1 as const;
-const MODULE_PREFERENCES_CHANGE_EVENT = "routine:module-preferences-change";
+const MODULE_PREFERENCES_CHANGE_EVENT = "rootine:module-preferences-change";
 
 export type ModulePreferences = {
   version: typeof MODULE_PREFERENCES_VERSION;

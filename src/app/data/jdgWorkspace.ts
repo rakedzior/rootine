@@ -136,7 +136,7 @@ export type JdgMutationMeta = {
   eventId?: string;
 };
 
-export const JDG_STORAGE_KEY = "routine.jdg.workspace.v1";
+export const JDG_STORAGE_KEY = "rootine.jdg.workspace.v1";
 export const JDG_PROFILE_TEMPLATE_ID = "profile-default";
 export const MAX_JDG_HISTORY_EVENTS = 100;
 

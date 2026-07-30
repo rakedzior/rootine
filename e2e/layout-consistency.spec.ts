@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 const ROUTES = [
   { name: "Dzisiaj", path: "/dzisiaj" },
@@ -49,9 +49,9 @@ async function expectNoGlobalHorizontalOverflow(page: Page, routeName: string) {
 test.describe("responsive shell and module invariants", { tag: "@viewport-matrix" }, () => {
   for (const route of ROUTES) {
     test(`${route.name} reflows without shifting the module header`, async ({
-      routinePage: page,
+      rootinePage: page,
     }) => {
-      await openRoutineRoute(page, route.path);
+      await openRootineRoute(page, route.path);
 
       const viewport = page.viewportSize();
       expect(viewport).not.toBeNull();
@@ -150,9 +150,9 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
   }
 
   test("skip link bypasses navigation and moves keyboard focus to the workspace", async ({
-    routinePage: page,
+    rootinePage: page,
   }) => {
-    await openRoutineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/dzisiaj");
 
     const skipLink = page.getByRole("link", { name: "Przejdź do treści" });
     const workspace = page.locator("#primary-workspace");

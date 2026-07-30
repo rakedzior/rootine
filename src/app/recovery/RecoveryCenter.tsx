@@ -138,7 +138,7 @@ export function RecoveryCenterButton() {
     try {
       const backup = await exportAllLocalWorkspaces();
       downloadText(
-        `routine-backup-${backup.exportedAt.slice(0, 10)}.json`,
+        `rootine-backup-${backup.exportedAt.slice(0, 10)}.json`,
         JSON.stringify(backup, null, 2),
       );
       setMessage(`Wyeksportowano ${Object.keys(backup.workspaces).length} obszarów danych.`);
@@ -220,7 +220,7 @@ export function RecoveryCenterButton() {
   const exportRecord = async (id: string) => {
     const raw = await exportLocalRecoveryRecord(id);
     if (raw !== null) {
-      downloadText(`routine-recovery-${id}.json`, raw);
+      downloadText(`rootine-recovery-${id}.json`, raw);
       return;
     }
     setMessage("Nie udało się odczytać zabezpieczonego zapisu.");

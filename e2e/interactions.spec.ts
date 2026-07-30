@@ -1,8 +1,8 @@
-import { test, expect, openRoutineRoute } from "./fixtures";
+import { test, expect, openRootineRoute } from "./fixtures";
 
 test.describe("modal keyboard behavior", { tag: "@desktop" }, () => {
-  test("Escape closes and returns focus to its trigger", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/sport?widok=templates");
+  test("Escape closes and returns focus to its trigger", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/sport?widok=templates");
 
     const trigger = page.getByRole("button", { name: "Nowy szablon" });
     await trigger.click();
@@ -18,8 +18,8 @@ test.describe("modal keyboard behavior", { tag: "@desktop" }, () => {
 });
 
 test.describe("mobile drawer keyboard behavior", { tag: "@mobile" }, () => {
-  test("Escape closes and restores focus", async ({ routinePage: page }) => {
-    await openRoutineRoute(page, "/dzisiaj");
+  test("Escape closes and restores focus", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/dzisiaj");
 
     const moreButton = page
       .getByRole("navigation", { name: "Główna nawigacja mobilna" })
