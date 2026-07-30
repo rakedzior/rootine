@@ -727,20 +727,10 @@ export default function Dzisiaj() {
       progressLabel: `${formatNumber(nutritionTotals.calories)} / ${formatNumber(calorieGoal)} kcal`,
     },
   ];
-  const sortedModuleRows = modulePreferences.order
+  const orderedModuleRows = modulePreferences.order
     .filter((moduleId) => visibleModuleIds.has(moduleId))
-    .flatMap((moduleId) => moduleRows.filter((module) => module.moduleId === moduleId))
-    .map((module, preferenceIndex) => ({ module, preferenceIndex }))
-    .sort((left, right) => {
-      const stateRank: Record<ModuleState, number> = {
-        active: 0,
-        complete: 1,
-        empty: 2,
-      };
-      return stateRank[left.module.state] - stateRank[right.module.state]
-        || left.preferenceIndex - right.preferenceIndex;
-    })
-    .map(({ module }) => module);
+    .flatMap((moduleId) => moduleRows.filter((module) => module.moduleId === moduleId));
+  const activeAreaCount = orderedModuleRows.filter((module) => module.state === "active").length;
 
   const pageHeader = (
     <PageHeader
@@ -798,6 +788,14 @@ export default function Dzisiaj() {
                   {remainingThingsLabel(remainingDailyItems)}
                 </h2>
                 <div className="today-day-balance__signals" aria-label="Bilans dnia">
+                  <span>
+                    {counted(
+                      activeAreaCount,
+                      "obszar wymaga reakcji",
+                      "obszary wymagają reakcji",
+                      "obszarów wymaga reakcji",
+                    )}
+                  </span>
                   <span>{counted(totalDailyItems, "zaplanowana", "zaplanowane", "zaplanowanych")}</span>
                   <span>{counted(completedDailyItems, "wykonana", "wykonane", "wykonanych")}</span>
                   <span className={overdueItems ? "is-danger" : ""}>{overdueItems} po terminie</span>
@@ -824,7 +822,7 @@ export default function Dzisiaj() {
               </div>
 
               <div className="today-module-list">
-                {sortedModuleRows.map((module) => (
+                {orderedModuleRows.map((module) => (
                   <ModuleSummary key={module.title} {...module} />
                 ))}
               </div>
