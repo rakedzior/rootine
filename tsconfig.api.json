@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.app.json",
-  "include": ["api/**/*.ts"]
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["api/**/*.ts", "functions/**/*.ts"]
 }

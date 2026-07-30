@@ -1,10 +1,13 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import handler, { resetProxyRateLimitForTests } from "./search";
+import handler, {
+  handleOpenFoodFactsSearch,
+  resetProxyRateLimitForTests,
+} from "./search";
 
 function request(path: string, init: RequestInit = {}) {
-  return new Request(`https://routine.example${path}`, {
+  return new Request(`https://rootine.example${path}`, {
     headers: { "x-forwarded-for": "203.0.113.8", ...init.headers },
     ...init,
   });
@@ -64,7 +67,7 @@ describe("Open Food Facts proxy", () => {
     expect(upstream.searchParams.get("page_size")).toBe("20");
     expect(upstream.searchParams.get("callback")).toBeNull();
     expect(headers.get("accept")).toBe("application/json");
-    expect(headers.get("user-agent")).toBe("Routine/1.0 (maintainer@example.test)");
+    expect(headers.get("user-agent")).toBe("Rootine/1.0 (maintainer@example.test)");
   });
 
   it("uses a non-identifying fallback when no contact is configured", async () => {
@@ -77,7 +80,28 @@ describe("Open Food Facts proxy", () => {
     await handler(request("/api/openfoodfacts/search?q=apple"));
 
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
-    expect(headers.get("user-agent")).toBe("Routine/1.0");
+    expect(headers.get("user-agent")).toBe("Rootine/1.0");
+  });
+
+  it("accepts Cloudflare runtime options without exposing them to the client", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({ hits: [] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleOpenFoodFactsSearch(
+      request("/api/openfoodfacts/search?q=apple"),
+      {
+        contact: "pages-maintainer@example.test",
+        clientIp: "198.51.100.24",
+      },
+    );
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(response.status).toBe(200);
+    expect(headers.get("user-agent")).toBe("Rootine/1.0 (pages-maintainer@example.test)");
+    expect(await response.json()).toEqual({ hits: [] });
   });
 
   it("preserves an upstream error and prevents it from being cached", async () => {

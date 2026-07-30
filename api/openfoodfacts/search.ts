@@ -6,6 +6,11 @@ const RATE_LIMIT = 8;
 const RATE_WINDOW_MS = 60_000;
 const rateWindows = new Map<string, { count: number; resetAt: number }>();
 
+export interface OpenFoodFactsHandlerOptions {
+  contact?: string;
+  clientIp?: string;
+}
+
 function jsonResponse(
   body: Record<string, unknown>,
   status: number,
@@ -28,21 +33,29 @@ function runtimeEnv(name: string) {
   return runtime.process?.env?.[name]?.trim();
 }
 
-function userAgent() {
-  const contact = runtimeEnv("OPEN_FOOD_FACTS_CONTACT")
+function userAgent(contactOverride?: string) {
+  const contact = (contactOverride ?? runtimeEnv("OPEN_FOOD_FACTS_CONTACT"))
     ?.replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
     .slice(0, 160);
-  return contact ? `Routine/1.0 (${contact})` : "Routine/1.0";
+  return contact ? `Rootine/1.0 (${contact})` : "Rootine/1.0";
 }
 
-function requestIp(request: Request) {
+function requestIp(request: Request, override?: string) {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
+  return override?.trim()
+    || request.headers.get("cf-connecting-ip")?.trim()
+    || forwarded
+    || request.headers.get("x-real-ip")?.trim()
+    || "unknown";
 }
 
-function consumeRateLimit(request: Request, now = Date.now()) {
-  const ip = requestIp(request);
+function consumeRateLimit(
+  request: Request,
+  clientIp?: string,
+  now = Date.now(),
+) {
+  const ip = requestIp(request, clientIp);
   if (rateWindows.size >= 1_000 && !rateWindows.has(ip)) {
     rateWindows.forEach((window, candidateIp) => {
       if (window.resetAt <= now) rateWindows.delete(candidateIp);
@@ -71,7 +84,10 @@ export function resetProxyRateLimitForTests() {
   rateWindows.clear();
 }
 
-export default async function handler(request: Request): Promise<Response> {
+export async function handleOpenFoodFactsSearch(
+  request: Request,
+  options: OpenFoodFactsHandlerOptions = {},
+): Promise<Response> {
   if (request.method !== "GET") {
     return jsonResponse({ error: "Method not allowed" }, 405, { allow: "GET" });
   }
@@ -82,7 +98,7 @@ export default async function handler(request: Request): Promise<Response> {
     return jsonResponse({ error: "Query must contain 2–180 characters" }, 400);
   }
 
-  const rateLimit = consumeRateLimit(request);
+  const rateLimit = consumeRateLimit(request, options.clientIp);
   if (!rateLimit.allowed) {
     return jsonResponse(
       { error: "Too many catalog searches. Try again later." },
@@ -110,7 +126,7 @@ export default async function handler(request: Request): Promise<Response> {
     const response = await fetch(upstream, {
       headers: {
         accept: "application/json",
-        "user-agent": userAgent(),
+        "user-agent": userAgent(options.contact),
       },
     });
     const body = await response.arrayBuffer();
@@ -131,4 +147,8 @@ export default async function handler(request: Request): Promise<Response> {
       "x-ratelimit-remaining": String(rateLimit.remaining),
     });
   }
+}
+
+export default function handler(request: Request): Promise<Response> {
+  return handleOpenFoodFactsSearch(request);
 }

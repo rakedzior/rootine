@@ -9,3 +9,5 @@ vite.config.d.ts
 Thumbs.db
 *.log
 .impeccable/config.local.json
+.claude/settings.local.json
+.wrangler/
