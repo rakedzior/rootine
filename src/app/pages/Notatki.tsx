@@ -1,6 +1,6 @@
 /**
  * THESIS: Notatki is a capture desk, not a wall of decorative sticky notes; it refuses a card gallery with no filing or editing depth.
- * OWN-WORLD: Routine's graphite workshop, a compact filing rail, restrained color markers, dense note sheets, and a docked writing panel.
+ * OWN-WORLD: Rootine's graphite workshop, a compact filing rail, restrained color markers, dense note sheets, and a docked writing panel.
  * STORY: Capture quickly, find by list or tag, pin what matters, and turn loose thoughts into text or actionable checklists.
  * FIRST VIEWPORT: The filing rail frames pinned and recent sheets while the selected note opens as a focused editor on the right.
  * FORM: The fifth grounded structure — a pinned desk with a live detail editor — selected with seed de49c24a.

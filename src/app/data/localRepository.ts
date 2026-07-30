@@ -253,7 +253,7 @@ function parseWorkspaceManifest(raw: string | null, expectedKey?: string): Works
 }
 
 function shouldUseIndexedDb(key: string) {
-  return payloadStore.available && isRoutineWorkspaceKey(key) && !INLINE_STORAGE_KEYS.has(key);
+  return payloadStore.available && isRootineWorkspaceKey(key) && !INLINE_STORAGE_KEYS.has(key);
 }
 
 function installMutationListeners() {
@@ -519,7 +519,7 @@ function issueMessage(kind: LocalPersistenceIssueKind, key: string) {
     return `Brak miejsca na zapis „${key}”. Wyeksportuj kopię, usuń zbędne dane i spróbuj ponownie.`;
   }
   if (kind === "conflict") {
-    return `Nowsza wersja „${key}” została zapisana w innej karcie. Routine zachował tamtą wersję i nie nadpisał jej po cichu.`;
+    return `Nowsza wersja „${key}” została zapisana w innej karcie. Rootine zachował tamtą wersję i nie nadpisał jej po cichu.`;
   }
   if (kind === "permission") {
     return `Przeglądarka zablokowała zapis „${key}”. Sprawdź ustawienia danych witryny i spróbuj ponownie.`;
@@ -1375,7 +1375,7 @@ export async function deleteLocalRecoveryRecord(id: string): Promise<boolean> {
   }
 }
 
-function isRoutineWorkspaceKey(key: string) {
+function isRootineWorkspaceKey(key: string) {
   return (key.startsWith("rootine.") || key.startsWith("routine.") || key.startsWith("routine-"))
     && key !== RECOVERY_INDEX_KEY
     && !key.startsWith(BACKUP_PREFIX);
@@ -1460,7 +1460,7 @@ function validateFullLocalBackup(value: unknown): LocalBackupValidationResult {
 
   const entries = Object.entries(value.workspaces);
   if (!entries.every(([key, raw]) => (
-    isRoutineWorkspaceKey(key)
+    isRootineWorkspaceKey(key)
     && typeof raw === "string"
     && validateStoredWorkspaceValue(key, raw)
   ))) {
@@ -1547,7 +1547,7 @@ export async function getPersistentStorageStatus(
       status: "ready",
       persisted,
       message: persisted
-        ? "Przeglądarka oznaczyła dane Routine jako trwałe."
+        ? "Przeglądarka oznaczyła dane Rootine jako trwałe."
         : "Dane działają lokalnie, ale przeglądarka może je usunąć podczas porządkowania pamięci.",
     };
   } catch {
@@ -1577,7 +1577,7 @@ export async function requestPersistentStorage(
       return {
         status: "ready",
         persisted: true,
-        message: "Dane Routine są już chronione przed automatycznym usunięciem.",
+        message: "Dane Rootine są już chronione przed automatycznym usunięciem.",
       };
     }
     const persisted = await provider.persist();
@@ -1585,7 +1585,7 @@ export async function requestPersistentStorage(
       status: "ready",
       persisted,
       message: persisted
-        ? "Przeglądarka włączyła trwałą ochronę danych Routine."
+        ? "Przeglądarka włączyła trwałą ochronę danych Rootine."
         : "Przeglądarka nie przyznała trwałej ochrony. Dane nadal działają, ale regularnie eksportuj kopię.",
     };
   } catch {
@@ -1604,7 +1604,7 @@ export function getWorkspaceStorageTierStatus() {
     }
     : {
       status: "fallback" as const,
-      message: "IndexedDB jest niedostępne. Routine korzysta z trybu zgodności localStorage o mniejszej pojemności.",
+      message: "IndexedDB jest niedostępne. Rootine korzysta z trybu zgodności localStorage o mniejszej pojemności.",
     };
 }
 
@@ -1639,12 +1639,12 @@ export async function exportAllLocalWorkspaces(): Promise<FullLocalBackup> {
   const keys = new Set<string>();
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index);
-    if (key && isRoutineWorkspaceKey(key)) keys.add(key);
+    if (key && isRootineWorkspaceKey(key)) keys.add(key);
   }
   if (payloadStore.available) {
     try {
       (await payloadStore.list()).forEach((record) => {
-        if (isRoutineWorkspaceKey(record.key)) keys.add(record.key);
+        if (isRootineWorkspaceKey(record.key)) keys.add(record.key);
       });
     } catch (error) {
       reportPersistenceIssue({

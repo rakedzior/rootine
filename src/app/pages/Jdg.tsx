@@ -1,6 +1,6 @@
 /**
  * THESIS: JDG is a repeatable monthly close, not a loose tax checklist; it refuses tasks without sequence or evidence.
- * OWN-WORLD: Routine's graphite register, three ordered ledgers, date-driven status, and one blue completion path.
+ * OWN-WORLD: Rootine's graphite register, three ordered ledgers, date-driven status, and one blue completion path.
  * STORY: Prepare documents, settle obligations, verify proof, and only then close the month with confidence.
  * FIRST VIEWPORT: The selected month, completion state, and every required checkpoint are visible without changing context.
  * FORM: The seventh grounded structure — a monthly responsibility cockpit — selected with seed 54454916.
@@ -557,7 +557,7 @@ export function JdgWorkspace({
       {settingsOpen && (
         <Modal
           title="Profil podatkowy i szablony"
-          description="Ustaw zgodnie z informacją od księgowości. Routine organizuje obowiązki, ale nie wylicza podatku."
+          description="Ustaw zgodnie z informacją od księgowości. Rootine organizuje obowiązki, ale nie wylicza podatku."
           onClose={() => setSettingsOpen(false)}
           width={680}
           footer={(

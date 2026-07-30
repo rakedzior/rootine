@@ -1,6 +1,6 @@
 /**
  * THESIS: Podróże is an operational trip dossier, not a destination gallery; it refuses decorative cards with no planning depth.
- * OWN-WORLD: Routine's graphite workshop, a compact trip rail, dated itinerary bands, quiet ledgers, and precision blue for the active journey.
+ * OWN-WORLD: Rootine's graphite workshop, a compact trip rail, dated itinerary bands, quiet ledgers, and precision blue for the active journey.
  * STORY: Scan every departure, open one trip, then close the gaps across plan, bookings, money, documents, and preparation.
  * FIRST VIEWPORT: The trip rail frames a departure board where readiness, the next action, dates, and committed budget meet in one scan.
  * FORM: The sixth grounded structure — a trip dossier with a readiness ledger — selected with seed 46ce9e6f.

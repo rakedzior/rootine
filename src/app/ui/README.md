@@ -1,4 +1,4 @@
-# Routine UI
+# Rootine UI
 
 To jest publiczna warstwa interfejsu dla wszystkich zakładek aplikacji. Importuj wyłącznie z `src/app/ui`:
 

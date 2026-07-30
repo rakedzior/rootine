@@ -255,7 +255,7 @@ export function RecoveryCenterButton() {
       {open && (
         <Modal
           title="Kopia i odzyskiwanie"
-          description="Eksportuj wszystkie lokalne dane albo przywróć zachowaną kopię. Przed importem Routine automatycznie zabezpiecza aktualne wpisy."
+          description="Eksportuj wszystkie lokalne dane albo przywróć zachowaną kopię. Przed importem Rootine automatycznie zabezpiecza aktualne wpisy."
           width={680}
           onClose={() => {
             setPendingImport(null);
@@ -283,7 +283,7 @@ export function RecoveryCenterButton() {
                       Zmiany wymagające uwagi
                     </h3>
                     <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
-                      Routine zatrzymał ryzykowny zapis. Trwała wersja nie została po cichu nadpisana; szkic możesz pobrać przed ponowieniem.
+                      Rootine zatrzymał ryzykowny zapis. Trwała wersja nie została po cichu nadpisana; szkic możesz pobrać przed ponowieniem.
                     </p>
                   </div>
                   <Badge tone="danger">{issues.length} {issues.length === 1 ? "problem" : "problemy"}</Badge>
@@ -312,7 +312,7 @@ export function RecoveryCenterButton() {
                             leadingIcon={<Download size={12} aria-hidden="true" />}
                             onClick={() => {
                               const draft = exportLocalPersistenceIssueDraft(issue.id);
-                              if (draft !== null) downloadText(`routine-unsaved-${issue.id}.json`, draft);
+                              if (draft !== null) downloadText(`rootine-unsaved-${issue.id}.json`, draft);
                             }}
                           >
                             Pobierz szkic
@@ -371,7 +371,7 @@ export function RecoveryCenterButton() {
                   className="sr-only"
                   type="file"
                   accept="application/json,.json"
-                  aria-label="Wybierz plik kopii danych Routine"
+                  aria-label="Wybierz plik kopii danych Rootine"
                   onChange={(event) => void selectImport(event.target.files?.[0])}
                 />
               </div>
@@ -388,7 +388,7 @@ export function RecoveryCenterButton() {
                     Pamięć tej witryny
                   </h3>
                   <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
-                    Szacunek przeglądarki obejmuje lokalne dane Routine oraz inne zasoby tej witryny, na przykład pamięć podręczną.
+                    Szacunek przeglądarki obejmuje lokalne dane Rootine oraz inne zasoby tej witryny, na przykład pamięć podręczną.
                   </p>
                 </div>
                 {storageEstimate.status === "ready" && (

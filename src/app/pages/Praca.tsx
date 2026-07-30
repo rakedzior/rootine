@@ -1,6 +1,6 @@
 /**
  * THESIS: Praca is a personal outline, not a team dashboard; it refuses boards full of assignees and reporting chrome.
- * OWN-WORLD: Routine's graphite workshop, compact rows, quiet borders, and precision blue reserved for selection and action.
+ * OWN-WORLD: Rootine's graphite workshop, compact rows, quiet borders, and precision blue reserved for selection and action.
  * STORY: Scan all work, choose a company, then turn one project's work into a clear tree with unlimited branches.
  * FIRST VIEWPORT: One local rail holds overview and an expanded company-project tree; the task outline owns the canvas.
  * FORM: A two-navigation-layer personal workspace refined from seed c87cae68.

@@ -90,7 +90,7 @@ export function createBrowserWorkspacePayloadStore(
         reject(request.error ?? new DOMException("Could not open IndexedDB.", "UnknownError"));
       };
       request.onblocked = () => {
-        // Give another Routine tab a short window to close its older connection.
+        // Give another Rootine tab a short window to close its older connection.
       };
     });
 

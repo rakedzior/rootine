@@ -29,7 +29,7 @@ function RouteStateFrame({
       <section className="app-route-state__panel" aria-labelledby="app-route-state-title">
         <div className="app-route-state__brand" aria-hidden="true">
           <span>R</span>
-          <strong>Routine</strong>
+          <strong>Rootine</strong>
         </div>
         <div className="app-route-state__icon" aria-hidden="true">{icon}</div>
         <p className="app-route-state__eyebrow">{eyebrow}</p>
@@ -44,7 +44,7 @@ function RouteStateFrame({
 export function RouteLoadingState() {
   return (
     <RouteStateFrame
-      eyebrow="Routine"
+      eyebrow="Rootine"
       title="Przygotowujemy obszar roboczy"
       description="Ładujemy tylko potrzebny moduł i zachowujemy stan pozostałych obszarów."
       icon={<LoaderCircle className="app-route-state__spinner" size={22} />}
@@ -85,7 +85,7 @@ export function RouteNotFoundState() {
   return (
     <RouteStateFrame
       eyebrow="Nieznany adres"
-      title="Tego widoku nie ma w Routine"
+      title="Tego widoku nie ma w Rootine"
       description={`Adres „${location.pathname}” nie odpowiada żadnemu aktywnemu modułowi.`}
       icon={<AlertTriangle size={22} />}
     >

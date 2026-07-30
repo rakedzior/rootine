@@ -232,7 +232,7 @@ function ProfileSummary() {
           <small>Profil nie jest jeszcze połączony z kontem.</small>
         </span>
       </div>
-      <p>Dane Routine są obecnie zapisywane tylko na tym urządzeniu.</p>
+      <p>Dane Rootine są obecnie zapisywane tylko na tym urządzeniu.</p>
       <div className="app-recovery-entry">
         <RecoveryCenterButton />
       </div>
@@ -464,7 +464,7 @@ export default function Layout() {
           ) : (
             <>
               <div className="app-brand__mark" aria-hidden="true">R</div>
-              <span className="app-brand-label">Routine</span>
+              <span className="app-brand-label">Rootine</span>
               <button
                 type="button"
                 className="app-sidebar-toggle"
@@ -654,7 +654,7 @@ export default function Layout() {
                     ? "Ustawienia"
                     : openMenu === "mobileProfile"
                       ? "Profil"
-                      : "Routine"}
+                      : "Rootine"}
                 </strong>
                 <small>
                   {openMenu === "mobileSettings"

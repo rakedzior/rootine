@@ -1,6 +1,6 @@
 /**
  * THESIS: Sprawy is a responsibility register, not another task list; it refuses one undifferentiated inbox.
- * OWN-WORLD: Routine's graphite workshop, compact ledgers, quiet borders, and precision blue for the active register.
+ * OWN-WORLD: Rootine's graphite workshop, compact ledgers, quiet borders, and precision blue for the active register.
  * STORY: See what carries risk, maintain recurring commitments, and give every złoty a place before the month starts.
  * FIRST VIEWPORT: A local register rail frames a dated agenda where private matters, renewals, and budget signals meet.
  * FORM: The seventh grounded structure — a monthly responsibility cockpit — selected with seed 54454916.

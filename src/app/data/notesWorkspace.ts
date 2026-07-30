@@ -70,11 +70,11 @@ const DEFAULT_WORKSPACE: NotesWorkspace = {
     },
     {
       id: "note-product-ideas",
-      title: "Pomysły do Routine",
+      title: "Pomysły do Rootine",
       body: "• Widok szybkiego przechwytywania z klawiatury\n• Powiązania notatki z celem i podróżą\n• Cotygodniowy przegląd zmian\n• Eksport wybranej listy do PDF",
       kind: "text",
       items: [],
-      tags: ["routine", "produkt"],
+      tags: ["rootine", "produkt"],
       listId: "list-ideas",
       color: "violet",
       pinned: true,
