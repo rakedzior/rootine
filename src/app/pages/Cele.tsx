@@ -303,27 +303,15 @@ export default function Cele() {
             <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
             <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
             <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
+            <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Target />}>Kategorie i ustawienia</MenuItem>
           </Menu>}
         </div>
       </>}
     />
   );
 
-  const contextSidebar = (
-    <GoalSubSidebar
-        activeFilter={activeFilter}
-        onFilter={handleFilter}
-        goals={goals}
-        categories={categories}
-        onCreateCategory={createCategory}
-        onUpdateCategory={updateCategory}
-        onDeleteCategory={setDeleteCategoryId}
-        onSettings={() => setSettingsOpen(true)}
-    />
-  );
-
   return (
-    <ModuleShell pageWidth="standard" header={pageHeader} contextSidebar={contextSidebar}>
+    <ModuleShell pageWidth="standard" header={pageHeader}>
       <ModuleMain>
         {importNotice && (
           <div
@@ -353,7 +341,6 @@ export default function Cele() {
           <div className="flex min-w-0 items-center gap-2">
             <Select
               aria-label="Widok celów"
-              fieldClassName="context-mobile-select"
               compact
               value={activeFilter}
               options={[
@@ -373,11 +360,11 @@ export default function Cele() {
               </Button>
               {sortMenuOpen && <Menu id={sortMenuId} triggerRef={sortMenuTriggerRef} onDismiss={() => setSortMenuOpen(false)} initialFocus="selected" className="absolute right-0 top-11 z-40 w-44">{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <MenuItem key={option.id} selected={sortKey === option.id} onClick={() => { setGoalSort(option.id); setSortMenuOpen(false); }} trailingIcon={sortKey === option.id ? <Check size={11} /> : undefined}>{option.label}</MenuItem>)}</Menu>}
             </div>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("list")} aria-label="Widok listy" aria-pressed={layout === "list"} style={{ color: layout === "list" ? C.iceBlueText : C.textMuted, background: layout === "list" ? C.iceBlueBg : "transparent" }}>
+            <div className="ui-view-switch" aria-label="Sposób wyświetlania celów">
+              <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("list")} aria-label="Widok listy" aria-pressed={layout === "list"}>
                 <List size={15} strokeWidth={1.8} />
               </Button>
-              <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("grid")} aria-label="Widok kafelków" aria-pressed={layout === "grid"} style={{ color: layout === "grid" ? C.iceBlueText : C.textMuted, background: layout === "grid" ? C.iceBlueBg : "transparent" }}>
+              <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("grid")} aria-label="Widok kafelków" aria-pressed={layout === "grid"}>
                 <Grid2X2 size={14} strokeWidth={1.8} />
               </Button>
             </div>
@@ -611,6 +598,16 @@ export default function Cele() {
                 { value: "name", label: "Nazwa" },
               ]}
               ariaLabel="Domyślne sortowanie"
+            />
+            <GoalSubSidebar
+              activeFilter={activeFilter}
+              onFilter={(id) => { handleFilter(id); setSettingsOpen(false); }}
+              goals={goals}
+              categories={categories}
+              onCreateCategory={createCategory}
+              onUpdateCategory={updateCategory}
+              onDeleteCategory={setDeleteCategoryId}
+              onSettings={() => undefined}
             />
           </div>
         </Modal>

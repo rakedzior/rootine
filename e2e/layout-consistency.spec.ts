@@ -106,6 +106,17 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
       ).toBeLessThanOrEqual(1);
       await expect(visibleH1).toHaveCSS("text-align", "left");
 
+      if (["/zadania", "/kalendarz", "/praca", "/notatki"].includes(route.path)) {
+        const contextSidebar = moduleShell.locator(":scope > .ui-module-shell__body > .ui-context-sidebar");
+        await expect(contextSidebar).toBeVisible();
+        const sidebarBox = await contextSidebar.boundingBox();
+        expect(sidebarBox).not.toBeNull();
+        expect(
+          Math.abs(sidebarBox!.x - shellBox!.x),
+          `${route.name}: context sidebar must attach to the global navigation edge`,
+        ).toBeLessThanOrEqual(1);
+      }
+
       if (route.path === "/zadania") {
         const contextSidebar = moduleShell.locator(".ui-context-sidebar");
         const collapseButton = contextSidebar.locator(".ui-context-sidebar__collapse");

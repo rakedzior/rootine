@@ -15,7 +15,12 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       "Cele",
       "Sprawy",
     ]);
-    await expect(page.getByText("5 obszarów wymaga reakcji", { exact: true })).toBeVisible();
+    await expect(page.getByText("4 aktywne obszary", { exact: true })).toBeVisible();
+    await expect(page.getByText("Część danych przykładowa", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Do wykonania", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Plan dnia", { exact: true })).toBeVisible();
+    await expect(page.locator(".today-day-balance__progress")).toHaveAttribute("role", "progressbar");
+    await expect(page.locator(".today-module-row__overdue").first()).toBeVisible();
   });
 
   test("renders a completed module against the canvas without hiding its state", async ({
@@ -58,6 +63,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     ]);
 
     for (const row of await emptyRows.all()) {
+      await expect(row.locator(".today-module-row__track")).toHaveAttribute("aria-valuenow", "100");
       const colors = await row.evaluate((element) => {
         const root = getComputedStyle(document.documentElement);
         const rowStyle = getComputedStyle(element);

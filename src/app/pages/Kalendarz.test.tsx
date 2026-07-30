@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TaskWorkspace } from "../data/taskWorkspace";
 import Kalendarz from "./Kalendarz";
 
 const fixtures = vi.hoisted(() => ({
@@ -10,7 +11,7 @@ const fixtures = vi.hoisted(() => ({
     habits: [],
     lists: [],
     tags: [],
-  },
+  } as TaskWorkspace,
   sport: {
     version: 3 as const,
     templates: [],
@@ -103,6 +104,9 @@ describe("Kalendarz canonical occurrences integration", () => {
 
   afterEach(() => {
     cleanup();
+    fixtures.taskWorkspace.tasks = [];
+    fixtures.taskWorkspace.lists = [];
+    fixtures.taskWorkspace.tags = [];
     vi.useRealTimers();
   });
 
@@ -141,5 +145,45 @@ describe("Kalendarz canonical occurrences integration", () => {
       "href",
       "/sprawy?widok=payments",
     );
+  });
+
+  it("filters calendar tasks from the context sidebar", () => {
+    fixtures.taskWorkspace.tasks = [
+      {
+        id: 1,
+        text: "Zakupy spożywcze",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+        list: "prywatne",
+        tags: ["dom"],
+      },
+      {
+        id: 2,
+        text: "Wysłać raport",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+        list: "praca",
+        tags: ["biuro"],
+      },
+    ];
+    fixtures.taskWorkspace.lists = [
+      { id: "prywatne", label: "Prywatne", color: "#70B89F" },
+      { id: "praca", label: "Praca", color: "#4772FA" },
+    ];
+    fixtures.taskWorkspace.tags = [
+      { id: "dom", label: "dom", color: "#D4AA68" },
+      { id: "biuro", label: "biuro", color: "#9B8CE8" },
+    ];
+
+    render(<Kalendarz />);
+    expect(screen.getByRole("button", { name: "Otwórz szczegóły: Zakupy spożywcze" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Otwórz szczegóły: Wysłać raport" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Prywatne1" }));
+
+    expect(screen.getByRole("button", { name: "Otwórz szczegóły: Zakupy spożywcze" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Otwórz szczegóły: Wysłać raport" })).not.toBeInTheDocument();
   });
 });

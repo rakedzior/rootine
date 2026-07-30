@@ -771,14 +771,9 @@ export default function Odzywanie() {
   const headerMeta = (
     <>
       {dayClosed && <Badge tone="success">Dzień zamknięty</Badge>}
-      {storageFailed ? (
-        <Badge tone="danger">Brak zapisu lokalnego</Badge>
-      ) : loadStatus === "corrupt" ? (
+      {storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
+      {!storageFailed && loadStatus === "corrupt" && (
         <Badge tone="danger">Zapis wymaga decyzji</Badge>
-      ) : day.source === "demo" ? (
-        <Badge tone="violet">Dane przykładowe</Badge>
-      ) : (
-        <Badge tone="neutral">Dane lokalne</Badge>
       )}
     </>
   );

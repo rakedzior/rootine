@@ -61,10 +61,10 @@
 
   --control-height-sm: 28px;
   --control-height-md: 40px;
-  --page-header-height: 70px;
+  --page-header-height: 80px;
   --app-sidebar-width: 204px;
-  --context-sidebar-width: 240px;
-  --detail-panel-width: 370px;
+  --context-sidebar-width: 220px;
+  --detail-panel-width: 408px;
 
   --shadow-floating: 0 12px 30px rgba(0, 0, 0, 0.45);
   --shadow-modal: 0 18px 50px rgba(0, 0, 0, 0.52);
@@ -75,8 +75,8 @@
 }
 
 :root {
-  --page-width-reading: 1040px;
-  --page-width-standard: 1440px;
+  --page-width-reading: 840px;
+  --page-width-standard: 1200px;
   --page-width-wide: 1560px;
   --color-category-sky: #7fa6c9;
   --color-category-teal: #79a8a4;

@@ -2,7 +2,7 @@
 
 A calm, graphite-first personal operating system with routed workspaces for today, tasks, calendar, nutrition, sport, work, goals, affairs, notes, and travel.
 
-The canonical navigation contains `Praca` and `Sprawy`; the retired `Biuro` and `Finanse` tabs are not exposed in the app shell. Existing bookmarks remain safe through compatibility redirects: `/biuro` → `/praca` and `/finanse` → `/sprawy?widok=budget`.
+The canonical navigation contains eight areas: `Dzisiaj`, `Zadania`, `Odżywianie`, `Sport`, `Praca`, `Cele`, `Sprawy`, and `Notatki`. Calendar and Habits live under Tasks; Travel lives under Affairs. The retired `Biuro` and `Finanse` tabs are not exposed in the app shell. Existing bookmarks remain safe through compatibility redirects: `/biuro` → `/praca` and `/finanse` → `/sprawy?widok=budget`.
 
 ## Run locally
 

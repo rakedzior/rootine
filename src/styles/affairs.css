@@ -23,6 +23,16 @@
   gap: 1px;
 }
 
+.affairs-sidebar__label {
+  margin: 0;
+  padding: 0 6px var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
 .affairs-sidebar__nav .ui-section-header {
   min-height: 0;
   padding: 0 6px var(--space-sm);
@@ -1825,4 +1835,10 @@
   .jdg-month-state__progress i {
     transition: none;
   }
+}
+.affairs-area-tabs {
+  width: min(100%, calc(var(--page-width-wide) + (2 * var(--space-3xl))));
+  margin-inline: auto;
+  padding: 0 var(--space-3xl) var(--space-md);
+  background: var(--color-graphite-sidebar);
 }

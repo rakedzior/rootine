@@ -5,7 +5,7 @@
 }
 
 @media (min-width: 761px) {
-  .sport-planner-toolbar:not(.has-status) {
+  .sport-planner-toolbar:not(.has-status, .has-subview) {
     display: none;
   }
 }

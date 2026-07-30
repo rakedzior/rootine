@@ -113,6 +113,10 @@
   justify-content: flex-start;
 }
 
+.work-overview-panel--full {
+  width: min(100%, 920px);
+}
+
 .work-desktop-context {
   display: flex;
   min-width: 0;
@@ -1242,4 +1246,127 @@
   .work-task-row__actions {
     transition: none;
   }
+}
+.work-company-sidebar .work-sidebar-section-label:first-child,
+.work-company-sidebar .work-company-list > .context-nav-item,
+.work-company-sidebar .work-sidebar-section-label--spaced,
+.work-company-sidebar .work-company-tree-group > .context-nav-item {
+  display: none;
+}
+
+.work-company-sidebar .work-project-tree {
+  padding-top: var(--space-lg);
+}
+
+.work-projects-sidebar-heading {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-xl) var(--space-lg) var(--space-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.work-projects-sidebar-heading strong { font-size: var(--text-label); }
+.work-projects-sidebar-heading span { color: var(--color-text-muted); font-size: var(--text-micro); }
+
+.work-board {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: var(--space-lg);
+  overflow: auto;
+  padding: var(--space-xl) var(--space-3xl);
+}
+
+.work-board__column {
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-graphite-sidebar);
+}
+
+.work-board__column > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.work-board__column h3 { margin: 0; font-size: var(--text-label); }
+.work-board__column > header span { color: var(--color-text-muted); font-size: var(--text-micro); }
+.work-board__column > div { display: grid; gap: var(--space-sm); padding: var(--space-md); }
+
+.work-board-card {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-panel);
+  color: var(--color-chalk-white);
+  text-align: left;
+}
+
+.work-board-card:hover { border-color: var(--color-border-strong); }
+.work-board-card span,
+.work-board-card small,
+.work-board__empty { color: var(--color-text-muted); font-size: var(--text-micro); }
+
+.work-calendar {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-xl) var(--space-3xl);
+}
+
+.work-calendar__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+  text-transform: capitalize;
+}
+
+.work-calendar__weekdays,
+.work-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(100px, 1fr));
+}
+
+.work-calendar__weekdays span {
+  padding: var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  text-align: center;
+}
+
+.work-calendar__day,
+.work-calendar__grid > .is-empty {
+  min-height: 112px;
+  padding: var(--space-sm);
+  border-top: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.work-calendar__day > span { color: var(--color-text-muted); font-size: var(--text-micro); }
+.work-calendar__day button {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-precision-blue-soft);
+  color: var(--color-precision-blue-text);
+  font-size: var(--text-micro);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .work-board { grid-template-columns: repeat(3, minmax(260px, 1fr)); }
+  .work-calendar__weekdays,
+  .work-calendar__grid { min-width: 780px; }
 }

@@ -1,5 +1,39 @@
 /* Route-owned tasks styles. Loaded only by the relevant lazy route. */
 
+.task-toolbar-actions,
+.task-view-switch {
+  display: flex;
+  align-items: center;
+}
+
+.task-toolbar-actions {
+  flex: 0 0 auto;
+  gap: var(--space-md);
+}
+
+.task-view-switch {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+}
+
+.task-view-switch .ui-button {
+  min-width: 28px;
+  height: 28px;
+}
+
+.task-content > * {
+  width: min(100%, 1200px);
+  margin-inline: auto;
+}
+
+.task-detail-panel {
+  width: 408px;
+  min-width: 408px;
+}
+
 @media (max-width: 1380px) {
   .task-summary-detail {
     display: none;
@@ -17,6 +51,16 @@
     justify-content: flex-start;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .task-toolbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .task-detail-panel {
+    width: var(--detail-panel-width);
+    min-width: var(--detail-panel-width);
   }
 
   .task-priority-filters::-webkit-scrollbar {

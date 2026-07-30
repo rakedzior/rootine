@@ -71,6 +71,7 @@ import {
   ModuleShell,
   PageHeader,
   Select,
+  Tabs,
   WorkspaceToolbar,
 } from "../ui";
 import "../../styles/sport.css";
@@ -132,7 +133,13 @@ function loadStoredCycleDraft(fallback: TrainingCycle | null): TrainingCycle | n
 function getInitialSportUrlState() {
   if (typeof window === "undefined") return { view: "today" as PlannerView, week: 0 };
   const params = new URLSearchParams(window.location.search);
-  const requestedView = params.get("widok");
+  let storedView: string | null = null;
+  try {
+    storedView = window.localStorage.getItem("rootine.sport.view");
+  } catch {
+    // Fall back to the URL/default when preference storage is unavailable.
+  }
+  const requestedView = params.get("widok") ?? storedView;
   const view: PlannerView = requestedView === "cycle"
     || requestedView === "templates"
     || requestedView === "history"
@@ -320,6 +327,14 @@ export default function Sport() {
     else url.searchParams.delete("tydzien");
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
   }, [activeWeek, view]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("rootine.sport.view", view);
+    } catch {
+      // The view preference is optional.
+    }
+  }, [view]);
 
   useEffect(() => {
     if (!moveUndo) return;
@@ -894,15 +909,32 @@ export default function Sport() {
       )}
     >
       <ModuleMain>
-        <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}>
+        <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""} ${view === "analysis" || view === "history" ? "has-subview" : ""}`.trim()}>
           <Select
             compact
             fieldClassName="context-mobile-select"
             aria-label="Widok Sportu"
             value={view}
-            options={Object.entries(SPORT_VIEW_LABELS).map(([id, meta]) => ({ value: id, label: meta.title }))}
+            options={[
+              { value: "today", label: "Plan na dziś" },
+              { value: "cycle", label: "Cykl treningowy" },
+              { value: "templates", label: "Szablony" },
+              { value: "analysis", label: "Analiza" },
+            ]}
             onChange={(event) => changeView(event.target.value as PlannerView)}
           />
+          {(view === "analysis" || view === "history") && (
+            <Tabs
+              className="ui-tabs--segmented"
+              ariaLabel="Zakres analizy"
+              activeId={view}
+              items={[
+                { id: "analysis", label: "Postępy" },
+                { id: "history", label: "Historia" },
+              ]}
+              onChange={(id) => changeView(id as PlannerView)}
+            />
+          )}
           <div className="sport-planner-toolbar__right">
             {view === "cycle" && cycleDraft && (
               <span className={`sport-planner-toolbar__status ${cycleDirty ? "is-dirty" : ""}`.trim()}>

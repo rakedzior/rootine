@@ -9,9 +9,7 @@ import {
   Archive,
   ArchiveRestore,
   Check,
-  CheckSquare,
   ChevronDown,
-  Clock3,
   FileText,
   Folder,
   LayoutGrid,
@@ -21,6 +19,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  Rows3,
   Search,
   Tag,
   Trash2,
@@ -62,8 +61,9 @@ import {
 } from "../ui";
 import "../../styles/notes.css";
 
-type NotesView = "all" | "pinned" | "recent" | "archive" | `list:${string}` | `tag:${string}`;
+type NotesView = "all" | "pinned" | "archive" | `list:${string}` | `tag:${string}`;
 type NotesSort = "updated" | "created" | "title";
+type NotesLayout = "cards" | "list";
 type EditorState = { mode: "add" | "edit"; id?: string };
 type ListEditorState = { mode: "add" | "edit"; id?: string };
 
@@ -93,7 +93,7 @@ const EMPTY_DRAFT: NoteDraft = {
 
 const NOTE_DRAFT_STORAGE_KEY = "rootine.notes-editor-draft.v1";
 const NOTE_DRAFT_SAVE_DELAY_MS = 250;
-const NOTES_VIEWS = new Set<NotesView>(["all", "pinned", "recent", "archive"]);
+const NOTES_VIEWS = new Set<NotesView>(["all", "pinned", "archive"]);
 
 type StoredDraftSession = {
   editor: EditorState;
@@ -207,6 +207,13 @@ export default function Notatki() {
   const [view, setView] = useState<NotesView>(initialUrlState.view);
   const [search, setSearch] = useState(initialUrlState.search);
   const [sort, setSort] = useState<NotesSort>(initialUrlState.sort);
+  const [layout, setLayout] = useState<NotesLayout>(() => {
+    try {
+      return window.localStorage.getItem("rootine.notes.layout") === "list" ? "list" : "cards";
+    } catch {
+      return "cards";
+    }
+  });
   const [editor, setEditor] = useState<EditorState | null>(storedDraftSession?.editor ?? null);
   const [draft, setDraft] = useState<NoteDraft>(storedDraftSession?.draft ?? EMPTY_DRAFT);
   const [draftBaseline, setDraftBaseline] = useState(storedDraftSession?.baseline ?? serializeDraft(EMPTY_DRAFT));
@@ -324,6 +331,14 @@ export default function Notatki() {
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
   }, [search, sort, view]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("rootine.notes.layout", layout);
+    } catch {
+      // The layout preference is optional.
+    }
+  }, [layout]);
+
   const activeNotes = useMemo(
     () => workspace.notes.filter((note) => !note.archived),
     [workspace.notes],
@@ -362,7 +377,6 @@ export default function Notatki() {
       return b.updatedAt.localeCompare(a.updatedAt);
     });
 
-    if (view === "recent") return notes.slice(0, 12);
     return notes;
   }, [search, sort, view, workspace.notes]);
 
@@ -372,7 +386,6 @@ export default function Notatki() {
   const viewTitle = useMemo(() => {
     if (view === "all") return "Wszystkie notatki";
     if (view === "pinned") return "Przypięte";
-    if (view === "recent") return "Ostatnie";
     if (view === "archive") return "Archiwum";
     if (view.startsWith("list:")) return workspace.lists.find((list) => list.id === view.slice(5))?.name ?? "Lista";
     return `#${view.slice(4)}`;
@@ -382,9 +395,7 @@ export default function Notatki() {
     ? "Notatki odłożone poza aktywny obszar"
     : view === "pinned"
       ? "Najważniejsze treści zawsze pod ręką"
-      : view === "recent"
-        ? "Ostatnio tworzone i zmieniane"
-        : view.startsWith("list:")
+      : view.startsWith("list:")
           ? "Notatki w wybranej liście"
           : view.startsWith("tag:")
             ? "Notatki oznaczone tym tagiem"
@@ -707,7 +718,6 @@ export default function Notatki() {
         <p className="notes-sidebar__label">Główne</p>
         <ContextNavItem active={view === "all"} icon={<LayoutGrid />} label="Wszystkie" meta={activeNotes.length} onClick={() => selectView("all")} />
         <ContextNavItem active={view === "pinned"} icon={<Pin />} label="Przypięte" meta={activeNotes.filter((note) => note.pinned).length} onClick={() => selectView("pinned")} />
-        <ContextNavItem active={view === "recent"} icon={<Clock3 />} label="Ostatnie" onClick={() => selectView("recent")} />
         <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.notes.filter((note) => note.archived).length} onClick={() => selectView("archive")} />
 
         <section className="notes-sidebar__group" aria-labelledby="notes-lists-heading">
@@ -948,7 +958,7 @@ export default function Notatki() {
           </div>
           <span>{notes.length}</span>
         </header>
-        <div className="notes-grid">{notes.map(renderNoteCard)}</div>
+        <div className={`notes-grid notes-grid--${layout}`}>{notes.map(renderNoteCard)}</div>
       </section>
     );
   };
@@ -1203,14 +1213,9 @@ export default function Notatki() {
           description="Szybkie zapiski, listy i pomysły"
           meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={(
-            <>
-              <Button variant="quiet" leadingIcon={<CheckSquare size={13} />} onClick={() => openNewNote("checklist")}>
-                Dodaj checklistę
-              </Button>
-              <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
-                Dodaj notatkę
-              </Button>
-            </>
+            <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
+              Dodaj notatkę
+            </Button>
           )}
         />
       )}
@@ -1225,7 +1230,6 @@ export default function Notatki() {
               options={[
                 { value: "all", label: "Wszystkie" },
                 { value: "pinned", label: "Przypięte" },
-                { value: "recent", label: "Ostatnie" },
                 { value: "archive", label: "Archiwum" },
                 ...workspace.lists.map((list) => ({ value: `list:${list.id}`, label: list.name })),
               ]}
@@ -1254,6 +1258,14 @@ export default function Notatki() {
             ]}
             onChange={(event) => setSort(event.target.value as NotesSort)}
           />
+          <div className="ui-view-switch" aria-label="Sposób wyświetlania notatek">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Widok listy" aria-pressed={layout === "list"} onClick={() => setLayout("list")}>
+              <Rows3 size={14} />
+            </Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Widok kart" aria-pressed={layout === "cards"} onClick={() => setLayout("cards")}>
+              <LayoutGrid size={14} />
+            </Button>
+          </div>
         </WorkspaceToolbar>
 
         <div className="notes-canvas">

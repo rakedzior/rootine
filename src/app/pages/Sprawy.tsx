@@ -7,6 +7,7 @@
  */
 import {
   Archive,
+  Building2,
   Car,
   Check,
   ChevronLeft,
@@ -14,6 +15,8 @@ import {
   Clock3,
   CreditCard,
   FileText,
+  LayoutDashboard,
+  Map,
   Pencil,
   Plus,
   ReceiptText,
@@ -24,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatDate as formatPolishDate } from "../formatters";
 import {
@@ -63,7 +67,6 @@ import {
   ModuleShell,
   PageHeader,
   ProgressBar,
-  SectionHeader,
   Select,
   StatCard,
   StatGrid,
@@ -78,7 +81,6 @@ import {
   CATEGORY_META,
   DOCUMENT_LABELS,
   EMPTY_DRAFT,
-  NAV_GROUPS,
   NAV_ITEMS,
   STATUS_LABELS,
   UPCOMING_ICONS,
@@ -101,6 +103,7 @@ import {
 } from "../affairs/affairsPresentation";
 
 export default function Sprawy() {
+  const navigate = useNavigate();
   const [workspace, setWorkspace] = useState(loadAffairsWorkspace);
   const [view, setView] = useState<AffairsView>(getInitialView);
   const [statusFilter, setStatusFilter] = useState<"active" | MatterStatus>("active");
@@ -731,6 +734,11 @@ export default function Sprawy() {
     return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openMatterEditor()}><span className="header-action-label">Dodaj sprawę</span></Button>;
   };
 
+  const affairsAreaId = ["oneTime", "payments", "subscriptions", "budget"].includes(view)
+    ? "payments"
+    : ["documents", "vehicles"].includes(view)
+      ? "records"
+      : view;
   const navMeta = (itemView: AffairsView) => {
     if (itemView === "matters") return activeMatters.length;
     if (itemView === "oneTime") return workspace.oneTimePayments.filter((item) => !item.paid).length;
@@ -744,23 +752,17 @@ export default function Sprawy() {
   const contextSidebar = (
     <ContextSidebar label="Widoki spraw" className="affairs-sidebar">
       <nav className="affairs-sidebar__nav">
-        {NAV_GROUPS.map((group) => (
-          <section key={group.label}>
-            <SectionHeader title={group.label} level={2} variant="label" />
-            <div>
-              {group.items.map(({ view: itemView, label, icon: Icon }) => (
-                <ContextNavItem
-                  key={itemView}
-                  active={view === itemView}
-                  icon={<Icon />}
-                  label={label}
-                  meta={navMeta(itemView)}
-                  onClick={() => selectView(itemView)}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
+        <section>
+          <p className="affairs-sidebar__label">Sprawy</p>
+          <div>
+            <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label="Przegląd" onClick={() => selectView("overview")} />
+            <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label="Do załatwienia" meta={navMeta("matters")} onClick={() => selectView("matters")} />
+            <ContextNavItem active={affairsAreaId === "payments"} icon={<CreditCard />} label="Płatności" meta={navMeta("payments")} onClick={() => selectView("payments")} />
+            <ContextNavItem active={affairsAreaId === "records"} icon={<FileText />} label="Rejestry" meta={documentAlerts + vehicleAlerts || undefined} onClick={() => selectView("documents")} />
+            <ContextNavItem active={view === "jdg"} icon={<Building2 />} label="JDG" onClick={() => selectView("jdg")} />
+            <ContextNavItem icon={<Map />} label="Podróże" onClick={() => navigate("/podroze")} />
+          </div>
+        </section>
       </nav>
       <div className="affairs-sidebar__footer">
         <Clock3 size={13} aria-hidden="true" />
@@ -899,7 +901,7 @@ export default function Sprawy() {
 
   const pageHeader = (
     <PageHeader
-      title={VIEW_COPY[view].title}
+      title="Sprawy"
       description={VIEW_COPY[view].description}
       meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
       actions={renderPrimaryAction()}
@@ -916,14 +918,17 @@ export default function Sprawy() {
     >
       <ModuleMain>
         <WorkspaceToolbar className="affairs-toolbar">
-          <Select
+          {(affairsAreaId === "payments" || affairsAreaId === "records") && <Select
             compact
-            fieldClassName="context-mobile-select"
             aria-label="Wybierz widok spraw"
             value={view}
-            options={NAV_ITEMS.map((item) => ({ value: item.view, label: item.label }))}
+            options={NAV_ITEMS
+              .filter((item) => affairsAreaId === "payments"
+                ? ["oneTime", "payments", "subscriptions", "budget"].includes(item.view)
+                : ["documents", "vehicles"].includes(item.view))
+              .map((item) => ({ value: item.view, label: item.label }))}
             onChange={(event) => selectView(event.target.value as AffairsView)}
-          />
+          />}
           {view === "matters" && (
             <>
               <Select

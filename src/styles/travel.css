@@ -1800,3 +1800,11 @@ article:focus-within > .travel-row-actions {
     transition: none;
   }
 }
+.travel-navigation-stack {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.travel-toolbar__trip-select {
+  min-width: 180px;
+}

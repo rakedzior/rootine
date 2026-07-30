@@ -345,6 +345,18 @@
   justify-content: start;
 }
 
+.notes-grid--list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.notes-grid--list .notes-card {
+  min-height: 132px;
+}
+
+.notes-grid--list .notes-card__body {
+  max-height: 76px;
+}
+
 @media (min-width: 761px) {
   .notes-canvas {
     display: flex;
@@ -956,10 +968,6 @@
 }
 
 @media (max-width: 760px) {
-  .notes-module .ui-page-header__actions .ui-button:first-child {
-    display: none;
-  }
-
   .notes-toolbar {
     flex-wrap: wrap;
   }

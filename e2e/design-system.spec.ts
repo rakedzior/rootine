@@ -197,7 +197,7 @@ test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
       await openRootineRoute(page, route);
       const box = await page.evaluate(() => {
         const sidebar = document.querySelector(".app-sidebar");
-        const header = document.querySelector(".ui-module-shell__header");
+        const header = document.querySelector(".ui-page-header__row");
         return {
           sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : null,
           headerHeight: header ? Math.round(header.getBoundingClientRect().height) : null,
@@ -208,7 +208,7 @@ test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
       if (viewport.width > 980) {
         expect(box.sidebarWidth, `${route}: --app-sidebar-width`).toBe(204);
       }
-      expect(box.headerHeight, `${route}: --page-header-height plus its border`).toBe(71);
+      expect(box.headerHeight, `${route}: --page-header-height`).toBe(70);
     }
   });
 });

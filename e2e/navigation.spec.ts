@@ -51,12 +51,14 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await openRootineRoute(page, "/dzisiaj");
 
     const primaryNavigation = page.getByRole("navigation", { name: "Obszary aplikacji" });
-    const calendarLink = primaryNavigation.getByRole("link", { name: "Kalendarz" });
-    await calendarLink.click();
+    const tasksLink = primaryNavigation.getByRole("link", { name: "Zadania" });
+    await tasksLink.click();
+    await page.getByRole("button", { name: "Widok kalendarza" }).click();
 
     await expect(page).toHaveURL(/\/kalendarz$/);
-    await expect(page.getByRole("heading", { level: 1, name: "Kalendarz" })).toBeVisible();
-    await expect(calendarLink).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { level: 1, name: "Zadania" })).toBeVisible();
+    await expect(tasksLink).toHaveAttribute("aria-current", "page");
+    await expect(primaryNavigation.getByRole("link", { name: "Kalendarz" })).toHaveCount(0);
   });
 });
 

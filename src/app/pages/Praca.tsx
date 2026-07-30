@@ -6,12 +6,14 @@
  * FORM: A two-navigation-layer personal workspace refined from seed c87cae68.
  */
 import {
+  Archive,
   Building2,
   CalendarDays,
   Check,
   ChevronDown,
   ChevronRight,
   Circle,
+  Columns3,
   Flag,
   FolderKanban,
   LayoutDashboard,
@@ -65,6 +67,9 @@ const PRIORITY_LABELS: Record<WorkTaskPriority, string> = {
   medium: "Średni",
   high: "Wysoki",
 };
+
+type WorkView = "list" | "board" | "calendar";
+type WorkOverviewScope = "overview" | "all" | "archive";
 
 type EditorState =
   | { kind: "company"; mode: "add" | "edit"; id?: string }
@@ -145,14 +150,24 @@ function taskDepth(task: WorkTask, tasks: WorkTask[]): number {
 
 function getInitialWorkUrlState() {
   if (typeof window === "undefined") {
-    return { companyId: "", projectId: "", search: "", showCompleted: false };
+    return { companyId: "", projectId: "", search: "", showCompleted: false, view: "list" as WorkView };
   }
   const params = new URLSearchParams(window.location.search);
+  let storedView: string | null = null;
+  try {
+    storedView = window.localStorage.getItem("rootine.work.view");
+  } catch {
+    // Fall back to the URL/default when preference storage is unavailable.
+  }
+  const requestedView = params.get("widok") ?? storedView ?? "list";
   return {
     companyId: params.get("firma") ?? "",
     projectId: params.get("projekt") ?? "",
     search: params.get("q") ?? "",
     showCompleted: params.get("ukonczone") === "1",
+    view: (["list", "board", "calendar"].includes(requestedView)
+      ? requestedView
+      : "list") as WorkView,
   };
 }
 
@@ -167,6 +182,9 @@ export default function Praca() {
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState(initialUrlState.search);
   const [showCompleted, setShowCompleted] = useState(initialUrlState.showCompleted);
+  const [workView, setWorkView] = useState<WorkView>(initialUrlState.view);
+  const [overviewScope, setOverviewScope] = useState<WorkOverviewScope>("overview");
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<EditorDraft>(EMPTY_DRAFT);
   const [editorError, setEditorError] = useState("");
@@ -190,6 +208,7 @@ export default function Praca() {
       setSelectedProjectId(next.projectId);
       setSearch(next.search);
       setShowCompleted(next.showCompleted);
+      setWorkView(next.view);
     };
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
@@ -205,8 +224,18 @@ export default function Praca() {
     else url.searchParams.delete("q");
     if (showCompleted) url.searchParams.set("ukonczone", "1");
     else url.searchParams.delete("ukonczone");
+    if (workView === "list") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", workView);
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
-  }, [search, selectedCompanyId, selectedProjectId, showCompleted]);
+  }, [search, selectedCompanyId, selectedProjectId, showCompleted, workView]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("rootine.work.view", workView);
+    } catch {
+      // The view preference is optional.
+    }
+  }, [workView]);
 
   useEffect(() => {
     if (!selectedCompanyId || workspace.companies.some((company) => company.id === selectedCompanyId)) return;
@@ -362,6 +391,7 @@ export default function Praca() {
     setSelectedCompanyId(companyId);
     setSelectedProjectId(projectId);
     setSearch("");
+    setOverviewScope("overview");
     pushWorkLocation(companyId, projectId);
   };
 
@@ -369,6 +399,7 @@ export default function Praca() {
     setSelectedCompanyId(companyId);
     setSelectedProjectId(projectId);
     setSearch("");
+    setOverviewScope("overview");
     pushWorkLocation(companyId, projectId);
   };
 
@@ -381,10 +412,11 @@ export default function Praca() {
     });
   };
 
-  const showOverview = () => {
+  const showOverview = (scope: WorkOverviewScope = "overview") => {
     setSelectedCompanyId("");
     setSelectedProjectId("");
     setSearch("");
+    setOverviewScope(scope);
     pushWorkLocation("", "");
   };
 
@@ -644,7 +676,7 @@ export default function Praca() {
     const visibleChildren = children.filter((child) => visibleTaskIds.has(child.id));
     const hasChildren = children.length > 0;
     const collapsed = collapsedTaskIds.has(task.id) && !search.trim();
-    const rowStyle = { "--work-task-indent": `${depth * 24}px` } as CSSProperties;
+    const rowStyle = { "--work-task-indent": `${Math.min(depth, 3) * 24}px` } as CSSProperties;
 
     return (
       <div key={task.id} className="work-task-branch">
@@ -771,14 +803,25 @@ export default function Praca() {
       )}
       contextSidebar={(
         <ContextSidebar label="Nawigacja pracy" className="work-company-sidebar">
+          <div className="work-projects-sidebar-heading">
+            <strong>Praca</strong>
+            <span>Firmy i projekty</span>
+          </div>
           <nav className="work-company-list" aria-label="Widoki pracy i firmy">
             <p className="work-sidebar-section-label">Główne</p>
             <ContextNavItem
-              active={isOverview}
+              active={isOverview && overviewScope === "overview"}
               icon={<LayoutDashboard />}
               label="Przegląd"
               meta={workspace.companies.length}
-              onClick={showOverview}
+              onClick={() => showOverview("overview")}
+            />
+            <ContextNavItem
+              active={isOverview && overviewScope === "all"}
+              icon={<ListTree />}
+              label="Wszystkie zadania"
+              meta={workspace.tasks.filter((task) => !task.completed).length}
+              onClick={() => showOverview("all")}
             />
             <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Firmy</p>
             {workspace.companies.map((company) => {
@@ -836,6 +879,14 @@ export default function Praca() {
                 </div>
               );
             })}
+            <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Pozostałe</p>
+            <ContextNavItem
+              active={isOverview && overviewScope === "archive"}
+              icon={<Archive />}
+              label="Archiwum"
+              meta={workspace.projects.filter((project) => project.status === "completed").length}
+              onClick={() => showOverview("archive")}
+            />
           </nav>
           {workspace.companies.length === 0 && (
             <p className="work-sidebar-empty">Dodaj pierwszą firmę, aby rozpocząć pracę z projektami.</p>
@@ -874,15 +925,57 @@ export default function Praca() {
           <section className="work-overview" aria-labelledby="work-overview-title">
             <header className="work-overview__header">
               <div>
-                <h2 id="work-overview-title">Przegląd pracy</h2>
+                <h2 id="work-overview-title">
+                  {overviewScope === "all" ? "Wszystkie zadania" : overviewScope === "archive" ? "Archiwum pracy" : "Przegląd pracy"}
+                </h2>
                 <p>
-                  Firmy {workspace.companies.length} · Projekty {workspace.projects.length} · Otwarte zadania{" "}
-                  {activeOpenTasks.length}
+                  {overviewScope === "all"
+                    ? `${workspace.tasks.filter((task) => !task.completed).length} otwartych zadań we wszystkich projektach`
+                    : overviewScope === "archive"
+                      ? `${workspace.projects.filter((project) => project.status === "completed").length} zakończonych projektów`
+                      : `Firmy ${workspace.companies.length} · Projekty ${workspace.projects.length} · Otwarte zadania ${activeOpenTasks.length}`}
                 </p>
               </div>
             </header>
 
-            {workspace.companies.length === 0 ? (
+            {overviewScope === "all" ? (
+              <section className="work-overview-panel work-overview-panel--full" aria-label="Wszystkie zadania">
+                <div className="work-overview-task-list">
+                  {workspace.tasks
+                    .filter((task) => !task.completed)
+                    .map((task) => {
+                      const project = workspace.projects.find((candidate) => candidate.id === task.projectId);
+                      const company = project ? workspace.companies.find((candidate) => candidate.id === project.companyId) : undefined;
+                      if (!project || !company) return null;
+                      return (
+                        <button key={task.id} type="button" onClick={() => selectProject(company.id, project.id)}>
+                          <span className={`work-overview-task__priority work-overview-task__priority--${task.priority}`}><Flag size={11} /></span>
+                          <span className="work-overview-task__copy"><strong>{task.title}</strong><small>{company.name} · {project.name}</small></span>
+                          <span className="work-overview-task__due">{task.dueDate ? formatDueDate(task.dueDate) : PRIORITY_LABELS[task.priority]}</span>
+                          <ChevronRight size={13} />
+                        </button>
+                      );
+                    })}
+                  {workspace.tasks.every((task) => task.completed) && <p className="work-overview-panel__empty">Nie ma otwartych zadań.</p>}
+                </div>
+              </section>
+            ) : overviewScope === "archive" ? (
+              <section className="work-overview-panel work-overview-panel--full" aria-label="Zakończone projekty">
+                <div className="work-overview-project-list">
+                  {workspace.projects.filter((project) => project.status === "completed").map((project) => {
+                    const company = workspace.companies.find((candidate) => candidate.id === project.companyId);
+                    if (!company) return null;
+                    return (
+                      <button key={project.id} type="button" onClick={() => selectProject(company.id, project.id)}>
+                        <span className="work-overview-project__copy"><strong>{project.name}</strong><small>{company.name}</small></span>
+                        <ChevronRight size={13} />
+                      </button>
+                    );
+                  })}
+                  {workspace.projects.every((project) => project.status !== "completed") && <p className="work-overview-panel__empty">Archiwum jest puste.</p>}
+                </div>
+              </section>
+            ) : workspace.companies.length === 0 ? (
               <EmptyState
                 icon={<Building2 size={18} />}
                 title="Dodaj pierwszą firmę"
@@ -1044,16 +1137,6 @@ export default function Praca() {
               <div className="work-mobile-context">
                 <Select
                   compact
-                  aria-label="Wybierz widok lub firmę"
-                  value={selectedCompanyId}
-                  options={[
-                    { value: "", label: "Przegląd" },
-                    ...workspace.companies.map((company) => ({ value: company.id, label: company.name })),
-                  ]}
-                  onChange={(event) => event.target.value ? selectCompany(event.target.value) : showOverview()}
-                />
-                <Select
-                  compact
                   aria-label="Wybierz projekt"
                   value={selectedProjectId}
                   disabled={companyProjects.length === 0}
@@ -1079,6 +1162,17 @@ export default function Praca() {
                 <Check size={12} aria-hidden="true" />
                 Ukończone
               </button>
+              <div className="ui-view-switch" aria-label="Sposób wyświetlania zadań">
+                <Button variant="ghost" size="sm" iconOnly aria-label="Widok listy" aria-pressed={workView === "list"} onClick={() => setWorkView("list")}>
+                  <ListTree size={14} />
+                </Button>
+                <Button variant="ghost" size="sm" iconOnly aria-label="Widok tablicy" aria-pressed={workView === "board"} onClick={() => setWorkView("board")}>
+                  <Columns3 size={14} />
+                </Button>
+                <Button variant="ghost" size="sm" iconOnly aria-label="Widok kalendarza" aria-pressed={workView === "calendar"} onClick={() => setWorkView("calendar")}>
+                  <CalendarDays size={14} />
+                </Button>
+              </div>
             </WorkspaceToolbar>
 
           <section className="work-task-canvas" aria-label="Zadania projektu">
@@ -1148,6 +1242,7 @@ export default function Praca() {
                   </div>
                 </header>
 
+                {workView === "list" ? (
                 <div className="work-task-list">
                   {completionUndo && (
                     <div className="work-completion-undo" role="status">
@@ -1194,6 +1289,69 @@ export default function Praca() {
                     </div>
                   )}
                 </div>
+                ) : workView === "board" ? (
+                  <div className="work-board" aria-label="Tablica zadań">
+                    {([
+                      { id: "todo", label: "Do zrobienia" },
+                      { id: "doing", label: "W toku" },
+                      { id: "done", label: "Gotowe" },
+                    ] as const).map((column) => {
+                      const rootTasks = (tasksByParent.get(null) ?? []).filter((task) => {
+                        const descendants = collectTaskBranch(projectTasks, task.id);
+                        descendants.delete(task.id);
+                        const hasCompletedChild = projectTasks.some((candidate) => descendants.has(candidate.id) && candidate.completed);
+                        const status = task.completed ? "done" : hasCompletedChild ? "doing" : "todo";
+                        return status === column.id && (showCompleted || !task.completed);
+                      });
+                      return (
+                        <section key={column.id} className="work-board__column">
+                          <header><h3>{column.label}</h3><span>{rootTasks.length}</span></header>
+                          <div>
+                            {rootTasks.map((task) => {
+                              const branch = collectTaskBranch(projectTasks, task.id);
+                              const children = projectTasks.filter((candidate) => candidate.id !== task.id && branch.has(candidate.id));
+                              const done = children.filter((candidate) => candidate.completed).length;
+                              return (
+                                <button key={task.id} type="button" className="work-board-card" onClick={() => openTaskEditor(task)}>
+                                  <strong>{task.title}</strong>
+                                  <span>{task.dueDate ? formatDueDate(task.dueDate) : PRIORITY_LABELS[task.priority]}</span>
+                                  {children.length > 0 && <small>{done}/{children.length} podzadań</small>}
+                                </button>
+                              );
+                            })}
+                            {rootTasks.length === 0 && <p className="work-board__empty">Brak zadań</p>}
+                          </div>
+                        </section>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="work-calendar" aria-label="Kalendarz zadań projektu">
+                    <div className="work-calendar__toolbar">
+                      <Button variant="ghost" size="sm" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>Poprzedni</Button>
+                      <strong>{calendarMonth.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })}</strong>
+                      <Button variant="ghost" size="sm" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Następny</Button>
+                    </div>
+                    <div className="work-calendar__weekdays" aria-hidden="true">
+                      {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Niedz"].map((day) => <span key={day}>{day}</span>)}
+                    </div>
+                    <div className="work-calendar__grid">
+                      {Array.from({ length: (new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() + 6) % 7 }).map((_, index) => <span key={`blank-${index}`} className="is-empty" />)}
+                      {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate() }, (_, index) => index + 1).map((day) => {
+                        const key = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                        const dayTasks = projectTasks.filter((task) => task.dueDate === key && (showCompleted || !task.completed));
+                        return (
+                          <section key={key} className="work-calendar__day">
+                            <span>{day}</span>
+                            {dayTasks.map((task) => (
+                              <button key={task.id} type="button" onClick={() => openTaskEditor(task)}>{task.title}</button>
+                            ))}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </section>

@@ -27,7 +27,7 @@ import { formatLocalDate } from "../data/localDate";
 import { ConfirmDialog, GoalFormDialog, MilestoneDialog, ProgressDialog } from "../goals/GoalDialogs";
 import type { GoalEditorData } from "../goals/GoalDialogs";
 import { GoalNoteTextarea } from "../goals/GoalNoteTextarea";
-import { Badge, Button, Card, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader, Tabs } from "../ui";
+import { Badge, Button, Card, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader, Tabs, WorkspaceToolbar } from "../ui";
 import { C } from "../goals/goalPresentationModel";
 import "../../styles/goals.css";
 
@@ -107,13 +107,15 @@ export default function CelSzczegoly() {
           <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={12} />}><span className="header-action-label">Edytuj</span></Button>
           <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-44"><MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "archived" ? "active" : "archived" }); setMenuOpen(false); }} leadingIcon={goal.status === "archived" ? <RotateCcw /> : <Archive />}>{goal.status === "archived" ? "Przywróć" : "Archiwizuj"}</MenuItem><MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem><MenuItem tone="danger" onClick={() => { setDeleteGoalOpen(true); setMenuOpen(false); }} leadingIcon={<Trash2 />}>Usuń</MenuItem></Menu>}</div>
         </>}
-        below={<Tabs id="goal-detail-tabs" ariaLabel="Sekcje celu" activeId={tab} onChange={(id) => setTab(id as TabId)} items={tabs.map(({ id, label, icon: Icon, count }) => ({ id, tabId: `goal-tab-${id}`, panelId: `goal-panel-${id}`, label: <span className="flex items-center gap-1.5"><Icon size={12} />{label}{count !== undefined && <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: C.inputBg }}>{count}</span>}</span> }))} />}
     />
   );
 
   return (
     <ModuleShell pageWidth="reading" header={pageHeader}>
       <ModuleMain>
+      <WorkspaceToolbar>
+        <Tabs className="ui-tabs--segmented" id="goal-detail-tabs" ariaLabel="Sekcje celu" activeId={tab} onChange={(id) => setTab(id as TabId)} items={tabs.map(({ id, label, icon: Icon, count }) => ({ id, tabId: `goal-tab-${id}`, panelId: `goal-panel-${id}`, label: <span className="flex items-center gap-1.5"><Icon size={12} />{label}{count !== undefined && <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: C.inputBg }}>{count}</span>}</span> }))} />
+      </WorkspaceToolbar>
 
       <div className="goals-content flex-1 overflow-y-auto px-7 py-5">
         <div className="mx-auto max-w-[1100px]">

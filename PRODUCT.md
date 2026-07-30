@@ -20,7 +20,7 @@ Rootine ma być jednym spójnym miejscem do pracy z powiązanymi obszarami życi
 
 ## Operating Context
 
-Obecny interfejs obejmuje moduły Dzisiaj, zadań, kalendarza, notatek, celów, sportu, odżywiania, pracy, spraw oraz podróży. `Praca` jest kanonicznym miejscem dla obowiązków zawodowych i dawnego pojęcia „Biuro”; adres `/biuro` zachowuje zgodność przez przekierowanie. `Finanse` pozostają nazwanym podwidokiem modułu Sprawy, obejmującym płatności, subskrypcje, budżet oraz kontekst JDG; adres `/finanse` prowadzi do miesięcznego budżetu w Sprawach. JDG jest wydzielonym podwidokiem modułu Sprawy. Rozbudowane sekcje korzystają ze wspólnego systemu interfejsu i lokalnych obszarów roboczych dopasowanych do charakteru danych.
+Obecny interfejs ma osiem głównych obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Praca, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki są widokami Zadań, a Podróże są obszarem Spraw; ich dotychczasowe adresy pozostają zgodne. `Praca` jest kanonicznym miejscem dla obowiązków zawodowych i dawnego pojęcia „Biuro”; adres `/biuro` zachowuje zgodność przez przekierowanie. `Finanse` pozostają grupą podwidoków modułu Sprawy, obejmującą płatności, subskrypcje i budżet; adres `/finanse` prowadzi do miesięcznego budżetu w Sprawach. JDG jest wydzielonym podwidokiem modułu Sprawy.
 
 ## Capabilities and Constraints
 

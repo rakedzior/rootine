@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router";
 import {
   Plus, Check, Trash2, RotateCcw,
   ChevronDown, ChevronRight,
@@ -83,6 +84,7 @@ import {
 } from "./tasks/TaskSecondaryViews";
 
 export default function Zadania() {
+  const navigate = useNavigate();
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(initialTaskView);
@@ -854,24 +856,49 @@ export default function Zadania() {
               </div>
             )}
           </div>
-          <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
-            {([
-              { id: "high" as Priority, label: "Wysoki", color: C.danger },
-              { id: "medium" as Priority, label: "Średni", color: C.warning },
-              { id: "low" as Priority, label: "Niski", color: C.iceBlue },
-            ]).map((item) => (
+          <div className="task-toolbar-actions">
+            <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
+              {([
+                { id: "high" as Priority, label: "Wysoki", color: C.danger },
+                { id: "medium" as Priority, label: "Średni", color: C.warning },
+                { id: "low" as Priority, label: "Niski", color: C.iceBlue },
+              ]).map((item) => (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={priorityFilter === item.id}
+                  onClick={() => setPriorityFilter(priorityFilter === item.id ? null : item.id)}
+                  style={{ color: priorityFilter === item.id ? item.color : C.textMuted, background: priorityFilter === item.id ? `${item.color}14` : undefined }}
+                >
+                  {item.label}
+                </Button>
+              ))}
+              {pending.length > 0 && <Badge tone="neutral">{pending.length} otwartych</Badge>}
+            </div>
+            <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
-                key={item.id}
+                variant="quiet"
+                size="sm"
+                iconOnly
+                aria-label="Widok listy"
+                aria-pressed="true"
+                title="Lista"
+              >
+                <List size={14} strokeWidth={1.7} />
+              </Button>
+              <Button
                 variant="ghost"
                 size="sm"
-                aria-pressed={priorityFilter === item.id}
-                onClick={() => setPriorityFilter(priorityFilter === item.id ? null : item.id)}
-                style={{ color: priorityFilter === item.id ? item.color : C.textMuted, background: priorityFilter === item.id ? `${item.color}14` : undefined }}
+                iconOnly
+                aria-label="Widok kalendarza"
+                aria-pressed="false"
+                title="Kalendarz"
+                onClick={() => navigate("/kalendarz")}
               >
-                {item.label}
+                <Calendar size={14} strokeWidth={1.7} />
               </Button>
-            ))}
-            {pending.length > 0 && <Badge tone="neutral">{pending.length} otwartych</Badge>}
+            </div>
           </div>
         </WorkspaceToolbar>
 
@@ -1172,7 +1199,7 @@ export default function Zadania() {
       {/* ── Right panel ── */}
       {(selectedTask || taskView === "podsumowanie") && (
         <DetailPanel
-          className={selectedTask ? "" : "task-summary-detail"}
+          className={selectedTask ? "task-detail-panel" : "task-summary-detail"}
           label={selectedTask
             ? selectedVirtualOccurrence
               ? "Szczegóły wystąpienia"

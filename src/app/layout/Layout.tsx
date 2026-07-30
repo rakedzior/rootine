@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { NavLink, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import {
   ArrowLeft,
   ChevronDown,
@@ -48,6 +48,7 @@ import { toLocalDateKey } from "../data/localDate";
 import {
   APP_MODULES,
   findModuleForPath,
+  isModulePath,
   type AppModule,
 } from "../moduleRegistry";
 import { RecoveryCenterButton } from "../recovery/RecoveryCenter";
@@ -128,18 +129,21 @@ function PrimaryNavItem({
   mobile?: boolean;
 }) {
   const Icon = item.icon;
+  const location = useLocation();
+  const active = isModulePath(item, location.pathname);
   return (
-    <NavLink
+    <Link
       to={item.to}
       title={item.label}
-      className={({ isActive }) => [
+      aria-current={active ? "page" : undefined}
+      className={[
         mobile ? "app-mobile-nav__item" : "app-nav-item",
-        isActive ? "is-active" : "",
+        active ? "is-active" : "",
       ].filter(Boolean).join(" ")}
     >
       <Icon size={mobile ? 18 : 15} strokeWidth={1.7} aria-hidden="true" />
       <span className={mobile ? "app-mobile-nav__label" : "app-nav-label"}>{item.label}</span>
-    </NavLink>
+    </Link>
   );
 }
 
@@ -693,13 +697,14 @@ export default function Layout() {
                     const Icon = item.icon;
                     const hiddenByPreference = modulePreferences.disabled.includes(item.id);
                     return (
-                      <NavLink
+                      <Link
                         key={item.id}
                         to={item.to}
+                        aria-current={isModulePath(item, location.pathname) ? "page" : undefined}
                         data-mobile-menu-focus={index === 0 ? "" : undefined}
-                        className={({ isActive }) => [
+                        className={[
                           "app-mobile-menu__module",
-                          isActive ? "is-active" : "",
+                          isModulePath(item, location.pathname) ? "is-active" : "",
                           hiddenByPreference ? "is-preference-hidden" : "",
                         ].filter(Boolean).join(" ")}
                       >
@@ -708,7 +713,7 @@ export default function Layout() {
                           <strong>{item.label}</strong>
                           {hiddenByPreference && <small>Ukryty w pasku nawigacji</small>}
                         </span>
-                      </NavLink>
+                      </Link>
                     );
                   })}
                 </nav>

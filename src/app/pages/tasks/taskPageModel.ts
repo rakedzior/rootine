@@ -70,8 +70,8 @@ export const SMART_VIEWS = [
   { id: "skrzynka",   label: "Skrzynka",       icon: Inbox      },
   { id: "jutro",      label: "Jutro",           icon: Calendar   },
   { id: "7dni",       label: "Następne 7 dni",  icon: TrendingUp },
-  { id: "podsumowanie", label: "Podsumowanie",  icon: BarChart2  },
   { id: "nawyki",     label: "Nawyki",           icon: Flame      },
+  { id: "podsumowanie", label: "Podsumowanie",  icon: BarChart2  },
 ];
 
 export const VIEW_LABELS: Record<string, string> = {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   ChevronLeft, ChevronRight,
-  Plus, Printer, X,
+  CalendarDays, Flag, List, Plus, Printer, X,
 } from "lucide-react";
 import { TaskDetail } from "./tasks/TaskViews";
 import {
@@ -33,11 +33,15 @@ import {
 import {
   Badge,
   Button,
+  ContextNavItem,
+  ContextSidebar,
   Menu,
   MenuItem,
   ModuleMain,
   ModuleShell,
   PageHeader,
+  SectionHeader,
+  Select,
   WorkspaceToolbar,
   uiColors,
 } from "../ui";
@@ -68,6 +72,29 @@ const MONTHS = [
 const WEEKDAYS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
 
 type CalendarEvent = Task & { calendarDate: string };
+type CalendarPriority = NonNullable<Task["priority"]>;
+type CalendarFilter =
+  | { kind: "all" }
+  | { kind: "list"; id: string }
+  | { kind: "tag"; id: string }
+  | { kind: "priority"; id: CalendarPriority };
+
+const CALENDAR_PRIORITIES: Array<{ id: CalendarPriority; label: string }> = [
+  { id: "high", label: "Wysoki" },
+  { id: "medium", label: "Średni" },
+  { id: "low", label: "Niski" },
+];
+
+function calendarFilterKey(filter: CalendarFilter) {
+  return filter.kind === "all" ? "all" : `${filter.kind}:${filter.id}`;
+}
+
+function taskMatchesCalendarFilter(task: Task, filter: CalendarFilter) {
+  if (filter.kind === "all") return true;
+  if (filter.kind === "list") return task.list === filter.id;
+  if (filter.kind === "tag") return task.tags?.includes(filter.id) ?? false;
+  return task.priority === filter.id;
+}
 
 const dateKey = (year: number, month: number, day: number) =>
   `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -206,6 +233,7 @@ export default function Kalendarz() {
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isCalendarTask));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
+  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>({ kind: "all" });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedOccurrenceDate, setSelectedOccurrenceDate] = useState<string | null>(null);
   const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null);
@@ -263,16 +291,38 @@ export default function Kalendarz() {
     () => Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7)),
     [cells],
   );
+  const filteredEvents = useMemo(
+    () => events.filter((event) => taskMatchesCalendarFilter(event, calendarFilter)),
+    [calendarFilter, events],
+  );
+  const calendarFilterChoices = useMemo(() => [
+    { value: "all", label: "Wszystkie zadania", filter: { kind: "all" } as CalendarFilter },
+    ...lists.map((list) => ({
+      value: `list:${list.id}`,
+      label: `Lista: ${list.label}`,
+      filter: { kind: "list", id: list.id } as CalendarFilter,
+    })),
+    ...tags.map((tag) => ({
+      value: `tag:${tag.id}`,
+      label: `Tag: #${tag.label}`,
+      filter: { kind: "tag", id: tag.id } as CalendarFilter,
+    })),
+    ...CALENDAR_PRIORITIES.map((priority) => ({
+      value: `priority:${priority.id}`,
+      label: `Priorytet: ${priority.label}`,
+      filter: { kind: "priority", id: priority.id } as CalendarFilter,
+    })),
+  ], [lists, tags]);
   const visibleOccurrences = useMemo(() => {
     const first = cells[0];
     const last = cells.at(-1);
     if (!first || !last) return [] as CalendarOccurrence[];
     return selectCalendarOccurrences(
-      { ...occurrenceSources, tasks: events },
+      { ...occurrenceSources, tasks: filteredEvents },
       dateKey(first.year, first.month, first.day),
       dateKey(last.year, last.month, last.day),
     );
-  }, [cells, events, occurrenceSources]);
+  }, [cells, filteredEvents, occurrenceSources]);
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarOccurrence[]>();
     visibleOccurrences.forEach((event) => grouped.set(event.calendarDate, [...(grouped.get(event.calendarDate) ?? []), event]));
@@ -425,6 +475,12 @@ export default function Kalendarz() {
     setDetailPosition((current) => ({ ...current, ready: false }));
     if (restoreFocus) requestAnimationFrame(() => detailReturnFocusRef.current?.focus());
   }, [draftId]);
+
+  const applyCalendarFilter = (nextFilter: CalendarFilter) => {
+    setCalendarFilter(nextFilter);
+    setAgendaDateKey(null);
+    closeTaskDetail(false);
+  };
 
   const selectEvent = (event: CalendarOccurrence, trigger?: HTMLElement) => {
     if (trigger) detailReturnFocusRef.current = trigger;
@@ -614,6 +670,9 @@ export default function Kalendarz() {
     const event: CalendarEvent = {
       id: Date.now(), calendarDate, text: "", done: false, date: formatTaskDate(calendarDate),
       view: taskViewForCalendarDate(calendarDate),
+      ...(calendarFilter.kind === "list" ? { list: calendarFilter.id } : {}),
+      ...(calendarFilter.kind === "tag" ? { tags: [calendarFilter.id] } : {}),
+      ...(calendarFilter.kind === "priority" ? { priority: calendarFilter.id } : {}),
     };
     setAgendaDateKey(null);
     detailReturnFocusRef.current = calendarRootRef.current?.querySelector<HTMLElement>(`[data-calendar-cell="${calendarDate}"]`) ?? null;
@@ -631,16 +690,115 @@ export default function Kalendarz() {
       pageWidth="canvas"
       header={(
         <PageHeader
-          title="Kalendarz"
-          description={formatHeaderDate(viewDate)}
+          title="Zadania"
+          description={`Kalendarz · ${formatHeaderDate(viewDate)}`}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>}
         />
       )}
     >
+      <ContextSidebar
+        label="Filtry kalendarza"
+        collapsible={false}
+        className="calendar-context-sidebar"
+      >
+        <div className="px-2 pb-4 pt-4">
+          <SectionHeader title="Główne" level={2} variant="label" className="px-1.5" />
+          <ContextNavItem
+            active={calendarFilter.kind === "all"}
+            onClick={() => applyCalendarFilter({ kind: "all" })}
+            icon={<CalendarDays />}
+            label="Wszystkie zadania"
+            meta={events.filter((event) => !event.deleted).length || undefined}
+          />
+        </div>
+
+        {lists.length > 0 && (
+          <>
+            <div className="task-nav__divider" />
+            <div className="px-2 py-2">
+              <SectionHeader title="Listy" level={2} variant="label" className="px-1.5" />
+              <div className="space-y-px">
+                {lists.map((list) => {
+                  const filter: CalendarFilter = { kind: "list", id: list.id };
+                  const count = events.filter((event) => !event.deleted && event.list === list.id).length;
+                  return (
+                    <ContextNavItem
+                      key={list.id}
+                      active={calendarFilterKey(calendarFilter) === calendarFilterKey(filter)}
+                      onClick={() => applyCalendarFilter(filter)}
+                      icon={<span className="h-2 w-2 rounded-full" style={{ background: list.color }} />}
+                      label={list.label}
+                      meta={count || undefined}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {tags.length > 0 && (
+          <>
+            <div className="task-nav__divider" />
+            <div className="px-2 py-2">
+              <SectionHeader title="Tagi" level={2} variant="label" className="px-1.5" />
+              <div className="space-y-px">
+                {tags.map((tag) => {
+                  const filter: CalendarFilter = { kind: "tag", id: tag.id };
+                  const count = events.filter((event) => !event.deleted && event.tags?.includes(tag.id)).length;
+                  return (
+                    <ContextNavItem
+                      key={tag.id}
+                      active={calendarFilterKey(calendarFilter) === calendarFilterKey(filter)}
+                      onClick={() => applyCalendarFilter(filter)}
+                      icon={<span className="h-2 w-2 rounded-full" style={{ background: tag.color }} />}
+                      label={`#${tag.label}`}
+                      meta={count || undefined}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="task-nav__divider" />
+        <div className="px-2 py-2">
+          <SectionHeader title="Priorytet" level={2} variant="label" className="px-1.5" />
+          <div className="space-y-px">
+            {CALENDAR_PRIORITIES.map((priority) => {
+              const filter: CalendarFilter = { kind: "priority", id: priority.id };
+              const count = events.filter((event) => !event.deleted && event.priority === priority.id).length;
+              return (
+                <ContextNavItem
+                  key={priority.id}
+                  active={calendarFilterKey(calendarFilter) === calendarFilterKey(filter)}
+                  onClick={() => applyCalendarFilter(filter)}
+                  icon={<Flag />}
+                  label={priority.label}
+                  meta={count || undefined}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </ContextSidebar>
+
       <ModuleMain>
         <WorkspaceToolbar>
           <div className="flex items-center gap-1">
+            <Select
+              aria-label="Filtr kalendarza"
+              fieldClassName="context-mobile-select"
+              compact
+              value={calendarFilterKey(calendarFilter)}
+              options={calendarFilterChoices.map(({ value, label }) => ({ value, label }))}
+              onChange={(event) => {
+                const choice = calendarFilterChoices.find((item) => item.value === event.target.value);
+                if (choice) applyCalendarFilter(choice.filter);
+              }}
+            />
             <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
             <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={15} strokeWidth={1.5} /></Button>
@@ -649,6 +807,29 @@ export default function Kalendarz() {
           <div className="flex items-center gap-2">
             <Badge tone="neutral">Miesiąc</Badge>
             <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={15} strokeWidth={1.5} /></Button>
+            <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                aria-label="Widok listy"
+                aria-pressed="false"
+                title="Lista"
+                onClick={() => window.location.assign("/zadania")}
+              >
+                <List size={14} strokeWidth={1.7} />
+              </Button>
+              <Button
+                variant="quiet"
+                size="sm"
+                iconOnly
+                aria-label="Widok kalendarza"
+                aria-pressed="true"
+                title="Kalendarz"
+              >
+                <CalendarDays size={14} strokeWidth={1.7} />
+              </Button>
+            </div>
           </div>
         </WorkspaceToolbar>
 

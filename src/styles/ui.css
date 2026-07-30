@@ -252,7 +252,7 @@
 .ui-menu-item__trailing { display: grid; flex: 0 0 auto; place-items: center; }
 
 .ui-page-header { flex: 0 0 auto; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-graphite-sidebar); }
-.ui-page-header__row { display: flex; min-height: var(--page-header-height); align-items: center; justify-content: space-between; gap: var(--space-lg); padding: 0 var(--space-3xl); }
+.ui-page-header__row { display: flex; width: 100%; min-height: var(--page-header-height); align-items: center; justify-content: space-between; gap: var(--space-lg); padding: 0 var(--space-3xl); }
 .ui-page-header__identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); }
 /* Navigation-only slot (e.g. a back control on detail routes). Module root pages must not
    set `leading`, otherwise the page title shifts horizontally between tabs. The fixed width
@@ -264,7 +264,7 @@
 .ui-page-header__meta { min-width: 0; }
 .ui-page-header__description { overflow: hidden; margin: 2px 0 0; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--leading-snug); text-overflow: ellipsis; white-space: nowrap; }
 .ui-page-header__actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-sm); }
-.ui-page-header__below { padding: 0 var(--space-3xl) var(--space-md); }
+.ui-page-header__below { width: 100%; padding: 0 var(--space-3xl) var(--space-md); }
 
 .ui-module-shell {
   position: relative;
@@ -322,15 +322,11 @@
 .ui-module-shell[data-page-width="wide"] { --current-page-width: var(--page-width-wide); }
 .ui-module-shell[data-page-width="canvas"] { --current-page-width: none; }
 
-.ui-module-shell:not([data-page-width="canvas"]) > .ui-module-shell__header .ui-page-header__below {
-  width: min(100%, calc(var(--current-page-width) + (2 * var(--space-3xl))));
-  margin-inline: auto;
-}
-
 .ui-module-shell:not([data-page-width="canvas"]) > .ui-module-shell__body > .ui-module-main {
   width: min(100%, calc(var(--current-page-width) + (2 * var(--space-3xl))));
   max-width: calc(var(--current-page-width) + (2 * var(--space-3xl)));
   flex-basis: auto;
+  margin-inline: auto;
 }
 
 .ui-context-sidebar {
@@ -392,6 +388,7 @@
 }
 
 .context-nav-item {
+  position: relative;
   display: flex;
   width: 100%;
   /* Was a bare 34px, the single most repeated off-scale height in the app (7 routes). */
@@ -417,9 +414,20 @@
 }
 
 .context-nav-item[aria-current="page"] {
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  background: var(--color-graphite-panel);
+  color: var(--color-text-secondary);
   font-weight: var(--weight-medium);
+}
+
+.context-nav-item[aria-current="page"]::before {
+  position: absolute;
+  top: var(--space-sm);
+  bottom: var(--space-sm);
+  left: 0;
+  width: 1px;
+  border-radius: var(--radius-pill);
+  background: var(--color-precision-blue);
+  content: "";
 }
 
 .context-nav-item__icon {
@@ -499,6 +507,57 @@
   background: var(--color-graphite-canvas);
 }
 
+.ui-view-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+}
+
+.ui-view-switch .ui-button {
+  min-width: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.ui-view-switch .ui-button[aria-pressed="true"] {
+  background: var(--color-graphite-card);
+  color: var(--color-chalk-white);
+}
+
+.ui-view-switch .ui-button:hover {
+  color: var(--color-text-secondary);
+}
+
+.ui-tabs--segmented {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+}
+
+.ui-tabs--segmented .ui-tab {
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-label);
+}
+
+.ui-tabs--segmented .ui-tab[aria-selected="true"] {
+  background: var(--color-graphite-card);
+  color: var(--color-chalk-white);
+}
+
+.ui-tabs--segmented .ui-tab[aria-selected="true"]::after {
+  display: none;
+}
+
 .ui-detail-panel {
   width: var(--detail-panel-width);
   min-width: var(--detail-panel-width);
@@ -517,7 +576,9 @@
 .ui-section-header--label .ui-section-header__title { color: var(--color-text-muted); font-size: var(--text-label); letter-spacing: var(--tracking-label); line-height: var(--leading-tight); text-transform: uppercase; }
 .ui-section-header__description { margin: 4px 0 0; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--leading-normal); }
 
-.ui-tabs { display: flex; align-items: center; gap: var(--space-xs); border-bottom: 1px solid var(--color-border-subtle); }
+.ui-tabs { display: flex; max-width: 100%; align-items: center; gap: var(--space-xs); overflow-x: auto; border-bottom: 1px solid var(--color-border-subtle); scrollbar-width: none; }
+.ui-tabs::-webkit-scrollbar { display: none; }
+.ui-tab { flex: 0 0 auto; }
 .ui-tab { position: relative; min-height: 36px; padding: 0 var(--space-md); border: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; background: transparent; color: var(--color-text-muted); font-size: var(--text-body); cursor: pointer; }
 .ui-tab:hover { color: var(--color-text-secondary); background: var(--color-graphite-panel); }
 .ui-tab[aria-selected="true"] { color: var(--color-precision-blue-text); background: var(--color-precision-blue-soft); }
