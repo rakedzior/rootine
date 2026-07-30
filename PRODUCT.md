@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Routine jest przeznaczone dla małej liczby użytkowników, którzy chcą zarządzać najważniejszymi obszarami codziennego życia w jednym miejscu. „Mateusz” i widoczne obecnie dane są przykładową personą oraz treścią demonstracyjną, a nie założeniem produktu dla jednej konkretnej osoby.
+Rootine jest przeznaczone dla małej liczby użytkowników, którzy chcą zarządzać najważniejszymi obszarami codziennego życia w jednym miejscu. „Mateusz” i widoczne obecnie dane są przykładową personą oraz treścią demonstracyjną, a nie założeniem produktu dla jednej konkretnej osoby.
 
 ## Product Purpose
 
@@ -16,7 +16,7 @@ Produkt łączy planowanie i śledzenie codziennych obowiązków, czasu, celów,
 
 ## Positioning
 
-Routine ma być jednym spójnym miejscem do pracy z powiązanymi obszarami życia zamiast zbiorem odseparowanych narzędzi. Dokładne pozycjonowanie rynkowe i wyróżnik względem konkretnych produktów pozostają do ustalenia po walidacji MVP.
+Rootine ma być jednym spójnym miejscem do pracy z powiązanymi obszarami życia zamiast zbiorem odseparowanych narzędzi. Dokładne pozycjonowanie rynkowe i wyróżnik względem konkretnych produktów pozostają do ustalenia po walidacji MVP.
 
 ## Operating Context
 
@@ -41,7 +41,7 @@ Obecny interfejs obejmuje moduły Dzisiaj, zadań, kalendarza, notatek, celów, 
 
 ## Brand Commitments
 
-Nazwa produktu to Routine. Interfejs i komunikaty są obecnie tworzone w języku polskim. Inne trwałe zobowiązania marki nie zostały jeszcze ustalone.
+Nazwa produktu to Rootine. Interfejs i komunikaty są obecnie tworzone w języku polskim. Inne trwałe zobowiązania marki nie zostały jeszcze ustalone.
 
 ## Evidence on Hand
 

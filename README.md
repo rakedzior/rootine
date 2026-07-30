@@ -1,4 +1,4 @@
-# Routine dashboard
+# Rootine dashboard
 
 A calm, graphite-first personal operating system with routed workspaces for today, tasks, calendar, nutrition, sport, work, goals, affairs, notes, and travel.
 

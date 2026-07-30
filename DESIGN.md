@@ -1,5 +1,5 @@
 ---
-name: Routine
+name: Rootine
 description: "Grafitowy warsztat do spokojnego zarządzania codziennymi obszarami życia."
 colors:
   precision-blue: "#4772FA"
@@ -149,13 +149,13 @@ components:
     padding: "24px"
 ---
 
-# Design System: Routine
+# Design System: Rootine
 
 ## Overview
 
 **Creative North Star: "Grafitowy warsztat"**
 
-Routine jest spokojnym, precyzyjnym i dyskretnym narzędziem do działania. Interfejs przypomina dobrze uporządkowany warsztat: każda kontrolka ma konkretne zadanie, treść ma pierwszeństwo, a gęstość pozwala szybko skanować wiele informacji bez wizualnego hałasu.
+Rootine jest spokojnym, precyzyjnym i dyskretnym narzędziem do działania. Interfejs przypomina dobrze uporządkowany warsztat: każda kontrolka ma konkretne zadanie, treść ma pierwszeństwo, a gęstość pozwala szybko skanować wiele informacji bez wizualnego hałasu.
 
 System jest ciemny, tonalny i kompaktowy. Marka ujawnia się przez konsekwentny rytm, oszczędne użycie Precyzyjnego błękitu, drobną typografię oraz dobrze rozróżnione stany, nie przez dekorację. To interfejs w trybie **Operate**: ma ułatwiać wykonanie zadania, a nie konkurować o uwagę.
 
@@ -414,7 +414,7 @@ Precyzyjny błękit ma trzy role kontrastowe: `precision-blue` pozostaje sygnał
 ### Don't:
 
 - **Don't** wprowadzaj gamingowego neonu, kolorowych poświat ani nasyconych gradientów.
-- **Don't** zmieniaj Routine w korporacyjny dashboard z wielkimi KPI i dekoracyjnymi wykresami.
+- **Don't** zmieniaj Rootine w korporacyjny dashboard z wielkimi KPI i dekoracyjnymi wykresami.
 - **Don't** używaj przesadnie dużej typografii; ekran aplikacyjny ma pozostać narzędziem.
 - **Don't** stosuj glassmorphismu, przezroczystych kart ani rozmycia jako głównego materiału powierzchni.
 - **Don't** dodawaj mocnego cienia do każdej karty.

@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
+    "@cloudflare/workers-types": "^5.20260729.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.0",
     "@projectwallace/stylelint-plugin": "^0.6.12",
@@ -54,6 +55,7 @@
     "typescript-eslint": "^8.65.0",
     "vite": "^7.1.3",
     "vitest": "^4.1.10",
-    "wallace-cli": "^4.0.2"
+    "wallace-cli": "^4.0.2",
+    "wrangler": "^4.115.0"
   }
 }
