@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["api/**/*.ts", "functions/**/*.ts"]
+  "include": ["api/**/*.ts", "functions/**/*.ts", "worker/**/*.ts"]
 }
