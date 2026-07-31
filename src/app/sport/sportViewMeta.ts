@@ -2,12 +2,12 @@ import type { PlannerView } from "./plannerModel";
 
 export const SPORT_VIEW_LABELS: Record<PlannerView, { title: string; description: string }> = {
   today: {
-    title: "Plan na dziś",
+    title: "Dzisiaj",
     description: "Treningi do wykonania i kontekst bieżącego tygodnia",
   },
   cycle: {
-    title: "Cykl treningowy",
-    description: "Prosty plan tygodni aktywnego cyklu",
+    title: "Plan treningowy",
+    description: "Tydzień bazowy i zakres aktywnego planu",
   },
   templates: {
     title: "Szablony",

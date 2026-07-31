@@ -57,6 +57,7 @@ import {
 import {
   createEmptyNutritionDay,
   createEmptyNutritionWorkspace,
+  createNutritionReviewWorkspace,
   loadNutritionWorkspace,
   NUTRITION_STORAGE_KEY,
   nutritionDateKey,
@@ -102,8 +103,22 @@ import {
 } from "../nutrition/nutritionPresentationModel";
 import { CalculatorProfileFields } from "../nutrition/NutritionCalculatorFields";
 
+function nutritionWorkspaceHasHistory(workspace: NutritionWorkspace) {
+  return Object.keys(workspace.weightMeasurements).length > 0
+    || Object.values(workspace.days).some((day) => (
+      day.waterMl > 0 || Object.values(day.entries).some((entries) => entries.length > 0)
+    ));
+}
+
 export default function Odzywanie() {
-  const [initialLoad] = useState(loadNutritionWorkspace);
+  const [initialLoad] = useState(() => {
+    const loaded = loadNutritionWorkspace();
+    if (loaded.status === "corrupt" || nutritionWorkspaceHasHistory(loaded.workspace)) return loaded;
+
+    const seeded = createNutritionReviewWorkspace(loaded.workspace);
+    saveNutritionWorkspace(seeded);
+    return { status: "ok" as const, workspace: seeded };
+  });
   const [workspace, setWorkspace] = useState(initialLoad.workspace);
   const [loadStatus, setLoadStatus] = useState(initialLoad.status);
   const [savePending, setSavePending] = useState(false);
@@ -233,6 +248,13 @@ export default function Odzywanie() {
     if (saved) setLoadStatus("ok");
     setSavePending(false);
   }, [savePending, workspace]);
+
+  useEffect(() => {
+    if (loadStatus === "corrupt" || nutritionWorkspaceHasHistory(workspace)) return;
+    const seeded = createNutritionReviewWorkspace(workspace);
+    setWorkspace(seeded);
+    setSavePending(true);
+  }, [loadStatus, workspace]);
 
   useEffect(() => subscribeToLocalWorkspace(NUTRITION_STORAGE_KEY, () => {
     const loaded = loadNutritionWorkspace();
@@ -1076,15 +1098,22 @@ export default function Odzywanie() {
                     title="Nawodnienie"
                     variant="label"
                     action={(
-                      <Button variant="ghost" size="sm" iconOnly aria-label="Ustaw cel nawodnienia" onClick={() => openGoalDialog("water")}>
-                        <Settings size={13} />
-                      </Button>
+                      <div className="nutrition-section-actions">
+                        {!waterEditOpen && (
+                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Edytuj wypitą wodę" onClick={openWaterEdit}>
+                            <Pencil size={13} />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" iconOnly aria-label="Ustaw cel nawodnienia" onClick={() => openGoalDialog("water")}>
+                          <Settings size={13} />
+                        </Button>
+                      </div>
                     )}
                   />
                   <Card tone="panel" padding="default">
                     <div className="nutrition-water-card__summary">
                       <div className="nutrition-water-card__label">
-                        <Droplets size={15} strokeWidth={1.5} style={{ color: uiColors.precisionBlueText }} />
+                        <Droplets size={15} strokeWidth={1.5} />
                         <span>Wypita woda</span>
                       </div>
                       <div className="nutrition-water-card__value">
@@ -1124,16 +1153,11 @@ export default function Odzywanie() {
                         ) : (
                           <strong>{day.waterMl.toLocaleString("pl-PL")} ml / {workspace.goals.waterMl.toLocaleString("pl-PL")} ml</strong>
                         )}
-                        {!waterEditOpen && (
-                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Edytuj wypitą wodę" onClick={openWaterEdit}>
-                            <Pencil size={12} />
-                          </Button>
-                        )}
                       </div>
                     </div>
                     {waterEditError && <p className="nutrition-inline-error" role="alert">{waterEditError}</p>}
                     <div
-                      className="my-3 h-1.5 overflow-hidden rounded-full"
+                      className="my-3 h-1 overflow-hidden rounded-full"
                       role="progressbar"
                       aria-label="Nawodnienie"
                       aria-valuemin={0}
@@ -1142,7 +1166,7 @@ export default function Odzywanie() {
                       aria-valuetext={`${formatWater(day.waterMl)} z celu ${formatWater(workspace.goals.waterMl)}${day.waterMl > workspace.goals.waterMl ? `, przekroczono o ${formatWater(day.waterMl - workspace.goals.waterMl)}` : ""}`}
                       style={{ background: uiColors.graphiteInput }}
                     >
-                      <div className="h-full w-full origin-left rounded-full transition-transform duration-200" style={{ transform: `scaleX(${Math.min(1, day.waterMl / workspace.goals.waterMl)})`, background: uiColors.precisionBlueText }} />
+                      <div className="h-full w-full origin-left rounded-full transition-transform duration-200" style={{ transform: `scaleX(${Math.min(1, day.waterMl / workspace.goals.waterMl)})`, background: uiColors.precisionBlue }} />
                     </div>
                     <div className="nutrition-water-actions">
                       <div className="nutrition-water-controls">
@@ -1159,7 +1183,29 @@ export default function Odzywanie() {
                 </section>
 
                 <section>
-                  <SectionHeader title="Masa ciała" variant="label" />
+                  <SectionHeader
+                    title="Masa ciała"
+                    variant="label"
+                    action={(
+                      <div className="nutrition-section-actions">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          disabled={dayClosed}
+                          aria-label={latestWeight ? "Edytuj ostatni pomiar masy" : "Dodaj pomiar masy"}
+                          onClick={latestWeight ? editLatestWeight : openWeightMeasurement}
+                        >
+                          <Pencil size={13} />
+                        </Button>
+                        {latestWeight && (
+                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Usuń ostatni pomiar masy" onClick={removeLatestWeight}>
+                            <Trash2 size={13} />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  />
                   <Card tone="panel" padding="default">
                     {latestWeight ? (
                       <div className="nutrition-weight-card nutrition-weight-card--compact">
@@ -1172,14 +1218,6 @@ export default function Odzywanie() {
                             </div>
                           </div>
                           <strong>{formatNumber(latestWeight.weightKg)} kg</strong>
-                          <div className="nutrition-weight-card__actions">
-                            <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Edytuj ostatni pomiar masy" onClick={editLatestWeight}>
-                              <Pencil size={12} />
-                            </Button>
-                            <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Usuń ostatni pomiar masy" onClick={removeLatestWeight}>
-                              <Trash2 size={12} />
-                            </Button>
-                          </div>
                         </div>
                         <Button variant="quiet" size="sm" fullWidth onClick={openWeightMeasurement}>Zarejestruj wagę</Button>
                       </div>

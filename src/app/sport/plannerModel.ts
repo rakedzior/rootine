@@ -35,6 +35,9 @@ export interface TrainingCycle {
   name: string;
   startDate: string;
   weeks: number;
+  /** Null means that the weekly schedule repeats without an end date. */
+  endDate?: string | null;
+  repeatWeekly?: boolean;
   workouts: CycleWorkout[];
   updatedAt: string;
 }
@@ -163,6 +166,8 @@ function isTrainingCycle(value: unknown): value is TrainingCycle {
     && value.weeks <= 52
     && Array.isArray(value.workouts)
     && value.workouts.every((workout) => isCycleWorkout(workout) && workout.week <= (value.weeks as number))
+    && (value.endDate === undefined || value.endDate === null || typeof value.endDate === "string")
+    && (value.repeatWeekly === undefined || typeof value.repeatWeekly === "boolean")
     && typeof value.updatedAt === "string";
 }
 
@@ -264,26 +269,56 @@ export function normalizeCycleStart(dateKey: string) {
 }
 
 export function cycleWorkoutDate(cycle: TrainingCycle, workout: Pick<CycleWorkout, "week" | "day">) {
-  return addDays(cycle.startDate, (workout.week - 1) * 7 + workout.day);
+  return cycleWeekDate(cycle, workout.week, workout.day);
 }
 
 export function cycleDateRange(cycle: TrainingCycle) {
   return {
     start: cycle.startDate,
-    end: addDays(cycle.startDate, cycle.weeks * 7 - 1),
+    end: cycle.endDate === null ? null : addDays(cycle.startDate, cycle.weeks * 7 - 1),
   };
+}
+
+export function isIndefiniteCycle(cycle: TrainingCycle) {
+  return cycle.endDate === null;
+}
+
+export function cycleWeekCount(cycle: TrainingCycle) {
+  return isIndefiniteCycle(cycle) ? 1 : cycle.weeks;
+}
+
+export function cycleDayIndex(cycle: TrainingCycle, dateKey: string) {
+  const difference = calendarDaysBetween(cycle.startDate, dateKey) ?? 0;
+  return ((difference % 7) + 7) % 7;
+}
+
+export function isWorkoutScheduledOnDate(
+  cycle: TrainingCycle,
+  workout: Pick<CycleWorkout, "week" | "day">,
+  dateKey: string,
+) {
+  if (dateKey < cycle.startDate) return false;
+  if (cycle.endDate !== null && dateKey > cycleDateRange(cycle).end!) return false;
+  return isIndefiniteCycle(cycle)
+    ? workout.week === 1 && workout.day === cycleDayIndex(cycle, dateKey)
+    : cycleWorkoutDate(cycle, workout) === dateKey;
 }
 
 export function createCycle(
   name = "Cykl treningowy",
   startDate = startOfWeekKey(),
   weeks = 12,
+  endDate?: string | null,
 ): TrainingCycle {
+  const normalizedStart = normalizeCycleStart(startDate);
+  const normalizedWeeks = clampInteger(weeks, 1, 52);
   return {
     id: createPlannerId("cycle"),
     name,
-    startDate: normalizeCycleStart(startDate),
-    weeks: clampInteger(weeks, 1, 52),
+    startDate: normalizedStart,
+    weeks: normalizedWeeks,
+    endDate: endDate === null ? null : endDate ?? addDays(normalizedStart, normalizedWeeks * 7 - 1),
+    repeatWeekly: endDate === null,
     workouts: [],
     updatedAt: new Date().toISOString(),
   };
@@ -575,6 +610,7 @@ export function cycleWeekDate(cycle: TrainingCycle, week: number, day: number) {
 }
 
 export function todayCycleWeek(cycle: TrainingCycle) {
+  if (isIndefiniteCycle(cycle)) return 1;
   const difference = calendarDaysBetween(cycle.startDate, toDateKey(new Date())) ?? 0;
   return clampInteger(Math.floor(difference / 7) + 1, 1, cycle.weeks);
 }

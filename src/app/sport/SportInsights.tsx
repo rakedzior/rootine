@@ -30,16 +30,20 @@ import {
   DetailPanel,
   EmptyState,
   Input,
+  ProgressBar,
   SectionHeader,
   Select,
   AddToTasksButton,
 } from "../ui";
 import {
   DAY_LABELS,
+  cycleDayIndex,
   cycleDateRange,
   cycleWeekDate,
   cycleWorkoutDate,
   historyEntryFromSession,
+  isIndefiniteCycle,
+  isWorkoutScheduledOnDate,
   todayCycleWeek,
   type CycleWorkout,
   type TrainingCycle,
@@ -95,7 +99,20 @@ function formatDateWithYear(dateKey: string) {
 
 function isDateInsideCycle(cycle: TrainingCycle, dateKey: string) {
   const range = cycleDateRange(cycle);
-  return dateKey >= range.start && dateKey <= range.end;
+  return dateKey >= range.start && (range.end === null || dateKey <= range.end);
+}
+
+function nextWorkoutDate(
+  cycle: TrainingCycle,
+  workout: CycleWorkout,
+  fromDate: string,
+) {
+  if (isIndefiniteCycle(cycle)) {
+    const offset = (workout.day - cycleDayIndex(cycle, fromDate) + 7) % 7 || 7;
+    return addDays(fromDate, offset);
+  }
+  const date = cycleWorkoutDate(cycle, workout);
+  return date > fromDate ? date : "";
 }
 
 function formatStopwatch(seconds: number) {
@@ -214,7 +231,6 @@ function PlannedWorkoutRow({
   onStart,
   onComplete,
   onResetStatus,
-  onMoveTomorrow,
 }: {
   workout: CycleWorkout;
   selected: boolean;
@@ -224,15 +240,28 @@ function PlannedWorkoutRow({
   onStart: () => void;
   onComplete: () => void;
   onResetStatus: () => void;
-  onMoveTomorrow: () => void;
 }) {
-  const DisciplineIcon = DISCIPLINE_ICONS[workout.discipline];
+  const currentStatus = active ? "in_progress" : outcome?.status ?? "scheduled";
+  const completed = currentStatus === "completed";
+  const statusAction = outcome ? onResetStatus : onComplete;
+  const statusActionLabel = active
+    ? "Trening jest w toku"
+    : outcome
+      ? "Oznacz trening jako niewykonany"
+      : "Oznacz trening jako wykonany";
   return (
-    <article className={`sport-overview-workout ${selected ? "is-selected" : ""} ${active ? "is-active" : ""} ${outcome ? `is-${outcome.status}` : ""}`.trim()}>
-      <button type="button" aria-pressed={selected} onClick={onSelect}>
-        <span className="sport-overview-workout__icon" style={{ color: DISCIPLINE_META[workout.discipline].color }} aria-hidden="true">
-          <DisciplineIcon size={18} strokeWidth={1.6} />
-        </span>
+    <article className={`sport-overview-workout ${selected ? "is-selected" : ""} ${active ? "is-active" : ""} ${completed ? "is-completed" : ""} ${outcome && !completed ? `is-${outcome.status}` : ""}`.trim()}>
+      <button
+        type="button"
+        className={`sport-overview-workout__checkbox ${completed ? "is-checked" : ""}`}
+        aria-label={statusActionLabel}
+        aria-pressed={completed}
+        disabled={active}
+        onClick={statusAction}
+      >
+        {completed && <Check size={8} strokeWidth={2.5} />}
+      </button>
+      <button className="sport-overview-workout__content" type="button" aria-pressed={selected} onClick={onSelect}>
         <span className="sport-overview-workout__copy">
           <strong>{workout.title}</strong>
           <span className="sport-overview-workout__meta">
@@ -241,11 +270,14 @@ function PlannedWorkoutRow({
             <span>{workout.durationMinutes} min</span>
             <span aria-hidden="true">·</span>
             <span>{workout.time || "Dowolna pora"}</span>
+            {outcome && !completed && (
+              <>
+                <span aria-hidden="true">·</span>
+                <StatusLabel status={outcome.status} compact />
+              </>
+            )}
           </span>
         </span>
-        {active
-          ? <StatusLabel status="in_progress" compact />
-          : <StatusLabel status={outcome?.status ?? "scheduled"} compact />}
       </button>
       {active ? (
         <div className="sport-overview-workout__actions">
@@ -254,15 +286,10 @@ function PlannedWorkoutRow({
       ) : outcome ? (
         <div className="sport-overview-workout__actions">
           <Button variant="quiet" size="sm" onClick={onSelect}>Podsumowanie</Button>
-          <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={11} />} onClick={onResetStatus}>
-            Przywróć plan
-          </Button>
         </div>
       ) : (
         <div className="sport-overview-workout__actions">
           <Button variant="primary" size="sm" leadingIcon={<Play size={11} />} onClick={onStart}>Rozpocznij</Button>
-          <Button variant="ghost" size="sm" leadingIcon={<Check size={11} />} onClick={onComplete}>Wykonany</Button>
-          <Button variant="ghost" size="sm" leadingIcon={<CalendarClock size={11} />} onClick={onMoveTomorrow}>Na jutro</Button>
         </div>
       )}
     </article>
@@ -280,7 +307,6 @@ export function SportOverview({
   onStartWorkout,
   onCompleteWorkout,
   onResetWorkout,
-  onMoveTomorrow,
   onMoveWorkout,
   onOpenCycle,
 }: {
@@ -294,7 +320,6 @@ export function SportOverview({
   onStartWorkout: (workout: CycleWorkout) => void;
   onCompleteWorkout: (workout: CycleWorkout) => void;
   onResetWorkout: (workout: CycleWorkout) => void;
-  onMoveTomorrow: (workout: CycleWorkout) => void;
   onMoveWorkout: (workout: CycleWorkout, day: number) => void;
   onOpenCycle: (week: number) => void;
 }) {
@@ -307,9 +332,9 @@ export function SportOverview({
       <div className="sport-insights">
         {activeSession && <ActiveSessionStrip session={activeSession} onResume={onResumeActive} />}
         <EmptyState
-          title="Brak aktywnego cyklu"
-          description="Utwórz cykl treningowy, aby zobaczyć plan na dziś i kolejne treningi."
-          action={<Button variant="primary" onClick={onCreateCycle}>Utwórz cykl treningowy</Button>}
+          title="Brak planu treningowego"
+          description="Utwórz plan treningowy, aby zobaczyć dzisiejsze i kolejne treningi."
+          action={<Button variant="primary" onClick={onCreateCycle}>Utwórz plan</Button>}
         />
       </div>
     );
@@ -317,23 +342,30 @@ export function SportOverview({
 
   const today = toDateKey(new Date());
   const week = todayCycleWeek(cycle);
+  const outcomeFor = (workout: CycleWorkout, dateKey: string) => {
+    const outcome = outcomes[workout.id];
+    return isIndefiniteCycle(cycle) && outcome?.updatedAt.slice(0, 10) !== dateKey
+      ? undefined
+      : outcome;
+  };
   const todayInCycle = isDateInsideCycle(cycle, today);
   const todayWorkouts = todayInCycle
     ? cycle.workouts
-      .filter((workout) => cycleWorkoutDate(cycle, workout) === today)
+      .filter((workout) => isWorkoutScheduledOnDate(cycle, workout, today))
       .sort((left, right) => (left.time ?? "").localeCompare(right.time ?? ""))
     : [];
   const todayHeading = formatDayHeading(today);
   const todayMinutes = todayWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
   const remainingWorkouts = todayWorkouts.filter((workout) => (
-    !outcomes[workout.id] && workout.id !== activeWorkoutId
+    !outcomeFor(workout, today) && workout.id !== activeWorkoutId
   )).length;
-  const completedToday = todayWorkouts.filter((workout) => outcomes[workout.id]?.status === "completed").length;
+  const completedToday = todayWorkouts.filter((workout) => outcomeFor(workout, today)?.status === "completed").length;
+  const todayProgress = todayWorkouts.length ? Math.round((completedToday / todayWorkouts.length) * 100) : 0;
   const weekWorkouts = cycle.workouts.filter((workout) => workout.week === week);
   const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
   const upcomingWorkouts = cycle.workouts
-    .map((workout) => ({ workout, date: cycleWorkoutDate(cycle, workout) }))
-    .filter((item) => item.date > today && item.workout.id !== activeWorkoutId)
+    .map((workout) => ({ workout, date: nextWorkoutDate(cycle, workout, today) }))
+    .filter((item): item is { workout: CycleWorkout; date: string } => Boolean(item.date) && item.workout.id !== activeWorkoutId)
     .sort((left, right) => (
       left.date.localeCompare(right.date)
       || (left.workout.time ?? "").localeCompare(right.workout.time ?? "")
@@ -342,33 +374,36 @@ export function SportOverview({
 
   return (
     <div className="sport-insights sport-overview">
-      <section className="sport-today-card" aria-labelledby="sport-today-heading">
-        <div className="sport-today-card__intro">
-          <div className="sport-today-card__heading">
-            <span>Dzisiaj</span>
-            <h2 id="sport-today-heading">
-              {todayHeading.weekday}
-              <span>{todayHeading.date}</span>
-            </h2>
-          </div>
-          <div className="sport-today-card__summary" aria-label="Podsumowanie planu na dziś">
-            <div>
-              <strong>{todayWorkouts.length}</strong>
-              <span>{workoutCountLabel(todayWorkouts.length)}</span>
+      <div className="sport-overview-layout">
+        <div className="sport-overview-layout__today">
+          <SectionHeader
+            title="Dzisiejsze treningi"
+            description={`${todayHeading.weekday}, ${todayHeading.date}`}
+            action={(
+              <Button variant="quiet" size="sm" onClick={() => onOpenCycle(week)}>
+                Plan tygodniowy
+              </Button>
+            )}
+          />
+          <section className="sport-today-card" aria-label="Dzisiejsze treningi">
+            <div className="sport-today-card__progress">
+              <p>
+                <span>{todayWorkouts.length} {workoutCountLabel(todayWorkouts.length)}</span>
+                <i aria-hidden="true">·</i>
+                <span>{todayMinutes} min</span>
+                <i aria-hidden="true">·</i>
+                <span>{completedToday} z {todayWorkouts.length} wykonanych</span>
+              </p>
+              <ProgressBar
+                value={todayProgress}
+                size="sm"
+                label="Postęp dzisiejszego planu treningowego"
+                valueLabel={`${todayProgress}%`}
+              />
             </div>
+            <div className="sport-today-card__agenda">
+              <div className="sport-today-card__agenda-summary">
             <div>
-              <strong>{todayMinutes}</strong>
-              <span>min łącznie</span>
-            </div>
-          </div>
-          <Button variant="quiet" size="sm" onClick={() => onOpenCycle(week)}>
-            Otwórz tydzień w cyklu
-          </Button>
-        </div>
-        <div className="sport-today-card__agenda">
-          <header className="sport-today-card__agenda-header">
-            <div>
-              <span>Plan dnia</span>
               <strong>
                 {activeSession
                   ? "Trening w toku — wróć do bieżącego ćwiczenia"
@@ -379,12 +414,7 @@ export function SportOverview({
                   : "Bez zaplanowanych treningów"}
               </strong>
             </div>
-            {todayWorkouts.length > 0 && (
-              <span className="sport-today-card__progress-copy">
-                {completedToday} z {todayWorkouts.length} wykonanych
-              </span>
-            )}
-          </header>
+              </div>
           {activeSession && <ActiveSessionStrip session={activeSession} onResume={onResumeActive} />}
           {todayWorkouts.length ? (
             <div className="sport-today-card__workouts">
@@ -393,13 +423,12 @@ export function SportOverview({
                   key={workout.id}
                   workout={workout}
                   selected={selectedWorkoutId === workout.id}
-                  outcome={outcomes[workout.id]}
+                  outcome={outcomeFor(workout, today)}
                   active={workout.id === activeWorkoutId}
                   onSelect={() => onSelectWorkout(workout)}
                   onStart={() => onStartWorkout(workout)}
                   onComplete={() => onCompleteWorkout(workout)}
                   onResetStatus={() => onResetWorkout(workout)}
-                  onMoveTomorrow={() => onMoveTomorrow(workout)}
                 />
               ))}
             </div>
@@ -407,19 +436,20 @@ export function SportOverview({
             <div className="sport-today-card__rest">
               <Activity size={21} aria-hidden="true" />
               <div>
-                <strong>{todayInCycle ? "Regeneracja albo trening spontaniczny" : "Cykl nie obejmuje dzisiejszej daty"}</strong>
+                <strong>{todayInCycle ? "Regeneracja albo trening spontaniczny" : "Plan nie obejmuje dzisiejszej daty"}</strong>
                 <p>{todayInCycle
                   ? "W planie nie ma dziś żadnej jednostki."
-                  : `Pokazujemy najbliższy tydzień cyklu: T${week}.`}</p>
+                  : `Pokazujemy najbliższy tydzień planu: T${week}.`}</p>
               </div>
             </div>
           )}
+            </div>
+          </section>
         </div>
-      </section>
-
-      <section className="sport-current-week" aria-label={`Tydzień ${week}`}>
+        <div className="sport-overview-layout__week">
+          <section className="sport-current-week" aria-label={`Tydzień ${week}`}>
         <SectionHeader
-          title={`Tydzień ${week}`}
+          title="Obecny tydzień"
           description={`${formatShortDate(cycleWeekDate(cycle, week, 0))} — ${formatShortDate(cycleWeekDate(cycle, week, 6))}`}
           action={<span className="sport-current-week__summary">{weekWorkouts.length} treningów · {weekMinutes} min</span>}
         />
@@ -454,12 +484,14 @@ export function SportOverview({
                   }}
                 >
                   <div className="sport-overview-day__heading">
-                    <strong>{day.short}</strong>
+                    <strong>{day.full}</strong>
                     <span>{formatShortDate(dateKey)}</span>
                   </div>
-                  <div>
+                  <div className="sport-overview-day__workouts" data-count={Math.min(workouts.length, 3)}>
                     {workouts.map((workout) => {
-                      const canMove = !outcomes[workout.id] && workout.id !== activeWorkoutId;
+                      const workoutOutcome = outcomeFor(workout, dateKey);
+                      const workoutCompleted = workoutOutcome?.status === "completed";
+                      const canMove = !workoutOutcome && workout.id !== activeWorkoutId;
                       return (
                         <button
                           key={workout.id}
@@ -469,6 +501,7 @@ export function SportOverview({
                             selectedWorkoutId === workout.id ? "is-selected" : "",
                             draggedWorkoutId === workout.id ? "is-dragging" : "",
                             canMove ? "is-movable" : "",
+                            workoutCompleted ? "is-completed" : "",
                           ].filter(Boolean).join(" ")}
                           aria-pressed={selectedWorkoutId === workout.id}
                           aria-describedby={canMove ? "sport-overview-drag-hint" : undefined}
@@ -507,8 +540,8 @@ export function SportOverview({
                             </span>
                           )}
                           <strong>{workout.title}</strong>
-                          <span>{workout.time || `${workout.durationMinutes} min`}</span>
-                          {outcomes[workout.id] && <StatusLabel status={outcomes[workout.id].status} compact />}
+                          <span>{workout.durationMinutes} min{workout.time ? ` · ${workout.time}` : ""}</span>
+                          {workoutOutcome && !workoutCompleted && <StatusLabel status={workoutOutcome.status} compact />}
                         </button>
                       );
                     })}
@@ -522,11 +555,13 @@ export function SportOverview({
         <p id="sport-overview-drag-hint" className="sport-overview-drag-hint">
           Przeciągnij trening na inny dzień. Klawiatura: Alt + ←/→.
         </p>
-      </section>
+          </section>
+        </div>
+      </div>
 
       <section className="sport-mobile-upcoming" aria-labelledby="sport-mobile-upcoming-heading">
         <div className="sport-mobile-upcoming__heading">
-          <div>
+          <div className="sport-workout-detail__fact sport-workout-detail__fact--wide">
             <span>Co dalej</span>
             <h2 id="sport-mobile-upcoming-heading">Następne treningi</h2>
           </div>
@@ -551,13 +586,13 @@ export function SportOverview({
                     <strong>{workout.title}</strong>
                     <small>{formatLongDate(date)} · {workout.time || `${workout.durationMinutes} min`}</small>
                   </span>
-                  {outcomes[workout.id] && <StatusLabel status={outcomes[workout.id].status} compact />}
+                  {outcomeFor(workout, date) && <StatusLabel status={outcomeFor(workout, date)!.status} compact />}
                 </button>
               );
             })}
           </div>
         ) : (
-          <p className="sport-mobile-upcoming__empty">W aktywnym cyklu nie ma późniejszych treningów.</p>
+          <p className="sport-mobile-upcoming__empty">W aktywnym planie nie ma późniejszych treningów.</p>
         )}
         <Button variant="quiet" fullWidth onClick={() => onOpenCycle(week)}>
           Zobacz plan całego tygodnia
@@ -928,10 +963,7 @@ export function WorkoutDetailPanel({
   return (
     <DetailPanel label="Szczegóły treningu" className="sport-workout-detail" onDismiss={onClose}>
       <div className="sport-workout-detail__header">
-        <div>
-          <span>Szczegóły treningu</span>
-          <h2>{workout.title}</h2>
-        </div>
+        <h2>{workout.title}</h2>
         <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={onClose}>
           <X size={14} />
         </Button>
@@ -944,21 +976,22 @@ export function WorkoutDetailPanel({
             : <StatusLabel status={outcome?.status ?? "scheduled"} />}
         </div>
         <dl className="sport-workout-detail__facts">
-          <div>
+          <div className="sport-workout-detail__fact sport-workout-detail__fact--wide">
             <dt><CalendarDays size={13} /> Termin</dt>
             <dd>{formatLongDate(date)}</dd>
             <small>Tydzień {workout.week} · {DAY_LABELS[workout.day].full}</small>
           </div>
-          <div>
+          <div className="sport-workout-detail__fact">
             <dt><Clock3 size={13} /> Czas</dt>
-            <dd>{session && outcome ? `${session.durationMinutes} min faktycznie` : `${workout.durationMinutes} min`}</dd>
+            <dd>{session && outcome ? `${session.durationMinutes} min` : `${workout.durationMinutes} min`}</dd>
             <small>
-              {session && outcome ? `Plan ${session.plannedDurationMinutes ?? workout.durationMinutes} min` : "Czas planowany"}
-              {workout.time ? ` · start o ${workout.time}` : ""}
+              {session && outcome
+                ? `Plan: ${session.plannedDurationMinutes ?? workout.durationMinutes} min`
+                : workout.time ? `Start: ${workout.time}` : "Czas planowany"}
             </small>
           </div>
           {session && outcome && (
-            <div>
+            <div className="sport-workout-detail__fact">
               <dt><ListChecks size={13} /> Wynik</dt>
               <dd>{sessionHistory ? historyResultLabel(sessionHistory) : "Tylko czas i status"}</dd>
               {(session.metrics?.rpe !== undefined || session.metrics?.pain !== undefined) && (
@@ -970,16 +1003,16 @@ export function WorkoutDetailPanel({
               )}
             </div>
           )}
-          <div>
+          <div className="sport-workout-detail__fact">
             <dt><Layers3 size={13} /> Źródło</dt>
             <dd>{template ? template.name : "Trening ręczny"}</dd>
             {template && <small>Szablon · {template.exercises.length || template.stages?.length || 0} elementów</small>}
           </div>
           {workout.seriesId && (
-            <div>
+            <div className="sport-workout-detail__fact">
               <dt><Repeat2 size={13} /> Seria</dt>
               <dd>{seriesCount} wystąpień</dd>
-              <small>Zmiany można zastosować do jednego lub wszystkich.</small>
+              <small>Wspólny plan</small>
             </div>
           )}
         </dl>
@@ -989,77 +1022,76 @@ export function WorkoutDetailPanel({
             <p>{workout.note}</p>
           </div>
         )}
-      </div>
-      <div className="sport-workout-detail__actions">
-        <AddToTasksButton compact input={{
-          source: {
-            kind: "sport",
-            entity: `${encodeURIComponent(cycle.id)}/${encodeURIComponent(workout.id)}`,
-            context: `${cycle.name} · tydzień ${workout.week}`,
-            href: `/sport?widok=cycle&tydzien=${workout.week}`,
-          },
-          text: workout.title,
-          done: outcome?.status === "completed",
-          calendarDate: date,
-          date,
-          time: workout.time,
-          list: "sport",
-          tags: ["sport"],
-          notes: workout.note,
-        }} />
-        {active ? (
-          <Button variant="primary" leadingIcon={<Play size={13} />} onClick={onStart}>
-            Wznów trening
-          </Button>
-        ) : (
-          <>
-            {!outcome && (
-              <Button variant="primary" leadingIcon={<Play size={13} />} onClick={onStart}>
-                Rozpocznij trening
+        {!active && (
+          <div className="sport-workout-detail__status-editor">
+            <span>Status</span>
+            <div>
+              <Button
+                variant="quiet"
+                size="sm"
+                disabled={!outcome}
+                leadingIcon={<RotateCcw size={12} />}
+                onClick={onClearOutcome}
+              >
+                Zaplanowany
               </Button>
-            )}
-            <div className="sport-workout-detail__status-editor">
-              <span>Zmień status</span>
-              <div>
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  disabled={!outcome}
-                  leadingIcon={<RotateCcw size={12} />}
-                  onClick={onClearOutcome}
-                >
-                  Zaplanowany
-                </Button>
-                <Button variant="quiet" size="sm" disabled={outcome?.status === "completed"} leadingIcon={<Check size={12} />} onClick={onComplete}>
-                  Wykonany
-                </Button>
-                <Button variant="quiet" size="sm" disabled={outcome?.status === "incomplete"} onClick={onIncomplete}>
-                  Niedokończony
-                </Button>
-                <Button variant="quiet" size="sm" disabled={outcome?.status === "missed"} onClick={onMiss}>
-                  Pominięty
-                </Button>
-              </div>
+              <Button variant="quiet" size="sm" disabled={outcome?.status === "completed"} leadingIcon={<Check size={12} />} onClick={onComplete}>
+                Wykonany
+              </Button>
+              <Button variant="quiet" size="sm" disabled={outcome?.status === "incomplete"} onClick={onIncomplete}>
+                Niedokończony
+              </Button>
+              <Button variant="quiet" size="sm" disabled={outcome?.status === "missed"} onClick={onMiss}>
+                Pominięty
+              </Button>
             </div>
+          </div>
+        )}
+        <details className="sport-workout-detail__more">
+          <summary>Więcej działań</summary>
+          <div>
+            <AddToTasksButton input={{
+              source: {
+                kind: "sport",
+                entity: `${encodeURIComponent(cycle.id)}/${encodeURIComponent(workout.id)}`,
+                context: `${cycle.name} · tydzień ${workout.week}`,
+                href: `/sport?widok=cycle&tydzien=${workout.week}`,
+              },
+              text: workout.title,
+              done: outcome?.status === "completed",
+              calendarDate: date,
+              date,
+              time: workout.time,
+              list: "sport",
+              tags: ["sport"],
+              notes: workout.note,
+            }} />
             {!outcome && (
               <Button variant="quiet" size="sm" leadingIcon={<CalendarClock size={12} />} onClick={onMoveTomorrow}>
                 Przełóż na jutro
               </Button>
             )}
-          </>
-        )}
-        <Button variant="quiet" leadingIcon={<Pencil size={13} />} onClick={onEditSingle}>
-          Edytuj ten trening
-        </Button>
-        {seriesCount > 1 && (
-          <Button variant="quiet" leadingIcon={<Repeat2 size={13} />} onClick={onEditSeries}>
-            Edytuj całą serię ({seriesCount})
-          </Button>
-        )}
-        <Button variant="danger" size="sm" leadingIcon={<Trash2 size={12} />} onClick={onDelete}>
-          Usuń ten trening
-        </Button>
+            <Button variant="quiet" size="sm" leadingIcon={<Pencil size={12} />} onClick={onEditSingle}>
+              Edytuj trening
+            </Button>
+            {seriesCount > 1 && (
+              <Button variant="quiet" size="sm" leadingIcon={<Repeat2 size={12} />} onClick={onEditSeries}>
+                Edytuj serię ({seriesCount})
+              </Button>
+            )}
+            <Button variant="danger" size="sm" leadingIcon={<Trash2 size={12} />} onClick={onDelete}>
+              Usuń trening
+            </Button>
+          </div>
+        </details>
       </div>
+      {(active || !outcome) && (
+        <div className="sport-workout-detail__actions">
+          <Button variant="primary" leadingIcon={<Play size={13} />} onClick={onStart}>
+            {active ? "Wznów trening" : "Rozpocznij trening"}
+          </Button>
+        </div>
+      )}
     </DetailPanel>
   );
 }

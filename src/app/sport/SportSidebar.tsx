@@ -16,12 +16,12 @@ const GROUPS: Array<{
 }> = [
   {
     label: "Główne",
-    items: [{ id: "today", label: "Plan na dziś", icon: Activity }],
+    items: [{ id: "today", label: "Dzisiaj", icon: Activity }],
   },
   {
     label: "Planowanie",
     items: [
-      { id: "cycle", label: "Cykl treningowy", icon: CalendarRange },
+      { id: "cycle", label: "Plan treningowy", icon: CalendarRange },
       { id: "templates", label: "Szablony", icon: Library },
     ],
   },

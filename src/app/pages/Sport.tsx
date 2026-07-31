@@ -35,8 +35,12 @@ import {
   createSessionFromCycleWorkout,
   createPlannerId,
   cycleDateRange,
+  cycleDayIndex,
+  cycleWeekCount,
   DAY_LABELS,
   historyEntryFromSession,
+  isIndefiniteCycle,
+  isWorkoutScheduledOnDate,
   loadSportPlannerState,
   saveSportPlannerState,
   SPORT_PLANNER_STORAGE_KEY,
@@ -128,6 +132,17 @@ function loadStoredCycleDraft(fallback: TrainingCycle | null): TrainingCycle | n
     window.sessionStorage.removeItem(SPORT_CYCLE_DRAFT_KEY);
     return fallback;
   }
+}
+
+function outcomeForDate(
+  cycle: TrainingCycle | null | undefined,
+  outcome: SportPlannerState["workoutOutcomes"][string] | undefined,
+  dateKey: string,
+) {
+  if (!outcome || (cycle && isIndefiniteCycle(cycle) && outcome.updatedAt.slice(0, 10) !== dateKey)) {
+    return undefined;
+  }
+  return outcome;
 }
 
 function getInitialSportUrlState() {
@@ -231,7 +246,9 @@ export default function Sport() {
   const selectedTemplate = selectedWorkout?.templateId
     ? plannerState.templates.find((template) => template.id === selectedWorkout.templateId)
     : undefined;
-  const selectedOutcome = selectedWorkout ? plannerState.workoutOutcomes[selectedWorkout.id] : undefined;
+  const selectedOutcome = selectedWorkout
+    ? outcomeForDate(cycleDraft, plannerState.workoutOutcomes[selectedWorkout.id], toDateKey(new Date()))
+    : undefined;
   const selectedSession = selectedOutcome?.sessionId
     ? plannerState.sessions.find((session) => session.id === selectedOutcome.sessionId)
     : undefined;
@@ -245,7 +262,7 @@ export default function Sport() {
   const viewMeta = SPORT_VIEW_LABELS[view];
   const todayKey = toDateKey(new Date());
   const todayWorkoutCount = cycleDraft?.workouts.filter((workout) => (
-    cycleWorkoutDate(cycleDraft, workout) === todayKey
+    isWorkoutScheduledOnDate(cycleDraft, workout, todayKey)
   )).length ?? 0;
 
   useEffect(() => {
@@ -367,7 +384,7 @@ export default function Sport() {
 
   const changeWeek = (week: number) => {
     if (!cycleDraft) return;
-    setActiveWeek(Math.max(1, Math.min(cycleDraft.weeks, week)));
+    setActiveWeek(Math.max(1, Math.min(cycleWeekCount(cycleDraft), week)));
   };
 
   const saveCycle = () => {
@@ -390,7 +407,7 @@ export default function Sport() {
 
   const submitCycleSettings = (cycle: TrainingCycle) => {
     setCycleDraft(cycle);
-    setActiveWeek((current) => Math.min(current, cycle.weeks));
+    setActiveWeek((current) => Math.min(current, cycleWeekCount(cycle)));
     closeDialogs();
   };
 
@@ -419,11 +436,34 @@ export default function Sport() {
   const moveWorkoutTomorrow = (workout: CycleWorkout) => {
     if (!cycleDraft) return;
     const tomorrow = addDays(cycleWorkoutDate(cycleDraft, workout), 1);
+    if (isIndefiniteCycle(cycleDraft)) {
+      const nextDay = cycleDayIndex(cycleDraft, tomorrow);
+      const updatedCycle = {
+        ...cycleDraft,
+        workouts: cycleDraft.workouts.map((item) => item.id === workout.id
+          ? { ...item, week: 1, day: nextDay }
+          : item),
+        updatedAt: new Date().toISOString(),
+      };
+      setMoveUndo({
+        workoutId: workout.id,
+        title: workout.title,
+        previousWeek: workout.week,
+        previousDay: workout.day,
+        message: `„${workout.title}” przeniesiono na jutro w tygodniu bazowym.`,
+        persisted: true,
+      });
+      setMoveNotice("");
+      setCycleDraft(updatedCycle);
+      setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+      setSelectedWorkoutId(null);
+      return;
+    }
     const difference = calendarDaysBetween(cycleDraft.startDate, tomorrow) ?? 0;
     const nextWeek = Math.floor(difference / 7) + 1;
     const nextDay = ((difference % 7) + 7) % 7;
-    if (nextWeek < 1 || nextWeek > cycleDraft.weeks) {
-      setMoveNotice("Jutro wypada poza zakresem cyklu. Otwórz edycję i wybierz termin w aktywnym cyklu.");
+    if (nextWeek < 1 || nextWeek > cycleWeekCount(cycleDraft)) {
+      setMoveNotice("Jutro wypada poza zakresem planu. Otwórz ustawienia i wybierz termin w aktywnym planie.");
       return;
     }
     const updatedCycle = {
@@ -454,7 +494,7 @@ export default function Sport() {
       || day < 0
       || day > 6
       || activeSession?.cycleWorkoutId === workout.id
-      || plannerState.workoutOutcomes[workout.id]
+      || outcomeForDate(cycleDraft, plannerState.workoutOutcomes[workout.id], toDateKey(new Date()))
     ) return;
     const updatedCycle = {
       ...cycleDraft,
@@ -636,7 +676,7 @@ export default function Sport() {
 
   const openTemplateWorkoutDialog = (template: WorkoutTemplate, today = false) => {
     if (!cycleDraft) {
-      setMoveNotice("Najpierw utwórz aktywny cykl treningowy.");
+      setMoveNotice("Najpierw utwórz aktywny plan treningowy.");
       return;
     }
     let week = activeWeek;
@@ -644,8 +684,8 @@ export default function Sport() {
     if (today) {
       const todayKey = toDateKey(new Date());
       const range = cycleDateRange(cycleDraft);
-      if (todayKey < range.start || todayKey > range.end) {
-        setMoveNotice("Dzisiejsza data wypada poza aktywnym cyklem. Dodaj trening do wybranego tygodnia.");
+      if (todayKey < range.start || (range.end && todayKey > range.end)) {
+        setMoveNotice("Dzisiejsza data wypada poza aktywnym planem. Dodaj trening do wybranego tygodnia.");
         return;
       }
       week = todayCycleWeek(cycleDraft);
@@ -701,7 +741,10 @@ export default function Sport() {
     const template = workout.templateId
       ? plannerState.templates.find((item) => item.id === workout.templateId)
       : undefined;
-    const session = createSessionFromCycleWorkout(cycleDraft, workout, template, "in_progress");
+    const sessionBase = createSessionFromCycleWorkout(cycleDraft, workout, template, "in_progress");
+    const session = isIndefiniteCycle(cycleDraft)
+      ? { ...sessionBase, date: toDateKey(new Date()) }
+      : sessionBase;
     setPlannerState((current) => ({
       ...current,
       sessions: [...current.sessions, session],
@@ -722,6 +765,7 @@ export default function Sport() {
       ? plannerState.templates.find((item) => item.id === workout.templateId)
       : undefined;
     let session = createSessionFromCycleWorkout(cycleDraft, workout, template, status);
+    if (isIndefiniteCycle(cycleDraft)) session = { ...session, date: toDateKey(new Date()) };
     if (status === "completed") session = markAllDone(session);
     const historyEntry = historyEntryFromSession(session);
     setPlannerState((current) => {
@@ -754,7 +798,7 @@ export default function Sport() {
   };
 
   const clearWorkoutOutcome = (workout: CycleWorkout) => {
-    const outcome = plannerState.workoutOutcomes[workout.id];
+    const outcome = outcomeForDate(cycleDraft, plannerState.workoutOutcomes[workout.id], toDateKey(new Date()));
     setPlannerState((current) => {
       const outcomes = { ...current.workoutOutcomes };
       delete outcomes[workout.id];
@@ -787,7 +831,10 @@ export default function Sport() {
       ? plannerState.templates.find((item) => item.id === requestedWorkout.templateId)
       : undefined;
     const finished = finalizeSession(activeSession, "incomplete");
-    const nextSession = createSessionFromCycleWorkout(cycleDraft, requestedWorkout, template, "in_progress");
+    const nextSessionBase = createSessionFromCycleWorkout(cycleDraft, requestedWorkout, template, "in_progress");
+    const nextSession = isIndefiniteCycle(cycleDraft)
+      ? { ...nextSessionBase, date: toDateKey(new Date()) }
+      : nextSessionBase;
     const historyEntry = historyEntryFromSession(finished);
     setPlannerState((current) => ({
       ...current,
@@ -853,7 +900,7 @@ export default function Sport() {
     : view === "cycle" && cycleDraft && cycleDirty
       ? <Button variant="primary" leadingIcon={<Save size={14} />} onClick={saveCycle}>Zapisz plan</Button>
       : view === "cycle" && !cycleDraft
-        ? <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog("cycle")}>Utwórz cykl</Button>
+        ? <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog("cycle")}>Utwórz plan</Button>
         : view === "today" && activeSession
           ? (
             <>
@@ -888,7 +935,7 @@ export default function Sport() {
   return (
     <ModuleShell
       className="sport-module sport-planner-module"
-      pageWidth={view === "cycle" ? "canvas" : "wide"}
+      pageWidth="wide"
       header={(
         <PageHeader
           title="Sport"
@@ -916,8 +963,8 @@ export default function Sport() {
             aria-label="Widok Sportu"
             value={view}
             options={[
-              { value: "today", label: "Plan na dziś" },
-              { value: "cycle", label: "Cykl treningowy" },
+              { value: "today", label: "Dzisiaj" },
+              { value: "cycle", label: "Plan treningowy" },
               { value: "templates", label: "Szablony" },
               { value: "analysis", label: "Analiza" },
             ]}
@@ -966,7 +1013,6 @@ export default function Sport() {
                 onStartWorkout={startWorkout}
                 onCompleteWorkout={(workout) => markWorkout(workout, "completed")}
                 onResetWorkout={clearWorkoutOutcome}
-                onMoveTomorrow={moveWorkoutTomorrow}
                 onMoveWorkout={moveWorkoutFromOverview}
                 onOpenCycle={openCycleView}
               />
@@ -1082,7 +1128,7 @@ export default function Sport() {
         <Modal
           eyebrow="Plan treningowy"
           title={`Usunąć „${workoutDeleteState.workout.title}”?`}
-          description="Trening zniknie z aktywnego cyklu. Po zatwierdzeniu możesz od razu cofnąć tę zmianę."
+          description="Trening zniknie z aktywnego planu. Po zatwierdzeniu możesz od razu cofnąć tę zmianę."
           onClose={() => setWorkoutDeleteState(null)}
           footer={(
             <>
@@ -1092,7 +1138,7 @@ export default function Sport() {
           )}
         >
           <p className="sport-delete-note">
-            Pozostałe treningi i zapisane wyniki cyklu nie zostaną zmienione.
+            Pozostałe treningi i zapisane wyniki planu nie zostaną zmienione.
           </p>
         </Modal>
       )}

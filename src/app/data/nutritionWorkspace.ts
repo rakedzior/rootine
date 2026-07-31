@@ -121,6 +121,102 @@ export function createEmptyNutritionWorkspace(): NutritionWorkspace {
   };
 }
 
+function sampleDateKey(offset: number) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + offset);
+  return nutritionDateKey(date);
+}
+
+function sampleEntry(
+  date: string,
+  meal: MealSlot,
+  name: string,
+  portion: string,
+  calories: number,
+  protein: number,
+  carbs: number,
+  fat: number,
+  index: number,
+): NutritionEntry {
+  return {
+    id: `nutrition-sample-${date}-${meal}-${index}`,
+    name,
+    portion,
+    calories,
+    protein,
+    carbs,
+    fat,
+    createdAt: `${date}T08:00:00.000Z`,
+  };
+}
+
+/**
+ * Provides a believable first view for an empty local journal so the daily
+ * balance and analysis have useful history to work with. Entries are stored
+ * as regular user data; there is no separate presentation state or marker.
+ */
+export function createNutritionReviewWorkspace(base: NutritionWorkspace): NutritionWorkspace {
+  const days = Object.fromEntries(
+    Array.from({ length: 14 }, (_, index) => {
+      const offset = index - 13;
+      const date = sampleDateKey(offset);
+      const variation = index % 3;
+      const breakfast = [
+        sampleEntry(date, "breakfast", "Owsianka z bananem i masłem orzechowym", "420 g", 486 + variation * 18, 19 + variation, 67 + variation * 3, 15 + variation, 0),
+      ];
+      const lunch = [
+        sampleEntry(date, "lunch", "Kurczak z ryżem i warzywami", "480 g", 672 + variation * 24, 48 + variation * 2, 75 + variation * 3, 17 + variation, 0),
+      ];
+      const snack = [
+        sampleEntry(date, "snack", "Skyr z owocami", "200 g", 214 + variation * 12, 22 + variation, 24 + variation * 2, 4 + variation, 0),
+      ];
+      const dinner = [
+        sampleEntry(date, "dinner", "Kanapki z twarożkiem i warzywami", "360 g", 508 + variation * 20, 31 + variation, 51 + variation * 2, 16 + variation, 0),
+      ];
+      return [date, {
+        date,
+        waterMl: 1880 + ((index * 145) % 620),
+        source: "user" as const,
+        entries: { breakfast, lunch, snack, dinner },
+      } satisfies NutritionDay];
+    }),
+  );
+
+  const weightMeasurements = Object.fromEntries(
+    [-13, -10, -7, -4, -1, 0].map((offset, index) => {
+      const date = sampleDateKey(offset);
+      return [date, {
+        date,
+        weightKg: Math.round((82.4 - index * 0.18) * 10) / 10,
+        note: undefined,
+        createdAt: `${date}T07:30:00.000Z`,
+      } satisfies WeightMeasurement];
+    }),
+  );
+
+  return {
+    ...base,
+    calculatorProfile: base.calculatorProfile ?? {
+      equationVariant: "male",
+      age: 31,
+      weightKg: 81.5,
+      heightCm: 180,
+      workActivity: "desk",
+      activities: [
+        { id: "sample-strength", type: "strength", intensity: "moderate", timesPerWeek: 3, minutesPerSession: 50 },
+        { id: "sample-walk", type: "walking", intensity: "moderate", timesPerWeek: 5, minutesPerSession: 35 },
+      ],
+      dietAdjustmentMode: "percent",
+      dietAdjustmentValue: 0,
+    },
+    weightMeasurements,
+    bodyMeasurements: base.bodyMeasurements ?? {},
+    days,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function createDemoNutritionDay(date: string): NutritionDay {
   const createdAt = new Date().toISOString();
   return {

@@ -28,12 +28,15 @@ import {
   DAY_LABELS,
   createPlannerId,
   cycleDateRange,
+  cycleWeekCount,
   cycleWeekDate,
   cycleWorkoutDate,
+  isIndefiniteCycle,
   type CycleWorkout,
   type TrainingCycle,
 } from "./plannerModel";
 import {
+  addDays,
   formatShortDate,
   fromDateKey,
   normalizeSearch,
@@ -183,7 +186,7 @@ export function TemplateLibrary({
                             <Copy size={13} aria-hidden="true" /> Duplikuj
                           </button>
                           <button type="button" onClick={() => onAddToCycle(template)}>
-                            <CalendarRange size={13} aria-hidden="true" /> Dodaj do cyklu
+                            <CalendarRange size={13} aria-hidden="true" /> Dodaj do planu
                           </button>
                           <button type="button" onClick={() => onUseToday(template)}>
                             <CalendarClock size={13} aria-hidden="true" /> Trening na dziś
@@ -237,12 +240,14 @@ function WeekBoard({
       document.getElementById(`sport-week-tab-${week}`)?.focus();
     });
   };
+  const totalWeeks = cycleWeekCount(cycle);
+  const indefinite = isIndefiniteCycle(cycle);
 
   return (
     <section className="sport-cycle-weeks" aria-labelledby="cycle-week-heading">
       <div className="sport-week-navigation">
         <div>
-          <h3 id="cycle-week-heading">Tydzień {activeWeek} z {cycle.weeks}</h3>
+          <h3 id="cycle-week-heading">{indefinite ? "Tydzień bazowy" : `Tydzień ${activeWeek} z ${totalWeeks}`}</h3>
           <p>{formatShortDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatShortDate(cycleWeekDate(cycle, activeWeek, 6))}</p>
         </div>
         <div className="sport-week-navigation__arrows">
@@ -261,7 +266,7 @@ function WeekBoard({
             size="sm"
             iconOnly
             aria-label="Następny tydzień"
-            disabled={activeWeek === cycle.weeks}
+            disabled={indefinite || activeWeek === totalWeeks}
             onClick={() => onWeekChange(activeWeek + 1)}
           >
             <ChevronRight size={13} />
@@ -269,8 +274,8 @@ function WeekBoard({
         </div>
       </div>
 
-      <div className="sport-week-strip" role="tablist" aria-label="Tygodnie cyklu">
-        {Array.from({ length: cycle.weeks }, (_, index) => index + 1).map((week) => {
+      <div className="sport-week-strip" role="tablist" aria-label="Tygodnie planu">
+        {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((week) => {
           const count = cycle.workouts.filter((workout) => workout.week === week).length;
           return (
             <button
@@ -285,10 +290,10 @@ function WeekBoard({
               onClick={() => onWeekChange(week)}
               onKeyDown={(event) => {
                 let nextWeek: number;
-                if (event.key === "ArrowRight" || event.key === "ArrowDown") nextWeek = week === cycle.weeks ? 1 : week + 1;
-                else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextWeek = week === 1 ? cycle.weeks : week - 1;
+                if (event.key === "ArrowRight" || event.key === "ArrowDown") nextWeek = week === totalWeeks ? 1 : week + 1;
+                else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextWeek = week === 1 ? totalWeeks : week - 1;
                 else if (event.key === "Home") nextWeek = 1;
-                else if (event.key === "End") nextWeek = cycle.weeks;
+                else if (event.key === "End") nextWeek = totalWeeks;
                 else return;
                 event.preventDefault();
                 onWeekChange(nextWeek);
@@ -309,7 +314,7 @@ function WeekBoard({
                 setDropTarget(null);
               }}
             >
-              <span>T{week}</span>
+              <span>{indefinite ? "Bazowy" : `T${week}`}</span>
               <small>{count} tr.</small>
             </button>
           );
@@ -346,7 +351,7 @@ function WeekBoard({
               >
                 <div className="sport-cycle-day__heading">
                   <div>
-                    <strong>{day.short}</strong>
+                    <strong>{day.full}</strong>
                     <span>{formatShortDate(dateKey)}</span>
                   </div>
                   <Button
@@ -383,7 +388,7 @@ function WeekBoard({
                           } else return;
                         } else if (event.key === "ArrowRight") {
                           if (nextDay < 6) nextDay += 1;
-                          else if (nextWeek < cycle.weeks) {
+                          else if (nextWeek < totalWeeks) {
                             nextWeek += 1;
                             nextDay = 0;
                           } else return;
@@ -391,7 +396,7 @@ function WeekBoard({
                           if (nextWeek <= 1) return;
                           nextWeek -= 1;
                         } else if (event.key === "ArrowDown") {
-                          if (nextWeek >= cycle.weeks) return;
+                          if (nextWeek >= totalWeeks) return;
                           nextWeek += 1;
                         } else return;
                         event.preventDefault();
@@ -461,14 +466,16 @@ export function CyclePlanner({
   if (!cycle) {
     return (
       <EmptyState
-        title="Brak cyklu treningowego"
-        description="Utwórz jeden cykl, wybierz liczbę tygodni i zacznij przypisywać szablony do dni."
-        action={<Button variant="primary" onClick={onCreateCycle}>Utwórz cykl</Button>}
+        title="Brak planu treningowego"
+        description="Utwórz plan bezterminowy albo określ jego zakres, a następnie przypisz treningi do dni."
+        action={<Button variant="primary" onClick={onCreateCycle}>Utwórz plan</Button>}
       />
     );
   }
 
   const range = cycleDateRange(cycle);
+  const totalWeeks = cycleWeekCount(cycle);
+  const indefinite = isIndefiniteCycle(cycle);
   const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek);
   const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
   const activeDays = new Set(weekWorkouts.map((workout) => workout.day)).size;
@@ -490,16 +497,16 @@ export function CyclePlanner({
               <h2>{cycle.name}</h2>
               {isDirty && <Badge tone="warning">Niezapisane zmiany</Badge>}
             </div>
-            <p>{formatLongDate(range.start)} — {formatLongDate(range.end)}</p>
+            <p>{formatLongDate(range.start)} {indefinite ? "· bez daty końcowej" : `— ${formatLongDate(range.end!)}`}</p>
           </div>
         </div>
         <div className="sport-cycle-summary__facts">
-          <span><strong>{cycle.weeks}</strong> tygodni</span>
+          <span><strong>{indefinite ? "∞" : totalWeeks}</strong> {indefinite ? "bezterminowo" : "tygodni"}</span>
           <span><strong>{cycle.workouts.length}</strong> treningów</span>
           <span><strong>{weekWorkouts.length}</strong> w tym tygodniu</span>
         </div>
         <div className="sport-cycle-summary__actions">
-          <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia cyklu</Button>
+          <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia planu</Button>
           <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => onAddWorkout(activeWeek, 0)}>
             Dodaj trening
           </Button>
@@ -654,62 +661,73 @@ export function CycleDialog({
   onClose: () => void;
   onSubmit: (cycle: TrainingCycle) => void;
 }) {
-  const [name, setName] = useState(cycle?.name ?? "Cykl 12 tygodni");
+  const [name, setName] = useState(cycle?.name ?? "Plan treningowy");
   const [startDate, setStartDate] = useState(cycle?.startDate ?? startOfWeekKey());
   const [weeks, setWeeks] = useState(String(cycle?.weeks ?? 12));
+  const [rangeMode, setRangeMode] = useState<"indefinite" | "fixed">(
+    cycle?.endDate === null ? "indefinite" : "fixed",
+  );
   const [error, setError] = useState("");
   const nextWeeks = Number(weeks);
-  const removedCount = cycle && Number.isFinite(nextWeeks)
+  const removedCount = cycle && rangeMode === "fixed" && Number.isFinite(nextWeeks)
     ? cycle.workouts.filter((workout) => workout.week > nextWeeks).length
+    : 0;
+  const collapsedCount = cycle && rangeMode === "indefinite"
+    ? cycle.workouts.filter((workout) => workout.week > 1).length
     : 0;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const parsedWeeks = Number(weeks);
     if (!name.trim()) {
-      setError("Podaj nazwę cyklu.");
+      setError("Podaj nazwę planu.");
       return;
     }
     if (!startDate) {
       setError("Wybierz datę rozpoczęcia.");
       return;
     }
-    if (!Number.isInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 52) {
+    if (rangeMode === "fixed" && (!Number.isInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 52)) {
       setError("Podaj długość od 1 do 52 tygodni.");
       return;
     }
     const monday = fromDateKey(startDate);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     const normalizedStart = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+    const normalizedWeeks = rangeMode === "indefinite" ? 1 : parsedWeeks;
     onSubmit({
       id: cycle?.id ?? createPlannerId("cycle"),
       name: name.trim(),
       startDate: normalizedStart,
-      weeks: parsedWeeks,
-      workouts: cycle?.workouts.filter((workout) => workout.week <= parsedWeeks) ?? [],
+      weeks: normalizedWeeks,
+      endDate: rangeMode === "indefinite" ? null : addDays(normalizedStart, normalizedWeeks * 7 - 1),
+      repeatWeekly: rangeMode === "indefinite",
+      workouts: (cycle?.workouts ?? [])
+        .filter((workout) => rangeMode === "indefinite" ? workout.week === 1 : workout.week <= normalizedWeeks)
+        .map((workout) => rangeMode === "indefinite" ? { ...workout, week: 1 } : workout),
       updatedAt: new Date().toISOString(),
     });
   };
 
   return (
     <Modal
-      title={cycle ? "Ustawienia cyklu" : "Nowy cykl treningowy"}
-      eyebrow="Jeden aktywny cykl"
-      description="Ustal początek i liczbę tygodni. Treningi przypiszesz bezpośrednio w kalendarzu."
+      title={cycle ? "Ustawienia planu" : "Nowy plan treningowy"}
+      eyebrow="Jeden aktywny plan"
+      description="Zaplanuj tydzień powtarzany bezterminowo albo określony zakres tygodni."
       width={620}
       onClose={onClose}
       footer={(
         <>
           <Button variant="ghost" onClick={onClose}>Anuluj</Button>
           <Button type="submit" form="sport-cycle-form" variant="primary">
-            {cycle ? "Zapisz ustawienia" : "Utwórz cykl"}
+            {cycle ? "Zapisz ustawienia" : "Utwórz plan"}
           </Button>
         </>
       )}
     >
       <form id="sport-cycle-form" className="sport-planner-form" onSubmit={submit}>
         <Input
-          label="Nazwa cyklu"
+          label="Nazwa planu"
           placeholder="np. Przygotowanie jesienne"
           value={name}
           data-autofocus
@@ -719,9 +737,23 @@ export function CycleDialog({
           <DatePicker
             label="Start"
             value={startDate}
-            hint="Cykl zacznie się w poniedziałek tego tygodnia."
+            hint="Plan zacznie się w poniedziałek tego tygodnia."
             onChange={(nextValue) => { setStartDate(nextValue); setError(""); }}
           />
+          <Select
+            label="Zakres planu"
+            value={rangeMode}
+            options={[
+              { value: "indefinite", label: "Bez daty końcowej" },
+              { value: "fixed", label: "Określona liczba tygodni" },
+            ]}
+            onChange={(event) => {
+              setRangeMode(event.target.value as "indefinite" | "fixed");
+              setError("");
+            }}
+          />
+        </div>
+        {rangeMode === "fixed" && (
           <Input
             label="Liczba tygodni"
             type="number"
@@ -731,10 +763,15 @@ export function CycleDialog({
             value={weeks}
             onChange={(event) => { setWeeks(event.target.value); setError(""); }}
           />
-        </div>
+        )}
         {removedCount > 0 && (
           <p className="sport-planner-form__warning">
-            Skrócenie cyklu usunie {removedCount} {removedCount === 1 ? "trening" : "treningów"} spoza nowego zakresu.
+            Skrócenie planu usunie {removedCount} {removedCount === 1 ? "trening" : "treningów"} spoza nowego zakresu.
+          </p>
+        )}
+        {collapsedCount > 0 && (
+          <p className="sport-planner-form__warning">
+            Plan bezterminowy zachowa tydzień bazowy. Dodatkowe treningi z dalszych tygodni zostaną usunięte: {collapsedCount}.
           </p>
         )}
         {error && <p className="sport-planner-form__error" role="alert">{error}</p>}
@@ -788,6 +825,8 @@ export function WorkoutDialog({
   const [repeat, setRepeat] = useState<"once" | "weekly" | "selected">("once");
   const [selectedWeeks, setSelectedWeeks] = useState<number[]>([initialWeek]);
   const [error, setError] = useState("");
+  const totalWeeks = cycleWeekCount(cycle);
+  const indefinite = isIndefiniteCycle(cycle);
 
   const chooseTemplate = (id: string) => {
     setTemplateId(id);
@@ -814,12 +853,12 @@ export function WorkoutDialog({
     if (
       !Number.isInteger(parsedWeek)
       || parsedWeek < 1
-      || parsedWeek > cycle.weeks
+      || parsedWeek > totalWeeks
       || !Number.isInteger(parsedDay)
       || parsedDay < 0
       || parsedDay > 6
     ) {
-      setError("Wybierz tydzień i dzień należące do cyklu.");
+      setError("Wybierz tydzień i dzień należące do planu.");
       return;
     }
     if (mode === "template" && !templates.some((template) => template.id === templateId)) {
@@ -831,7 +870,9 @@ export function WorkoutDialog({
       setError("Wybierz przynajmniej jeden tydzień.");
       return;
     }
-    const weeks = workout || repeat === "once"
+    const weeks = indefinite
+      ? [1]
+      : workout || repeat === "once"
       ? [parsedWeek]
       : repeat === "weekly"
         ? Array.from({ length: cycle.weeks - parsedWeek + 1 }, (_, index) => parsedWeek + index)
@@ -855,7 +896,7 @@ export function WorkoutDialog({
   return (
     <Modal
       title={workout ? (editScope === "series" ? "Edytuj serię treningów" : "Edytuj trening") : "Dodaj trening"}
-      eyebrow={`Tydzień ${workout?.week ?? initialWeek}`}
+      eyebrow={indefinite ? "Tydzień bazowy" : `Tydzień ${workout?.week ?? initialWeek}`}
       description={workout && editScope === "series"
         ? `Zmiany obejmą wszystkie wystąpienia tej serii (${seriesCount}).`
         : "Wybierz szablon albo dodaj pojedynczy trening ręcznie."}
@@ -951,7 +992,7 @@ export function WorkoutDialog({
             <Select
               label="Tydzień"
               value={week}
-              options={Array.from({ length: cycle.weeks }, (_, index) => ({
+              options={Array.from({ length: totalWeeks }, (_, index) => ({
                 value: String(index + 1),
                 label: `Tydzień ${index + 1}`,
               }))}
@@ -972,13 +1013,13 @@ export function WorkoutDialog({
           />
         </div>
 
-        {!workout && (
+        {!workout && !indefinite && (
           <Select
             label="Powtarzalność"
             value={repeat}
             options={[
               { value: "once", label: "Tylko ten termin" },
-              { value: "weekly", label: "Co tydzień do końca cyklu" },
+              { value: "weekly", label: "Co tydzień do końca planu" },
               { value: "selected", label: "Tylko wybrane tygodnie" },
             ]}
             hint={repeat === "weekly"
@@ -993,11 +1034,11 @@ export function WorkoutDialog({
             }}
           />
         )}
-        {!workout && repeat === "selected" && (
+        {!workout && !indefinite && repeat === "selected" && (
           <fieldset className="sport-repeat-weeks">
             <legend>Wybierz tygodnie</legend>
             <div>
-              {Array.from({ length: cycle.weeks }, (_, index) => index + 1).map((weekNumber) => {
+              {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((weekNumber) => {
                 const selected = selectedWeeks.includes(weekNumber);
                 return (
                   <button
