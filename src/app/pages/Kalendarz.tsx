@@ -768,6 +768,12 @@ export default function Kalendarz() {
     <ModuleShell
       pageWidth="canvas"
       className="task-module calendar-module"
+      ambient={{
+        scene: "calendar",
+        dayProgress: ((now.getHours() * 60) + now.getMinutes()) / 1440,
+        progress: filteredEvents.length ? 1 - (openCalendarCount / filteredEvents.length) : 0,
+        signal: `${openCalendarCount}:${anchorDateKey ?? "month"}`,
+      }}
       header={(
         <PageHeader
           title="Zadania"

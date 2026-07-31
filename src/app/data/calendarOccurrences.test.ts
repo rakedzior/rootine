@@ -23,9 +23,11 @@ function emptyAffairs(): AffairsWorkspace {
 
 function emptySport(): SportPlannerState {
   return {
-    version: 3,
+    version: 4,
     templates: [],
     activeCycle: null,
+    cycles: [],
+    activeCycleId: null,
     history: [],
     sessions: [],
     workoutOutcomes: {},

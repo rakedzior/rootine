@@ -69,6 +69,17 @@ export interface WorkoutOutcome {
 }
 
 export interface SportPlannerState {
+  version: 4;
+  templates: WorkoutTemplate[];
+  activeCycle: TrainingCycle | null;
+  cycles: TrainingCycle[];
+  activeCycleId: string | null;
+  history: WorkoutHistoryEntry[];
+  sessions: WorkoutSession[];
+  workoutOutcomes: Record<string, WorkoutOutcome>;
+}
+
+interface SportPlannerStateV3 {
   version: 3;
   templates: WorkoutTemplate[];
   activeCycle: TrainingCycle | null;
@@ -220,10 +231,13 @@ function isWorkoutOutcome(value: unknown): value is WorkoutOutcome {
 
 function isSportPlannerState(value: unknown): value is SportPlannerState {
   return isRecord(value)
-    && value.version === 3
+    && value.version === 4
     && Array.isArray(value.templates)
     && value.templates.every(isWorkoutTemplate)
     && (value.activeCycle === null || isTrainingCycle(value.activeCycle))
+    && Array.isArray(value.cycles)
+    && value.cycles.every(isTrainingCycle)
+    && (value.activeCycleId === null || typeof value.activeCycleId === "string")
     && Array.isArray(value.history)
     && value.history.every(isWorkoutHistoryEntry)
     && Array.isArray(value.sessions)
@@ -270,6 +284,20 @@ export function normalizeCycleStart(dateKey: string) {
 
 export function cycleWorkoutDate(cycle: TrainingCycle, workout: Pick<CycleWorkout, "week" | "day">) {
   return cycleWeekDate(cycle, workout.week, workout.day);
+}
+
+function isSportPlannerStateV3(value: unknown): value is SportPlannerStateV3 {
+  return isRecord(value)
+    && value.version === 3
+    && Array.isArray(value.templates)
+    && value.templates.every(isWorkoutTemplate)
+    && (value.activeCycle === null || isTrainingCycle(value.activeCycle))
+    && Array.isArray(value.history)
+    && value.history.every(isWorkoutHistoryEntry)
+    && Array.isArray(value.sessions)
+    && value.sessions.every(isWorkoutSession)
+    && isRecord(value.workoutOutcomes)
+    && Object.values(value.workoutOutcomes).every(isWorkoutOutcome);
 }
 
 export function cycleDateRange(cycle: TrainingCycle) {
@@ -460,6 +488,78 @@ function enrichPlannerState(state: SportPlannerState): SportPlannerState {
   return { ...state, sessions, history };
 }
 
+function lastCompletedOccurrenceDate(cycle: TrainingCycle, workout: CycleWorkout, today: string) {
+  const daysSinceScheduled = (cycleDayIndex(cycle, today) - workout.day + 7) % 7 || 7;
+  return addDays(today, -daysSinceScheduled);
+}
+
+/**
+ * A planned occurrence is only considered missed once its calendar day has
+ * ended. Explicitly completed/incomplete sessions and sessions still in
+ * progress are left untouched so recorded work is never silently discarded.
+ */
+export function reconcilePastWorkoutOutcomes(
+  state: SportPlannerState,
+  today = toDateKey(new Date()),
+): SportPlannerState {
+  const cycle = state.activeCycle;
+  if (!cycle) return state;
+
+  const sessions = [...state.sessions];
+  const outcomes = { ...state.workoutOutcomes };
+  let history = [...state.history];
+  let changed = false;
+  const templates = new Map(state.templates.map((template) => [template.id, template]));
+
+  const markMissed = (workout: CycleWorkout, date: string) => {
+    const outcome = outcomes[workout.id];
+    const sessionForOccurrence = sessions.find((session) => (
+      session.cycleWorkoutId === workout.id && session.date === date
+    ));
+    const outcomeForOccurrence = isIndefiniteCycle(cycle)
+      ? outcome?.updatedAt.slice(0, 10) === date
+      : Boolean(outcome);
+    if (outcomeForOccurrence || sessionForOccurrence) return;
+
+    const sessionBase = createSessionFromCycleWorkout(
+      cycle,
+      workout,
+      workout.templateId ? templates.get(workout.templateId) : undefined,
+      "missed",
+    );
+    const session = { ...sessionBase, date };
+    const historyEntry = historyEntryFromSession(session);
+    sessions.push(session);
+    if (historyEntry) history = upsertHistoryEntry(history, historyEntry);
+    outcomes[workout.id] = {
+      status: "missed",
+      sessionId: session.id,
+      updatedAt: new Date().toISOString(),
+    };
+    changed = true;
+  };
+
+  if (isIndefiniteCycle(cycle)) {
+    cycle.workouts
+      .filter((workout) => workout.week === 1)
+      .forEach((workout) => {
+        const occurrenceDate = lastCompletedOccurrenceDate(cycle, workout, today);
+        if (occurrenceDate >= cycle.startDate) markMissed(workout, occurrenceDate);
+      });
+  } else {
+    cycle.workouts
+      .filter((workout) => cycleWorkoutDate(cycle, workout) < today)
+      .forEach((workout) => markMissed(workout, cycleWorkoutDate(cycle, workout)));
+  }
+
+  return changed ? { ...state, sessions, history, workoutOutcomes: outcomes } : state;
+}
+
+function upsertHistoryEntry(history: WorkoutHistoryEntry[], entry: WorkoutHistoryEntry) {
+  return [entry, ...history.filter((item) => item.id !== entry.id)]
+    .sort((left, right) => right.date.localeCompare(left.date));
+}
+
 function withMigratedSeries(cycle: TrainingCycle | null) {
   if (!cycle) return null;
   return {
@@ -500,10 +600,13 @@ function migrateLegacyState(legacy: LegacySportState): SportPlannerState {
     })
     .filter((workout) => workout.week >= 1 && workout.week <= weeks);
 
+  const activeCycle = cycle.workouts.length ? cycle : seedDefaultCycle(templates);
   return {
-    version: 3,
+    version: 4,
     templates,
-    activeCycle: cycle.workouts.length ? cycle : seedDefaultCycle(templates),
+    activeCycle,
+    cycles: [activeCycle],
+    activeCycleId: activeCycle.id,
     history: historyFromSessions(legacy.sessions),
     sessions: legacy.sessions.filter((session) => session.status !== "scheduled"),
     workoutOutcomes: {},
@@ -517,10 +620,13 @@ export function createDefaultSportPlannerState(): SportPlannerState {
     stages: template.stages?.map((stage) => ({ ...stage })),
   }));
   const initialSessions = createInitialSessions();
+  const activeCycle = seedDefaultCycle(templates);
   return {
-    version: 3,
+    version: 4,
     templates,
-    activeCycle: seedDefaultCycle(templates),
+    activeCycle,
+    cycles: [activeCycle],
+    activeCycleId: activeCycle.id,
     history: historyFromSessions(initialSessions),
     sessions: initialSessions.filter((session) => session.status !== "scheduled"),
     workoutOutcomes: {},
@@ -542,6 +648,19 @@ function loadLegacySportFallback(): SportPlannerState {
 }
 
 function migratePlannerState(value: unknown): SportPlannerState | null {
+  if (isSportPlannerStateV3(value)) {
+    const activeCycle = withMigratedSeries(value.activeCycle);
+    return {
+      version: 4,
+      templates: value.templates,
+      activeCycle,
+      cycles: activeCycle ? [activeCycle] : [],
+      activeCycleId: activeCycle?.id ?? null,
+      history: value.history,
+      sessions: value.sessions,
+      workoutOutcomes: value.workoutOutcomes,
+    };
+  }
   if (isSportPlannerStateV2(value)) {
     const legacy: unknown = (() => {
       try {
@@ -552,9 +671,11 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
       }
     })();
     return {
-      version: 3,
+      version: 4,
       templates: value.templates,
       activeCycle: value.activeCycle,
+      cycles: value.activeCycle ? [value.activeCycle] : [],
+      activeCycleId: value.activeCycle?.id ?? null,
       history: value.history,
       sessions: isLegacySportState(legacy)
         ? legacy.sessions.filter((session) => session.status !== "scheduled")
@@ -575,10 +696,13 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
     } catch {
       // Optional legacy history is ignored when the primary planner can be migrated.
     }
+    const activeCycle = withMigratedSeries(value.activeCycle);
     return {
-      version: 3,
+      version: 4,
       templates: value.templates,
-      activeCycle: withMigratedSeries(value.activeCycle),
+      activeCycle,
+      cycles: activeCycle ? [activeCycle] : [],
+      activeCycleId: activeCycle?.id ?? null,
       history,
       sessions,
       workoutOutcomes: {},
@@ -594,11 +718,19 @@ export function loadSportPlannerStateResult(): LocalLoadResult<SportPlannerState
     validate: isSportPlannerState,
     migrate: migratePlannerState,
   });
-  return { ...result, workspace: enrichPlannerState(result.workspace) };
+  return { ...result, workspace: reconcilePastWorkoutOutcomes(enrichPlannerState(result.workspace)) };
 }
 
 export function loadSportPlannerState(): SportPlannerState {
   return loadSportPlannerStateResult().workspace;
+}
+
+export function withActiveCycle(state: SportPlannerState, cycle: TrainingCycle | null): SportPlannerState {
+  if (!cycle) return { ...state, activeCycle: null, activeCycleId: null };
+  const cycles = state.cycles.some((item) => item.id === cycle.id)
+    ? state.cycles.map((item) => item.id === cycle.id ? cycle : item)
+    : [cycle, ...state.cycles];
+  return { ...state, activeCycle: cycle, activeCycleId: cycle.id, cycles };
 }
 
 export function saveSportPlannerState(state: SportPlannerState) {

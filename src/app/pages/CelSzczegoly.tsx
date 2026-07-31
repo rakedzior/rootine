@@ -66,7 +66,7 @@ export default function CelSzczegoly() {
 
   if (!goal) {
     return (
-      <ModuleShell pageWidth="reading">
+      <ModuleShell pageWidth="reading" ambient="quiet">
         <ModuleMain>
           <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}>
             <Target size={38} strokeWidth={1.2} />
@@ -111,7 +111,11 @@ export default function CelSzczegoly() {
   );
 
   return (
-    <ModuleShell pageWidth="reading" header={pageHeader}>
+    <ModuleShell
+      pageWidth="reading"
+      header={pageHeader}
+      ambient={{ scene: "goals", progress: progress / 100, signal: `${goal.id}:${progress}` }}
+    >
       <ModuleMain>
       <WorkspaceToolbar>
         <Tabs className="ui-tabs--segmented" id="goal-detail-tabs" ariaLabel="Sekcje celu" activeId={tab} onChange={(id) => setTab(id as TabId)} items={tabs.map(({ id, label, icon: Icon, count }) => ({ id, tabId: `goal-tab-${id}`, panelId: `goal-panel-${id}`, label: <span className="flex items-center gap-1.5"><Icon size={12} />{label}{count !== undefined && <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: C.inputBg }}>{count}</span>}</span> }))} />

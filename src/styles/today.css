@@ -1,8 +1,17 @@
 .today-scroll {
+  position: relative;
   min-height: 0;
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
+}
+
+.today-module .ui-page-header {
+  background: color-mix(in srgb, var(--color-graphite-sidebar) 88%, transparent);
+}
+
+.today-module .ui-module-main {
+  background: transparent;
 }
 
 .today-content {
@@ -166,7 +175,7 @@
 }
 
 .today-day-balance__attention.has-overdue .today-day-balance__attention-head {
-  color: var(--color-danger-coral);
+  color: var(--color-warning-ochre);
 }
 
 .today-day-balance__attention.is-clear .today-day-balance__attention-head {
@@ -178,15 +187,20 @@
   justify-self: start;
   align-self: start;
   margin-top: var(--space-xs);
-  padding-inline: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-meta);
-  font-weight: var(--weight-medium);
+  padding: 6px var(--space-sm);
+  border: 1px solid color-mix(in srgb, var(--color-warning-ochre) 32%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-warning-ochre) 6%, transparent);
+  color: var(--color-warning-ochre);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
 }
 
 .today-day-balance__attention-action:hover:not(:disabled) {
-  background: var(--color-danger-soft);
-  color: var(--color-danger-coral);
+  border-color: color-mix(in srgb, var(--color-warning-ochre) 48%, transparent);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-ochre);
 }
 
 .today-day-balance__attention-footer {
@@ -351,10 +365,10 @@
 .today-module-row__overdue {
   flex: 0 0 auto;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--color-danger-coral) 36%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning-ochre) 36%, transparent);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-danger-coral) 10%, transparent);
-  color: var(--color-danger-coral);
+  background: color-mix(in srgb, var(--color-warning-ochre) 10%, transparent);
+  color: var(--color-warning-ochre);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   line-height: 1.2;

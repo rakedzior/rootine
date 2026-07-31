@@ -14,7 +14,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { Button, Input, Modal, Select } from "../ui";
+import { AmbientScene, Button, Input, Modal, Select } from "../ui";
 import type {
   ExerciseLibraryItem,
   WorkoutExercise,
@@ -678,6 +678,14 @@ export function SportActiveSession({
 
   return (
     <div className="sport-active-session">
+      <AmbientScene
+        config={{
+          scene: "sport",
+          progress: progress / 100,
+          active: true,
+          signal: `${session.id}:${progress}`,
+        }}
+      />
       <header className="sport-active-session__header">
         <Button variant="ghost" size="sm" leadingIcon={<ArrowLeft size={13} />} onClick={onExit}>
           Wróć do Sportu

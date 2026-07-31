@@ -777,6 +777,13 @@ export default function Praca() {
     <ModuleShell
       className="work-module"
       pageWidth="wide"
+      ambient={{
+        scene: "work",
+        progress: workspace.tasks.length
+          ? workspace.tasks.filter((task) => task.completed).length / workspace.tasks.length
+          : 0,
+        signal: workspace.tasks.filter((task) => task.completed).length,
+      }}
       header={(
         <PageHeader
           title="Praca"

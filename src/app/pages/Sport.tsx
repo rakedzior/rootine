@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Play, Plus, Save, Undo2 } from "lucide-react";
+import { Check, Play, Undo2 } from "lucide-react";
 import { calendarDaysBetween } from "../data/localDate";
 import {
   listLocalPersistenceIssues,
@@ -27,6 +27,7 @@ import {
 import {
   CycleDialog,
   CyclePlanner,
+  MoveWorkoutDialog,
   TemplateDialog,
   TemplateLibrary,
   WorkoutDialog,
@@ -40,12 +41,12 @@ import {
   DAY_LABELS,
   historyEntryFromSession,
   isIndefiniteCycle,
-  isWorkoutScheduledOnDate,
   loadSportPlannerState,
   saveSportPlannerState,
   SPORT_PLANNER_STORAGE_KEY,
   todayCycleWeek,
   cycleWorkoutDate,
+  withActiveCycle,
   type CycleWorkout,
   type PlannerView,
   type SportPlannerState,
@@ -80,7 +81,7 @@ import {
 } from "../ui";
 import "../../styles/sport.css";
 
-type PlannerDialog = "cycle" | "new-template" | null;
+type PlannerDialog = "cycle" | "new-cycle" | "new-template" | null;
 
 interface WorkoutDialogState {
   workoutId?: string;
@@ -211,6 +212,7 @@ export default function Sport() {
   const [dialog, setDialog] = useState<PlannerDialog>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [workoutDialog, setWorkoutDialog] = useState<WorkoutDialogState | null>(null);
+  const [moveDialogWorkout, setMoveDialogWorkout] = useState<CycleWorkout | null>(null);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState(false);
   const [requestedWorkoutId, setRequestedWorkoutId] = useState<string | null>(null);
@@ -256,15 +258,17 @@ export default function Sport() {
     ? cycleDraft?.workouts.filter((workout) => workout.seriesId === selectedWorkout.seriesId).length ?? 1
     : 1;
   const activeSession = plannerState.sessions.find((session) => session.status === "in_progress");
+  const activeSessionItems = activeSession?.stages?.length
+    ? activeSession.stages
+    : activeSession?.exercises.flatMap((exercise) => exercise.sets) ?? [];
+  const activeSessionDone = activeSessionItems.filter((item) => item.done).length;
+  const activeSessionProgress = activeSessionItems.length
+    ? activeSessionDone / activeSessionItems.length
+    : 0;
   const requestedWorkout = requestedWorkoutId
     ? cycleDraft?.workouts.find((workout) => workout.id === requestedWorkoutId)
     : undefined;
   const viewMeta = SPORT_VIEW_LABELS[view];
-  const todayKey = toDateKey(new Date());
-  const todayWorkoutCount = cycleDraft?.workouts.filter((workout) => (
-    isWorkoutScheduledOnDate(cycleDraft, workout, todayKey)
-  )).length ?? 0;
-
   useEffect(() => {
     const mode = activeSessionEditRef.current ? "debounced" : "immediate";
     activeSessionEditRef.current = false;
@@ -369,6 +373,7 @@ export default function Sport() {
     setDialog(null);
     setEditingTemplateId(null);
     setWorkoutDialog(null);
+    setMoveDialogWorkout(null);
   }, []);
 
   const changeView = (next: PlannerView) => {
@@ -391,14 +396,59 @@ export default function Sport() {
     if (!cycleDraft) return;
     const savedCycle = { ...cycleDraft, updatedAt: new Date().toISOString() };
     setCycleDraft(savedCycle);
-    setPlannerState((current) => ({ ...current, activeCycle: savedCycle }));
+    setPlannerState((current) => withActiveCycle(current, savedCycle));
+  };
+
+  const selectCycle = (nextCycle: TrainingCycle) => {
+    if (cycleDirty) {
+      setAutosaveNotice("Zapisz albo odrzuć zmiany przed zmianą aktywnego planu.");
+      return;
+    }
+    if (activeSession?.planId && activeSession.planId !== nextCycle.id) {
+      setAutosaveNotice("Najpierw zakończ aktywny trening.");
+      return;
+    }
+    setPlannerState((current) => withActiveCycle(current, nextCycle));
+    setCycleDraft(nextCycle);
+    setActiveWeek(todayCycleWeek(nextCycle));
+    setSelectedWorkoutId(null);
+    setMoveUndo(null);
+  };
+
+  const createNewCycle = (nextCycle: TrainingCycle) => {
+    const savedCycle = { ...nextCycle, updatedAt: new Date().toISOString() };
+    setPlannerState((current) => withActiveCycle(current, savedCycle));
+    setCycleDraft(savedCycle);
+    setActiveWeek(todayCycleWeek(savedCycle));
+    setSelectedWorkoutId(null);
+    setMoveUndo(null);
+    closeDialogs();
+    setAutosaveNotice("Utworzono nowy plan.");
+  };
+
+  const openNewCycle = () => {
+    if (cycleDirty) {
+      setAutosaveNotice("Zapisz albo odrzuć zmiany przed utworzeniem nowego planu.");
+      return;
+    }
+    setDialog("new-cycle");
+  };
+
+  const discardCycleChanges = () => {
+    const savedCycle = plannerState.activeCycle;
+    setCycleDraft(savedCycle);
+    setActiveWeek((current) => savedCycle ? Math.min(current, cycleWeekCount(savedCycle)) : 1);
+    setMoveUndo(null);
+    setMoveNotice("");
+    setMoveDialogWorkout(null);
+    setAutosaveNotice("Odrzucono niezapisane zmiany planu.");
   };
 
   const applyCycleChange = (nextCycle: TrainingCycle, notice: string) => {
     if (view === "today") {
       const savedCycle = { ...nextCycle, updatedAt: new Date().toISOString() };
       setCycleDraft(savedCycle);
-      setPlannerState((current) => ({ ...current, activeCycle: savedCycle }));
+      setPlannerState((current) => withActiveCycle(current, savedCycle));
       setAutosaveNotice(notice);
       return;
     }
@@ -455,7 +505,7 @@ export default function Sport() {
       });
       setMoveNotice("");
       setCycleDraft(updatedCycle);
-      setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+      setPlannerState((current) => withActiveCycle(current, updatedCycle));
       setSelectedWorkoutId(null);
       return;
     }
@@ -483,7 +533,7 @@ export default function Sport() {
     });
     setMoveNotice("");
     setCycleDraft(updatedCycle);
-    setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+    setPlannerState((current) => withActiveCycle(current, updatedCycle));
     setSelectedWorkoutId(null);
   };
 
@@ -513,7 +563,7 @@ export default function Sport() {
     });
     setMoveNotice("");
     setCycleDraft(updatedCycle);
-    setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+    setPlannerState((current) => withActiveCycle(current, updatedCycle));
   };
 
   const undoMove = () => {
@@ -527,7 +577,7 @@ export default function Sport() {
     };
     setCycleDraft(updatedCycle);
     if (moveUndo.persisted) {
-      setPlannerState((current) => ({ ...current, activeCycle: updatedCycle }));
+      setPlannerState((current) => withActiveCycle(current, updatedCycle));
     }
     setMoveUndo(null);
   };
@@ -595,7 +645,7 @@ export default function Sport() {
       ...(persisted ? { updatedAt: new Date().toISOString() } : {}),
     };
     setCycleDraft(nextCycle);
-    if (persisted) setPlannerState((current) => ({ ...current, activeCycle: nextCycle }));
+    if (persisted) setPlannerState((current) => withActiveCycle(current, nextCycle));
     setWorkoutDeleteUndo({ workout, index, persisted });
     setWorkoutDeleteState(null);
     setSelectedWorkoutId(null);
@@ -617,7 +667,7 @@ export default function Sport() {
     };
     setCycleDraft(nextCycle);
     if (workoutDeleteUndo.persisted) {
-      setPlannerState((current) => ({ ...current, activeCycle: nextCycle }));
+      setPlannerState((current) => withActiveCycle(current, nextCycle));
     }
     setWorkoutDeleteUndo(null);
   };
@@ -649,12 +699,34 @@ export default function Sport() {
   };
 
   const saveTemplate = (template: WorkoutTemplate) => {
-    setPlannerState((current) => ({
-      ...current,
-      templates: current.templates.some((item) => item.id === template.id)
-        ? current.templates.map((item) => item.id === template.id ? template : item)
-        : [...current.templates, template],
-    }));
+    const templateExists = plannerState.templates.some((item) => item.id === template.id);
+    const nextTemplates = templateExists
+      ? plannerState.templates.map((item) => item.id === template.id ? template : item)
+      : [...plannerState.templates, template];
+    const linkedCycle = cycleDraft && templateExists
+      ? {
+          ...cycleDraft,
+          workouts: cycleDraft.workouts.map((workout) => workout.templateId === template.id
+            ? {
+                ...workout,
+                title: template.name,
+                discipline: template.discipline,
+                durationMinutes: template.durationMinutes,
+              }
+            : workout),
+          updatedAt: new Date().toISOString(),
+        }
+      : undefined;
+    setPlannerState((current) => {
+      const nextState = { ...current, templates: nextTemplates };
+      return view === "today" && linkedCycle ? withActiveCycle(nextState, linkedCycle) : nextState;
+    });
+    if (linkedCycle) setCycleDraft(linkedCycle);
+    setAutosaveNotice(templateExists
+      ? view === "today"
+        ? "Szablon zapisano i zaktualizowano powiązane treningi."
+        : "Szablon zapisano. Zapisz plan, aby zatwierdzić powiązane treningi."
+      : "Utworzono szablon treningu.");
     closeDialogs();
   };
 
@@ -895,47 +967,29 @@ export default function Sport() {
     );
   }
 
-  const headerAction = view === "templates"
-    ? <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog("new-template")}>Nowy szablon</Button>
-    : view === "cycle" && cycleDraft && cycleDirty
-      ? <Button variant="primary" leadingIcon={<Save size={14} />} onClick={saveCycle}>Zapisz plan</Button>
-      : view === "cycle" && !cycleDraft
-        ? <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setDialog("cycle")}>Utwórz plan</Button>
-        : view === "today" && activeSession
-          ? (
-            <>
-              {cycleDraft && (
-                <Button variant="quiet" leadingIcon={<Plus size={14} />} onClick={openTodayWorkoutDialog}>
-                  <span className="header-action-label">Dodaj trening</span>
-                </Button>
-              )}
-              <Button
-                className="ui-button--icon-mobile"
-                variant="primary"
-                leadingIcon={<Play size={14} />}
-                onClick={() => setActiveMode(true)}
-              >
-                <span className="header-action-label">Wznów trening</span>
-              </Button>
-            </>
-            )
-          : view === "today" && cycleDraft
-            ? (
-                <Button
-                  className="ui-button--icon-mobile"
-                  variant={todayWorkoutCount ? "quiet" : "primary"}
-                  leadingIcon={<Plus size={14} />}
-                  onClick={openTodayWorkoutDialog}
-                >
-                  <span className="header-action-label">Dodaj trening</span>
-                </Button>
-              )
-            : undefined;
+  const headerAction = view === "today" && activeSession
+    ? (
+      <Button
+        className="ui-button--icon-mobile"
+        variant="primary"
+        leadingIcon={<Play size={14} />}
+        onClick={() => setActiveMode(true)}
+      >
+        <span className="header-action-label">Wznów trening</span>
+      </Button>
+    )
+    : undefined;
 
   return (
     <ModuleShell
       className="sport-module sport-planner-module"
       pageWidth="wide"
+      ambient={{
+        scene: "sport",
+        progress: activeSessionProgress,
+        active: Boolean(activeSession),
+        signal: activeSession ? `${activeSession.id}:${activeSessionDone}` : view,
+      }}
       header={(
         <PageHeader
           title="Sport"
@@ -1008,6 +1062,7 @@ export default function Sport() {
                 outcomes={plannerState.workoutOutcomes}
                 selectedWorkoutId={selectedWorkoutId}
                 onCreateCycle={() => setDialog("cycle")}
+                onAddWorkout={openTodayWorkoutDialog}
                 onResumeActive={() => setActiveMode(true)}
                 onSelectWorkout={toggleWorkoutDetails}
                 onStartWorkout={startWorkout}
@@ -1019,10 +1074,15 @@ export default function Sport() {
             )}
             {view === "cycle" && (
               <CyclePlanner
-                cycle={cycleDraft}
+                cycle={cycleDraft!}
+                cycles={plannerState.cycles}
                 activeWeek={activeWeek}
                 selectedWorkoutId={selectedWorkoutId}
                 isDirty={cycleDirty}
+                onSaveCycle={saveCycle}
+                onDiscardChanges={discardCycleChanges}
+                onSelectCycle={selectCycle}
+                onCreateNewCycle={openNewCycle}
                 onWeekChange={changeWeek}
                 onCreateCycle={() => setDialog("cycle")}
                 onEditCycle={() => setDialog("cycle")}
@@ -1034,6 +1094,7 @@ export default function Sport() {
             {view === "templates" && (
               <TemplateLibrary
                 templates={plannerState.templates}
+                onCreate={() => setDialog("new-template")}
                 onEdit={(template) => setEditingTemplateId(template.id)}
                 onDuplicate={duplicateTemplate}
                 onAddToCycle={(template) => openTemplateWorkoutDialog(template)}
@@ -1060,10 +1121,12 @@ export default function Sport() {
           onComplete={() => markWorkout(selectedWorkout, "completed")}
           onIncomplete={() => markWorkout(selectedWorkout, "incomplete")}
           onMiss={() => markWorkout(selectedWorkout, "missed")}
+          onMoveToPlan={() => setMoveDialogWorkout(selectedWorkout)}
           onMoveTomorrow={() => moveWorkoutTomorrow(selectedWorkout)}
           onClearOutcome={() => clearWorkoutOutcome(selectedWorkout)}
           onEditSingle={() => openWorkoutEditor(selectedWorkout, "single")}
           onEditSeries={() => openWorkoutEditor(selectedWorkout, "series")}
+          onEditTemplate={selectedTemplate ? () => setEditingTemplateId(selectedTemplate.id) : undefined}
           onDelete={requestWorkoutDelete}
         />
       )}
@@ -1089,8 +1152,25 @@ export default function Sport() {
         </div>
       )}
 
+      {moveDialogWorkout && cycleDraft && (
+        <MoveWorkoutDialog
+          cycle={cycleDraft}
+          workout={moveDialogWorkout}
+          onClose={() => setMoveDialogWorkout(null)}
+          onSubmit={(week, day) => {
+            moveWorkout(moveDialogWorkout.id, week, day);
+            setActiveWeek(week);
+            setMoveDialogWorkout(null);
+          }}
+        />
+      )}
+
       {dialog === "cycle" && (
         <CycleDialog cycle={cycleDraft} onClose={closeDialogs} onSubmit={submitCycleSettings} />
+      )}
+
+      {dialog === "new-cycle" && (
+        <CycleDialog cycle={null} onClose={closeDialogs} onSubmit={createNewCycle} />
       )}
 
       {dialog === "new-template" && (

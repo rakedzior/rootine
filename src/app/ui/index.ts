@@ -27,6 +27,7 @@ export { PageHeader, type PageHeaderProps } from "./components/PageHeader";
 export { SectionHeader, type SectionHeaderProps } from "./components/SectionHeader";
 export { Select, type SelectOption, type SelectProps } from "./components/Select";
 export {
+  AmbientScene,
   ContextSidebar,
   ContextNavItem,
   DetailPanel,
@@ -34,6 +35,9 @@ export {
   ModuleShell,
   WorkspaceToolbar,
   type ContextSidebarProps,
+  type AmbientConfig,
+  type AmbientSceneProps,
+  type AmbientVariant,
   type ContextNavItemProps,
   type DetailPanelProps,
   type ModuleMainProps,

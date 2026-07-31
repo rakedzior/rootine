@@ -1205,6 +1205,11 @@ export default function Notatki() {
       detailPanel={detailPanel}
       className="notes-module"
       pageWidth="standard"
+      ambient={{
+        scene: "notes",
+        progress: activeNotes.length ? activeNotes.filter((note) => note.pinned).length / activeNotes.length : 0,
+        signal: `${activeNotes.length}:${selectedNote?.id ?? "shelf"}`,
+      }}
       header={(
         <PageHeader
           title="Notatki"

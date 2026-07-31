@@ -890,6 +890,13 @@ export default function Sprawy() {
             contextSidebar={contextSidebar}
             className="affairs-module"
             pageWidth="wide"
+            ambient={{
+              scene: "affairs",
+              progress: workspace.matters.length
+                ? workspace.matters.filter((matter) => matter.status === "done").length / workspace.matters.length
+                : 0,
+              signal: dueSoon,
+            }}
             header={header}
           >
             <ModuleMain>{content}</ModuleMain>
@@ -914,6 +921,13 @@ export default function Sprawy() {
       detailPanel={detailPanel}
       className="affairs-module"
       pageWidth="wide"
+      ambient={{
+        scene: "affairs",
+        progress: workspace.matters.length
+          ? workspace.matters.filter((matter) => matter.status === "done").length / workspace.matters.length
+          : 0,
+        signal: dueSoon,
+      }}
       header={pageHeader}
     >
       <ModuleMain>

@@ -242,8 +242,8 @@ export function daysUntil(value: string): number {
 
 export function dueCopy(value: string): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
   const days = daysUntil(value);
-  if (days < 0) return { text: `${Math.abs(days)} dni po terminie`, tone: "danger" };
-  if (days === 0) return { text: "Dzisiaj", tone: "danger" };
+  if (days < 0) return { text: `${Math.abs(days)} dni po terminie`, tone: "warning" };
+  if (days === 0) return { text: "Dzisiaj", tone: "warning" };
   if (days === 1) return { text: "Jutro", tone: "warning" };
   if (days <= 7) return { text: `Za ${days} dni`, tone: "warning" };
   return { text: formatDate(value), tone: "neutral" };

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   CalendarClock,
   CalendarRange,
@@ -7,8 +7,10 @@ import {
   Copy,
   Ellipsis,
   GripVertical,
+  MoveRight,
   Pencil,
   Plus,
+  Save,
   Search,
   Trash2,
 } from "lucide-react";
@@ -32,6 +34,7 @@ import {
   cycleWeekDate,
   cycleWorkoutDate,
   isIndefiniteCycle,
+  todayCycleWeek,
   type CycleWorkout,
   type TrainingCycle,
 } from "./plannerModel";
@@ -41,6 +44,7 @@ import {
   fromDateKey,
   normalizeSearch,
   startOfWeekKey,
+  toDateKey,
   type Discipline,
   type WorkoutTemplate,
 } from "./model";
@@ -69,12 +73,14 @@ function workoutContentCount(template: WorkoutTemplate) {
 
 export function TemplateLibrary({
   templates,
+  onCreate,
   onEdit,
   onDuplicate,
   onAddToCycle,
   onUseToday,
 }: {
   templates: WorkoutTemplate[];
+  onCreate: () => void;
   onEdit: (template: WorkoutTemplate) => void;
   onDuplicate: (template: WorkoutTemplate) => void;
   onAddToCycle: (template: WorkoutTemplate) => void;
@@ -112,6 +118,11 @@ export function TemplateLibrary({
       <SectionHeader
         title="Szablony treningów"
         description={`${templates.length} zapisanych jednostek · wybierz szablon, aby go edytować albo dodać do planu.`}
+        action={(
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreate}>
+            Nowy szablon
+          </Button>
+        )}
       />
       <div className="sport-template-tools" aria-label="Filtry szablonów">
         <div className="sport-template-search">
@@ -212,6 +223,148 @@ export function TemplateLibrary({
   );
 }
 
+function WeekSelector({
+  cycle,
+  activeWeek,
+  onWeekChange,
+  onMove,
+}: {
+  cycle: TrainingCycle;
+  activeWeek: number;
+  onWeekChange: (week: number) => void;
+  onMove: (id: string, week: number, day?: number) => void;
+}) {
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const totalWeeks = cycleWeekCount(cycle);
+  const currentWeek = todayCycleWeek(cycle);
+  const indefinite = isIndefiniteCycle(cycle);
+  const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek);
+  const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
+  const scrollCarousel = (direction: -1 | 1) => {
+    stripRef.current?.scrollBy({
+      left: direction * Math.max(220, stripRef.current.clientWidth * 0.72),
+      behavior: "smooth",
+    });
+  };
+  useEffect(() => {
+    const strip = stripRef.current;
+    const tab = document.getElementById(`sport-week-tab-${activeWeek}`);
+    if (!strip || !tab) return;
+    const left = tab.getBoundingClientRect().left - strip.getBoundingClientRect().left
+      + strip.scrollLeft - Math.max(0, (strip.clientWidth - tab.clientWidth) / 2);
+    strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [activeWeek]);
+  const focusWeekTab = (week: number) => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(`sport-week-tab-${week}`)?.focus();
+    });
+  };
+
+  return (
+    <section className="sport-cycle-week-carousel" aria-label="Wybór tygodnia planu">
+      <div className="sport-cycle-week-header">
+        <div className="sport-cycle-week-header__identity">
+          <div>
+            <h2>{indefinite ? "Tydzień bazowy" : `Tydzień ${activeWeek} z ${totalWeeks}`}</h2>
+            <p>{formatLongDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatLongDate(cycleWeekDate(cycle, activeWeek, 6))}</p>
+          </div>
+          <div className="sport-cycle-week-header__facts">
+            <span>{weekWorkouts.length} {weekWorkouts.length === 1 ? "trening" : weekWorkouts.length >= 2 && weekWorkouts.length <= 4 ? "treningi" : "treningów"}</span>
+            <span>·</span>
+            <span>{weekMinutes} min</span>
+            {activeWeek === currentWeek && <Badge tone="neutral">Obecny tydzień</Badge>}
+          </div>
+        </div>
+        <div className="sport-week-navigation__arrows">
+          <Button variant="ghost" size="sm" iconOnly aria-label="Przewiń tygodnie w lewo" onClick={() => scrollCarousel(-1)}>
+            <ChevronLeft size={13} />
+          </Button>
+          <Button variant="ghost" size="sm" iconOnly aria-label="Przewiń tygodnie w prawo" onClick={() => scrollCarousel(1)}>
+            <ChevronRight size={13} />
+          </Button>
+        </div>
+      </div>
+      <div className="sport-cycle-sidebar__section-heading">
+        <div>
+          <h3 id="sport-cycle-week-selector-heading">Tygodnie planu</h3>
+          <p>{indefinite ? "Powtarzany tydzień bazowy" : `${totalWeeks} tygodni w cyklu`}</p>
+        </div>
+        <div className="sport-week-navigation__arrows">
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label="Poprzedni tydzień"
+            onClick={() => scrollCarousel(-1)}
+          >
+            <ChevronLeft size={13} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label="Następny tydzień"
+            onClick={() => scrollCarousel(1)}
+          >
+            <ChevronRight size={13} />
+          </Button>
+        </div>
+      </div>
+      <div ref={stripRef} className="sport-week-strip" role="tablist" aria-label="Tygodnie planu" aria-orientation="horizontal">
+        {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((week) => {
+          const count = cycle.workouts.filter((workout) => workout.week === week).length;
+          const isCurrentWeek = week === currentWeek;
+          const weekLabel = indefinite ? "Tydzień bazowy" : `Tydzień ${week}`;
+          return (
+            <button
+              key={week}
+              type="button"
+              role="tab"
+              id={`sport-week-tab-${week}`}
+              aria-controls="sport-cycle-week-panel"
+              aria-selected={week === activeWeek}
+              tabIndex={week === activeWeek ? 0 : -1}
+              className={`sport-week-tab ${isCurrentWeek ? "is-current" : ""} ${dropTarget === `week-${week}` ? "is-drop-target" : ""}`.trim()}
+              aria-label={`${weekLabel}, ${count} ${count === 1 ? "trening" : "treningów"}${isCurrentWeek ? ", bieżący tydzień" : ""}`}
+              title={isCurrentWeek ? `${weekLabel} · bieżący tydzień` : weekLabel}
+              onClick={() => onWeekChange(week)}
+              onKeyDown={(event) => {
+                let nextWeek: number;
+                if (event.key === "ArrowRight" || event.key === "ArrowDown") nextWeek = week === totalWeeks ? 1 : week + 1;
+                else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextWeek = week === 1 ? totalWeeks : week - 1;
+                else if (event.key === "Home") nextWeek = 1;
+                else if (event.key === "End") nextWeek = totalWeeks;
+                else return;
+                event.preventDefault();
+                onWeekChange(nextWeek);
+                focusWeekTab(nextWeek);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDropTarget(`week-${week}`);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const id = event.dataTransfer.getData("text/sport-cycle-workout");
+                if (id) {
+                  onMove(id, week);
+                  onWeekChange(week);
+                }
+                setDropTarget(null);
+              }}
+            >
+              <span>{indefinite ? "Bazowy" : `Tydz. ${week}`}</span>
+              <small className="sport-week-tab__range">{formatShortDate(cycleWeekDate(cycle, week, 0))} — {formatShortDate(cycleWeekDate(cycle, week, 6))}</small>
+              <small>{isCurrentWeek ? "Dziś" : `${count} ${count === 1 ? "trening" : "treningów"}`}</small>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function WeekBoard({
   cycle,
   activeWeek,
@@ -235,92 +388,11 @@ function WeekBoard({
     () => cycle.workouts.filter((workout) => workout.week === activeWeek),
     [activeWeek, cycle.workouts],
   );
-  const focusWeekTab = (week: number) => {
-    window.requestAnimationFrame(() => {
-      document.getElementById(`sport-week-tab-${week}`)?.focus();
-    });
-  };
   const totalWeeks = cycleWeekCount(cycle);
-  const indefinite = isIndefiniteCycle(cycle);
+  const todayKey = toDateKey(new Date());
 
   return (
-    <section className="sport-cycle-weeks" aria-labelledby="cycle-week-heading">
-      <div className="sport-week-navigation">
-        <div>
-          <h3 id="cycle-week-heading">{indefinite ? "Tydzień bazowy" : `Tydzień ${activeWeek} z ${totalWeeks}`}</h3>
-          <p>{formatShortDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatShortDate(cycleWeekDate(cycle, activeWeek, 6))}</p>
-        </div>
-        <div className="sport-week-navigation__arrows">
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            aria-label="Poprzedni tydzień"
-            disabled={activeWeek === 1}
-            onClick={() => onWeekChange(activeWeek - 1)}
-          >
-            <ChevronLeft size={13} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            aria-label="Następny tydzień"
-            disabled={indefinite || activeWeek === totalWeeks}
-            onClick={() => onWeekChange(activeWeek + 1)}
-          >
-            <ChevronRight size={13} />
-          </Button>
-        </div>
-      </div>
-
-      <div className="sport-week-strip" role="tablist" aria-label="Tygodnie planu">
-        {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((week) => {
-          const count = cycle.workouts.filter((workout) => workout.week === week).length;
-          return (
-            <button
-              key={week}
-              type="button"
-              role="tab"
-              id={`sport-week-tab-${week}`}
-              aria-controls="sport-cycle-week-panel"
-              aria-selected={week === activeWeek}
-              tabIndex={week === activeWeek ? 0 : -1}
-              className={`sport-week-tab ${dropTarget === `week-${week}` ? "is-drop-target" : ""}`.trim()}
-              onClick={() => onWeekChange(week)}
-              onKeyDown={(event) => {
-                let nextWeek: number;
-                if (event.key === "ArrowRight" || event.key === "ArrowDown") nextWeek = week === totalWeeks ? 1 : week + 1;
-                else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextWeek = week === 1 ? totalWeeks : week - 1;
-                else if (event.key === "Home") nextWeek = 1;
-                else if (event.key === "End") nextWeek = totalWeeks;
-                else return;
-                event.preventDefault();
-                onWeekChange(nextWeek);
-                focusWeekTab(nextWeek);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDropTarget(`week-${week}`);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                const id = event.dataTransfer.getData("text/sport-cycle-workout") || draggedId;
-                if (id) {
-                  onMove(id, week);
-                  onWeekChange(week);
-                }
-                setDraggedId(null);
-                setDropTarget(null);
-              }}
-            >
-              <span>{indefinite ? "Bazowy" : `T${week}`}</span>
-              <small>{count} tr.</small>
-            </button>
-          );
-        })}
-      </div>
-
+    <section className="sport-cycle-weeks" aria-label={`Rozpiska dni tygodnia ${activeWeek}`}>
       <div
         id="sport-cycle-week-panel"
         role="tabpanel"
@@ -336,7 +408,7 @@ function WeekBoard({
             return (
               <div
                 key={day.short}
-                className={`sport-cycle-day ${dropTarget === `day-${dayIndex}` ? "is-drop-target" : ""}`.trim()}
+                className={`sport-cycle-day ${dateKey === todayKey ? "is-today" : ""} ${dropTarget === `day-${dayIndex}` ? "is-drop-target" : ""}`.trim()}
                 onDragOver={(event) => {
                   event.preventDefault();
                   setDropTarget(`day-${dayIndex}`);
@@ -354,15 +426,6 @@ function WeekBoard({
                     <strong>{day.full}</strong>
                     <span>{formatShortDate(dateKey)}</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    iconOnly
-                    aria-label={`Dodaj trening: ${day.full}`}
-                    onClick={() => onAdd(activeWeek, dayIndex)}
-                  >
-                    <Plus size={11} />
-                  </Button>
                 </div>
                 <div className="sport-cycle-day__workouts">
                   {dayWorkouts.map((workout) => (
@@ -418,15 +481,19 @@ function WeekBoard({
                       <span className="sport-cycle-workout__meta">
                         {workout.time && <time>{workout.time}</time>}
                         <span>{workout.durationMinutes} min</span>
+                        <DisciplineLabel discipline={workout.discipline} compact />
                       </span>
-                      <DisciplineLabel discipline={workout.discipline} compact />
                     </button>
                   ))}
-                  {!dayWorkouts.length && (
-                    <button type="button" className="sport-cycle-day__empty" onClick={() => onAdd(activeWeek, dayIndex)}>
-                      Dodaj trening
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={`sport-cycle-day__add ${dayWorkouts.length ? "is-icon" : "sport-cycle-day__empty"}`.trim()}
+                    aria-label={`Dodaj trening: ${day.full}`}
+                    onClick={() => onAdd(activeWeek, dayIndex)}
+                  >
+                    <Plus size={12} aria-hidden="true" />
+                    {!dayWorkouts.length && <span>Dodaj trening</span>}
+                  </button>
                 </div>
               </div>
             );
@@ -442,9 +509,14 @@ function WeekBoard({
 
 export function CyclePlanner({
   cycle,
+  cycles,
   activeWeek,
   selectedWorkoutId,
   isDirty,
+  onSaveCycle,
+  onDiscardChanges,
+  onSelectCycle,
+  onCreateNewCycle,
   onWeekChange,
   onCreateCycle,
   onEditCycle,
@@ -452,10 +524,15 @@ export function CyclePlanner({
   onSelectWorkout,
   onMoveWorkout,
 }: {
-  cycle: TrainingCycle | null;
+  cycle: TrainingCycle;
+  cycles: TrainingCycle[];
   activeWeek: number;
   selectedWorkoutId?: string | null;
   isDirty: boolean;
+  onSaveCycle: () => void;
+  onDiscardChanges: () => void;
+  onSelectCycle: (cycle: TrainingCycle) => void;
+  onCreateNewCycle: () => void;
   onWeekChange: (week: number) => void;
   onCreateCycle: () => void;
   onEditCycle: () => void;
@@ -472,6 +549,25 @@ export function CyclePlanner({
       />
     );
   }
+
+  return (
+    <CyclePlannerLayout
+      cycle={cycle}
+      cycles={cycles}
+      activeWeek={activeWeek}
+      selectedWorkoutId={selectedWorkoutId}
+      isDirty={isDirty}
+      onSaveCycle={onSaveCycle}
+      onDiscardChanges={onDiscardChanges}
+      onSelectCycle={onSelectCycle}
+      onCreateNewCycle={onCreateNewCycle}
+      onWeekChange={onWeekChange}
+      onEditCycle={onEditCycle}
+      onAddWorkout={onAddWorkout}
+      onSelectWorkout={onSelectWorkout}
+      onMoveWorkout={onMoveWorkout}
+    />
+  );
 
   const range = cycleDateRange(cycle);
   const totalWeeks = cycleWeekCount(cycle);
@@ -510,18 +606,18 @@ export function CyclePlanner({
           <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => onAddWorkout(activeWeek, 0)}>
             Dodaj trening
           </Button>
+          {isDirty && (
+            <div className="sport-cycle-summary__commit">
+              <Button variant="ghost" size="sm" onClick={onDiscardChanges}>
+                Odrzuć zmiany
+              </Button>
+              <Button variant="primary" size="sm" leadingIcon={<Save size={12} />} onClick={onSaveCycle}>
+                Zapisz plan
+              </Button>
+            </div>
+          )}
         </div>
       </div>
-
-      <WeekBoard
-        cycle={cycle}
-        activeWeek={activeWeek}
-        selectedWorkoutId={selectedWorkoutId}
-        onWeekChange={onWeekChange}
-        onMove={onMoveWorkout}
-        onSelect={onSelectWorkout}
-        onAdd={onAddWorkout}
-      />
 
       <section className="sport-week-summary" aria-labelledby="sport-week-summary-heading">
         <div>
@@ -544,7 +640,245 @@ export function CyclePlanner({
             : <span>Brak treningów w tym tygodniu</span>}
         </div>
       </section>
+
+      <WeekBoard
+        cycle={cycle}
+        activeWeek={activeWeek}
+        selectedWorkoutId={selectedWorkoutId}
+        onWeekChange={onWeekChange}
+        onMove={onMoveWorkout}
+        onSelect={onSelectWorkout}
+        onAdd={onAddWorkout}
+      />
+
     </div>
+  );
+}
+
+function CyclePlannerLayout({
+  cycle,
+  cycles,
+  activeWeek,
+  selectedWorkoutId,
+  isDirty,
+  onSaveCycle,
+  onDiscardChanges,
+  onSelectCycle,
+  onCreateNewCycle,
+  onWeekChange,
+  onEditCycle,
+  onAddWorkout,
+  onSelectWorkout,
+  onMoveWorkout,
+}: {
+  cycle: TrainingCycle;
+  cycles: TrainingCycle[];
+  activeWeek: number;
+  selectedWorkoutId?: string | null;
+  isDirty: boolean;
+  onSaveCycle: () => void;
+  onDiscardChanges: () => void;
+  onSelectCycle: (cycle: TrainingCycle) => void;
+  onCreateNewCycle: () => void;
+  onWeekChange: (week: number) => void;
+  onEditCycle: () => void;
+  onAddWorkout: (week: number, day: number) => void;
+  onSelectWorkout: (workout: CycleWorkout) => void;
+  onMoveWorkout: (id: string, week: number, day?: number) => void;
+}) {
+  const range = cycleDateRange(cycle);
+  const totalWeeks = cycleWeekCount(cycle);
+  const indefinite = isIndefiniteCycle(cycle);
+  const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek);
+  const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
+  const activeDays = new Set(weekWorkouts.map((workout) => workout.day)).size;
+  const weekDisciplines = Object.entries(DISCIPLINE_META)
+    .map(([discipline, meta]) => ({
+      discipline: discipline as Discipline,
+      label: meta.label,
+      count: weekWorkouts.filter((workout) => workout.discipline === discipline).length,
+    }))
+    .filter((item) => item.count > 0);
+  const planItems = cycles.some((item) => item.id === cycle.id)
+    ? cycles.map((item) => item.id === cycle.id ? cycle : item)
+    : [cycle, ...cycles];
+  const otherCycles = planItems.filter((item) => item.id !== cycle.id);
+
+  return (
+    <div className="sport-cycle-layout">
+      <aside className="sport-cycle-sidebar" aria-label="Zarządzanie planem treningowym">
+        <div className="sport-cycle-sidebar__heading">
+          <h2>Plany treningowe</h2>
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreateNewCycle}>Nowy plan</Button>
+        </div>
+        <section className="sport-cycle-sidebar__section sport-cycle-sidebar__active">
+          <div className="sport-cycle-sidebar__section-heading">
+            <div>
+              <h3>Aktywny plan</h3>
+              <div className="sport-cycle-plan-card__title-row">
+                <CalendarRange size={15} strokeWidth={1.5} aria-hidden="true" />
+                <h2>{cycle.name}</h2>
+                {isDirty && <Badge tone="warning">Niezapisane zmiany</Badge>}
+              </div>
+            </div>
+          </div>
+          <p className="sport-cycle-plan-card__week">Tydzień {activeWeek} z {totalWeeks}</p>
+          <p className="sport-cycle-plan-card__date">
+            {formatLongDate(range.start)} {indefinite ? "· bez daty końcowej" : `— ${formatLongDate(range.end!)}`}
+          </p>
+          <div className="sport-cycle-plan-card__stats">
+            <span><strong>{indefinite ? "∞" : totalWeeks}</strong>{indefinite ? "bezterminowo" : "tygodni"}</span>
+            <span><strong>{cycle.workouts.length}</strong>treningów</span>
+            <span><strong>{weekWorkouts.length}</strong>w tym tygodniu</span>
+          </div>
+          <div className="sport-cycle-sidebar__actions">
+            <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia planu</Button>
+            <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => onAddWorkout(activeWeek, 0)}>
+              Dodaj trening
+            </Button>
+            {isDirty && (
+              <div className="sport-cycle-summary__commit">
+                <Button variant="ghost" size="sm" onClick={onDiscardChanges}>Odrzuć zmiany</Button>
+                <Button variant="primary" size="sm" leadingIcon={<Save size={12} />} onClick={onSaveCycle}>Zapisz plan</Button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="sport-cycle-sidebar__section sport-cycle-sidebar__plans" aria-labelledby="sport-cycle-plans-heading">
+          <div className="sport-cycle-sidebar__section-heading">
+            <div>
+              <h3 id="sport-cycle-plans-heading">Pozostałe plany</h3>
+              <p>{otherCycles.length ? `${otherCycles.length} zapisanych planów` : "Dodaj alternatywny plan"}</p>
+            </div>
+          </div>
+          <div className="sport-cycle-plan-list">
+            {otherCycles.length ? otherCycles.map((item) => {
+              const itemRange = cycleDateRange(item);
+              const itemIndefinite = isIndefiniteCycle(item);
+              return (
+                <button key={item.id} type="button" className="sport-cycle-plan-card" onClick={() => onSelectCycle(item)}>
+                  <span className="sport-cycle-plan-card__title-row">
+                    <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" />
+                    <strong>{item.name}</strong>
+                  </span>
+                  <span className="sport-cycle-plan-card__date">
+                    {formatLongDate(itemRange.start)} {itemIndefinite ? "· bez daty końcowej" : `— ${formatLongDate(itemRange.end!)}`}
+                  </span>
+                  <span className="sport-cycle-plan-card__meta">{item.workouts.length} treningów · {itemIndefinite ? "bezterminowy" : `${item.weeks} tyg.`}</span>
+                </button>
+              );
+            }) : <p className="sport-cycle-sidebar__empty">Nowe plany pojawią się tutaj po zapisaniu.</p>}
+          </div>
+        </section>
+
+        <section className="sport-week-summary sport-cycle-sidebar__summary" aria-labelledby="sport-week-summary-heading">
+          <div>
+            <h3 id="sport-week-summary-heading">Podsumowanie tygodnia {activeWeek}</h3>
+            <p>Planowana objętość przed rozpoczęciem treningów.</p>
+          </div>
+          <dl>
+            <div><dt>Treningi</dt><dd>{weekWorkouts.length}</dd></div>
+            <div><dt>Planowany czas</dt><dd>{weekMinutes} min</dd></div>
+            <div><dt>Aktywne dni</dt><dd>{activeDays} z 7</dd></div>
+          </dl>
+          <div className="sport-week-summary__disciplines">
+            {weekDisciplines.length
+              ? weekDisciplines.map((item) => (
+                  <span key={item.discipline}><i style={{ background: DISCIPLINE_META[item.discipline].color }} />{item.label} · {item.count}</span>
+                ))
+              : <span>Brak treningów w tym tygodniu</span>}
+          </div>
+        </section>
+      </aside>
+
+      <main className="sport-cycle-workspace">
+        <div className="sport-cycle-workspace__heading">
+          <div>
+            <h2>{indefinite ? "Tydzień bazowy" : `Tydzień ${activeWeek} z ${totalWeeks}`}</h2>
+            <p>{formatLongDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatLongDate(cycleWeekDate(cycle, activeWeek, 6))}</p>
+          </div>
+          {activeWeek === todayCycleWeek(cycle) && <Badge tone="neutral">Obecny tydzień</Badge>}
+        </div>
+        <WeekSelector cycle={cycle} activeWeek={activeWeek} onWeekChange={onWeekChange} onMove={onMoveWorkout} />
+        <WeekBoard
+          cycle={cycle}
+          activeWeek={activeWeek}
+          selectedWorkoutId={selectedWorkoutId}
+          onWeekChange={onWeekChange}
+          onMove={onMoveWorkout}
+          onSelect={onSelectWorkout}
+          onAdd={onAddWorkout}
+        />
+      </main>
+    </div>
+  );
+}
+
+export function MoveWorkoutDialog({
+  cycle,
+  workout,
+  onClose,
+  onSubmit,
+}: {
+  cycle: TrainingCycle;
+  workout: CycleWorkout;
+  onClose: () => void;
+  onSubmit: (week: number, day: number) => void;
+}) {
+  const [week, setWeek] = useState(String(workout.week));
+  const [day, setDay] = useState(String(workout.day));
+  const totalWeeks = cycleWeekCount(cycle);
+  const indefinite = isIndefiniteCycle(cycle);
+  const parsedWeek = indefinite ? 1 : Number(week);
+  const parsedDay = Number(day);
+  const dateKey = cycleWeekDate(cycle, parsedWeek, parsedDay);
+
+  return (
+    <Modal
+      title="Przenieś trening"
+      eyebrow={workout.title}
+      description="Wybierz tydzień i dzień. Przeciąganie pozostaje szybkim skrótem na planszy."
+      width={460}
+      onClose={onClose}
+      footer={(
+        <>
+          <Button variant="ghost" onClick={onClose}>Anuluj</Button>
+          <Button
+            variant="primary"
+            leadingIcon={<MoveRight size={13} />}
+            onClick={() => onSubmit(parsedWeek, parsedDay)}
+            disabled={!Number.isInteger(parsedWeek) || !Number.isInteger(parsedDay)}
+          >
+            Przenieś trening
+          </Button>
+        </>
+      )}
+    >
+      <div className="sport-planner-form sport-move-workout-form">
+        <div className="sport-planner-form__grid">
+          <Select
+            label="Tydzień"
+            value={indefinite ? "1" : week}
+            disabled={indefinite}
+            options={Array.from({ length: totalWeeks }, (_, index) => {
+              const value = String(index + 1);
+              return { value, label: `Tydzień ${index + 1}` };
+            })}
+            onChange={(event) => setWeek(event.target.value)}
+          />
+          <Select
+            label="Dzień"
+            value={day}
+            options={DAY_LABELS.map((item, index) => ({ value: String(index), label: item.full }))}
+            onChange={(event) => setDay(event.target.value)}
+          />
+        </div>
+        <p className="sport-move-workout-form__preview">
+          Nowy termin: <strong>{DAY_LABELS[parsedDay]?.full}</strong> · {formatShortDate(dateKey)}
+        </p>
+      </div>
+    </Modal>
   );
 }
 

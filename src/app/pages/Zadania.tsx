@@ -559,7 +559,16 @@ export default function Zadania() {
   );
 
   return (
-    <ModuleShell pageWidth="canvas" header={pageHeader} className="task-module">
+    <ModuleShell
+      pageWidth="canvas"
+      header={pageHeader}
+      className="task-module"
+      ambient={{
+        scene: "tasks",
+        progress: visible.length ? completed.length / visible.length : 0,
+        signal: completed.length,
+      }}
+    >
 
       {/* ── Sub-sidebar ── */}
       <ContextSidebar label="Widoki i listy zadań" collapsible={false} className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

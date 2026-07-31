@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
@@ -44,25 +45,208 @@ export interface ModuleShellProps extends HTMLAttributes<HTMLDivElement> {
   contextSidebar?: ReactNode;
   detailPanel?: ReactNode;
   pageWidth?: PageWidth;
+  ambient?: AmbientVariant | AmbientConfig;
 }
 
 export type PageWidth = "reading" | "standard" | "wide" | "canvas";
+export type AmbientVariant =
+  | "quiet"
+  | "warm"
+  | "cool"
+  | "focus"
+  | "today"
+  | "sport"
+  | "goals"
+  | "tasks"
+  | "calendar"
+  | "nutrition"
+  | "work"
+  | "affairs"
+  | "travel"
+  | "notes";
+
+export interface AmbientConfig {
+  scene: AmbientVariant;
+  progress?: number;
+  dayProgress?: number;
+  active?: boolean;
+  signal?: string | number;
+}
+
+export interface AmbientSceneProps {
+  config: AmbientConfig;
+  className?: string;
+}
+
+function clampUnit(value: number | undefined) {
+  return Math.min(1, Math.max(0, value ?? 0));
+}
+
+function ambientDayPhase(dayProgress: number) {
+  if (dayProgress < 0.22 || dayProgress >= 0.84) return "night";
+  if (dayProgress < 0.36) return "morning";
+  if (dayProgress < 0.68) return "day";
+  return "evening";
+}
+
+export function AmbientScene({ config, className }: AmbientSceneProps) {
+  const [paused, setPaused] = useState(() => (
+    typeof document !== "undefined" && document.visibilityState === "hidden"
+  ));
+  const progress = clampUnit(config.progress);
+  const dayProgress = clampUnit(config.dayProgress);
+  const style = {
+    "--ambient-progress": progress,
+    "--ambient-goal-offset": 100 - (progress * 100),
+    "--ambient-day-angle": `${-118 + (dayProgress * 236)}deg`,
+    "--ambient-day-y": `${8 + (dayProgress * 84)}%`,
+    "--ambient-progress-angle": `${progress * 236}deg`,
+  } as CSSProperties;
+
+  useEffect(() => {
+    const updateVisibility = () => setPaused(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => document.removeEventListener("visibilitychange", updateVisibility);
+  }, []);
+
+  return (
+    <div
+      className={cx("ui-ambient-scene", className)}
+      data-scene={config.scene}
+      data-active={config.active || undefined}
+      data-day-phase={config.scene === "today" ? ambientDayPhase(dayProgress) : undefined}
+      data-paused={paused || undefined}
+      style={style}
+      aria-hidden="true"
+    >
+      <span className="ui-ambient-scene__wash" />
+
+      {config.scene === "today" && (
+        <span className="ui-ambient-today">
+          <span className="ui-ambient-today__photo" />
+          <span className="ui-ambient-today__dial">
+            <i className="ui-ambient-today__ticks" />
+            <i className="ui-ambient-today__progress" />
+            <i className="ui-ambient-today__inner" />
+            <i className="ui-ambient-today__hand" />
+            <i className="ui-ambient-today__marker" />
+          </span>
+        </span>
+      )}
+
+      {config.scene === "sport" && (
+        <span className="ui-ambient-sport">
+          {Array.from({ length: 7 }, (_, index) => (
+            <i key={index} style={{ "--ambient-stream-index": index } as CSSProperties} />
+          ))}
+          <b />
+        </span>
+      )}
+
+      {config.scene === "goals" && (
+        <span className="ui-ambient-goals">
+          <svg viewBox="0 0 320 320" role="presentation">
+            <circle className="ui-ambient-goals__orbit" cx="160" cy="160" r="132" pathLength="100" />
+            <circle className="ui-ambient-goals__track" cx="160" cy="160" r="108" pathLength="100" />
+            <circle className="ui-ambient-goals__progress" cx="160" cy="160" r="108" pathLength="100" />
+            <circle className="ui-ambient-goals__inner" cx="160" cy="160" r="66" pathLength="100" />
+            <path className="ui-ambient-goals__crosshair" d="M160 38v52M160 230v52M38 160h52M230 160h52" />
+            <circle className="ui-ambient-goals__core" cx="160" cy="160" r="8" />
+          </svg>
+          <i />
+        </span>
+      )}
+
+      {config.scene === "tasks" && (
+        <span className="ui-ambient-tasks">
+          <svg viewBox="0 0 720 420" preserveAspectRatio="xMidYMid slice" role="presentation">
+            <path className="ui-ambient-tasks__guide" d="M44 334C146 334 132 222 244 222S348 94 458 94s104 114 218 114" pathLength="100" />
+            <path className="ui-ambient-tasks__progress" d="M44 334C146 334 132 222 244 222S348 94 458 94s104 114 218 114" pathLength="100" />
+            {[{ x: 44, y: 334 }, { x: 244, y: 222 }, { x: 458, y: 94 }, { x: 676, y: 208 }].map((node, index) => (
+              <circle key={index} cx={node.x} cy={node.y} r={index === 3 ? 7 : 5} />
+            ))}
+          </svg>
+          {Array.from({ length: 4 }, (_, index) => <i key={index} style={{ "--ambient-lane-index": index } as CSSProperties} />)}
+        </span>
+      )}
+
+      {config.scene === "calendar" && (
+        <span className="ui-ambient-calendar">
+          <span className="ui-ambient-calendar__grid" />
+          <i className="ui-ambient-calendar__now" />
+          <b className="ui-ambient-calendar__marker" />
+        </span>
+      )}
+
+      {config.scene === "nutrition" && (
+        <span className="ui-ambient-nutrition">
+          {Array.from({ length: 5 }, (_, index) => <i key={index} style={{ "--ambient-contour-index": index } as CSSProperties} />)}
+          <b />
+        </span>
+      )}
+
+      {config.scene === "work" && (
+        <span className="ui-ambient-work">
+          {Array.from({ length: 7 }, (_, index) => <i key={index} style={{ "--ambient-work-index": index } as CSSProperties} />)}
+          <b />
+        </span>
+      )}
+
+      {config.scene === "affairs" && (
+        <span className="ui-ambient-affairs">
+          {Array.from({ length: 5 }, (_, index) => <i key={index} style={{ "--ambient-sheet-index": index } as CSSProperties} />)}
+          <b />
+        </span>
+      )}
+
+      {config.scene === "travel" && (
+        <span className="ui-ambient-travel">
+          <svg viewBox="0 0 720 520" preserveAspectRatio="xMidYMid slice" role="presentation">
+            <path className="ui-ambient-travel__contour" d="M40 384c96-92 196-98 276-48s172 58 350-32" />
+            <path className="ui-ambient-travel__contour" d="M14 438c116-102 218-122 314-72s190 66 378-38" />
+            <path className="ui-ambient-travel__contour" d="M80 312c78-74 154-72 226-30s154 38 316-40" />
+            <path className="ui-ambient-travel__contour" d="M176 238c52-48 104-44 154-16s112 24 226-32" />
+            <path className="ui-ambient-travel__route" d="M54 402C172 366 186 242 306 268s162-96 346-156" pathLength="100" />
+            <circle className="ui-ambient-travel__origin" cx="54" cy="402" r="6" />
+            <circle className="ui-ambient-travel__destination" cx="652" cy="112" r="9" />
+          </svg>
+        </span>
+      )}
+
+      {config.scene === "notes" && (
+        <span className="ui-ambient-notes">
+          {Array.from({ length: 6 }, (_, index) => <i key={index} style={{ "--ambient-stroke-index": index } as CSSProperties} />)}
+          <b />
+        </span>
+      )}
+
+      {config.signal !== undefined && (
+        <span key={String(config.signal)} className="ui-ambient-scene__signal" />
+      )}
+    </div>
+  );
+}
 
 export function ModuleShell({
   header,
   contextSidebar,
   detailPanel,
   pageWidth = "standard",
+  ambient,
   children,
   className,
   ...props
 }: ModuleShellProps) {
+  const ambientConfig = typeof ambient === "string" ? { scene: ambient } : ambient;
+
   return (
     <div
-      className={cx("ui-module-shell", className)}
+      className={cx("ui-module-shell", ambientConfig && "ui-module-shell--ambient", className)}
       data-page-width={pageWidth}
+      data-ambient={ambientConfig?.scene}
       {...props}
     >
+      {ambientConfig && <AmbientScene config={ambientConfig} />}
       {header && <div className="ui-module-shell__header">{header}</div>}
       <div className="ui-module-shell__body">
         {contextSidebar}

@@ -620,6 +620,7 @@ export default function Dzisiaj() {
     }
   };
   const dailyProgress = percentage(completedDailyItems, totalDailyItems);
+  const dayProgress = ((today.getHours() * 60) + today.getMinutes()) / (24 * 60);
 
   const pageHeader = (
     <PageHeader
@@ -648,7 +649,17 @@ export default function Dzisiaj() {
   );
 
   return (
-    <ModuleShell className="today-module" pageWidth="standard" header={pageHeader}>
+    <ModuleShell
+      className="today-module"
+      pageWidth="standard"
+      header={pageHeader}
+      ambient={{
+        scene: "today",
+        dayProgress,
+        progress: dailyProgress / 100,
+        signal: `${todayKey}:${completedDailyItems}`,
+      }}
+    >
       <ModuleMain>
         <div className="today-scroll">
           <div className="today-content">
