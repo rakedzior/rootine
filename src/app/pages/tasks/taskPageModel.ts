@@ -118,16 +118,15 @@ export type TaskSidebarState = {
   tagiOpen: boolean;
 };
 
-const TASK_SIDEBAR_STATE_KEY = "rootine.tasks.sidebar.v1";
+const TASK_SIDEBAR_STATE_KEY = "rootine.tasks.sidebar.v2";
 const DEFAULT_TASK_SIDEBAR_STATE: TaskSidebarState = {
   taskView: "dzis",
   listFilter: null,
   tagFilter: null,
-  // Keep both taxonomy groups visible on first visit. Once the user changes
-  // either group, the explicit preference is persisted and shared by both
-  // task views.
-  listyOpen: true,
-  tagiOpen: true,
+  // Keep taxonomy available without making administration compete with the
+  // user's current task. An explicit choice is persisted across task views.
+  listyOpen: false,
+  tagiOpen: false,
 };
 
 export function loadTaskSidebarState(): TaskSidebarState {

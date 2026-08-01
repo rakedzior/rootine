@@ -219,6 +219,10 @@
   background: var(--color-graphite-canvas);
 }
 
+.work-module[data-ambient="work"] .work-overview {
+  background: transparent;
+}
+
 .work-overview__header {
   display: flex;
   width: 100%;
@@ -591,6 +595,10 @@
   padding: var(--space-xl) var(--space-3xl) var(--space-3xl);
   overflow: auto;
   background: var(--color-graphite-canvas);
+}
+
+.work-module[data-ambient="work"] .work-task-canvas {
+  background: transparent;
 }
 
 @media (min-width: 761px) {

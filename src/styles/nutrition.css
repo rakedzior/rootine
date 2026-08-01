@@ -26,6 +26,11 @@
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
+.nutrition-module[data-ambient="nutrition"] .nutrition-toolbar {
+  border-bottom-color: transparent !important;
+  background: transparent;
+}
+
 .nutrition-toolbar__date,
 .nutrition-toolbar__actions {
   display: flex;
@@ -50,8 +55,8 @@
 }
 
 .nutrition-date-input .ui-date-trigger {
-  min-height: 32px;
-  height: 32px;
+  min-height: var(--control-height-sm);
+  height: var(--control-height-sm);
   padding: 0 var(--space-sm);
   border-color: transparent;
   background: transparent;
@@ -145,7 +150,7 @@
 .nutrition-meal-summary__metric small {
   color: var(--color-text-muted);
   font-family: var(--font-sans);
-  font-size: 9px;
+  font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
   line-height: 1;
 }
@@ -205,6 +210,14 @@
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;
+}
+
+.nutrition-entry-item__nutrition {
+  display: contents;
+}
+
+.nutrition-entry-item__metric small {
+  display: none;
 }
 
 .nutrition-entry-item__portion {
@@ -2030,7 +2043,7 @@
   .nutrition-ledger-table thead th {
     padding-right: var(--space-sm);
     padding-left: var(--space-sm);
-    font-size: 9px;
+    font-size: var(--text-micro);
     letter-spacing: 0.04em;
     white-space: nowrap;
   }
@@ -2082,7 +2095,7 @@
   .nutrition-meal-summary__metric.is-fat,
   .nutrition-meal-summary__metric.is-calories {
     grid-column: auto;
-    font-size: 9px;
+    font-size: var(--text-micro);
   }
 
   .nutrition-meal-summary__metric.is-portion {
@@ -2293,6 +2306,124 @@
 }
 
 @media ((max-width: 760px)) {
+  .nutrition-toolbar {
+    min-width: 0;
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-lg);
+  }
+
+  .nutrition-toolbar__date {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .nutrition-date-input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .nutrition-toolbar__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .nutrition-meal-card {
+    --nutrition-meal-columns: minmax(0, 1fr) auto;
+  }
+
+  .nutrition-entry-list {
+    overflow-x: visible;
+  }
+
+  .nutrition-meal-card__header {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .nutrition-meal-summary {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-sm);
+    padding-top: var(--space-xs);
+    border-top: 1px solid color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  }
+
+  .nutrition-meal-summary__metric,
+  .nutrition-meal-summary__metric.is-protein,
+  .nutrition-meal-summary__metric.is-carbs,
+  .nutrition-meal-summary__metric.is-fat,
+  .nutrition-meal-summary__metric.is-calories {
+    grid-column: auto;
+  }
+
+  .nutrition-meal-summary__metric.is-portion {
+    display: none;
+  }
+
+  .nutrition-meal-card__header > .ui-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .nutrition-entry-item {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .nutrition-entry-item__main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .nutrition-entry-item__nutrition {
+    display: flex;
+    min-width: 0;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-md);
+  }
+
+  .nutrition-entry-item__portion,
+  .nutrition-entry-item__metric,
+  .nutrition-entry-item__calories {
+    width: auto;
+    text-align: left;
+  }
+
+  .nutrition-entry-item__portion {
+    flex-basis: 100%;
+  }
+
+  .nutrition-entry-item__metric {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+
+  .nutrition-entry-item__metric small {
+    display: inline;
+    color: var(--color-text-muted);
+    font-family: var(--font-sans);
+    font-size: var(--text-micro);
+  }
+
+  .nutrition-entry-item__calories {
+    margin-left: auto;
+    color: var(--color-chalk-white);
+  }
+
+  .nutrition-entry-item__actions {
+    grid-column: 2;
+    grid-row: 1;
+    opacity: 1;
+  }
+
   .nutrition-entry-form-grid,
 .nutrition-amount-grid,
 .nutrition-calculator-profile-grid,
@@ -2360,6 +2491,8 @@
 }
 
 @media (pointer: coarse) {
+  .nutrition-entry-item__actions .ui-button,
+  .nutrition-meal-card__header > .ui-button,
   .nutrition-entry-actions .ui-button,
 .nutrition-meal-action-cell .ui-button {
     min-width: 44px;

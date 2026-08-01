@@ -229,10 +229,10 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
         className="flex min-h-6 min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left"
         style={{ color: "inherit", cursor: "pointer" }}
       >
-        <span title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
+        <span className="calendar-event__title" title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
         {virtual && <span aria-hidden="true" title="Wystąpienie cykliczne" style={{ color: C.blueText, flexShrink: 0 }}>↻</span>}
-        <span style={{ flexShrink: 0, fontSize: 11, color: C.second }}>{event.source.label}</span>
-        {event.time && <span style={{ fontFamily: "var(--font-data)", fontSize: 11, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
+        <span className="calendar-event__source" style={{ flexShrink: 0, fontSize: 11, color: C.second }}>{event.source.label}</span>
+        {event.time && <span className="calendar-event__time" style={{ fontFamily: "var(--font-data)", fontSize: 11, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
       </button>
     </div>
   );
@@ -776,8 +776,8 @@ export default function Kalendarz() {
       }}
       header={(
         <PageHeader
-          title="Zadania"
-          description={`Kalendarz · ${formatHeaderDate(viewDate)}`}
+          title="Kalendarz"
+          description={`Plan zadań · ${formatHeaderDate(viewDate)}`}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>}
         />
@@ -988,15 +988,15 @@ export default function Kalendarz() {
           aria-colcount={7}
           aria-rowcount={calendarRows.length + 1}
           className="calendar-page flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-          style={{ background: C.bg, color: C.text }}
+          style={{ color: C.text }}
         >
-          <div role="row" aria-rowindex={1} style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", height: 31, flexShrink: 0, borderBottom: `1px solid ${C.border}` }}>
+          <div role="row" aria-rowindex={1} className="calendar-weekdays" style={{ borderBottom: `1px solid ${C.border}` }}>
             {WEEKDAYS.map((day) => <div key={day} role="columnheader" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: "var(--text-label)" }}>{day}</div>)}
           </div>
 
-          <div role="rowgroup" style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateRows: `repeat(${calendarRows.length}, minmax(112px, 1fr))`, overflow: "auto" }}>
+          <div role="rowgroup" className="calendar-grid-rows" style={{ "--calendar-row-count": calendarRows.length } as React.CSSProperties}>
         {calendarRows.map((row, rowIndex) => (
-          <div key={`${row[0]?.year}-${row[0]?.month}-${row[0]?.day}`} role="row" aria-rowindex={rowIndex + 2} style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", minHeight: 0 }}>
+          <div key={`${row[0]?.year}-${row[0]?.month}-${row[0]?.day}`} role="row" aria-rowindex={rowIndex + 2} className="calendar-grid-row">
         {row.map((cell, columnIndex) => {
           const cellIndex = rowIndex * 7 + columnIndex;
           const key = dateKey(cell.year, cell.month, cell.day);
@@ -1010,7 +1010,7 @@ export default function Kalendarz() {
               aria-colindex={(cellIndex % 7) + 1}
               aria-label={`${cell.day} ${MONTHS[cell.month]} ${cell.year}. Enter, aby dodać zadanie.`}
               data-calendar-cell={key}
-              className="calendar-cell"
+              className={`calendar-cell${isToday ? " is-today" : ""}${dragOverDateKey === key ? " is-drop-target" : ""}`}
               onFocus={() => setFocusedDateKey(key)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -1054,7 +1054,6 @@ export default function Kalendarz() {
               style={{
                 minWidth: 0, minHeight: 0, position: "relative", padding: "7px 5px 4px",
                 borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
-                background: dragOverDateKey === key ? C.hover : isToday ? C.blueSoft : C.grid,
                 boxShadow: dragOverDateKey === key ? `inset 0 0 0 1px ${C.blueSignal}` : "none",
                 cursor: "pointer", transition: "background-color 140ms ease-out, box-shadow 140ms ease-out",
               }}

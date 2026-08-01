@@ -181,6 +181,7 @@ describe("Kalendarz canonical occurrences integration", () => {
     expect(screen.getByRole("button", { name: "Otwórz szczegóły: Zakupy spożywcze" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Otwórz szczegóły: Wysłać raport" })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Listy" }));
     fireEvent.click(screen.getByRole("button", { name: "Prywatne1" }));
 
     expect(screen.getByRole("button", { name: "Otwórz szczegóły: Zakupy spożywcze" })).toBeInTheDocument();

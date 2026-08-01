@@ -8,8 +8,8 @@
 import {
   Archive,
   ArchiveRestore,
+  ArrowLeft,
   BedDouble,
-  Building2,
   CalendarDays,
   Check,
   ChevronRight,
@@ -22,9 +22,7 @@ import {
   Pencil,
   Plane,
   Plus,
-  CreditCard,
   ReceiptText,
-  ShieldCheck,
   Trash2,
   WalletCards,
 } from "lucide-react";
@@ -640,13 +638,8 @@ export default function Podroze() {
   const contextSidebar = (
     <ContextSidebar label="Podróże" className="travel-sidebar">
       <div className="travel-sidebar__nav">
-        <p className="travel-sidebar__label">Sprawy</p>
-        <ContextNavItem icon={<LayoutDashboard />} label="Przegląd" onClick={() => navigate("/sprawy")} />
-        <ContextNavItem icon={<ShieldCheck />} label="Do załatwienia" onClick={() => navigate("/sprawy?widok=matters")} />
-        <ContextNavItem icon={<CreditCard />} label="Płatności" onClick={() => navigate("/sprawy?widok=payments")} />
-        <ContextNavItem icon={<FileText />} label="Rejestry" onClick={() => navigate("/sprawy?widok=documents")} />
-        <ContextNavItem icon={<Building2 />} label="JDG" onClick={() => navigate("/sprawy?widok=jdg")} />
-        <ContextNavItem active icon={<MapIcon />} label="Podróże" onClick={showAllTrips} />
+        <p className="travel-sidebar__label">Obszar nadrzędny</p>
+        <ContextNavItem icon={<ArrowLeft />} label="Wróć do Spraw" onClick={() => navigate("/sprawy")} />
         <p className="travel-sidebar__label travel-sidebar__label--spaced">Wyjazdy</p>
         <ContextNavItem
           active={!selectedTrip}

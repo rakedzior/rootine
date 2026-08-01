@@ -5,11 +5,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  CircleHelp,
+  CircleCheck,
   Clock3,
   Cloud,
   CloudFog,
@@ -18,6 +20,8 @@ import {
   CloudSnow,
   CloudSun,
   LocateFixed,
+  Keyboard,
+  Search,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
@@ -45,6 +49,10 @@ import {
   type TodayWeather,
 } from "../data/todayWeather";
 import { toLocalDateKey } from "../data/localDate";
+import {
+  listLocalPersistenceIssues,
+  subscribeToLocalPersistenceIssues,
+} from "../data/localRepository";
 import {
   APP_MODULES,
   findModuleForPath,
@@ -85,6 +93,51 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   day: "numeric",
   month: "short",
 });
+
+const HELP_GUIDES = {
+  today: {
+    title: "Dzisiaj",
+    steps: ["Sprawdź pogodę, plan dnia i najważniejsze wskaźniki.", "Uporządkuj zaległe sprawy, zanim dodasz nowe.", "Wybierz jeden priorytet i przejdź do właściwego modułu."],
+  },
+  tasks: {
+    title: "Zadania",
+    steps: ["Dodaj zadanie i od razu ustaw termin, listę lub priorytet.", "Filtruj po dacie, liście albo tagu — nie musisz pamiętać, gdzie zadanie trafiło.", "Użyj „Wybierz”, aby grupowo zakończyć, przełożyć lub usunąć zadania; operację możesz cofnąć."],
+  },
+  calendar: {
+    title: "Kalendarz",
+    steps: ["Zmień miesiąc strzałkami lub wróć przyciskiem „Dziś”.", "Wybierz dzień, aby zobaczyć jego zadania i wolne miejsce.", "Przeciągnij zadanie albo użyj Alt + strzałka, by zmienić termin."],
+  },
+  nutrition: {
+    title: "Odżywianie",
+    steps: ["Wybierz dzień i sprawdź bilans kalorii oraz makro.", "Dodaj produkt do właściwego posiłku i podaj rzeczywistą porcję.", "Porównaj dzień z celem; usunięty wpis możesz od razu przywrócić."],
+  },
+  sport: {
+    title: "Sport",
+    steps: ["Zaplanuj tydzień, rozkładając mocne i lekkie jednostki.", "Uruchom sesję i zapisuj serie lub czas bez opuszczania treningu.", "Po treningu sprawdź historię, analizę i gotowość do regeneracji."],
+  },
+  work: {
+    title: "Praca",
+    steps: ["Wybierz firmę, a potem projekt, nad którym teraz pracujesz.", "Dodaj następne konkretne zadanie i przypisz odpowiedzialność.", "Aktualizuj postęp projektu; ostatnią zmianę ukończenia możesz cofnąć."],
+  },
+  goals: {
+    title: "Cele",
+    steps: ["Zapisz mierzalny rezultat i realny termin.", "Podziel cel na kamienie milowe, które da się jednoznacznie zakończyć.", "Regularnie aktualizuj postęp i reaguj na status „Zagrożony”."],
+  },
+  affairs: {
+    title: "Sprawy",
+    steps: ["Zacznij od radaru zobowiązań i najbliższych terminów.", "Przejdź do płatności, firmy albo podróży zależnie od kontekstu.", "Po wykonaniu sprawy sprawdź historię; ostatnią operację można cofnąć."],
+  },
+  travel: {
+    title: "Podróże",
+    steps: ["Otwórz najbliższy wyjazd i sprawdź jego gotowość.", "Uzupełnij checklistę, budżet i dokumenty w jednym dossier.", "Przed wyjazdem wyeksportuj kopię; usunięty wyjazd możesz przywrócić."],
+  },
+  notes: {
+    title: "Notatki",
+    steps: ["Zapisz myśl bez formatowania — porządek możesz dodać później.", "Użyj list i tagów, aby połączyć notatkę z obszarem życia.", "Wyszukuj po treści, a nie po zapamiętanym miejscu zapisu."],
+  },
+} as const;
+
+type HelpGuideId = keyof typeof HELP_GUIDES;
 
 function getInitialSidebarState() {
   try {
@@ -258,12 +311,21 @@ function ProfileSummary() {
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
   const [isCompactViewport, setIsCompactViewport] = useState(getInitialCompactViewport);
   const [modulePreferences, setModulePreferences] = useState(loadModulePreferences);
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpGuideId, setHelpGuideId] = useState<HelpGuideId>(() => {
+    if (location.pathname.startsWith("/kalendarz")) return "calendar";
+    if (location.pathname.startsWith("/podroze")) return "travel";
+    return findModuleForPath(location.pathname)?.id ?? "today";
+  });
+  const [helpQuery, setHelpQuery] = useState("");
+  const [saveFeedback, setSaveFeedback] = useState<"saved" | "error" | null>(null);
   const weatherRequestId = useRef(0);
   const mobileMoreButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLElement>(null);
@@ -291,6 +353,28 @@ export default function Layout() {
   useEffect(() => subscribeToModulePreferences(() => {
     setModulePreferences(loadModulePreferences());
   }), []);
+
+  useEffect(() => {
+    let hideTimer: number | undefined;
+    const showSaved = () => {
+      if (listLocalPersistenceIssues().length > 0) return;
+      window.clearTimeout(hideTimer);
+      setSaveFeedback("saved");
+      hideTimer = window.setTimeout(() => setSaveFeedback(null), 2200);
+    };
+    const showIssues = () => {
+      window.clearTimeout(hideTimer);
+      setSaveFeedback(listLocalPersistenceIssues().length > 0 ? "error" : null);
+    };
+    window.addEventListener("rootine:workspace-change", showSaved);
+    const unsubscribeIssues = subscribeToLocalPersistenceIssues(showIssues);
+    showIssues();
+    return () => {
+      window.clearTimeout(hideTimer);
+      window.removeEventListener("rootine:workspace-change", showSaved);
+      unsubscribeIssues();
+    };
+  }, []);
 
   const todayKey = toLocalDateKey(now);
   const requestWeather = useCallback((forceRefresh = false) => {
@@ -417,6 +501,16 @@ export default function Layout() {
     ))
     .slice(0, 4);
   const currentModule = findModuleForPath(location.pathname);
+  const contextualHelpId: HelpGuideId = location.pathname.startsWith("/kalendarz")
+    ? "calendar"
+    : location.pathname.startsWith("/podroze")
+      ? "travel"
+      : currentModule?.id ?? "today";
+  const activeHelpGuide = HELP_GUIDES[helpGuideId];
+  const normalizedHelpQuery = helpQuery.trim().toLocaleLowerCase("pl-PL");
+  const matchingHelpGuides = (Object.entries(HELP_GUIDES) as [HelpGuideId, typeof HELP_GUIDES[HelpGuideId]][])
+    .filter(([, guide]) => !normalizedHelpQuery || [guide.title, ...guide.steps]
+      .some((value) => value.toLocaleLowerCase("pl-PL").includes(normalizedHelpQuery)));
   const moreIsActive = Boolean(
     currentModule && !mobilePrimaryNav.some((item) => item.id === currentModule.id),
   );
@@ -449,6 +543,36 @@ export default function Layout() {
     onToggle: toggleModule,
     onReset: resetModules,
   };
+
+  useEffect(() => {
+    const handleGlobalShortcut = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isTyping = target instanceof HTMLElement && (
+        target.matches("input, textarea, select")
+        || target.isContentEditable
+      );
+      if (isTyping) return;
+
+      if (event.key === "?" || (event.ctrlKey && event.key.toLowerCase() === "k")) {
+        event.preventDefault();
+        setOpenMenu(null);
+        setHelpGuideId(contextualHelpId);
+        setHelpQuery("");
+        setHelpOpen(true);
+        return;
+      }
+
+      if (!event.altKey || event.ctrlKey || event.metaKey || !/^\d$/.test(event.key)) return;
+      const shortcutIndex = Number(event.key) - 1;
+      const destination = visibleNav[shortcutIndex];
+      if (!destination) return;
+      event.preventDefault();
+      navigate(destination.to);
+    };
+
+    document.addEventListener("keydown", handleGlobalShortcut);
+    return () => document.removeEventListener("keydown", handleGlobalShortcut);
+  }, [contextualHelpId, navigate, visibleNav]);
 
   return (
     <div className="app-shell">
@@ -550,6 +674,23 @@ export default function Layout() {
 
           <button
             type="button"
+            className="app-sidebar-action"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+            title="Pomoc i skróty (?)"
+            onClick={() => {
+              setOpenMenu(null);
+              setHelpGuideId(contextualHelpId);
+              setHelpQuery("");
+              setHelpOpen(true);
+            }}
+          >
+            <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
+            <span className="app-sidebar-action__label">Pomoc i skróty</span>
+          </button>
+
+          <button
+            type="button"
             className="app-sidebar-profile"
             data-app-menu-trigger
             aria-haspopup="dialog"
@@ -625,6 +766,108 @@ export default function Layout() {
           )}
         </div>
       </aside>
+
+      {helpOpen && (
+        <Modal
+          title="Pomoc i szybkie przejście"
+          description="Przejdź do obszaru bez szukania go w nawigacji albo sprawdź, jak bezpiecznie zarządzać lokalnymi danymi."
+          width={640}
+          bodyClassName="app-help-dialog"
+          onClose={() => setHelpOpen(false)}
+        >
+          <section aria-labelledby="help-context-title">
+            <div className="app-help-dialog__heading">
+              <CircleHelp size={16} aria-hidden="true" />
+              <div>
+                <h3 id="help-context-title">Jak pracować: {activeHelpGuide.title}</h3>
+                <p>Krótka ścieżka od pierwszego kroku do bezpiecznego zakończenia.</p>
+              </div>
+            </div>
+            <ol className="app-help-dialog__steps">
+              {activeHelpGuide.steps.map((step, index) => (
+                <li key={step}><span aria-hidden="true">{index + 1}</span><p>{step}</p></li>
+              ))}
+            </ol>
+            <label className="app-help-dialog__search">
+              <Search size={14} aria-hidden="true" />
+              <span className="ui-sr-only">Szukaj w pomocy</span>
+              <input
+                type="search"
+                value={helpQuery}
+                placeholder="Szukaj w pomocy…"
+                onChange={(event) => setHelpQuery(event.target.value)}
+              />
+            </label>
+            <div className="app-help-dialog__guide-list" aria-label="Przewodniki modułów">
+              {matchingHelpGuides.map(([id, guide]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={id === helpGuideId ? "is-active" : ""}
+                  aria-pressed={id === helpGuideId}
+                  onClick={() => { setHelpGuideId(id); setHelpQuery(""); }}
+                >
+                  {guide.title}
+                </button>
+              ))}
+              {matchingHelpGuides.length === 0 && <p>Brak wyniku. Spróbuj innego słowa.</p>}
+            </div>
+          </section>
+
+          <section aria-labelledby="help-navigation-title">
+            <div className="app-help-dialog__heading">
+              <Keyboard size={16} aria-hidden="true" />
+              <div>
+                <h3 id="help-navigation-title">Szybkie przejście</h3>
+                <p>Użyj przycisków albo skrótów Alt + numer.</p>
+              </div>
+            </div>
+            <div className="app-help-dialog__modules">
+              {visibleNav.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-autofocus={index === 0 ? "" : undefined}
+                    onClick={() => {
+                      navigate(item.to);
+                      setHelpOpen(false);
+                    }}
+                  >
+                    <Icon size={15} aria-hidden="true" />
+                    <span>{item.label}</span>
+                    <kbd>Alt {index + 1}</kbd>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section aria-labelledby="help-shortcuts-title">
+            <div className="app-help-dialog__heading">
+              <CircleHelp size={16} aria-hidden="true" />
+              <div>
+                <h3 id="help-shortcuts-title">Skróty i bezpieczeństwo</h3>
+                <p><kbd>Ctrl K</kbd> lub <kbd>?</kbd> otwiera ten panel. <kbd>Esc</kbd> zamyka dialogi.</p>
+              </div>
+            </div>
+            <div className="app-help-dialog__recovery">
+              <p>Dane są zapisywane lokalnie. Kopię możesz wyeksportować i przywrócić bez opuszczania aplikacji.</p>
+              <RecoveryCenterButton />
+            </div>
+          </section>
+        </Modal>
+      )}
+
+      {saveFeedback && (
+        <div className={`app-save-feedback is-${saveFeedback}`} role="status" aria-live="polite">
+          {saveFeedback === "saved"
+            ? <CircleCheck size={15} aria-hidden="true" />
+            : <CircleHelp size={15} aria-hidden="true" />}
+          <span>{saveFeedback === "saved" ? "Zapisano lokalnie" : "Zapis wymaga uwagi — otwórz Centrum odzyskiwania"}</span>
+        </div>
+      )}
 
       <div className="app-shell__body">
         <div id="primary-workspace" className="app-shell__content" tabIndex={-1}>
@@ -718,6 +961,13 @@ export default function Layout() {
                   })}
                 </nav>
                 <div className="app-mobile-menu__actions">
+                  <button type="button" onClick={() => { closeMobileMenu(); setHelpOpen(true); }}>
+                    <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
+                    <span>
+                      <strong>Pomoc i skróty</strong>
+                      <small>Szybkie przejście i bezpieczeństwo danych</small>
+                    </span>
+                  </button>
                   <button type="button" onClick={() => setOpenMenu("mobileSettings")}>
                     <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
                     <span>

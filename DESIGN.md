@@ -23,6 +23,11 @@ colors:
   warning-ochre: "#D4AA68"
   danger-coral: "#CF777C"
   accent-violet: "#9B8CE8"
+  category-sky: "#7FA6C9"
+  category-teal: "#79A8A4"
+  category-sand: "#B9A171"
+  category-rose: "#BC8EA5"
+  category-slate: "#8793A1"
 typography:
   micro:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"

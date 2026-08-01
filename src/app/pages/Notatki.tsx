@@ -219,6 +219,7 @@ export default function Notatki() {
   const [draftBaseline, setDraftBaseline] = useState(storedDraftSession?.baseline ?? serializeDraft(EMPTY_DRAFT));
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<NoteRecord | null>(null);
+  const [deletedNoteUndo, setDeletedNoteUndo] = useState<{ note: NoteRecord; index: number } | null>(null);
   const [listEditor, setListEditor] = useState<ListEditorState | null>(null);
   const [listDeleteState, setListDeleteState] = useState<{ id: string; name: string } | null>(null);
   const [listName, setListName] = useState("");
@@ -667,12 +668,27 @@ export default function Notatki() {
 
   const confirmDelete = () => {
     if (!deleteState) return;
+    setDeletedNoteUndo({
+      note: deleteState,
+      index: Math.max(0, workspace.notes.findIndex((note) => note.id === deleteState.id)),
+    });
     setWorkspace((current) => ({
       ...current,
       notes: current.notes.filter((note) => note.id !== deleteState.id),
     }));
     if (editor?.id === deleteState.id) closeEditorDirectly();
     setDeleteState(null);
+  };
+
+  const undoNoteDelete = () => {
+    if (!deletedNoteUndo) return;
+    setWorkspace((current) => {
+      if (current.notes.some((note) => note.id === deletedNoteUndo.note.id)) return current;
+      const notes = [...current.notes];
+      notes.splice(Math.min(deletedNoteUndo.index, notes.length), 0, deletedNoteUndo.note);
+      return { ...current, notes };
+    });
+    setDeletedNoteUndo(null);
   };
 
   const selectView = (nextView: NotesView) => {
@@ -1272,6 +1288,13 @@ export default function Notatki() {
             </Button>
           </div>
         </WorkspaceToolbar>
+
+        {deletedNoteUndo && (
+          <div className="notes-undo" role="status" aria-live="polite">
+            <span>Usunięto „{deletedNoteUndo.note.title}”.</span>
+            <Button variant="quiet" size="sm" onClick={undoNoteDelete}>Cofnij</Button>
+          </div>
+        )}
 
         <div className="notes-canvas">
           <div className="notes-canvas__heading">

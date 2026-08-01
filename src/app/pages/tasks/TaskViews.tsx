@@ -38,6 +38,7 @@ import {
 
 export function TaskRow({
   task, selected, onToggle, onSelect, onUpdate, tagi, deadlineLabel, railLabel,
+  bulkMode = false, bulkSelected = false, bulkDisabled = false, onBulkToggle,
 }: {
   task: Task; selected: boolean;
   onToggle: (id: number) => void;
@@ -45,6 +46,10 @@ export function TaskRow({
   onUpdate: (id: number, patch: Partial<Task>) => void;
   tagi: TagItem[];
   deadlineLabel?: string;
+  bulkMode?: boolean;
+  bulkSelected?: boolean;
+  bulkDisabled?: boolean;
+  onBulkToggle?: (id: number) => void;
   /**
    * Value for the fixed-width "when" rail. A clock time inside a single day, "9 dni" in the
    * overdue group. Pass an empty string to keep the row aligned without showing a value.
@@ -71,12 +76,13 @@ export function TaskRow({
       rail={railLabel ?? (task.time || "")}
       density="compact"
       divided={false}
-      selected={selected}
+      selected={bulkMode ? bulkSelected : selected}
       completed={task.done}
       onClick={(event) => {
         const target = event.target as HTMLElement;
         if (target.closest("button, a, input, textarea, select")) return;
-        onSelect(task.id);
+        if (bulkMode && !bulkDisabled) onBulkToggle?.(task.id);
+        else onSelect(task.id);
       }}
       title={task.text}
       subtitle={subtitle}
@@ -85,16 +91,31 @@ export function TaskRow({
       leading={(
         <button
           type="button"
-          aria-label={task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
-          onClick={e => { e.stopPropagation(); onToggle(task.id); }}
-          className={`task-checkbox ${task.done ? "is-checked" : ""}`}
-          style={{ "--task-checkbox-color": task.done ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
+          aria-label={bulkMode
+            ? bulkDisabled
+              ? `Zadanie cykliczne: operacje zbiorcze są niedostępne; zarządzaj wystąpieniem w szczegółach`
+              : bulkSelected ? `Odznacz zadanie: ${task.text}` : `Zaznacz zadanie: ${task.text}`
+            : task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
+          disabled={bulkMode && bulkDisabled}
+          onClick={e => {
+            e.stopPropagation();
+            if (bulkMode && !bulkDisabled) onBulkToggle?.(task.id);
+            else onToggle(task.id);
+          }}
+          className={`task-checkbox ${(bulkMode ? bulkSelected : task.done) ? "is-checked" : ""}`}
+          style={{ "--task-checkbox-color": (bulkMode ? bulkSelected : task.done) ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
         >
-          {task.done && <Check size={8} strokeWidth={2.5} />}
+          {(bulkMode ? bulkSelected : task.done) && <Check size={8} strokeWidth={2.5} />}
         </button>
       )}
-      onTitleClick={() => onSelect(task.id)}
-      titleLabel={`Otwórz szczegóły zadania: ${task.text}`}
+      onTitleClick={() => bulkMode
+        ? !bulkDisabled && onBulkToggle?.(task.id)
+        : onSelect(task.id)}
+      titleLabel={bulkMode
+        ? bulkDisabled
+          ? `Zadanie cykliczne poza operacjami zbiorczymi: ${task.text}`
+          : `${bulkSelected ? "Odznacz" : "Zaznacz"} zadanie: ${task.text}`
+        : `Otwórz szczegóły zadania: ${task.text}`}
       trailing={(taskTags.length > 0 || task.source) ? (
         <>
           {taskTags.map(td => (

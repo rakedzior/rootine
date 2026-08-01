@@ -8,7 +8,7 @@ import {
   PenLine, Hash, List,
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
-import { todayLocalDateKey } from "../data/localDate";
+import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   projectTaskOccurrences,
@@ -130,6 +130,13 @@ export default function Zadania() {
   } | null>(null);
   const [purgeTaskId, setPurgeTaskId] = useState<number | null>(null);
   const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<number>>(() => new Set());
+  const [bulkUndo, setBulkUndo] = useState<{
+    tasks: Task[];
+    message: string;
+    completionIds?: number[];
+  } | null>(null);
 
   useEffect(() => {
     const nextWorkspace = { ...workspaceRef.current, tasks, habits, lists: listy, tags: tagi };
@@ -278,6 +285,10 @@ export default function Zadania() {
   const currentPending = sortByScheduledTime(pending.filter(task => !overdueIds.has(task.id)));
   const dayHeading = viewedTaskDayHeading(taskView);
   const dayHeadingCount = currentPending.length + completed.length;
+  const selectableVisibleIds = Array.from(new Set((taskView === "ukonczone"
+    ? completed
+    : [...overdue, ...currentPending]
+  ).filter((task) => !occurrenceById.get(task.id)?.occurrence.virtual).map((task) => task.id)));
 
   const viewCounts = Object.fromEntries(
     SMART_VIEWS.map(v => {
@@ -467,6 +478,70 @@ export default function Zadania() {
       habit.id === id ? toggleHabitOnDate(habit, today) : habit
     )));
   };
+  const toggleBulkMode = () => {
+    setBulkMode((current) => !current);
+    setBulkSelectedIds(new Set());
+    setSelectedId(null);
+  };
+  const toggleBulkTask = (id: number) => setBulkSelectedIds((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  const selectedBulkSourceIds = () => Array.from(new Set(Array.from(bulkSelectedIds)
+    .filter((id) => !occurrenceById.get(id)?.occurrence.virtual)
+    .map((id) => occurrenceById.get(id)?.occurrence.sourceTaskId ?? id)));
+  const bulkTaskNoun = (count: number) => count === 1 ? "zadanie" : count < 5 ? "zadania" : "zadań";
+  const finishBulkAction = (previous: Task[], message: string, completionIds?: number[]) => {
+    setBulkUndo({ tasks: previous, message, completionIds });
+    setBulkSelectedIds(new Set());
+    setBulkMode(false);
+  };
+  const completeSelectedTasks = () => {
+    const sourceIds = new Set(selectedBulkSourceIds());
+    if (!sourceIds.size) return;
+    const previous = tasks;
+    sourceIds.forEach((id) => persistTaskCompletion(id, true));
+    setTasks((current) => current.map((task) => sourceIds.has(task.id) ? { ...task, done: true } : task));
+    finishBulkAction(
+      previous,
+      `Ukończono ${sourceIds.size} ${bulkTaskNoun(sourceIds.size)}.`,
+      Array.from(sourceIds),
+    );
+  };
+  const moveSelectedTasksToTomorrow = () => {
+    const sourceIds = new Set(selectedBulkSourceIds());
+    if (!sourceIds.size) return;
+    const previous = tasks;
+    const tomorrow = shiftLocalDateKey(todayKey, 1);
+    setTasks((current) => current.map((task) => sourceIds.has(task.id) ? {
+      ...task,
+      calendarDate: tomorrow,
+      date: "Jutro",
+      view: "jutro",
+    } : task));
+    finishBulkAction(previous, `Przeniesiono ${sourceIds.size} ${bulkTaskNoun(sourceIds.size)} na jutro.`);
+  };
+  const deleteSelectedTasks = () => {
+    const sourceIds = selectedBulkSourceIds();
+    if (!sourceIds.length) return;
+    const previous = tasks;
+    setTasks((current) => sourceIds.reduce(
+      (next, id) => trashTask(workspaceWithTasks(next), id).tasks,
+      current,
+    ));
+    finishBulkAction(previous, `Przeniesiono ${sourceIds.length} ${bulkTaskNoun(sourceIds.length)} do Kosza.`);
+  };
+  const undoBulkAction = () => {
+    if (!bulkUndo) return;
+    bulkUndo.completionIds?.forEach((id) => {
+      const previousTask = bulkUndo.tasks.find((task) => task.id === id);
+      if (previousTask) persistTaskCompletion(id, previousTask.done);
+    });
+    setTasks(bulkUndo.tasks);
+    setBulkUndo(null);
+  };
   const updateHabit = (id: number, patch: Partial<Habit>) => setHabits((current) => current.map((habit) => (
     habit.id === id ? normalizeHabitState({ ...habit, ...patch }) : habit
   )));
@@ -571,7 +646,7 @@ export default function Zadania() {
     >
 
       {/* ── Sub-sidebar ── */}
-      <ContextSidebar label="Widoki i listy zadań" collapsible={false} className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ContextSidebar label="Widoki i listy zadań" className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* Smart views */}
         <div className="px-2 pb-4 pt-4">
@@ -983,6 +1058,16 @@ export default function Zadania() {
               ))}
               {pending.length > 0 && <Badge tone="neutral">{formatOpenTaskCount(pending.length)}</Badge>}
             </div>
+            {taskView !== "kosz" && (
+              <Button
+                variant={bulkMode ? "quiet" : "ghost"}
+                size="sm"
+                aria-pressed={bulkMode}
+                onClick={toggleBulkMode}
+              >
+                {bulkMode ? "Anuluj wybór" : "Wybierz"}
+              </Button>
+            )}
             <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
                 variant="quiet"
@@ -1008,6 +1093,32 @@ export default function Zadania() {
             </div>
           </div>
         </WorkspaceToolbar>
+
+        {bulkMode && (
+          <div className="task-bulk-bar" role="toolbar" aria-label="Operacje zbiorcze na zadaniach">
+            <strong aria-live="polite">Zaznaczono: {bulkSelectedIds.size}</strong>
+            <Button variant="ghost" size="sm" onClick={() => setBulkSelectedIds(new Set(selectableVisibleIds))}>
+              Zaznacz widoczne
+            </Button>
+            <span className="task-bulk-bar__spacer" />
+            <Button variant="quiet" size="sm" disabled={!bulkSelectedIds.size} onClick={completeSelectedTasks}>
+              Zakończ
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!bulkSelectedIds.size} onClick={moveSelectedTasksToTomorrow}>
+              Na jutro
+            </Button>
+            <Button variant="danger" size="sm" disabled={!bulkSelectedIds.size} onClick={deleteSelectedTasks}>
+              Usuń
+            </Button>
+          </div>
+        )}
+
+        {bulkUndo && (
+          <div className="task-bulk-undo" role="status" aria-live="polite">
+            <span>{bulkUndo.message}</span>
+            <Button variant="quiet" size="sm" onClick={undoBulkAction}>Cofnij</Button>
+          </div>
+        )}
 
         <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* Add task input */}
@@ -1177,6 +1288,10 @@ export default function Zadania() {
                       railLabel={overdueRailLabel(task.calendarDate!)}
                       deadlineLabel={overdueDateLabel(task.calendarDate!)}
                       selected={selectedId === task.id}
+                      bulkMode={bulkMode}
+                      bulkSelected={bulkSelectedIds.has(task.id)}
+                      bulkDisabled={Boolean(occurrenceById.get(task.id)?.occurrence.virtual)}
+                      onBulkToggle={toggleBulkTask}
                       onToggle={id => updateTask(id, { done: true })}
                       onUpdate={updateTask}
                       onSelect={id => setSelectedId(selectedId === id ? null : id)}
@@ -1207,6 +1322,10 @@ export default function Zadania() {
               {visible.map(t => (
                 <TaskRow key={t.id} task={t} tagi={tagi}
                   selected={selectedId === t.id}
+                  bulkMode={bulkMode}
+                  bulkSelected={bulkSelectedIds.has(t.id)}
+                  bulkDisabled={Boolean(occurrenceById.get(t.id)?.occurrence.virtual)}
+                  onBulkToggle={toggleBulkTask}
                   onToggle={id => updateTask(id, { done: false })}
                   onUpdate={updateTask}
                   onSelect={id => setSelectedId(selectedId === id ? null : id)} />
@@ -1256,6 +1375,10 @@ export default function Zadania() {
                   {currentPending.map(t => (
                     <TaskRow key={t.id} task={t} tagi={tagi}
                       selected={selectedId === t.id}
+                      bulkMode={bulkMode}
+                      bulkSelected={bulkSelectedIds.has(t.id)}
+                      bulkDisabled={Boolean(occurrenceById.get(t.id)?.occurrence.virtual)}
+                      onBulkToggle={toggleBulkTask}
                       onToggle={id => updateTask(id, { done: true })}
                       onUpdate={updateTask}
                       onSelect={id => setSelectedId(selectedId === id ? null : id)} />
@@ -1278,6 +1401,10 @@ export default function Zadania() {
                       {completed.map(t => (
                         <TaskRow key={t.id} task={t} tagi={tagi}
                           selected={selectedId === t.id}
+                          bulkMode={bulkMode}
+                          bulkSelected={bulkSelectedIds.has(t.id)}
+                          bulkDisabled={Boolean(occurrenceById.get(t.id)?.occurrence.virtual)}
+                          onBulkToggle={toggleBulkTask}
                           onToggle={id => updateTask(id, { done: false })}
                           onUpdate={updateTask}
                           onSelect={id => setSelectedId(selectedId === id ? null : id)} />

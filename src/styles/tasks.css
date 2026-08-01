@@ -1026,6 +1026,11 @@ input.task-entry-input:focus-visible {
   background: var(--color-graphite-input);
 }
 
+.task-checkbox:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .task-sched__time-options {
   display: grid;
   max-height: 176px;
@@ -1689,6 +1694,60 @@ input.task-entry-input:focus-visible {
   gap: var(--space-sm);
   padding: 80px 0;
   color: var(--color-text-muted);
+}
+
+.task-bulk-bar,
+.task-bulk-undo {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-graphite-panel) 88%, transparent);
+}
+
+.task-bulk-bar strong,
+.task-bulk-undo span {
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+}
+
+.task-bulk-bar__spacer { flex: 1; }
+
+.task-bulk-undo {
+  justify-content: space-between;
+  border-left: 2px solid var(--color-precision-blue);
+}
+
+@media (max-width: 760px) {
+  .task-bulk-bar,
+  .task-bulk-undo {
+    flex-wrap: wrap;
+    padding-inline: var(--space-sm);
+  }
+
+  .task-bulk-bar__spacer { display: none; }
+
+  .task-module-main:has(.task-bulk-bar) .task-priority-filters {
+    display: none;
+  }
+
+  .task-module-main:has(.task-bulk-bar) .task-toolbar-actions {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .task-bulk-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .task-bulk-bar strong { grid-column: 1 / 3; }
+  .task-bulk-bar > .ui-button:nth-of-type(1) { grid-column: 3 / 5; }
+  .task-bulk-bar > .ui-button { width: 100%; }
+  .task-bulk-bar > .ui-button:last-child { grid-column: 3 / 5; }
 }
 
 /* Weekly commentary editor inside Podsumowanie. */

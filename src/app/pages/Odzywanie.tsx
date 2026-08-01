@@ -8,44 +8,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
-  ChartNoAxesCombined,
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Droplets,
-  LoaderCircle,
-  Pencil,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-
-  Save,
-  Scale,
-  Settings,
-  Trash2,
-  X,
+  ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Droplets,
+  LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, Save, Scale, Settings, Trash2, X,
 } from "lucide-react";
 import {
-  Badge,
-  Button,
-  Card,
-  DatePicker,
-  Input,
-  Modal,
-  ModuleMain,
-  ModuleShell,
-  PageHeader,
-  SectionHeader,
-  Select,
-  uiColors,
+  Badge, Button, Card, DatePicker, Input, Modal, ModuleMain, ModuleShell,
+  PageHeader, SectionHeader, Select, uiColors,
 } from "../ui";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
-import {
-  calculateNutritionTargets,
-  MACRO_MODE_OPTIONS,
-  MACRO_PRESET_OPTIONS,
-} from "../data/nutritionCalculator";
+import { calculateNutritionTargets, MACRO_MODE_OPTIONS, MACRO_PRESET_OPTIONS } from "../data/nutritionCalculator";
 import {
   OpenFoodFactsSearchError,
   scaleNutrition,
@@ -66,10 +37,7 @@ import {
   type NutritionEntry,
   type NutritionWorkspace,
 } from "../data/nutritionWorkspace";
-import {
-  NutritionAnalysis,
-  type NutritionAnalysisRange,
-} from "../nutrition/NutritionAnalysis";
+import { NutritionAnalysis, type NutritionAnalysisRange } from "../nutrition/NutritionAnalysis";
 import "../../styles/nutrition.css";
 
 import {
@@ -912,7 +880,7 @@ export default function Odzywanie() {
         </div>
       ) : (
         <>
-          <div className="nutrition-toolbar" style={{ borderColor: uiColors.borderSubtle, background: uiColors.graphiteCanvas }}>
+          <div className="nutrition-toolbar" style={{ borderColor: uiColors.borderSubtle }}>
             <div className="nutrition-toolbar__date">
               <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}>
                 <ChevronLeft size={14} />
@@ -1003,11 +971,13 @@ export default function Odzywanie() {
                                   {entry.brand && <span className="nutrition-product-brand">{entry.brand}</span>}
                                   <p>{entry.portion} · Białko {formatNumber(entry.protein)} g · Węglowodany {formatNumber(entry.carbs)} g · Tłuszcze {formatNumber(entry.fat)} g</p>
                                 </div>
-                                <span className="nutrition-entry-item__portion">{entry.portion}</span>
-                                <span className="nutrition-entry-item__metric">{formatNumber(entry.protein)} g</span>
-                                <span className="nutrition-entry-item__metric">{formatNumber(entry.carbs)} g</span>
-                                <span className="nutrition-entry-item__metric">{formatNumber(entry.fat)} g</span>
-                                <span className="nutrition-entry-item__calories">{formatNumber(entry.calories)} kcal</span>
+                                <div className="nutrition-entry-item__nutrition" aria-label={`Wartości odżywcze: ${entry.portion}, białko ${formatNumber(entry.protein)} gramów, węglowodany ${formatNumber(entry.carbs)} gramów, tłuszcz ${formatNumber(entry.fat)} gramów, ${formatNumber(entry.calories)} kilokalorii`}>
+                                  <span className="nutrition-entry-item__portion">{entry.portion}</span>
+                                  <span className="nutrition-entry-item__metric"><small>B</small>{formatNumber(entry.protein)} g</span>
+                                  <span className="nutrition-entry-item__metric"><small>W</small>{formatNumber(entry.carbs)} g</span>
+                                  <span className="nutrition-entry-item__metric"><small>T</small>{formatNumber(entry.fat)} g</span>
+                                  <span className="nutrition-entry-item__calories">{formatNumber(entry.calories)} kcal</span>
+                                </div>
                                 <div className="nutrition-entry-item__actions">
                                   <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Edytuj ${entry.name}`} onClick={() => openEditDialog(id, entry)}>
                                     <Pencil size={12} />
