@@ -1,6 +1,10 @@
 import { handleOpenFoodFactsSearch } from "../api/openfoodfacts/search";
+import {
+  handleRealtimeSession,
+  type AssistantRuntimeEnv,
+} from "../api/_shared/realtime-session";
 
-interface Env {
+interface Env extends AssistantRuntimeEnv {
   ASSETS: Fetcher;
   OPEN_FOOD_FACTS_CONTACT?: string;
 }
@@ -12,6 +16,13 @@ const worker: ExportedHandler<Env> = {
     if (url.pathname === "/api/openfoodfacts/search") {
       return handleOpenFoodFactsSearch(request, {
         contact: env.OPEN_FOOD_FACTS_CONTACT,
+        clientIp: request.headers.get("CF-Connecting-IP") ?? undefined,
+      });
+    }
+
+    if (url.pathname === "/api/assistant/realtime-session") {
+      return handleRealtimeSession(request, {
+        env,
         clientIp: request.headers.get("CF-Connecting-IP") ?? undefined,
       });
     }

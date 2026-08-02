@@ -1,13 +1,13 @@
-import { Check } from "lucide-react";
+import { Check, MonitorCog } from "lucide-react";
 import {
   APP_THEMES,
-  type AppThemeId,
+  type AppThemePreference,
 } from "../theme/appTheme";
 
 type ThemeSettingsProps = {
   idPrefix: string;
-  value: AppThemeId;
-  onChange: (themeId: AppThemeId) => void;
+  value: AppThemePreference;
+  onChange: (themeId: AppThemePreference) => void;
 };
 
 export function ThemeSettings({ idPrefix, value, onChange }: ThemeSettingsProps) {
@@ -20,10 +20,29 @@ export function ThemeSettings({ idPrefix, value, onChange }: ThemeSettingsProps)
           <strong id={titleId}>Motyw aplikacji</strong>
           <small>Kolory interfejsu, powierzchni i akcentów</small>
         </span>
-        <small>Zmiana zapisuje się automatycznie</small>
+        <small>Zmiana działa od razu i zapisuje się automatycznie</small>
       </div>
 
       <div className="app-theme-settings__grid" role="radiogroup" aria-labelledby={titleId}>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === "system"}
+          className={`app-theme-option app-theme-option--system${value === "system" ? " is-selected" : ""}`}
+          onClick={() => onChange("system")}
+        >
+          <span className="app-theme-option__system-icon" aria-hidden="true">
+            <MonitorCog size={17} strokeWidth={1.7} />
+          </span>
+          <span className="app-theme-option__copy">
+            <strong>Automatycznie</strong>
+            <small>Warm Linen w trybie jasnym, Midnight Instrument w ciemnym</small>
+          </span>
+          <span className="app-theme-option__status" aria-hidden="true">
+            {value === "system" && <Check size={13} strokeWidth={2.2} />}
+          </span>
+        </button>
+
         {APP_THEMES.map((theme) => {
           const selected = theme.id === value;
 
@@ -33,17 +52,19 @@ export function ThemeSettings({ idPrefix, value, onChange }: ThemeSettingsProps)
               type="button"
               role="radio"
               aria-checked={selected}
+              data-theme-option={theme.id}
               className={`app-theme-option${selected ? " is-selected" : ""}`}
               onClick={() => onChange(theme.id)}
             >
               <span className="app-theme-option__swatches" aria-hidden="true">
-                {theme.swatches.map((swatch) => (
-                  <span key={swatch} style={{ backgroundColor: swatch }} />
-                ))}
+                <span />
+                <span />
+                <span />
               </span>
               <span className="app-theme-option__copy">
                 <strong>{theme.name}</strong>
                 <small>{theme.description}</small>
+                <em>{theme.role}</em>
               </span>
               <span className="app-theme-option__status" aria-hidden="true">
                 {selected && <Check size={13} strokeWidth={2.2} />}

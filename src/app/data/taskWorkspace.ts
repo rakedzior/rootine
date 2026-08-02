@@ -517,6 +517,10 @@ export function setHabitCompletionOnDate(habit: WorkspaceHabit, dateKey: string,
   return normalizeHabitState({ ...habit, completedDates: [...completedDates].sort() });
 }
 
+export function setTaskDoneState(task: WorkspaceTask, done: boolean): WorkspaceTask {
+  return task.done === done ? task : { ...task, done };
+}
+
 export function toggleHabitOnDate(habit: WorkspaceHabit, dateKey: string): WorkspaceHabit {
   return setHabitCompletionOnDate(habit, dateKey, !isHabitDoneOnDate(habit, dateKey));
 }

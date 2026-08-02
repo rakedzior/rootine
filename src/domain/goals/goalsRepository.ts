@@ -1,0 +1,26 @@
+import { readLocalWorkspace, writeLocalWorkspace } from "../../app/data/localRepository";
+import {
+  createSeedGoalsWorkspace,
+  isGoalsWorkspace,
+  normalizeGoalsWorkspace,
+  type GoalsWorkspace,
+} from "../../app/goals/goalsModel";
+
+export const GOALS_STORAGE_KEY = "rootine.goals.v1";
+
+export function loadGoalsWorkspaceResult() {
+  const loaded = readLocalWorkspace<GoalsWorkspace>({
+    key: GOALS_STORAGE_KEY,
+    fallback: createSeedGoalsWorkspace,
+    validate: isGoalsWorkspace,
+  });
+  return { ...loaded, workspace: normalizeGoalsWorkspace(loaded.workspace) };
+}
+
+export function loadGoalsWorkspace() {
+  return loadGoalsWorkspaceResult().workspace;
+}
+
+export function saveGoalsWorkspace(workspace: GoalsWorkspace) {
+  return isGoalsWorkspace(workspace) && writeLocalWorkspace(GOALS_STORAGE_KEY, workspace);
+}

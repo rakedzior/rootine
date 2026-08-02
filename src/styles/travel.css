@@ -226,7 +226,7 @@
 
 .travel-next-departure small {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -243,11 +243,12 @@
 
 .travel-next-departure__identity > strong {
   font-size: var(--text-title);
+  line-height: var(--leading-snug);
 }
 
 .travel-next-departure__identity > span {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-label);
   text-overflow: ellipsis;
   white-space: nowrap;

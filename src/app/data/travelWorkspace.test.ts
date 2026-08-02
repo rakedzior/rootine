@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isDateWithinTrip,
   normalizeIsoCurrency,
+  setTravelTaskCompletionState,
   summarizeTravelBudget,
   type TravelTrip,
 } from "./travelWorkspace";
@@ -73,5 +74,28 @@ describe("travel workspace domain helpers", () => {
     expect(summary.reservationCommitted).toBe(1_100);
     expect(summary.unbudgetedReservations).toBe(300);
     expect(summary.remaining).toBe(500);
+  });
+
+  it("uses the shared completion mutation for a trip task without changing sibling trips", () => {
+    const trip = createTrip();
+    trip.tasks = [{
+      id: "travel-task-1",
+      title: "Spakować dokumenty",
+      category: "documents",
+      dueDate: "2026-08-09",
+      completed: false,
+    }];
+    const sibling = { ...createTrip(), id: "trip-sibling", name: "Sibling" };
+    const workspace = {
+      version: 2 as const,
+      updatedAt: "2026-08-02T08:00:00.000Z",
+      trips: [trip, sibling],
+    };
+
+    const next = setTravelTaskCompletionState(workspace, trip.id, "travel-task-1", true);
+
+    expect(next.trips[0].tasks[0].completed).toBe(true);
+    expect(next.trips[1]).toBe(sibling);
+    expect(workspace.trips[0].tasks[0].completed).toBe(false);
   });
 });

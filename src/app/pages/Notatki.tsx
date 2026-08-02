@@ -28,6 +28,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { calendarDaysBetween, todayLocalDateKey, toLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { recordActivity } from "../experience/activityLog";
+import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   POLISH_TIME_ZONE,
   formatDate,
@@ -206,8 +208,12 @@ export default function Notatki() {
   const [workspace, setWorkspace] = useState(loadNotesWorkspace);
   const quickAddRequested = typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("akcja") === "nowa-notatka";
+  const quickAddTitle = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("tytul") ?? ""
+    : "";
   const quickAddDraft: NoteDraft = {
     ...EMPTY_DRAFT,
+    title: quickAddTitle,
     listId: workspace.lists[0]?.id ?? "",
   };
   const [view, setView] = useState<NotesView>(initialUrlState.view);
@@ -244,6 +250,7 @@ export default function Notatki() {
     if (!quickAddRequested) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("akcja");
+    url.searchParams.delete("tytul");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, [quickAddRequested]);
 
@@ -343,6 +350,7 @@ export default function Notatki() {
     if (sort === "updated") url.searchParams.delete("sort");
     else url.searchParams.set("sort", sort);
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
+    writeModuleMemoryValue("notes", "location", `${url.pathname}${url.search}`);
   }, [search, sort, view]);
 
   useEffect(() => {
@@ -524,6 +532,7 @@ export default function Notatki() {
         archived: savedDraft.archived,
         updatedAt: now,
       }));
+      recordActivity({ moduleId: "notes", kind: "save", title: savedDraft.title, detail: "Zapisano notatkę" });
     } else {
       const id = createNotesId("note");
       setWorkspace((current) => ({
@@ -543,6 +552,7 @@ export default function Notatki() {
           updatedAt: now,
         }, ...current.notes],
       }));
+      recordActivity({ moduleId: "notes", kind: "create", title: savedDraft.title, detail: "Utworzono notatkę" });
       setEditor({ mode: "edit", id });
     }
     setDraft(savedDraft);
@@ -1255,7 +1265,7 @@ export default function Notatki() {
         />
       )}
     >
-      <ModuleMain>
+      <ModuleMain transitionKey={view}>
         <WorkspaceToolbar className="notes-toolbar">
           <div className="notes-toolbar__mobile">
             <Select

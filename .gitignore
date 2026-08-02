@@ -2,6 +2,8 @@ node_modules/
 dist/
 playwright-report/
 test-results/
+test-results-*/
+.tmp-design-assessment-b/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
@@ -11,3 +13,9 @@ Thumbs.db
 .impeccable/config.local.json
 .claude/settings.local.json
 .wrangler/
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example

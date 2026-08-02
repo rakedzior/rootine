@@ -13,6 +13,15 @@ async function expectNoDocumentOverflow(page: Parameters<typeof openRootineRoute
   ).toBe(true);
 }
 
+async function openFirstNutritionProductDialog(page: Parameters<typeof openRootineRoute>[0]) {
+  const addButton = page.getByRole("button", {
+    name: /^(Dodaj pierwszy produkt|Dodaj produkt do:)/,
+  }).first();
+  await expect(addButton).toBeVisible();
+  await addButton.click();
+  return page.getByRole("dialog", { name: "Dodaj produkt" });
+}
+
 test.describe("production viewport matrix", { tag: "@viewport" }, () => {
   test("uses the configured viewport and contains long task content", async ({ rootinePage: page }, testInfo) => {
     const configuredViewport = testInfo.project.use.viewport;
@@ -110,8 +119,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     });
 
     await openRootineRoute(page, "/odzywianie");
-    await page.getByRole("button", { name: "Dodaj produkt", exact: true }).first().click();
-    const dialog = page.getByRole("dialog", { name: "Dodaj produkt" });
+    const dialog = await openFirstNutritionProductDialog(page);
     const productInput = dialog.getByRole("combobox", { name: "Produkt lub danie" });
     await productInput.fill("Czekolada testowa E2E");
     await page.waitForTimeout(650);
@@ -125,8 +133,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
 
   test("offline catalog failure leaves manual nutrition entry available", async ({ rootinePage: page, context }) => {
     await openRootineRoute(page, "/odzywianie");
-    await page.getByRole("button", { name: "Dodaj produkt", exact: true }).first().click();
-    const dialog = page.getByRole("dialog", { name: "Dodaj produkt" });
+    const dialog = await openFirstNutritionProductDialog(page);
     await dialog.getByRole("combobox", { name: "Produkt lub danie" }).fill("Produkt bez sieci E2E");
     await page.unroute("**/api/openfoodfacts/search**");
 
@@ -200,7 +207,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     expect(backup).toBe(corruptRaw);
 
     await page.getByRole("button", { name: "Rozpocznij pusty dziennik" }).click();
-    await expect(page.getByRole("button", { name: "Dodaj produkt", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Dodaj pierwszy produkt/ }).first()).toBeVisible();
     await expect.poll(() => page.evaluate((key) => {
       const raw = window.localStorage.getItem(key);
       if (!raw) return null;
@@ -222,10 +229,12 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     }, NUTRITION_STORAGE_KEY);
 
     await openRootineRoute(page, "/odzywianie");
+    const hydration = page.getByRole("progressbar", { name: "Nawodnienie" });
+    const initialHydration = Number(await hydration.getAttribute("aria-valuenow")) || 0;
     await page.getByRole("button", { name: "+250 ml", exact: true }).click();
 
     await expect(page.getByText("Brak zapisu lokalnego", { exact: true })).toBeVisible();
-    await expect(page.getByRole("progressbar", { name: "Nawodnienie" })).toHaveAttribute("aria-valuenow", "250");
+    await expect(hydration).toHaveAttribute("aria-valuenow", String(initialHydration + 250));
     expect(await page.evaluate((key) => window.localStorage.getItem(key), NUTRITION_STORAGE_KEY)).toBeNull();
   });
 });

@@ -26,6 +26,7 @@ import {
   purgeTask,
   restoreTask,
   saveTaskWorkspace,
+  setTaskDoneState,
   setHabitCompletionOnDate,
   trashTask,
   toggleHabitOnDate,
@@ -49,6 +50,8 @@ import {
   WorkspaceToolbar,
 } from "../ui";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
+import { recordActivity } from "../experience/activityLog";
+import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import "../../styles/tasks.css";
 import "../../styles/task-habits.css";
 
@@ -112,6 +115,7 @@ export default function Zadania() {
   const [selectedId,    setSelectedId]    = useState<number | null>(null);
   const [selectedHabitId, setSelectedHabitId] = useState<number | null>(null);
   const [newTask,       setNewTask]       = useState("");
+  const [habitQuickCapture, setHabitQuickCapture] = useState({ title: "", revision: 0 });
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
   const [newTaskList,   setNewTaskList]   = useState<string | null>(null);
   const [newPriority,   setNewPriority]   = useState<Priority | null>(null);
@@ -170,6 +174,7 @@ export default function Zadania() {
     if (taskView === "dzis") url.searchParams.delete("widok");
     else url.searchParams.set("widok", taskView);
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    writeModuleMemoryValue("tasks", "location", `${url.pathname}${url.search}`);
   }, [taskView]);
 
   // Sidebar collapse state
@@ -204,10 +209,30 @@ export default function Zadania() {
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.get("akcja") !== "nowe-zadanie") return;
-    if (taskView !== "dzis") setTaskView("dzis");
-    window.setTimeout(() => inputRef.current?.focus(), 0);
+    const action = url.searchParams.get("akcja");
+    if (action !== "nowe-zadanie" && action !== "nowy-nawyk") return;
+    const title = url.searchParams.get("tytul") ?? "";
+    if (action === "nowy-nawyk") {
+      if (taskView !== "nawyki") setTaskView("nawyki");
+      setHabitQuickCapture((current) => ({ title, revision: current.revision + 1 }));
+    } else {
+      if (taskView !== "dzis") setTaskView("dzis");
+      setNewTask(title);
+      const priority = url.searchParams.get("priorytet");
+      setNewPriority(["low", "medium", "high"].includes(priority ?? "") ? priority as Priority : null);
+      const dateKey = url.searchParams.get("data");
+      const time = url.searchParams.get("godzina") ?? "";
+      const parsedDate = dateKey ? new Date(`${dateKey}T12:00:00`) : null;
+      setNewDateVal(parsedDate && !Number.isNaN(parsedDate.getTime())
+        ? { ...DEFAULT_DATE_VAL, date: parsedDate, time, allDay: !time }
+        : DEFAULT_DATE_VAL);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    }
     url.searchParams.delete("akcja");
+    url.searchParams.delete("tytul");
+    url.searchParams.delete("data");
+    url.searchParams.delete("godzina");
+    url.searchParams.delete("priorytet");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, [taskView]);
 
@@ -363,6 +388,12 @@ export default function Zadania() {
           }))];
     });
     setTasks((current) => [...current, task]);
+    recordActivity({
+      moduleId: "tasks",
+      kind: "create",
+      title: task.text,
+      detail: task.calendarDate ? `Zaplanowano na ${task.calendarDate}` : "Dodano zadanie",
+    });
     setSelectedId(id);
     setNewTask(""); setNewPriority(null); setNewTaskTags([]); setNewTaskList(null);
     setNewDateVal(DEFAULT_DATE_VAL); setInputDropdown(null);
@@ -435,7 +466,10 @@ export default function Zadania() {
     setTasks((current) => current.map((task) => {
       if (task.id !== sourceId) return task;
       if (!occurrence?.occurrence.virtual || typeof patch.done !== "boolean") {
-        return { ...task, ...patch };
+        const withCompletion = typeof patch.done === "boolean"
+          ? setTaskDoneState(task, patch.done)
+          : task;
+        return { ...withCompletion, ...patch };
       }
       const { done, ...sourcePatch } = patch;
       return {
@@ -452,6 +486,15 @@ export default function Zadania() {
     tags: tagi,
   });
   const deleteTask = (id: number) => {
+    const task = tasks.find((candidate) => candidate.id === id);
+    if (task) {
+      recordActivity({
+        moduleId: "tasks",
+        kind: "delete",
+        title: task.text,
+        detail: "Przeniesiono do kosza",
+      });
+    }
     setTasks((current) => trashTask(workspaceWithTasks(current), id).tasks);
     setSelectedId(null);
   };
@@ -474,6 +517,16 @@ export default function Zadania() {
   )));
   const toggleHabit = (id: number) => {
     const today = toCalendarDateKey(new Date());
+    const habit = habits.find((item) => item.id === id);
+    if (habit) {
+      const wasDone = isHabitDoneOnDate(habit, today);
+      recordActivity({
+        moduleId: "tasks",
+        kind: wasDone ? "reopen" : "complete",
+        title: habit.name,
+        detail: wasDone ? "Cofnięto wykonanie nawyku" : "Wykonano nawyk",
+      });
+    }
     setHabits((current) => current.map((habit) => (
       habit.id === id ? toggleHabitOnDate(habit, today) : habit
     )));
@@ -996,6 +1049,8 @@ export default function Zadania() {
             onToggleHabit={toggleHabit}
             onSelectHabit={(id) => { setSelectedHabitId((current) => current === id ? null : id); setSelectedId(null); }}
             onAddHabit={addHabit}
+            quickCaptureTitle={habitQuickCapture.title}
+            quickCaptureRevision={habitQuickCapture.revision}
           />
         </ModuleMain>
       )}

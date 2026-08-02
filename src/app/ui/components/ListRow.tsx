@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 export type ListRowDensity = "compact" | "default" | "comfortable";
 
@@ -42,6 +42,8 @@ interface ListRowOwnProps {
   selected?: boolean;
   /** Dims the row without changing its height or layout. */
   completed?: boolean;
+  /** Keeps an actionable no-data row visually distinct from a disabled control. */
+  empty?: boolean;
   className?: string;
 }
 
@@ -71,12 +73,28 @@ export const ListRow = forwardRef<HTMLElement, ListRowProps>(function ListRow(
     divided = true,
     selected = false,
     completed = false,
+    empty = false,
     as,
     className = "",
     ...props
   },
   ref,
 ) {
+  const previousCompleted = useRef(completed);
+  const [completionRitual, setCompletionRitual] = useState(false);
+
+  useEffect(() => {
+    const justCompleted = completed && !previousCompleted.current;
+    previousCompleted.current = completed;
+    if (!justCompleted) {
+      if (!completed) setCompletionRitual(false);
+      return;
+    }
+    setCompletionRitual(true);
+    const timer = window.setTimeout(() => setCompletionRitual(false), 680);
+    return () => window.clearTimeout(timer);
+  }, [completed]);
+
   // A row-level button cannot contain other controls, so `onTitleClick` always wins.
   const interactive = !onTitleClick
     && (as === "button" || (as === undefined && typeof props.onClick === "function"));
@@ -89,6 +107,8 @@ export const ListRow = forwardRef<HTMLElement, ListRowProps>(function ListRow(
     (interactive || onTitleClick) ? "ui-list-row--interactive" : "",
     selected ? "is-selected" : "",
     completed ? "is-completed" : "",
+    completionRitual ? "is-completion-ritual" : "",
+    empty ? "is-empty" : "",
     className,
   ].filter(Boolean).join(" ");
 

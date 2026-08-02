@@ -1,39 +1,43 @@
+/* stylelint-disable projectwallace/max-unique-colors -- Six complete appearance palettes intentionally enumerate the product theme system here. */
 :root {
   color-scheme: dark;
 
-  --color-precision-blue: #4772fa;
-  --color-precision-blue-text: #809af4;
-  --color-precision-blue-strong: #3e63da;
-  --color-precision-blue-hover: #3658c7;
-  --color-precision-blue-soft: rgba(71, 114, 250, 0.11);
-  --color-graphite-shell: #1c1c1c;
-  --color-graphite-sidebar: #1e1e1e;
-  --color-graphite-input: #222222;
-  --color-graphite-canvas: #242424;
-  --color-graphite-panel: #2a2a2a;
-  --color-graphite-card: #2e2e2e;
-  --color-graphite-hover: #333333;
-  --color-border-subtle: #383838;
-  --color-border-strong: #484848;
-  --color-chalk-white: #f0f0f0;
-  --color-text-secondary: #a0a0a0;
-  --color-text-muted: #969696;
-  /*
-   * :disabled controls and non-text affordances only. At 4.27:1 on --color-graphite-panel
-   * and 4.04:1 on --color-graphite-card this fails WCAG AA for body copy, so content text
-   * must use --color-text-muted (4.59:1 on card) instead.
-   */
-  --color-text-disabled: #8c8c8c;
-  --color-success-seaglass: #70b89f;
-  --color-success-soft: rgba(112, 184, 159, 0.11);
-  --color-warning-ochre: #d4aa68;
-  --color-warning-soft: rgba(212, 170, 104, 0.1);
-  --color-danger-coral: #dc858a;
-  --color-danger-soft: rgba(207, 119, 124, 0.1);
-  --color-accent-violet: #9b8ce8;
-  --color-violet-soft: rgba(155, 140, 232, 0.11);
-  --color-backdrop: rgba(0, 0, 0, 0.62);
+  /* Rootine Midnight Instrument is the product default. */
+  --color-app-bg: #101214;
+  --color-sidebar-bg: #0b0d0f;
+  --color-surface-1: #1a1d21;
+  --color-surface-2: #20242a;
+  --color-surface-hover: #282d35;
+  --color-border: rgba(222, 229, 244, 0.08);
+  --color-border-strong: rgba(222, 229, 244, 0.16);
+  --color-text-primary: #f2f3f5;
+  --color-text-secondary: #aeb3bb;
+  --color-text-tertiary: #818791;
+  --color-sidebar-text: var(--color-text-secondary);
+  --color-primary: #657fce;
+  --color-primary-hover: #7891da;
+  --color-primary-subtle: rgba(101, 127, 206, 0.12);
+  --color-primary-text: #8ca1e0;
+  --color-on-primary: #0b1020;
+  --color-warning: #d2a04d;
+  --color-warning-subtle: rgba(210, 160, 77, 0.12);
+  --color-warning-text: #d2a04d;
+  --color-success: #69a77a;
+  --color-success-subtle: rgba(105, 167, 122, 0.12);
+  --color-success-text: #78b789;
+  --color-danger: #d36a6a;
+  --color-danger-subtle: rgba(211, 106, 106, 0.12);
+  --color-danger-text: #df7c7c;
+  --color-focus-ring: var(--color-primary);
+  --color-progress-track: rgba(242, 243, 245, 0.1);
+  --color-disabled-bg: #1a1d21;
+  --color-disabled-text: #818791;
+  --color-neutral-subtle: rgba(174, 179, 187, 0.07);
+  --color-backdrop: rgba(2, 3, 6, 0.72);
+  --color-on-accent: var(--color-on-primary);
+}
 
+:root {
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-data: "DM Mono", monospace;
   --text-micro: 11px;
@@ -43,6 +47,8 @@
   --text-body-emphasis: 14px;
   --text-title: 20px;
   --text-headline: 24px;
+  --text-heading-sm: var(--text-body-emphasis);
+  --text-heading-md: var(--text-title);
 
   --radius-xs: 3px;
   --radius-sm: 6px;
@@ -66,17 +72,29 @@
   --context-sidebar-width: 220px;
   --detail-panel-width: 408px;
 
-  --shadow-floating: 0 12px 30px rgba(0, 0, 0, 0.45);
-  --shadow-modal: 0 18px 50px rgba(0, 0, 0, 0.52);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --focus-ring: 0 0 0 2px var(--color-graphite-canvas), 0 0 0 4px var(--color-precision-blue);
+  --shadow-floating: 0 12px 30px rgba(0, 0, 0, 0.42);
+  --shadow-modal: 0 18px 50px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --focus-ring-width: 2px;
+  --focus-ring: 0 0 0 2px var(--color-app-bg), 0 0 0 4px var(--color-focus-ring);
+  --motion-instant: 90ms;
   --motion-fast: 140ms;
-  --motion-normal: 180ms;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-normal: 240ms;
+  --motion-slow: 360ms;
+  --motion-page: 420ms;
+  --motion-ritual: 680ms;
+  --motion-value-duration: var(--motion-normal);
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: var(--ease-enter);
+  --opacity-disabled: 0.42;
+  --opacity-completed: 0.72;
+  --opacity-decorative: 0.04;
+  --telemetry-segment-weight: 1;
 }
 
-/* stylelint-disable projectwallace/max-unique-colors -- Theme foundations and five selectable palettes intentionally enumerate their color systems here. */
 :root {
   --page-width-reading: 840px;
   --page-width-standard: 1200px;
@@ -86,250 +104,349 @@
   --color-category-sand: #b9a171;
   --color-category-rose: #bc8ea5;
   --color-category-slate: #8793a1;
-  --color-on-accent: #ffffff;
   --task-checkbox-color: var(--color-border-strong);
 
-  --theme-ambient-brand: #6f8ff2;
-  --theme-ambient-warm: #c9a66e;
-  --theme-ambient-cool: #89a9bd;
-  --theme-ambient-focus: #9c8fd4;
-  --theme-ambient-organic: #7ca59b;
-  --theme-ambient-material: #93897c;
-  --theme-ambient-soft: #c7bdb0;
-  --theme-ambient-wash-opacity: 0.4;
+  --theme-ambient-brand: #657fce;
+  --theme-ambient-warm: #b6a37e;
+  --theme-ambient-cool: #7189b8;
+  --theme-ambient-focus: #7d7fa8;
+  --theme-ambient-organic: #789383;
+  --theme-ambient-material: #8d8880;
+  --theme-ambient-soft: #a2aaa5;
+  --theme-ambient-wash-opacity: 0.2;
+  --theme-motif-opacity: 0.045;
+  --theme-paper-opacity: 0;
+  --theme-stone-opacity: 0;
+  --theme-material-fiber: rgba(164, 177, 207, 0.12);
+  --theme-material-vein: rgba(101, 127, 206, 0.2);
+  --theme-instrument-glint-opacity: 0.46;
 }
 
-/*
- * Material-inspired appearance themes. The legacy token names stay stable for the
- * component layer; each palette reassigns their semantic role across the whole app.
- */
-:root[data-theme="olive-walnut-ivory"] {
-  color-scheme: dark;
-
-  --color-precision-blue: #7f8d4d;
-  --color-precision-blue-text: #bac783;
-  --color-precision-blue-strong: #6d7a40;
-  --color-precision-blue-hover: #606c36;
-  --color-precision-blue-soft: rgba(127, 141, 77, 0.14);
-  --color-graphite-shell: #171812;
-  --color-graphite-sidebar: #1b1c15;
-  --color-graphite-input: #22231b;
-  --color-graphite-canvas: #202119;
-  --color-graphite-panel: #292920;
-  --color-graphite-card: #302f25;
-  --color-graphite-hover: #39372b;
-  --color-border-subtle: #3d3b2f;
-  --color-border-strong: #504d3d;
-  --color-chalk-white: #f3eddf;
-  --color-text-secondary: #b9b1a0;
-  --color-text-muted: #aaa291;
-  --color-text-disabled: #8f8879;
-  --color-success-seaglass: #82b493;
-  --color-success-soft: rgba(130, 180, 147, 0.12);
-  --color-warning-ochre: #d0a665;
-  --color-warning-soft: rgba(208, 166, 101, 0.12);
-  --color-danger-coral: #d98282;
-  --color-danger-soft: rgba(217, 130, 130, 0.11);
-  --color-accent-violet: #a597d5;
-  --color-violet-soft: rgba(165, 151, 213, 0.12);
-  --color-category-sky: #83a5b2;
-  --color-category-teal: #79a797;
-  --color-category-sand: #bd9c66;
-  --color-category-rose: #b98e9a;
-  --color-category-slate: #92988d;
-  --theme-ambient-brand: #8b965c;
-  --theme-ambient-warm: #d0aa6e;
-  --theme-ambient-cool: #88a8a1;
-  --theme-ambient-focus: #b58a76;
-  --theme-ambient-organic: #88a372;
-  --theme-ambient-material: #a47c5b;
-  --theme-ambient-soft: #d3c6a3;
-  --theme-ambient-wash-opacity: 0.38;
-  --color-backdrop: rgba(7, 8, 5, 0.7);
-  --shadow-floating: 0 12px 30px rgba(8, 7, 4, 0.48);
-  --shadow-modal: 0 18px 50px rgba(8, 7, 4, 0.56);
-}
-
-:root[data-theme="deep-teal-smoked-oak-pearl"] {
-  color-scheme: dark;
-
-  --color-precision-blue: #39878a;
-  --color-precision-blue-text: #7bc1c3;
-  --color-precision-blue-strong: #307a7e;
-  --color-precision-blue-hover: #296b6e;
-  --color-precision-blue-soft: rgba(57, 135, 138, 0.14);
-  --color-graphite-shell: #11191a;
-  --color-graphite-sidebar: #141e1f;
-  --color-graphite-input: #192426;
-  --color-graphite-canvas: #172123;
-  --color-graphite-panel: #202b2c;
-  --color-graphite-card: #263234;
-  --color-graphite-hover: #303e40;
-  --color-border-subtle: #324144;
-  --color-border-strong: #43565a;
-  --color-chalk-white: #f0eee7;
-  --color-text-secondary: #adb7b4;
-  --color-text-muted: #9fa9a6;
-  --color-text-disabled: #86918f;
-  --color-success-seaglass: #74b59d;
-  --color-success-soft: rgba(116, 181, 157, 0.12);
-  --color-warning-ochre: #d2a76d;
-  --color-warning-soft: rgba(210, 167, 109, 0.11);
-  --color-danger-coral: #d98488;
-  --color-danger-soft: rgba(217, 132, 136, 0.11);
-  --color-accent-violet: #9b91d3;
-  --color-violet-soft: rgba(155, 145, 211, 0.12);
-  --color-category-sky: #79a8b9;
-  --color-category-teal: #6eaaa5;
-  --color-category-sand: #b79b72;
-  --color-category-rose: #b68e9e;
-  --color-category-slate: #86999d;
-  --theme-ambient-brand: #4a989a;
-  --theme-ambient-warm: #d0aa73;
-  --theme-ambient-cool: #82b8bc;
-  --theme-ambient-focus: #8c9ac5;
-  --theme-ambient-organic: #77a793;
-  --theme-ambient-material: #8f7564;
-  --theme-ambient-soft: #d9cfbd;
-  --theme-ambient-wash-opacity: 0.4;
-  --color-backdrop: rgba(4, 10, 11, 0.72);
-  --shadow-floating: 0 12px 30px rgba(3, 9, 10, 0.5);
-  --shadow-modal: 0 18px 50px rgba(3, 9, 10, 0.58);
-}
-
-:root[data-theme="onyx-ebony-stone"] {
-  color-scheme: dark;
-
-  --color-precision-blue: #5379ed;
-  --color-precision-blue-text: #88a0ee;
-  --color-precision-blue-strong: #4569d8;
-  --color-precision-blue-hover: #3b5dc4;
-  --color-precision-blue-soft: rgba(83, 121, 237, 0.12);
-  --color-graphite-shell: #151515;
-  --color-graphite-sidebar: #181818;
-  --color-graphite-input: #1f1f1e;
-  --color-graphite-canvas: #20201f;
-  --color-graphite-panel: #292927;
-  --color-graphite-card: #302f2d;
-  --color-graphite-hover: #393835;
-  --color-border-subtle: #3c3b38;
-  --color-border-strong: #4d4b46;
-  --color-chalk-white: #f0eee8;
-  --color-text-secondary: #aaa8a2;
-  --color-text-muted: #9c9a94;
-  --color-text-disabled: #888680;
-  --color-category-sky: #7fa2bf;
-  --color-category-teal: #77a39e;
-  --color-category-sand: #b39b70;
-  --color-category-rose: #b38b9d;
-  --color-category-slate: #898f95;
-  --theme-ambient-brand: #6f8ff2;
-  --theme-ambient-warm: #c5a46d;
-  --theme-ambient-cool: #8da9bd;
-  --theme-ambient-focus: #9a8cce;
-  --theme-ambient-organic: #7da49c;
-  --theme-ambient-material: #90877a;
-  --theme-ambient-soft: #c7beb0;
-  --theme-ambient-wash-opacity: 0.4;
-  --color-backdrop: rgba(0, 0, 0, 0.68);
-}
-
-:root[data-theme="putty-natural-oak-calacatta"] {
+:root[data-theme="rootine-warm-linen"] {
   color-scheme: light;
 
-  --color-precision-blue: #7a5d40;
-  --color-precision-blue-text: #6f5439;
-  --color-precision-blue-strong: #6e5237;
-  --color-precision-blue-hover: #5d452e;
-  --color-precision-blue-soft: rgba(110, 82, 55, 0.12);
-  --color-graphite-shell: #ded4c3;
-  --color-graphite-sidebar: #e8e0d3;
-  --color-graphite-input: #e5dccd;
-  --color-graphite-canvas: #e4dacb;
-  --color-graphite-panel: #eee6da;
-  --color-graphite-card: #f7f1e7;
-  --color-graphite-hover: #ddd2c0;
-  --color-border-subtle: #cbbda9;
-  --color-border-strong: #ac9b82;
-  --color-chalk-white: #302b25;
-  --color-text-secondary: #5c554b;
-  --color-text-muted: #6c6358;
-  --color-text-disabled: #8c8173;
-  --color-success-seaglass: #36715c;
-  --color-success-soft: rgba(54, 113, 92, 0.11);
-  --color-warning-ochre: #805b29;
-  --color-warning-soft: rgba(128, 91, 41, 0.1);
-  --color-danger-coral: #9d4149;
-  --color-danger-soft: rgba(157, 65, 73, 0.1);
-  --color-accent-violet: #6d599a;
-  --color-violet-soft: rgba(109, 89, 154, 0.1);
+  --color-app-bg: #f2eee6;
+  --color-sidebar-bg: #e8e0d3;
+  --color-surface-1: #faf8f3;
+  --color-surface-2: #f5f0e8;
+  --color-surface-hover: #efe8dd;
+  --color-border: rgba(70, 55, 40, 0.12);
+  --color-border-strong: rgba(70, 55, 40, 0.22);
+  --color-text-primary: #302c27;
+  --color-text-secondary: #756e64;
+  --color-text-tertiary: #6f685f;
+  --color-sidebar-text: #665f56;
+  --color-primary: #76583e;
+  --color-primary-hover: #654a34;
+  --color-primary-subtle: rgba(118, 88, 62, 0.1);
+  --color-primary-text: #76583e;
+  --color-on-primary: #ffffff;
+  --color-warning: #b97828;
+  --color-warning-subtle: rgba(185, 120, 40, 0.12);
+  --color-warning-text: #8f5e20;
+  --color-success: #5f8a68;
+  --color-success-subtle: rgba(95, 138, 104, 0.12);
+  --color-success-text: #487052;
+  --color-danger: #b95858;
+  --color-danger-subtle: rgba(185, 88, 88, 0.12);
+  --color-danger-text: #a63e3e;
+  --color-progress-track: rgba(48, 44, 39, 0.1);
+  --color-disabled-bg: #efe8dd;
+  --color-disabled-text: #938a7d;
+  --color-neutral-subtle: rgba(70, 55, 40, 0.06);
+  --color-backdrop: rgba(45, 37, 27, 0.46);
   --color-category-sky: #4f758b;
   --color-category-teal: #4f786f;
   --color-category-sand: #7b633c;
   --color-category-rose: #80566a;
   --color-category-slate: #626e76;
-  --theme-ambient-brand: #7a5d40;
+  --theme-ambient-brand: #76583e;
   --theme-ambient-warm: #946a3d;
   --theme-ambient-cool: #5e7e83;
-  --theme-ambient-focus: #7a667f;
-  --theme-ambient-organic: #63795d;
+  --theme-ambient-focus: #777c58;
+  --theme-ambient-organic: #687454;
   --theme-ambient-material: #8a6747;
-  --theme-ambient-soft: #a79882;
-  --theme-ambient-wash-opacity: 0.28;
-  --color-backdrop: rgba(45, 37, 27, 0.46);
-  --shadow-floating: 0 12px 30px rgba(69, 53, 34, 0.16);
-  --shadow-modal: 0 18px 50px rgba(69, 53, 34, 0.22);
-  --shadow-sm: 0 1px 2px rgba(69, 53, 34, 0.12);
-  --shadow-md: 0 4px 12px rgba(69, 53, 34, 0.14);
+  --theme-ambient-soft: #9a927f;
+  --theme-ambient-wash-opacity: 0.2;
+  --theme-motif-opacity: 0.05;
+  --theme-paper-opacity: 0.52;
+  --theme-stone-opacity: 0.32;
+  --theme-material-fiber: rgba(104, 92, 67, 0.12);
+  --theme-material-vein: rgba(112, 121, 76, 0.2);
+  --theme-instrument-glint-opacity: 0;
+  --shadow-floating: 0 12px 30px rgba(69, 53, 34, 0.14);
+  --shadow-modal: 0 18px 50px rgba(69, 53, 34, 0.2);
+  --shadow-sm: 0 1px 2px rgba(69, 53, 34, 0.1);
+  --shadow-md: 0 4px 12px rgba(69, 53, 34, 0.12);
 }
 
-:root[data-theme="burgundy-soft-ivory"] {
+:root[data-theme="rootine-burgundy"] {
   color-scheme: dark;
 
-  --color-precision-blue: #a24d5d;
-  --color-precision-blue-text: #dda0aa;
-  --color-precision-blue-strong: #8f3e4d;
-  --color-precision-blue-hover: #7e3442;
-  --color-precision-blue-soft: rgba(162, 77, 93, 0.15);
-  --color-graphite-shell: #151413;
-  --color-graphite-sidebar: #181716;
-  --color-graphite-input: #201e1c;
-  --color-graphite-canvas: #211f1d;
-  --color-graphite-panel: #292623;
-  --color-graphite-card: #302c29;
-  --color-graphite-hover: #393430;
-  --color-border-subtle: #3d3834;
-  --color-border-strong: #504841;
-  --color-chalk-white: #f4eee5;
-  --color-text-secondary: #b9b0a7;
-  --color-text-muted: #a69d94;
-  --color-text-disabled: #8b837c;
-  --color-success-seaglass: #7db096;
-  --color-success-soft: rgba(125, 176, 150, 0.11);
-  --color-warning-ochre: #d2a169;
-  --color-warning-soft: rgba(210, 161, 105, 0.11);
-  --color-danger-coral: #e08488;
-  --color-danger-soft: rgba(224, 132, 136, 0.11);
-  --color-accent-violet: #a28fd0;
-  --color-violet-soft: rgba(162, 143, 208, 0.12);
+  --color-app-bg: #141313;
+  --color-sidebar-bg: #101010;
+  --color-surface-1: #242120;
+  --color-surface-2: #2a2624;
+  --color-surface-hover: #302b29;
+  --color-border: rgba(255, 235, 235, 0.08);
+  --color-border-strong: rgba(255, 235, 235, 0.16);
+  --color-text-primary: #f3f0ef;
+  --color-text-secondary: #b8aeab;
+  --color-text-tertiary: #a39a97;
+  --color-primary: #a84f64;
+  --color-primary-hover: #bd6175;
+  --color-primary-subtle: rgba(168, 79, 100, 0.14);
+  --color-primary-text: #d98a9b;
+  --color-on-primary: #fff7f7;
+  --color-warning: #d39a4a;
+  --color-warning-subtle: rgba(211, 154, 74, 0.12);
+  --color-warning-text: #d39a4a;
+  --color-success: #6ea57c;
+  --color-success-subtle: rgba(110, 165, 124, 0.12);
+  --color-success-text: #7db88b;
+  --color-danger: #d46b6b;
+  --color-danger-subtle: rgba(212, 107, 107, 0.12);
+  --color-danger-text: #e17c7c;
+  --color-progress-track: rgba(243, 240, 239, 0.1);
+  --color-disabled-bg: #242120;
+  --color-disabled-text: #8e8582;
+  --color-neutral-subtle: rgba(184, 174, 171, 0.07);
+  --color-backdrop: rgba(10, 4, 5, 0.74);
   --color-category-sky: #819eb2;
   --color-category-teal: #78a095;
   --color-category-sand: #b89869;
   --color-category-rose: #c18498;
   --color-category-slate: #948d91;
-  --theme-ambient-brand: #a24d5d;
-  --theme-ambient-warm: #b48b65;
-  --theme-ambient-cool: #8796a0;
-  --theme-ambient-focus: #b36b78;
+  --theme-ambient-brand: #a84f64;
+  --theme-ambient-warm: #ae8a69;
+  --theme-ambient-cool: #82949e;
+  --theme-ambient-focus: #a87480;
   --theme-ambient-organic: #7f9483;
-  --theme-ambient-material: #9a8b7d;
-  --theme-ambient-soft: #d1c2b2;
-  --theme-ambient-wash-opacity: 0.32;
-  --color-backdrop: rgba(11, 4, 6, 0.74);
-  --shadow-floating: 0 12px 30px rgba(10, 3, 5, 0.52);
-  --shadow-modal: 0 18px 50px rgba(10, 3, 5, 0.6);
+  --theme-ambient-material: #91867d;
+  --theme-ambient-soft: #b7aaa2;
+  --theme-ambient-wash-opacity: 0.18;
+  --theme-motif-opacity: 0.04;
+  --theme-paper-opacity: 0;
+  --theme-stone-opacity: 0.08;
+  --theme-material-fiber: rgba(196, 164, 167, 0.1);
+  --theme-material-vein: rgba(168, 79, 100, 0.16);
+  --theme-instrument-glint-opacity: 0.12;
+  --shadow-floating: 0 12px 30px rgba(10, 3, 5, 0.48);
+  --shadow-modal: 0 18px 50px rgba(10, 3, 5, 0.56);
+}
+
+:root[data-theme="rootine-cobalt"] {
+  color-scheme: dark;
+
+  --color-app-bg: #101214;
+  --color-sidebar-bg: #0b0d0f;
+  --color-surface-1: #1a1d21;
+  --color-surface-2: #20242a;
+  --color-surface-hover: #282d35;
+  --color-border: rgba(222, 229, 244, 0.08);
+  --color-border-strong: rgba(222, 229, 244, 0.16);
+  --color-text-primary: #f2f3f5;
+  --color-text-secondary: #aeb3bb;
+  --color-text-tertiary: #818791;
+  --color-primary: #657fce;
+  --color-primary-hover: #7891da;
+  --color-primary-subtle: rgba(101, 127, 206, 0.12);
+  --color-primary-text: #8ca1e0;
+  --color-on-primary: #0b1020;
+  --color-warning: #d2a04d;
+  --color-warning-subtle: rgba(210, 160, 77, 0.12);
+  --color-warning-text: #d2a04d;
+  --color-success: #69a77a;
+  --color-success-subtle: rgba(105, 167, 122, 0.12);
+  --color-success-text: #78b789;
+  --color-danger: #d36a6a;
+  --color-danger-subtle: rgba(211, 106, 106, 0.12);
+  --color-danger-text: #df7c7c;
+  --color-progress-track: rgba(242, 243, 245, 0.1);
+  --color-disabled-bg: #1a1d21;
+  --color-disabled-text: #818791;
+  --color-neutral-subtle: rgba(174, 179, 187, 0.07);
+  --color-backdrop: rgba(2, 3, 6, 0.72);
+  --theme-ambient-brand: #657fce;
+  --theme-ambient-warm: #b49b72;
+  --theme-ambient-cool: #7189b8;
+  --theme-ambient-focus: #7d7fa8;
+  --theme-ambient-organic: #789b8c;
+  --theme-ambient-material: #898985;
+  --theme-ambient-soft: #a6acae;
+  --theme-ambient-wash-opacity: 0.2;
+  --theme-motif-opacity: 0.045;
+  --theme-paper-opacity: 0;
+  --theme-stone-opacity: 0;
+  --theme-material-fiber: rgba(164, 177, 207, 0.12);
+  --theme-material-vein: rgba(101, 127, 206, 0.2);
+  --theme-instrument-glint-opacity: 0.46;
+}
+
+:root[data-theme="rootine-graphite-sea-glass"] {
+  color-scheme: dark;
+
+  --color-app-bg: #121515;
+  --color-sidebar-bg: #0d1010;
+  --color-surface-1: #1c2020;
+  --color-surface-2: #222727;
+  --color-surface-hover: #2a3030;
+  --color-border: rgba(210, 225, 224, 0.08);
+  --color-border-strong: rgba(210, 225, 224, 0.16);
+  --color-text-primary: #f1f3f2;
+  --color-text-secondary: #acb4b2;
+  --color-text-tertiary: #818a88;
+  --color-primary: #709a9c;
+  --color-primary-hover: #82abad;
+  --color-primary-subtle: rgba(112, 154, 156, 0.11);
+  --color-primary-text: #8db5b7;
+  --color-on-primary: #0b1111;
+  --color-progress-track: rgba(241, 243, 242, 0.1);
+  --color-disabled-bg: #1c2020;
+  --color-disabled-text: #818a88;
+  --color-neutral-subtle: rgba(172, 180, 178, 0.07);
+  --color-backdrop: rgba(2, 6, 6, 0.72);
+  --theme-ambient-brand: #709a9c;
+  --theme-ambient-warm: #aa9876;
+  --theme-ambient-cool: #789396;
+  --theme-ambient-focus: #7b8994;
+  --theme-ambient-organic: #768d7f;
+  --theme-ambient-material: #888984;
+  --theme-ambient-soft: #a2aaa7;
+  --theme-ambient-wash-opacity: 0.17;
+  --theme-motif-opacity: 0.045;
+  --theme-paper-opacity: 0;
+  --theme-stone-opacity: 0.06;
+  --theme-material-fiber: rgba(154, 177, 174, 0.1);
+  --theme-material-vein: rgba(112, 154, 156, 0.16);
+  --theme-instrument-glint-opacity: 0.16;
+}
+
+:root[data-theme="rootine-mineral-noir"] {
+  color-scheme: dark;
+
+  --color-app-bg: #101112;
+  --color-sidebar-bg: #090a0b;
+  --color-surface-1: #1b1c1e;
+  --color-surface-2: #222326;
+  --color-surface-hover: #292b2e;
+  --color-border: rgba(232, 234, 238, 0.08);
+  --color-border-strong: rgba(232, 234, 238, 0.16);
+  --color-text-primary: #f1f2f4;
+  --color-text-secondary: #aeb0b5;
+  --color-text-tertiary: #85878c;
+  --color-primary: #5f79c7;
+  --color-primary-hover: #748bd2;
+  --color-primary-subtle: rgba(95, 121, 199, 0.12);
+  --color-primary-text: #8ea2dc;
+  --color-on-primary: #0b1020;
+  --color-progress-track: rgba(241, 242, 244, 0.1);
+  --color-disabled-bg: #1b1c1e;
+  --color-disabled-text: #85878c;
+  --color-neutral-subtle: rgba(174, 176, 181, 0.07);
+  --color-backdrop: rgba(0, 0, 1, 0.76);
+  --theme-ambient-brand: #5f79c7;
+  --theme-ambient-warm: #a99577;
+  --theme-ambient-cool: #74849f;
+  --theme-ambient-focus: #777d9e;
+  --theme-ambient-organic: #748b7c;
+  --theme-ambient-material: #8b8988;
+  --theme-ambient-soft: #a5a7aa;
+  --theme-ambient-wash-opacity: 0.16;
+  --theme-motif-opacity: 0.045;
+  --theme-paper-opacity: 0;
+  --theme-stone-opacity: 0.54;
+  --theme-material-fiber: rgba(176, 181, 193, 0.1);
+  --theme-material-vein: rgba(95, 121, 199, 0.22);
+  --theme-instrument-glint-opacity: 0.18;
+}
+
+:root[data-theme="rootine-olive"] {
+  color-scheme: dark;
+
+  --color-app-bg: #131412;
+  --color-sidebar-bg: #0e0f0d;
+  --color-surface-1: #1f211e;
+  --color-surface-2: #262825;
+  --color-surface-hover: #2d302c;
+  --color-border: rgba(225, 235, 195, 0.08);
+  --color-border-strong: rgba(225, 235, 195, 0.16);
+  --color-text-primary: #f1f2ec;
+  --color-text-secondary: #adb1a2;
+  --color-text-tertiary: #858a7a;
+  --color-primary: #8d986b;
+  --color-primary-hover: #a0aa7e;
+  --color-primary-subtle: rgba(141, 152, 107, 0.12);
+  --color-primary-text: #aab58a;
+  --color-on-primary: #11140c;
+  --color-warning: #d39545;
+  --color-warning-subtle: rgba(211, 149, 69, 0.12);
+  --color-warning-text: #d39545;
+  --color-success: #58a39a;
+  --color-success-subtle: rgba(88, 163, 154, 0.12);
+  --color-success-text: #69b6ad;
+  --color-danger: #d16b67;
+  --color-danger-subtle: rgba(209, 107, 103, 0.12);
+  --color-danger-text: #dc7d78;
+  --color-progress-track: rgba(241, 242, 236, 0.1);
+  --color-disabled-bg: #1f211e;
+  --color-disabled-text: #858a7a;
+  --color-neutral-subtle: rgba(173, 177, 162, 0.07);
+  --color-backdrop: rgba(5, 7, 3, 0.72);
+  --color-category-sky: #83a5b2;
+  --color-category-teal: #79a797;
+  --color-category-sand: #bd9c66;
+  --color-category-rose: #b98e9a;
+  --color-category-slate: #92988d;
+  --theme-ambient-brand: #8d986b;
+  --theme-ambient-warm: #b59668;
+  --theme-ambient-cool: #7f9890;
+  --theme-ambient-focus: #9a8c73;
+  --theme-ambient-organic: #849071;
+  --theme-ambient-material: #928574;
+  --theme-ambient-soft: #afb19c;
+  --theme-ambient-wash-opacity: 0.15;
+  --theme-motif-opacity: 0.045;
+  --theme-paper-opacity: 0;
+  --theme-stone-opacity: 0.08;
+  --theme-material-fiber: rgba(184, 190, 156, 0.1);
+  --theme-material-vein: rgba(141, 152, 107, 0.16);
+  --theme-instrument-glint-opacity: 0.12;
+  --shadow-floating: 0 12px 30px rgba(7, 8, 4, 0.46);
+  --shadow-modal: 0 18px 50px rgba(7, 8, 4, 0.54);
 }
 /* stylelint-enable projectwallace/max-unique-colors */
+
+/*
+ * Compatibility aliases for modules that still use the original visual names.
+ * They resolve to semantic roles, so status colors never inherit a theme primary.
+ */
+:root {
+  --color-precision-blue: var(--color-primary);
+  --color-precision-blue-text: var(--color-primary-text);
+  --color-precision-blue-strong: var(--color-primary);
+  --color-precision-blue-hover: var(--color-primary-hover);
+  --color-precision-blue-soft: var(--color-primary-subtle);
+  --color-graphite-shell: var(--color-app-bg);
+  --color-graphite-sidebar: var(--color-sidebar-bg);
+  --color-graphite-input: var(--color-surface-1);
+  --color-graphite-canvas: var(--color-app-bg);
+  --color-graphite-panel: var(--color-surface-1);
+  --color-graphite-card: var(--color-surface-2);
+  --color-graphite-hover: var(--color-surface-hover);
+  --color-border-subtle: var(--color-border);
+  --color-chalk-white: var(--color-text-primary);
+  --color-text-muted: var(--color-text-tertiary);
+  --color-text-disabled: var(--color-disabled-text);
+  --color-success-seaglass: var(--color-success-text);
+  --color-success-soft: var(--color-success-subtle);
+  --color-warning-ochre: var(--color-warning-text);
+  --color-warning-soft: var(--color-warning-subtle);
+  --color-danger-coral: var(--color-danger-text);
+  --color-danger-soft: var(--color-danger-subtle);
+  --color-accent-violet: var(--theme-ambient-focus);
+  --color-violet-soft: var(--color-primary-subtle);
+}
 
 /*
  * Vertical rhythm, control sizing and layout constants.
@@ -338,21 +455,21 @@
  * Anything outside these scales is a bug, not a design decision.
  */
 :root {
-  --leading-tight: 1.2;    /* headings, numerals, single-line labels */
-  --leading-snug: 1.35;    /* card titles, list rows */
-  --leading-normal: 1.5;   /* body copy, descriptions */
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
 
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
 
-  --tracking-label: 0.16em;  /* UPPERCASE SECTION LABELS */
-  --tracking-tight: -0.02em; /* headings >= 20px */
+  --tracking-label: 0.16em;
+  --tracking-tight: -0.02em;
   --tracking-normal: 0;
 
-  --text-section: 15px;      /* h2 / SectionHeader — must stay below --text-title */
+  --text-section: 15px;
 
-  /* A control whose height is not one of these four is a bug. */
   --control-height-xs: 24px;
   --control-height-sm: 28px;
   --control-height-md: 40px;
@@ -361,21 +478,9 @@
   --row-height-compact: 36px;
   --row-height-default: 44px;
   --row-height-comfortable: 56px;
-
-  /* Width of the "when" column in ListRow. Sized for the longest label it carries: "Wczoraj". */
   --list-rail-width: 64px;
-
   --rail-width: 320px;
 
-  /*
-   * The only four breakpoints. Media queries must use these pixel values verbatim —
-   * custom properties are not allowed inside media query conditions.
-   *   1380px  detail panel  -> drawer
-   *   1180px  context sidebar -> collapsed
-   *    980px  multi-column  -> single column
-   *    760px  mobile
-   * Kept as tokens so JS (Layout.tsx, Shell.tsx) reads the same source of truth.
-   */
   --bp-detail: 1380px;
   --bp-context: 1180px;
   --bp-columns: 980px;

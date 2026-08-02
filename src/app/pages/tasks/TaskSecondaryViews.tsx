@@ -152,17 +152,34 @@ export function HabitsWorkspace({
   onToggleHabit,
   onSelectHabit,
   onAddHabit,
+  quickCaptureTitle,
+  quickCaptureRevision = 0,
 }: {
   habits: Habit[];
   onToggleHabit: (id: number) => void;
   onSelectHabit: (id: number) => void;
   onAddHabit: (name: string, draft: HabitMetaDraft) => void;
+  quickCaptureTitle?: string;
+  quickCaptureRevision?: number;
 }) {
   const [newHabit, setNewHabit] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [completingHabitId, setCompletingHabitId] = useState<number | null>(null);
+  const completionTimerRef = useRef<number | null>(null);
   const todayKey = toCalendarDateKey(new Date());
   const [draft, setDraft] = useState<HabitMetaDraft>({
     schedule: { type: "daily", startDate: todayKey },
   });
+
+  useEffect(() => {
+    if (quickCaptureRevision <= 0) return;
+    setNewHabit(quickCaptureTitle ?? "");
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  }, [quickCaptureRevision, quickCaptureTitle]);
+
+  useEffect(() => () => {
+    if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+  }, []);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -177,6 +194,7 @@ export function HabitsWorkspace({
       <form className="task-habits-add task-entry" aria-label="Dodaj nawyk" onSubmit={submit}>
         <span className="task-entry__lead" aria-hidden="true"><Plus size={14} /></span>
         <input
+          ref={inputRef}
           className="task-entry-input task-habits-add__name"
           value={newHabit}
           onChange={(event) => setNewHabit(event.target.value)}
@@ -205,21 +223,33 @@ export function HabitsWorkspace({
             return (
               <ListRow
                 key={habit.id}
-                className="task-row"
+                className={`task-row${completingHabitId === habit.id ? " is-completion-ritual" : ""}`}
                 density="compact"
                 divided={false}
                 completed={doneToday}
                 leading={(
                   <button
                     type="button"
-                    disabled={!scheduledToday}
+                    disabled={!scheduledToday || completingHabitId === habit.id}
                     aria-label={doneToday
                       ? `Oznacz nawyk jako niewykonany: ${habit.name}`
                       : scheduledToday ? `Ukończ nawyk: ${habit.name}` : `Nawyk nie jest zaplanowany na dziś: ${habit.name}`}
-                    onClick={(event) => { event.stopPropagation(); onToggleHabit(habit.id); }}
-                    className={`task-checkbox ${doneToday ? "is-checked" : ""}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (doneToday) {
+                        onToggleHabit(habit.id);
+                        return;
+                      }
+                      setCompletingHabitId(habit.id);
+                      completionTimerRef.current = window.setTimeout(() => {
+                        onToggleHabit(habit.id);
+                        setCompletingHabitId(null);
+                        completionTimerRef.current = null;
+                      }, 260);
+                    }}
+                    className={`task-checkbox ${doneToday || completingHabitId === habit.id ? "is-checked" : ""}`}
                   >
-                    {doneToday && <Check size={8} strokeWidth={2.5} />}
+                    {(doneToday || completingHabitId === habit.id) && <Check size={8} strokeWidth={2.5} />}
                   </button>
                 )}
                 title={habit.name}

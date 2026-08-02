@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { NutritionDay, NutritionGoals, WeightMeasurement } from "../data/nutritionWorkspace";
+import { SensitiveValue, usePrivacy } from "../experience/preferences";
 
 export type NutritionAnalysisRange = 7 | 14 | 30 | 90 | "custom";
 
@@ -100,6 +101,7 @@ export function NutritionAnalysis({
   range,
   onRangeChange,
 }: NutritionAnalysisProps) {
+  const { enabled: privacyMode } = usePrivacy();
   const rangeName = useId();
   const [chartMode, setChartMode] = useState<ChartMode>("weight");
   const [customStartDate, setCustomStartDate] = useState(() => shiftDateKey(endDate, -29));
@@ -189,7 +191,11 @@ export function NutritionAnalysis({
           ) : <strong>—</strong>}
           <small>na dzień z wpisem</small>
         </div>
-        <div className="nutrition-analysis__kpi is-weight"><span>Średnia masa</span><strong>{weightPoints.length ? `${formatNumber(averageWeight)} kg` : "—"}</strong><small>{weightChange === null ? "Potrzebne 2 pomiary" : `Zmiana ${signed(weightChange, "kg")}`}</small></div>
+        <div className="nutrition-analysis__kpi is-weight">
+          <span>Średnia masa</span>
+          <strong><SensitiveValue label="Średnia masa">{weightPoints.length ? `${formatNumber(averageWeight)} kg` : "—"}</SensitiveValue></strong>
+          <small>{privacyMode ? "Dane ukryte w Privacy Mode" : weightChange === null ? "Potrzebne 2 pomiary" : `Zmiana ${signed(weightChange, "kg")}`}</small>
+        </div>
         <div className="nutrition-analysis__kpi is-water"><span>Średnie nawodnienie</span><strong>{waterPoints.length ? `${formatNumber(averageWater, 0)} ml` : "—"}</strong><small>{waterPoints.length ? `z ${waterPoints.length} zapisanych dni` : "Brak wpisów wody"}</small></div>
       </div>
 
@@ -204,7 +210,9 @@ export function NutritionAnalysis({
             <button type="button" className={chartMode === "calories" ? "is-active" : ""} onClick={() => setChartMode("calories")}>Kalorie</button>
           </div>
         </div>
-        {hasChartData ? (
+        {privacyMode && chartMode === "weight" ? (
+          <div className="nutrition-analysis__empty" role="status">Wartości masy ciała są ukryte w Privacy Mode.</div>
+        ) : hasChartData ? (
           <svg className="nutrition-analysis__chart" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label={chartMode === "weight" ? "Wykres masy ciała" : "Wykres kalorii z celem"}>
             <line className="nutrition-analysis__axis" x1={CHART.left} y1={CHART.bottom} x2={CHART.width - CHART.right} y2={CHART.bottom} />
             {chartMode === "weight" ? (

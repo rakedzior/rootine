@@ -333,6 +333,20 @@ export function createWorkId(prefix: "company" | "project" | "task"): string {
   return `${prefix}-${suffix}`;
 }
 
+export function setWorkTasksCompletionState(
+  workspace: WorkWorkspace,
+  taskIds: readonly string[],
+  completed: boolean,
+): WorkWorkspace {
+  const ids = new Set(taskIds);
+  return {
+    ...workspace,
+    tasks: workspace.tasks.map((task) => ids.has(task.id)
+      ? { ...task, completed }
+      : task),
+  };
+}
+
 export function loadWorkWorkspaceResult(): LocalLoadResult<WorkWorkspace> {
   const result = readLocalWorkspace({
     key: WORK_STORAGE_KEY,

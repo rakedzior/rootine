@@ -10,10 +10,11 @@ describe("app theme", () => {
   beforeEach(() => {
     window.localStorage.clear();
     delete document.documentElement.dataset.theme;
+    delete document.documentElement.dataset.themePreference;
     document.documentElement.style.colorScheme = "";
   });
 
-  it("uses the onyx palette when no valid preference exists", () => {
+  it("uses Midnight Instrument when no valid preference exists", () => {
     expect(loadAppTheme()).toBe(DEFAULT_APP_THEME_ID);
 
     window.localStorage.setItem(APP_THEME_STORAGE_KEY, "unknown-theme");
@@ -21,11 +22,27 @@ describe("app theme", () => {
   });
 
   it("applies and persists a selected theme", () => {
-    applyAppTheme("putty-natural-oak-calacatta");
+    applyAppTheme("rootine-warm-linen");
 
-    expect(document.documentElement.dataset.theme).toBe("putty-natural-oak-calacatta");
+    expect(document.documentElement.dataset.theme).toBe("rootine-warm-linen");
+    expect(document.documentElement.dataset.themePreference).toBe("rootine-warm-linen");
     expect(document.documentElement.style.colorScheme).toBe("light");
-    expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe("putty-natural-oak-calacatta");
-    expect(loadAppTheme()).toBe("putty-natural-oak-calacatta");
+    expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe("rootine-warm-linen");
+    expect(loadAppTheme()).toBe("rootine-warm-linen");
+  });
+
+  it("migrates legacy material theme ids", () => {
+    window.localStorage.setItem(APP_THEME_STORAGE_KEY, "deep-teal-smoked-oak-pearl");
+
+    expect(loadAppTheme()).toBe("rootine-graphite-sea-glass");
+    expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe("rootine-graphite-sea-glass");
+  });
+
+  it("supports a system preference without making it the product default", () => {
+    applyAppTheme("system");
+
+    expect(document.documentElement.dataset.theme).toBe("rootine-cobalt");
+    expect(document.documentElement.dataset.themePreference).toBe("system");
+    expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe("system");
   });
 });

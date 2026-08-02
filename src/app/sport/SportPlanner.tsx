@@ -1121,6 +1121,7 @@ export function WorkoutDialog({
   initialWeek,
   initialDay,
   initialTemplateId,
+  initialTitle,
   editScope = "single",
   seriesCount = 1,
   onClose,
@@ -1133,6 +1134,7 @@ export function WorkoutDialog({
   initialWeek: number;
   initialDay: number;
   initialTemplateId?: string;
+  initialTitle?: string;
   editScope?: "single" | "series";
   seriesCount?: number;
   onClose: () => void;
@@ -1145,11 +1147,11 @@ export function WorkoutDialog({
       ? templates.find((template) => template.id === initialTemplateId)
       : undefined;
   const [mode, setMode] = useState<"template" | "manual">(
-    workout ? (initialTemplate ? "template" : "manual") : templates.length ? "template" : "manual",
+    workout ? (initialTemplate ? "template" : "manual") : initialTitle ? "manual" : templates.length ? "template" : "manual",
   );
   const [templateId, setTemplateId] = useState(initialTemplate?.id ?? templates[0]?.id ?? "");
   const firstTemplate = initialTemplate ?? templates[0];
-  const [title, setTitle] = useState(workout?.title ?? firstTemplate?.name ?? "");
+  const [title, setTitle] = useState(workout?.title ?? initialTitle ?? firstTemplate?.name ?? "");
   const [discipline, setDiscipline] = useState<Discipline>(workout?.discipline ?? firstTemplate?.discipline ?? "strength");
   const [duration, setDuration] = useState(String(workout?.durationMinutes ?? firstTemplate?.durationMinutes ?? 45));
   const [week, setWeek] = useState(String(workout?.week ?? initialWeek));

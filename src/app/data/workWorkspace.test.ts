@@ -4,6 +4,7 @@ import { setWorkspacePayloadStoreForTests } from "./localRepository";
 import {
   loadWorkWorkspaceResult,
   saveWorkWorkspace,
+  setWorkTasksCompletionState,
   WORK_STORAGE_KEY,
 } from "./workWorkspace";
 
@@ -49,5 +50,21 @@ describe("work workspace", () => {
     expect(result.workspace.tasks[0]).not.toHaveProperty("linkedTask");
     expect(saveWorkWorkspace(result.workspace)).toBe(true);
     expect(JSON.parse(window.localStorage.getItem(WORK_STORAGE_KEY) ?? "{}").version).toBe(2);
+  });
+
+  it("shares one immutable completion mutation for single and cascaded work tasks", () => {
+    const loaded = loadWorkWorkspaceResult().workspace;
+    const workspace = {
+      ...loaded,
+      tasks: loaded.tasks.map((task) => ({ ...task, completed: false })),
+    };
+    const ids = workspace.tasks.slice(0, 2).map((task) => task.id);
+    const untouched = workspace.tasks.find((task) => !ids.includes(task.id));
+
+    const next = setWorkTasksCompletionState(workspace, ids, true);
+
+    expect(next.tasks.filter((task) => ids.includes(task.id)).every((task) => task.completed)).toBe(true);
+    if (untouched) expect(next.tasks.find((task) => task.id === untouched.id)).toBe(untouched);
+    expect(workspace.tasks.filter((task) => ids.includes(task.id)).some((task) => !task.completed)).toBe(true);
   });
 });

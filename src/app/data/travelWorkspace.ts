@@ -579,6 +579,23 @@ export function summarizeTravelBudget(trip: TravelTrip): TravelBudgetSummary {
   };
 }
 
+export function setTravelTaskCompletionState(
+  workspace: TravelWorkspace,
+  tripId: string,
+  taskId: string,
+  completed: boolean,
+): TravelWorkspace {
+  return {
+    ...workspace,
+    trips: workspace.trips.map((trip) => trip.id !== tripId ? trip : {
+      ...trip,
+      tasks: trip.tasks.map((task) => task.id === taskId
+        ? { ...task, completed }
+        : task),
+    }),
+  };
+}
+
 export function loadTravelWorkspaceResult(): LocalLoadResult<TravelWorkspace> {
   return readLocalWorkspace({
     key: TRAVEL_STORAGE_KEY,

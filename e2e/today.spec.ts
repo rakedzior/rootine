@@ -14,8 +14,9 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       "Praca",
       "Cele",
       "Sprawy",
+      "Notatki",
     ]);
-    await expect(page.getByText("4 aktywne obszary", { exact: true })).toBeVisible();
+    await expect(page.getByText("6 obszarów wymaga uwagi", { exact: true })).toBeVisible();
     await expect(page.getByText("Część danych przykładowa", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Do wykonania", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Plan dnia", { exact: true })).toBeVisible();
@@ -23,7 +24,91 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     await expect(page.locator(".today-module-row__overdue").first()).toBeVisible();
   });
 
-  test("renders a completed module against the canvas without hiding its state", async ({
+  test("keeps one contextual area ring without redundant progress rings", async ({
+    rootinePage: page,
+  }) => {
+    await openRootineRoute(page, "/dzisiaj");
+
+    const livingDay = page.locator(".living-day--foreground");
+    const areaSegments = livingDay.locator(".living-day__area");
+    const moduleCount = await page.locator(".today-module-row").count();
+
+    await expect(livingDay).toBeVisible();
+    await expect(livingDay.locator(".living-day__outer-track")).toHaveCount(0);
+    await expect(livingDay.locator(".living-day__plan-track")).toHaveCount(0);
+    await expect(areaSegments).toHaveCount(moduleCount);
+    await expect(livingDay.locator(".living-day__context")).toHaveText("Wszystkie obszary");
+
+    const taskArea = livingDay.locator('.living-day__area[data-area="tasks"]');
+    const taskLabel = await taskArea.getAttribute("aria-label");
+    const taskBreakdown = taskLabel?.match(
+      /na dziś: (\d+) · zaległe: (\d+) · wykonane: (\d+) z (\d+)/,
+    );
+    expect(taskBreakdown).not.toBeNull();
+    const [, remainingToday, overdue, completedToday, plannedToday] = taskBreakdown!;
+
+    if (page.viewportSize()!.width > 760) {
+      await taskArea.locator(".living-day__area-signal").hover();
+    } else {
+      await taskArea.focus();
+    }
+    await expect(livingDay.locator(".living-day__context")).toHaveText("Zadania");
+    await expect(taskArea).toHaveAttribute("data-expanded", "true");
+    const expandedTaskLength = await taskArea.locator(".living-day__area-track").evaluate(
+      (element) => (element as SVGGeometryElement).getTotalLength(),
+    );
+    expect(Math.abs(expandedTaskLength - 2 * Math.PI * 116)).toBeLessThan(1);
+    await expect(taskArea.locator(".living-day__area-track")).toHaveJSProperty(
+      "tagName",
+      "circle",
+    );
+    await expect(livingDay.locator('.living-day__area[data-area="habits"]')).toHaveCSS(
+      "opacity",
+      "0",
+    );
+    await expect(livingDay.locator('.living-day__area[data-area="habits"]')).toHaveCSS(
+      "pointer-events",
+      "none",
+    );
+    await expect(livingDay.locator(".living-day__metric-value")).toHaveText([
+      remainingToday,
+      overdue,
+    ]);
+    await expect(livingDay.locator(".living-day__metric-label")).toHaveText([
+      "na dziś",
+      "zaległe",
+    ]);
+    await expect(livingDay.locator(".living-day__detail")).toHaveText(
+      Number(plannedToday) > 0
+        ? `${completedToday} z ${plannedToday} wykonane`
+        : "brak planu na dziś",
+    );
+    await expect(taskArea.locator(".living-day__area-slice--done")).toHaveCount(
+      Number(completedToday) > 0 ? 1 : 0,
+    );
+    await expect(taskArea.locator(".living-day__area-slice--today")).toHaveCount(
+      Number(remainingToday) > 0 ? 1 : 0,
+    );
+    await expect(taskArea.locator(".living-day__area-slice--overdue")).toHaveCount(
+      Number(overdue) > 0 ? 1 : 0,
+    );
+
+    await livingDay.locator('.living-day__area[data-area="habits"]').focus();
+    await expect(livingDay.locator(".living-day__context")).toHaveText("Nawyki");
+    await expect(livingDay.locator('.living-day__area[data-area="habits"]')).toHaveAttribute(
+      "data-expanded",
+      "true",
+    );
+
+    await expect(page.locator(".today-day-balance__overdue-summary")).toHaveText(/^w tym \d+ zaległych$/);
+    await expect(page.locator(".today-day-balance__attention-eyebrow")).toHaveText("Zaległości");
+
+    await page.locator(".today-day-balance__attention-action").click();
+    await expect(page.locator('.today-module-row[data-area-id="tasks"]')).toBeFocused();
+    await expect(livingDay.locator(".living-day__context")).toHaveText("Zadania");
+  });
+
+  test("renders a completed module on a subdued surface without hiding its state", async ({
     rootinePage: page,
   }) => {
     await openRootineRoute(page, "/dzisiaj");
@@ -31,23 +116,27 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     const colors = await page.locator(".today-module-row").first().evaluate((row) => {
       row.style.transition = "none";
       row.classList.add("is-complete");
-      const root = getComputedStyle(document.documentElement);
+      const tokenProbe = document.createElement("span");
+      tokenProbe.style.backgroundColor = "var(--color-surface-1)";
+      tokenProbe.style.color = "var(--color-text-tertiary)";
+      document.body.append(tokenProbe);
       const rowStyle = getComputedStyle(row);
       const titleStyle = getComputedStyle(
         row.querySelector(".today-module-row__identity > strong")!,
       );
-      return {
+      const tokenStyle = getComputedStyle(tokenProbe);
+      const result = {
         background: rowStyle.backgroundColor,
-        canvas: root.getPropertyValue("--color-graphite-canvas").trim(),
+        surface: tokenStyle.backgroundColor,
         title: titleStyle.color,
-        muted: root.getPropertyValue("--color-text-muted").trim(),
+        tertiary: tokenStyle.color,
       };
+      tokenProbe.remove();
+      return result;
     });
 
-    expect(colors.background).toBe("rgb(36, 36, 36)");
-    expect(colors.canvas).toBe("#242424");
-    expect(colors.title).toBe("rgb(150, 150, 150)");
-    expect(colors.muted).toBe("#969696");
+    expect(colors.background).toBe(colors.surface);
+    expect(colors.title).toBe(colors.tertiary);
   });
 
   test("dims modules with nothing planned for today", async ({
@@ -58,30 +147,48 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     const emptyRows = page.locator(".today-module-row.is-empty");
     await expect(emptyRows).toHaveCount(2);
     await expect(emptyRows.locator(".today-module-row__identity > strong")).toHaveText([
-      "Sport",
       "Sprawy",
+      "Notatki",
     ]);
 
     for (const row of await emptyRows.all()) {
-      await expect(row.locator(".today-module-row__track")).toHaveAttribute("aria-valuenow", "100");
       const colors = await row.evaluate((element) => {
-        const root = getComputedStyle(document.documentElement);
+        const tokenProbe = document.createElement("span");
+        tokenProbe.style.backgroundColor = "var(--color-surface-1)";
+        tokenProbe.style.color = "var(--color-text-primary)";
+        document.body.append(tokenProbe);
         const rowStyle = getComputedStyle(element);
         const titleStyle = getComputedStyle(
           element.querySelector(".today-module-row__identity > strong")!,
         );
-        return {
+        const tokenStyle = getComputedStyle(tokenProbe);
+        const result = {
           background: rowStyle.backgroundColor,
-          canvas: root.getPropertyValue("--color-graphite-canvas").trim(),
+          surface: tokenStyle.backgroundColor,
           title: titleStyle.color,
-          muted: root.getPropertyValue("--color-text-muted").trim(),
+          primary: tokenStyle.color,
         };
+        tokenProbe.remove();
+        return result;
       });
 
-      expect(colors.background).toBe("rgb(36, 36, 36)");
-      expect(colors.canvas).toBe("#242424");
-      expect(colors.title).toBe("rgb(150, 150, 150)");
-      expect(colors.muted).toBe("#969696");
+      expect(colors.background).toBe(colors.surface);
+      expect(colors.title).toBe(colors.primary);
     }
+  });
+});
+
+test.describe("Today desktop density", { tag: "@desktop" }, () => {
+  test("fits the complete daily register in the desktop viewport", async ({
+    rootinePage: page,
+  }) => {
+    await openRootineRoute(page, "/dzisiaj");
+
+    const dimensions = await page.locator(".today-scroll").evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+
+    expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.clientHeight + 1);
   });
 });

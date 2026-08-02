@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  readLocalWorkspace,
   subscribeToLocalWorkspace,
-  writeLocalWorkspace,
   type LocalLoadStatus,
 } from "../data/localRepository";
 import {
+  GOALS_STORAGE_KEY,
+  loadGoalsWorkspaceResult,
+  saveGoalsWorkspace,
+} from "../../domain/goals/goalsRepository";
+import {
+  appendGoalProgress,
+  patchGoalMilestone,
+} from "../../domain/goals/goalMutations";
+import {
   GOALS_STORE_VERSION,
-  createSeedGoalsWorkspace,
   inspectGoalsImport,
-  isGoalsWorkspace,
   normalizeGoal,
   normalizeGoalAccentColor,
   normalizeGoalCategory,
-  normalizeGoalsWorkspace,
   parseGoalsImport,
   type Goal,
   type GoalCategory,
@@ -26,21 +30,12 @@ import {
   type GoalsStoreValue,
 } from "./goalsContext";
 
-const STORAGE_KEY = "rootine.goals.v1";
+const STORAGE_KEY = GOALS_STORAGE_KEY;
 const nowIso = () => new Date().toISOString();
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-function readGoalsWorkspace() {
-  const loaded = readLocalWorkspace<GoalsWorkspace>({
-    key: STORAGE_KEY,
-    fallback: createSeedGoalsWorkspace,
-    validate: isGoalsWorkspace,
-  });
-  return { ...loaded, workspace: normalizeGoalsWorkspace(loaded.workspace) };
-}
-
 export function GoalsProvider({ children }: { children: ReactNode }) {
-  const initial = useMemo(readGoalsWorkspace, []);
+  const initial = useMemo(loadGoalsWorkspaceResult, []);
   const [goals, setGoals] = useState<Goal[]>(initial.workspace.goals);
   const [categories, setCategories] = useState<GoalCategory[]>(initial.workspace.categories);
   const [storageFailed, setStorageFailed] = useState(false);
@@ -58,7 +53,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
     const previous = lastSerializedRef.current;
     lastSerializedRef.current = serialized;
-    const saved = writeLocalWorkspace(STORAGE_KEY, workspace);
+    const saved = saveGoalsWorkspace(workspace);
     if (!saved) lastSerializedRef.current = previous;
     setStorageFailed(!saved);
     if (saved) setLoadStatus("ok");
@@ -123,7 +118,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => subscribeToLocalWorkspace(STORAGE_KEY, () => {
     if (pendingWorkspaceRef.current) return;
-    const loaded = readGoalsWorkspace();
+    const loaded = loadGoalsWorkspaceResult();
     const serialized = JSON.stringify(loaded.workspace);
     setLoadStatus(loaded.status);
     setRecoveryId(loaded.recoveryId);
@@ -205,14 +200,14 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
       }));
       return duplicateId;
     },
-    addProgress: (goalId, draft) => applyWorkspace((current) => ({
-      ...current,
-      goals: current.goals.map((goal) => goal.id === goalId ? {
-        ...goal,
-        progressEntries: [...goal.progressEntries, { ...draft, id: uid(), createdAt: nowIso() }],
-        updatedAt: nowIso(),
-      } : goal),
-    })),
+    addProgress: (goalId, draft) => applyWorkspace((current) => {
+      const createdAt = nowIso();
+      return appendGoalProgress(current, goalId, {
+        ...draft,
+        id: uid(),
+        createdAt,
+      });
+    }),
     updateProgress: (goalId, progressId, patch) => applyWorkspace((current) => ({
       ...current,
       goals: current.goals.map((goal) => goal.id === goalId ? {
@@ -239,16 +234,9 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         updatedAt: nowIso(),
       } : goal),
     })),
-    updateMilestone: (goalId, milestoneId, patch) => applyWorkspace((current) => ({
-      ...current,
-      goals: current.goals.map((goal) => goal.id === goalId ? {
-        ...goal,
-        milestones: goal.milestones.map((item) => (
-          item.id === milestoneId ? { ...item, ...patch, id: item.id } : item
-        )),
-        updatedAt: nowIso(),
-      } : goal),
-    })),
+    updateMilestone: (goalId, milestoneId, patch) => applyWorkspace((current) => (
+      patchGoalMilestone(current, goalId, milestoneId, patch, nowIso())
+    )),
     deleteMilestone: (goalId, milestoneId) => applyWorkspace((current) => ({
       ...current,
       goals: current.goals.map((goal) => goal.id === goalId ? {
@@ -290,7 +278,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
       const previousSerialized = lastSerializedRef.current;
       const serialized = JSON.stringify(parsed.workspace);
       lastSerializedRef.current = serialized;
-      if (!writeLocalWorkspace(STORAGE_KEY, parsed.workspace)) {
+      if (!saveGoalsWorkspace(parsed.workspace)) {
         lastSerializedRef.current = previousSerialized;
         setStorageFailed(true);
         return { ok: false, error: "Nie udało się zapisać importowanych danych w pamięci przeglądarki." };

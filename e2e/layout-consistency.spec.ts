@@ -57,7 +57,7 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
       expect(viewport).not.toBeNull();
 
       const workspace = page.locator("#primary-workspace");
-      const moduleShell = workspace.locator(":scope > .ui-module-shell");
+      const moduleShell = workspace.locator(":scope > .rootine-route-transition > .ui-module-shell");
       const moduleHeader = moduleShell.locator(":scope > .ui-module-shell__header");
       const headerRow = moduleHeader.locator(".ui-page-header__row");
       const visibleMain = workspace.locator("main:visible");

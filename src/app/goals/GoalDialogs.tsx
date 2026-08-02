@@ -22,14 +22,14 @@ import type {
 } from "./goalsModel";
 
 const C = {
-  input: uiColors.graphiteInput,
-  border: uiColors.borderSubtle,
+  input: uiColors.surface1,
+  border: uiColors.border,
   borderStrong: uiColors.borderStrong,
-  primary: uiColors.chalkWhite,
+  primary: uiColors.textPrimary,
   second: uiColors.textSecondary,
-  muted: uiColors.textMuted,
-  blue: uiColors.precisionBlue,
-  blueText: uiColors.precisionBlueText,
+  muted: uiColors.textTertiary,
+  blue: uiColors.primary,
+  blueText: uiColors.primaryText,
   green: uiColors.success,
   danger: uiColors.danger,
 };
@@ -228,11 +228,13 @@ const ICONS: { value: GoalIconKey; label: string }[] = [
 
 export function GoalFormDialog({
   goal,
+  initialTitle,
   categories,
   onClose,
   onSubmit,
 }: {
   goal?: Goal | null;
+  initialTitle?: string;
   categories: GoalCategory[];
   onClose: () => void;
   onSubmit: (data: GoalEditorData) => void;
@@ -242,7 +244,7 @@ export function GoalFormDialog({
   const uploadId = useId();
   const advancedId = useId();
   const [form, setForm] = useState<GoalEditorData>(() => ({
-    title: goal?.title ?? "",
+    title: goal?.title ?? initialTitle ?? "",
     description: goal?.description ?? "",
     categoryId: goal?.categoryId ?? defaultCategory?.id ?? "personal",
     iconKey: goal?.iconKey ?? "target",
@@ -739,7 +741,7 @@ export function ProgressDialog({
                     style={{
                       color: kind === option.value ? C.blueText : C.second,
                       borderColor: kind === option.value ? C.blue : C.border,
-                      background: kind === option.value ? uiColors.precisionBlueSoft : C.input,
+                      background: kind === option.value ? uiColors.primarySubtle : C.input,
                     }}
                   >
                     {option.label}

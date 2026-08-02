@@ -60,4 +60,13 @@ describe("nutrition workspace persistence", () => {
 
     expect(nutrition.loadNutritionWorkspace().status).toBe("corrupt");
   });
+
+  it("shares clamped water arithmetic with UI and domain services", async () => {
+    const nutrition = await import("./nutritionWorkspace");
+    const day = { ...nutrition.createEmptyNutritionDay("2026-08-02"), waterMl: 19_900 };
+
+    expect(nutrition.adjustNutritionWater(day, 500).waterMl).toBe(20_000);
+    expect(nutrition.adjustNutritionWater(day, -20_000).waterMl).toBe(0);
+    expect(day.waterMl).toBe(19_900);
+  });
 });

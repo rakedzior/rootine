@@ -12,6 +12,11 @@ import {
 } from "react";
 
 import { maxWidthQuery } from "../breakpoints";
+import { findModuleForPath } from "../../moduleRegistry";
+import { useModuleMemory } from "../../experience/moduleMemory";
+import { useSubtabTransition } from "../../experience/transitions";
+import { LivingDay, type LivingDayArea } from "../../experience/LivingDay";
+import type { RootineAreaId } from "../../experience/activeArea";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -46,6 +51,7 @@ export interface ModuleShellProps extends HTMLAttributes<HTMLDivElement> {
   detailPanel?: ReactNode;
   pageWidth?: PageWidth;
   ambient?: AmbientVariant | AmbientConfig;
+  memoryKey?: string;
 }
 
 export type PageWidth = "reading" | "standard" | "wide" | "canvas";
@@ -72,6 +78,9 @@ export interface AmbientConfig {
   dayProgress?: number;
   active?: boolean;
   signal?: string | number;
+  areas?: readonly LivingDayArea[];
+  activeAreaId?: RootineAreaId | null;
+  remaining?: number;
 }
 
 export interface AmbientSceneProps {
@@ -91,9 +100,12 @@ function ambientDayPhase(dayProgress: number) {
 }
 
 export function AmbientScene({ config, className }: AmbientSceneProps) {
+  const sceneRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(() => (
     typeof document !== "undefined" && document.visibilityState === "hidden"
   ));
+  const previousSignal = useRef(config.signal);
+  const [visibleSignal, setVisibleSignal] = useState<string | number | null>(null);
   const progress = clampUnit(config.progress);
   const dayProgress = clampUnit(config.dayProgress);
   const style = {
@@ -110,8 +122,27 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
     return () => document.removeEventListener("visibilitychange", updateVisibility);
   }, []);
 
+  useEffect(() => {
+    if (!("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setPaused(document.visibilityState === "hidden" || !entry.isIntersecting);
+    }, { rootMargin: "80px" });
+    if (sceneRef.current) observer.observe(sceneRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (Object.is(previousSignal.current, config.signal)) return;
+    previousSignal.current = config.signal;
+    if (config.signal === undefined) return;
+    setVisibleSignal(config.signal);
+    const timer = window.setTimeout(() => setVisibleSignal(null), 720);
+    return () => window.clearTimeout(timer);
+  }, [config.signal]);
+
   return (
     <div
+      ref={sceneRef}
       className={cx("ui-ambient-scene", className)}
       data-scene={config.scene}
       data-active={config.active || undefined}
@@ -128,12 +159,15 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
             <i />
             <b />
           </span>
-          <span className="ui-ambient-today__dial">
-            <i className="ui-ambient-today__ticks" />
-            <i className="ui-ambient-today__progress" />
-            <i className="ui-ambient-today__inner" />
-            <i className="ui-ambient-today__hand" />
-            <i className="ui-ambient-today__marker" />
+          <span className="ui-ambient-today__living">
+            <LivingDay
+              areas={config.areas ?? []}
+              dayProgress={dayProgress * 100}
+              planProgress={progress * 100}
+              remaining={config.remaining}
+              activeAreaId={config.activeAreaId}
+              variant="ambient"
+            />
           </span>
         </span>
       )}
@@ -248,8 +282,8 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
         </span>
       )}
 
-      {config.signal !== undefined && (
-        <span key={String(config.signal)} className="ui-ambient-scene__signal" />
+      {visibleSignal !== null && (
+        <span key={String(visibleSignal)} className="ui-ambient-scene__signal" />
       )}
     </div>
   );
@@ -261,17 +295,24 @@ export function ModuleShell({
   detailPanel,
   pageWidth = "standard",
   ambient,
+  memoryKey,
   children,
   className,
   ...props
 }: ModuleShellProps) {
+  const shellRef = useRef<HTMLDivElement>(null);
   const ambientConfig = typeof ambient === "string" ? { scene: ambient } : ambient;
+  const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
+  const resolvedMemoryKey = memoryKey ?? findModuleForPath(pathname)?.id ?? pathname;
+  useModuleMemory(shellRef, resolvedMemoryKey);
 
   return (
     <div
+      ref={shellRef}
       className={cx("ui-module-shell", ambientConfig && "ui-module-shell--ambient", className)}
       data-page-width={pageWidth}
       data-ambient={ambientConfig?.scene}
+      data-module-memory={resolvedMemoryKey}
       {...props}
     >
       {ambientConfig && <AmbientScene config={ambientConfig} />}
@@ -285,10 +326,12 @@ export function ModuleShell({
   );
 }
 
-export type ModuleMainProps = HTMLAttributes<HTMLElement>;
+export type ModuleMainProps = HTMLAttributes<HTMLElement> & { transitionKey?: string };
 
-export function ModuleMain({ className, ...props }: ModuleMainProps) {
-  return <main className={cx("ui-module-main", className)} {...props} />;
+export function ModuleMain({ className, transitionKey, ...props }: ModuleMainProps) {
+  const mainRef = useRef<HTMLElement>(null);
+  useSubtabTransition(mainRef, transitionKey);
+  return <main ref={mainRef} className={cx("ui-module-main", className)} {...props} />;
 }
 
 export interface ContextSidebarProps extends HTMLAttributes<HTMLElement> {

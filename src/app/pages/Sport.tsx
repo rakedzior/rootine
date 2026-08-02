@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Check, Play, Undo2 } from "lucide-react";
 import { calendarDaysBetween } from "../data/localDate";
 import {
@@ -68,6 +69,8 @@ import {
   type SportPersistenceQueue,
 } from "../sport/sportPersistence";
 import { SPORT_VIEW_LABELS } from "../sport/sportViewMeta";
+import { recordActivity } from "../experience/activityLog";
+import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   Badge,
   Button,
@@ -88,6 +91,7 @@ interface WorkoutDialogState {
   week: number;
   day: number;
   templateId?: string;
+  initialTitle?: string;
   editScope?: "single" | "series";
 }
 
@@ -203,8 +207,11 @@ function finalizeSession(
 }
 
 export default function Sport() {
-  const quickAddRequested = typeof window !== "undefined"
-    && new URLSearchParams(window.location.search).get("akcja") === "dodaj-trening";
+  const [commandParams, setCommandParams] = useSearchParams();
+  const quickAddAction = commandParams.get("akcja");
+  const quickAddRequested = quickAddAction === "dodaj-trening" || quickAddAction === "dodaj-aktywnosc";
+  const quickAddTitle = commandParams.get("tytul")?.trim() ?? "";
+  const quickAddDate = commandParams.get("data");
   const [initialUrlState] = useState(getInitialSportUrlState);
   const [plannerState, setPlannerState] = useState(loadSportPlannerState);
   const [cycleDraft, setCycleDraft] = useState<TrainingCycle | null>(() => loadStoredCycleDraft(plannerState.activeCycle));
@@ -218,6 +225,7 @@ export default function Sport() {
       ? {
         week: todayCycleWeek(cycleDraft),
         day: (new Date().getDay() + 6) % 7,
+        initialTitle: quickAddTitle || undefined,
       }
       : null
   ));
@@ -236,10 +244,24 @@ export default function Sport() {
 
   useEffect(() => {
     if (!quickAddRequested) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("akcja");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [quickAddRequested]);
+    if (cycleDraft) {
+      const requestedDate = quickAddDate && /^\d{4}-\d{2}-\d{2}$/.test(quickAddDate) ? quickAddDate : null;
+      const difference = requestedDate ? calendarDaysBetween(cycleDraft.startDate, requestedDate) : null;
+      const week = difference === null || isIndefiniteCycle(cycleDraft)
+        ? todayCycleWeek(cycleDraft)
+        : Math.max(1, Math.min(cycleWeekCount(cycleDraft), Math.floor(difference / 7) + 1));
+      setWorkoutDialog({
+        week,
+        day: requestedDate ? cycleDayIndex(cycleDraft, requestedDate) : (new Date().getDay() + 6) % 7,
+        initialTitle: quickAddTitle || undefined,
+      });
+    } else {
+      setDialog("cycle");
+    }
+    const nextParams = new URLSearchParams(window.location.search);
+    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => nextParams.delete(key));
+    setCommandParams(nextParams, { replace: true });
+  }, [cycleDraft, quickAddDate, quickAddRequested, quickAddTitle, setCommandParams]);
   if (!persistenceQueueRef.current) {
     persistenceQueueRef.current = createSportPersistenceQueue((state) => {
       const saved = saveSportPlannerState(state);
@@ -363,6 +385,7 @@ export default function Sport() {
     if (view === "cycle") url.searchParams.set("tydzien", String(activeWeek));
     else url.searchParams.delete("tydzien");
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
+    writeModuleMemoryValue("sport", "location", `${url.pathname}${url.search}`);
   }, [activeWeek, view]);
 
   useEffect(() => {
@@ -636,6 +659,12 @@ export default function Sport() {
         ? "Zmiany treningu zapisano automatycznie."
         : "Trening dodano i zapisano automatycznie.",
     );
+    recordActivity({
+      moduleId: "sport",
+      kind: editingId ? "save" : "create",
+      title: submitted.title,
+      detail: `Tydzień ${submitted.week} · ${DAY_LABELS[submitted.day].full}`,
+    });
     setActiveWeek(submitted.week);
     closeDialogs();
   };
@@ -812,6 +841,12 @@ export default function Sport() {
         },
       } : current.workoutOutcomes,
     }));
+    recordActivity({
+      moduleId: "sport",
+      kind: status === "completed" ? "complete" : "status",
+      title: finished.title,
+      detail: status === "completed" ? "Trening ukończony" : "Trening zakończony jako niepełny",
+    });
   };
 
   const startWorkout = (workout: CycleWorkout) => {
@@ -875,6 +910,12 @@ export default function Sport() {
           },
         },
       };
+    });
+    recordActivity({
+      moduleId: "sport",
+      kind: status === "completed" ? "complete" : "status",
+      title: workout.title,
+      detail: status === "completed" ? "Trening ukończony" : status === "incomplete" ? "Trening niepełny" : "Trening pominięty",
     });
     setAutosaveNotice(
       status === "completed"
@@ -1025,7 +1066,7 @@ export default function Sport() {
         />
       )}
     >
-      <ModuleMain>
+      <ModuleMain transitionKey={`${view}:${activeWeek}`}>
         <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""} ${view === "analysis" || view === "history" ? "has-subview" : ""}`.trim()}>
           <Select
             compact
@@ -1204,12 +1245,14 @@ export default function Sport() {
 
       {workoutDialog && cycleDraft && (
         <WorkoutDialog
+          key={`${workoutDialog.workoutId ?? "new"}:${workoutDialog.week}:${workoutDialog.day}:${workoutDialog.initialTitle ?? ""}`}
           cycle={cycleDraft}
           templates={plannerState.templates}
           workout={editingWorkout}
           initialWeek={workoutDialog.week}
           initialDay={workoutDialog.day}
           initialTemplateId={workoutDialog.templateId}
+          initialTitle={workoutDialog.initialTitle}
           editScope={workoutDialog.editScope}
           seriesCount={editingWorkout?.seriesId
             ? cycleDraft.workouts.filter((workout) => workout.seriesId === editingWorkout.seriesId).length

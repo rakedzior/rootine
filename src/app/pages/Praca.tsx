@@ -24,11 +24,15 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { recordActivity } from "../experience/activityLog";
+import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   createWorkId,
   loadWorkWorkspace,
   saveWorkWorkspace,
+  setWorkTasksCompletionState,
   WORK_STORAGE_KEY,
   type WorkCompany,
   type WorkProject,
@@ -172,6 +176,7 @@ function getInitialWorkUrlState() {
 }
 
 export default function Praca() {
+  const [commandParams, setCommandParams] = useSearchParams();
   const [initialUrlState] = useState(getInitialWorkUrlState);
   const [workspace, setWorkspace] = useState(loadWorkWorkspace);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialUrlState.companyId);
@@ -227,6 +232,7 @@ export default function Praca() {
     if (workView === "list") url.searchParams.delete("widok");
     else url.searchParams.set("widok", workView);
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
+    writeModuleMemoryValue("work", "location", `${url.pathname}${url.search}`);
   }, [search, selectedCompanyId, selectedProjectId, showCompleted, workView]);
 
   useEffect(() => {
@@ -447,6 +453,44 @@ export default function Praca() {
     setEditor({ kind: "task", mode: task ? "edit" : "add", id: task?.id, parentId });
   };
 
+  useEffect(() => {
+    if (commandParams.get("akcja") !== "nowe-zadanie") return;
+
+    const targetProject = selectedProject
+      ?? workspace.projects.find((project) => project.status === "active")
+      ?? workspace.projects[0];
+    const next = new URLSearchParams(commandParams);
+    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => next.delete(key));
+
+    if (!targetProject) {
+      setCommandParams(next, { replace: true });
+      return;
+    }
+
+    const requestedPriority = commandParams.get("priorytet");
+    const priority: WorkTaskPriority = requestedPriority === "low"
+      || requestedPriority === "medium"
+      || requestedPriority === "high"
+      ? requestedPriority
+      : "none";
+
+    setSelectedCompanyId(targetProject.companyId);
+    setSelectedProjectId(targetProject.id);
+    setExpandedCompanyIds((current) => new Set(current).add(targetProject.companyId));
+    setDraft({
+      ...EMPTY_DRAFT,
+      name: commandParams.get("tytul")?.trim() ?? "",
+      priority,
+      dueDate: commandParams.get("data") ?? "",
+    });
+    setEditorError("");
+    setEditor({ kind: "task", mode: "add", parentId: null });
+
+    next.set("firma", targetProject.companyId);
+    next.set("projekt", targetProject.id);
+    setCommandParams(next, { replace: true });
+  }, [commandParams, selectedProject, setCommandParams, workspace.projects]);
+
   const closeEditor = () => {
     setEditor(null);
     setEditorError("");
@@ -541,6 +585,12 @@ export default function Praca() {
           });
         }
       }
+      recordActivity({
+        moduleId: "work",
+        kind: editor.mode === "edit" ? "save" : "create",
+        title: name,
+        detail: editor.mode === "edit" ? "Zaktualizowano zadanie pracy" : "Dodano zadanie pracy",
+      });
     }
 
     closeEditor();
@@ -585,12 +635,15 @@ export default function Praca() {
     const previous = workspace.tasks
       .filter((candidate) => idSet.has(candidate.id))
       .map((candidate) => ({ id: candidate.id, completed: candidate.completed }));
-    setWorkspace((current) => ({
-      ...current,
-      tasks: current.tasks.map((candidate) => idSet.has(candidate.id)
-        ? { ...candidate, completed }
-        : candidate),
-    }));
+    setWorkspace((current) => setWorkTasksCompletionState(current, taskIds, completed));
+    workspace.tasks.filter((candidate) => idSet.has(candidate.id)).forEach((candidate) => {
+      recordActivity({
+        moduleId: "work",
+        kind: completed ? "complete" : "reopen",
+        title: candidate.title,
+        detail: completed ? "Ukończono zadanie pracy" : "Przywrócono zadanie pracy",
+      });
+    });
     setCompletionUndo({ label, previous });
   };
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ProgressMorph } from "../../experience/MotionValues";
 
 export type ProgressTone = "default" | "success" | "warning" | "danger";
 export type ProgressSize = "sm" | "md";
@@ -35,18 +36,12 @@ export function ProgressBar({
     .filter(Boolean).join(" ");
 
   return (
-    <div className={classes}>
-      <div
-        className="ui-progress__track"
-        role="progressbar"
-        aria-valuenow={Math.round(clamped)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={label}
-      >
-        <div className="ui-progress__fill" style={{ transform: `scaleX(${clamped / 100})` }} />
-      </div>
-      {valueLabel !== undefined && <span className="ui-progress__value">{valueLabel}</span>}
-    </div>
+    <ProgressMorph
+      className={classes}
+      value={clamped}
+      label={label ?? "Postęp"}
+      tone={tone}
+      valueLabel={valueLabel}
+    />
   );
 }

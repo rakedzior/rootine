@@ -26,7 +26,7 @@
 }
 
 .app-theme-settings__heading small {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-micro);
   line-height: var(--leading-snug);
 }
@@ -45,14 +45,14 @@
 .app-theme-option {
   display: grid;
   min-width: 0;
-  min-height: 66px;
+  min-height: 76px;
   grid-template-columns: 54px minmax(0, 1fr) 18px;
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-graphite-panel) 72%, transparent);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
   text-align: left;
   cursor: pointer;
@@ -64,15 +64,37 @@
 }
 
 .app-theme-option:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
   transform: translateY(-1px);
 }
 
+.app-theme-option:active {
+  transform: translateY(0);
+}
+
+.app-theme-option:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
 .app-theme-option.is-selected {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 70%, var(--color-border-strong));
-  background: var(--color-precision-blue-soft);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-precision-blue) 24%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary-subtle) 72%, var(--color-surface-1));
+}
+
+.app-theme-option--system {
+  grid-column: 1 / -1;
+}
+
+.app-theme-option__system-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-primary-text);
 }
 
 .app-theme-option__swatches {
@@ -80,10 +102,23 @@
   height: 34px;
   grid-template-columns: repeat(3, 1fr);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-border-strong) 72%, transparent);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
 }
+
+.app-theme-option__swatches > span:nth-child(1) { background: var(--preview-canvas); }
+.app-theme-option__swatches > span:nth-child(2) { background: var(--preview-surface); }
+.app-theme-option__swatches > span:nth-child(3) { background: var(--preview-primary); }
+
+/* stylelint-disable projectwallace/max-unique-colors -- Static palette previews document the six selectable themes. */
+.app-theme-option[data-theme-option="rootine-graphite-sea-glass"] { --preview-canvas: #121515; --preview-surface: #222727; --preview-primary: #709a9c; }
+.app-theme-option[data-theme-option="rootine-warm-linen"] { --preview-canvas: #f2eee6; --preview-surface: #faf8f3; --preview-primary: #76583e; }
+.app-theme-option[data-theme-option="rootine-burgundy"] { --preview-canvas: #141313; --preview-surface: #2a2624; --preview-primary: #a84f64; }
+.app-theme-option[data-theme-option="rootine-cobalt"] { --preview-canvas: #101214; --preview-surface: #20242a; --preview-primary: #657fce; }
+.app-theme-option[data-theme-option="rootine-mineral-noir"] { --preview-canvas: #101112; --preview-surface: #222326; --preview-primary: #5f79c7; }
+.app-theme-option[data-theme-option="rootine-olive"] { --preview-canvas: #131412; --preview-surface: #262825; --preview-primary: #8d986b; }
+/* stylelint-enable projectwallace/max-unique-colors */
 
 .app-theme-option__copy {
   display: grid;
@@ -101,11 +136,20 @@
 
 .app-theme-option__copy small {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-micro);
   line-height: var(--leading-snug);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-theme-option__copy em {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.04em;
+  line-height: var(--leading-snug);
 }
 
 .app-theme-option__status {
@@ -119,9 +163,9 @@
 }
 
 .app-theme-option.is-selected .app-theme-option__status {
-  border-color: var(--color-precision-blue-strong);
-  background: var(--color-precision-blue-strong);
-  color: var(--color-on-accent);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 @media (max-width: 560px) {
@@ -131,5 +175,68 @@
 
   .app-theme-settings__heading > small {
     display: none;
+  }
+}
+
+.experience-settings {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg) 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.experience-settings__heading {
+  display: grid;
+  gap: 2px;
+}
+
+.experience-settings__heading strong,
+.experience-settings > label > span:first-child {
+  color: var(--color-text-primary);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+}
+
+.experience-settings__heading small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-micro);
+}
+
+.experience-settings > label:not(.experience-settings__toggle) {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(190px, 0.8fr);
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.experience-settings select {
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+}
+
+.experience-settings__toggle {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+}
+
+.experience-settings__toggle kbd {
+  margin-left: var(--space-xs);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-micro);
+}
+
+@media (max-width: 560px) {
+  .experience-settings > label:not(.experience-settings__toggle) {
+    grid-template-columns: 1fr;
+    gap: var(--space-xs);
   }
 }

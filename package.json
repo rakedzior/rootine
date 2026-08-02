@@ -7,12 +7,12 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "lint": "eslint src api e2e scripts playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
+    "lint": "eslint src api functions worker e2e scripts playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
     "typecheck": "npm run typecheck:app && npm run typecheck:api",
     "typecheck:app": "tsc --noEmit -p tsconfig.app.json --pretty false",
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json --pretty false",
     "test": "vitest run",
-    "test:api": "vitest run api/openfoodfacts/search.test.ts",
+    "test:api": "vitest run api",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:viewport": "playwright test --grep @viewport-matrix",
@@ -30,7 +30,8 @@
     "lucide-react": "^0.542.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "react-router": "8.3.0"
+    "react-router": "8.3.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

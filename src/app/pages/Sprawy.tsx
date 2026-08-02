@@ -27,7 +27,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
+import { SensitiveValue } from "../experience/preferences";
+import { recordActivity } from "../experience/activityLog";
+import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatDate as formatPolishDate } from "../formatters";
 import {
@@ -38,6 +41,8 @@ import {
   getMonthKey,
   loadAffairsWorkspace,
   saveAffairsWorkspace,
+  setMatterCompletionState,
+  setOneTimePaymentPaidState,
   type DocumentCategory,
   type DocumentRecord,
   type Matter,
@@ -104,6 +109,7 @@ import {
 
 export default function Sprawy() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [workspace, setWorkspace] = useState(loadAffairsWorkspace);
   const [view, setView] = useState<AffairsView>(getInitialView);
   const [statusFilter, setStatusFilter] = useState<"active" | MatterStatus>("active");
@@ -405,6 +411,38 @@ export default function Sprawy() {
     setEditor({ kind: "budget", mode: "add" });
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const action = params.get("akcja");
+    if (!action || !["nowa-sprawa", "nowa-platnosc", "nowy-wydatek"].includes(action)) return;
+
+    const initialTitle = params.get("tytul")?.trim() ?? "";
+    const initialDate = params.get("data") ?? "";
+    const initialPriority = params.get("priorytet") === "high" ? "high" : "normal";
+    if (action === "nowa-sprawa") {
+      setView("matters");
+      setDraft({ ...EMPTY_DRAFT, title: initialTitle, dueDate: initialDate, priority: initialPriority });
+      setEditorError("");
+      setEditor({ kind: "matter", mode: "add" });
+    } else if (action === "nowa-platnosc") {
+      setView("payments");
+      setDraft({ ...EMPTY_DRAFT, title: initialTitle, dueDate: initialDate, category: "Rachunki" });
+      setEditorError("");
+      setEditor({ kind: "payment", mode: "add" });
+    } else {
+      setView("budget");
+      setDraft({ ...EMPTY_DRAFT, title: initialTitle, category: "", budgetKind: "fixed" });
+      setEditorError("");
+      setEditor({ kind: "budget", mode: "add" });
+    }
+
+    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => params.delete(key));
+    navigate({
+      pathname: location.pathname,
+      search: params.toString() ? `?${params.toString()}` : "",
+    }, { replace: true });
+  }, [location.pathname, location.search, navigate]);
+
   const closeEditor = () => {
     setEditor(null);
     setEditorError("");
@@ -614,6 +652,12 @@ export default function Sprawy() {
           : budget),
       }));
     }
+    recordActivity({
+      moduleId: "affairs",
+      kind: editor.mode === "edit" ? "save" : "create",
+      title,
+      detail: editor.mode === "edit" ? "Zaktualizowano wpis" : "Dodano wpis",
+    });
     closeEditor();
   };
 
@@ -657,12 +701,31 @@ export default function Sprawy() {
   };
 
   const toggleMatter = (matterId: string) => {
-    setWorkspace((current) => ({
-      ...current,
-      matters: current.matters.map((matter) => matter.id === matterId
-        ? { ...matter, status: matter.status === "done" ? "open" : "done" }
-        : matter),
-    }));
+    const matter = workspace.matters.find((item) => item.id === matterId);
+    if (matter) recordActivity({
+      moduleId: "affairs",
+      kind: matter.status === "done" ? "reopen" : "complete",
+      title: matter.title,
+      detail: matter.status === "done" ? "Przywrócono sprawę" : "Domknięto sprawę",
+    });
+    setWorkspace((current) => setMatterCompletionState(
+      current,
+      matterId,
+      matter?.status !== "done",
+    ));
+  };
+
+  const toggleOneTimePayment = (paymentId: string) => {
+    const payment = workspace.oneTimePayments.find((item) => item.id === paymentId);
+    if (payment) recordActivity({
+      moduleId: "affairs",
+      kind: payment.paid ? "reopen" : "complete",
+      title: payment.title,
+      detail: payment.paid ? "Przywrócono płatność" : "Oznaczono płatność jako opłaconą",
+    });
+    const paid = !payment?.paid;
+    const paidAt = paid ? new Date().toISOString() : "";
+    setWorkspace((current) => setOneTimePaymentPaidState(current, paymentId, paid, paidAt));
   };
 
   const budgetDraftKey = (lineId: string, field: "planned" | "actual") => `${lineId}:${field}`;
@@ -710,6 +773,7 @@ export default function Sprawy() {
     if (url.href !== window.location.href) {
       window.history.pushState({}, "", url);
     }
+    writeModuleMemoryValue("affairs", "location", `${url.pathname}${url.search}`);
   };
 
   const renderPrimaryAction = () => {
@@ -729,7 +793,7 @@ export default function Sprawy() {
       return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openVehicleEditor()}><span className="header-action-label">Dodaj pojazd</span></Button>;
     }
     if (view === "budget") {
-      return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={openBudgetEditor}><span className="header-action-label">Dodaj pozycję</span></Button>;
+      return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openBudgetEditor()}><span className="header-action-label">Dodaj pozycję</span></Button>;
     }
     return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openMatterEditor()}><span className="header-action-label">Dodaj sprawę</span></Button>;
   };
@@ -899,7 +963,7 @@ export default function Sprawy() {
             }}
             header={header}
           >
-            <ModuleMain>{content}</ModuleMain>
+            <ModuleMain transitionKey={view}>{content}</ModuleMain>
           </ModuleShell>
         )}
       />
@@ -930,7 +994,7 @@ export default function Sprawy() {
       }}
       header={pageHeader}
     >
-      <ModuleMain>
+      <ModuleMain transitionKey={view}>
         <WorkspaceToolbar className="affairs-toolbar">
           {(affairsAreaId === "payments" || affairsAreaId === "records") && <Select
             compact
@@ -973,19 +1037,19 @@ export default function Sprawy() {
           {view === "payments" && (
             <span className="affairs-toolbar__context">
               <CreditCard size={13} aria-hidden="true" />
-              Szacunkowo {formatMoney(monthlyPaymentTotal)} / mies.
+              Szacunkowo <SensitiveValue label="Miesięczna kwota płatności">{formatMoney(monthlyPaymentTotal)}</SensitiveValue> / mies.
             </span>
           )}
           {view === "oneTime" && (
             <span className="affairs-toolbar__context">
               <ReceiptText size={13} aria-hidden="true" />
-              Do opłacenia {formatMoney(unpaidOneTimeTotal)}
+              Do opłacenia <SensitiveValue label="Kwota do opłacenia">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>
             </span>
           )}
           {view === "subscriptions" && (
             <span className="affairs-toolbar__context">
               <CreditCard size={13} aria-hidden="true" />
-              Aktywne {formatMoney(monthlySubscriptionTotal)} / mies.
+              Aktywne <SensitiveValue label="Miesięczna kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue> / mies.
             </span>
           )}
           {view === "documents" && (
@@ -1016,12 +1080,12 @@ export default function Sprawy() {
                 <StatCard label="Najbliższe 30 dni" value={dueSoon} hint="wszystkie zobowiązania na radarze" />
                 <StatCard
                   label="Płatności jednorazowe"
-                  value={formatMoney(unpaidOneTimeTotal)}
+                  value={<SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>}
                   hint={`${workspace.oneTimePayments.filter((payment) => !payment.paid).length} nieopłaconych pozycji`}
                 />
                 <StatCard
                   label="Stałe zobowiązania"
-                  value={formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}
+                  value={<SensitiveValue label="Kwota stałych zobowiązań">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue>}
                   hint="cykliczne i subskrypcje / mies."
                 />
                 <StatCard
@@ -1065,7 +1129,11 @@ export default function Sprawy() {
                               <strong>{item.title}</strong>
                               <small>{item.meta}</small>
                             </span>
-                            {item.amount !== null && <span className="affairs-agenda-row__amount">{formatMoney(item.amount)}</span>}
+                            {item.amount !== null && (
+                              <span className="affairs-agenda-row__amount">
+                                <SensitiveValue label={`Kwota: ${item.title}`}>{formatMoney(item.amount)}</SensitiveValue>
+                              </span>
+                            )}
                             <Badge tone={due.tone}>{due.text}</Badge>
                             <ChevronRight size={13} aria-hidden="true" />
                           </button>
@@ -1086,7 +1154,7 @@ export default function Sprawy() {
                   <div className="affairs-budget-snapshot__body">
                     <div className="affairs-budget-balance">
                       <span>Miesięcznie zarezerwowane</span>
-                      <strong>{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</strong>
+                      <strong><SensitiveValue label="Miesięcznie zarezerwowana kwota">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue></strong>
                     </div>
                     <ProgressBar
                       label="Udział stałych zobowiązań w planowanych wpływach"
@@ -1095,9 +1163,9 @@ export default function Sprawy() {
                         : 0}
                     />
                     <dl>
-                      <div><dt>Cykliczne</dt><dd>{formatMoney(monthlyPaymentTotal)}</dd></div>
-                      <div><dt>Subskrypcje</dt><dd>{formatMoney(monthlySubscriptionTotal)}</dd></div>
-                      <div><dt>Jednorazowe</dt><dd>{formatMoney(unpaidOneTimeTotal)}</dd></div>
+                      <div><dt>Cykliczne</dt><dd><SensitiveValue label="Kwota płatności cyklicznych">{formatMoney(monthlyPaymentTotal)}</SensitiveValue></dd></div>
+                      <div><dt>Subskrypcje</dt><dd><SensitiveValue label="Kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue></dd></div>
+                      <div><dt>Jednorazowe</dt><dd><SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue></dd></div>
                     </dl>
                     <p>Kwoty roczne i kwartalne są przeliczone na miesięczny odpowiednik.</p>
                   </div>
@@ -1189,7 +1257,7 @@ export default function Sprawy() {
                       </span>
                       <span className="affairs-payment-row__cadence">{payment.category}</span>
                       <Badge tone={payment.paid ? "success" : due.tone}>{payment.paid ? "Opłacone" : due.text}</Badge>
-                      <strong className="affairs-payment-row__amount">{formatMoney(payment.amount)}</strong>
+                      <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.title}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
                       <span className="affairs-payment-row__actions">
                         <AddToTasksButton compact input={{
                           source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Sprawy", href: "/sprawy?widok=oneTime" },
@@ -1205,12 +1273,7 @@ export default function Sprawy() {
                           variant="quiet"
                           size="sm"
                           leadingIcon={payment.paid ? <RefreshCw size={12} /> : <Check size={12} />}
-                          onClick={() => setWorkspace((current) => ({
-                            ...current,
-                            oneTimePayments: current.oneTimePayments.map((item) => item.id === payment.id
-                              ? { ...item, paid: !item.paid, paidAt: item.paid ? "" : new Date().toISOString() }
-                              : item),
-                          }))}
+                          onClick={() => toggleOneTimePayment(payment.id)}
                         >
                           {payment.paid ? "Przywróć" : "Opłacone"}
                         </Button>
@@ -1258,7 +1321,7 @@ export default function Sprawy() {
                     </span>
                     <span className="affairs-payment-row__cadence">{CADENCE_LABELS[payment.cadence]}</span>
                     <Badge tone={payment.active ? due.tone : "neutral"}>{payment.active ? due.text : "Wstrzymana"}</Badge>
-                    <strong className="affairs-payment-row__amount">{formatMoney(payment.amount)}</strong>
+                    <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.name}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
                     <span className="affairs-payment-row__actions">
                       <AddToTasksButton compact input={{
                         source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/recurring`, context: "Sprawy", href: "/sprawy?widok=payments" },
@@ -1346,7 +1409,7 @@ export default function Sprawy() {
                       </span>
                       <span className="affairs-payment-row__cadence">{CADENCE_LABELS[subscription.cadence]}</span>
                       <Badge tone={subscription.active ? due.tone : "neutral"}>{subscription.active ? due.text : "Wstrzymana"}</Badge>
-                      <strong className="affairs-payment-row__amount">{formatMoney(subscription.amount)}</strong>
+                      <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${subscription.name}`}>{formatMoney(subscription.amount)}</SensitiveValue></strong>
                       <span className="affairs-payment-row__actions">
                         <AddToTasksButton compact input={{
                           source: { kind: "affairs", entity: `${encodeURIComponent(subscription.id)}/subscription`, context: "Sprawy", href: "/sprawy?widok=subscriptions" },
@@ -1546,10 +1609,10 @@ export default function Sprawy() {
           {view === "budget" && (
             <div className="affairs-budget">
               <section className="affairs-budget__summary" aria-label="Podsumowanie budżetu">
-                <div><span>Planowane wpływy</span><strong>{formatMoney(budgetSummary.income)}</strong></div>
-                <div><span>Przydzielone</span><strong>{formatMoney(budgetSummary.plannedOut)}</strong></div>
-                <div><span>Rzeczywiste wydatki</span><strong>{formatMoney(budgetSummary.actualOut)}</strong></div>
-                <div><span>Rzeczywiście zostaje</span><strong className={budgetSummary.actualAvailable < 0 ? "is-negative" : ""}>{formatMoney(budgetSummary.actualAvailable)}</strong></div>
+                <div><span>Planowane wpływy</span><strong><SensitiveValue label="Planowane wpływy">{formatMoney(budgetSummary.income)}</SensitiveValue></strong></div>
+                <div><span>Przydzielone</span><strong><SensitiveValue label="Przydzielona kwota">{formatMoney(budgetSummary.plannedOut)}</SensitiveValue></strong></div>
+                <div><span>Rzeczywiste wydatki</span><strong><SensitiveValue label="Rzeczywiste wydatki">{formatMoney(budgetSummary.actualOut)}</SensitiveValue></strong></div>
+                <div><span>Rzeczywiście zostaje</span><strong className={budgetSummary.actualAvailable < 0 ? "is-negative" : ""}><SensitiveValue label="Pozostała kwota">{formatMoney(budgetSummary.actualAvailable)}</SensitiveValue></strong></div>
               </section>
               <section className="affairs-budget-table">
                 <div className="affairs-budget-table__head">
@@ -1621,7 +1684,7 @@ export default function Sprawy() {
                     icon={<WalletCards size={18} />}
                     title="Ten miesiąc nie ma jeszcze planu"
                     description="Dodaj wpływy, koszty stałe, elastyczne i cel oszczędności."
-                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={openBudgetEditor}>Dodaj pozycję</Button>}
+                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openBudgetEditor()}>Dodaj pozycję</Button>}
                   />
                 )}
               </section>

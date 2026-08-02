@@ -57,6 +57,11 @@ export function TaskRow({
    */
   railLabel?: string;
 }) {
+  const [completing, setCompleting] = useState(false);
+  const completionTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (completionTimerRef.current !== null) window.clearTimeout(completionTimerRef.current);
+  }, []);
   const taskTags = task.source
     ? []
     : (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
@@ -73,7 +78,7 @@ export function TaskRow({
 
   return (
     <ListRow
-      className="task-row task-item-row"
+      className={`task-row task-item-row${completing ? " is-completion-ritual" : ""}`}
       // Start time only: the rail answers "when does this begin", and a full range would not
       // fit the fixed width without pushing every checkbox out of line.
       rail={railLabel ?? (task.time || "")}
@@ -109,16 +114,27 @@ export function TaskRow({
               ? `Zadanie cykliczne: operacje zbiorcze są niedostępne; zarządzaj wystąpieniem w szczegółach`
               : bulkSelected ? `Odznacz zadanie: ${task.text}` : `Zaznacz zadanie: ${task.text}`
             : task.done ? "Oznacz zadanie jako niewykonane" : "Oznacz zadanie jako wykonane"}
-          disabled={bulkMode && bulkDisabled}
+          disabled={(bulkMode && bulkDisabled) || completing}
           onClick={e => {
             e.stopPropagation();
-            if (bulkMode && !bulkDisabled) onBulkToggle?.(task.id);
-            else onToggle(task.id);
+            if (bulkMode && !bulkDisabled) {
+              onBulkToggle?.(task.id);
+              return;
+            }
+            if (task.done) {
+              onToggle(task.id);
+              return;
+            }
+            setCompleting(true);
+            completionTimerRef.current = window.setTimeout(() => {
+              completionTimerRef.current = null;
+              onToggle(task.id);
+            }, 260);
           }}
-          className={`task-checkbox ${(bulkMode ? bulkSelected : task.done) ? "is-checked" : ""}`}
-          style={{ "--task-checkbox-color": (bulkMode ? bulkSelected : task.done) ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
+          className={`task-checkbox ${(bulkMode ? bulkSelected : task.done) || completing ? "is-checked" : ""}`}
+          style={{ "--task-checkbox-color": (bulkMode ? bulkSelected : task.done) || completing ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
         >
-          {(bulkMode ? bulkSelected : task.done) && <Check size={8} strokeWidth={2.5} />}
+          {((bulkMode ? bulkSelected : task.done) || completing) && <Check size={8} strokeWidth={2.5} />}
         </button>
       )}
       onTitleClick={() => bulkMode

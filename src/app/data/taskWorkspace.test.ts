@@ -11,6 +11,7 @@ import {
   purgeTask,
   restoreTask,
   saveTaskWorkspace,
+  setTaskDoneState,
   setHabitCompletionOnDate,
   taskViewForCalendarDate,
   trashTask,
@@ -222,6 +223,15 @@ describe("task workspace", () => {
     expect(restoreTask(trashed, 1).tasks.find((task) => task.id === 1)?.deleted).toBe(false);
     expect(purgeTask(trashed, 2).tasks.map((task) => task.id)).toEqual([1]);
     expect(emptyTaskTrash(trashed).tasks).toEqual([]);
+  });
+
+  it("shares an idempotent task completion transition with domain services", () => {
+    const task = { id: 99, text: "Test", done: false, view: "dzis" };
+    const completed = setTaskDoneState(task, true);
+
+    expect(completed).toEqual({ ...task, done: true });
+    expect(setTaskDoneState(completed, true)).toBe(completed);
+    expect(task.done).toBe(false);
   });
 
   it("schedules habits on selected weekdays and counts streaks by planned days", () => {

@@ -109,6 +109,13 @@ export function createEmptyNutritionDay(date: string): NutritionDay {
   };
 }
 
+export function adjustNutritionWater(day: NutritionDay, deltaMl: number): NutritionDay {
+  return {
+    ...day,
+    waterMl: Math.max(0, Math.min(20_000, day.waterMl + deltaMl)),
+  };
+}
+
 export function createEmptyNutritionWorkspace(): NutritionWorkspace {
   return {
     version: WORKSPACE_VERSION,

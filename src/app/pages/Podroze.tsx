@@ -30,12 +30,15 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatPercent, pluralize } from "../formatters";
+import { AnimatedCurrency } from "../experience/MotionValues";
+import { SensitiveValue } from "../experience/preferences";
 import {
   createTravelId,
   isDateWithinTrip,
   loadTravelWorkspace,
   normalizeIsoCurrency,
   saveTravelWorkspace,
+  setTravelTaskCompletionState,
   summarizeTravelBudget,
   TRAVEL_STORAGE_KEY,
   type BudgetCategory,
@@ -88,7 +91,6 @@ import {
   daysUntil,
   formatDate,
   formatDateTime,
-  formatMoney,
   isTravelSection,
   nextAction,
   numberFrom,
@@ -102,6 +104,22 @@ import {
   type TravelSection,
   type TripActionState,
 } from "../travel/travelPresentation";
+
+function PrivateMoney({
+  value,
+  currency,
+  label = "Kwota podróży",
+}: {
+  value: number;
+  currency: string;
+  label?: string;
+}) {
+  return (
+    <SensitiveValue label={label}>
+      <AnimatedCurrency value={value} currency={currency} />
+    </SensitiveValue>
+  );
+}
 
 export default function Podroze() {
   const [workspace, setWorkspace] = useState(loadTravelWorkspace);
@@ -606,10 +624,12 @@ export default function Podroze() {
 
   const toggleTask = (task: TravelTask) => {
     if (!selectedTrip) return;
-    updateTrip(selectedTrip.id, (trip) => ({
-      ...trip,
-      tasks: trip.tasks.map((item) => item.id === task.id ? { ...item, completed: !item.completed } : item),
-    }));
+    setWorkspace((current) => setTravelTaskCompletionState(
+      current,
+      selectedTrip.id,
+      task.id,
+      !task.completed,
+    ));
   };
 
   const cycleDocumentStatus = (document: TravelDocument) => {
@@ -938,8 +958,12 @@ export default function Podroze() {
                           <small>{tripCountdown(trip)}</small>
                         </span>
                         <span className="travel-board__money">
-                          <strong>{formatMoney(tripBudget.planned, trip.baseCurrency)}</strong>
-                          <small>{tripBudget.actual ? `${formatMoney(tripBudget.actual, trip.baseCurrency)} rzeczywiście` : "Brak wydatków"}</small>
+                          <strong><PrivateMoney value={tripBudget.planned} currency={trip.baseCurrency} label={`Planowany budżet: ${trip.name}`} /></strong>
+                          <small>
+                            {tripBudget.actual
+                              ? <><PrivateMoney value={tripBudget.actual} currency={trip.baseCurrency} label={`Rzeczywiste wydatki: ${trip.name}`} /> rzeczywiście</>
+                              : "Brak wydatków"}
+                          </small>
                         </span>
                         <ChevronRight size={14} aria-hidden="true" />
                       </button>
@@ -1049,9 +1073,9 @@ export default function Podroze() {
                       <button type="button" onClick={() => setSection("budget")}>Szczegóły</button>
                     </header>
                     <div className="travel-money-summary">
-                      <span><small>Plan</small><strong>{formatMoney(budgetSummary.planned, selectedTrip.baseCurrency)}</strong></span>
-                      <span><small>Rzeczywiste</small><strong>{formatMoney(budgetSummary.actual, selectedTrip.baseCurrency)}</strong></span>
-                      <span><small>Zostaje</small><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}>{formatMoney(budgetSummary.remaining, selectedTrip.baseCurrency)}</strong></span>
+                      <span><small>Plan</small><strong><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Planowany budżet podróży" /></strong></span>
+                      <span><small>Rzeczywiste</small><strong><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Rzeczywiste wydatki podróży" /></strong></span>
+                      <span><small>Zostaje</small><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Pozostały budżet podróży" /></strong></span>
                     </div>
                   </section>
                 </div>
@@ -1140,7 +1164,7 @@ export default function Podroze() {
                               <strong>{formatDate(stay.checkIn, false)} — {formatDate(stay.checkOut, false)}</strong>
                               <small>{stay.bookingRef || "Brak numeru rezerwacji"}</small>
                             </span>
-                            <span className="travel-reservation-money">{formatMoney(stay.amount, selectedTrip.baseCurrency)}</span>
+                            <span className="travel-reservation-money"><PrivateMoney value={stay.amount} currency={selectedTrip.baseCurrency} label={`Kwota noclegu: ${stay.name}`} /></span>
                             <Badge tone={stay.status === "paid" ? "success" : stay.status === "booked" ? "primary" : "warning"}>{RESERVATION_STATUS_LABELS[stay.status]}</Badge>
                             <span className="travel-row-actions">
                               <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${stay.name}`} onClick={() => openStayEditor(stay)}><Pencil size={12} /></Button>
@@ -1177,7 +1201,7 @@ export default function Podroze() {
                                 <strong>{transport.from || "—"} <ChevronRight size={11} /> {transport.to || "—"}</strong>
                                 <small>{formatDateTime(transport.departure)} — {formatDateTime(transport.arrival)}</small>
                               </span>
-                              <span className="travel-reservation-money">{formatMoney(transport.amount, selectedTrip.baseCurrency)}</span>
+                              <span className="travel-reservation-money"><PrivateMoney value={transport.amount} currency={selectedTrip.baseCurrency} label={`Kwota transportu: ${transport.title}`} /></span>
                               <Badge tone={transport.status === "paid" ? "success" : transport.status === "booked" ? "primary" : "warning"}>{RESERVATION_STATUS_LABELS[transport.status]}</Badge>
                               <span className="travel-row-actions">
                                 <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${transport.title}`} onClick={() => openTransportEditor(transport)}><Pencil size={12} /></Button>
@@ -1195,23 +1219,23 @@ export default function Podroze() {
             {activeSection === "budget" && (
               <div className="travel-budget">
                 <section className="travel-budget-summary" aria-label="Podsumowanie budżetu">
-                  <div><span>Plan podróży</span><strong>{formatMoney(budgetSummary.planned, selectedTrip.baseCurrency)}</strong></div>
-                  <div><span>Rzeczywiste wydatki</span><strong>{formatMoney(budgetSummary.actual, selectedTrip.baseCurrency)}</strong></div>
-                  <div><span>Już opłacone</span><strong>{formatMoney(budgetSummary.paid, selectedTrip.baseCurrency)}</strong></div>
-                  <div><span>Do dyspozycji</span><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}>{formatMoney(budgetSummary.remaining, selectedTrip.baseCurrency)}</strong></div>
+                  <div><span>Plan podróży</span><strong><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Planowany budżet podróży" /></strong></div>
+                  <div><span>Rzeczywiste wydatki</span><strong><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Rzeczywiste wydatki podróży" /></strong></div>
+                  <div><span>Już opłacone</span><strong><PrivateMoney value={budgetSummary.paid} currency={selectedTrip.baseCurrency} label="Opłacona kwota podróży" /></strong></div>
+                  <div><span>Do dyspozycji</span><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Kwota do dyspozycji" /></strong></div>
                 </section>
                 <div className="travel-budget-link-note" role="note">
                   <ReceiptText size={14} aria-hidden="true" />
                   <span>
                     <strong>Rezerwacje są połączone z podsumowaniem</strong>
                     <small>
-                      Noclegi i transport wnoszą {formatMoney(budgetSummary.reservationCommitted, selectedTrip.baseCurrency)}.
+                      Noclegi i transport wnoszą <PrivateMoney value={budgetSummary.reservationCommitted} currency={selectedTrip.baseCurrency} label="Kwota rezerwacji" />.
                       Dla tych kategorii podsumowanie bierze wyższą z kwot — wpis budżetowy albo rezerwacje — aby ich nie dublować.
                     </small>
                   </span>
                   {budgetSummary.unbudgetedReservations > 0 && (
                     <Badge tone="warning">
-                      {formatMoney(budgetSummary.unbudgetedReservations, selectedTrip.baseCurrency)} poza planem
+                      <PrivateMoney value={budgetSummary.unbudgetedReservations} currency={selectedTrip.baseCurrency} label="Kwota rezerwacji poza planem" /> poza planem
                     </Badge>
                   )}
                 </div>
@@ -1227,8 +1251,8 @@ export default function Podroze() {
                           <strong>{line.label}</strong>
                           <small>{BUDGET_CATEGORY_LABELS[line.category]}</small>
                         </span>
-                        <span className="travel-budget-row__value">{formatMoney(line.planned, selectedTrip.baseCurrency)}</span>
-                        <span className="travel-budget-row__value">{formatMoney(line.actual, selectedTrip.baseCurrency)}</span>
+                        <span className="travel-budget-row__value"><PrivateMoney value={line.planned} currency={selectedTrip.baseCurrency} label={`Planowana kwota: ${line.label}`} /></span>
+                        <span className="travel-budget-row__value"><PrivateMoney value={line.actual} currency={selectedTrip.baseCurrency} label={`Rzeczywista kwota: ${line.label}`} /></span>
                         <span
                           className="travel-budget-row__progress"
                           role="progressbar"

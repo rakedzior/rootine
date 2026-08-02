@@ -1,4 +1,5 @@
 import {
+  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -8,10 +9,10 @@ import {
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   ArrowLeft,
+  AudioLines,
   ChevronDown,
   ChevronUp,
   CircleHelp,
-  CircleCheck,
   Clock3,
   Cloud,
   CloudFog,
@@ -25,11 +26,13 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   RefreshCw,
   RotateCcw,
   Settings,
   SunMedium,
   UserRound,
+  EyeOff,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -66,12 +69,31 @@ import { maxWidthQuery } from "../ui/breakpoints";
 import {
   applyAppTheme,
   loadAppTheme,
-  type AppThemeId,
+  subscribeToSystemTheme,
+  type AppThemePreference,
 } from "../theme/appTheme";
 import { ThemeSettings } from "./ThemeSettings";
+import { useActiveArea } from "../experience/activeArea";
+import {
+  ExperienceSettings,
+  usePrivacy,
+} from "../experience/preferences";
+import { RouteTransition } from "../experience/transitions";
+import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
+import { AssistantSettingsPanel } from "../../assistant/settings/AssistantSettingsPanel";
+import { useAssistantSettings } from "../../assistant/config/useAssistantSettings";
+import { useAssistant } from "../../assistant/runtime/useAssistant";
+import { AssistantEntryButton } from "../../assistant/ui/AssistantEntryButton";
+import { AssistantStage, type AssistantStageStatus } from "../../assistant/ui/AssistantStage";
+import { AssistantUndoToast } from "../../assistant/ui/AssistantUndoToast";
 
 const SIDEBAR_STORAGE_KEY = "rootine.sidebar.collapsed";
 const LEGACY_SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
+
+const CommandCenter = lazy(() => import("../experience/CommandCenter")
+  .then((module) => ({ default: module.CommandCenter })));
+const DayReplay = lazy(() => import("../experience/DayReplay")
+  .then((module) => ({ default: module.DayReplay })));
 
 type WeatherState =
   | { status: "loading" }
@@ -79,6 +101,20 @@ type WeatherState =
   | { status: "error"; message: string };
 
 type OpenMenu = "settings" | "profile" | "mobileMore" | "mobileSettings" | "mobileProfile" | null;
+
+const TRANSIENT_COMMAND_PARAMS = ["akcja", "tytul", "data", "godzina", "priorytet"] as const;
+
+function rememberedModuleLocation(item: AppModule) {
+  return readModuleMemoryValue(
+    item.id,
+    "location",
+    (value): value is string => {
+      if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return false;
+      const pathname = value.split(/[?#]/, 1)[0];
+      return isModulePath(item, pathname);
+    },
+  );
+}
 
 const MOBILE_MENU_FOCUSABLE = [
   "a[href]",
@@ -189,16 +225,45 @@ function PrimaryNavItem({
 }) {
   const Icon = item.icon;
   const location = useLocation();
+  const { activeAreaId, setActiveAreaId } = useActiveArea();
   const active = isModulePath(item, location.pathname);
+  const rememberedDestination = rememberedModuleLocation(item);
+  const destination = active && location.pathname === item.to
+    ? `${location.pathname}${location.search}`
+    : active
+      ? `${location.pathname}${location.search}`
+      : rememberedDestination ?? item.to;
   return (
     <Link
-      to={item.to}
+      to={destination}
+      viewTransition
       title={item.label}
       aria-current={active ? "page" : undefined}
+      data-module-id={item.id}
+      data-area-active={activeAreaId === item.id || undefined}
       className={[
         mobile ? "app-mobile-nav__item" : "app-nav-item",
         active ? "is-active" : "",
+        activeAreaId === item.id ? "is-area-active" : "",
       ].filter(Boolean).join(" ")}
+      onClick={(event) => {
+        if (active) {
+          event.preventDefault();
+          return;
+        }
+      }}
+      onPointerEnter={() => {
+        setActiveAreaId(item.id);
+      }}
+      onPointerLeave={() => {
+        setActiveAreaId(null);
+      }}
+      onFocus={() => {
+        setActiveAreaId(item.id);
+      }}
+      onBlur={() => {
+        setActiveAreaId(null);
+      }}
     >
       <Icon size={mobile ? 18 : 15} strokeWidth={1.7} aria-hidden="true" />
       <span className={mobile ? "app-mobile-nav__label" : "app-nav-label"}>{item.label}</span>
@@ -296,6 +361,7 @@ function ModuleSettings({
 }
 
 function ProfileSummary() {
+  const privacy = usePrivacy();
   return (
     <>
       <div className="app-sidebar-popover__profile">
@@ -308,6 +374,18 @@ function ProfileSummary() {
         </span>
       </div>
       <p>Dane Rootine są obecnie zapisywane tylko na tym urządzeniu.</p>
+      <button
+        type="button"
+        className={`app-profile-privacy${privacy.enabled ? " is-active" : ""}`}
+        aria-pressed={privacy.enabled}
+        onClick={privacy.toggle}
+      >
+        <EyeOff size={15} aria-hidden="true" />
+        <span>
+          <strong>{privacy.enabled ? "Privacy Mode włączony" : "Włącz Privacy Mode"}</strong>
+          <small>Ukrywa kwoty, pomiary i prywatne treści. Skrót: Ctrl ⇧ P.</small>
+        </span>
+      </button>
       <div className="app-recovery-entry">
         <RecoveryCenterButton />
       </div>
@@ -318,6 +396,10 @@ function ProfileSummary() {
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const assistant = useAssistant();
+  const { settings: assistantSettings } = useAssistantSettings();
+  const { openAssistant, updateAppContext } = assistant;
+  const privacy = usePrivacy();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
   const [isCompactViewport, setIsCompactViewport] = useState(getInitialCompactViewport);
   const [modulePreferences, setModulePreferences] = useState(loadModulePreferences);
@@ -326,13 +408,15 @@ export default function Layout() {
   const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [commandCenterOpen, setCommandCenterOpen] = useState(false);
+  const [dayReplayOpen, setDayReplayOpen] = useState(false);
   const [helpGuideId, setHelpGuideId] = useState<HelpGuideId>(() => {
     if (location.pathname.startsWith("/kalendarz")) return "calendar";
     if (location.pathname.startsWith("/podroze")) return "travel";
     return findModuleForPath(location.pathname)?.id ?? "today";
   });
   const [helpQuery, setHelpQuery] = useState("");
-  const [saveFeedback, setSaveFeedback] = useState<"saved" | "error" | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<"error" | null>(null);
   const weatherRequestId = useRef(0);
   const mobileMoreButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLElement>(null);
@@ -361,23 +445,20 @@ export default function Layout() {
     setModulePreferences(loadModulePreferences());
   }), []);
 
+  useEffect(() => subscribeToSystemTheme(appTheme), [appTheme]);
+
   useEffect(() => {
-    let hideTimer: number | undefined;
     const showSaved = () => {
       if (listLocalPersistenceIssues().length > 0) return;
-      window.clearTimeout(hideTimer);
-      setSaveFeedback("saved");
-      hideTimer = window.setTimeout(() => setSaveFeedback(null), 2200);
+      setSaveFeedback(null);
     };
     const showIssues = () => {
-      window.clearTimeout(hideTimer);
       setSaveFeedback(listLocalPersistenceIssues().length > 0 ? "error" : null);
     };
     window.addEventListener("rootine:workspace-change", showSaved);
     const unsubscribeIssues = subscribeToLocalPersistenceIssues(showIssues);
     showIssues();
     return () => {
-      window.clearTimeout(hideTimer);
       window.removeEventListener("rootine:workspace-change", showSaved);
       unsubscribeIssues();
     };
@@ -467,6 +548,21 @@ export default function Layout() {
     setOpenMenu(null);
   }, [location.pathname, location.search]);
 
+  useEffect(() => {
+    const module = findModuleForPath(location.pathname);
+    if (!module) return;
+    const params = new URLSearchParams(location.search);
+    TRANSIENT_COMMAND_PARAMS.forEach((key) => params.delete(key));
+    const search = params.toString();
+    writeModuleMemoryValue(module.id, "location", `${location.pathname}${search ? `?${search}` : ""}`);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const openCommandCenter = () => setCommandCenterOpen(true);
+    window.addEventListener("rootine:open-command-center", openCommandCenter);
+    return () => window.removeEventListener("rootine:open-command-center", openCommandCenter);
+  }, []);
+
   const toggleSidebar = () => {
     setIsSidebarCollapsed((collapsed) => !collapsed);
     setOpenMenu(null);
@@ -551,9 +647,32 @@ export default function Layout() {
     onReset: resetModules,
   };
 
-  const changeAppTheme = (themeId: AppThemeId) => {
-    setAppTheme(themeId);
-    applyAppTheme(themeId);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const selectedEntityId = location.pathname.startsWith("/cele/")
+      ? location.pathname.slice("/cele/".length).split("/", 1)[0]
+      : location.pathname.startsWith("/podroze/")
+        ? location.pathname.slice("/podroze/".length).split("/", 1)[0]
+        : params.get("id") ?? undefined;
+    updateAppContext({
+      module: location.pathname.startsWith("/kalendarz")
+        ? "calendar"
+        : location.pathname.startsWith("/podroze")
+          ? "travel"
+          : currentModule?.id ?? "today",
+      subview: params.get("widok") ?? params.get("tab") ?? undefined,
+      selectedDate: params.get("data") ?? params.get("date") ?? undefined,
+      selectedEntityId,
+      activeFilter: params.get("filter") ?? params.get("filtr") ?? undefined,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Warsaw",
+      locale: navigator.language || "pl-PL",
+      privacyMode: privacy.enabled,
+    });
+  }, [currentModule?.id, location.pathname, location.search, privacy.enabled, updateAppContext]);
+
+  const changeAppTheme = (preference: AppThemePreference) => {
+    setAppTheme(preference);
+    applyAppTheme(preference);
   };
 
   useEffect(() => {
@@ -563,9 +682,23 @@ export default function Layout() {
         target.matches("input, textarea, select")
         || target.isContentEditable
       );
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setOpenMenu(null);
+        setHelpOpen(false);
+        setCommandCenterOpen(true);
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === "Space" && !isTyping) {
+        event.preventDefault();
+        setOpenMenu(null);
+        setHelpOpen(false);
+        openAssistant();
+        return;
+      }
       if (isTyping) return;
 
-      if (event.key === "?" || (event.ctrlKey && event.key.toLowerCase() === "k")) {
+      if (event.key === "?") {
         event.preventDefault();
         setOpenMenu(null);
         setHelpGuideId(contextualHelpId);
@@ -584,7 +717,14 @@ export default function Layout() {
 
     document.addEventListener("keydown", handleGlobalShortcut);
     return () => document.removeEventListener("keydown", handleGlobalShortcut);
-  }, [contextualHelpId, navigate, visibleNav]);
+  }, [contextualHelpId, navigate, openAssistant, visibleNav]);
+
+  const latestUserTranscript = [...assistant.state.transcript]
+    .reverse()
+    .find((entry) => entry.role === "user")?.text ?? "";
+  const assistantStageStatus: AssistantStageStatus = assistant.state.status === "disabled"
+    ? "idle"
+    : assistant.state.status;
 
   return (
     <div className="app-shell">
@@ -635,18 +775,49 @@ export default function Layout() {
         </div>
 
         <nav className="app-primary-nav" aria-label="Obszary aplikacji">
-          {visibleNav.map((item) => <PrimaryNavItem key={item.id} item={item} />)}
+          {visibleNav.map((item) => (
+            <PrimaryNavItem
+              key={item.id}
+              item={item}
+            />
+          ))}
         </nav>
+
+        <AssistantEntryButton
+          enabled={assistant.canOpen}
+          active={assistant.isOpen}
+          reason={assistant.availability.message}
+          compact={isSidebarCollapsed || isCompactViewport}
+          onClick={assistant.openAssistant}
+        />
+
+        <button
+          type="button"
+          className="app-command-trigger"
+          aria-haspopup="dialog"
+          aria-expanded={commandCenterOpen}
+          onClick={() => setCommandCenterOpen(true)}
+        >
+          <Plus size={16} strokeWidth={1.8} aria-hidden="true" />
+          <span>Dodaj</span>
+          <kbd>Ctrl K</kbd>
+        </button>
 
         <div className="app-sidebar__bottom">
           <div className="app-sidebar-glance" aria-label="Data, godzina i pogoda">
-            <div className="app-sidebar-glance__row" title={`${timeLabel} · ${dateLabel}`}>
+            <button
+              type="button"
+              className="app-sidebar-glance__row app-sidebar-replay"
+              title={`${timeLabel} · ${dateLabel} · otwórz Oś dnia`}
+              aria-label={`${timeLabel}, ${dateLabel}. Otwórz Oś dnia`}
+              onClick={() => setDayReplayOpen(true)}
+            >
               <Clock3 size={16} strokeWidth={1.7} aria-hidden="true" />
               <span className="app-sidebar-glance__copy">
                 <strong>{timeLabel}</strong>
                 <small>{dateLabel}</small>
               </span>
-            </div>
+            </button>
 
             <button
               type="button"
@@ -755,6 +926,8 @@ export default function Layout() {
                 value={appTheme}
                 onChange={changeAppTheme}
               />
+              <ExperienceSettings />
+              <AssistantSettingsPanel availability={assistant.availability} />
               <ModuleSettings {...settingsProps} idPrefix="sidebar" />
               <div className="app-recovery-entry">
                 <RecoveryCenterButton />
@@ -866,7 +1039,7 @@ export default function Layout() {
               <CircleHelp size={16} aria-hidden="true" />
               <div>
                 <h3 id="help-shortcuts-title">Skróty i bezpieczeństwo</h3>
-                <p><kbd>Ctrl K</kbd> lub <kbd>?</kbd> otwiera ten panel. <kbd>Esc</kbd> zamyka dialogi.</p>
+                <p><kbd>Ctrl K</kbd> otwiera centrum dodawania, <kbd>?</kbd> pomoc, a <kbd>Esc</kbd> zamyka dialogi.</p>
               </div>
             </div>
             <div className="app-help-dialog__recovery">
@@ -879,18 +1052,56 @@ export default function Layout() {
 
       {saveFeedback && (
         <div className={`app-save-feedback is-${saveFeedback}`} role="status" aria-live="polite">
-          {saveFeedback === "saved"
-            ? <CircleCheck size={15} aria-hidden="true" />
-            : <CircleHelp size={15} aria-hidden="true" />}
-          <span>{saveFeedback === "saved" ? "Zapisano lokalnie" : "Zapis wymaga uwagi — otwórz Centrum odzyskiwania"}</span>
+          <CircleHelp size={15} aria-hidden="true" />
+          <span>Zapis wymaga uwagi — otwórz Centrum odzyskiwania</span>
         </div>
       )}
 
+      <Suspense fallback={null}>
+        {commandCenterOpen && (
+          <CommandCenter
+            open
+            onClose={() => setCommandCenterOpen(false)}
+            currentModuleId={currentModule?.id}
+          />
+        )}
+        {dayReplayOpen && <DayReplay open onClose={() => setDayReplayOpen(false)} />}
+      </Suspense>
+
       <div className="app-shell__body">
-        <div id="primary-workspace" className="app-shell__content" tabIndex={-1}>
+        <div
+          id="primary-workspace"
+          className={`app-shell__content${assistant.isOpen ? " is-assistant-active" : ""}`}
+          tabIndex={-1}
+        >
           <Suspense fallback={<RouteLoadingState />}>
-            <Outlet />
+            <RouteTransition inactive={assistant.isOpen}><Outlet /></RouteTransition>
           </Suspense>
+          <AssistantStage
+            open={assistant.isOpen}
+            status={assistantStageStatus}
+            transcript={latestUserTranscript}
+            partialTranscript={assistant.state.partialTranscript}
+            assistantText={assistant.state.assistantText}
+            view={assistant.view}
+            pendingConfirmation={assistant.pendingConfirmation}
+            error={assistant.state.error?.message}
+            microphoneEnabled={assistant.state.microphoneEnabled}
+            microphoneMode={assistantSettings.microphoneMode}
+            audioEnabled={assistant.state.audioEnabled}
+            privacyMode={privacy.enabled}
+            analyser={assistant.analyser}
+            onStartVoice={() => { void assistant.startVoice(); }}
+            onSendText={(text) => { void assistant.sendText(text); }}
+            onCancelResponse={assistant.cancelResponse}
+            onToggleAudio={assistant.toggleAudio}
+            onStartPushToTalk={() => { void assistant.startPushToTalk(); }}
+            onStopPushToTalk={assistant.stopPushToTalk}
+            onCancelPushToTalk={assistant.cancelPushToTalk}
+            onClose={() => { void assistant.closeAssistant(); }}
+            onInteraction={assistant.handlePanelInteraction}
+            onRetry={() => { void assistant.retry(); }}
+          />
         </div>
 
         {openMenu?.startsWith("mobile") && (
@@ -978,6 +1189,21 @@ export default function Layout() {
                   })}
                 </nav>
                 <div className="app-mobile-menu__actions">
+                  <button
+                    type="button"
+                    disabled={!assistant.canOpen}
+                    onClick={() => {
+                      closeMobileMenu();
+                      mobileMoreButtonRef.current?.focus();
+                      assistant.openAssistant();
+                    }}
+                  >
+                    <AudioLines size={16} strokeWidth={1.7} aria-hidden="true" />
+                    <span>
+                      <strong>Asystent</strong>
+                      <small>{assistant.canOpen ? "Głos i tekst w Assistant Stage" : assistant.availability.message}</small>
+                    </span>
+                  </button>
                   <button type="button" onClick={() => { closeMobileMenu(); setHelpOpen(true); }}>
                     <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
                     <span>
@@ -1010,6 +1236,8 @@ export default function Layout() {
                   value={appTheme}
                   onChange={changeAppTheme}
                 />
+                <ExperienceSettings compact />
+                <AssistantSettingsPanel availability={assistant.availability} compact />
                 <button
                   type="button"
                   className="app-mobile-menu__weather"
@@ -1052,6 +1280,7 @@ export default function Layout() {
             type="button"
             className={`app-mobile-nav__item${moreIsActive || openMenu?.startsWith("mobile") ? " is-active" : ""}`}
             data-app-menu-trigger
+            aria-haspopup="dialog"
             aria-expanded={Boolean(openMenu?.startsWith("mobile"))}
             aria-controls="mobile-more-menu"
             onClick={() => setOpenMenu((current) => current?.startsWith("mobile") ? null : "mobileMore")}
@@ -1061,6 +1290,11 @@ export default function Layout() {
           </button>
         </nav>
       </div>
+      <AssistantUndoToast
+        notice={assistant.undoNotice}
+        onUndo={(token) => { void assistant.undo(token); }}
+        onDismiss={assistant.dismissUndo}
+      />
     </div>
   );
 }

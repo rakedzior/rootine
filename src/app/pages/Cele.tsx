@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useGoalsStore } from "../goals/goalsContext";
 import { todayLocalDateKey } from "../data/localDate";
+import { recordActivity } from "../experience/activityLog";
 import type {
   Goal as StoredGoal,
   GoalDraft,
@@ -116,6 +117,7 @@ export default function Cele() {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [goalFormId, setGoalFormId] = useState<"new" | string | null>(null);
+  const [quickGoalTitle, setQuickGoalTitle] = useState("");
   const [progressGoalId, setProgressGoalId] = useState<string | null>(null);
   const [milestoneGoalId, setMilestoneGoalId] = useState<string | null>(null);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
@@ -133,11 +135,23 @@ export default function Cele() {
   const setGoalSort = (nextSort: GoalSortKey) => updateGoalViewState({ sort: nextSort });
 
   useEffect(() => {
+    if (searchParams.get("akcja") === "nowy-cel") return;
     const canonical = writeGoalViewState(searchParams, { ...viewState, selectedId });
     if (canonical.toString() !== searchParams.toString()) {
       setSearchParams(canonical, { replace: true });
     }
   }, [searchParams, selectedId, setSearchParams, viewState]);
+
+  useEffect(() => {
+    if (searchParams.get("akcja") !== "nowy-cel") return;
+
+    setQuickGoalTitle(searchParams.get("tytul")?.trim() ?? "");
+    setGoalFormId("new");
+
+    const next = new URLSearchParams(searchParams);
+    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => next.delete(key));
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => { try { localStorage.setItem("rootine.goals.layout", layout); } catch { /* preference persistence is best-effort */ } }, [layout]);
   useEffect(() => { try { localStorage.setItem("rootine.goals.sort", sortKey); } catch { /* preference persistence is best-effort */ } }, [sortKey]);
@@ -181,17 +195,24 @@ export default function Cele() {
   };
 
   const changeStatus = (goalId: string, status: GoalStatus) => {
+    const goal = storedGoals.find((item) => item.id === goalId);
     if (status === "risk") updateGoal(goalId, { status: "active", health: "risk" });
     else updateGoal(goalId, { status: status as StoredGoalStatus, ...(status === "active" ? { health: "ontrack" as const } : {}) });
+    if (goal) recordActivity({ moduleId: "goals", kind: "status", title: goal.title, detail: `Status: ${status}` });
   };
 
   const submitGoal = (data: GoalEditorData) => {
     if (goalFormId === "new") {
       const draft: GoalDraft = { ...data, initialValue: 0, milestones: [], progressEntries: [] };
       const id = createGoal(draft);
+      recordActivity({ moduleId: "goals", kind: "create", title: data.title, detail: "Utworzono cel" });
       setSelectedGoalId(id);
-    } else if (goalFormId) updateGoal(goalFormId, data);
+    } else if (goalFormId) {
+      updateGoal(goalFormId, data);
+      recordActivity({ moduleId: "goals", kind: "save", title: data.title, detail: "Zaktualizowano cel" });
+    }
     setGoalFormId(null);
+    setQuickGoalTitle("");
   };
 
   const downloadJson = (raw: string, fileName: string) => {
@@ -474,8 +495,12 @@ export default function Cele() {
       {goalFormId && (
         <GoalFormDialog
           goal={goalFormId === "new" ? null : storedGoals.find((goal) => goal.id === goalFormId)}
+          initialTitle={goalFormId === "new" ? quickGoalTitle : undefined}
           categories={categories}
-          onClose={() => setGoalFormId(null)}
+          onClose={() => {
+            setGoalFormId(null);
+            setQuickGoalTitle("");
+          }}
           onSubmit={submitGoal}
         />
       )}

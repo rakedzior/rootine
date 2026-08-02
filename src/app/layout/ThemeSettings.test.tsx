@@ -2,11 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import type { AppThemeId } from "../theme/appTheme";
+import type { AppThemePreference } from "../theme/appTheme";
 import { ThemeSettings } from "./ThemeSettings";
 
 function ThemeSettingsFixture() {
-  const [theme, setTheme] = useState<AppThemeId>("onyx-ebony-stone");
+  const [theme, setTheme] = useState<AppThemePreference>("rootine-cobalt");
   return (
     <ThemeSettings
       idPrefix="test"
@@ -17,17 +17,17 @@ function ThemeSettingsFixture() {
 }
 
 describe("ThemeSettings", () => {
-  it("offers five named themes and updates the selected radio", async () => {
+  it("offers six named themes plus system mode and updates the selected radio", async () => {
     const user = userEvent.setup();
     render(<ThemeSettingsFixture />);
 
-    expect(screen.getAllByRole("radio")).toHaveLength(5);
-    expect(screen.getByRole("radio", { name: /Onyx · Ebony · Stone/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getAllByRole("radio")).toHaveLength(7);
+    expect(screen.getByRole("radio", { name: /Rootine Midnight Instrument/ })).toHaveAttribute("aria-checked", "true");
 
-    const puttyTheme = screen.getByRole("radio", { name: /Putty · Natural Oak · Calacatta/ });
-    await user.click(puttyTheme);
+    const warmTheme = screen.getByRole("radio", { name: /Rootine Warm Linen/ });
+    await user.click(warmTheme);
 
-    expect(puttyTheme).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("radio", { name: /Onyx · Ebony · Stone/ })).toHaveAttribute("aria-checked", "false");
+    expect(warmTheme).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /Rootine Midnight Instrument/ })).toHaveAttribute("aria-checked", "false");
   });
 });

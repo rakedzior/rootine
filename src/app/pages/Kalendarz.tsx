@@ -59,22 +59,23 @@ import {
   tasksForSmartDateView,
 } from "./tasks/taskPageModel";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
+import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
 import "../../styles/calendar.css";
 import "../../styles/tasks.css";
 
 const C = {
-  bg: uiColors.graphiteCanvas,
-  grid: uiColors.graphiteCanvas,
-  border: uiColors.borderSubtle,
-  text: uiColors.chalkWhite,
+  bg: uiColors.appBg,
+  grid: uiColors.appBg,
+  border: uiColors.border,
+  text: uiColors.textPrimary,
   second: uiColors.textSecondary,
-  muted: uiColors.textMuted,
+  muted: uiColors.textTertiary,
   disabled: uiColors.textDisabled,
-  blue: uiColors.precisionBlueStrong,
-  blueText: uiColors.precisionBlueText,
-  blueSoft: uiColors.precisionBlueSoft,
-  panel: uiColors.graphitePanel,
-  hover: uiColors.graphiteHover,
+  blue: uiColors.primary,
+  blueText: uiColors.primaryText,
+  blueSoft: uiColors.primarySubtle,
+  panel: uiColors.surface1,
+  hover: uiColors.surfaceHover,
 } as const;
 
 const MONTHS = [
@@ -242,7 +243,16 @@ export default function Kalendarz() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
   const [occurrenceSources, setOccurrenceSources] = useState(loadCalendarOccurrenceSources);
-  const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
+  const [viewDate, setViewDate] = useState(() => {
+    const saved = readModuleMemoryValue(
+      "tasks.calendar",
+      "month",
+      (value): value is string => typeof value === "string" && /^\d{4}-\d{2}$/.test(value),
+    );
+    if (!saved) return new Date(now.getFullYear(), now.getMonth(), 1);
+    const [year, month] = saved.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  });
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isCalendarTask));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
@@ -268,6 +278,14 @@ export default function Kalendarz() {
   const [agendaDateKey, setAgendaDateKey] = useState<string | null>(null);
   const [agendaPosition, setAgendaPosition] = useState({ left: 8, top: 8 });
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
+
+  useEffect(() => {
+    writeModuleMemoryValue(
+      "tasks.calendar",
+      "month",
+      `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}`,
+    );
+  }, [viewDate]);
   const [trashedTask, setTrashedTask] = useState<CalendarEvent | null>(null);
   const calendarRootRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
@@ -893,7 +911,7 @@ export default function Kalendarz() {
         </div>
       </ContextSidebar>
 
-      <ModuleMain>
+      <ModuleMain transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
         <WorkspaceToolbar>
           <div className="flex items-center gap-1">
             <Select
@@ -1180,7 +1198,7 @@ export default function Kalendarz() {
             visibility: detailPosition.ready ? "visible" : "hidden",
             width: detailPosition.width, height: detailPosition.height, overflow: "hidden",
             border: `1px solid ${C.border}`, borderRadius: 15,
-            boxShadow: "0 12px 36px rgba(0,0,0,.38)",
+            boxShadow: "var(--shadow-floating)",
           }}
         >
           <TaskDetail
@@ -1223,7 +1241,7 @@ export default function Kalendarz() {
             visibility: detailPosition.ready ? "visible" : "hidden",
             width: detailPosition.width, maxHeight: detailPosition.height, overflow: "auto",
             border: `1px solid ${C.border}`, borderRadius: 15,
-            boxShadow: "0 12px 36px rgba(0,0,0,.38)",
+            boxShadow: "var(--shadow-floating)",
           }}
         >
           <header className="calendar-source-detail__header">

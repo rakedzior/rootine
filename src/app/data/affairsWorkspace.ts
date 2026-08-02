@@ -570,6 +570,33 @@ export function createAffairsId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function setMatterCompletionState(
+  workspace: AffairsWorkspace,
+  matterId: string,
+  completed: boolean,
+): AffairsWorkspace {
+  return {
+    ...workspace,
+    matters: workspace.matters.map((matter) => matter.id === matterId
+      ? { ...matter, status: completed ? "done" : "open" }
+      : matter),
+  };
+}
+
+export function setOneTimePaymentPaidState(
+  workspace: AffairsWorkspace,
+  paymentId: string,
+  paid: boolean,
+  paidAt = paid ? new Date().toISOString() : "",
+): AffairsWorkspace {
+  return {
+    ...workspace,
+    oneTimePayments: workspace.oneTimePayments.map((payment) => payment.id === paymentId
+      ? { ...payment, paid, paidAt: paid ? paidAt : "" }
+      : payment),
+  };
+}
+
 export function createBudgetMonth(month: string, source?: BudgetMonth): BudgetMonth {
   return {
     month,
