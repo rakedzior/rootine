@@ -299,7 +299,7 @@ function PlannedWorkoutRow({
         </div>
       ) : outcome ? (
         <div className="sport-overview-workout__actions">
-          <Button variant="quiet" size="sm" onClick={onSelect}>Podsumowanie</Button>
+          <Button variant="quiet" size="sm" onClick={onSelect}>{completed ? "Podsumowanie" : "Działania"}</Button>
         </div>
       ) : (
         <div className="sport-overview-workout__actions">
@@ -400,8 +400,8 @@ export function SportOverview({
                 <Button variant="quiet" size="sm" onClick={onAddWorkout}>
                   Dodaj trening
                 </Button>
-                <Button variant="quiet" size="sm" onClick={() => onOpenCycle(week)}>
-                  Plan tygodniowy
+                <Button variant="ghost" size="sm" onClick={() => onOpenCycle(week)}>
+                  Otwórz plan
                 </Button>
               </div>
             )}
@@ -412,15 +412,15 @@ export function SportOverview({
                 <span>{todayWorkouts.length} {workoutCountLabel(todayWorkouts.length)}</span>
                 <i aria-hidden="true">·</i>
                 <span>{todayMinutes} min</span>
-                <i aria-hidden="true">·</i>
-                <span>{completedToday} z {todayWorkouts.length} wykonanych</span>
               </p>
-              <ProgressBar
-                value={todayProgress}
-                size="sm"
-                label="Postęp dzisiejszego planu treningowego"
-                valueLabel={`${todayProgress}%`}
-              />
+              {todayWorkouts.length > 0 && (
+                <ProgressBar
+                  value={todayProgress}
+                  size="sm"
+                  label="Postęp dzisiejszego planu treningowego"
+                  valueLabel={`${todayProgress}%`}
+                />
+              )}
             </div>
             <div className="sport-today-card__agenda">
               <div className="sport-today-card__agenda-summary">

@@ -71,7 +71,6 @@ const C = {
   muted: uiColors.textMuted,
   disabled: uiColors.textDisabled,
   blue: uiColors.precisionBlueStrong,
-  blueSignal: uiColors.precisionBlue,
   blueText: uiColors.precisionBlueText,
   blueSoft: uiColors.precisionBlueSoft,
   panel: uiColors.graphitePanel,
@@ -1054,7 +1053,6 @@ export default function Kalendarz() {
               style={{
                 minWidth: 0, minHeight: 0, position: "relative", padding: "7px 5px 4px",
                 borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
-                boxShadow: dragOverDateKey === key ? `inset 0 0 0 1px ${C.blueSignal}` : "none",
                 cursor: "pointer", transition: "background-color 140ms ease-out, box-shadow 140ms ease-out",
               }}
             >

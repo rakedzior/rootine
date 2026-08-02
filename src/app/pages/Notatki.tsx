@@ -204,6 +204,12 @@ export default function Notatki() {
   const [initialUrlState] = useState(getInitialNotesUrlState);
   const [storedDraftSession] = useState(loadStoredDraftSession);
   const [workspace, setWorkspace] = useState(loadNotesWorkspace);
+  const quickAddRequested = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("akcja") === "nowa-notatka";
+  const quickAddDraft: NoteDraft = {
+    ...EMPTY_DRAFT,
+    listId: workspace.lists[0]?.id ?? "",
+  };
   const [view, setView] = useState<NotesView>(initialUrlState.view);
   const [search, setSearch] = useState(initialUrlState.search);
   const [sort, setSort] = useState<NotesSort>(initialUrlState.sort);
@@ -214,9 +220,9 @@ export default function Notatki() {
       return "cards";
     }
   });
-  const [editor, setEditor] = useState<EditorState | null>(storedDraftSession?.editor ?? null);
-  const [draft, setDraft] = useState<NoteDraft>(storedDraftSession?.draft ?? EMPTY_DRAFT);
-  const [draftBaseline, setDraftBaseline] = useState(storedDraftSession?.baseline ?? serializeDraft(EMPTY_DRAFT));
+  const [editor, setEditor] = useState<EditorState | null>(storedDraftSession?.editor ?? (quickAddRequested ? { mode: "add" } : null));
+  const [draft, setDraft] = useState<NoteDraft>(storedDraftSession?.draft ?? (quickAddRequested ? quickAddDraft : EMPTY_DRAFT));
+  const [draftBaseline, setDraftBaseline] = useState(storedDraftSession?.baseline ?? serializeDraft(quickAddRequested ? quickAddDraft : EMPTY_DRAFT));
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<NoteRecord | null>(null);
   const [deletedNoteUndo, setDeletedNoteUndo] = useState<{ note: NoteRecord; index: number } | null>(null);
@@ -233,6 +239,13 @@ export default function Notatki() {
   const draftPersistenceTimerRef = useRef<number | null>(null);
   const draftSessionRef = useRef<StoredDraftSession | null>(storedDraftSession);
   const isEditorDirty = Boolean(editor) && serializeDraft(draft) !== draftBaseline;
+
+  useEffect(() => {
+    if (!quickAddRequested) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("akcja");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [quickAddRequested]);
 
   const flushDraftSession = useCallback(() => {
     if (draftPersistenceTimerRef.current !== null) {
@@ -1036,6 +1049,7 @@ export default function Notatki() {
             <span className="sr-only">Tytuł notatki</span>
             <input
               autoFocus
+              data-autofocus
               value={draft.title}
               placeholder="Tytuł notatki"
               onChange={(event) => {

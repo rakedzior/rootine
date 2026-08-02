@@ -58,6 +58,7 @@ export type AmbientVariant =
   | "sport"
   | "goals"
   | "tasks"
+  | "habits"
   | "calendar"
   | "nutrition"
   | "work"
@@ -123,7 +124,10 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
 
       {config.scene === "today" && (
         <span className="ui-ambient-today">
-          <span className="ui-ambient-today__photo" />
+          <span className="ui-ambient-today__light">
+            <i />
+            <b />
+          </span>
           <span className="ui-ambient-today__dial">
             <i className="ui-ambient-today__ticks" />
             <i className="ui-ambient-today__progress" />
@@ -167,6 +171,30 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
             ))}
           </svg>
           {Array.from({ length: 4 }, (_, index) => <i key={index} style={{ "--ambient-lane-index": index } as CSSProperties} />)}
+        </span>
+      )}
+
+      {config.scene === "habits" && (
+        <span className="ui-ambient-habits">
+          <svg viewBox="0 0 720 460" preserveAspectRatio="xMidYMid slice" role="presentation">
+            <path className="ui-ambient-habits__guide" d="M58 316C150 316 162 176 264 176S386 286 476 286s112-136 190-136" pathLength="100" />
+            <path className="ui-ambient-habits__progress" d="M58 316C150 316 162 176 264 176S386 286 476 286s112-136 190-136" pathLength="100" />
+            {[
+              { x: 58, y: 316 },
+              { x: 154, y: 246 },
+              { x: 264, y: 176 },
+              { x: 370, y: 230 },
+              { x: 476, y: 286 },
+              { x: 570, y: 222 },
+              { x: 666, y: 150 },
+            ].map((node, index) => (
+              <g key={index} className="ui-ambient-habits__day" style={{ "--ambient-habit-index": index } as CSSProperties}>
+                <circle className="ui-ambient-habits__halo" cx={node.x} cy={node.y} r="17" />
+                <circle className="ui-ambient-habits__node" cx={node.x} cy={node.y} r={index === 6 ? 7 : 5} />
+              </g>
+            ))}
+          </svg>
+          <i />
         </span>
       )}
 

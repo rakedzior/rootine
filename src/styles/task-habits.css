@@ -208,6 +208,8 @@
   margin-top: 0;
   margin-bottom: var(--space-xl);
   padding: var(--space-xs) var(--space-sm);
+  border-color: color-mix(in srgb, var(--color-category-teal) 14%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-graphite-input) 86%, transparent);
   border-radius: var(--radius-lg);
 }
 
@@ -426,6 +428,16 @@
 
 .task-habits-workspace--list .task-habits-list .task-row {
   min-height: 52px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.task-habits-workspace--list .task-habits-list .task-row:hover {
+  border-color: color-mix(in srgb, var(--color-category-teal) 18%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-graphite-hover) 88%, transparent);
 }
 
 .task-habits-workspace--list .task-habits-list .ui-list-row__trailing {
@@ -514,7 +526,7 @@
   height: 13px;
   place-items: center;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: var(--text-body-emphasis);
 }
 
 .task-habit-weekday-picker {

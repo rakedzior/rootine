@@ -1407,20 +1407,18 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-overview-layout {
   display: grid;
   grid-template-columns: minmax(360px, 0.44fr) minmax(0, 0.56fr);
-  align-items: stretch;
+  align-items: start;
   gap: var(--space-lg);
 }
 
 .sport-overview-layout__today {
   display: grid;
-  height: 100%;
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: var(--space-sm);
 }
 
 .sport-overview-layout__week {
-  height: 100%;
   min-width: 0;
 }
 
@@ -1436,12 +1434,11 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-today-card {
   display: flex;
-  height: 100%;
   min-height: 0;
   flex-direction: column;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-graphite-input) 88%, transparent);
+  background: color-mix(in srgb, var(--color-graphite-input) 82%, transparent);
   overflow: hidden;
 }
 
@@ -1477,7 +1474,6 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   min-width: 0;
   align-content: start;
-  flex: 1;
   gap: var(--space-md);
   padding: var(--space-lg);
 }
@@ -1761,7 +1757,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-today-card__rest {
   display: flex;
-  min-height: 140px;
+  min-height: 96px;
   align-items: center;
   justify-content: center;
   gap: var(--space-lg);
@@ -1786,9 +1782,8 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-current-week {
   display: grid;
-  height: 100%;
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: var(--space-sm);
 }
 
@@ -1803,8 +1798,12 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-current-week > .ui-card {
-  height: 100%;
   overflow: hidden;
+  background: color-mix(in srgb, var(--color-graphite-card) 86%, transparent);
+}
+
+.sport-section-header-actions > .ui-button:first-child {
+  color: var(--color-precision-blue-text);
 }
 
 /*

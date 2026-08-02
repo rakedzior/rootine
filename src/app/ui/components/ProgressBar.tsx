@@ -44,7 +44,7 @@ export function ProgressBar({
         aria-valuemax={100}
         aria-label={label}
       >
-        <div className="ui-progress__fill" style={{ width: `${clamped}%` }} />
+        <div className="ui-progress__fill" style={{ transform: `scaleX(${clamped / 100})` }} />
       </div>
       {valueLabel !== undefined && <span className="ui-progress__value">{valueLabel}</span>}
     </div>

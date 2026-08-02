@@ -228,14 +228,14 @@ export function overdueDateLabel(calendarDate: string): string {
 }
 
 /**
- * Short form of {@link overdueDateLabel} for the fixed-width ListRow rail.
- * The rail is 56px, so "9 dni temu" is trimmed to "9 dni".
+ * Explicit form for the fixed-width ListRow date column. The user should not have to
+ * infer that a bare duration means lateness.
  */
 export function overdueRailLabel(calendarDate: string): string {
   const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
   if (daysAgo === null) return "";
   if (daysAgo === 1) return "Wczoraj";
-  if (daysAgo > 1) return `${daysAgo} dni`;
+  if (daysAgo > 1) return `${daysAgo} dni po terminie`;
   return "";
 }
 

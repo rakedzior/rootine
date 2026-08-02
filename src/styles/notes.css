@@ -383,12 +383,16 @@
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--note-accent) 4%, var(--color-graphite-card));
   color: var(--color-text-secondary);
-  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .notes-card:hover {
   border-color: var(--color-border-strong);
   background: color-mix(in srgb, var(--note-accent) 7%, var(--color-graphite-card));
+  transform: translateY(-1px);
 }
 
 .notes-card--graphite,

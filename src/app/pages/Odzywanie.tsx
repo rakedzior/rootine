@@ -79,6 +79,7 @@ function nutritionWorkspaceHasHistory(workspace: NutritionWorkspace) {
 }
 
 export default function Odzywanie() {
+  const quickAddRequested = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("akcja") === "dodaj-posilek";
   const [initialLoad] = useState(() => {
     const loaded = loadNutritionWorkspace();
     if (loaded.status === "corrupt" || nutritionWorkspaceHasHistory(loaded.workspace)) return loaded;
@@ -91,7 +92,7 @@ export default function Odzywanie() {
   const [loadStatus, setLoadStatus] = useState(initialLoad.status);
   const [savePending, setSavePending] = useState(false);
   const [selectedDate, setSelectedDate] = useState(nutritionDateKey);
-  const [entryDialogOpen, setEntryDialogOpen] = useState(false);
+  const [entryDialogOpen, setEntryDialogOpen] = useState(quickAddRequested);
   const [entryDraft, setEntryDraft] = useState<EntryDraft>(createEntryDraft);
   const [selectedFood, setSelectedFood] = useState<FoodSuggestion | null>(null);
   const [editingEntry, setEditingEntry] = useState<{ meal: MealSlot; entry: NutritionEntry } | null>(null);
@@ -132,6 +133,12 @@ export default function Odzywanie() {
   const [waterSimpleWeight, setWaterSimpleWeight] = useState("");
   const [storageFailed, setStorageFailed] = useState(false);
   const [undoEntry, setUndoEntry] = useState<{ meal: MealSlot; entry: NutritionEntry } | null>(null);
+
+  useEffect(() => {
+    if (!quickAddRequested) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("akcja"); window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [quickAddRequested]);
 
   const today = nutritionDateKey();
   const day = workspace.days[selectedDate] ?? createEmptyNutritionDay(selectedDate);
@@ -935,7 +942,6 @@ export default function Odzywanie() {
                 <SectionHeader
                   title="Posiłki"
                   description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} kcal`}
-                  action={<Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} onClick={() => openEntryDialog()}>Dodaj produkt</Button>}
                 />
 
                 <div className="nutrition-meal-list">
@@ -957,9 +963,11 @@ export default function Odzywanie() {
                             <span className="nutrition-meal-summary__metric is-fat"><small>T</small>{formatNumber(mealTotals.fat)} g</span>
                             <span className="nutrition-meal-summary__metric is-calories"><small>kcal</small>{formatNumber(mealTotals.calories)}</span>
                           </div>
-                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
-                            <Plus size={13} />
-                          </Button>
+                          {mealEntries.length > 0 && (
+                            <Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
+                              Dodaj
+                            </Button>
+                          )}
                         </div>
 
                         {mealEntries.length ? (
@@ -990,10 +998,16 @@ export default function Odzywanie() {
                             ))}
                           </div>
                         ) : (
-                          <div className="nutrition-meal-card__empty">
-                            <span>Nie dodano produktów</span>
-                            <Button variant="ghost" size="sm" disabled={dayClosed} onClick={() => openEntryDialog(id)}>Dodaj</Button>
-                          </div>
+                          <button
+                            type="button"
+                            className="nutrition-meal-card__empty"
+                            disabled={dayClosed}
+                            onClick={() => openEntryDialog(id)}
+                          >
+                            <Plus size={14} aria-hidden="true" />
+                            <span>Dodaj pierwszy produkt</span>
+                            <small>do: {label}</small>
+                          </button>
                         )}
                       </section>
                     );

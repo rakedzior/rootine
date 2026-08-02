@@ -82,12 +82,21 @@
 }
 
 .nutrition-meal-card {
-  --nutrition-meal-columns: minmax(0, 1fr) 76px 62px 62px 62px 74px 32px;
+  --nutrition-meal-columns: minmax(0, 1fr) 70px 64px 64px 64px 76px 70px;
 
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-border-subtle) 82%, transparent);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-graphite-panel) 82%, transparent);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.nutrition-meal-card:hover,
+.nutrition-meal-card:focus-within {
+  border-color: color-mix(in srgb, var(--color-success-seaglass) 22%, var(--color-border-strong));
+  background: color-mix(in srgb, var(--color-graphite-panel) 90%, transparent);
 }
 
 .nutrition-meal-card__header {
@@ -139,7 +148,7 @@
   gap: 2px;
   color: var(--color-chalk-white);
   font-family: var(--font-data);
-  font-size: var(--text-micro);
+  font-size: var(--text-label);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-medium);
   line-height: 1.1;
@@ -167,7 +176,7 @@
 
 .nutrition-meal-card__header > .ui-button {
   grid-column: 7;
-  justify-self: center;
+  justify-self: end;
 }
 
 .nutrition-entry-list {
@@ -206,7 +215,7 @@
 .nutrition-entry-item__metric {
   color: var(--color-text-secondary);
   font-family: var(--font-data);
-  font-size: var(--text-micro);
+  font-size: var(--text-label);
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;
@@ -260,13 +269,51 @@
 .nutrition-meal-card__empty {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-md);
+  width: 100%;
   min-height: 50px;
   padding: var(--space-sm) var(--space-md);
+  border: 0;
   border-top: 1px solid color-mix(in srgb, var(--color-border-subtle) 76%, transparent);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-micro);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.nutrition-meal-card__empty > svg {
+  color: var(--color-precision-blue-text);
+}
+
+.nutrition-meal-card__empty > span {
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+}
+
+.nutrition-meal-card__empty > small {
+  margin-left: auto;
   color: var(--color-text-muted);
   font-size: var(--text-micro);
+}
+
+.nutrition-meal-card__empty:hover:not(:disabled) {
+  background: var(--color-graphite-hover);
+  color: var(--color-text-secondary);
+}
+
+.nutrition-meal-card__empty:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 2px var(--color-precision-blue);
+}
+
+.nutrition-meal-card__empty:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .nutrition-summary {
@@ -277,7 +324,7 @@
 }
 
 .nutrition-budget-card {
-  background: var(--color-graphite-panel);
+  background: color-mix(in srgb, var(--color-graphite-panel) 90%, transparent);
 }
 
 .nutrition-budget-card__content {
@@ -2066,7 +2113,7 @@
   }
 
   .nutrition-meal-card__header {
-    grid-template-columns: minmax(0, 1fr) 32px;
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
     min-height: 68px;
   }
@@ -2336,7 +2383,7 @@
   }
 
   .nutrition-meal-card__header {
-    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
   }

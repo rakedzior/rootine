@@ -8,6 +8,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -46,11 +47,9 @@ import {
   toCalendarDateKey,
   type WorkspaceHabit,
   type WorkspaceTask,
-  saveTaskWorkspace,
-  taskViewForCalendarDate,
 } from "../data/taskWorkspace";
 import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
-import { loadWorkWorkspace, saveWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
+import { loadWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
 import { useGoalsStore } from "../goals/goalsContext";
 import type { Goal } from "../goals/goalsModel";
 import { APP_MODULE_BY_ID, type AppModuleId } from "../moduleRegistry";
@@ -62,6 +61,8 @@ import {
 import { toDateKey } from "../sport/model";
 import {
   Button,
+  Menu,
+  MenuItem,
   ModuleMain,
   ModuleShell,
   PageHeader,
@@ -102,14 +103,6 @@ function formatFullDate(date: Date) {
     month: "long",
     year: "numeric",
   }).format(date));
-}
-
-function formatTaskDate(dateKey: string) {
-  return new Date(`${dateKey}T12:00:00`).toLocaleDateString("pl-PL", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
 }
 
 function formatNumber(value: number, maximumFractionDigits = 0) {
@@ -261,7 +254,8 @@ export default function Dzisiaj() {
   const [sportPlanner, setSportPlanner] = useState(loadSportPlannerState);
   const [nutritionLoad, setNutritionLoad] = useState(loadNutritionWorkspace);
   const [modulePreferences, setModulePreferences] = useState<ModulePreferences>(loadModulePreferences);
-  const [reschedulingOverdue, setReschedulingOverdue] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setToday(new Date()), 60_000);
@@ -454,6 +448,7 @@ export default function Dzisiaj() {
   const SportIcon = APP_MODULE_BY_ID.sport.icon;
   const AffairsIcon = APP_MODULE_BY_ID.affairs.icon;
   const NutritionIcon = APP_MODULE_BY_ID.nutrition.icon;
+  const NotesIcon = APP_MODULE_BY_ID.notes.icon;
   const moduleRows: ModuleSummaryProps[] = [
     {
       moduleId: "tasks",
@@ -534,7 +529,7 @@ export default function Dzisiaj() {
           ? "Brak treningu na dziś"
           : counted(remainingWorkouts, "trening do wykonania", "treningi do wykonania", "treningów do wykonania"),
       state: sportState,
-      progress: sportProgress,
+      progress: sportState === "empty" ? undefined : sportProgress,
     },
     {
       moduleId: "affairs",
@@ -551,7 +546,7 @@ export default function Dzisiaj() {
         : undefined,
       accent: "neutral",
       state: affairsState,
-      progress: affairsState === "empty" ? 100 : undefined,
+      progress: undefined,
     },
     {
       moduleId: "nutrition",
@@ -581,44 +576,6 @@ export default function Dzisiaj() {
   const overdueTaskItems = (visibleModuleIds.has("tasks") ? overdueTasks.length : 0)
     + (visibleModuleIds.has("work") ? overdueWorkTasks.length : 0);
 
-  const rescheduleOverdueTasks = () => {
-    if (reschedulingOverdue || overdueTaskItems === 0) return;
-    setReschedulingOverdue(true);
-    try {
-      const overdueWorkIds = new Set(overdueWorkTasks.map((task) => task.id));
-      if (overdueWorkIds.size > 0) {
-        saveWorkWorkspace({
-          ...workWorkspace,
-          tasks: workWorkspace.tasks.map((task) => overdueWorkIds.has(task.id)
-            ? { ...task, dueDate: todayKey }
-            : task),
-        });
-      }
-
-      const overdueTaskIds = new Set(overdueTasks.map((task) => task.id));
-      const projectedWorkspace = loadTaskWorkspace();
-      const nextTaskWorkspace = {
-        ...projectedWorkspace,
-        tasks: projectedWorkspace.tasks.map((task) => {
-          if (!overdueTaskIds.has(task.id)) return task;
-          return {
-            ...task,
-            calendarDate: todayKey,
-            date: formatTaskDate(todayKey),
-            view: taskViewForCalendarDate(todayKey),
-            ...(task.schedule?.recurrence
-              ? { schedule: { ...task.schedule, completedDates: undefined } }
-              : {}),
-          };
-        }),
-      };
-      saveTaskWorkspace(nextTaskWorkspace);
-      setWorkWorkspace(loadWorkWorkspace());
-      setTaskWorkspace(loadTaskWorkspace());
-    } finally {
-      setReschedulingOverdue(false);
-    }
-  };
   const dailyProgress = percentage(completedDailyItems, totalDailyItems);
   const dayProgress = ((today.getHours() * 60) + today.getMinutes()) / (24 * 60);
 
@@ -627,23 +584,34 @@ export default function Dzisiaj() {
       title="Dzisiaj"
       description={formatFullDate(today)}
       actions={(
-        <Button
-          variant="primary"
-          leadingIcon={<Plus size={13} aria-hidden="true" />}
-          aria-label="Dodaj zadanie"
-          onClick={() => navigate(
-            `${APP_MODULE_BY_ID.tasks.to}?widok=dzis&akcja=nowe-zadanie`,
-            {
-              state: {
-                intent: "create-task",
-                focus: "task-composer",
-                source: "dzisiaj",
-              },
-            },
+        <div className="today-add-menu">
+          <Button
+            ref={addMenuTriggerRef}
+            variant="primary"
+            leadingIcon={<Plus size={13} aria-hidden="true" />}
+            aria-label="Dodaj do dzisiejszego planu"
+            aria-haspopup="menu"
+            aria-expanded={addMenuOpen}
+            aria-controls="today-add-menu"
+            onClick={() => setAddMenuOpen((open) => !open)}
+          >
+            <span className="header-action-label">Dodaj</span>
+          </Button>
+          {addMenuOpen && (
+            <Menu
+              id="today-add-menu"
+              triggerRef={addMenuTriggerRef}
+              onDismiss={() => setAddMenuOpen(false)}
+              className="today-add-menu__popup"
+            >
+              <MenuItem leadingIcon={<TasksIcon />} onClick={() => navigate(`${APP_MODULE_BY_ID.tasks.to}?widok=dzis&akcja=nowe-zadanie`)}>Zadanie</MenuItem>
+              <MenuItem leadingIcon={<NutritionIcon />} onClick={() => navigate(`${APP_MODULE_BY_ID.nutrition.to}?akcja=dodaj-posilek`)}>Posiłek</MenuItem>
+              <MenuItem leadingIcon={<SportIcon />} onClick={() => navigate(`${APP_MODULE_BY_ID.sport.to}?akcja=dodaj-trening`)}>Trening</MenuItem>
+              <MenuItem leadingIcon={<AffairsIcon />} onClick={() => navigate(APP_MODULE_BY_ID.affairs.to)}>Sprawę</MenuItem>
+              <MenuItem leadingIcon={<NotesIcon />} onClick={() => navigate(`${APP_MODULE_BY_ID.notes.to}?akcja=nowa-notatka`)}>Notatkę</MenuItem>
+            </Menu>
           )}
-        >
-          <span className="header-action-label">Dodaj zadanie</span>
-        </Button>
+        </div>
       )}
     />
   );
@@ -673,7 +641,10 @@ export default function Dzisiaj() {
                   <span>Plan dnia</span>
                 </div>
                 <div className="today-day-balance__headline">
-                  <h2 id="today-day-balance-title">{remainingDailyItems} pozostało</h2>
+                  <h2 id="today-day-balance-title">
+                    {remainingDailyItems} pozostało
+                    {overdueItems > 0 && <small>, w tym {overdueItems} zaległych</small>}
+                  </h2>
                 </div>
                 <div className="today-day-balance__progress-row">
                   <span
@@ -693,7 +664,7 @@ export default function Dzisiaj() {
                 </div>
                 <div className="today-day-balance__footer">
                   <LayoutGrid size={17} aria-hidden="true" />
-                  <span>{counted(activeAreaCount, "aktywny obszar", "aktywne obszary", "aktywnych obszarów")}</span>
+                  <span>{counted(activeAreaCount, "obszar wymaga uwagi", "obszary wymagają uwagi", "obszarów wymaga uwagi")}</span>
                 </div>
               </div>
 
@@ -716,16 +687,15 @@ export default function Dzisiaj() {
                     size="sm"
                     className="today-day-balance__attention-action"
                     trailingIcon={<ChevronRight size={14} aria-hidden="true" />}
-                    onClick={rescheduleOverdueTasks}
-                    disabled={reschedulingOverdue}
+                    onClick={() => navigate(APP_MODULE_BY_ID.tasks.to)}
                   >
-                    {reschedulingOverdue ? "Przenoszenie…" : "Przełóż zaległe zadania na dziś"}
+                    Przejrzyj zaległe
                   </Button>
                 )}
                 {overdueTaskAreaCount > 0 && (
                   <div className="today-day-balance__attention-footer">
                     <LayoutGrid size={17} aria-hidden="true" />
-                    <span>{counted(overdueTaskAreaCount, "aktywny obszar", "aktywne obszary", "aktywnych obszarów")}</span>
+                    <span>{counted(overdueTaskAreaCount, "obszar z zaległościami", "obszary z zaległościami", "obszarów z zaległościami")}</span>
                   </div>
                 )}
               </aside>

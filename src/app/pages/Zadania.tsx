@@ -610,8 +610,8 @@ export default function Zadania() {
     />
   ) : taskView === "nawyki" ? (
     <PageHeader
-      title="Zadania"
-      description={`Nawyki · ${todayStr()}`}
+      title="Nawyki"
+      description={`Codzienny rytm · ${todayStr()}`}
       meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
     />
   ) : (
@@ -639,9 +639,18 @@ export default function Zadania() {
       header={pageHeader}
       className="task-module"
       ambient={{
-        scene: "tasks",
-        progress: visible.length ? completed.length / visible.length : 0,
-        signal: completed.length,
+        scene: taskView === "nawyki" ? "habits" : "tasks",
+        progress: taskView === "nawyki"
+          ? (() => {
+            const scheduledHabits = habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey));
+            return scheduledHabits.length
+              ? scheduledHabits.filter((habit) => isHabitDoneOnDate(habit, todayKey)).length / scheduledHabits.length
+              : 0;
+          })()
+          : visible.length ? completed.length / visible.length : 0,
+        signal: taskView === "nawyki"
+          ? habits.filter((habit) => isHabitDoneOnDate(habit, todayKey)).length
+          : completed.length,
       }}
     >
 
@@ -1285,6 +1294,7 @@ export default function Zadania() {
                       key={task.id}
                       task={task}
                       tagi={tagi}
+                      listy={listy}
                       railLabel={overdueRailLabel(task.calendarDate!)}
                       deadlineLabel={overdueDateLabel(task.calendarDate!)}
                       selected={selectedId === task.id}
@@ -1320,7 +1330,7 @@ export default function Zadania() {
                 </div>
               )}
               {visible.map(t => (
-                <TaskRow key={t.id} task={t} tagi={tagi}
+                <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
                   selected={selectedId === t.id}
                   bulkMode={bulkMode}
                   bulkSelected={bulkSelectedIds.has(t.id)}
@@ -1341,7 +1351,7 @@ export default function Zadania() {
               ) : visible.map(t => (
                 <div key={t.id} className="flex items-center gap-2">
                   <div className="min-w-0 flex-1">
-                    <TaskRow task={t} tagi={tagi}
+                    <TaskRow task={t} tagi={tagi} listy={listy}
                       selected={selectedId === t.id}
                       onToggle={() => restoreTaskFromTrash(t.id)}
                       onUpdate={updateTask}
@@ -1373,7 +1383,7 @@ export default function Zadania() {
               {currentPending.length > 0 && (
                 <div className="task-list task-list--pending">
                   {currentPending.map(t => (
-                    <TaskRow key={t.id} task={t} tagi={tagi}
+                    <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
                       selected={selectedId === t.id}
                       bulkMode={bulkMode}
                       bulkSelected={bulkSelectedIds.has(t.id)}
@@ -1399,7 +1409,7 @@ export default function Zadania() {
                   {showDone && (
                     <div className="task-list">
                       {completed.map(t => (
-                        <TaskRow key={t.id} task={t} tagi={tagi}
+                        <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
                           selected={selectedId === t.id}
                           bulkMode={bulkMode}
                           bulkSelected={bulkSelectedIds.has(t.id)}

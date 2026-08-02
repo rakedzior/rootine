@@ -37,7 +37,7 @@ import {
 } from "./taskPageModel";
 
 export function TaskRow({
-  task, selected, onToggle, onSelect, onUpdate, tagi, deadlineLabel, railLabel,
+  task, selected, onToggle, onSelect, onUpdate, tagi, listy, deadlineLabel, railLabel,
   bulkMode = false, bulkSelected = false, bulkDisabled = false, onBulkToggle,
 }: {
   task: Task; selected: boolean;
@@ -45,6 +45,7 @@ export function TaskRow({
   onSelect: (id: number) => void;
   onUpdate: (id: number, patch: Partial<Task>) => void;
   tagi: TagItem[];
+  listy: ListItem[];
   deadlineLabel?: string;
   bulkMode?: boolean;
   bulkSelected?: boolean;
@@ -60,7 +61,9 @@ export function TaskRow({
     ? []
     : (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const priorityColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.seaGlass : null;
+  const priorityLabel = task.priority === "high" ? "Wysoki" : task.priority === "medium" ? "Średni" : task.priority === "low" ? "Niski" : "Brak";
   const sourceLabel = task.source ? commitmentSourceLabel(task.source.kind) : null;
+  const listLabel = task.source ? sourceLabel : listy.find((list) => list.id === task.list)?.label ?? "Skrzynka";
 
   const subtitle = task.source
     ? `${sourceLabel} · ${task.source.context}`
@@ -70,7 +73,7 @@ export function TaskRow({
 
   return (
     <ListRow
-      className="task-row"
+      className="task-row task-item-row"
       // Start time only: the rail answers "when does this begin", and a full range would not
       // fit the fixed width without pushing every checkbox out of line.
       rail={railLabel ?? (task.time || "")}
@@ -87,7 +90,17 @@ export function TaskRow({
       title={task.text}
       subtitle={subtitle}
       // The rail shows the start; a finish time only appears when one is set.
-      meta={task.time && task.endTime ? <span className="task-row__range">do {task.endTime}</span> : undefined}
+      meta={(
+        <>
+          <span className="task-row__context" title={listLabel ?? undefined}>
+            {listLabel}{task.time && task.endTime ? ` · do ${task.endTime}` : ""}
+          </span>
+          <span className="task-row__priority" style={{ "--task-priority-color": priorityColor ?? C.textMuted } as React.CSSProperties}>
+            <i aria-hidden="true" />
+            {priorityLabel}
+          </span>
+        </>
+      )}
       leading={(
         <button
           type="button"
@@ -116,8 +129,8 @@ export function TaskRow({
           ? `Zadanie cykliczne poza operacjami zbiorczymi: ${task.text}`
           : `${bulkSelected ? "Odznacz" : "Zaznacz"} zadanie: ${task.text}`
         : `Otwórz szczegóły zadania: ${task.text}`}
-      trailing={(taskTags.length > 0 || task.source) ? (
-        <>
+      trailing={(
+        <span className="task-row__tags">
           {taskTags.map(td => (
             <button
               type="button"
@@ -142,8 +155,8 @@ export function TaskRow({
               {sourceLabel}
             </Link>
           )}
-        </>
-      ) : undefined}
+        </span>
+      )}
     />
   );
 }

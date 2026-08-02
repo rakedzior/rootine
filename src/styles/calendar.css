@@ -237,6 +237,7 @@
 .calendar-weekdays {
   height: 31px;
   flex-shrink: 0;
+  background: color-mix(in srgb, var(--color-graphite-canvas) 78%, transparent);
 }
 
 .calendar-grid-rows {
@@ -254,15 +255,36 @@
 }
 
 .calendar-module[data-ambient="calendar"] .calendar-cell {
-  background: color-mix(in srgb, var(--color-graphite-canvas) 84%, transparent);
+  background: color-mix(in srgb, var(--color-graphite-canvas) 76%, transparent);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.calendar-module[data-ambient="calendar"] .calendar-cell:hover,
+.calendar-module[data-ambient="calendar"] .calendar-cell:focus-visible {
+  background: color-mix(
+    in srgb,
+    var(--color-category-sky) 7%,
+    color-mix(in srgb, var(--color-graphite-canvas) 82%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-category-sky) 24%, transparent);
 }
 
 .calendar-module[data-ambient="calendar"] .calendar-cell.is-today {
-  background: color-mix(in srgb, var(--color-precision-blue-soft) 82%, transparent);
+  background: color-mix(in srgb, var(--color-precision-blue-soft) 78%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-category-sky) 52%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-category-sky) 16%, transparent);
 }
 
 .calendar-module[data-ambient="calendar"] .calendar-cell.is-drop-target {
   background: color-mix(in srgb, var(--color-graphite-hover) 86%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-precision-blue);
+}
+
+.calendar-module[data-ambient="calendar"] .calendar-event {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-category-sky) 13%, transparent);
 }
 
 @media (max-width: 760px) {

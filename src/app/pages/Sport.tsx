@@ -203,15 +203,24 @@ function finalizeSession(
 }
 
 export default function Sport() {
+  const quickAddRequested = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("akcja") === "dodaj-trening";
   const [initialUrlState] = useState(getInitialSportUrlState);
   const [plannerState, setPlannerState] = useState(loadSportPlannerState);
   const [cycleDraft, setCycleDraft] = useState<TrainingCycle | null>(() => loadStoredCycleDraft(plannerState.activeCycle));
   const [view, setView] = useState<PlannerView>(initialUrlState.view);
   const [activeWeek, setActiveWeek] = useState(() => initialUrlState.week
     || (plannerState.activeCycle ? todayCycleWeek(plannerState.activeCycle) : 1));
-  const [dialog, setDialog] = useState<PlannerDialog>(null);
+  const [dialog, setDialog] = useState<PlannerDialog>(quickAddRequested && !cycleDraft ? "cycle" : null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [workoutDialog, setWorkoutDialog] = useState<WorkoutDialogState | null>(null);
+  const [workoutDialog, setWorkoutDialog] = useState<WorkoutDialogState | null>(() => (
+    quickAddRequested && cycleDraft
+      ? {
+        week: todayCycleWeek(cycleDraft),
+        day: (new Date().getDay() + 6) % 7,
+      }
+      : null
+  ));
   const [moveDialogWorkout, setMoveDialogWorkout] = useState<CycleWorkout | null>(null);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState(false);
@@ -224,6 +233,13 @@ export default function Sport() {
   const [workoutDeleteUndo, setWorkoutDeleteUndo] = useState<WorkoutDeleteUndo | null>(null);
   const activeSessionEditRef = useRef(false);
   const persistenceQueueRef = useRef<SportPersistenceQueue<SportPlannerState> | null>(null);
+
+  useEffect(() => {
+    if (!quickAddRequested) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("akcja");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [quickAddRequested]);
   if (!persistenceQueueRef.current) {
     persistenceQueueRef.current = createSportPersistenceQueue((state) => {
       const saved = saveSportPlannerState(state);
