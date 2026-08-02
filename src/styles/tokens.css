@@ -68,12 +68,15 @@
 
   --shadow-floating: 0 12px 30px rgba(0, 0, 0, 0.45);
   --shadow-modal: 0 18px 50px rgba(0, 0, 0, 0.52);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
   --focus-ring: 0 0 0 2px var(--color-graphite-canvas), 0 0 0 4px var(--color-precision-blue);
   --motion-fast: 140ms;
   --motion-normal: 180ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* stylelint-disable projectwallace/max-unique-colors -- Theme foundations and five selectable palettes intentionally enumerate their color systems here. */
 :root {
   --page-width-reading: 840px;
   --page-width-standard: 1200px;
@@ -83,8 +86,250 @@
   --color-category-sand: #b9a171;
   --color-category-rose: #bc8ea5;
   --color-category-slate: #8793a1;
+  --color-on-accent: #ffffff;
   --task-checkbox-color: var(--color-border-strong);
+
+  --theme-ambient-brand: #6f8ff2;
+  --theme-ambient-warm: #c9a66e;
+  --theme-ambient-cool: #89a9bd;
+  --theme-ambient-focus: #9c8fd4;
+  --theme-ambient-organic: #7ca59b;
+  --theme-ambient-material: #93897c;
+  --theme-ambient-soft: #c7bdb0;
+  --theme-ambient-wash-opacity: 0.4;
 }
+
+/*
+ * Material-inspired appearance themes. The legacy token names stay stable for the
+ * component layer; each palette reassigns their semantic role across the whole app.
+ */
+:root[data-theme="olive-walnut-ivory"] {
+  color-scheme: dark;
+
+  --color-precision-blue: #7f8d4d;
+  --color-precision-blue-text: #bac783;
+  --color-precision-blue-strong: #6d7a40;
+  --color-precision-blue-hover: #606c36;
+  --color-precision-blue-soft: rgba(127, 141, 77, 0.14);
+  --color-graphite-shell: #171812;
+  --color-graphite-sidebar: #1b1c15;
+  --color-graphite-input: #22231b;
+  --color-graphite-canvas: #202119;
+  --color-graphite-panel: #292920;
+  --color-graphite-card: #302f25;
+  --color-graphite-hover: #39372b;
+  --color-border-subtle: #3d3b2f;
+  --color-border-strong: #504d3d;
+  --color-chalk-white: #f3eddf;
+  --color-text-secondary: #b9b1a0;
+  --color-text-muted: #aaa291;
+  --color-text-disabled: #8f8879;
+  --color-success-seaglass: #82b493;
+  --color-success-soft: rgba(130, 180, 147, 0.12);
+  --color-warning-ochre: #d0a665;
+  --color-warning-soft: rgba(208, 166, 101, 0.12);
+  --color-danger-coral: #d98282;
+  --color-danger-soft: rgba(217, 130, 130, 0.11);
+  --color-accent-violet: #a597d5;
+  --color-violet-soft: rgba(165, 151, 213, 0.12);
+  --color-category-sky: #83a5b2;
+  --color-category-teal: #79a797;
+  --color-category-sand: #bd9c66;
+  --color-category-rose: #b98e9a;
+  --color-category-slate: #92988d;
+  --theme-ambient-brand: #8b965c;
+  --theme-ambient-warm: #d0aa6e;
+  --theme-ambient-cool: #88a8a1;
+  --theme-ambient-focus: #b58a76;
+  --theme-ambient-organic: #88a372;
+  --theme-ambient-material: #a47c5b;
+  --theme-ambient-soft: #d3c6a3;
+  --theme-ambient-wash-opacity: 0.38;
+  --color-backdrop: rgba(7, 8, 5, 0.7);
+  --shadow-floating: 0 12px 30px rgba(8, 7, 4, 0.48);
+  --shadow-modal: 0 18px 50px rgba(8, 7, 4, 0.56);
+}
+
+:root[data-theme="deep-teal-smoked-oak-pearl"] {
+  color-scheme: dark;
+
+  --color-precision-blue: #39878a;
+  --color-precision-blue-text: #7bc1c3;
+  --color-precision-blue-strong: #307a7e;
+  --color-precision-blue-hover: #296b6e;
+  --color-precision-blue-soft: rgba(57, 135, 138, 0.14);
+  --color-graphite-shell: #11191a;
+  --color-graphite-sidebar: #141e1f;
+  --color-graphite-input: #192426;
+  --color-graphite-canvas: #172123;
+  --color-graphite-panel: #202b2c;
+  --color-graphite-card: #263234;
+  --color-graphite-hover: #303e40;
+  --color-border-subtle: #324144;
+  --color-border-strong: #43565a;
+  --color-chalk-white: #f0eee7;
+  --color-text-secondary: #adb7b4;
+  --color-text-muted: #9fa9a6;
+  --color-text-disabled: #86918f;
+  --color-success-seaglass: #74b59d;
+  --color-success-soft: rgba(116, 181, 157, 0.12);
+  --color-warning-ochre: #d2a76d;
+  --color-warning-soft: rgba(210, 167, 109, 0.11);
+  --color-danger-coral: #d98488;
+  --color-danger-soft: rgba(217, 132, 136, 0.11);
+  --color-accent-violet: #9b91d3;
+  --color-violet-soft: rgba(155, 145, 211, 0.12);
+  --color-category-sky: #79a8b9;
+  --color-category-teal: #6eaaa5;
+  --color-category-sand: #b79b72;
+  --color-category-rose: #b68e9e;
+  --color-category-slate: #86999d;
+  --theme-ambient-brand: #4a989a;
+  --theme-ambient-warm: #d0aa73;
+  --theme-ambient-cool: #82b8bc;
+  --theme-ambient-focus: #8c9ac5;
+  --theme-ambient-organic: #77a793;
+  --theme-ambient-material: #8f7564;
+  --theme-ambient-soft: #d9cfbd;
+  --theme-ambient-wash-opacity: 0.4;
+  --color-backdrop: rgba(4, 10, 11, 0.72);
+  --shadow-floating: 0 12px 30px rgba(3, 9, 10, 0.5);
+  --shadow-modal: 0 18px 50px rgba(3, 9, 10, 0.58);
+}
+
+:root[data-theme="onyx-ebony-stone"] {
+  color-scheme: dark;
+
+  --color-precision-blue: #5379ed;
+  --color-precision-blue-text: #88a0ee;
+  --color-precision-blue-strong: #4569d8;
+  --color-precision-blue-hover: #3b5dc4;
+  --color-precision-blue-soft: rgba(83, 121, 237, 0.12);
+  --color-graphite-shell: #151515;
+  --color-graphite-sidebar: #181818;
+  --color-graphite-input: #1f1f1e;
+  --color-graphite-canvas: #20201f;
+  --color-graphite-panel: #292927;
+  --color-graphite-card: #302f2d;
+  --color-graphite-hover: #393835;
+  --color-border-subtle: #3c3b38;
+  --color-border-strong: #4d4b46;
+  --color-chalk-white: #f0eee8;
+  --color-text-secondary: #aaa8a2;
+  --color-text-muted: #9c9a94;
+  --color-text-disabled: #888680;
+  --color-category-sky: #7fa2bf;
+  --color-category-teal: #77a39e;
+  --color-category-sand: #b39b70;
+  --color-category-rose: #b38b9d;
+  --color-category-slate: #898f95;
+  --theme-ambient-brand: #6f8ff2;
+  --theme-ambient-warm: #c5a46d;
+  --theme-ambient-cool: #8da9bd;
+  --theme-ambient-focus: #9a8cce;
+  --theme-ambient-organic: #7da49c;
+  --theme-ambient-material: #90877a;
+  --theme-ambient-soft: #c7beb0;
+  --theme-ambient-wash-opacity: 0.4;
+  --color-backdrop: rgba(0, 0, 0, 0.68);
+}
+
+:root[data-theme="putty-natural-oak-calacatta"] {
+  color-scheme: light;
+
+  --color-precision-blue: #7a5d40;
+  --color-precision-blue-text: #6f5439;
+  --color-precision-blue-strong: #6e5237;
+  --color-precision-blue-hover: #5d452e;
+  --color-precision-blue-soft: rgba(110, 82, 55, 0.12);
+  --color-graphite-shell: #ded4c3;
+  --color-graphite-sidebar: #e8e0d3;
+  --color-graphite-input: #e5dccd;
+  --color-graphite-canvas: #e4dacb;
+  --color-graphite-panel: #eee6da;
+  --color-graphite-card: #f7f1e7;
+  --color-graphite-hover: #ddd2c0;
+  --color-border-subtle: #cbbda9;
+  --color-border-strong: #ac9b82;
+  --color-chalk-white: #302b25;
+  --color-text-secondary: #5c554b;
+  --color-text-muted: #6c6358;
+  --color-text-disabled: #8c8173;
+  --color-success-seaglass: #36715c;
+  --color-success-soft: rgba(54, 113, 92, 0.11);
+  --color-warning-ochre: #805b29;
+  --color-warning-soft: rgba(128, 91, 41, 0.1);
+  --color-danger-coral: #9d4149;
+  --color-danger-soft: rgba(157, 65, 73, 0.1);
+  --color-accent-violet: #6d599a;
+  --color-violet-soft: rgba(109, 89, 154, 0.1);
+  --color-category-sky: #4f758b;
+  --color-category-teal: #4f786f;
+  --color-category-sand: #7b633c;
+  --color-category-rose: #80566a;
+  --color-category-slate: #626e76;
+  --theme-ambient-brand: #7a5d40;
+  --theme-ambient-warm: #946a3d;
+  --theme-ambient-cool: #5e7e83;
+  --theme-ambient-focus: #7a667f;
+  --theme-ambient-organic: #63795d;
+  --theme-ambient-material: #8a6747;
+  --theme-ambient-soft: #a79882;
+  --theme-ambient-wash-opacity: 0.28;
+  --color-backdrop: rgba(45, 37, 27, 0.46);
+  --shadow-floating: 0 12px 30px rgba(69, 53, 34, 0.16);
+  --shadow-modal: 0 18px 50px rgba(69, 53, 34, 0.22);
+  --shadow-sm: 0 1px 2px rgba(69, 53, 34, 0.12);
+  --shadow-md: 0 4px 12px rgba(69, 53, 34, 0.14);
+}
+
+:root[data-theme="burgundy-soft-ivory"] {
+  color-scheme: dark;
+
+  --color-precision-blue: #a24d5d;
+  --color-precision-blue-text: #dda0aa;
+  --color-precision-blue-strong: #8f3e4d;
+  --color-precision-blue-hover: #7e3442;
+  --color-precision-blue-soft: rgba(162, 77, 93, 0.15);
+  --color-graphite-shell: #151413;
+  --color-graphite-sidebar: #181716;
+  --color-graphite-input: #201e1c;
+  --color-graphite-canvas: #211f1d;
+  --color-graphite-panel: #292623;
+  --color-graphite-card: #302c29;
+  --color-graphite-hover: #393430;
+  --color-border-subtle: #3d3834;
+  --color-border-strong: #504841;
+  --color-chalk-white: #f4eee5;
+  --color-text-secondary: #b9b0a7;
+  --color-text-muted: #a69d94;
+  --color-text-disabled: #8b837c;
+  --color-success-seaglass: #7db096;
+  --color-success-soft: rgba(125, 176, 150, 0.11);
+  --color-warning-ochre: #d2a169;
+  --color-warning-soft: rgba(210, 161, 105, 0.11);
+  --color-danger-coral: #e08488;
+  --color-danger-soft: rgba(224, 132, 136, 0.11);
+  --color-accent-violet: #a28fd0;
+  --color-violet-soft: rgba(162, 143, 208, 0.12);
+  --color-category-sky: #819eb2;
+  --color-category-teal: #78a095;
+  --color-category-sand: #b89869;
+  --color-category-rose: #c18498;
+  --color-category-slate: #948d91;
+  --theme-ambient-brand: #a24d5d;
+  --theme-ambient-warm: #b48b65;
+  --theme-ambient-cool: #8796a0;
+  --theme-ambient-focus: #b36b78;
+  --theme-ambient-organic: #7f9483;
+  --theme-ambient-material: #9a8b7d;
+  --theme-ambient-soft: #d1c2b2;
+  --theme-ambient-wash-opacity: 0.32;
+  --color-backdrop: rgba(11, 4, 6, 0.74);
+  --shadow-floating: 0 12px 30px rgba(10, 3, 5, 0.52);
+  --shadow-modal: 0 18px 50px rgba(10, 3, 5, 0.6);
+}
+/* stylelint-enable projectwallace/max-unique-colors */
 
 /*
  * Vertical rhythm, control sizing and layout constants.
@@ -121,9 +366,6 @@
   --list-rail-width: 64px;
 
   --rail-width: 320px;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
 
   /*
    * The only four breakpoints. Media queries must use these pixel values verbatim —

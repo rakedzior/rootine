@@ -875,7 +875,7 @@
 .task-habit-week__day.is-completed > strong,
 .task-habit-month__day.is-completed {
   background: var(--color-precision-blue);
-  color: var(--color-chalk-white);
+  color: var(--color-on-accent);
 }
 
 .task-habit-week__day.is-scheduled > strong,

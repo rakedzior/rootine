@@ -33,7 +33,7 @@
 .ui-button--icon { width: var(--control-height-md); padding: 0; }
 .ui-button--icon.ui-button--sm { width: var(--control-height-sm); }
 .ui-button--full { width: 100%; }
-.ui-button--primary { background: var(--color-precision-blue-strong); color: var(--color-chalk-white); }
+.ui-button--primary { background: var(--color-precision-blue-strong); color: var(--color-on-accent); }
 .ui-button--primary:hover:not(:disabled) { background: var(--color-precision-blue-hover); }
 .ui-button--quiet { border-color: var(--color-border-subtle); background: transparent; color: var(--color-text-secondary); }
 .ui-button--quiet:hover:not(:disabled) { border-color: var(--color-border-strong); background: var(--color-graphite-panel); color: var(--color-chalk-white); }
@@ -181,7 +181,7 @@
 .ui-date-picker__week button:hover:not(:disabled) { background: var(--color-graphite-hover); color: var(--color-chalk-white); }
 .ui-date-picker__week button.is-outside { color: var(--color-text-muted); }
 .ui-date-picker__week button.is-today::after { position: absolute; bottom: 4px; width: 3px; height: 3px; border-radius: 50%; background: var(--color-precision-blue); content: ""; }
-.ui-date-picker__week button.is-selected { background: var(--color-precision-blue-strong); color: var(--color-chalk-white); font-weight: var(--weight-semibold); }
+.ui-date-picker__week button.is-selected { background: var(--color-precision-blue-strong); color: var(--color-on-accent); font-weight: var(--weight-semibold); }
 .ui-date-picker__week button.is-selected::after { background: currentColor; }
 .ui-date-picker__week button:disabled { cursor: not-allowed; opacity: 0.25; }
 .ui-date-picker__footer { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border-subtle); }
@@ -282,97 +282,102 @@
 
 .ui-module-shell--ambient {
   isolation: isolate;
-  --ambient-accent: var(--color-precision-blue);
-  --ambient-accent-secondary: var(--ambient-accent);
-  --ambient-opacity: 0.18;
+  --ambient-brand: var(--theme-ambient-brand);
+  --ambient-accent: var(--theme-ambient-brand);
+  --ambient-accent-secondary: var(--theme-ambient-soft);
+  --ambient-wash-opacity: var(--theme-ambient-wash-opacity);
+  --ambient-motif-opacity: 0.18;
   --ambient-wash-x: 94%;
   --ambient-wash-y: 42%;
 }
 
 .ui-module-shell--ambient[data-ambient="warm"] {
-  --ambient-accent: var(--color-warning-ochre);
-  --ambient-opacity: 0.2;
+  --ambient-accent: var(--theme-ambient-warm);
+  --ambient-accent-secondary: var(--theme-ambient-material);
+  --ambient-motif-opacity: 0.2;
 }
 
 .ui-module-shell--ambient[data-ambient="cool"] {
-  --ambient-accent: var(--color-category-sky);
-  --ambient-opacity: 0.18;
+  --ambient-accent: var(--theme-ambient-cool);
+  --ambient-accent-secondary: var(--theme-ambient-soft);
+  --ambient-motif-opacity: 0.18;
 }
 
 .ui-module-shell--ambient[data-ambient="focus"] {
-  --ambient-accent: var(--color-accent-violet);
-  --ambient-opacity: 0.16;
+  --ambient-accent: var(--theme-ambient-focus);
+  --ambient-accent-secondary: var(--theme-ambient-brand);
+  --ambient-motif-opacity: 0.16;
 }
 
 .ui-module-shell--ambient[data-ambient="today"] {
-  --ambient-accent: var(--color-warning-ochre);
-  --ambient-accent-secondary: var(--color-category-sand);
-  --ambient-opacity: 0.58;
+  --ambient-accent: var(--theme-ambient-warm);
+  --ambient-accent-secondary: var(--theme-ambient-soft);
+  --ambient-motif-opacity: 0.58;
   --ambient-wash-x: 78%;
   --ambient-wash-y: 38%;
 }
 
 .ui-module-shell--ambient[data-ambient="sport"] {
-  --ambient-accent: var(--color-precision-blue-text);
-  --ambient-accent-secondary: var(--color-category-sky);
-  --ambient-opacity: 0.66;
+  --ambient-accent: var(--theme-ambient-cool);
+  --ambient-accent-secondary: var(--theme-ambient-soft);
+  --ambient-motif-opacity: 0.62;
   --ambient-wash-x: 82%;
 }
 
 .ui-module-shell--ambient[data-ambient="goals"] {
-  --ambient-accent: color-mix(in srgb, var(--color-precision-blue-text) 72%, var(--color-accent-violet));
-  --ambient-accent-secondary: var(--color-accent-violet);
-  --ambient-opacity: 0.54;
+  --ambient-accent: var(--theme-ambient-focus);
+  --ambient-accent-secondary: var(--theme-ambient-brand);
+  --ambient-motif-opacity: 0.54;
 }
 
 .ui-module-shell--ambient[data-ambient="tasks"] {
-  --ambient-accent: var(--color-accent-violet);
-  --ambient-accent-secondary: var(--color-category-rose);
-  --ambient-opacity: 0.38;
+  --ambient-accent: var(--theme-ambient-focus);
+  --ambient-accent-secondary: var(--theme-ambient-soft);
+  --ambient-motif-opacity: 0.44;
 }
 
 .ui-module-shell--ambient[data-ambient="habits"] {
-  --ambient-accent: var(--color-category-teal);
-  --ambient-accent-secondary: var(--color-success-seaglass);
-  --ambient-opacity: 0.52;
+  --ambient-accent: var(--theme-ambient-organic);
+  --ambient-accent-secondary: var(--theme-ambient-soft);
+  --ambient-motif-opacity: 0.5;
 }
 
 .ui-module-shell--ambient[data-ambient="calendar"] {
-  --ambient-accent: var(--color-category-sky);
-  --ambient-accent-secondary: var(--color-category-slate);
-  --ambient-opacity: 0.68;
+  --ambient-accent: var(--theme-ambient-cool);
+  --ambient-accent-secondary: var(--theme-ambient-material);
+  --ambient-motif-opacity: 0.58;
 }
 
 .ui-module-shell--ambient[data-ambient="nutrition"] {
-  --ambient-accent: var(--color-success-seaglass);
-  --ambient-accent-secondary: var(--color-category-sand);
-  --ambient-opacity: 0.5;
+  --ambient-accent: var(--theme-ambient-organic);
+  --ambient-accent-secondary: var(--theme-ambient-warm);
+  --ambient-motif-opacity: 0.5;
 }
 
 .ui-module-shell--ambient[data-ambient="work"] {
-  --ambient-accent: var(--color-category-slate);
-  --ambient-accent-secondary: var(--color-precision-blue-text);
-  --ambient-opacity: 0.68;
+  --ambient-accent: var(--theme-ambient-material);
+  --ambient-accent-secondary: var(--theme-ambient-brand);
+  --ambient-motif-opacity: 0.58;
   --ambient-wash-x: 70%;
   --ambient-wash-y: 54%;
 }
 
 .ui-module-shell--ambient[data-ambient="affairs"] {
-  --ambient-accent: var(--color-category-sand);
-  --ambient-accent-secondary: var(--color-warning-ochre);
-  --ambient-opacity: 0.42;
+  --ambient-accent: var(--theme-ambient-material);
+  --ambient-accent-secondary: var(--theme-ambient-warm);
+  --ambient-motif-opacity: 0.46;
 }
 
 .ui-module-shell--ambient[data-ambient="travel"] {
-  --ambient-accent: color-mix(in srgb, var(--color-category-sky) 58%, var(--color-success-seaglass));
-  --ambient-accent-secondary: var(--color-category-sand);
-  --ambient-opacity: 0.52;
+  --ambient-accent: var(--theme-ambient-cool);
+  --ambient-accent-secondary: var(--theme-ambient-material);
+  --ambient-motif-opacity: 0.5;
 }
 
 .ui-module-shell--ambient[data-ambient="notes"] {
-  --ambient-accent: var(--color-category-rose);
-  --ambient-accent-secondary: var(--color-chalk-white);
-  --ambient-opacity: 0.48;
+  --ambient-accent: var(--theme-ambient-soft);
+  --ambient-accent-secondary: var(--theme-ambient-focus);
+  --ambient-motif-opacity: 0.46;
 }
 
 .ui-ambient-scene {
@@ -393,7 +398,7 @@
   inset: 0;
   contain: paint;
   isolation: isolate;
-  opacity: var(--ambient-opacity);
+  opacity: 1;
   overflow: hidden;
   pointer-events: none;
   animation: ui-ambient-arrive 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -405,14 +410,20 @@
   background:
     radial-gradient(
       ellipse 52% 72% at var(--ambient-wash-x) var(--ambient-wash-y),
-      color-mix(in srgb, var(--ambient-accent) 18%, transparent) 0%,
+      color-mix(in srgb, var(--ambient-brand) 18%, transparent) 0%,
       transparent 68%
+    ),
+    radial-gradient(
+      ellipse 34% 48% at 96% 72%,
+      color-mix(in srgb, var(--ambient-accent) 5%, transparent) 0%,
+      transparent 72%
     ),
     linear-gradient(
       90deg,
       transparent 42%,
-      color-mix(in srgb, var(--ambient-accent-secondary) 4%, transparent) 100%
+      color-mix(in srgb, var(--ambient-brand) 4%, transparent) 100%
     );
+  opacity: var(--ambient-wash-opacity);
 }
 
 .ui-ambient-today,
@@ -1018,6 +1029,11 @@
   transform: rotate(12deg);
 }
 
+/* The blue brand wash stays constant; only the semantic motif changes strength. */
+.ui-ambient-scene__motif {
+  opacity: var(--ambient-motif-opacity);
+}
+
 .ui-ambient-scene__signal {
   position: absolute;
   top: 50%;
@@ -1042,8 +1058,8 @@
 }
 
 @keyframes ui-ambient-arrive {
-  from { opacity: 0.18; clip-path: inset(0 0 0 18%); }
-  to { opacity: var(--ambient-opacity); clip-path: inset(0); }
+  from { clip-path: inset(0 0 0 18%); }
+  to { clip-path: inset(0); }
 }
 
 @keyframes ui-ambient-wind {
@@ -1088,7 +1104,7 @@
 }
 
 .ui-module-shell--ambient .ui-page-header {
-  border-bottom-color: color-mix(in srgb, var(--ambient-accent) 9%, var(--color-border-subtle));
+  border-bottom-color: color-mix(in srgb, var(--ambient-brand) 9%, var(--color-border-subtle));
 }
 
 .ui-module-shell--ambient .ui-page-header::after {
@@ -1101,8 +1117,8 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--ambient-accent) 5%, transparent) 60%,
-    color-mix(in srgb, var(--ambient-accent) 12%, transparent) 100%
+    color-mix(in srgb, var(--ambient-brand) 5%, transparent) 60%,
+    color-mix(in srgb, var(--ambient-brand) 12%, transparent) 100%
   );
   content: "";
   opacity: 0.72;
@@ -1137,8 +1153,12 @@
 }
 
 @media (max-width: 760px) {
-  .ui-ambient-scene {
-    opacity: calc(var(--ambient-opacity) * 0.68);
+  .ui-ambient-scene__wash {
+    opacity: calc(var(--ambient-wash-opacity) * 0.76);
+  }
+
+  .ui-ambient-scene__motif {
+    opacity: calc(var(--ambient-motif-opacity) * 0.68);
   }
 
   .ui-ambient-today__light {
@@ -1663,7 +1683,7 @@
 .ui-checkbox__input:checked + .ui-checkbox__box::after {
   width: 10px;
   height: 6px;
-  border: 2px solid var(--color-chalk-white);
+  border: 2px solid var(--color-on-accent);
   border-top: 0;
   border-right: 0;
   margin-top: -2px;
@@ -1671,7 +1691,7 @@
   transform: rotate(-45deg);
 }
 .ui-checkbox__input:indeterminate + .ui-checkbox__box { border-color: var(--color-precision-blue); background: var(--color-precision-blue-strong); }
-.ui-checkbox__input:indeterminate + .ui-checkbox__box::after { width: 9px; height: 2px; background: var(--color-chalk-white); content: ""; }
+.ui-checkbox__input:indeterminate + .ui-checkbox__box::after { width: 9px; height: 2px; background: var(--color-on-accent); content: ""; }
 .ui-checkbox__input:focus-visible + .ui-checkbox__box { box-shadow: var(--focus-ring); }
 .ui-checkbox__input:disabled + .ui-checkbox__box { cursor: not-allowed; opacity: 0.45; }
 .ui-checkbox__copy { display: grid; min-width: 0; gap: 2px; }

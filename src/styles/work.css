@@ -896,6 +896,7 @@
 .work-task-check[aria-pressed="true"] {
   border-color: var(--color-precision-blue);
   background: var(--color-precision-blue-strong);
+  color: var(--color-on-accent);
 }
 
 .work-task-row__title {

@@ -834,6 +834,7 @@
 .notes-editor__item > button:first-child.is-checked {
   border-color: var(--color-precision-blue);
   background: var(--color-precision-blue-strong);
+  color: var(--color-on-accent);
 }
 
 .notes-editor__item > input {

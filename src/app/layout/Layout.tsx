@@ -63,6 +63,12 @@ import { RecoveryCenterButton } from "../recovery/RecoveryCenter";
 import { RouteLoadingState } from "../RouteStates";
 import { Modal } from "../ui";
 import { maxWidthQuery } from "../ui/breakpoints";
+import {
+  applyAppTheme,
+  loadAppTheme,
+  type AppThemeId,
+} from "../theme/appTheme";
+import { ThemeSettings } from "./ThemeSettings";
 
 const SIDEBAR_STORAGE_KEY = "rootine.sidebar.collapsed";
 const LEGACY_SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
@@ -315,6 +321,7 @@ export default function Layout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
   const [isCompactViewport, setIsCompactViewport] = useState(getInitialCompactViewport);
   const [modulePreferences, setModulePreferences] = useState(loadModulePreferences);
+  const [appTheme, setAppTheme] = useState(loadAppTheme);
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
@@ -544,6 +551,11 @@ export default function Layout() {
     onReset: resetModules,
   };
 
+  const changeAppTheme = (themeId: AppThemeId) => {
+    setAppTheme(themeId);
+    applyAppTheme(themeId);
+  };
+
   useEffect(() => {
     const handleGlobalShortcut = (event: KeyboardEvent) => {
       const target = event.target;
@@ -708,8 +720,8 @@ export default function Layout() {
           {openMenu === "settings" && (
             <Modal
               title="Ustawienia"
-              description="Dostosuj panel, kolejność obszarów i wspólną prognozę aplikacji."
-              width={520}
+              description="Dostosuj wygląd, panel, kolejność obszarów i wspólną prognozę aplikacji."
+              width={620}
               bodyClassName="app-settings-dialog"
               onClose={() => setOpenMenu(null)}
             >
@@ -738,6 +750,11 @@ export default function Layout() {
                   <small>{TODAY_WEATHER_LOCATION.label} · wspólna prognoza aplikacji</small>
                 </span>
               </button>
+              <ThemeSettings
+                idPrefix="sidebar"
+                value={appTheme}
+                onChange={changeAppTheme}
+              />
               <ModuleSettings {...settingsProps} idPrefix="sidebar" />
               <div className="app-recovery-entry">
                 <RecoveryCenterButton />
@@ -917,7 +934,7 @@ export default function Layout() {
                 </strong>
                 <small>
                   {openMenu === "mobileSettings"
-                    ? "Nawigacja i prognoza"
+                    ? "Wygląd, nawigacja i prognoza"
                     : openMenu === "mobileProfile"
                       ? "Dane lokalne"
                       : "Wszystkie obszary"}
@@ -972,7 +989,7 @@ export default function Layout() {
                     <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
                     <span>
                       <strong>Ustawienia</strong>
-                      <small>Kolejność, widoczność i pogoda</small>
+                      <small>Motyw, kolejność, widoczność i pogoda</small>
                     </span>
                   </button>
                   <button type="button" onClick={() => setOpenMenu("mobileProfile")}>
@@ -988,6 +1005,11 @@ export default function Layout() {
 
             {openMenu === "mobileSettings" && (
               <div className="app-mobile-menu__settings">
+                <ThemeSettings
+                  idPrefix="mobile"
+                  value={appTheme}
+                  onChange={changeAppTheme}
+                />
                 <button
                   type="button"
                   className="app-mobile-menu__weather"

@@ -1378,6 +1378,7 @@ article:focus-within > .travel-row-actions {
 .travel-check[aria-pressed="true"] {
   border-color: var(--color-precision-blue);
   background: var(--color-precision-blue-strong);
+  color: var(--color-on-accent);
 }
 
 .travel-task-row__copy {

@@ -123,7 +123,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       <span className="ui-ambient-scene__wash" />
 
       {config.scene === "today" && (
-        <span className="ui-ambient-today">
+        <span className="ui-ambient-today ui-ambient-scene__motif">
           <span className="ui-ambient-today__light">
             <i />
             <b />
@@ -139,7 +139,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "sport" && (
-        <span className="ui-ambient-sport">
+        <span className="ui-ambient-sport ui-ambient-scene__motif">
           {Array.from({ length: 7 }, (_, index) => (
             <i key={index} style={{ "--ambient-stream-index": index } as CSSProperties} />
           ))}
@@ -148,7 +148,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "goals" && (
-        <span className="ui-ambient-goals">
+        <span className="ui-ambient-goals ui-ambient-scene__motif">
           <svg viewBox="0 0 320 320" role="presentation">
             <circle className="ui-ambient-goals__orbit" cx="160" cy="160" r="132" pathLength="100" />
             <circle className="ui-ambient-goals__track" cx="160" cy="160" r="108" pathLength="100" />
@@ -162,7 +162,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "tasks" && (
-        <span className="ui-ambient-tasks">
+        <span className="ui-ambient-tasks ui-ambient-scene__motif">
           <svg viewBox="0 0 720 420" preserveAspectRatio="xMidYMid slice" role="presentation">
             <path className="ui-ambient-tasks__guide" d="M44 334C146 334 132 222 244 222S348 94 458 94s104 114 218 114" pathLength="100" />
             <path className="ui-ambient-tasks__progress" d="M44 334C146 334 132 222 244 222S348 94 458 94s104 114 218 114" pathLength="100" />
@@ -175,7 +175,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "habits" && (
-        <span className="ui-ambient-habits">
+        <span className="ui-ambient-habits ui-ambient-scene__motif">
           <svg viewBox="0 0 720 460" preserveAspectRatio="xMidYMid slice" role="presentation">
             <path className="ui-ambient-habits__guide" d="M58 316C150 316 162 176 264 176S386 286 476 286s112-136 190-136" pathLength="100" />
             <path className="ui-ambient-habits__progress" d="M58 316C150 316 162 176 264 176S386 286 476 286s112-136 190-136" pathLength="100" />
@@ -199,7 +199,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "calendar" && (
-        <span className="ui-ambient-calendar">
+        <span className="ui-ambient-calendar ui-ambient-scene__motif">
           <span className="ui-ambient-calendar__grid" />
           <i className="ui-ambient-calendar__now" />
           <b className="ui-ambient-calendar__marker" />
@@ -207,28 +207,28 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "nutrition" && (
-        <span className="ui-ambient-nutrition">
+        <span className="ui-ambient-nutrition ui-ambient-scene__motif">
           {Array.from({ length: 5 }, (_, index) => <i key={index} style={{ "--ambient-contour-index": index } as CSSProperties} />)}
           <b />
         </span>
       )}
 
       {config.scene === "work" && (
-        <span className="ui-ambient-work">
+        <span className="ui-ambient-work ui-ambient-scene__motif">
           {Array.from({ length: 7 }, (_, index) => <i key={index} style={{ "--ambient-work-index": index } as CSSProperties} />)}
           <b />
         </span>
       )}
 
       {config.scene === "affairs" && (
-        <span className="ui-ambient-affairs">
+        <span className="ui-ambient-affairs ui-ambient-scene__motif">
           {Array.from({ length: 5 }, (_, index) => <i key={index} style={{ "--ambient-sheet-index": index } as CSSProperties} />)}
           <b />
         </span>
       )}
 
       {config.scene === "travel" && (
-        <span className="ui-ambient-travel">
+        <span className="ui-ambient-travel ui-ambient-scene__motif">
           <svg viewBox="0 0 720 520" preserveAspectRatio="xMidYMid slice" role="presentation">
             <path className="ui-ambient-travel__contour" d="M40 384c96-92 196-98 276-48s172 58 350-32" />
             <path className="ui-ambient-travel__contour" d="M14 438c116-102 218-122 314-72s190 66 378-38" />
@@ -242,7 +242,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       )}
 
       {config.scene === "notes" && (
-        <span className="ui-ambient-notes">
+        <span className="ui-ambient-notes ui-ambient-scene__motif">
           {Array.from({ length: 6 }, (_, index) => <i key={index} style={{ "--ambient-stroke-index": index } as CSSProperties} />)}
           <b />
         </span>
