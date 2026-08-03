@@ -802,7 +802,6 @@ export default function Kalendarz() {
     >
       <ContextSidebar
         label="Widoki i listy zadań"
-        collapsible={false}
         className="task-context-sidebar calendar-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="px-2 pb-4 pt-4">

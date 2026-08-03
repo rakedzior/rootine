@@ -1,4 +1,3 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -336,72 +335,20 @@ export function ModuleMain({ className, transitionKey, ...props }: ModuleMainPro
 
 export interface ContextSidebarProps extends HTMLAttributes<HTMLElement> {
   label: string;
-  collapsible?: boolean;
-  storageKey?: string;
 }
 
 export function ContextSidebar({
   label,
-  collapsible = true,
-  storageKey,
   className,
   children,
   ...props
 }: ContextSidebarProps) {
-  const preferenceKey = storageKey ?? `rootine.context-sidebar.${encodeURIComponent(label)}.collapsed`;
-  const legacyPreferenceKey = preferenceKey.startsWith("rootine.")
-    ? `routine.${preferenceKey.slice("rootine.".length)}`
-    : null;
-  const [collapsed, setCollapsed] = useState(() => {
-    if (!collapsible || typeof window === "undefined") return false;
-    try {
-      const saved = window.localStorage.getItem(preferenceKey);
-      const legacySaved = saved === null && legacyPreferenceKey
-        ? window.localStorage.getItem(legacyPreferenceKey)
-        : null;
-      if (saved === null && legacySaved !== null) {
-        try {
-          window.localStorage.setItem(preferenceKey, legacySaved);
-        } catch {
-          // Keep using the legacy preference if the new key cannot be written yet.
-        }
-      }
-      return (saved ?? legacySaved) === "true";
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    if (!collapsible) return;
-    try {
-      window.localStorage.setItem(preferenceKey, String(collapsed));
-    } catch {
-      // The preference is optional; navigation remains available without storage.
-    }
-  }, [collapsed, collapsible, preferenceKey]);
-
-  const CollapseIcon = collapsed ? ChevronRight : ChevronLeft;
-
   return (
     <aside
       aria-label={label}
-      className={cx("ui-context-sidebar", collapsed && "is-collapsed", className)}
-      data-collapsed={collapsed || undefined}
+      className={cx("ui-context-sidebar", className)}
       {...props}
     >
-      {collapsible && (
-        <button
-          type="button"
-          className="ui-context-sidebar__collapse"
-          aria-label={collapsed ? `Rozwiń: ${label}` : `Zwiń: ${label}`}
-          title={collapsed ? `Rozwiń: ${label}` : `Zwiń: ${label}`}
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((current) => !current)}
-        >
-          <CollapseIcon size={14} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-      )}
       {children}
     </aside>
   );

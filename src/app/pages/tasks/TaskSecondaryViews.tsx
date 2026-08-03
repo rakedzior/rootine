@@ -31,7 +31,7 @@ import {
   toCalendarDateKey,
 } from "../../data/taskWorkspace";
 import { formatLocalDate, parseLocalDateKey, shiftLocalDateKey } from "../../data/localDate";
-import { Button, ListRow, Menu, MenuItem, Select } from "../../ui";
+import { Button, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
 import { SummaryEditor } from "./SummaryEditor";
 import { DurationTimePicker } from "./TaskSchedulePicker";
 import {
@@ -264,9 +264,12 @@ export function HabitsWorkspace({
           })}
         </div>
       ) : (
-        <div className="task-empty">
-          <span>Nie masz jeszcze nawyków. Dodaj pierwszy powyżej.</span>
-        </div>
+        <EmptyState
+          className="task-empty-state"
+          icon={<Repeat2 size={18} />}
+          title="Zbuduj pierwszy rytm"
+          description="Dodaj nawyk powyżej i wybierz dni, w których ma pojawiać się w planie."
+        />
       )}
     </div>
   );

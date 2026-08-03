@@ -247,7 +247,7 @@ export function GoalSubSidebar({
                         aria-label={`Edytuj kategorię ${category.label}`}
                         title="Edytuj"
                         onClick={() => { setEditingId(category.id); setEditingValue(category.label); }}
-                        className="flex h-6 w-6 items-center justify-center rounded-md"
+                        className="goal-category-action flex h-6 w-6 items-center justify-center rounded-md"
                         style={{ color: C.textMuted }}
                       >
                         <Pencil size={11} strokeWidth={1.7} />
@@ -257,7 +257,7 @@ export function GoalSubSidebar({
                           aria-label={`Usuń kategorię ${category.label}`}
                           title="Usuń"
                           onClick={() => onDeleteCategory(category.id)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md"
+                          className="goal-category-action flex h-6 w-6 items-center justify-center rounded-md"
                           style={{ color: C.danger }}
                         >
                           <Trash2 size={11} strokeWidth={1.7} />

@@ -10,6 +10,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronsDown,
+  ChevronsUp,
   Circle,
   CircleAlert,
   CircleDot,
@@ -347,7 +349,7 @@ export default function Praca() {
   const [companySearch, setCompanySearch] = useState("");
   const [companyStatusFilter, setCompanyStatusFilter] = useState<CompanyProjectStatusFilter>("all");
   const [companySort, setCompanySort] = useState<CompanyProjectSort>("name");
-  const [expandedCompanyProjectId, setExpandedCompanyProjectId] = useState<string | null>(null);
+  const [expandedCompanyProjectIds, setExpandedCompanyProjectIds] = useState<Set<string>>(() => new Set());
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [detailSubtasksExpanded, setDetailSubtasksExpanded] = useState(false);
@@ -519,7 +521,7 @@ export default function Praca() {
     setCompanySearch("");
     setCompanyStatusFilter("all");
     setCompanySort("name");
-    setExpandedCompanyProjectId(null);
+    setExpandedCompanyProjectIds(new Set());
     setDetailTaskId(null);
     const url = new URL(window.location.href);
     if (nextView === "today") url.searchParams.delete("widok");
@@ -1317,8 +1319,6 @@ export default function Praca() {
     if (!selectedCompany) return null;
     const projects = visibleCompanyProjects;
     const allProjects = companyProjects.filter((project) => project.status !== "completed");
-    const openCount = workspace.tasks.filter((task) => task.projectId && companyProjects.some((project) => project.id === task.projectId) && isTaskOpen(task)).length;
-    const overdueCount = workspace.tasks.filter((task) => task.projectId && companyProjects.some((project) => project.id === task.projectId) && isTaskOpen(task) && taskAnchorDate(task) && taskAnchorDate(task) < today).length;
     return (
       <div className="work-screen work-screen--table">
         <header className="work-company-header">
@@ -1330,20 +1330,39 @@ export default function Praca() {
             <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj firmę" title="Edytuj firmę" onClick={() => openCompanyEditor(selectedCompany)}><Pencil size={12} /></Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Usuń firmę" title="Usuń firmę" onClick={() => setDeleteState({ kind: "company", id: selectedCompany.id, name: selectedCompany.name })}><Trash2 size={12} /></Button>
           </div>
-          <div className="work-company-summary">
-            <span><strong>{allProjects.length}</strong><small>Aktywne projekty</small></span>
-            <span><strong>{openCount}</strong><small>Otwarte zadania</small></span>
-            <span><strong>{overdueCount}</strong><small>Po terminie</small></span>
-          </div>
         </header>
         <section className="work-project-list work-project-list--company" aria-labelledby="work-company-projects-title">
-          <header className="work-section-heading"><div><h3 id="work-company-projects-title">Projekty</h3><span>{projects.length}</span></div><Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openProjectEditor()}>Projekt</Button></header>
+          <header className="work-section-heading">
+            <div><h3 id="work-company-projects-title">Projekty</h3><span>{projects.length}</span></div>
+            <div className="work-section-heading__actions">
+              <div className="work-project-list__bulk-actions" aria-label="Sterowanie rozwinięciem projektów">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={<ChevronsDown size={13} />}
+                  disabled={!projects.length}
+                  onClick={() => setExpandedCompanyProjectIds(new Set(projects.map((project) => project.id)))}
+                >
+                  Rozwiń wszystkie
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={<ChevronsUp size={13} />}
+                  disabled={!expandedCompanyProjectIds.size}
+                  onClick={() => setExpandedCompanyProjectIds(new Set())}
+                >
+                  Zwiń wszystkie
+                </Button>
+              </div>
+              <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openProjectEditor()}>Projekt</Button>
+            </div>
+          </header>
           <div className="work-project-columns" aria-hidden="true">
             <span>Projekt</span>
             <span>Status</span>
             <span>Termin</span>
             <span>Otwarte</span>
-            <span>Najbliższe</span>
             <span>Postęp</span>
             <span>Akcje</span>
             <span />
@@ -1354,13 +1373,16 @@ export default function Praca() {
             const projectOpenTasks = workspace.tasks
               .filter((task) => task.projectId === project.id && isTaskOpen(task))
               .sort((a, b) => (taskAnchorDate(a) || "9999-12-31").localeCompare(taskAnchorDate(b) || "9999-12-31") || a.createdAt.localeCompare(b.createdAt));
-            const nextTask = projectOpenTasks.find((task) => taskAnchorDate(task));
-            const isExpanded = expandedCompanyProjectId === project.id;
-            const previewTasks = projectOpenTasks.slice(0, 3);
+            const isExpanded = expandedCompanyProjectIds.has(project.id);
             return (
               <article key={project.id} className={`work-project-record ${isExpanded ? "is-expanded" : ""}`}>
                 <div
                   className="work-project-record__main"
+                  onDoubleClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("button, input, select, textarea, [role=\"button\"]")) return;
+                    navigate("project", project.companyId, project.id);
+                  }}
                 >
                   <button
                     type="button"
@@ -1368,7 +1390,14 @@ export default function Praca() {
                     aria-expanded={isExpanded}
                     aria-controls={`work-project-preview-${project.id}`}
                     aria-label={`${isExpanded ? "Zwiń" : "Rozwiń"} podgląd projektu ${project.name}`}
-                    onClick={() => setExpandedCompanyProjectId((current) => current === project.id ? null : project.id)}
+                    title="Kliknij, aby rozwinąć · kliknij dwukrotnie, aby otworzyć projekt"
+                    onClick={() => setExpandedCompanyProjectIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(project.id)) next.delete(project.id);
+                      else next.add(project.id);
+                      return next;
+                    })}
+                    onDoubleClick={() => navigate("project", project.companyId, project.id)}
                   >
                     <FolderKanban size={15} aria-hidden="true" />
                     <span><strong>{project.name}</strong><small>{project.description || "Bez opisu projektu"}</small></span>
@@ -1399,20 +1428,7 @@ export default function Praca() {
                     portalZIndex={260}
                     onChange={(value) => updateProjectValues(project.id, { endDate: value })}
                   />
-                  <span className="work-project-record__open-count" title={formatTaskCount(count.open)}><strong>{formatTaskCount(count.open)}</strong></span>
-                  <span className="work-project-record__next">
-                    {nextTask ? (
-                      <button
-                        type="button"
-                        className="work-project-record__next-button"
-                        aria-label={detailTaskId === nextTask.id ? `Zamknij szczegóły zadania „${nextTask.title}”` : `Otwórz szczegóły zadania „${nextTask.title}”`}
-                        aria-pressed={detailTaskId === nextTask.id}
-                        onClick={() => toggleTaskDetails(nextTask.id)}
-                      >
-                        {nextTask.title}
-                      </button>
-                    ) : <small>Brak otwartych zadań</small>}
-                  </span>
+                  <span className="work-project-record__open-count" title={formatTaskCount(count.open)}><strong>{count.open}</strong><small>{taskCountLabel(count.open)}</small></span>
                   <span className="work-project-record__progress"><span className="work-progress"><i style={{ width: `${progress}%` }} /></span><strong>{progress}%</strong></span>
                   <span className="work-project-record__action-space" aria-hidden="true" />
                   <button
@@ -1421,7 +1437,12 @@ export default function Praca() {
                     aria-expanded={isExpanded}
                     aria-controls={`work-project-preview-${project.id}`}
                     aria-label={`${isExpanded ? "Zwiń" : "Rozwiń"} projekt`}
-                    onClick={() => setExpandedCompanyProjectId((current) => current === project.id ? null : project.id)}
+                    onClick={() => setExpandedCompanyProjectIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(project.id)) next.delete(project.id);
+                      else next.add(project.id);
+                      return next;
+                    })}
                   >
                     {isExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
                   </button>
@@ -1438,12 +1459,12 @@ export default function Praca() {
                 {isExpanded && (
                   <div id={`work-project-preview-${project.id}`} className="work-project-record__preview">
                     <div className="work-project-record__preview-heading">
-                      <span>Najbliższe zadania</span>
-                      <span>{previewTasks.length ? `${previewTasks.length} najbliższe z ${formatOpenTaskCount(count.open)}` : "Brak otwartych zadań"}</span>
+                      <span>Zadania</span>
+                      <span>{projectOpenTasks.length ? formatOpenTaskCount(projectOpenTasks.length) : "Brak otwartych zadań"}</span>
                     </div>
-                    {previewTasks.length ? (
+                    {projectOpenTasks.length ? (
                       <div className="work-project-record__preview-list">
-                        {previewTasks.map((task) => {
+                        {projectOpenTasks.map((task) => {
                           const taskStatus = getTaskStatus(task);
                           return (
                             <button key={task.id} type="button" className="work-project-record__preview-task" onClick={() => toggleTaskDetails(task.id)}>
@@ -1471,28 +1492,72 @@ export default function Praca() {
 
   const renderProjectView = () => {
     if (!selectedProject) return null;
+    const selectedProjectCompany = companyById.get(selectedProject.companyId);
     const count = projectCounts.get(selectedProject.id) ?? { total: 0, completed: 0, open: 0 };
     const progress = count.total ? Math.round((count.completed / count.total) * 100) : 0;
+    const openProjectTasks = projectTasks
+      .filter(isTaskOpen)
+      .sort((a, b) => (taskAnchorDate(a) || "9999-12-31").localeCompare(taskAnchorDate(b) || "9999-12-31") || a.createdAt.localeCompare(b.createdAt));
+    const nextProjectTask = openProjectTasks[0];
+    const overdueProjectTaskCount = openProjectTasks.filter((task) => {
+      const anchor = taskAnchorDate(task);
+      return Boolean(anchor) && anchor < today;
+    }).length;
     return (
       <div className="work-screen work-screen--project">
         <header className="work-project-header">
           <div className="work-project-header__identity">
-            <button type="button" className="work-back-link" onClick={() => navigate("company", selectedProject.companyId)}><ChevronRight size={13} className="is-back" /> {companyById.get(selectedProject.companyId)?.name ?? "Firma"}</button>
-            <div className="work-project-title-row"><h2>{selectedProject.name}</h2><Badge tone={projectStatusTone(selectedProject.status)}>{PROJECT_STATUS_LABELS[selectedProject.status]}</Badge></div>
-            <p>{selectedProject.description || "Dodaj krótki opis projektu, aby zachować kontekst."}</p>
-            <div className="work-project-dates"><CalendarDays size={12} aria-hidden="true" /> {formatDateRange(selectedProject.startDate, selectedProject.endDate)}{selectedProject.note && <span> · {selectedProject.note}</span>}</div>
+            <button type="button" className="work-back-link" onClick={() => navigate("company", selectedProject.companyId)}><ChevronRight size={13} className="is-back" /> {selectedProjectCompany?.name ?? "Firma"}</button>
+            <div className="work-project-header__copy">
+              <div className="work-project-title-row"><h2>{selectedProject.name}</h2><Badge tone={projectStatusTone(selectedProject.status)}>{PROJECT_STATUS_LABELS[selectedProject.status]}</Badge></div>
+              <p>{selectedProject.description || "Dodaj krótki opis projektu, aby zachować kontekst."}</p>
+              <div className="work-project-dates"><CalendarDays size={12} aria-hidden="true" /> {formatDateRange(selectedProject.startDate, selectedProject.endDate)}</div>
+            </div>
           </div>
           <div className="work-project-header__actions">
             <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj projekt" title="Edytuj projekt" onClick={() => openProjectEditor(selectedProject)}><Pencil size={12} /></Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Usuń projekt" title="Usuń projekt" onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}><Trash2 size={12} /></Button>
           </div>
-          <div className="work-project-progress"><span>Postęp</span><strong>{formatProjectProgress(count)}</strong><span className="work-progress"><i style={{ width: `${progress}%` }} /></span><b>{progress}%</b></div>
         </header>
-        <section className="work-project-task-panel" aria-labelledby="work-project-tasks-title">
-          <header className="work-section-heading"><div><ListTree size={14} aria-hidden="true" /><h3 id="work-project-tasks-title">Zadania projektu</h3><span>{formatOpenTaskCount(count.open)}</span></div><div className="work-section-heading__actions"><span className="work-task-tree__hint">Przeciągnij zadanie na inne, aby je zagnieździć</span><Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openTaskEditor()}>Zadanie</Button></div></header>
-          {completionUndo && <div className="work-completion-undo" role="status"><span>{completionUndo.label}</span><Button variant="quiet" size="sm" onClick={undoCompletionChange}>Cofnij</Button><button type="button" aria-label="Zamknij komunikat" onClick={() => setCompletionUndo(null)}><X size={13} /></button></div>}
-          {renderTaskTree()}
+        <section className="work-project-summary" aria-label="Podsumowanie projektu">
+          <div className="work-project-summary__progress">
+            <div className="work-project-summary__heading"><span><ListTree size={13} aria-hidden="true" /> Postęp projektu</span><b>{progress}%</b></div>
+            <div className="work-progress" role="progressbar" aria-label="Postęp projektu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${progress}%` }} /></div>
+            <p>{formatProjectProgress(count)}</p>
+          </div>
+          <dl className="work-project-summary__facts">
+            <div><dt>Firma</dt><dd>{selectedProjectCompany?.name ?? "Bez firmy"}</dd></div>
+            <div><dt>Termin końcowy</dt><dd>{selectedProject.endDate ? formatDate(selectedProject.endDate) : "Bez terminu"}</dd></div>
+            <div><dt>Otwarte zadania</dt><dd>{count.open}</dd><small>{taskCountLabel(count.open)}</small></div>
+          </dl>
         </section>
+        <div className="work-project-layout">
+          <section className="work-project-task-panel" aria-labelledby="work-project-tasks-title">
+            <header className="work-section-heading"><div><ListTree size={14} aria-hidden="true" /><h3 id="work-project-tasks-title">Zadania projektu</h3><span>{formatOpenTaskCount(count.open)}</span></div><div className="work-section-heading__actions"><span className="work-task-tree__hint">Przeciągnij, aby zagnieździć</span><Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openTaskEditor()}>Zadanie</Button></div></header>
+            {completionUndo && <div className="work-completion-undo" role="status"><span>{completionUndo.label}</span><Button variant="quiet" size="sm" onClick={undoCompletionChange}>Cofnij</Button><button type="button" aria-label="Zamknij komunikat" onClick={() => setCompletionUndo(null)}><X size={13} /></button></div>}
+            {renderTaskTree()}
+          </section>
+          <aside className="work-project-context" aria-label="Kontekst projektu">
+            <section className="work-project-context__section">
+              <header className="work-project-context__header"><h3>Kontekst projektu</h3><Button variant="ghost" size="sm" onClick={() => openProjectEditor(selectedProject)}>Edytuj</Button></header>
+              <p className="work-project-context__description">{selectedProject.description || "Dodaj opis projektu, aby przy kolejnym wejściu od razu wiedzieć, czego dotyczy."}</p>
+            </section>
+            <section className="work-project-context__section">
+              <header className="work-project-context__header"><h3>Najbliższe zadanie</h3>{overdueProjectTaskCount > 0 && <span className="work-project-context__warning"><CircleAlert size={12} aria-hidden="true" /> {overdueProjectTaskCount} po terminie</span>}</header>
+              {nextProjectTask ? (
+                <button type="button" className="work-project-next-task" onClick={() => toggleTaskDetails(nextProjectTask.id)}>
+                  <span className={`work-project-next-task__status ${taskStatusTone(getTaskStatus(nextProjectTask))}`}>{taskStatusIcon(getTaskStatus(nextProjectTask))}</span>
+                  <span className="work-project-next-task__copy"><strong>{nextProjectTask.title}</strong><small>{taskAnchorDate(nextProjectTask) ? formatDate(taskAnchorDate(nextProjectTask)) : "Bez terminu"}</small></span>
+                  <ChevronRight size={14} aria-hidden="true" />
+                </button>
+              ) : <p className="work-project-context__empty">Brak otwartych zadań. Możesz dodać pierwsze zadanie do projektu.</p>}
+            </section>
+            <section className="work-project-context__section work-project-context__section--note">
+              <header className="work-project-context__header"><h3>Notatka projektu</h3></header>
+              {selectedProject.note ? <p className="work-project-context__note">{selectedProject.note}</p> : <button type="button" className="work-project-add-note" onClick={() => openProjectEditor(selectedProject)}>Dodaj notatkę <ChevronRight size={13} aria-hidden="true" /></button>}
+            </section>
+          </aside>
+        </div>
       </div>
     );
   };

@@ -61,6 +61,7 @@ import {
   Button,
   ContextNavItem,
   ContextSidebar,
+  CompletedSection,
   EmptyState,
   Input,
   Modal,
@@ -142,7 +143,7 @@ export default function Podroze({
   const [searchParams, setSearchParams] = useSearchParams();
   const embedded = Boolean(layout);
   const tripId = routeTripId ?? searchParams.get("podroz") ?? undefined;
-  const selectedTrip = workspace.trips.find((trip) => trip.id === tripId);
+  const selectedTrip = workspace.trips.find((trip) => trip.id === tripId)!;
   const sectionParam = searchParams.get("sekcja");
   const activeSection: TravelSection = isTravelSection(sectionParam) ? sectionParam : "overview";
 
@@ -666,6 +667,53 @@ export default function Podroze({
       !task.completed,
     ));
   };
+
+  const renderTravelTask = (task: TravelTask) => (
+    <article key={task.id} className={`travel-task-row ${task.completed ? "is-completed" : ""}`}>
+      <button
+        type="button"
+        className="travel-check"
+        aria-label={task.completed ? `Przywróć ${task.title}` : `Oznacz jako zrobione: ${task.title}`}
+        aria-pressed={task.completed}
+        onClick={() => toggleTask(task)}
+      >
+        {task.completed && <Check size={10} />}
+      </button>
+      <span className="travel-task-row__copy">
+        <strong>{task.title}</strong>
+        <small>{TASK_CATEGORY_LABELS[task.category]}</small>
+      </span>
+      <Badge tone={task.category === "health" ? "warning" : task.category === "documents" ? "violet" : "neutral"}>
+        {TASK_CATEGORY_LABELS[task.category]}
+      </Badge>
+      <span className={`travel-task-row__due ${task.dueDate && daysUntil(task.dueDate) < 0 && !task.completed ? "is-overdue" : ""}`}>
+        {task.dueDate ? formatDate(task.dueDate) : "Bez terminu"}
+      </span>
+      <span className="travel-row-actions">
+        <AddToTasksButton
+          compact
+          input={{
+            source: {
+              kind: "travel",
+              entity: `${encodeURIComponent(selectedTrip?.id ?? "")}/${encodeURIComponent(task.id)}`,
+              context: `${selectedTrip?.name ?? "Podróż"} · ${selectedTrip?.destination ?? ""}`,
+              href: embedded
+                ? `/sprawy?widok=travel&podroz=${encodeURIComponent(selectedTrip?.id ?? "")}&sekcja=tasks`
+                : `/podroze/${encodeURIComponent(selectedTrip?.id ?? "")}?sekcja=tasks`,
+            },
+            text: task.title,
+            done: task.completed,
+            calendarDate: task.dueDate || undefined,
+            date: task.dueDate || undefined,
+            list: "podroze",
+            tags: ["podroze"],
+          }}
+        />
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={12} /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={12} /></Button>
+      </span>
+    </article>
+  );
 
   const cycleDocumentStatus = (document: TravelDocument) => {
     if (!selectedTrip) return;
@@ -1369,7 +1417,18 @@ export default function Podroze({
                     {selectedTrip.tasks
                       .slice()
                       .sort((a, b) => Number(a.completed) - Number(b.completed) || (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
-                      .map((task) => (
+                      .map((task, index, sortedTasks) => {
+                        if (task.completed) {
+                          if (sortedTasks[index - 1]?.completed) return null;
+                          const completedTasks = sortedTasks.filter((item) => item.completed);
+                          return (
+                            <CompletedSection key="completed-travel-tasks" label="Ukończone" count={completedTasks.length} className="travel-completed-section">
+                              <div className="travel-task-register">{completedTasks.map(renderTravelTask)}</div>
+                            </CompletedSection>
+                          );
+                        }
+                        return renderTravelTask(task);
+                        return (
                         <article key={task.id} className={`travel-task-row ${task.completed ? "is-completed" : ""}`}>
                           <button
                             type="button"
@@ -1396,11 +1455,11 @@ export default function Podroze({
                               input={{
                                 source: {
                                   kind: "travel",
-                                  entity: `${encodeURIComponent(selectedTrip.id)}/${encodeURIComponent(task.id)}`,
+                                  entity: `${encodeURIComponent(selectedTrip?.id ?? "")}/${encodeURIComponent(task.id)}`,
                                   context: `${selectedTrip.name} · ${selectedTrip.destination}`,
                                   href: embedded
-                                    ? `/sprawy?widok=travel&podroz=${encodeURIComponent(selectedTrip.id)}&sekcja=tasks`
-                                    : `/podroze/${encodeURIComponent(selectedTrip.id)}?sekcja=tasks`,
+                                    ? `/sprawy?widok=travel&podroz=${encodeURIComponent(selectedTrip?.id ?? "")}&sekcja=tasks`
+                                    : `/podroze/${encodeURIComponent(selectedTrip?.id ?? "")}?sekcja=tasks`,
                                 },
                                 text: task.title,
                                 done: task.completed,
@@ -1414,7 +1473,8 @@ export default function Podroze({
                             <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={12} /></Button>
                           </span>
                         </article>
-                      ))}
+                      );
+                      })}
                   </section>
                 )}
               </div>

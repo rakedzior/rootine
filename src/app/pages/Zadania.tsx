@@ -40,6 +40,7 @@ import {
   ContextNavItem,
   ContextSidebar,
   DetailPanel,
+  EmptyState,
   MenuItem,
   Modal,
   ModuleMain,
@@ -121,8 +122,8 @@ export default function Zadania() {
   const [newPriority,   setNewPriority]   = useState<Priority | null>(null);
   const [newDateVal,    setNewDateVal]    = useState<DateVal>(DEFAULT_DATE_VAL);
   const [inputDropdown, setInputDropdown] = useState<"priority" | "list" | "tags" | null>(null);
-  const [showDone,      setShowDone]      = useState(true);
   const [showOverdue,   setShowOverdue]   = useState(true);
+  const [showDone,      setShowDone]      = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
@@ -1379,10 +1380,12 @@ export default function Zadania() {
             /* Ukończone view — flat list of all done tasks */
             <div className="task-list">
               {visible.length === 0 && (
-                <div className="task-empty">
-                  <RotateCcw size={28} strokeWidth={1} />
-                  <span className="text-[13px]">Brak ukończonych zadań</span>
-                </div>
+                <EmptyState
+                  className="task-empty-state"
+                  icon={<RotateCcw size={18} />}
+                  title="Nie ma jeszcze ukończonych zadań"
+                  description="Zadania oznaczone jako wykonane pojawią się tutaj w jednym spokojnym archiwum."
+                />
               )}
               {visible.map(t => (
                 <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
@@ -1399,10 +1402,12 @@ export default function Zadania() {
           ) : taskView === "kosz" ? (
             <div className="task-list">
               {visible.length === 0 ? (
-                <div className="task-empty">
-                  <Trash2 size={28} strokeWidth={1} />
-                  <span className="text-[13px]">Kosz jest pusty</span>
-                </div>
+                <EmptyState
+                  className="task-empty-state"
+                  icon={<Trash2 size={18} />}
+                  title="Kosz jest pusty"
+                  description="Usunięte zadania pozostaną tutaj do czasu przywrócenia albo trwałego usunięcia."
+                />
               ) : visible.map(t => (
                 <div key={t.id} className="flex items-center gap-2">
                   <div className="min-w-0 flex-1">
@@ -1454,7 +1459,9 @@ export default function Zadania() {
               {/* Completed */}
               {completed.length > 0 && (
                 <div className="task-completed">
-                  <button onClick={() => setShowDone(v => !v)}
+                   <button type="button" onClick={() => setShowDone(v => !v)}
+                     aria-expanded={showDone}
+                     aria-controls="task-completed-list"
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] transition-colors mb-1"
                     style={{ color: C.textMuted }}>
                     <ChevronDown size={12} strokeWidth={1.5}
@@ -1462,7 +1469,7 @@ export default function Zadania() {
                     Ukończone · {completed.length}
                   </button>
                   {showDone && (
-                    <div className="task-list">
+                     <div id="task-completed-list" className="task-list">
                       {completed.map(t => (
                         <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
                           selected={selectedId === t.id}
@@ -1481,14 +1488,18 @@ export default function Zadania() {
             </>
           )}
 
-          {taskView !== "kosz" && pending.length === 0 && completed.length === 0 && (
-            <div className="task-empty">
-              <Circle size={28} strokeWidth={1} />
-              <span className="text-[13px]">Brak zadań</span>
-              <button onClick={() => inputRef.current?.focus()} className="text-[11px] mt-1" style={{ color: C.iceBlue }}>
-                Dodaj pierwsze zadanie →
-              </button>
-            </div>
+          {taskView !== "kosz" && taskView !== "ukonczone" && pending.length === 0 && completed.length === 0 && (
+            <EmptyState
+              className="task-empty-state"
+              icon={<Circle size={18} />}
+              title="Dodaj pierwszy konkretny krok"
+              description="Zapisz zadanie, które chcesz wykonać, a potem przypisz mu termin, listę albo priorytet."
+              action={(
+                <Button variant="primary" size="sm" leadingIcon={<Plus size={12} />} onClick={() => inputRef.current?.focus()}>
+                  Dodaj zadanie
+                </Button>
+              )}
+            />
           )}
         </div>
       </ModuleMain>

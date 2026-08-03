@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   Home,
-  LoaderCircle,
   RotateCcw,
 } from "lucide-react";
 import { Link, isRouteErrorResponse, useLocation, useRouteError } from "react-router";
@@ -43,13 +42,47 @@ function RouteStateFrame({
 
 export function RouteLoadingState() {
   return (
-    <RouteStateFrame
-      eyebrow="Rootine"
-      title="Przygotowujemy obszar roboczy"
-      description="Ładujemy tylko potrzebny moduł i zachowujemy stan pozostałych obszarów."
-      icon={<LoaderCircle className="app-route-state__spinner" size={22} />}
-      compact
-    />
+    <main className="app-route-loading" aria-busy="true" aria-label="Przygotowywanie obszaru roboczego">
+      <span className="ui-sr-only" role="status" aria-live="polite">
+        Przygotowujemy obszar roboczy. Zachowujemy stan pozostałych obszarów.
+      </span>
+      <header className="app-route-loading__header" aria-hidden="true">
+        <span className="app-route-loading__identity app-route-skeleton" />
+        <span className="app-route-loading__action app-route-skeleton" />
+      </header>
+      <div className="app-route-loading__workspace" aria-hidden="true">
+        <section className="app-route-loading__summary">
+          <div className="app-route-loading__summary-copy">
+            <span className="app-route-loading__label app-route-skeleton" />
+            <span className="app-route-loading__metric app-route-skeleton" />
+            <span className="app-route-loading__track app-route-skeleton" />
+          </div>
+          <span className="app-route-loading__dial app-route-skeleton" />
+          <div className="app-route-loading__summary-copy is-secondary">
+            <span className="app-route-loading__label app-route-skeleton" />
+            <span className="app-route-loading__metric is-short app-route-skeleton" />
+            <span className="app-route-loading__caption app-route-skeleton" />
+          </div>
+        </section>
+        <section className="app-route-loading__list">
+          <div className="app-route-loading__section-heading">
+            <span className="app-route-loading__section-title app-route-skeleton" />
+            <span className="app-route-loading__count app-route-skeleton" />
+          </div>
+          {Array.from({ length: 7 }, (_, index) => (
+            <div
+              key={index}
+              className="app-route-loading__row"
+            >
+              <span className="app-route-loading__row-icon app-route-skeleton" />
+              <span className="app-route-loading__row-title app-route-skeleton" />
+              <span className="app-route-loading__row-meta app-route-skeleton" />
+              <span className="app-route-loading__row-status app-route-skeleton" />
+            </div>
+          ))}
+        </section>
+      </div>
+    </main>
   );
 }
 

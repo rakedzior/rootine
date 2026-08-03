@@ -4,6 +4,7 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { Card, type CardProps } from "./components/Card";
 export { Checkbox, type CheckboxProps, type CheckboxShape, type CheckboxSize } from "./components/Checkbox";
 export { ConfirmDialog, type ConfirmDialogProps } from "./components/ConfirmDialog";
+export { CompletedSection, type CompletedSectionProps } from "./components/CompletedSection";
 export { IconButton, type IconButtonProps } from "./components/IconButton";
 export { ListRow, type ListRowProps, type ListRowDensity } from "./components/ListRow";
 export { ProgressBar, type ProgressBarProps, type ProgressSize, type ProgressTone } from "./components/ProgressBar";

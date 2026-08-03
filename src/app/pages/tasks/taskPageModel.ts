@@ -222,7 +222,7 @@ export function viewedTaskDayHeading(view: string) {
 export function overdueDateLabel(calendarDate: string): string {
   const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
   if (daysAgo === null) return "Po terminie";
-  if (daysAgo === 1) return "Wczoraj";
+  if (daysAgo === 1) return "1 dzień po terminie";
   if (daysAgo > 1) return `${daysAgo} dni temu`;
   return "Po terminie";
 }
@@ -234,7 +234,7 @@ export function overdueDateLabel(calendarDate: string): string {
 export function overdueRailLabel(calendarDate: string): string {
   const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
   if (daysAgo === null) return "";
-  if (daysAgo === 1) return "Wczoraj";
+  if (daysAgo === 1) return "1 dzień po terminie";
   if (daysAgo > 1) return `${daysAgo} dni po terminie`;
   return "";
 }

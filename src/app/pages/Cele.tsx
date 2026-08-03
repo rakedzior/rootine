@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useGoalsStore } from "../goals/goalsContext";
-import { todayLocalDateKey } from "../data/localDate";
+import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import { recordActivity } from "../experience/activityLog";
 import type {
   Goal as StoredGoal,
@@ -27,6 +27,7 @@ import {
 import {
   Badge,
   Button,
+  CompletedSection,
   DetailPanel,
   EmptyState,
   Menu,
@@ -40,7 +41,11 @@ import {
   WorkspaceToolbar,
 } from "../ui";
 import {
+  Activity,
+  AlertTriangle,
   Archive,
+  ArrowRight,
+  CalendarDays,
   Check,
   ChevronDown,
   Ellipsis,
@@ -178,15 +183,39 @@ export default function Cele() {
     });
   }, [activeFilter, goals, sortKey, storedGoals]);
 
+  const goalsRadar = useMemo(() => {
+    const actionable = goals.filter((goal) => goal.status === "active" || goal.status === "risk");
+    const risk = actionable.filter((goal) => goal.status === "risk" || goal.daysLeft.includes("po terminie"));
+    const stale = actionable.filter((goal) => {
+      const raw = storedGoals.find((item) => item.id === String(goal.id));
+      if (!raw?.updatedAt) return true;
+      const updatedAt = Date.parse(raw.updatedAt);
+      return !Number.isFinite(updatedAt) || (Date.now() - updatedAt) / 86_400_000 >= 14;
+    });
+    const upcoming = [...actionable]
+      .map((goal) => ({ goal, days: calendarDaysBetween(todayLocalDateKey(), storedGoals.find((item) => item.id === String(goal.id))?.dueDate ?? "") ?? 99999 }))
+      .filter(({ days }) => days >= 0)
+      .sort((a, b) => a.days - b.days)[0]?.goal ?? null;
+    const focus = risk[0] ?? upcoming ?? stale[0] ?? actionable[0] ?? null;
+    return { risk, stale, upcoming, focus };
+  }, [goals, storedGoals]);
+
   const selectedGoal = goals.find((goal) => goal.id === selectedId) ?? null;
   const shouldGroupPriority = activeFilter === "overview"
     || activeFilter === "active"
     || activeFilter === "all"
     || activeFilter.startsWith("category:");
-  const priorityGoals = shouldGroupPriority
-    ? visibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk")
+  const collapseCompleted = activeFilter === "all" || activeFilter.startsWith("category:");
+  const completedGoals = collapseCompleted
+    ? visibleGoals.filter((goal) => goal.status === "completed")
     : [];
-  const remainingGoals = visibleGoals.filter((goal) => !priorityGoals.includes(goal));
+  const openVisibleGoals = collapseCompleted
+    ? visibleGoals.filter((goal) => goal.status !== "completed")
+    : visibleGoals;
+  const priorityGoals = shouldGroupPriority
+    ? openVisibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk")
+    : [];
+  const remainingGoals = openVisibleGoals.filter((goal) => !priorityGoals.includes(goal));
   const ambientGoalProgress = selectedGoal?.progress ?? (visibleGoals.length
     ? visibleGoals.reduce((sum, goal) => sum + goal.progress, 0) / visibleGoals.length
     : 0);
@@ -423,6 +452,38 @@ export default function Cele() {
           </div>
         </WorkspaceToolbar>
 
+        {activeFilter === "overview" && (
+          <section className="goals-radar" aria-label="Najważniejsze sygnały celów">
+            <div className="goals-radar__grid">
+              <div className={`goals-radar__signal ${goalsRadar.risk.length ? "is-warning" : "is-clear"}`}>
+                <AlertTriangle size={15} aria-hidden="true" />
+                <strong>{goalsRadar.risk.length}</strong>
+                <span>{goalsRadar.risk.length === 1 ? "cel wymaga uwagi" : "cele wymagają uwagi"}</span>
+              </div>
+              <div className="goals-radar__signal">
+                <CalendarDays size={15} aria-hidden="true" />
+                <strong>{goalsRadar.upcoming?.due ?? "—"}</strong>
+                <span>{goalsRadar.upcoming ? `Najbliższy termin · ${goalsRadar.upcoming.title}` : "Brak nadchodzącego terminu"}</span>
+              </div>
+              <div className={`goals-radar__signal ${goalsRadar.stale.length ? "is-muted" : "is-clear"}`}>
+                <Activity size={15} aria-hidden="true" />
+                <strong>{goalsRadar.stale.length}</strong>
+                <span>{goalsRadar.stale.length === 1 ? "cel bez świeżej aktualizacji" : "cele bez świeżej aktualizacji"}</span>
+              </div>
+            </div>
+            {goalsRadar.focus && (
+              <button type="button" className="goals-radar__focus" onClick={() => navigate(`/cele/${goalsRadar.focus!.id}`)}>
+                <span className="goals-radar__focus-copy">
+                  <span>Następny krok</span>
+                  <strong>{goalsRadar.focus.nextMilestone.title}</strong>
+                  <small>{goalsRadar.focus.title} · {goalsRadar.focus.nextMilestone.daysLeft}</small>
+                </span>
+                <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            )}
+          </section>
+        )}
+
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {visibleGoals.length === 0 ? (
             <EmptyState className="h-full" icon={<Target size={20} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo utwórz nowy cel." action={<Button variant="primary" size="sm" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={12} />}>Nowy cel</Button>} />
@@ -472,6 +533,28 @@ export default function Cele() {
                     ))}
                   </div>
                 </section>
+              )}
+
+              {completedGoals.length > 0 && (
+                <CompletedSection label="Ukończone cele" count={completedGoals.length} className="goals-completed-section">
+                  <div className={layout === "grid" ? "goals-card-grid grid grid-cols-2 gap-3" : "space-y-3"}>
+                    {completedGoals.map((goal) => (
+                      <GoalCard
+                        key={goal.id}
+                        goal={goal}
+                        selected={selectedId === goal.id}
+                        grid={layout === "grid"}
+                        onSelect={() => setSelectedGoalId(selectedId === goal.id ? null : String(goal.id))}
+                        onEdit={() => setGoalFormId(String(goal.id))}
+                        onProgress={() => openProgressFor(String(goal.id))}
+                        onDuplicate={() => duplicateGoal(String(goal.id))}
+                        onDelete={() => setDeleteGoalId(String(goal.id))}
+                        onOpen={() => navigate(`/cele/${goal.id}`)}
+                        onStatus={(status) => changeStatus(String(goal.id), status)}
+                      />
+                    ))}
+                  </div>
+                </CompletedSection>
               )}
             </div>
           )}

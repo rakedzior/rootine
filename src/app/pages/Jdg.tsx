@@ -54,6 +54,7 @@ import {
   Button,
   Card,
   Checkbox,
+  CompletedSection,
   Input,
   Modal,
   PageHeader,
@@ -441,6 +442,60 @@ export function JdgWorkspace({
               const groupItems = items.filter((item) => item.group === group.id);
               const groupDone = groupItems.filter((item) => item.done).length;
               const GroupIcon = group.icon;
+              const completedGroupItems = groupItems.filter((item) => item.done);
+              const renderChecklistItem = (item: JdgChecklistItem) => {
+                const due = dueStatus(monthKey, item.dueDay, item.done);
+                const isClose = item.id === "control-close";
+                const closeLocked = isClose && !readyToClose && !item.done;
+                const dueDate = item.dueDay ? `${monthKey}-${String(item.dueDay).padStart(2, "0")}` : undefined;
+                return (
+                  <div key={item.id} className={`jdg-check-row ${item.done ? "is-done" : ""} ${isClose ? "is-final" : ""}`}>
+                    <Checkbox
+                      size="sm"
+                      checked={item.done}
+                      aria-label={item.done ? `Cofnij: ${item.label}` : `Potwierdź: ${item.label}`}
+                      disabled={closeLocked}
+                      title={closeLocked ? "Najpierw ukończ pozostałe wymagane punkty." : undefined}
+                      onChange={() => toggleItem(item.id)}
+                    />
+                    <button
+                      type="button"
+                      className="jdg-check-row__label"
+                      disabled={closeLocked}
+                      onClick={() => toggleItem(item.id)}
+                    >
+                      <strong>{item.label}</strong>
+                      <small>
+                        {item.doneAt
+                          ? `Potwierdzono ${formatShortDate(item.doneAt)}`
+                          : item.required ? "Punkt wymagany" : "Punkt kontrolny"}
+                      </small>
+                    </button>
+                    <Badge tone={closeLocked ? "warning" : due.tone}>
+                      {closeLocked ? "Po wymaganych" : due.label}
+                    </Badge>
+                    <AddToTasksButton compact input={{
+                      source: {
+                        kind: "affairs",
+                        entity: `${encodeURIComponent(monthKey)}/${encodeURIComponent(item.id)}`,
+                        context: `JDG · ${monthKey}`,
+                        href: `/sprawy?widok=jdg&month=${encodeURIComponent(monthKey)}`,
+                      },
+                      text: item.label,
+                      done: item.done,
+                      calendarDate: dueDate,
+                      date: dueDate,
+                      list: "sprawy",
+                      tags: ["sprawy", "jdg"],
+                    }} />
+                    {item.id.startsWith("custom-") && (
+                      <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
+                        <Trash2 size={12} />
+                      </Button>
+                    )}
+                  </div>
+                );
+              };
               return (
                 <Card key={group.id} as="section" tone="panel" padding="none" className="jdg-stage">
                   <header className="jdg-stage__header">
@@ -457,6 +512,15 @@ export function JdgWorkspace({
 
                   <div className="jdg-stage__items">
                     {groupItems.map((item) => {
+                      if (item.done) {
+                        if (item.id !== completedGroupItems[0]?.id) return null;
+                        return (
+                          <CompletedSection key={`completed-${group.id}`} label="Ukończone" count={completedGroupItems.length} className="jdg-completed-section">
+                            <div className="jdg-stage__items">{completedGroupItems.map(renderChecklistItem)}</div>
+                          </CompletedSection>
+                        );
+                      }
+                      return renderChecklistItem(item);
                       const due = dueStatus(monthKey, item.dueDay, item.done);
                       const isClose = item.id === "control-close";
                       const closeLocked = isClose && !readyToClose && !item.done;

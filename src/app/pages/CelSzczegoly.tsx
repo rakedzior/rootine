@@ -279,7 +279,7 @@ export default function CelSzczegoly() {
 
   return (
     <ModuleShell
-      pageWidth="standard"
+      pageWidth="canvas"
       header={pageHeader}
       ambient="quiet"
     >
@@ -297,25 +297,31 @@ export default function CelSzczegoly() {
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5">
           <div className="goal-detail-page mx-auto max-w-[1180px]">
             <section className="goal-detail-hero" aria-labelledby="goal-progress-heading">
-              <div className="goal-detail-hero-main">
-                <div className="goal-detail-hero-icon" style={{ color: goal.color, background: `${goal.color}18`, borderColor: `${goal.color}55` }}>
-                  {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-7 w-7 object-contain" /> : <Target size={22} strokeWidth={1.5} />}
+              <div className="goal-detail-hero-content">
+                <div className="goal-detail-hero-main">
+                  <div className="goal-detail-hero-icon" style={{ color: goal.color, background: `${goal.color}18`, borderColor: `${goal.color}55` }}>
+                    {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-7 w-7 object-contain" /> : <Target size={22} strokeWidth={1.5} />}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 id="goal-progress-heading">Realizacja celu</h2>
+                    <p>{getGoalMetric(goal)} · {statusLabels[goal.status]}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h2 id="goal-progress-heading">Realizacja celu</h2>
-                  <p>{getGoalMetric(goal)} · {statusLabels[goal.status]}</p>
+                <div className="goal-detail-hero-value"><strong>{progress}%</strong><span>ukończone</span></div>
+                <div className="goal-detail-progress" role="progressbar" aria-label="Postęp celu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+                  <div className="goal-detail-progress-meta"><span>Postęp</span><span>{getGoalMetric(goal)}</span></div>
+                  <div className="goal-detail-progress-track"><div className="goal-detail-progress-fill" style={{ width: `${progress}%`, background: goal.color }} /></div>
+                </div>
+                <div className="goal-detail-summary-grid">
+                  <div><strong>{goal.progressMode === "milestones" ? `${completedMilestones}/${goal.milestones.length}` : current.toLocaleString("pl-PL")}</strong><span>{measurementLabel}</span></div>
+                  <div><strong>{fmtDate(goal.dueDate)}</strong><span>Termin</span></div>
+                  <div><strong style={{ color: goal.health === "risk" ? C.warning : C.seaGlass }}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</strong><span>Kondycja celu</span></div>
                 </div>
               </div>
-              <div className="goal-detail-hero-value"><strong>{progress}%</strong><span>ukończone</span></div>
-              <div className="goal-detail-progress" role="progressbar" aria-label="Postęp celu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-                <div className="goal-detail-progress-meta"><span>Postęp</span><span>{getGoalMetric(goal)}</span></div>
-                <div className="goal-detail-progress-track"><div className="goal-detail-progress-fill" style={{ width: `${progress}%`, background: goal.color }} /></div>
-              </div>
-              <div className="goal-detail-summary-grid">
-                <div><strong>{goal.progressMode === "milestones" ? `${completedMilestones}/${goal.milestones.length}` : current.toLocaleString("pl-PL")}</strong><span>{measurementLabel}</span></div>
-                <div><strong>{fmtDate(goal.dueDate)}</strong><span>Termin</span></div>
-                <div><strong style={{ color: goal.health === "risk" ? C.warning : C.seaGlass }}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</strong><span>Kondycja celu</span></div>
-              </div>
+              <aside className="goal-detail-hero-details" aria-label="Szczegóły celu">
+                {renderFacts()}
+                {renderNote()}
+              </aside>
             </section>
 
             {viewMode === "summary" ? (
@@ -336,10 +342,6 @@ export default function CelSzczegoly() {
                   )}
                 </div>
 
-                <aside className="goal-detail-side">
-                  {renderFacts()}
-                  {renderNote()}
-                </aside>
               </div>
             ) : (
               <div className="goal-detail-execution-grid">
@@ -354,10 +356,6 @@ export default function CelSzczegoly() {
                     {goal.progressMode === "milestones" ? renderMilestoneTimeline() : renderProgressTimeline()}
                   </section>
                 </div>
-                <aside className="goal-detail-side goal-detail-execution-side">
-                  {renderFacts()}
-                  {renderNote()}
-                </aside>
               </div>
             )}
           </div>

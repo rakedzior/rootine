@@ -63,6 +63,7 @@ import {
   Card,
   Checkbox,
   ConfirmDialog,
+  CompletedSection,
   ContextNavItem,
   ContextSidebar,
   DetailPanel,
@@ -728,6 +729,59 @@ export default function Sprawy() {
     setWorkspace((current) => setOneTimePaymentPaidState(current, paymentId, paid, paidAt));
   };
 
+  const sortedOneTimePayments = useMemo(
+    () => workspace.oneTimePayments
+      .slice()
+      .sort((a, b) => Number(a.paid) - Number(b.paid) || a.dueDate.localeCompare(b.dueDate)),
+    [workspace.oneTimePayments],
+  );
+
+  const renderOneTimePayment = (payment: OneTimePayment) => {
+    const due = dueCopy(payment.dueDate);
+    return (
+      <div key={payment.id} className={`affairs-payment-row ${payment.paid ? "is-done" : ""}`}>
+        <span className="affairs-payment-row__icon"><ReceiptText size={14} /></span>
+        <span className="affairs-payment-row__title">
+          <strong>{payment.title}</strong>
+          <small>{payment.note || "Jednorazowe zobowiązanie"}</small>
+        </span>
+        <span className="affairs-payment-row__cadence">{payment.category}</span>
+        <Badge tone={payment.paid ? "success" : due.tone}>{payment.paid ? "Opłacone" : due.text}</Badge>
+        <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.title}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
+        <span className="affairs-payment-row__actions">
+          <AddToTasksButton compact input={{
+            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Sprawy", href: "/sprawy?widok=oneTime" },
+            text: payment.title,
+            done: payment.paid,
+            calendarDate: payment.dueDate,
+            date: payment.dueDate,
+            list: "sprawy",
+            tags: ["sprawy", "płatność"],
+            notes: payment.note,
+          }} />
+          <Button
+            variant="quiet"
+            size="sm"
+            leadingIcon={payment.paid ? <RefreshCw size={12} /> : <Check size={12} />}
+            onClick={() => toggleOneTimePayment(payment.id)}
+          >
+            {payment.paid ? "Przywróć" : "Opłacone"}
+          </Button>
+          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={12} /></Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label={`Usuń ${payment.title}`}
+            onClick={() => setDeleteState({ kind: "oneTime", id: payment.id, label: payment.title })}
+          >
+            <Trash2 size={12} />
+          </Button>
+        </span>
+      </div>
+    );
+  };
+
   const budgetDraftKey = (lineId: string, field: "planned" | "actual") => `${lineId}:${field}`;
 
   const updateBudgetDraft = (lineId: string, field: "planned" | "actual", value: string) => {
@@ -1301,10 +1355,21 @@ export default function Sprawy() {
                   description="Dodaj opłatę urzędową, ratę, rachunek albo większy zakup z terminem."
                   action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openOneTimeEditor()}>Dodaj płatność</Button>}
                 />
-              ) : workspace.oneTimePayments
+              ) : sortedOneTimePayments
                 .slice()
                 .sort((a, b) => Number(a.paid) - Number(b.paid) || a.dueDate.localeCompare(b.dueDate))
-                .map((payment) => {
+                .map((payment, index, sortedPayments) => {
+                  if (payment.paid) {
+                    if (sortedPayments[index - 1]?.paid) return null;
+                    const completedPayments = sortedPayments.filter((item) => item.paid);
+                    return (
+                      <CompletedSection key="completed-payments" label="Opłacone" count={completedPayments.length} className="affairs-completed-section">
+                        <div className="affairs-ledger__completed-list">
+                          {completedPayments.map(renderOneTimePayment)}
+                        </div>
+                      </CompletedSection>
+                    );
+                  }
                   const due = dueCopy(payment.dueDate);
                   return (
                     <div key={payment.id} className={`affairs-payment-row ${payment.paid ? "is-done" : ""}`}>
@@ -1590,6 +1655,43 @@ export default function Sprawy() {
                 const items = workspace.vehicleItems
                   .filter((item) => item.vehicleId === vehicle.id)
                   .sort((a, b) => Number(a.done) - Number(b.done) || (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+                const renderVehicleItem = (item: VehicleItem) => {
+                  const due = vehicleItemDueCopy(item, vehicle);
+                  return (
+                    <div key={item.id} className={`affairs-vehicle-row ${item.done ? "is-done" : ""}`}>
+                      <Checkbox
+                        size="sm"
+                        checked={item.done}
+                        aria-label={item.done ? `Przywróć ${item.title}` : `Oznacz jako zrobione: ${item.title}`}
+                        onChange={() => setWorkspace((current) => ({
+                          ...current,
+                          vehicleItems: current.vehicleItems.map((candidate) => candidate.id === item.id ? { ...candidate, done: !candidate.done } : candidate),
+                        }))}
+                      />
+                      <span className="affairs-vehicle-row__title">
+                        <strong>{item.title}</strong>
+                        <small>{VEHICLE_ITEM_LABELS[item.type]}{item.note ? ` · ${item.note}` : ""}</small>
+                      </span>
+                      <span className="affairs-vehicle-row__target">
+                        {item.dueDate && <span>{formatDate(item.dueDate)}</span>}
+                        {item.dueMileage !== null && <span>{formatMileage(item.dueMileage)}</span>}
+                      </span>
+                      <Badge tone={due.tone}>{due.text}</Badge>
+                      <span className="affairs-vehicle-row__actions">
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={12} /></Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          aria-label={`Usuń ${item.title}`}
+                          onClick={() => setDeleteState({ kind: "vehicleItem", id: item.id, label: item.title })}
+                        >
+                          <Trash2 size={12} />
+                        </Button>
+                      </span>
+                    </div>
+                  );
+                };
                 return (
                   <Card key={vehicle.id} as="section" tone="panel" padding="none" className="affairs-vehicle">
                     <header className="affairs-vehicle__header">
@@ -1619,7 +1721,18 @@ export default function Sprawy() {
                       </div>
                     ) : (
                       <div className="affairs-vehicle__items">
-                        {items.map((item) => {
+                        {items.map((item, index, sortedItems) => {
+                          if (item.done) {
+                            if (sortedItems[index - 1]?.done) return null;
+                            const completedItems = sortedItems.filter((candidate) => candidate.done);
+                            return (
+                              <CompletedSection key="completed-vehicle-items" label="Ukończone terminy" count={completedItems.length} className="affairs-completed-section">
+                                <div className="affairs-vehicle-row-list">
+                                  {completedItems.map(renderVehicleItem)}
+                                </div>
+                              </CompletedSection>
+                            );
+                          }
                           const due = vehicleItemDueCopy(item, vehicle);
                           return (
                             <div key={item.id} className={`affairs-vehicle-row ${item.done ? "is-done" : ""}`}>

@@ -29,6 +29,7 @@ import {
 import {
   Button,
   Card,
+  CompletedSection,
   DetailPanel,
   EmptyState,
   Input,
@@ -387,6 +388,21 @@ export function SportOverview({
       || (left.workout.time ?? "").localeCompare(right.workout.time ?? "")
     ))
     .slice(0, 3);
+  const completedTodayWorkouts = todayWorkouts.filter((workout) => outcomeFor(workout, today)?.status === "completed");
+  const openTodayWorkouts = todayWorkouts.filter((workout) => !completedTodayWorkouts.includes(workout));
+  const renderTodayWorkout = (workout: CycleWorkout) => (
+    <PlannedWorkoutRow
+      key={workout.id}
+      workout={workout}
+      selected={selectedWorkoutId === workout.id}
+      outcome={outcomeFor(workout, today)}
+      active={workout.id === activeWorkoutId}
+      onSelect={() => onSelectWorkout(workout)}
+      onStart={() => onStartWorkout(workout)}
+      onComplete={() => onCompleteWorkout(workout)}
+      onResetStatus={() => onResetWorkout(workout)}
+    />
+  );
 
   return (
     <div className="sport-insights sport-overview">
@@ -439,19 +455,12 @@ export function SportOverview({
           {activeSession && <ActiveSessionStrip session={activeSession} onResume={onResumeActive} />}
           {todayWorkouts.length ? (
             <div className="sport-today-card__workouts">
-              {todayWorkouts.map((workout) => (
-                <PlannedWorkoutRow
-                  key={workout.id}
-                  workout={workout}
-                  selected={selectedWorkoutId === workout.id}
-                  outcome={outcomeFor(workout, today)}
-                  active={workout.id === activeWorkoutId}
-                  onSelect={() => onSelectWorkout(workout)}
-                  onStart={() => onStartWorkout(workout)}
-                  onComplete={() => onCompleteWorkout(workout)}
-                  onResetStatus={() => onResetWorkout(workout)}
-                />
-              ))}
+              {openTodayWorkouts.map(renderTodayWorkout)}
+              {completedTodayWorkouts.length > 0 && (
+                <CompletedSection label="Wykonane" count={completedTodayWorkouts.length} className="sport-completed-section">
+                  {completedTodayWorkouts.map(renderTodayWorkout)}
+                </CompletedSection>
+              )}
             </div>
           ) : (
             <div className="sport-today-card__rest">
