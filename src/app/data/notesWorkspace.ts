@@ -191,7 +191,7 @@ function isWorkspace(value: unknown): value is NotesWorkspace {
     && value.notes.every(isNote);
 }
 
-function cloneDefaultWorkspace(): NotesWorkspace {
+export function createDefaultNotesWorkspace(): NotesWorkspace {
   return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as NotesWorkspace;
 }
 
@@ -205,7 +205,7 @@ export function createNotesId(prefix: "note" | "list" | "item"): string {
 export function loadNotesWorkspaceResult(): LocalLoadResult<NotesWorkspace> {
   return readLocalWorkspace({
     key: NOTES_STORAGE_KEY,
-    fallback: cloneDefaultWorkspace,
+    fallback: createDefaultNotesWorkspace,
     validate: isWorkspace,
   });
 }

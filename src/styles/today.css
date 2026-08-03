@@ -261,6 +261,8 @@
 
 .today-module-register {
   min-width: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 420px;
 }
 
 .today-module-register__header {

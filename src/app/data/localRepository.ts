@@ -147,6 +147,7 @@ let persistenceLifecycleListenersInstalled = false;
 const blockedWrites = new Map<string, number>();
 const baselines = new Map<string, WorkspaceBaseline>();
 const workspaceCache = new Map<string, WorkspacePayloadRecord>();
+const parsedWorkspaceCache = new Map<string, { raw: string; value: unknown }>();
 const knownMissingKeys = new Set<string>();
 const hydrationPromises = new Map<string, Promise<void>>();
 const migrationPromises = new Map<string, Promise<void>>();
@@ -613,6 +614,14 @@ function recordInlineBaseline(key: string, raw: string) {
   });
 }
 
+function parseCachedWorkspace(key: string, raw: string) {
+  const cached = parsedWorkspaceCache.get(key);
+  if (cached?.raw === raw) return cached.value;
+  const value: unknown = JSON.parse(raw);
+  parsedWorkspaceCache.set(key, { raw, value });
+  return value;
+}
+
 function writeManifest(record: WorkspacePayloadRecord) {
   if (typeof window === "undefined") throw new DOMException("Browser storage is unavailable.", "NotSupportedError");
   const current = parseWorkspaceManifest(window.localStorage.getItem(record.key), record.key);
@@ -904,7 +913,7 @@ function readCachedWorkspace<T>(
   migrate?: (value: unknown) => T | null,
 ): LocalLoadResult<T> {
   try {
-    const parsed: unknown = JSON.parse(record.raw);
+    const parsed = parseCachedWorkspace(record.key, record.raw);
     if (validate(parsed)) return { status: "ok", workspace: parsed };
     const migrated = migrate?.(parsed) ?? null;
     if (migrated && validate(migrated)) return { status: "migrated", workspace: migrated };
@@ -948,7 +957,7 @@ export function readLocalWorkspace<T>({
         scheduleLegacyWorkspaceMigration(key, legacyKey);
         return { status: "missing", workspace: safeFallback };
       }
-      const legacyParsed: unknown = JSON.parse(legacyRaw);
+      const legacyParsed = parseCachedWorkspace(legacyKey, legacyRaw);
       recordInlineBaseline(key, legacyRaw);
       if (validate(legacyParsed)) {
         try {
@@ -997,6 +1006,7 @@ export function readLocalWorkspace<T>({
     }
 
     if (!raw) {
+      parsedWorkspaceCache.delete(key);
       const cached = workspaceCache.get(key);
       if (cached) return readCachedWorkspace(cached, safeFallback, validate, migrate);
       if (shouldUseIndexedDb(key) && !knownMissingKeys.has(key)) {
@@ -1008,7 +1018,7 @@ export function readLocalWorkspace<T>({
       return { status: "missing", workspace: safeFallback };
     }
 
-    const parsed: unknown = JSON.parse(raw);
+    const parsed = parseCachedWorkspace(key, raw);
     recordInlineBaseline(key, raw);
     if (validate(parsed)) {
       if (shouldUseIndexedDb(key)) scheduleLegacyMigration(key, raw);
@@ -1926,6 +1936,7 @@ export function setWorkspacePayloadStoreForTests(store: WorkspacePayloadStore) {
   blockedWrites.clear();
   baselines.clear();
   workspaceCache.clear();
+  parsedWorkspaceCache.clear();
   knownMissingKeys.clear();
   hydrationPromises.clear();
   migrationPromises.clear();

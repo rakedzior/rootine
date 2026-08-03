@@ -290,7 +290,7 @@ function createExpansionDefaults() {
   };
 }
 
-function createDefaultWorkspace(): AffairsWorkspace {
+export function createDefaultAffairsWorkspace(): AffairsWorkspace {
   const expansion = createExpansionDefaults();
   return {
     version: 2,
@@ -552,7 +552,7 @@ function migrateLegacyWorkspace(workspace: LegacyAffairsWorkspace): AffairsWorks
 export function loadAffairsWorkspaceResult(): LocalLoadResult<AffairsWorkspace> {
   return readLocalWorkspace({
     key: AFFAIRS_STORAGE_KEY,
-    fallback: createDefaultWorkspace,
+    fallback: createDefaultAffairsWorkspace,
     validate: isWorkspace,
     migrate: (value) => hasLegacyCollections(value) ? migrateLegacyWorkspace(value) : null,
   });

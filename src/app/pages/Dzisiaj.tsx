@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import {
   AFFAIRS_STORAGE_KEY,
+  createDefaultAffairsWorkspace,
   loadAffairsWorkspace,
   type AffairsWorkspace,
 } from "../data/affairsWorkspace";
@@ -34,17 +35,21 @@ import {
   type ModulePreferences,
 } from "../data/modulePreferences";
 import {
+  createEmptyNutritionWorkspace,
   NUTRITION_STORAGE_KEY,
   loadNutritionWorkspace,
+  type NutritionLoadResult,
   type NutritionEntry,
 } from "../data/nutritionWorkspace";
 import {
+  createDefaultNotesWorkspace,
   loadNotesWorkspace,
   NOTES_STORAGE_KEY,
 } from "../data/notesWorkspace";
 import {
   isHabitDoneOnDate,
   isHabitScheduledOnDate,
+  createDefaultTaskWorkspace,
   loadTaskWorkspace,
   TASK_STORAGE_KEY,
   toCalendarDateKey,
@@ -52,7 +57,7 @@ import {
   type WorkspaceTask,
 } from "../data/taskWorkspace";
 import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
-import { loadWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
+import { createDefaultWorkWorkspace, loadWorkWorkspace, WORK_STORAGE_KEY } from "../data/workWorkspace";
 import { useGoalsStore } from "../goals/goalsContext";
 import type { Goal } from "../goals/goalsModel";
 import { APP_MODULE_BY_ID, type AppModuleId } from "../moduleRegistry";
@@ -66,6 +71,7 @@ import { AnimatedNumber, AnimatedPercentage } from "../experience/MotionValues";
 import { TelemetryBar, type TelemetrySegment } from "../experience/TelemetryBar";
 import {
   cycleWorkoutDate,
+  createDefaultSportPlannerState,
   loadSportPlannerState,
   SPORT_PLANNER_STORAGE_KEY,
 } from "../sport/plannerModel";
@@ -286,13 +292,29 @@ export default function Dzisiaj() {
   const { activeAreaId, setActiveAreaId } = useActiveArea();
   const [today, setToday] = useState(() => new Date());
   const todayKey = useMemo(() => toCalendarDateKey(today), [today]);
-  const [taskWorkspace, setTaskWorkspace] = useState(loadTaskWorkspace);
-  const [workWorkspace, setWorkWorkspace] = useState(loadWorkWorkspace);
-  const [affairsWorkspace, setAffairsWorkspace] = useState(loadAffairsWorkspace);
-  const [sportPlanner, setSportPlanner] = useState(loadSportPlannerState);
-  const [nutritionLoad, setNutritionLoad] = useState(loadNutritionWorkspace);
-  const [notesWorkspace, setNotesWorkspace] = useState(loadNotesWorkspace);
+  const [taskWorkspace, setTaskWorkspace] = useState(createDefaultTaskWorkspace);
+  const [workWorkspace, setWorkWorkspace] = useState(createDefaultWorkWorkspace);
+  const [affairsWorkspace, setAffairsWorkspace] = useState(createDefaultAffairsWorkspace);
+  const [sportPlanner, setSportPlanner] = useState(createDefaultSportPlannerState);
+  const [nutritionLoad, setNutritionLoad] = useState<NutritionLoadResult>(() => ({
+    status: "missing" as const,
+    workspace: createEmptyNutritionWorkspace(),
+  }));
+  const [notesWorkspace, setNotesWorkspace] = useState(createDefaultNotesWorkspace);
   const [modulePreferences, setModulePreferences] = useState<ModulePreferences>(loadModulePreferences);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setTaskWorkspace(loadTaskWorkspace());
+      setWorkWorkspace(loadWorkWorkspace());
+      setAffairsWorkspace(loadAffairsWorkspace());
+      setSportPlanner(loadSportPlannerState());
+      setNutritionLoad(loadNutritionWorkspace());
+      setNotesWorkspace(loadNotesWorkspace());
+      setModulePreferences(loadModulePreferences());
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setToday(new Date()), 60_000);

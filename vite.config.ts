@@ -13,13 +13,14 @@ const openFoodFactsProxy = {
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
+    cssCodeSplit: true,
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
           const normalizedId = id.replaceAll("\\", "/");
           if (normalizedId.includes("/node_modules/zod/")) return "vendor-zod";
           if (normalizedId.includes("/node_modules/")) return "vendor";
-          if (normalizedId.includes("/src/assistant/")) return "rootine-assistant";
           if (normalizedId.includes("/src/domain/")) return "rootine-domain";
           if (normalizedId.includes("/src/infrastructure/")) return "rootine-infrastructure";
           return undefined;
@@ -28,6 +29,15 @@ export default defineConfig({
     },
   },
   server: {
+    watch: {
+      ignored: [
+        "**/playwright-report/**",
+        "**/test-results/**",
+        "**/coverage/**",
+        "**/dist/**",
+        "**/.tmp-*/**",
+      ],
+    },
     proxy: openFoodFactsProxy,
   },
   preview: {

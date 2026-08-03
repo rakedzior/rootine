@@ -43,7 +43,7 @@ export async function createWorkItem(input: unknown): Promise<DomainMutationResu
   }
   const task: WorkTask = {
     id: createWorkId("task"), projectId: project.id, parentId: parsed.data.parentId,
-    title: parsed.data.title, completed: false, priority: parsed.data.priority,
+    title: parsed.data.title, completed: false, status: "todo", priority: parsed.data.priority,
     dueDate: parsed.data.dueDate, createdAt: new Date().toISOString(),
   };
   const next = { ...workspace, tasks: [...workspace.tasks, task] };
@@ -65,7 +65,11 @@ export async function setWorkItemCompletion(input: unknown): Promise<DomainMutat
   const before = workspace.tasks.find((task) => task.id === parsed.data.taskId);
   if (!before) return domainFailure("NOT_FOUND", "Zadanie służbowe nie istnieje.");
   if (before.completed === parsed.data.completed) return domainFailure("CONFLICT", "Zadanie ma już wybrany status.");
-  const after = { ...before, completed: parsed.data.completed };
+  const after = {
+    ...before,
+    completed: parsed.data.completed,
+    status: parsed.data.completed ? "completed" as const : "todo" as const,
+  };
   const next = setWorkTasksCompletionState(workspace, [before.id], after.completed);
   return commitDomainMutation({
     entityId: before.id, storageKey: WORK_STORAGE_KEY,

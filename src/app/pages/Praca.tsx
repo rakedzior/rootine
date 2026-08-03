@@ -1,9 +1,7 @@
 /**
- * THESIS: Praca is a personal outline, not a team dashboard; it refuses boards full of assignees and reporting chrome.
- * OWN-WORLD: Rootine's graphite workshop, compact rows, quiet borders, and precision blue reserved for selection and action.
- * STORY: Scan all work, choose a company, then turn one project's work into a clear tree with unlimited branches.
- * FIRST VIEWPORT: One local rail holds overview and an expanded company-project tree; the task outline owns the canvas.
- * FORM: A two-navigation-layer personal workspace refined from seed c87cae68.
+ * Praca is Rootine's work cockpit: time first, hierarchy second.
+ * One helper sidebar owns navigation. Companies open their overview in the canvas;
+ * projects and tasks never compete for a second permanent rail.
  */
 import {
   Archive,
@@ -13,17 +11,22 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
-  Columns3,
+  CircleAlert,
+  CircleDot,
+  Clock3,
+  CornerDownRight,
   Flag,
   FolderKanban,
+  Inbox,
   LayoutDashboard,
   ListTree,
   Pencil,
   Plus,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { recordActivity } from "../experience/activityLog";
@@ -32,29 +35,36 @@ import {
   createWorkId,
   loadWorkWorkspace,
   saveWorkWorkspace,
-  setWorkTasksCompletionState,
   WORK_STORAGE_KEY,
   type WorkCompany,
   type WorkProject,
   type WorkProjectStatus,
   type WorkTask,
   type WorkTaskPriority,
+  type WorkTaskStatus,
 } from "../data/workWorkspace";
 import { formatShortDate } from "../formatters";
 import {
+  Badge,
   Button,
   ContextNavItem,
   ContextSidebar,
+  DatePicker,
+  DetailPanel,
   EmptyState,
   Input,
+  ListRow,
+  Menu,
+  MenuItem,
+  MenuTrigger,
   Modal,
   ModuleMain,
   ModuleShell,
   PageHeader,
   Select,
   WorkspaceToolbar,
-  AddToTasksButton,
 } from "../ui";
+import { TaskInlineMenu, WorkProjectActionsMenu } from "./PracaMenus";
 import "../../styles/work.css";
 
 const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#B9A171", "#9B8CE8", "#BC8EA5", "#8793A1"];
@@ -65,6 +75,18 @@ const PROJECT_STATUS_LABELS: Record<WorkProjectStatus, string> = {
   completed: "Zakończony",
 };
 
+const PROJECT_STATUS_ORDER: WorkProjectStatus[] = ["active", "paused", "completed"];
+
+const TASK_STATUS_LABELS: Record<WorkTaskStatus, string> = {
+  todo: "Do zrobienia",
+  in_progress: "W trakcie",
+  blocked: "Zablokowane",
+  waiting: "Oczekuje",
+  completed: "Ukończone",
+};
+
+const TASK_STATUS_ORDER: WorkTaskStatus[] = ["todo", "in_progress", "blocked", "waiting", "completed"];
+
 const PRIORITY_LABELS: Record<WorkTaskPriority, string> = {
   none: "Bez priorytetu",
   low: "Niski",
@@ -72,8 +94,13 @@ const PRIORITY_LABELS: Record<WorkTaskPriority, string> = {
   high: "Wysoki",
 };
 
-type WorkView = "list" | "board" | "calendar";
-type WorkOverviewScope = "overview" | "all" | "archive";
+const PRIORITY_ORDER: WorkTaskPriority[] = ["none", "low", "medium", "high"];
+
+type WorkView = "today" | "week" | "active" | "unassigned" | "archive" | "company" | "project";
+type TaskStatusFilter = WorkTaskStatus | "all";
+type PriorityFilter = WorkTaskPriority | "all";
+type CompanyProjectStatusFilter = WorkProjectStatus | "all";
+type CompanyProjectSort = "name" | "progress" | "endDate";
 
 type EditorState =
   | { kind: "company"; mode: "add" | "edit"; id?: string }
@@ -86,41 +113,153 @@ type DeleteState = {
   name: string;
 };
 
-type CascadeState = {
-  taskId: string;
-  taskTitle: string;
-  branchIds: string[];
-};
-
 type CompletionUndo = {
   label: string;
-  previous: Array<{ id: string; completed: boolean }>;
+  previous: Array<{ id: string; completed: boolean; status?: WorkTaskStatus }>;
 };
+
+type SaveStatus = "idle" | "saving" | "saved";
 
 type EditorDraft = {
   name: string;
   description: string;
+  note: string;
   color: string;
-  status: WorkProjectStatus;
-  priority: WorkTaskPriority;
-  dueDate: string;
+  companyId: string;
+  projectId: string;
   parentId: string;
+  projectStatus: WorkProjectStatus;
+  taskStatus: WorkTaskStatus;
+  priority: WorkTaskPriority;
+  startDate: string;
+  endDate: string;
 };
 
 const EMPTY_DRAFT: EditorDraft = {
   name: "",
   description: "",
+  note: "",
   color: COMPANY_COLORS[0],
-  status: "active",
-  priority: "none",
-  dueDate: "",
+  companyId: "",
+  projectId: "",
   parentId: "",
+  projectStatus: "active",
+  taskStatus: "todo",
+  priority: "none",
+  startDate: "",
+  endDate: "",
 };
 
-function formatDueDate(value: string): string {
-  if (!value) return "";
+function localDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateFromKey(value: string): Date | null {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function addDays(value: string, amount: number): string {
+  const date = dateFromKey(value) ?? new Date();
+  date.setDate(date.getDate() + amount);
+  return localDateKey(date);
+}
+
+function formatDate(value: string): string {
+  if (!value) return "Bez terminu";
   const formatted = formatShortDate(value);
   return formatted === "—" ? value : formatted;
+}
+
+function formatLongDate(value: string): string {
+  const date = dateFromKey(value);
+  if (!date) return "";
+  return new Intl.DateTimeFormat("pl-PL", { weekday: "long", day: "numeric", month: "long" }).format(date);
+}
+
+function formatDateRange(startDate = "", endDate = ""): string {
+  if (startDate && endDate) return `${formatDate(startDate)} → ${formatDate(endDate)}`;
+  if (startDate) return `od ${formatDate(startDate)}`;
+  if (endDate) return `do ${formatDate(endDate)}`;
+  return "Brak dat";
+}
+
+function taskCountLabel(count: number): string {
+  return countWord(count, "zadanie", "zadania", "zadań");
+}
+
+function subtaskCountLabel(count: number): string {
+  return countWord(count, "podzadanie", "podzadania", "podzadań");
+}
+
+function countWord(count: number, one: string, few: string, many: string): string {
+  const absolute = Math.abs(count);
+  const lastDigit = absolute % 10;
+  const lastTwoDigits = absolute % 100;
+  if (absolute === 1) return one;
+  if (lastDigit >= 2 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)) return few;
+  return many;
+}
+
+function completedTaskLabel(count: number): string {
+  const absolute = Math.abs(count);
+  const lastDigit = absolute % 10;
+  const lastTwoDigits = absolute % 100;
+  return lastDigit >= 1 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)
+    ? "ukończone"
+    : "ukończonych";
+}
+
+function openTaskLabel(count: number): string {
+  return countWord(count, "otwarte", "otwarte", "otwartych");
+}
+
+function formatTaskCount(count: number): string {
+  return `${count} ${taskCountLabel(count)}`;
+}
+
+function formatOpenTaskCount(count: number): string {
+  return `${count} ${openTaskLabel(count)}`;
+}
+
+function formatProjectProgress(count: { total: number; completed: number; open: number }): string {
+  return `${count.completed} ${completedTaskLabel(count.completed)} z ${count.total} · ${count.open} ${openTaskLabel(count.open)}`;
+}
+
+function formatSubtaskProgress(completed: number, total: number): string {
+  return `${completed} ${completedTaskLabel(completed)} z ${total} ${subtaskCountLabel(total)}`;
+}
+
+function collectTaskDescendantRows(
+  tasks: WorkTask[],
+  parentId: string,
+  depth = 1,
+  visited = new Set<string>(),
+): Array<{ task: WorkTask; depth: number }> {
+  return tasks
+    .filter((task) => task.parentId === parentId && !visited.has(task.id))
+    .flatMap((task) => {
+      visited.add(task.id);
+      return [{ task, depth }, ...collectTaskDescendantRows(tasks, task.id, depth + 1, visited)];
+    });
+}
+
+function getTaskStatus(task: WorkTask): WorkTaskStatus {
+  if (task.completed) return "completed";
+  return task.status && task.status !== "completed" ? task.status : "todo";
+}
+
+function isTaskOpen(task: WorkTask): boolean {
+  return getTaskStatus(task) !== "completed";
+}
+
+function taskAnchorDate(task: WorkTask): string {
+  return task.dueDate || task.startDate || "";
 }
 
 function collectTaskBranch(tasks: WorkTask[], taskId: string): Set<string> {
@@ -142,7 +281,7 @@ function taskDepth(task: WorkTask, tasks: WorkTask[]): number {
   let depth = 0;
   let parentId = task.parentId;
   const visited = new Set<string>();
-  while (parentId && depth < 24 && !visited.has(parentId)) {
+  while (parentId && depth < 32 && !visited.has(parentId)) {
     visited.add(parentId);
     const parent = tasks.find((candidate) => candidate.id === parentId);
     if (!parent) break;
@@ -152,51 +291,78 @@ function taskDepth(task: WorkTask, tasks: WorkTask[]): number {
   return depth;
 }
 
-function getInitialWorkUrlState() {
-  if (typeof window === "undefined") {
-    return { companyId: "", projectId: "", search: "", showCompleted: false, view: "list" as WorkView };
-  }
+function getInitialWorkLocation(): { view: WorkView; companyId: string; projectId: string; search: string } {
+  if (typeof window === "undefined") return { view: "today", companyId: "", projectId: "", search: "" };
   const params = new URLSearchParams(window.location.search);
-  let storedView: string | null = null;
-  try {
-    storedView = window.localStorage.getItem("rootine.work.view");
-  } catch {
-    // Fall back to the URL/default when preference storage is unavailable.
-  }
-  const requestedView = params.get("widok") ?? storedView ?? "list";
+  const requested = params.get("widok");
+  const hasProject = Boolean(params.get("projekt"));
+  const hasCompany = Boolean(params.get("firma"));
+  const view: WorkView = hasProject
+    ? "project"
+    : hasCompany
+      ? "company"
+      : requested === "week" || requested === "active" || requested === "unassigned" || requested === "archive"
+        ? requested
+        : "today";
   return {
+    view,
     companyId: params.get("firma") ?? "",
     projectId: params.get("projekt") ?? "",
     search: params.get("q") ?? "",
-    showCompleted: params.get("ukonczone") === "1",
-    view: (["list", "board", "calendar"].includes(requestedView)
-      ? requestedView
-      : "list") as WorkView,
   };
+}
+
+function normalize(value: string): string {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("pl-PL");
+}
+
+function projectStatusTone(status: WorkProjectStatus): "primary" | "warning" | "success" {
+  if (status === "paused") return "warning";
+  if (status === "completed") return "success";
+  return "primary";
+}
+
+function taskStatusTone(status: WorkTaskStatus): string {
+  return `work-task-status--${status}`;
+}
+
+function taskStatusIcon(status: WorkTaskStatus): ReactNode {
+  if (status === "in_progress") return <CircleDot size={11} aria-hidden="true" />;
+  if (status === "blocked") return <CircleAlert size={11} aria-hidden="true" />;
+  if (status === "waiting") return <Clock3 size={11} aria-hidden="true" />;
+  if (status === "completed") return <Check size={11} aria-hidden="true" />;
+  return <Circle size={11} aria-hidden="true" />;
 }
 
 export default function Praca() {
   const [commandParams, setCommandParams] = useSearchParams();
-  const [initialUrlState] = useState(getInitialWorkUrlState);
+  const [initialLocation] = useState(getInitialWorkLocation);
   const [workspace, setWorkspace] = useState(loadWorkWorkspace);
-  const [selectedCompanyId, setSelectedCompanyId] = useState(initialUrlState.companyId);
-  const [selectedProjectId, setSelectedProjectId] = useState(initialUrlState.projectId);
-  const [expandedCompanyIds, setExpandedCompanyIds] = useState<Set<string>>(
-    () => new Set(workspace.companies.map((company) => company.id)),
-  );
+  const [view, setView] = useState<WorkView>(initialLocation.view);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(initialLocation.companyId);
+  const [selectedProjectId, setSelectedProjectId] = useState(initialLocation.projectId);
+  const [search, setSearch] = useState(initialLocation.search);
+  const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("all");
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyStatusFilter, setCompanyStatusFilter] = useState<CompanyProjectStatusFilter>("all");
+  const [companySort, setCompanySort] = useState<CompanyProjectSort>("name");
+  const [expandedCompanyProjectId, setExpandedCompanyProjectId] = useState<string | null>(null);
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
-  const [search, setSearch] = useState(initialUrlState.search);
-  const [showCompleted, setShowCompleted] = useState(initialUrlState.showCompleted);
-  const [workView, setWorkView] = useState<WorkView>(initialUrlState.view);
-  const [overviewScope, setOverviewScope] = useState<WorkOverviewScope>("overview");
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const [detailSubtasksExpanded, setDetailSubtasksExpanded] = useState(false);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<EditorDraft>(EMPTY_DRAFT);
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
-  const [cascadeState, setCascadeState] = useState<CascadeState | null>(null);
   const [completionUndo, setCompletionUndo] = useState<CompletionUndo | null>(null);
   const [storageError, setStorageError] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const addTriggerRef = useRef<HTMLButtonElement>(null);
+  const saveNoticeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setStorageError(!saveWorkWorkspace(workspace));
@@ -206,14 +372,26 @@ export default function Praca() {
     setWorkspace(loadWorkWorkspace());
   }), []);
 
+  useEffect(() => () => {
+    if (saveNoticeTimerRef.current) window.clearTimeout(saveNoticeTimerRef.current);
+  }, []);
+
+  const showSaveNotice = () => {
+    setSaveStatus("saving");
+    if (saveNoticeTimerRef.current) window.clearTimeout(saveNoticeTimerRef.current);
+    saveNoticeTimerRef.current = window.setTimeout(() => {
+      setSaveStatus("saved");
+      saveNoticeTimerRef.current = window.setTimeout(() => setSaveStatus("idle"), 1800);
+    }, 180);
+  };
+
   useEffect(() => {
     const syncFromUrl = () => {
-      const next = getInitialWorkUrlState();
+      const next = getInitialWorkLocation();
+      setView(next.view);
       setSelectedCompanyId(next.companyId);
       setSelectedProjectId(next.projectId);
       setSearch(next.search);
-      setShowCompleted(next.showCompleted);
-      setWorkView(next.view);
     };
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
@@ -221,169 +399,131 @@ export default function Praca() {
 
   useEffect(() => {
     const url = new URL(window.location.href);
+    if (view === "today") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", view);
     if (selectedCompanyId) url.searchParams.set("firma", selectedCompanyId);
     else url.searchParams.delete("firma");
     if (selectedProjectId) url.searchParams.set("projekt", selectedProjectId);
     else url.searchParams.delete("projekt");
     if (search.trim()) url.searchParams.set("q", search);
     else url.searchParams.delete("q");
-    if (showCompleted) url.searchParams.set("ukonczone", "1");
-    else url.searchParams.delete("ukonczone");
-    if (workView === "list") url.searchParams.delete("widok");
-    else url.searchParams.set("widok", workView);
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
     writeModuleMemoryValue("work", "location", `${url.pathname}${url.search}`);
-  }, [search, selectedCompanyId, selectedProjectId, showCompleted, workView]);
+  }, [search, selectedCompanyId, selectedProjectId, view]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem("rootine.work.view", workView);
-    } catch {
-      // The view preference is optional.
+    if (selectedCompanyId && !workspace.companies.some((company) => company.id === selectedCompanyId)) {
+      setSelectedCompanyId("");
+      setSelectedProjectId("");
+      setView("today");
     }
-  }, [workView]);
-
-  useEffect(() => {
-    if (!selectedCompanyId || workspace.companies.some((company) => company.id === selectedCompanyId)) return;
-    setSelectedCompanyId("");
-    setSelectedProjectId("");
   }, [selectedCompanyId, workspace.companies]);
 
+  useEffect(() => {
+    setDetailSubtasksExpanded(false);
+  }, [detailTaskId]);
+
+  const companyById = useMemo(() => new Map(workspace.companies.map((company) => [company.id, company])), [workspace.companies]);
+  const projectById = useMemo(() => new Map(workspace.projects.map((project) => [project.id, project])), [workspace.projects]);
+  const selectedCompany = selectedCompanyId ? companyById.get(selectedCompanyId) : undefined;
+  const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) : undefined;
+  const activeProjects = useMemo(
+    () => workspace.projects.filter((project) => project.status === "active" || project.status === "paused"),
+    [workspace.projects],
+  );
+  const activeProjectIds = useMemo(() => new Set(activeProjects.map((project) => project.id)), [activeProjects]);
   const companyProjects = useMemo(
     () => workspace.projects.filter((project) => project.companyId === selectedCompanyId),
     [selectedCompanyId, workspace.projects],
   );
-
-  useEffect(() => {
-    if (companyProjects.some((project) => project.id === selectedProjectId)) return;
-    setSelectedProjectId(companyProjects[0]?.id ?? "");
-  }, [companyProjects, selectedProjectId]);
-
-  const selectedCompany = workspace.companies.find((company) => company.id === selectedCompanyId);
-  const isOverview = !selectedCompany;
-  const selectedProject = workspace.projects.find(
-    (project) => project.id === selectedProjectId && project.companyId === selectedCompanyId,
-  );
-  const activeProjectId = selectedProject?.id ?? "";
   const projectTasks = useMemo(
-    () => workspace.tasks.filter((task) => task.projectId === activeProjectId),
-    [activeProjectId, workspace.tasks],
+    () => workspace.tasks.filter((task) => task.projectId === selectedProjectId),
+    [selectedProjectId, workspace.tasks],
   );
+  const taskById = useMemo(() => new Map(workspace.tasks.map((task) => [task.id, task])), [workspace.tasks]);
 
-  const tasksByParent = useMemo(() => {
-    const map = new Map<string | null, WorkTask[]>();
-    projectTasks.forEach((task) => {
-      const parentId = projectTasks.some((candidate) => candidate.id === task.parentId) ? task.parentId : null;
-      const bucket = map.get(parentId) ?? [];
-      bucket.push(task);
-      map.set(parentId, bucket);
-    });
-    map.forEach((tasks) => tasks.sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
-    return map;
-  }, [projectTasks]);
-
-  const visibleTaskIds = useMemo(() => {
-    const result = new Set<string>();
-    const query = search.trim().toLocaleLowerCase("pl-PL");
-
-    const visit = (task: WorkTask): boolean => {
-      let childVisible = false;
-      (tasksByParent.get(task.id) ?? []).forEach((child) => {
-        if (visit(child)) childVisible = true;
-      });
-      const passesCompletion = showCompleted || !task.completed;
-      const passesSearch = !query || task.title.toLocaleLowerCase("pl-PL").includes(query);
-      const visible = (passesCompletion && passesSearch) || childVisible;
-      if (visible) result.add(task.id);
-      return visible;
-    };
-
-    (tasksByParent.get(null) ?? []).forEach(visit);
-    return result;
-  }, [search, showCompleted, tasksByParent]);
-
-  const completedCount = projectTasks.filter((task) => task.completed).length;
-  const progress = projectTasks.length ? Math.round((completedCount / projectTasks.length) * 100) : 0;
-
-  const projectTaskCounts = useMemo(() => {
-    const counts = new Map<string, { completed: number; total: number }>();
-    workspace.projects.forEach((project) => counts.set(project.id, { completed: 0, total: 0 }));
+  const projectCounts = useMemo(() => {
+    const counts = new Map<string, { total: number; completed: number; open: number }>();
+    workspace.projects.forEach((project) => counts.set(project.id, { total: 0, completed: 0, open: 0 }));
     workspace.tasks.forEach((task) => {
       const count = counts.get(task.projectId);
       if (!count) return;
       count.total += 1;
-      if (task.completed) count.completed += 1;
+      if (getTaskStatus(task) === "completed") count.completed += 1;
+      else count.open += 1;
     });
     return counts;
   }, [workspace.projects, workspace.tasks]);
 
-  const activeProjectIds = useMemo(
-    () => new Set(workspace.projects.filter((project) => project.status === "active").map((project) => project.id)),
-    [workspace.projects],
-  );
-  const activeOpenTasks = useMemo(
-    () => workspace.tasks.filter((task) => activeProjectIds.has(task.projectId) && !task.completed),
-    [activeProjectIds, workspace.tasks],
-  );
-
-  const companyProjectCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    workspace.companies.forEach((company) => counts.set(company.id, 0));
-    workspace.projects.forEach((project) => counts.set(project.companyId, (counts.get(project.companyId) ?? 0) + 1));
-    return counts;
-  }, [workspace.companies, workspace.projects]);
-
-  const companySummaries = useMemo(() => {
-    return new Map(workspace.companies.map((company) => {
-      const projects = workspace.projects.filter((project) => project.companyId === company.id);
-      const projectIds = new Set(projects.filter((project) => project.status === "active").map((project) => project.id));
-      const tasks = workspace.tasks.filter((task) => projectIds.has(task.projectId));
-      const completed = tasks.filter((task) => task.completed).length;
-      return [company.id, {
-        projects,
-        totalTasks: tasks.length,
-        openTasks: tasks.length - completed,
-        progress: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
-      }];
-    }));
-  }, [workspace.companies, workspace.projects, workspace.tasks]);
-
-  const overviewTasks = useMemo(() => {
-    const priorityRank: Record<WorkTaskPriority, number> = { high: 0, medium: 1, low: 2, none: 3 };
-    return activeOpenTasks
-      .slice()
+  const visibleCompanyProjects = useMemo(() => {
+    const query = normalize(companySearch.trim());
+    return companyProjects
+      .filter((project) => project.status !== "completed")
+      .filter((project) => companyStatusFilter === "all" || project.status === companyStatusFilter)
+      .filter((project) => !query || normalize([project.name, project.description, project.note ?? ""].join(" ")).includes(query))
       .sort((a, b) => {
-        if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-        if (a.dueDate !== b.dueDate) return a.dueDate ? -1 : 1;
-        if (priorityRank[a.priority] !== priorityRank[b.priority]) {
-          return priorityRank[a.priority] - priorityRank[b.priority];
+        if (companySort === "progress") {
+          const countA = projectCounts.get(a.id) ?? { total: 0, completed: 0, open: 0 };
+          const countB = projectCounts.get(b.id) ?? { total: 0, completed: 0, open: 0 };
+          const progressA = countA.total ? countA.completed / countA.total : 0;
+          const progressB = countB.total ? countB.completed / countB.total : 0;
+          return progressB - progressA || a.name.localeCompare(b.name, "pl");
         }
-        return a.createdAt.localeCompare(b.createdAt);
-      })
-      .slice(0, 6);
-  }, [activeOpenTasks]);
+        if (companySort === "endDate") {
+          return (a.endDate || "9999-12-31").localeCompare(b.endDate || "9999-12-31") || a.name.localeCompare(b.name, "pl");
+        }
+        return a.name.localeCompare(b.name, "pl");
+      });
+  }, [companyProjects, companySearch, companySort, companyStatusFilter, projectCounts]);
 
-  const overviewProjects = useMemo(() => {
-    return workspace.projects
-      .filter((project) => project.status === "active")
-      .sort((a, b) => {
-        const aCount = projectTaskCounts.get(a.id) ?? { completed: 0, total: 0 };
-        const bCount = projectTaskCounts.get(b.id) ?? { completed: 0, total: 0 };
-        return (bCount.total - bCount.completed) - (aCount.total - aCount.completed);
-      })
-      .slice(0, 6);
-  }, [projectTaskCounts, workspace.projects]);
-
-  const openCompanyEditor = (company?: WorkCompany) => {
-    setDraft(company
-      ? { ...EMPTY_DRAFT, name: company.name, description: company.description, color: company.color }
-      : { ...EMPTY_DRAFT, color: COMPANY_COLORS[workspace.companies.length % COMPANY_COLORS.length] });
-    setEditorError("");
-    setEditor({ kind: "company", mode: company ? "edit" : "add", id: company?.id });
+  const currentTaskMatches = (task: WorkTask, includeCompleted = true): boolean => {
+    const taskStatus = getTaskStatus(task);
+    const project = projectById.get(task.projectId);
+    const company = project ? companyById.get(project.companyId) : undefined;
+    const haystack = normalize([task.title, task.note ?? "", project?.name ?? "", company?.name ?? ""].join(" "));
+    if (search.trim() && !haystack.includes(normalize(search.trim()))) return false;
+    if (statusFilter !== "all" && taskStatus !== statusFilter) return false;
+    if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
+    if (!includeCompleted && taskStatus === "completed") return false;
+    return true;
   };
 
-  const pushWorkLocation = (companyId: string, projectId: string) => {
+  const relevantOpenTasks = useMemo(
+    () => workspace.tasks.filter((task) => {
+      const project = projectById.get(task.projectId);
+      const belongsToActiveWorkspace = !project || activeProjectIds.has(project.id);
+      return belongsToActiveWorkspace && isTaskOpen(task);
+    }),
+    [activeProjectIds, projectById, workspace.tasks],
+  );
+  const relevantTasks = useMemo(
+    () => workspace.tasks.filter((task) => {
+      const project = projectById.get(task.projectId);
+      return !project || activeProjectIds.has(project.id);
+    }),
+    [activeProjectIds, projectById, workspace.tasks],
+  );
+
+  const today = localDateKey();
+  const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today]);
+
+  const filterTaskList = (tasks: WorkTask[], includeCompleted = statusFilter === "completed") => tasks.filter((task) => currentTaskMatches(task, includeCompleted));
+
+  const navigate = (nextView: WorkView, companyId = "", projectId = "") => {
+    setView(nextView);
+    setSelectedCompanyId(companyId);
+    setSelectedProjectId(projectId);
+    setSearch("");
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setCompanySearch("");
+    setCompanyStatusFilter("all");
+    setCompanySort("name");
+    setExpandedCompanyProjectId(null);
+    setDetailTaskId(null);
     const url = new URL(window.location.href);
+    if (nextView === "today") url.searchParams.delete("widok");
+    else url.searchParams.set("widok", nextView);
     if (companyId) url.searchParams.set("firma", companyId);
     else url.searchParams.delete("firma");
     if (projectId) url.searchParams.set("projekt", projectId);
@@ -392,38 +532,13 @@ export default function Praca() {
     window.history.pushState({}, "", url);
   };
 
-  const selectCompany = (companyId: string) => {
-    const projectId = workspace.projects.find((project) => project.companyId === companyId)?.id ?? "";
-    setSelectedCompanyId(companyId);
-    setSelectedProjectId(projectId);
-    setSearch("");
-    setOverviewScope("overview");
-    pushWorkLocation(companyId, projectId);
-  };
-
-  const selectProject = (companyId: string, projectId: string) => {
-    setSelectedCompanyId(companyId);
-    setSelectedProjectId(projectId);
-    setSearch("");
-    setOverviewScope("overview");
-    pushWorkLocation(companyId, projectId);
-  };
-
-  const toggleCompanyExpanded = (companyId: string) => {
-    setExpandedCompanyIds((current) => {
-      const next = new Set(current);
-      if (next.has(companyId)) next.delete(companyId);
-      else next.add(companyId);
-      return next;
-    });
-  };
-
-  const showOverview = (scope: WorkOverviewScope = "overview") => {
-    setSelectedCompanyId("");
-    setSelectedProjectId("");
-    setSearch("");
-    setOverviewScope(scope);
-    pushWorkLocation("", "");
+  const openCompanyEditor = (company?: WorkCompany) => {
+    setDraft(company
+      ? { ...EMPTY_DRAFT, name: company.name, description: company.description, color: company.color }
+      : { ...EMPTY_DRAFT, color: COMPANY_COLORS[workspace.companies.length % COMPANY_COLORS.length] });
+    setEditorError("");
+    setDetailTaskId(null);
+    setEditor({ kind: "company", mode: company ? "edit" : "add", id: company?.id });
   };
 
   const openProjectEditor = (project?: WorkProject) => {
@@ -432,64 +547,61 @@ export default function Praca() {
           ...EMPTY_DRAFT,
           name: project.name,
           description: project.description,
-          status: project.status,
+          note: project.note ?? "",
+          companyId: project.companyId,
+          projectStatus: project.status,
+          startDate: project.startDate ?? "",
+          endDate: project.endDate ?? "",
         }
-      : EMPTY_DRAFT);
+      : {
+          ...EMPTY_DRAFT,
+          companyId: selectedCompanyId || workspace.companies[0]?.id || "",
+        });
     setEditorError("");
+    setDetailTaskId(null);
     setEditor({ kind: "project", mode: project ? "edit" : "add", id: project?.id });
   };
 
-  const openTaskEditor = (task?: WorkTask, parentId: string | null = null) => {
+  const openTaskEditor = (task?: WorkTask, parentId: string | null = null, initialDate = "") => {
     setDraft(task
       ? {
           ...EMPTY_DRAFT,
           name: task.title,
-          priority: task.priority,
-          dueDate: task.dueDate,
+          note: task.note ?? "",
+          projectId: task.projectId,
           parentId: task.parentId ?? "",
+          taskStatus: getTaskStatus(task),
+          priority: task.priority,
+          startDate: task.startDate ?? "",
+          endDate: task.dueDate,
         }
-      : { ...EMPTY_DRAFT, parentId: parentId ?? "" });
+      : {
+          ...EMPTY_DRAFT,
+          projectId: selectedProjectId || "",
+          parentId: parentId ?? "",
+          endDate: initialDate,
+        });
     setEditorError("");
     setEditor({ kind: "task", mode: task ? "edit" : "add", id: task?.id, parentId });
   };
 
   useEffect(() => {
     if (commandParams.get("akcja") !== "nowe-zadanie") return;
-
-    const targetProject = selectedProject
-      ?? workspace.projects.find((project) => project.status === "active")
-      ?? workspace.projects[0];
     const next = new URLSearchParams(commandParams);
-    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => next.delete(key));
-
-    if (!targetProject) {
-      setCommandParams(next, { replace: true });
-      return;
-    }
-
-    const requestedPriority = commandParams.get("priorytet");
-    const priority: WorkTaskPriority = requestedPriority === "low"
-      || requestedPriority === "medium"
-      || requestedPriority === "high"
-      ? requestedPriority
-      : "none";
-
-    setSelectedCompanyId(targetProject.companyId);
-    setSelectedProjectId(targetProject.id);
-    setExpandedCompanyIds((current) => new Set(current).add(targetProject.companyId));
+    ["akcja", "tytul", "data", "priorytet"].forEach((key) => next.delete(key));
     setDraft({
       ...EMPTY_DRAFT,
       name: commandParams.get("tytul")?.trim() ?? "",
-      priority,
-      dueDate: commandParams.get("data") ?? "",
+      projectId: selectedProjectId,
+      endDate: commandParams.get("data") ?? "",
+      priority: ["low", "medium", "high"].includes(commandParams.get("priorytet") ?? "")
+        ? commandParams.get("priorytet") as WorkTaskPriority
+        : "none",
     });
     setEditorError("");
     setEditor({ kind: "task", mode: "add", parentId: null });
-
-    next.set("firma", targetProject.companyId);
-    next.set("projekt", targetProject.id);
     setCommandParams(next, { replace: true });
-  }, [commandParams, selectedProject, setCommandParams, workspace.projects]);
+  }, [commandParams, selectedProjectId, setCommandParams]);
 
   const closeEditor = () => {
     setEditor(null);
@@ -504,6 +616,10 @@ export default function Praca() {
       setEditorError(editor.kind === "task" ? "Wpisz nazwę zadania." : "Wpisz nazwę.");
       return;
     }
+    if ((editor.kind === "project" || editor.kind === "task") && draft.startDate && draft.endDate && draft.startDate > draft.endDate) {
+      setEditorError("Data rozpoczęcia nie może być późniejsza niż termin końcowy.");
+      return;
+    }
 
     if (editor.kind === "company") {
       if (editor.mode === "edit" && editor.id) {
@@ -513,42 +629,63 @@ export default function Praca() {
             ? { ...company, name, description: draft.description.trim(), color: draft.color }
             : company),
         }));
+        if (selectedCompanyId === editor.id && view !== "company") navigate("company", editor.id);
       } else {
         const id = createWorkId("company");
         setWorkspace((current) => ({
           ...current,
           companies: [...current.companies, { id, name, description: draft.description.trim(), color: draft.color }],
         }));
-        setExpandedCompanyIds((current) => new Set(current).add(id));
-        selectCompany(id);
+        navigate("company", id);
       }
     }
 
-    if (editor.kind === "project" && selectedCompanyId) {
+    if (editor.kind === "project") {
+      const companyId = draft.companyId || selectedCompanyId;
+      if (!companyId) {
+        setEditorError("Wybierz firmę dla projektu.");
+        return;
+      }
       if (editor.mode === "edit" && editor.id) {
         setWorkspace((current) => ({
           ...current,
           projects: current.projects.map((project) => project.id === editor.id
-            ? { ...project, name, description: draft.description.trim(), status: draft.status }
+            ? {
+                ...project,
+                companyId,
+                name,
+                description: draft.description.trim(),
+                note: draft.note.trim(),
+                status: draft.projectStatus,
+                startDate: draft.startDate,
+                endDate: draft.endDate,
+              }
             : project),
         }));
+        navigate("project", companyId, editor.id);
       } else {
         const id = createWorkId("project");
         setWorkspace((current) => ({
           ...current,
           projects: [...current.projects, {
             id,
-            companyId: selectedCompanyId,
+            companyId,
             name,
             description: draft.description.trim(),
-            status: draft.status,
+            note: draft.note.trim(),
+            status: draft.projectStatus,
+            startDate: draft.startDate,
+            endDate: draft.endDate,
           }],
         }));
-        setSelectedProjectId(id);
+        navigate("project", companyId, id);
       }
     }
 
-    if (editor.kind === "task" && selectedProjectId) {
+    if (editor.kind === "task") {
+      const projectId = draft.projectId;
+      const parentId = projectId ? draft.parentId || null : null;
+      const completed = draft.taskStatus === "completed";
       if (editor.mode === "edit" && editor.id) {
         setWorkspace((current) => ({
           ...current,
@@ -556,134 +693,190 @@ export default function Praca() {
             ? {
                 ...task,
                 title: name,
+                projectId,
+                parentId,
+                note: draft.note.trim(),
+                status: draft.taskStatus,
+                completed,
                 priority: draft.priority,
-                dueDate: draft.dueDate,
-                parentId: draft.parentId || null,
+                startDate: draft.startDate,
+                dueDate: draft.endDate,
               }
             : task),
         }));
+        recordActivity({ moduleId: "work", kind: "save", title: name, detail: "Zaktualizowano zadanie pracy" });
       } else {
         const id = createWorkId("task");
         setWorkspace((current) => ({
           ...current,
           tasks: [...current.tasks, {
             id,
-            projectId: selectedProjectId,
-            parentId: draft.parentId || null,
+            projectId,
+            parentId,
             title: name,
-            completed: false,
+            completed,
+            status: draft.taskStatus,
             priority: draft.priority,
-            dueDate: draft.dueDate,
+            startDate: draft.startDate,
+            dueDate: draft.endDate,
+            note: draft.note.trim(),
             createdAt: new Date().toISOString(),
           }],
         }));
-        if (draft.parentId) {
-          setCollapsedTaskIds((current) => {
-            const next = new Set(current);
-            next.delete(draft.parentId);
-            return next;
-          });
-        }
+        recordActivity({ moduleId: "work", kind: "create", title: name, detail: "Dodano zadanie pracy" });
       }
-      recordActivity({
-        moduleId: "work",
-        kind: editor.mode === "edit" ? "save" : "create",
-        title: name,
-        detail: editor.mode === "edit" ? "Zaktualizowano zadanie pracy" : "Dodano zadanie pracy",
-      });
+      setDetailTaskId(null);
     }
 
+    showSaveNotice();
     closeEditor();
   };
 
   const confirmDelete = () => {
     if (!deleteState) return;
-
     if (deleteState.kind === "company") {
-      const projectIds = new Set(
-        workspace.projects.filter((project) => project.companyId === deleteState.id).map((project) => project.id),
-      );
+      const projectIds = new Set(workspace.projects.filter((project) => project.companyId === deleteState.id).map((project) => project.id));
       setWorkspace((current) => ({
         ...current,
         companies: current.companies.filter((company) => company.id !== deleteState.id),
         projects: current.projects.filter((project) => !projectIds.has(project.id)),
         tasks: current.tasks.filter((task) => !projectIds.has(task.projectId)),
       }));
+      navigate("today");
     }
-
     if (deleteState.kind === "project") {
+      const project = projectById.get(deleteState.id);
       setWorkspace((current) => ({
         ...current,
-        projects: current.projects.filter((project) => project.id !== deleteState.id),
+        projects: current.projects.filter((candidate) => candidate.id !== deleteState.id),
         tasks: current.tasks.filter((task) => task.projectId !== deleteState.id),
       }));
+      navigate("company", project?.companyId ?? selectedCompanyId);
     }
-
     if (deleteState.kind === "task") {
       const branch = collectTaskBranch(workspace.tasks, deleteState.id);
-      setWorkspace((current) => ({
-        ...current,
-        tasks: current.tasks.filter((task) => !branch.has(task.id)),
-      }));
+      setWorkspace((current) => ({ ...current, tasks: current.tasks.filter((task) => !branch.has(task.id)) }));
+      setDetailTaskId(null);
     }
-
+    showSaveNotice();
     setDeleteState(null);
   };
 
-  const applyTaskCompletion = (taskIds: string[], completed: boolean, label: string) => {
-    const idSet = new Set(taskIds);
+  const applyTaskStatuses = (taskIds: string[], status: WorkTaskStatus, label: string) => {
+    const ids = new Set(taskIds);
     const previous = workspace.tasks
-      .filter((candidate) => idSet.has(candidate.id))
-      .map((candidate) => ({ id: candidate.id, completed: candidate.completed }));
-    setWorkspace((current) => setWorkTasksCompletionState(current, taskIds, completed));
-    workspace.tasks.filter((candidate) => idSet.has(candidate.id)).forEach((candidate) => {
-      recordActivity({
-        moduleId: "work",
-        kind: completed ? "complete" : "reopen",
-        title: candidate.title,
-        detail: completed ? "Ukończono zadanie pracy" : "Przywrócono zadanie pracy",
-      });
-    });
+      .filter((task) => ids.has(task.id))
+      .map((task) => ({ id: task.id, completed: task.completed, status: task.status }));
+    const completed = status === "completed";
+    setWorkspace((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => ids.has(task.id)
+        ? { ...task, status, completed }
+        : task),
+    }));
     setCompletionUndo({ label, previous });
+    showSaveNotice();
+    workspace.tasks.filter((task) => ids.has(task.id)).forEach((task) => {
+      recordActivity({ moduleId: "work", kind: completed ? "complete" : "save", title: task.title, detail: completed ? "Ukończono zadanie pracy" : "Zmieniono status zadania pracy" });
+    });
+  };
+
+  const updateTaskValues = (taskId: string, patch: Partial<Pick<WorkTask, "priority" | "dueDate">>) => {
+    setWorkspace((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...patch } : task),
+    }));
+    showSaveNotice();
+  };
+
+  const updateProjectValues = (projectId: string, patch: Partial<Pick<WorkProject, "status" | "endDate">>) => {
+    setWorkspace((current) => ({
+      ...current,
+      projects: current.projects.map((project) => project.id === projectId ? { ...project, ...patch } : project),
+    }));
+    showSaveNotice();
   };
 
   const toggleTask = (task: WorkTask) => {
-    if (task.completed) {
-      applyTaskCompletion([task.id], false, `Przywrócono „${task.title}”`);
+    const currentStatus = getTaskStatus(task);
+    if (currentStatus === "completed") {
+      applyTaskStatuses([task.id], "todo", `Przywrócono „${task.title}”`);
       return;
     }
-    const branch = collectTaskBranch(projectTasks, task.id);
-    if (branch.size > 1) {
-      setCascadeState({
-        taskId: task.id,
-        taskTitle: task.title,
-        branchIds: Array.from(branch),
-      });
-      return;
-    }
-    applyTaskCompletion([task.id], true, `Ukończono „${task.title}”`);
-  };
-
-  const confirmCascadeCompletion = () => {
-    if (!cascadeState) return;
-    applyTaskCompletion(
-      cascadeState.branchIds,
-      true,
-      `Ukończono „${cascadeState.taskTitle}” i ${cascadeState.branchIds.length - 1} podzadań`,
-    );
-    setCascadeState(null);
+    const branch = collectTaskBranch(workspace.tasks.filter((candidate) => candidate.projectId === task.projectId), task.id);
+    applyTaskStatuses(Array.from(branch), "completed", branch.size > 1
+      ? `Ukończono „${task.title}” i ${branch.size - 1} podzadań`
+      : `Ukończono „${task.title}”`);
   };
 
   const undoCompletionChange = () => {
     if (!completionUndo) return;
-    const previous = new Map(completionUndo.previous.map((item) => [item.id, item.completed]));
+    const previous = new Map(completionUndo.previous.map((item) => [item.id, item]));
     setWorkspace((current) => ({
       ...current,
-      tasks: current.tasks.map((task) => previous.has(task.id)
-        ? { ...task, completed: previous.get(task.id) ?? task.completed }
-        : task),
+      tasks: current.tasks.map((task) => {
+        const before = previous.get(task.id);
+        return before ? { ...task, completed: before.completed, status: before.status } : task;
+      }),
     }));
+    showSaveNotice();
     setCompletionUndo(null);
+  };
+
+  const canDropTaskOn = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return false;
+    const source = workspace.tasks.find((task) => task.id === sourceId);
+    const target = workspace.tasks.find((task) => task.id === targetId);
+    if (!source || !target || source.projectId !== target.projectId) return false;
+    return !collectTaskBranch(workspace.tasks, sourceId).has(targetId);
+  };
+
+  const reparentTask = (sourceId: string, parentId: string | null) => {
+    const source = workspace.tasks.find((task) => task.id === sourceId);
+    if (!source || source.parentId === parentId) return;
+    if (parentId && !canDropTaskOn(sourceId, parentId)) return;
+    setWorkspace((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => task.id === sourceId ? { ...task, parentId } : task),
+    }));
+    if (parentId) {
+      setCollapsedTaskIds((current) => {
+        if (!current.has(parentId)) return current;
+        const next = new Set(current);
+        next.delete(parentId);
+        return next;
+      });
+    }
+    showSaveNotice();
+    recordActivity({ moduleId: "work", kind: "save", title: source.title, detail: parentId ? "Zagnieżdżono zadanie w innym zadaniu" : "Przeniesiono zadanie na główny poziom projektu" });
+  };
+
+  const handleTaskDragStart = (event: DragEvent, task: WorkTask) => {
+    if (view !== "project" || task.projectId !== selectedProject?.id) return;
+    setDraggedTaskId(task.id);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", task.id);
+  };
+
+  const handleTaskDragOver = (event: DragEvent, task: WorkTask) => {
+    if (!draggedTaskId || !canDropTaskOn(draggedTaskId, task.id)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverTaskId(task.id);
+  };
+
+  const handleTaskDrop = (event: DragEvent, task: WorkTask) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceId = event.dataTransfer.getData("text/plain") || draggedTaskId;
+    if (sourceId && canDropTaskOn(sourceId, task.id)) reparentTask(sourceId, task.id);
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+  };
+
+  const handleTaskDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
   };
 
   const toggleCollapsed = (taskId: string) => {
@@ -695,6 +888,14 @@ export default function Praca() {
     });
   };
 
+  const toggleTaskDetails = (taskId: string) => {
+    setDetailTaskId((current) => current === taskId ? null : taskId);
+  };
+
+  const detailTask = detailTaskId ? workspace.tasks.find((task) => task.id === detailTaskId) : undefined;
+  const detailTaskProject = detailTask ? projectById.get(detailTask.projectId) : undefined;
+  const detailTaskCompany = detailTaskProject ? companyById.get(detailTaskProject.companyId) : undefined;
+
   const editorTitle = editor?.kind === "company"
     ? `${editor.mode === "edit" ? "Edytuj" : "Nowa"} firma`
     : editor?.kind === "project"
@@ -704,125 +905,691 @@ export default function Praca() {
   const editorDescription = editor?.kind === "company"
     ? "Firma porządkuje powiązane projekty."
     : editor?.kind === "project"
-      ? `Projekt zostanie przypisany do firmy ${selectedCompany?.name ?? ""}.`
-      : editor?.parentId
-        ? "Podzadanie pojawi się bezpośrednio pod wybranym zadaniem."
-        : "Dodaj zadanie do bieżącego projektu.";
+      ? "Projekt dostaje status, zakres dat i prostą notatkę."
+      : "Zadanie może zostać przypisane do projektu albo pozostać nieprzypisane.";
 
+  const editorProjectTasks = draft.projectId
+    ? workspace.tasks.filter((task) => task.projectId === draft.projectId && task.id !== editor?.id)
+    : [];
   const unavailableParentIds = editor?.kind === "task" && editor.id
-    ? collectTaskBranch(projectTasks, editor.id)
+    ? collectTaskBranch(workspace.tasks, editor.id)
     : new Set<string>();
-
   const parentOptions = [
     { value: "", label: "Brak — zadanie główne" },
-    ...projectTasks
+    ...editorProjectTasks
       .filter((task) => !unavailableParentIds.has(task.id))
-      .map((task) => ({
-        value: task.id,
-        label: `${"— ".repeat(taskDepth(task, projectTasks))}${task.title}`,
+      .map((task) => ({ value: task.id, label: `${"— ".repeat(Math.min(taskDepth(task, editorProjectTasks), 4))}${task.title}` })),
+  ];
+  const projectOptions = [
+    { value: "", label: "Nieprzypisane" },
+    ...workspace.projects
+      .filter((project) => project.status !== "completed")
+      .map((project) => ({
+        value: project.id,
+        label: `${project.name} · ${companyById.get(project.companyId)?.name ?? "Firma"}`,
       })),
   ];
 
-  const renderTask = (task: WorkTask, depth: number): ReactNode => {
-    if (!visibleTaskIds.has(task.id)) return null;
-    const children = tasksByParent.get(task.id) ?? [];
-    const visibleChildren = children.filter((child) => visibleTaskIds.has(child.id));
-    const hasChildren = children.length > 0;
-    const collapsed = collapsedTaskIds.has(task.id) && !search.trim();
-    const rowStyle = { "--work-task-indent": `${Math.min(depth, 3) * 24}px` } as CSSProperties;
+  const taskContext = (task: WorkTask) => {
+    const project = projectById.get(task.projectId);
+    const company = project ? companyById.get(project.companyId) : undefined;
+    const parentChain: string[] = [];
+    const visited = new Set<string>();
+    let parentId = task.parentId;
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      const parent = taskById.get(parentId);
+      if (!parent) break;
+      parentChain.unshift(parent.title);
+      parentId = parent.parentId;
+    }
+    return {
+      project,
+      company,
+      parentLabel: parentChain.join(" › "),
+    };
+  };
 
+  const detailTaskContext = detailTask ? taskContext(detailTask) : undefined;
+  const detailTaskParent = detailTask?.parentId ? taskById.get(detailTask.parentId) : undefined;
+  const detailTaskDescendantRows = detailTask
+    ? collectTaskDescendantRows(workspace.tasks, detailTask.id)
+    : [];
+  const detailTaskDescendants = detailTaskDescendantRows.map(({ task }) => task);
+  const detailTaskCompletedDescendants = detailTaskDescendants.filter((task) => getTaskStatus(task) === "completed").length;
+  const detailTaskProgress = detailTaskDescendants.length
+    ? Math.round((detailTaskCompletedDescendants / detailTaskDescendants.length) * 100)
+    : null;
+
+  const taskMatches = (task: WorkTask, includeCompleted = true) => currentTaskMatches(task, includeCompleted);
+
+  const renderTaskRow = (task: WorkTask, depth = 0, showContext = true) => {
+    const status = getTaskStatus(task);
+    const context = taskContext(task);
+    const companyName = context.company?.name ?? "Nieprzypisane";
+    const projectName = context.project?.name ?? "Bez projektu";
+    const hasChildren = workspace.tasks.some((candidate) => candidate.parentId === task.id);
+    const rowStyle = {
+      "--work-task-depth": depth,
+      "--work-company-accent": context.company?.color ?? "#8793A1",
+    } as CSSProperties;
+    const isProjectTreeTask = view === "project" && task.projectId === selectedProject?.id;
+    const dateLabel = task.dueDate
+      ? task.startDate ? `${formatDate(task.startDate)} → ${formatDate(task.dueDate)}` : formatDate(task.dueDate)
+      : task.startDate ? `od ${formatDate(task.startDate)}` : "Bez terminu";
     return (
-      <div key={task.id} className="work-task-branch">
-        <div className={`work-task-row ${task.completed ? "is-completed" : ""}`} style={rowStyle}>
+      <ListRow
+        key={task.id}
+         className={`work-task-row ${depth ? "work-task-row--nested" : ""} ${showContext ? "work-task-row--with-context" : ""}`}
+         style={rowStyle}
+         draggable={isProjectTreeTask}
+         onDragStart={(event) => handleTaskDragStart(event, task)}
+         onDragOver={(event) => handleTaskDragOver(event, task)}
+         onDrop={(event) => handleTaskDrop(event, task)}
+         onDragEnd={handleTaskDragEnd}
+         data-drag-over={dragOverTaskId === task.id ? "true" : undefined}
+        leading={(
           <button
             type="button"
-            className="work-task-row__disclosure"
-            aria-label={collapsed ? "Rozwiń podzadania" : "Zwiń podzadania"}
-            aria-expanded={hasChildren ? !collapsed : undefined}
-            disabled={!hasChildren}
-            onClick={() => toggleCollapsed(task.id)}
-          >
-            {hasChildren && (collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />)}
-          </button>
-          <button
-            type="button"
-            className="work-task-check"
-            aria-label={task.completed ? `Oznacz „${task.title}” jako niezrobione` : `Oznacz „${task.title}” jako zrobione`}
-            aria-pressed={task.completed}
+            className={`work-task-check ${status === "completed" ? "is-completed" : ""}`}
+            aria-label={status === "completed" ? `Przywróć „${task.title}”` : `Ukończ „${task.title}”`}
+            aria-pressed={status === "completed"}
             onClick={() => toggleTask(task)}
           >
-            {task.completed && <Check size={11} strokeWidth={2.4} />}
+            {status === "completed" && <Check size={11} strokeWidth={2.4} />}
           </button>
-          <button type="button" className="work-task-row__title" onClick={() => openTaskEditor(task)}>
-            {task.title}
-          </button>
-          <div className="work-task-row__meta">
-            {task.priority !== "none" && (
-              <span className={`work-task-priority work-task-priority--${task.priority}`}>
-                <Flag size={11} aria-hidden="true" />
-                {PRIORITY_LABELS[task.priority]}
-              </span>
+        )}
+        title={<span>{task.title}</span>}
+        titleLabel={detailTaskId === task.id ? `Zamknij szczegóły zadania „${task.title}”` : `Otwórz szczegóły zadania „${task.title}”`}
+        onTitleClick={() => toggleTaskDetails(task.id)}
+        selected={detailTaskId === task.id}
+        subtitle={task.note ? <span className="work-task-row__subtitle-copy"><span className="work-task-row__note">{task.note}</span></span> : undefined}
+        trailing={(
+          <div className={`work-task-row__controls ${showContext ? "work-task-row__controls--with-context" : ""}`}>
+            {showContext && (
+              <>
+                <span className="work-task-row__context-column work-task-row__company-column" title={companyName}>
+                  <span className="work-task-row__company-dot" aria-hidden="true" />
+                  <span>{companyName}</span>
+                </span>
+                <span className="work-task-row__context-column work-task-row__project-column" title={projectName}>{projectName}</span>
+              </>
             )}
-            {task.dueDate && (
-              <span className="work-task-date">
-                <CalendarDays size={11} aria-hidden="true" />
-                {formatDueDate(task.dueDate)}
-              </span>
-            )}
-          </div>
-          <div className="work-task-row__actions">
-            <AddToTasksButton
-              compact
-              input={{
-                source: {
-                  kind: "work",
-                  entity: `${encodeURIComponent(task.projectId)}/${encodeURIComponent(task.id)}`,
-                  context: `${selectedCompany?.name ?? "Praca"} · ${selectedProject?.name ?? "Projekt"}`,
-                  href: `/praca?firma=${encodeURIComponent(selectedCompanyId)}&projekt=${encodeURIComponent(task.projectId)}`,
-                },
-                text: task.title,
-                done: task.completed,
-                calendarDate: task.dueDate || undefined,
-                date: task.dueDate || undefined,
-                priority: task.priority === "none" ? undefined : task.priority,
-                list: "praca",
-                tags: ["praca"],
+            <span className="work-task-row__disclosure-slot">
+              {isProjectTreeTask && hasChildren && (
+                <button
+                  type="button"
+                  className="work-task-row__disclosure"
+                  aria-label={collapsedTaskIds.has(task.id) ? "Rozwiń podzadania" : "Zwiń podzadania"}
+                  aria-expanded={!collapsedTaskIds.has(task.id)}
+                  onClick={() => toggleCollapsed(task.id)}
+                >
+                  {collapsedTaskIds.has(task.id) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                </button>
+              )}
+            </span>
+            <TaskInlineMenu
+              value={status}
+              ariaLabel={`Zmień status zadania „${task.title}”`}
+              triggerClassName={`work-task-status ${taskStatusTone(status)}`}
+              options={TASK_STATUS_ORDER.map((candidate) => ({
+                value: candidate,
+                label: TASK_STATUS_LABELS[candidate],
+                leadingIcon: taskStatusIcon(candidate),
+                selected: candidate === status,
+                className: `work-inline-menu__item--${candidate}`,
+              }))}
+              onChange={(value) => {
+                const nextStatus = value as WorkTaskStatus;
+                if (nextStatus === "completed" && status !== "completed") {
+                  toggleTask(task);
+                  return;
+                }
+                applyTaskStatuses([task.id], nextStatus, `Status: ${TASK_STATUS_LABELS[nextStatus]}`);
               }}
+            >
+              {taskStatusIcon(status)}
+              {TASK_STATUS_LABELS[status]}
+            </TaskInlineMenu>
+            <TaskInlineMenu
+              value={task.priority}
+              ariaLabel={`Zmień priorytet zadania „${task.title}”`}
+              triggerClassName={`work-task-priority work-task-priority--${task.priority}`}
+              options={PRIORITY_ORDER.map((priority) => ({
+                value: priority,
+                label: PRIORITY_LABELS[priority],
+                leadingIcon: <Flag size={11} aria-hidden="true" />,
+                selected: priority === task.priority,
+                className: `work-inline-menu__item--${priority}`,
+              }))}
+              onChange={(value) => updateTaskValues(task.id, { priority: value as WorkTaskPriority })}
+            >
+              <Flag size={11} aria-hidden="true" />
+              {PRIORITY_LABELS[task.priority]}
+            </TaskInlineMenu>
+            <DatePicker
+              value={task.dueDate}
+              displayValue={dateLabel}
+              min={task.startDate || undefined}
+              aria-label={`Zmień termin zadania „${task.title}”`}
+              fieldClassName="work-task-inline-date"
+              portalZIndex={260}
+              onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              aria-label={`Dodaj podzadanie do „${task.title}”`}
-              title="Dodaj podzadanie"
-              onClick={() => openTaskEditor(undefined, task.id)}
-            >
-              <Plus size={13} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              aria-label={`Edytuj „${task.title}”`}
-              title="Edytuj zadanie"
-              onClick={() => openTaskEditor(task)}
-            >
-              <Pencil size={12} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              aria-label={`Usuń „${task.title}”`}
-              title="Usuń zadanie"
-              onClick={() => setDeleteState({ kind: "task", id: task.id, name: task.title })}
-            >
-              <Trash2 size={12} />
-            </Button>
           </div>
+        )}
+        completed={status === "completed"}
+        density="comfortable"
+        divided
+      />
+    );
+  };
+
+  const renderTaskSection = (title: string, tasks: WorkTask[], icon: ReactNode, emptyText?: string, emptyAction?: ReactNode) => (
+    <section className="work-task-section" aria-label={title}>
+      <header className="work-task-section__header">
+        <div>
+          {icon}
+          <h3>{title}</h3>
+          <span>{tasks.length}</span>
         </div>
-        {!collapsed && visibleChildren.map((child) => renderTask(child, depth + 1))}
+      </header>
+      {tasks.length ? (
+        <div className="work-task-list">{tasks.map((task) => renderTaskRow(task))}</div>
+      ) : emptyText ? (
+        <div className={`work-task-section__empty ${emptyAction ? "work-task-section__empty--compact" : ""}`}>
+          {emptyAction ? <span className="work-task-section__empty-icon" aria-hidden="true">{icon}</span> : null}
+          <span>{emptyText}</span>
+          {emptyAction}
+        </div>
+      ) : null}
+    </section>
+  );
+
+  const renderWeekGroups = (tasks: WorkTask[], includeOverdue = true) => {
+    const overdue = includeOverdue ? tasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today) : [];
+    const remaining = tasks.filter((task) => !overdue.includes(task));
+    return (
+      <>
+        {overdue.length > 0 && renderTaskSection("Po terminie", overdue, <CircleAlert size={14} aria-hidden="true" />)}
+        {weekDates.map((date, index) => {
+          const dayTasks = remaining.filter((task) => taskAnchorDate(task) === date);
+          if (!dayTasks.length) return null;
+          return (
+            <Fragment key={date}>
+              {renderTaskSection(
+                index === 0 ? "Dzisiaj" : formatLongDate(date),
+                dayTasks,
+                <CalendarDays size={14} aria-hidden="true" />,
+              )}
+            </Fragment>
+          );
+        })}
+        {tasks.filter((task) => !taskAnchorDate(task)).length > 0
+          && renderTaskSection("Bez terminu", tasks.filter((task) => !taskAnchorDate(task)), <Circle size={14} aria-hidden="true" />)}
+      </>
+    );
+  };
+
+  const renderTaskTree = () => {
+    const tasks = projectTasks.filter((task) => taskMatches(task));
+    const byParent = new Map<string | null, WorkTask[]>();
+    projectTasks.forEach((task) => {
+      const parentId = projectTasks.some((candidate) => candidate.id === task.parentId) ? task.parentId : null;
+      const bucket = byParent.get(parentId) ?? [];
+      bucket.push(task);
+      byParent.set(parentId, bucket);
+    });
+    const visibleIds = new Set<string>();
+    const visit = (task: WorkTask): boolean => {
+      const childMatch = (byParent.get(task.id) ?? []).some(visit);
+      const matches = tasks.some((candidate) => candidate.id === task.id);
+      if (matches || childMatch) visibleIds.add(task.id);
+      return matches || childMatch;
+    };
+    (byParent.get(null) ?? []).forEach(visit);
+    const renderBranch = (task: WorkTask, depth: number): ReactNode => {
+      if (!visibleIds.has(task.id)) return null;
+      const children = byParent.get(task.id) ?? [];
+      return (
+        <div key={task.id} className="work-task-branch">
+          {renderTaskRow(task, depth, false)}
+          {!collapsedTaskIds.has(task.id) && children.map((child) => renderBranch(child, depth + 1))}
+        </div>
+      );
+    };
+    if (!visibleIds.size) {
+      return (
+        <EmptyState
+          icon={<ListTree size={18} />}
+          title={projectTasks.length ? "Brak zadań pasujących do filtrów" : "Pierwsze zadanie nada projektowi rytm"}
+          description={projectTasks.length ? "Zmień wyszukiwanie albo filtr statusu." : "Dodaj zadanie, aby rozpocząć pracę nad projektem."}
+          action={!projectTasks.length ? <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Dodaj zadanie</Button> : undefined}
+        />
+      );
+    }
+    return (
+      <div
+        className="work-task-tree"
+        onDragOver={(event) => {
+          if (!draggedTaskId) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const sourceId = event.dataTransfer.getData("text/plain") || draggedTaskId;
+          if (sourceId) reparentTask(sourceId, null);
+          setDraggedTaskId(null);
+          setDragOverTaskId(null);
+        }}
+        onDragEnd={handleTaskDragEnd}
+      >
+        {(byParent.get(null) ?? []).map((task) => renderBranch(task, 0))}
       </div>
+    );
+  };
+
+  const renderTodayView = () => {
+    const tasks = filterTaskList(relevantTasks);
+    const overdue = tasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today);
+    const todayTasks = tasks.filter((task) => taskAnchorDate(task) === today);
+    const openTasks = tasks.filter((task) => isTaskOpen(task));
+    const upcoming = tasks.filter((task) => {
+      const anchor = taskAnchorDate(task);
+      return anchor > today && weekDates.includes(anchor);
+    });
+    const withoutDate = tasks.filter((task) => !taskAnchorDate(task));
+    return (
+      <div className="work-screen work-screen--focus">
+        <header className="work-screen-heading">
+          <div>
+            <h2>Dzisiaj w pracy</h2>
+            <p>{todayTasks.length} na dziś · {overdue.length} po terminie · {formatOpenTaskCount(openTasks.length)}</p>
+          </div>
+          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
+        </header>
+        <div className="work-focus-stack">
+          {renderTaskSection("Po terminie", overdue, <CircleAlert size={14} aria-hidden="true" />, "Brak zadań po terminie")}
+          {renderTaskSection(
+            "Dzisiaj",
+            todayTasks,
+            <Clock3 size={14} aria-hidden="true" />,
+            "Nie masz zadań z terminem na dziś",
+            <Button variant="quiet" size="sm" onClick={() => openTaskEditor(undefined, null, today)}>Zaplanuj zadanie</Button>,
+          )}
+          {upcoming.length > 0 && (
+            <section className="work-task-section work-task-section--week-preview" aria-label="Najbliższe dni">
+              <header className="work-task-section__header">
+                <div><CalendarDays size={14} aria-hidden="true" /><h3>Ten tydzień</h3><span>{upcoming.length}</span></div>
+                <Button variant="quiet" size="sm" onClick={() => navigate("week")}>Otwórz widok</Button>
+              </header>
+              <div className="work-task-list">{upcoming.sort((a, b) => taskAnchorDate(a).localeCompare(taskAnchorDate(b))).map((task) => renderTaskRow(task))}</div>
+            </section>
+          )}
+          {renderTaskSection("Bez terminu", withoutDate, <Circle size={14} aria-hidden="true" />, "Nie ma otwartych zadań bez terminu")}
+        </div>
+      </div>
+    );
+  };
+
+  const renderWeekView = () => {
+    const tasks = filterTaskList(relevantTasks);
+    return (
+      <div className="work-screen work-screen--focus">
+        <header className="work-screen-heading">
+          <div>
+            <h2>Ten tydzień</h2>
+            <p>Praca do zaplanowania od dziś przez najbliższe siedem dni</p>
+          </div>
+          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
+        </header>
+        <div className="work-focus-stack">{renderWeekGroups(tasks)}</div>
+      </div>
+    );
+  };
+
+  const renderActiveView = () => {
+    const tasks = filterTaskList(relevantTasks);
+    const sorted = tasks.slice().sort((a, b) => {
+      const projectA = projectById.get(a.projectId)?.name ?? "";
+      const projectB = projectById.get(b.projectId)?.name ?? "";
+      return projectA.localeCompare(projectB, "pl") || taskAnchorDate(a).localeCompare(taskAnchorDate(b)) || a.createdAt.localeCompare(b.createdAt);
+    });
+    return (
+      <div className="work-screen work-screen--table">
+        <header className="work-screen-heading">
+          <div><h2>Wszystkie aktywne</h2><p>{sorted.length} {statusFilter === "completed" ? "ukończonych zadań" : "otwartych zadań"} w aktywnych i wstrzymanych projektach oraz bez przypisania</p></div>
+          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
+        </header>
+        <section className="work-task-section" aria-label="Wszystkie aktywne zadania">
+          {sorted.length ? <div className="work-task-list">{sorted.map((task) => renderTaskRow(task))}</div> : <EmptyState icon={<Check size={18} />} title="Brak aktywnych zadań" description="Wszystko jest zamknięte albo nie ma jeszcze zadań." />}
+        </section>
+      </div>
+    );
+  };
+
+  const renderUnassignedView = () => {
+    const tasks = filterTaskList(workspace.tasks.filter((task) => !task.projectId));
+    return (
+      <div className="work-screen">
+        <header className="work-screen-heading">
+          <div><h2>Nieprzypisane</h2><p>Zadania, które nie mają jeszcze projektu</p></div>
+          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
+        </header>
+        <section className="work-task-section" aria-label="Nieprzypisane zadania">
+          {tasks.length ? <div className="work-task-list">{tasks.map((task) => renderTaskRow(task))}</div> : <EmptyState icon={<Inbox size={18} />} title="Brak nieprzypisanych zadań" description="Nowe zadanie możesz przypisać później albo zostawić bez projektu." />}
+        </section>
+      </div>
+    );
+  };
+
+  const renderArchiveView = () => {
+    const projects = workspace.projects.filter((project) => project.status === "completed");
+    return (
+      <div className="work-screen">
+        <header className="work-screen-heading"><div><h2>Archiwum</h2><p>Zakończone projekty i ich kontekst</p></div></header>
+        <section className="work-project-list" aria-label="Zakończone projekty">
+          {projects.length ? projects.map((project) => {
+            const company = companyById.get(project.companyId);
+            const count = projectCounts.get(project.id) ?? { total: 0, completed: 0, open: 0 };
+            return (
+              <article key={project.id} className="work-project-record work-project-record--archived">
+                <button type="button" className="work-project-record__main" onClick={() => navigate("project", project.companyId, project.id)}>
+                  <span className="work-project-record__identity"><FolderKanban size={15} /><span><strong>{project.name}</strong><small>{company?.name ?? "Bez firmy"} · {count.completed}/{count.total} ukończonych</small></span></span>
+                  <Badge tone="success">Zakończony</Badge>
+                  <ChevronRight size={14} aria-hidden="true" />
+                </button>
+              </article>
+            );
+          }) : <EmptyState icon={<Archive size={18} />} title="Archiwum jest puste" description="Zakończone projekty pojawią się tutaj." />}
+        </section>
+      </div>
+    );
+  };
+
+  const renderCompanyView = () => {
+    if (!selectedCompany) return null;
+    const projects = visibleCompanyProjects;
+    const allProjects = companyProjects.filter((project) => project.status !== "completed");
+    const openCount = workspace.tasks.filter((task) => task.projectId && companyProjects.some((project) => project.id === task.projectId) && isTaskOpen(task)).length;
+    const overdueCount = workspace.tasks.filter((task) => task.projectId && companyProjects.some((project) => project.id === task.projectId) && isTaskOpen(task) && taskAnchorDate(task) && taskAnchorDate(task) < today).length;
+    return (
+      <div className="work-screen work-screen--table">
+        <header className="work-company-header">
+          <div className="work-company-header__identity">
+            <span className="work-company-marker" style={{ background: selectedCompany.color }} />
+            <div><h2>{selectedCompany.name}</h2><p>{selectedCompany.description || "Dodaj krótki opis firmy, aby zachować kontekst."}</p></div>
+          </div>
+          <div className="work-company-header__actions">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj firmę" title="Edytuj firmę" onClick={() => openCompanyEditor(selectedCompany)}><Pencil size={12} /></Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Usuń firmę" title="Usuń firmę" onClick={() => setDeleteState({ kind: "company", id: selectedCompany.id, name: selectedCompany.name })}><Trash2 size={12} /></Button>
+          </div>
+          <div className="work-company-summary">
+            <span><strong>{allProjects.length}</strong><small>Aktywne projekty</small></span>
+            <span><strong>{openCount}</strong><small>Otwarte zadania</small></span>
+            <span><strong>{overdueCount}</strong><small>Po terminie</small></span>
+          </div>
+        </header>
+        <section className="work-project-list work-project-list--company" aria-labelledby="work-company-projects-title">
+          <header className="work-section-heading"><div><h3 id="work-company-projects-title">Projekty</h3><span>{projects.length}</span></div><Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openProjectEditor()}>Projekt</Button></header>
+          <div className="work-project-columns" aria-hidden="true">
+            <span>Projekt</span>
+            <span>Status</span>
+            <span>Termin</span>
+            <span>Otwarte</span>
+            <span>Najbliższe</span>
+            <span>Postęp</span>
+            <span>Akcje</span>
+            <span />
+          </div>
+          {projects.length ? projects.map((project) => {
+            const count = projectCounts.get(project.id) ?? { total: 0, completed: 0, open: 0 };
+            const progress = count.total ? Math.round((count.completed / count.total) * 100) : 0;
+            const projectOpenTasks = workspace.tasks
+              .filter((task) => task.projectId === project.id && isTaskOpen(task))
+              .sort((a, b) => (taskAnchorDate(a) || "9999-12-31").localeCompare(taskAnchorDate(b) || "9999-12-31") || a.createdAt.localeCompare(b.createdAt));
+            const nextTask = projectOpenTasks.find((task) => taskAnchorDate(task));
+            const isExpanded = expandedCompanyProjectId === project.id;
+            const previewTasks = projectOpenTasks.slice(0, 3);
+            return (
+              <article key={project.id} className={`work-project-record ${isExpanded ? "is-expanded" : ""}`}>
+                <div
+                  className="work-project-record__main"
+                >
+                  <button
+                    type="button"
+                    className="work-project-record__identity work-project-record__identity-trigger"
+                    aria-expanded={isExpanded}
+                    aria-controls={`work-project-preview-${project.id}`}
+                    aria-label={`${isExpanded ? "Zwiń" : "Rozwiń"} podgląd projektu ${project.name}`}
+                    onClick={() => setExpandedCompanyProjectId((current) => current === project.id ? null : project.id)}
+                  >
+                    <FolderKanban size={15} aria-hidden="true" />
+                    <span><strong>{project.name}</strong><small>{project.description || "Bez opisu projektu"}</small></span>
+                  </button>
+                  <div className="work-project-record__status">
+                    <TaskInlineMenu
+                      value={project.status}
+                      ariaLabel={`Zmień status projektu „${project.name}”`}
+                      triggerClassName={`work-project-status-control work-project-status-control--${project.status}`}
+                      options={PROJECT_STATUS_ORDER.map((candidate) => ({
+                        value: candidate,
+                        label: PROJECT_STATUS_LABELS[candidate],
+                        selected: candidate === project.status,
+                        className: `work-inline-menu__item--${candidate}`,
+                      }))}
+                      onChange={(value) => updateProjectValues(project.id, { status: value as WorkProjectStatus })}
+                    >
+                      <span>{PROJECT_STATUS_LABELS[project.status]}</span>
+                      <ChevronDown size={11} aria-hidden="true" />
+                    </TaskInlineMenu>
+                  </div>
+                  <DatePicker
+                    value={project.endDate ?? ""}
+                    displayValue={formatDateRange(project.startDate, project.endDate)}
+                    min={project.startDate || undefined}
+                    aria-label={`Zmień termin projektu „${project.name}”`}
+                    fieldClassName="work-project-inline-date"
+                    portalZIndex={260}
+                    onChange={(value) => updateProjectValues(project.id, { endDate: value })}
+                  />
+                  <span className="work-project-record__open-count" title={formatTaskCount(count.open)}><strong>{formatTaskCount(count.open)}</strong></span>
+                  <span className="work-project-record__next">
+                    {nextTask ? (
+                      <button
+                        type="button"
+                        className="work-project-record__next-button"
+                        aria-label={detailTaskId === nextTask.id ? `Zamknij szczegóły zadania „${nextTask.title}”` : `Otwórz szczegóły zadania „${nextTask.title}”`}
+                        aria-pressed={detailTaskId === nextTask.id}
+                        onClick={() => toggleTaskDetails(nextTask.id)}
+                      >
+                        {nextTask.title}
+                      </button>
+                    ) : <small>Brak otwartych zadań</small>}
+                  </span>
+                  <span className="work-project-record__progress"><span className="work-progress"><i style={{ width: `${progress}%` }} /></span><strong>{progress}%</strong></span>
+                  <span className="work-project-record__action-space" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="work-project-record__expand-icon"
+                    aria-expanded={isExpanded}
+                    aria-controls={`work-project-preview-${project.id}`}
+                    aria-label={`${isExpanded ? "Zwiń" : "Rozwiń"} projekt`}
+                    onClick={() => setExpandedCompanyProjectId((current) => current === project.id ? null : project.id)}
+                  >
+                    {isExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                  </button>
+                </div>
+                <div className="work-project-record__actions">
+                  <WorkProjectActionsMenu
+                    projectId={project.id}
+                    projectName={project.name}
+                    onEdit={() => openProjectEditor(project)}
+                    onDelete={() => setDeleteState({ kind: "project", id: project.id, name: project.name })}
+                  />
+                </div>
+                {project.note && <p className="work-project-record__note">{project.note}</p>}
+                {isExpanded && (
+                  <div id={`work-project-preview-${project.id}`} className="work-project-record__preview">
+                    <div className="work-project-record__preview-heading">
+                      <span>Najbliższe zadania</span>
+                      <span>{previewTasks.length ? `${previewTasks.length} najbliższe z ${formatOpenTaskCount(count.open)}` : "Brak otwartych zadań"}</span>
+                    </div>
+                    {previewTasks.length ? (
+                      <div className="work-project-record__preview-list">
+                        {previewTasks.map((task) => {
+                          const taskStatus = getTaskStatus(task);
+                          return (
+                            <button key={task.id} type="button" className="work-project-record__preview-task" onClick={() => toggleTaskDetails(task.id)}>
+                              <span className={`work-project-record__preview-status ${taskStatusTone(taskStatus)}`}>{taskStatusIcon(taskStatus)}</span>
+                              <span className="work-project-record__preview-title">{task.title}</span>
+                              <span className="work-project-record__preview-date">{formatDate(task.dueDate ?? task.startDate ?? "")}</span>
+                              <ChevronRight size={13} aria-hidden="true" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="work-project-record__preview-empty">Projekt nie ma jeszcze otwartych zadań.</p>}
+                    <div className="work-project-record__preview-footer">
+                      <Button variant="quiet" size="sm" onClick={() => navigate("project", project.companyId, project.id)}>Otwórz projekt <ChevronRight size={13} aria-hidden="true" /></Button>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          }) : allProjects.length ? <EmptyState icon={<Search size={18} />} title="Brak projektów pasujących do filtrów" description="Zmień wyszukiwanie, status albo sortowanie." /> : <EmptyState icon={<FolderKanban size={18} />} title="Dodaj pierwszy projekt" description="Projekty pomagają oddzielić większe strumienie pracy." action={<Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openProjectEditor()}>Dodaj projekt</Button>} />}
+        </section>
+      </div>
+    );
+  };
+
+  const renderProjectView = () => {
+    if (!selectedProject) return null;
+    const count = projectCounts.get(selectedProject.id) ?? { total: 0, completed: 0, open: 0 };
+    const progress = count.total ? Math.round((count.completed / count.total) * 100) : 0;
+    return (
+      <div className="work-screen work-screen--project">
+        <header className="work-project-header">
+          <div className="work-project-header__identity">
+            <button type="button" className="work-back-link" onClick={() => navigate("company", selectedProject.companyId)}><ChevronRight size={13} className="is-back" /> {companyById.get(selectedProject.companyId)?.name ?? "Firma"}</button>
+            <div className="work-project-title-row"><h2>{selectedProject.name}</h2><Badge tone={projectStatusTone(selectedProject.status)}>{PROJECT_STATUS_LABELS[selectedProject.status]}</Badge></div>
+            <p>{selectedProject.description || "Dodaj krótki opis projektu, aby zachować kontekst."}</p>
+            <div className="work-project-dates"><CalendarDays size={12} aria-hidden="true" /> {formatDateRange(selectedProject.startDate, selectedProject.endDate)}{selectedProject.note && <span> · {selectedProject.note}</span>}</div>
+          </div>
+          <div className="work-project-header__actions">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj projekt" title="Edytuj projekt" onClick={() => openProjectEditor(selectedProject)}><Pencil size={12} /></Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Usuń projekt" title="Usuń projekt" onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}><Trash2 size={12} /></Button>
+          </div>
+          <div className="work-project-progress"><span>Postęp</span><strong>{formatProjectProgress(count)}</strong><span className="work-progress"><i style={{ width: `${progress}%` }} /></span><b>{progress}%</b></div>
+        </header>
+        <section className="work-project-task-panel" aria-labelledby="work-project-tasks-title">
+          <header className="work-section-heading"><div><ListTree size={14} aria-hidden="true" /><h3 id="work-project-tasks-title">Zadania projektu</h3><span>{formatOpenTaskCount(count.open)}</span></div><div className="work-section-heading__actions"><span className="work-task-tree__hint">Przeciągnij zadanie na inne, aby je zagnieździć</span><Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openTaskEditor()}>Zadanie</Button></div></header>
+          {completionUndo && <div className="work-completion-undo" role="status"><span>{completionUndo.label}</span><Button variant="quiet" size="sm" onClick={undoCompletionChange}>Cofnij</Button><button type="button" aria-label="Zamknij komunikat" onClick={() => setCompletionUndo(null)}><X size={13} /></button></div>}
+          {renderTaskTree()}
+        </section>
+      </div>
+    );
+  };
+
+  const renderToolbar = () => {
+    const labels: Record<WorkView, string> = {
+      today: "Dzisiaj w pracy",
+      week: "Ten tydzień",
+      active: "Wszystkie aktywne",
+      unassigned: "Nieprzypisane",
+      archive: "Archiwum",
+      company: selectedCompany?.name ?? "Firma",
+      project: selectedProject?.name ?? "Projekt",
+    };
+    const showTaskFilters = view !== "company" && view !== "archive";
+    const showProjectFilters = view === "company";
+    const toolbarWidthClass = view === "company" || view === "active" ? "work-toolbar--table" : "";
+    return (
+      <WorkspaceToolbar className={`work-toolbar ${toolbarWidthClass}`}>
+        <div className="work-toolbar__context"><span>{labels[view]}</span>{view !== "company" && view !== "project" && <small>{view === "today" ? "Najważniejsze rzeczy na teraz" : "Widok roboczy"}</small>}</div>
+        {showTaskFilters && (
+          <div className="work-toolbar__controls">
+            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="sr-only">Szukaj w pracy</span><input value={search} placeholder="Szukaj w pracy" onChange={(event) => setSearch(event.target.value)} /></label>
+            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Każdy status" }, ...TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
+            <Select compact aria-label="Filtruj po priorytecie" value={priorityFilter} options={[{ value: "all", label: "Każdy priorytet" }, ...PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))]} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} />
+          </div>
+        )}
+        {showProjectFilters && (
+          <div className="work-toolbar__controls">
+            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="sr-only">Szukaj projektów</span><input value={companySearch} placeholder="Szukaj projektów" onChange={(event) => setCompanySearch(event.target.value)} /></label>
+            <Select compact aria-label="Filtruj projekty po statusie" value={companyStatusFilter} options={[{ value: "all", label: "Każdy status" }, ...Object.entries(PROJECT_STATUS_LABELS).filter(([value]) => value !== "completed").map(([value, label]) => ({ value, label }))]} onChange={(event) => setCompanyStatusFilter(event.target.value as CompanyProjectStatusFilter)} />
+            <Select compact aria-label="Sortuj projekty" value={companySort} options={[{ value: "name", label: "Sortuj: nazwa" }, { value: "progress", label: "Sortuj: postęp" }, { value: "endDate", label: "Sortuj: termin" }]} onChange={(event) => setCompanySort(event.target.value as CompanyProjectSort)} />
+          </div>
+        )}
+      </WorkspaceToolbar>
+    );
+  };
+
+  const renderMainView = () => {
+    if (view === "today") return renderTodayView();
+    if (view === "week") return renderWeekView();
+    if (view === "active") return renderActiveView();
+    if (view === "unassigned") return renderUnassignedView();
+    if (view === "archive") return renderArchiveView();
+    if (view === "company") return renderCompanyView();
+    return renderProjectView();
+  };
+
+  const sidebar = (
+    <ContextSidebar label="Widoki pracy" className="work-context-sidebar">
+      <nav className="work-sidebar-nav" aria-label="Widoki pracy">
+        <p className="work-sidebar-section-label">Widoki</p>
+        <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={filterTaskList(relevantOpenTasks).filter((task) => taskAnchorDate(task) === today).length} onClick={() => navigate("today")} />
+        <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={filterTaskList(relevantOpenTasks).filter((task) => weekDates.includes(taskAnchorDate(task))).length} onClick={() => navigate("week")} />
+        <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie aktywne" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
+
+        <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Firmy</p>
+        {workspace.companies.map((company) => {
+          const projectCount = workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length;
+          return <ContextNavItem key={company.id} active={view === "company" && selectedCompanyId === company.id} icon={<span className="work-company-dot" style={{ background: company.color }} />} label={company.name} meta={projectCount} onClick={() => navigate("company", company.id)} />;
+        })}
+        {!workspace.companies.length && <p className="work-sidebar-empty">Dodaj firmę, aby uporządkować projekty.</p>}
+
+        <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Pozostałe</p>
+        <ContextNavItem active={view === "unassigned"} icon={<Inbox />} label="Nieprzypisane" meta={workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length} onClick={() => navigate("unassigned")} />
+        <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length} onClick={() => navigate("archive")} />
+      </nav>
+      <div className="work-sidebar-footer"><CircleDot size={12} aria-hidden="true" /><span>Dane zapisują się lokalnie</span></div>
+    </ContextSidebar>
+  );
+
+  const renderMobileContextNav = () => {
+    const items = [
+      { key: "today", label: "Dzisiaj", icon: <Clock3 />, meta: filterTaskList(relevantOpenTasks).filter((task) => taskAnchorDate(task) === today).length, onClick: () => navigate("today") },
+      { key: "week", label: "Ten tydzień", icon: <CalendarDays />, meta: filterTaskList(relevantOpenTasks).filter((task) => weekDates.includes(taskAnchorDate(task))).length, onClick: () => navigate("week") },
+      { key: "active", label: "Aktywne", icon: <LayoutDashboard />, meta: relevantOpenTasks.length, onClick: () => navigate("active") },
+      ...(selectedProject ? [{ key: `project-${selectedProject.id}`, label: selectedProject.name, icon: <FolderKanban />, meta: undefined, onClick: () => navigate("project", selectedProject.companyId, selectedProject.id) }] : []),
+      ...workspace.companies.map((company) => ({
+        key: `company-${company.id}`,
+        label: company.name,
+        icon: <span className="work-company-dot" style={{ background: company.color }} />,
+        meta: workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length,
+        onClick: () => navigate("company", company.id),
+      })),
+      { key: "unassigned", label: "Nieprzypisane", icon: <Inbox />, meta: workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length, onClick: () => navigate("unassigned") },
+      { key: "archive", label: "Archiwum", icon: <Archive />, meta: workspace.projects.filter((project) => project.status === "completed").length, onClick: () => navigate("archive") },
+    ];
+    return (
+      <nav className="work-mobile-nav" aria-label="Skróty widoków pracy">
+        <div className="work-mobile-nav__scroll">
+          {items.map((item) => {
+            const active = item.key === view || (item.key === `company-${selectedCompanyId}` && view === "company") || (item.key === `project-${selectedProjectId}` && view === "project");
+            return (
+              <button key={item.key} type="button" className={`work-mobile-nav__item ${active ? "is-active" : ""}`} aria-current={active ? "page" : undefined} onClick={item.onClick}>
+                <span className="work-mobile-nav__icon">{item.icon}</span>
+                <span className="work-mobile-nav__label">{item.label}</span>
+                {item.meta !== undefined && <span className="work-mobile-nav__meta">{item.meta}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     );
   };
 
@@ -830,739 +1597,151 @@ export default function Praca() {
     <ModuleShell
       className="work-module"
       pageWidth="wide"
-      ambient={{
-        scene: "work",
-        progress: workspace.tasks.length
-          ? workspace.tasks.filter((task) => task.completed).length / workspace.tasks.length
-          : 0,
-        signal: workspace.tasks.filter((task) => task.completed).length,
-      }}
+      ambient={{ scene: "work", progress: workspace.tasks.length ? workspace.tasks.filter((task) => getTaskStatus(task) === "completed").length / workspace.tasks.length : 0 }}
       header={(
         <PageHeader
           title="Praca"
-          description="Firmy, projekty i zadania w jednym osobistym widoku"
-          actions={selectedCompany ? (
-            <>
-              <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>
-                <span className="header-action-label">Dodaj firmę</span>
-              </Button>
-              <Button
-                variant="primary"
-                leadingIcon={<Plus size={13} />}
-                onClick={() => openProjectEditor()}
-              >
-                <span className="header-action-label">Dodaj projekt</span>
-              </Button>
-            </>
-          ) : (
-            <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>
-              <span className="header-action-label">Dodaj firmę</span>
-            </Button>
+          description="Dzisiaj, terminy i projekty w jednym miejscu"
+          actions={(
+            <div className="work-add-menu">
+              <MenuTrigger ref={addTriggerRef} open={addMenuOpen} menuId="work-add-menu" className="ui-button ui-button--primary" onClick={() => setAddMenuOpen((current) => !current)}><Plus size={13} /> Dodaj</MenuTrigger>
+              {addMenuOpen && (
+                <Menu id="work-add-menu" className="work-add-menu__panel" triggerRef={addTriggerRef} onDismiss={() => setAddMenuOpen(false)}>
+                  <MenuItem leadingIcon={<Building2 size={14} />} onClick={() => { setAddMenuOpen(false); openCompanyEditor(); }}>Nowa firma</MenuItem>
+                  <MenuItem leadingIcon={<FolderKanban size={14} />} onClick={() => { setAddMenuOpen(false); openProjectEditor(); }}>Nowy projekt</MenuItem>
+                  <MenuItem leadingIcon={<ListTree size={14} />} onClick={() => { setAddMenuOpen(false); openTaskEditor(); }}>Nowe zadanie</MenuItem>
+                </Menu>
+              )}
+            </div>
           )}
         />
       )}
-      contextSidebar={(
-        <ContextSidebar label="Nawigacja pracy" className="work-company-sidebar">
-          <div className="work-projects-sidebar-heading">
-            <strong>Praca</strong>
-            <span>Firmy i projekty</span>
-          </div>
-          <nav className="work-company-list" aria-label="Widoki pracy i firmy">
-            <p className="work-sidebar-section-label">Główne</p>
-            <ContextNavItem
-              active={isOverview && overviewScope === "overview"}
-              icon={<LayoutDashboard />}
-              label="Przegląd"
-              meta={workspace.companies.length}
-              onClick={() => showOverview("overview")}
-            />
-            <ContextNavItem
-              active={isOverview && overviewScope === "all"}
-              icon={<ListTree />}
-              label="Wszystkie zadania"
-              meta={workspace.tasks.filter((task) => !task.completed).length}
-              onClick={() => showOverview("all")}
-            />
-            <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Firmy</p>
-            {workspace.companies.map((company) => {
-              const projects = workspace.projects.filter((project) => project.companyId === company.id);
-              const expanded = expandedCompanyIds.has(company.id);
-              const active = company.id === selectedCompanyId;
-              return (
-                <div key={company.id} className="work-company-tree-group">
-                  <ContextNavItem
-                    active={active && !selectedProjectId}
-                    aria-expanded={expanded}
-                    aria-label={expanded ? `Zwiń firmę ${company.name}` : `Rozwiń firmę ${company.name}`}
-                    icon={expanded ? <ChevronDown /> : <ChevronRight />}
-                    label={company.name}
-                    meta={companyProjectCounts.get(company.id) ?? 0}
-                    onClick={() => toggleCompanyExpanded(company.id)}
-                  />
-                  {expanded && (
-                    <div className="work-project-tree" role="group" aria-label={`Projekty firmy ${company.name}`}>
-                      {projects.map((project, projectIndex) => {
-                        const count = projectTaskCounts.get(project.id) ?? { completed: 0, total: 0 };
-                        const shadeStrength = 92 - (projectIndex % 5) * 13;
-                        return (
-                          <ContextNavItem
-                            key={project.id}
-                            active={project.id === selectedProjectId}
-                            aria-current={project.id === selectedProjectId ? "page" : undefined}
-                            icon={(
-                              <span
-                                className="work-project-tree__status"
-                                style={{
-                                  background: `color-mix(in srgb, ${company.color} ${shadeStrength}%, var(--color-chalk-white))`,
-                                }}
-                              />
-                            )}
-                            label={project.name}
-                            meta={`${count.completed}/${count.total}`}
-                            onClick={() => selectProject(company.id, project.id)}
-                          />
-                        );
-                      })}
-                      {projects.length === 0 && (
-                        <ContextNavItem
-                          icon={<Plus />}
-                          label="Dodaj projekt"
-                          onClick={() => {
-                            setSelectedCompanyId(company.id);
-                            setSelectedProjectId("");
-                            openProjectEditor();
-                          }}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Pozostałe</p>
-            <ContextNavItem
-              active={isOverview && overviewScope === "archive"}
-              icon={<Archive />}
-              label="Archiwum"
-              meta={workspace.projects.filter((project) => project.status === "completed").length}
-              onClick={() => showOverview("archive")}
-            />
-          </nav>
-          {workspace.companies.length === 0 && (
-            <p className="work-sidebar-empty">Dodaj pierwszą firmę, aby rozpocząć pracę z projektami.</p>
-          )}
-          {selectedCompany && (
-            <div className="work-sidebar-footer">
-              <div>
-                <span style={{ background: selectedCompany.color }} />
-                <p>{selectedCompany.description || "Bez opisu"}</p>
-              </div>
-              <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj wybraną firmę" onClick={() => openCompanyEditor(selectedCompany)}>
-                <Pencil size={12} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                iconOnly
-                aria-label="Usuń wybraną firmę"
-                onClick={() => setDeleteState({ kind: "company", id: selectedCompany.id, name: selectedCompany.name })}
-              >
-                <Trash2 size={12} />
-              </Button>
+      contextSidebar={sidebar}
+      detailPanel={detailTask ? (
+        <DetailPanel label="Szczegóły zadania" onDismiss={() => setDetailTaskId(null)} className="work-detail-panel">
+          <header className="work-detail-header"><div><span className="work-detail-kicker">Zadanie</span><h2>{detailTask.title}</h2></div><Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setDetailTaskId(null)}><X size={14} /></Button></header>
+          <div className="work-detail-body">
+            <div className="work-detail-context">
+              <span>{detailTaskCompany?.name ?? "Nieprzypisane"}</span>
+              <strong>{detailTaskProject?.name ?? "Bez projektu"}</strong>
+              {detailTaskContext?.parentLabel && (
+                <span className="work-detail-context__parent"><CornerDownRight size={13} aria-hidden="true" />{detailTaskContext.parentLabel}</span>
+              )}
             </div>
-          )}
-        </ContextSidebar>
-      )}
-    >
-      <ModuleMain>
-        {storageError && (
-          <div className="work-storage-error" role="alert">
-            Nie udało się zapisać zmian lokalnie. Sprawdź ustawienia pamięci przeglądarki.
-          </div>
-        )}
-
-        {isOverview ? (
-          <section className="work-overview" aria-labelledby="work-overview-title">
-            <header className="work-overview__header">
-              <div>
-                <h2 id="work-overview-title">
-                  {overviewScope === "all" ? "Wszystkie zadania" : overviewScope === "archive" ? "Archiwum pracy" : "Przegląd pracy"}
-                </h2>
-                <p>
-                  {overviewScope === "all"
-                    ? `${workspace.tasks.filter((task) => !task.completed).length} otwartych zadań we wszystkich projektach`
-                    : overviewScope === "archive"
-                      ? `${workspace.projects.filter((project) => project.status === "completed").length} zakończonych projektów`
-                      : `Firmy ${workspace.companies.length} · Projekty ${workspace.projects.length} · Otwarte zadania ${activeOpenTasks.length}`}
-                </p>
-              </div>
-            </header>
-
-            {overviewScope === "all" ? (
-              <section className="work-overview-panel work-overview-panel--full" aria-label="Wszystkie zadania">
-                <div className="work-overview-task-list">
-                  {workspace.tasks
-                    .filter((task) => !task.completed)
-                    .map((task) => {
-                      const project = workspace.projects.find((candidate) => candidate.id === task.projectId);
-                      const company = project ? workspace.companies.find((candidate) => candidate.id === project.companyId) : undefined;
-                      if (!project || !company) return null;
-                      return (
-                        <button key={task.id} type="button" onClick={() => selectProject(company.id, project.id)}>
-                          <span className={`work-overview-task__priority work-overview-task__priority--${task.priority}`}><Flag size={11} /></span>
-                          <span className="work-overview-task__copy"><strong>{task.title}</strong><small>{company.name} · {project.name}</small></span>
-                          <span className="work-overview-task__due">{task.dueDate ? formatDueDate(task.dueDate) : PRIORITY_LABELS[task.priority]}</span>
-                          <ChevronRight size={13} />
-                        </button>
-                      );
-                    })}
-                  {workspace.tasks.every((task) => task.completed) && <p className="work-overview-panel__empty">Nie ma otwartych zadań.</p>}
+            <div className="work-detail-facts" aria-label="Informacje o zadaniu">
+              <div><span>Typ</span><strong>{detailTaskParent ? "Podzadanie" : "Zadanie główne"}</strong></div>
+              <div><span>Utworzono</span><strong>{formatDate(detailTask.createdAt.slice(0, 10))}</strong></div>
+            </div>
+            {detailTaskDescendantRows.length > 0 && detailTaskProgress !== null && (
+              <section className="work-detail-subtasks" aria-label="Podzadania">
+                <header className="work-detail-subtasks__header">
+                  <div><span>Podzadania</span><strong>{formatSubtaskProgress(detailTaskCompletedDescendants, detailTaskDescendants.length)}</strong></div>
+                  <span>{detailTaskProgress}%</span>
+                </header>
+                <div className="work-detail-subtasks__progress" role="progressbar" aria-label="Postęp podzadań" aria-valuemin={0} aria-valuemax={100} aria-valuenow={detailTaskProgress}>
+                  <span style={{ width: `${detailTaskProgress}%` }} />
                 </div>
-              </section>
-            ) : overviewScope === "archive" ? (
-              <section className="work-overview-panel work-overview-panel--full" aria-label="Zakończone projekty">
-                <div className="work-overview-project-list">
-                  {workspace.projects.filter((project) => project.status === "completed").map((project) => {
-                    const company = workspace.companies.find((candidate) => candidate.id === project.companyId);
-                    if (!company) return null;
+                <div className="work-detail-subtask-list">
+                  {(detailSubtasksExpanded ? detailTaskDescendantRows : detailTaskDescendantRows.slice(0, 4)).map(({ task: child, depth }) => {
+                    const childStatus = getTaskStatus(child);
+                    const childDate = child.dueDate || child.startDate;
                     return (
-                      <button key={project.id} type="button" onClick={() => selectProject(company.id, project.id)}>
-                        <span className="work-overview-project__copy"><strong>{project.name}</strong><small>{company.name}</small></span>
-                        <ChevronRight size={13} />
+                      <button
+                        key={child.id}
+                        type="button"
+                        className="work-detail-subtask"
+                        style={{ "--work-subtask-depth": depth } as CSSProperties}
+                        title={child.title}
+                        onClick={() => toggleTaskDetails(child.id)}
+                      >
+                        <span className={`work-detail-subtask__status ${taskStatusTone(childStatus)}`}>{taskStatusIcon(childStatus)}</span>
+                        <span className="work-detail-subtask__title">{child.title}</span>
+                        <span className="work-detail-subtask__label">{TASK_STATUS_LABELS[childStatus]}</span>
+                        <span className="work-detail-subtask__date">{childDate ? formatDate(childDate) : "Bez terminu"}</span>
+                        <ChevronRight size={13} aria-hidden="true" />
                       </button>
                     );
                   })}
-                  {workspace.projects.every((project) => project.status !== "completed") && <p className="work-overview-panel__empty">Archiwum jest puste.</p>}
                 </div>
-              </section>
-            ) : workspace.companies.length === 0 ? (
-              <EmptyState
-                icon={<Building2 size={18} />}
-                title="Dodaj pierwszą firmę"
-                description="Przegląd zbierze tutaj wszystkie firmy, ich projekty i liczbę otwartych zadań."
-                action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openCompanyEditor()}>Dodaj firmę</Button>}
-              />
-            ) : (
-              <>
-                <div className="work-overview-table">
-                  <div className="work-overview-table__head" aria-hidden="true">
-                    <span>Firma</span>
-                    <span>Projekty</span>
-                    <span>Otwarte</span>
-                    <span>Postęp</span>
-                    <span />
-                  </div>
-                  <div className="work-overview-table__body">
-                    {workspace.companies.map((company) => {
-                      const summary = companySummaries.get(company.id);
-                      const projectNames = summary?.projects.map((project) => project.name) ?? [];
-                      return (
-                        <button
-                          key={company.id}
-                          type="button"
-                          className="work-overview-row"
-                          onClick={() => selectCompany(company.id)}
-                        >
-                          <span className="work-overview-row__company">
-                            <i style={{ background: company.color }} />
-                            <span>
-                              <strong>{company.name}</strong>
-                              <small>{company.description || "Bez opisu"}</small>
-                            </span>
-                          </span>
-                          <span className="work-overview-row__projects">
-                            <strong>{summary?.projects.length ?? 0}</strong>
-                            <small>{projectNames.length ? projectNames.slice(0, 2).join(" · ") : "Brak projektów"}</small>
-                          </span>
-                          <span className="work-overview-row__open">
-                            <strong>{summary?.openTasks ?? 0}</strong>
-                            <small>z {summary?.totalTasks ?? 0} zadań</small>
-                          </span>
-                          <span
-                            className="work-overview-row__progress"
-                            role="progressbar"
-                            aria-label={`Postęp firmy ${company.name}`}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={summary?.progress ?? 0}
-                          >
-                            <span><i style={{ width: `${summary?.progress ?? 0}%` }} /></span>
-                            <strong>{summary?.progress ?? 0}%</strong>
-                          </span>
-                          <ChevronRight size={14} aria-hidden="true" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="work-overview-insights">
-                  <section className="work-overview-panel" aria-labelledby="work-next-tasks-title">
-                    <header>
-                      <div>
-                        <CalendarDays size={14} aria-hidden="true" />
-                        <h3 id="work-next-tasks-title">Najbliższe i ważne</h3>
-                      </div>
-                      <span>{activeOpenTasks.length} w aktywnych projektach</span>
-                    </header>
-                    <div className="work-overview-task-list">
-                      {overviewTasks.map((task) => {
-                        const project = workspace.projects.find((candidate) => candidate.id === task.projectId);
-                        const company = project
-                          ? workspace.companies.find((candidate) => candidate.id === project.companyId)
-                          : undefined;
-                        if (!project || !company) return null;
-                        return (
-                          <button
-                            key={task.id}
-                            type="button"
-                            onClick={() => selectProject(company.id, project.id)}
-                          >
-                            <span className={`work-overview-task__priority work-overview-task__priority--${task.priority}`}>
-                              <Flag size={11} aria-hidden="true" />
-                            </span>
-                            <span className="work-overview-task__copy">
-                              <strong>{task.title}</strong>
-                              <small>{company.name} · {project.name}</small>
-                            </span>
-                            <span className="work-overview-task__due">
-                              {task.dueDate ? formatDueDate(task.dueDate) : PRIORITY_LABELS[task.priority]}
-                            </span>
-                            <ChevronRight size={13} aria-hidden="true" />
-                          </button>
-                        );
-                      })}
-                      {overviewTasks.length === 0 && (
-                        <p className="work-overview-panel__empty">Nie ma żadnych otwartych zadań.</p>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="work-overview-panel" aria-labelledby="work-active-projects-title">
-                    <header>
-                      <div>
-                        <FolderKanban size={14} aria-hidden="true" />
-                        <h3 id="work-active-projects-title">Aktywne projekty</h3>
-                      </div>
-                      <span>{workspace.projects.filter((project) => project.status === "active").length} aktywnych</span>
-                    </header>
-                    <div className="work-overview-project-list">
-                      {overviewProjects.map((project) => {
-                        const company = workspace.companies.find((candidate) => candidate.id === project.companyId);
-                        const count = projectTaskCounts.get(project.id) ?? { completed: 0, total: 0 };
-                        const projectProgress = count.total ? Math.round((count.completed / count.total) * 100) : 0;
-                        if (!company) return null;
-                        return (
-                          <button
-                            key={project.id}
-                            type="button"
-                            onClick={() => selectProject(company.id, project.id)}
-                          >
-                            <span className="work-overview-project__copy">
-                              <strong>{project.name}</strong>
-                              <small>{company.name} · {count.total - count.completed} otwartych</small>
-                            </span>
-                            <span
-                              className="work-overview-project__progress"
-                              role="progressbar"
-                              aria-label={`Postęp projektu ${project.name}`}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              aria-valuenow={projectProgress}
-                            >
-                              <span><i style={{ width: `${projectProgress}%` }} /></span>
-                              <strong>{projectProgress}%</strong>
-                            </span>
-                            <ChevronRight size={13} aria-hidden="true" />
-                          </button>
-                        );
-                      })}
-                      {overviewProjects.length === 0 && (
-                        <p className="work-overview-panel__empty">Brak aktywnych projektów.</p>
-                      )}
-                    </div>
-                  </section>
-                </div>
-              </>
-            )}
-          </section>
-        ) : (
-          <>
-            <WorkspaceToolbar className="work-toolbar">
-              <div className="work-desktop-context" aria-label="Bieżąca firma">
-                <span className="work-company-dot" style={{ background: selectedCompany?.color }} />
-                <strong>{selectedCompany?.name}</strong>
-                {selectedCompany?.description && <small>{selectedCompany.description}</small>}
-              </div>
-              <div className="work-mobile-context">
-                <Select
-                  compact
-                  aria-label="Wybierz projekt"
-                  value={selectedProjectId}
-                  disabled={companyProjects.length === 0}
-                  options={companyProjects.map((project) => ({ value: project.id, label: project.name }))}
-                  onChange={(event) => selectProject(selectedCompanyId, event.target.value)}
-                />
-              </div>
-              <label className="work-search">
-                <Search size={13} aria-hidden="true" />
-                <span className="sr-only">Szukaj zadań</span>
-                <input
-                  value={search}
-                  placeholder="Szukaj w projekcie"
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                className={`work-completed-toggle ${showCompleted ? "is-active" : ""}`}
-                aria-pressed={showCompleted}
-                onClick={() => setShowCompleted((current) => !current)}
-              >
-                <Check size={12} aria-hidden="true" />
-                Ukończone
-              </button>
-              <div className="ui-view-switch" aria-label="Sposób wyświetlania zadań">
-                <Button variant="ghost" size="sm" iconOnly aria-label="Widok listy" aria-pressed={workView === "list"} onClick={() => setWorkView("list")}>
-                  <ListTree size={14} />
-                </Button>
-                <Button variant="ghost" size="sm" iconOnly aria-label="Widok tablicy" aria-pressed={workView === "board"} onClick={() => setWorkView("board")}>
-                  <Columns3 size={14} />
-                </Button>
-                <Button variant="ghost" size="sm" iconOnly aria-label="Widok kalendarza" aria-pressed={workView === "calendar"} onClick={() => setWorkView("calendar")}>
-                  <CalendarDays size={14} />
-                </Button>
-              </div>
-            </WorkspaceToolbar>
-
-          <section className="work-task-canvas" aria-label="Zadania projektu">
-            {!selectedProject ? (
-              <EmptyState
-                icon={<FolderKanban size={18} />}
-                title="Utwórz projekt"
-                description={`Dodaj pierwszy projekt dla firmy ${selectedCompany?.name ?? ""}.`}
-                action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openProjectEditor()}>Dodaj projekt</Button>}
-              />
-            ) : (
-              <>
-                <header className="work-project-header">
-                  <div className="work-project-header__identity">
-                    <div className="work-project-header__icon">
-                      <FolderKanban size={16} aria-hidden="true" />
-                    </div>
-                    <div>
-                      <div className="work-project-header__title">
-                        <h2>{selectedProject.name}</h2>
-                        <span className={`work-project-status work-project-status--${selectedProject.status}`}>
-                          {PROJECT_STATUS_LABELS[selectedProject.status]}
-                        </span>
-                      </div>
-                      <p>{selectedProject.description || "Dodaj krótki opis projektu, aby zachować kontekst."}</p>
-                    </div>
-                  </div>
-                  <div className="work-project-header__actions">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      iconOnly
-                      aria-label="Edytuj projekt"
-                      title="Edytuj projekt"
-                      onClick={() => openProjectEditor(selectedProject)}
-                    >
-                      <Pencil size={12} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      iconOnly
-                      aria-label="Usuń projekt"
-                      title="Usuń projekt"
-                      onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}
-                    >
-                      <Trash2 size={12} />
-                    </Button>
-                  </div>
-                  <div className="work-project-progress">
-                    <div>
-                      <span>Postęp</span>
-                      <strong>{completedCount} z {projectTasks.length}</strong>
-                    </div>
-                    <div
-                      className="work-project-progress__track"
-                      role="progressbar"
-                      aria-label={`Postęp projektu ${selectedProject.name}`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={progress}
-                      aria-valuetext={`${completedCount} z ${projectTasks.length} zadań ukończonych`}
-                    >
-                      <span style={{ transform: `scaleX(${progress / 100})` }} />
-                    </div>
-                    <b>{progress}%</b>
-                  </div>
-                </header>
-
-                {workView === "list" ? (
-                <div className="work-task-list">
-                  {completionUndo && (
-                    <div className="work-completion-undo" role="status">
-                      <span>{completionUndo.label}</span>
-                      <Button variant="quiet" size="sm" onClick={undoCompletionChange}>Cofnij</Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        iconOnly
-                        aria-label="Zamknij komunikat"
-                        onClick={() => setCompletionUndo(null)}
-                      >
-                        ×
-                      </Button>
-                    </div>
-                  )}
-                  <div className="work-task-list__heading">
-                    <div>
-                      <ListTree size={14} aria-hidden="true" />
-                      <h3>Zadania</h3>
-                      <span>{projectTasks.filter((task) => !task.completed).length} otwartych</span>
-                    </div>
-                    <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openTaskEditor()}>
-                      Zadanie
-                    </Button>
-                  </div>
-
-                  {projectTasks.length === 0 ? (
-                    <EmptyState
-                      icon={<ListTree size={18} />}
-                      title="Pierwsze zadanie nada projektowi rytm"
-                      description="Zacznij od większego kroku. Podzadania możesz dodawać na dowolnym poziomie."
-                      action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Dodaj zadanie</Button>}
-                    />
-                  ) : visibleTaskIds.size === 0 ? (
-                    <div className="work-no-results">
-                      <Circle size={16} aria-hidden="true" />
-                      <p>{search ? "Brak zadań pasujących do wyszukiwania." : "Wszystkie zadania w tym widoku są ukończone."}</p>
-                      {!search && <button type="button" onClick={() => setShowCompleted(true)}>Pokaż ukończone</button>}
-                    </div>
-                  ) : (
-                    <div className="work-task-tree">
-                      {(tasksByParent.get(null) ?? []).map((task) => renderTask(task, 0))}
-                    </div>
-                  )}
-                </div>
-                ) : workView === "board" ? (
-                  <div className="work-board" aria-label="Tablica zadań">
-                    {([
-                      { id: "todo", label: "Do zrobienia" },
-                      { id: "doing", label: "W toku" },
-                      { id: "done", label: "Gotowe" },
-                    ] as const).map((column) => {
-                      const rootTasks = (tasksByParent.get(null) ?? []).filter((task) => {
-                        const descendants = collectTaskBranch(projectTasks, task.id);
-                        descendants.delete(task.id);
-                        const hasCompletedChild = projectTasks.some((candidate) => descendants.has(candidate.id) && candidate.completed);
-                        const status = task.completed ? "done" : hasCompletedChild ? "doing" : "todo";
-                        return status === column.id && (showCompleted || !task.completed);
-                      });
-                      return (
-                        <section key={column.id} className="work-board__column">
-                          <header><h3>{column.label}</h3><span>{rootTasks.length}</span></header>
-                          <div>
-                            {rootTasks.map((task) => {
-                              const branch = collectTaskBranch(projectTasks, task.id);
-                              const children = projectTasks.filter((candidate) => candidate.id !== task.id && branch.has(candidate.id));
-                              const done = children.filter((candidate) => candidate.completed).length;
-                              return (
-                                <button key={task.id} type="button" className="work-board-card" onClick={() => openTaskEditor(task)}>
-                                  <strong>{task.title}</strong>
-                                  <span>{task.dueDate ? formatDueDate(task.dueDate) : PRIORITY_LABELS[task.priority]}</span>
-                                  {children.length > 0 && <small>{done}/{children.length} podzadań</small>}
-                                </button>
-                              );
-                            })}
-                            {rootTasks.length === 0 && <p className="work-board__empty">Brak zadań</p>}
-                          </div>
-                        </section>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="work-calendar" aria-label="Kalendarz zadań projektu">
-                    <div className="work-calendar__toolbar">
-                      <Button variant="ghost" size="sm" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>Poprzedni</Button>
-                      <strong>{calendarMonth.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })}</strong>
-                      <Button variant="ghost" size="sm" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Następny</Button>
-                    </div>
-                    <div className="work-calendar__weekdays" aria-hidden="true">
-                      {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Niedz"].map((day) => <span key={day}>{day}</span>)}
-                    </div>
-                    <div className="work-calendar__grid">
-                      {Array.from({ length: (new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() + 6) % 7 }).map((_, index) => <span key={`blank-${index}`} className="is-empty" />)}
-                      {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate() }, (_, index) => index + 1).map((day) => {
-                        const key = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                        const dayTasks = projectTasks.filter((task) => task.dueDate === key && (showCompleted || !task.completed));
-                        return (
-                          <section key={key} className="work-calendar__day">
-                            <span>{day}</span>
-                            {dayTasks.map((task) => (
-                              <button key={task.id} type="button" onClick={() => openTaskEditor(task)}>{task.title}</button>
-                            ))}
-                          </section>
-                        );
-                      })}
-                    </div>
-                  </div>
+                {detailTaskDescendantRows.length > 4 && (
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    aria-expanded={detailSubtasksExpanded}
+                    onClick={() => setDetailSubtasksExpanded((current) => !current)}
+                  >
+                    {detailSubtasksExpanded ? "Pokaż mniej" : `Pokaż ${detailTaskDescendantRows.length - 4} pozostałe`}
+                  </Button>
                 )}
-              </>
+              </section>
             )}
-          </section>
-          </>
-        )}
+            <div className="work-detail-fields">
+              <Select label="Status" value={getTaskStatus(detailTask)} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => applyTaskStatuses([detailTask.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
+              <Select label="Priorytet" value={detailTask.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, priority: event.target.value as WorkTaskPriority } : task) })); showSaveNotice(); }} />
+              <div className="work-detail-date-grid"><Input type="date" label="Start" value={detailTask.startDate ?? ""} max={detailTask.dueDate || undefined} onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, startDate: event.target.value } : task) })); showSaveNotice(); }} /><Input type="date" label="Termin" value={detailTask.dueDate} min={detailTask.startDate || undefined} onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, dueDate: event.target.value } : task) })); showSaveNotice(); }} /></div>
+              <label className="ui-field"><span className="ui-field__label">Notatka</span><textarea className="ui-field__control work-detail-note" value={detailTask.note ?? ""} placeholder="Krótka notatka" onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, note: event.target.value } : task) })); showSaveNotice(); }} /></label>
+            </div>
+          </div>
+          <footer className="work-detail-footer">
+            <span className={`work-detail-save-status ${saveStatus === "saved" ? "is-saved" : saveStatus === "saving" ? "is-saving" : ""}`} role="status" aria-live="polite">
+              {saveStatus === "saving" ? "Zapisywanie…" : saveStatus === "saved" ? <><Check size={12} aria-hidden="true" /> Zapisano</> : "Autozapis lokalny"}
+            </span>
+            <Button className="work-detail-delete" variant="danger" leadingIcon={<Trash2 size={13} />} onClick={() => setDeleteState({ kind: "task", id: detailTask.id, name: detailTask.title })}>Usuń</Button>
+          </footer>
+        </DetailPanel>
+      ) : undefined}
+    >
+      <ModuleMain>
+        {storageError && <div className="work-storage-error" role="alert">Nie udało się zapisać zmian lokalnie. Sprawdź ustawienia pamięci przeglądarki.</div>}
+        {renderToolbar()}
+        {renderMobileContextNav()}
+        <div className="work-main-scroll">{renderMainView()}</div>
       </ModuleMain>
 
       {editor && (
-        <Modal
-          title={editorTitle}
-          description={editorDescription}
-          eyebrow={editor.kind === "company" ? "Firma" : editor.kind === "project" ? "Projekt" : "Zadanie"}
-          onClose={closeEditor}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={closeEditor}>Anuluj</Button>
-              <Button variant="primary" type="submit" form="work-editor-form">
-                {editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}
-              </Button>
-            </>
-          )}
-        >
+        <Modal title={editorTitle} description={editorDescription} eyebrow={editor.kind === "company" ? "Firma" : editor.kind === "project" ? "Projekt" : "Zadanie"} onClose={closeEditor} footer={<><Button variant="ghost" onClick={closeEditor}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form">{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
           <form id="work-editor-form" className="work-editor-form" onSubmit={submitEditor}>
-            <Input
-              label={editor.kind === "task" ? "Nazwa zadania" : "Nazwa"}
-              value={draft.name}
-              placeholder={editor.kind === "company" ? "np. Studio North" : editor.kind === "project" ? "np. Nowa strona" : "Co trzeba zrobić?"}
-              error={editorError}
-              autoFocus
-              onChange={(event) => {
-                setDraft((current) => ({ ...current, name: event.target.value }));
-                if (editorError) setEditorError("");
-              }}
-            />
+            <Input label={editor.kind === "task" ? "Nazwa zadania" : "Nazwa"} value={draft.name} error={editorError} autoFocus placeholder={editor.kind === "company" ? "np. Studio North" : editor.kind === "project" ? "np. Nowa strona" : "Co trzeba zrobić?"} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); if (editorError) setEditorError(""); }} />
 
-            {editor.kind !== "task" && (
-              <label className="ui-field">
-                <span className="ui-field__label">Opis <span className="work-optional">opcjonalnie</span></span>
-                <textarea
-                  className="ui-field__control work-textarea"
-                  value={draft.description}
-                  placeholder="Krótki kontekst, który przyda się później"
-                  onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-                />
-              </label>
-            )}
-
-            {editor.kind === "company" && (
-              <fieldset className="work-color-field">
-                <legend>Kolor firmy</legend>
-                <div>
-                  {COMPANY_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={draft.color === color ? "is-selected" : ""}
-                      style={{ background: color }}
-                      aria-label={`Wybierz kolor ${color}`}
-                      aria-pressed={draft.color === color}
-                      onClick={() => setDraft((current) => ({ ...current, color }))}
-                    >
-                      {draft.color === color && <Check size={12} />}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            )}
+            {editor.kind === "company" && <><label className="ui-field"><span className="ui-field__label">Opis <span className="work-optional">opcjonalnie</span></span><textarea className="ui-field__control work-textarea" value={draft.description} placeholder="Czym zajmuje się ta firma?" onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /></label><fieldset className="work-color-field"><legend>Kolor firmy</legend><div>{COMPANY_COLORS.map((color) => <button key={color} type="button" className={draft.color === color ? "is-selected" : ""} style={{ background: color }} aria-label={`Wybierz kolor ${color}`} aria-pressed={draft.color === color} onClick={() => setDraft((current) => ({ ...current, color }))}>{draft.color === color && <Check size={12} />}</button>)}</div></fieldset></>}
 
             {editor.kind === "project" && (
-              <Select
-                label="Status"
-                value={draft.status}
-                options={[
-                  { value: "active", label: "Aktywny", description: "Projekt, nad którym pracujesz" },
-                  { value: "paused", label: "Wstrzymany", description: "Tymczasowo bez działań" },
-                  { value: "completed", label: "Zakończony", description: "Projekt zamknięty" },
-                ]}
-                onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as WorkProjectStatus }))}
-              />
-            )}
-
-            {editor.kind === "task" && (
               <>
                 <Select
-                  label="Poziom w drzewie"
-                  value={draft.parentId}
-                  options={parentOptions}
-                  onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))}
+                  label="Firma"
+                  value={draft.companyId}
+                  options={workspace.companies.map((company) => ({ value: company.id, label: company.name }))}
+                  onChange={(event) => setDraft((current) => ({ ...current, companyId: event.target.value }))}
                 />
-                <div className="work-editor-grid">
-                  <Select
-                    label="Priorytet"
-                    value={draft.priority}
-                    options={[
-                      { value: "none", label: "Bez priorytetu" },
-                      { value: "low", label: "Niski" },
-                      { value: "medium", label: "Średni" },
-                      { value: "high", label: "Wysoki" },
-                    ]}
-                    onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))}
-                  />
-                  <Input
-                    type="date"
-                    label="Termin"
-                    value={draft.dueDate}
-                    onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))}
-                  />
+                <label className="ui-field">
+                  <span className="ui-field__label">Opis <span className="work-optional">opcjonalnie</span></span>
+                  <textarea className="ui-field__control work-textarea" value={draft.description} placeholder="Krótki opis widoczny na liście projektów" onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} />
+                  <p className="ui-field__hint">Krótki opis widoczny na liście projektów.</p>
+                </label>
+                <Select
+                  label="Status"
+                  value={draft.projectStatus}
+                  options={Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => ({ value, label }))}
+                  onChange={(event) => setDraft((current) => ({ ...current, projectStatus: event.target.value as WorkProjectStatus }))}
+                />
+                <div className="work-editor-grid work-editor-grid--dates">
+                  <Input type="date" label="Start" value={draft.startDate} max={draft.endDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
+                  <Input type="date" label="Termin końcowy" value={draft.endDate} min={draft.startDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
                 </div>
+                <label className="ui-field">
+                  <span className="ui-field__label">Notatka wewnętrzna <span className="work-optional">opcjonalnie</span></span>
+                  <textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Informacje niewidoczne w skróconym widoku" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} />
+                  <p className="ui-field__hint">Dodatkowy kontekst dostępny po otwarciu projektu.</p>
+                </label>
               </>
             )}
+
+            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><Input type="date" label="Start" value={draft.startDate} max={draft.endDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} /><Input type="date" label="Termin" value={draft.endDate} min={draft.startDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} /></div><label className="ui-field"><span className="ui-field__label">Notatka <span className="work-optional">opcjonalnie</span></span><textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label></>}
           </form>
         </Modal>
       )}
 
-      {deleteState && (
-        <Modal
-          title={`Usuń ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"}?`}
-          description={deleteState.kind === "company"
-            ? `Firma „${deleteState.name}” zostanie usunięta razem ze wszystkimi projektami i zadaniami.`
-            : deleteState.kind === "project"
-              ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.`
-              : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`}
-          eyebrow="Potwierdzenie"
-          onClose={() => setDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmDelete}>Usuń</Button>
-            </>
-          )}
-        >
-          <p className="work-delete-note">Tej operacji nie można cofnąć.</p>
-        </Modal>
-      )}
-
-      {cascadeState && (
-        <Modal
-          title={`Ukończyć „${cascadeState.taskTitle}”?`}
-          description={`To zadanie ma ${cascadeState.branchIds.length - 1} ${cascadeState.branchIds.length - 1 === 1 ? "podzadanie" : "podzadań"}. Wszystkie zostaną oznaczone jako ukończone.`}
-          eyebrow="Zadanie nadrzędne"
-          onClose={() => setCascadeState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setCascadeState(null)}>Anuluj</Button>
-              <Button variant="primary" onClick={confirmCascadeCompletion}>Ukończ całą gałąź</Button>
-            </>
-          )}
-        >
-          <p className="work-delete-note">Po zatwierdzeniu możesz cofnąć zmianę z komunikatu nad listą zadań.</p>
-        </Modal>
-      )}
+      {deleteState && <Modal title={`Usuń ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"}?`} description={deleteState.kind === "company" ? `Firma „${deleteState.name}” zostanie usunięta razem ze wszystkimi projektami i zadaniami.` : deleteState.kind === "project" ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.` : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`} eyebrow="Potwierdzenie" onClose={() => setDeleteState(null)} footer={<><Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button><Button variant="danger" onClick={confirmDelete}>Usuń</Button></>}><p className="work-delete-note">Tej operacji nie można cofnąć.</p></Modal>}
     </ModuleShell>
   );
 }

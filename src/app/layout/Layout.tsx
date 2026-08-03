@@ -80,12 +80,10 @@ import {
 } from "../experience/preferences";
 import { RouteTransition } from "../experience/transitions";
 import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
-import { AssistantSettingsPanel } from "../../assistant/settings/AssistantSettingsPanel";
 import { useAssistantSettings } from "../../assistant/config/useAssistantSettings";
 import { useAssistant } from "../../assistant/runtime/useAssistant";
 import { AssistantEntryButton } from "../../assistant/ui/AssistantEntryButton";
-import { AssistantStage, type AssistantStageStatus } from "../../assistant/ui/AssistantStage";
-import { AssistantUndoToast } from "../../assistant/ui/AssistantUndoToast";
+import type { AssistantStageStatus } from "../../assistant/ui/AssistantStage";
 
 const SIDEBAR_STORAGE_KEY = "rootine.sidebar.collapsed";
 const LEGACY_SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
@@ -94,6 +92,12 @@ const CommandCenter = lazy(() => import("../experience/CommandCenter")
   .then((module) => ({ default: module.CommandCenter })));
 const DayReplay = lazy(() => import("../experience/DayReplay")
   .then((module) => ({ default: module.DayReplay })));
+const AssistantSettingsPanel = lazy(() => import("../../assistant/settings/AssistantSettingsPanel")
+  .then((module) => ({ default: module.AssistantSettingsPanel })));
+const AssistantStage = lazy(() => import("../../assistant/ui/AssistantStage")
+  .then((module) => ({ default: module.AssistantStage })));
+const AssistantUndoToast = lazy(() => import("../../assistant/ui/AssistantUndoToast")
+  .then((module) => ({ default: module.AssistantUndoToast })));
 
 type WeatherState =
   | { status: "loading" }
@@ -410,6 +414,7 @@ export default function Layout() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandCenterOpen, setCommandCenterOpen] = useState(false);
   const [dayReplayOpen, setDayReplayOpen] = useState(false);
+  const [assistantUiRequested, setAssistantUiRequested] = useState(false);
   const [helpGuideId, setHelpGuideId] = useState<HelpGuideId>(() => {
     if (location.pathname.startsWith("/kalendarz")) return "calendar";
     if (location.pathname.startsWith("/podroze")) return "travel";
@@ -418,6 +423,7 @@ export default function Layout() {
   const [helpQuery, setHelpQuery] = useState("");
   const [saveFeedback, setSaveFeedback] = useState<"error" | null>(null);
   const weatherRequestId = useRef(0);
+  const weatherAbortController = useRef<AbortController | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLElement>(null);
 
@@ -467,12 +473,16 @@ export default function Layout() {
   const todayKey = toLocalDateKey(now);
   const requestWeather = useCallback((forceRefresh = false) => {
     const requestId = ++weatherRequestId.current;
+    weatherAbortController.current?.abort();
+    const controller = new AbortController();
+    weatherAbortController.current = controller;
     setWeather({ status: "loading" });
-    void loadTodayWeather(todayKey, undefined, { forceRefresh })
+    void loadTodayWeather(todayKey, controller.signal, { forceRefresh })
       .then((data) => {
         if (weatherRequestId.current === requestId) setWeather({ status: "ready", data });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         if (weatherRequestId.current === requestId) {
           setWeather({ status: "error", message: "Pogoda jest chwilowo niedostępna" });
         }
@@ -480,9 +490,11 @@ export default function Layout() {
   }, [todayKey]);
 
   useEffect(() => {
-    requestWeather();
+    const frame = window.requestAnimationFrame(() => requestWeather());
     return () => {
+      window.cancelAnimationFrame(frame);
       weatherRequestId.current += 1;
+      weatherAbortController.current?.abort();
     };
   }, [requestWeather]);
 
@@ -547,6 +559,10 @@ export default function Layout() {
   useEffect(() => {
     setOpenMenu(null);
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (assistant.isOpen) setAssistantUiRequested(true);
+  }, [assistant.isOpen]);
 
   useEffect(() => {
     const module = findModuleForPath(location.pathname);
@@ -927,7 +943,9 @@ export default function Layout() {
                 onChange={changeAppTheme}
               />
               <ExperienceSettings />
-              <AssistantSettingsPanel availability={assistant.availability} />
+              <Suspense fallback={null}>
+                <AssistantSettingsPanel availability={assistant.availability} />
+              </Suspense>
               <ModuleSettings {...settingsProps} idPrefix="sidebar" />
               <div className="app-recovery-entry">
                 <RecoveryCenterButton />
@@ -1077,6 +1095,8 @@ export default function Layout() {
           <Suspense fallback={<RouteLoadingState />}>
             <RouteTransition inactive={assistant.isOpen}><Outlet /></RouteTransition>
           </Suspense>
+          {assistantUiRequested && (
+            <Suspense fallback={null}>
           <AssistantStage
             open={assistant.isOpen}
             status={assistantStageStatus}
@@ -1102,6 +1122,8 @@ export default function Layout() {
             onInteraction={assistant.handlePanelInteraction}
             onRetry={() => { void assistant.retry(); }}
           />
+            </Suspense>
+          )}
         </div>
 
         {openMenu?.startsWith("mobile") && (
@@ -1237,7 +1259,9 @@ export default function Layout() {
                   onChange={changeAppTheme}
                 />
                 <ExperienceSettings compact />
-                <AssistantSettingsPanel availability={assistant.availability} compact />
+                <Suspense fallback={null}>
+                  <AssistantSettingsPanel availability={assistant.availability} compact />
+                </Suspense>
                 <button
                   type="button"
                   className="app-mobile-menu__weather"
@@ -1290,11 +1314,15 @@ export default function Layout() {
           </button>
         </nav>
       </div>
-      <AssistantUndoToast
-        notice={assistant.undoNotice}
-        onUndo={(token) => { void assistant.undo(token); }}
-        onDismiss={assistant.dismissUndo}
-      />
+      {assistant.undoNotice && (
+        <Suspense fallback={null}>
+          <AssistantUndoToast
+            notice={assistant.undoNotice}
+            onUndo={(token) => { void assistant.undo(token); }}
+            onDismiss={assistant.dismissUndo}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

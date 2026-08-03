@@ -152,7 +152,7 @@ const DEFAULT_TAGS: WorkspaceTag[] = [
   { id: "hobby", label: "hobby", color: "#9B8CE8" },
 ];
 
-function createDefaultWorkspace(): TaskWorkspace {
+export function createDefaultTaskWorkspace(): TaskWorkspace {
   return {
     version: WORKSPACE_VERSION,
     updatedAt: new Date(0).toISOString(),
@@ -356,7 +356,7 @@ function stripRuntimeTaskOccurrences(tasks: readonly WorkspaceTask[]): Workspace
 export function loadTaskWorkspaceResult(): LocalLoadResult<TaskWorkspace> {
   const result = readLocalWorkspace({
     key: TASK_STORAGE_KEY,
-    fallback: createDefaultWorkspace,
+    fallback: createDefaultTaskWorkspace,
     validate: isWorkspace,
     migrate: migrateLegacyWorkspace,
   });

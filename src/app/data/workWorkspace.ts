@@ -5,6 +5,7 @@ const WORKSPACE_VERSION = 2 as const;
 
 export type WorkProjectStatus = "active" | "paused" | "completed";
 export type WorkTaskPriority = "none" | "low" | "medium" | "high";
+export type WorkTaskStatus = "todo" | "in_progress" | "blocked" | "waiting" | "completed";
 
 export type WorkCompany = {
   id: string;
@@ -19,6 +20,9 @@ export type WorkProject = {
   name: string;
   description: string;
   status: WorkProjectStatus;
+  startDate?: string;
+  endDate?: string;
+  note?: string;
 };
 
 export type WorkLinkedTaskSchedule = {
@@ -50,8 +54,11 @@ export type WorkTask = {
   parentId: string | null;
   title: string;
   completed: boolean;
+  status?: WorkTaskStatus;
   priority: WorkTaskPriority;
+  startDate?: string;
   dueDate: string;
+  note?: string;
   createdAt: string;
   linkedTask?: WorkLinkedTaskDetails;
 };
@@ -210,7 +217,10 @@ function isProject(value: unknown): value is WorkProject {
     && typeof value.companyId === "string"
     && typeof value.name === "string"
     && typeof value.description === "string"
-    && ["active", "paused", "completed"].includes(String(value.status));
+    && ["active", "paused", "completed"].includes(String(value.status))
+    && (value.startDate === undefined || typeof value.startDate === "string")
+    && (value.endDate === undefined || typeof value.endDate === "string")
+    && (value.note === undefined || typeof value.note === "string");
 }
 
 function isClockTime(value: string) {
@@ -273,8 +283,11 @@ function isTask(value: unknown): value is WorkTask {
     && (value.parentId === null || typeof value.parentId === "string")
     && typeof value.title === "string"
     && typeof value.completed === "boolean"
+    && (value.status === undefined || ["todo", "in_progress", "blocked", "waiting", "completed"].includes(String(value.status)))
     && ["none", "low", "medium", "high"].includes(String(value.priority))
+    && (value.startDate === undefined || typeof value.startDate === "string")
     && typeof value.dueDate === "string"
+    && (value.note === undefined || typeof value.note === "string")
     && typeof value.createdAt === "string"
     && (value.linkedTask === undefined || isLinkedTaskDetails(value.linkedTask));
 }
@@ -307,7 +320,7 @@ function migrateLegacyWorkspace(value: unknown): WorkWorkspace | null {
   };
 }
 
-function cloneDefaultWorkspace(): WorkWorkspace {
+export function createDefaultWorkWorkspace(): WorkWorkspace {
   return {
     ...DEFAULT_WORKSPACE,
     companies: DEFAULT_WORKSPACE.companies.map((company) => ({ ...company })),
@@ -342,7 +355,7 @@ export function setWorkTasksCompletionState(
   return {
     ...workspace,
     tasks: workspace.tasks.map((task) => ids.has(task.id)
-      ? { ...task, completed }
+      ? { ...task, completed, status: completed ? "completed" : "todo" }
       : task),
   };
 }
@@ -350,7 +363,7 @@ export function setWorkTasksCompletionState(
 export function loadWorkWorkspaceResult(): LocalLoadResult<WorkWorkspace> {
   const result = readLocalWorkspace({
     key: WORK_STORAGE_KEY,
-    fallback: cloneDefaultWorkspace,
+    fallback: createDefaultWorkWorkspace,
     validate: isWorkspace,
     migrate: migrateLegacyWorkspace,
   });

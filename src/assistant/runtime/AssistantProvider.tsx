@@ -24,7 +24,6 @@ import {
   stripInternalToolMetadata,
 } from "../privacy/redaction";
 import { WebRtcRealtimeTransport, type RealtimeServerEvent, type RealtimeTransport, type RealtimeTransportEvent } from "../realtime";
-import { registerRootineDomainTools } from "../tools/domain-tools";
 import { AssistantToolExecutor, type AssistantExecutedToolCall, type AssistantToolCall } from "../tools/tool-executor";
 import { AssistantToolRegistry } from "../tools/tool-registry";
 import type { AssistantPanelInteraction } from "../ui/AssistantPanelRenderer";
@@ -189,6 +188,7 @@ export function AssistantProvider({
   const confirmationCalls = useRef(new Map<string, ConfirmationCallMetadata>());
   const queuedToolBatches = useRef(new Map<string, QueuedToolBatch>());
   const sessionAbortRef = useRef<AbortController | null>(null);
+  const domainToolsPromiseRef = useRef<Promise<void> | null>(null);
   const idleTimerRef = useRef<number | null>(null);
   const maxTimerRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -210,7 +210,6 @@ export function AssistantProvider({
   );
   const registry = useMemo(() => {
     const next = new AssistantToolRegistry();
-    registerRootineDomainTools(next, () => settingsRef.current);
     registerPresentationTools(next, presentation, (path) => navigateRef.current(path));
     return next;
   }, [presentation]);
@@ -231,6 +230,22 @@ export function AssistantProvider({
   stateRef.current = state;
   openRef.current = isOpen;
   pendingConfirmationRef.current = pendingConfirmation;
+
+  const ensureDomainTools = useCallback(() => {
+    const existing = domainToolsPromiseRef.current;
+    if (existing) return existing;
+
+    const promise = import("../tools/domain-tools")
+      .then(({ registerRootineDomainTools }) => {
+        registerRootineDomainTools(registry, () => settingsRef.current);
+      })
+      .catch((error: unknown) => {
+        domainToolsPromiseRef.current = null;
+        throw error;
+      });
+    domainToolsPromiseRef.current = promise;
+    return promise;
+  }, [registry]);
 
   const clearTimers = useCallback(() => {
     if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current);
@@ -326,6 +341,7 @@ export function AssistantProvider({
       throw new Error("Wpisz prywatny kod dostępu w Ustawieniach → Asystent.");
     }
     if (transport.connectionState === "connected" && (!voice || stateRef.current.microphoneEnabled)) return;
+    await ensureDomainTools();
     sessionAbortRef.current?.abort();
     const controller = new AbortController();
     sessionAbortRef.current = controller;
@@ -347,7 +363,7 @@ export function AssistantProvider({
     } finally {
       connectStartedAtRef.current = null;
     }
-  }, [armSessionTimers, availability, sessionConfiguration, transport]);
+  }, [armSessionTimers, availability, ensureDomainTools, sessionConfiguration, transport]);
 
   const resultForModel = useCallback((execution: AssistantExecutedToolCall) => {
     const definition = registry.get(execution.name);
@@ -713,8 +729,9 @@ export function AssistantProvider({
 
   const openAssistant = useCallback(() => {
     if (availability.status !== "available" || !settingsRef.current.assistantEnabled) return;
+    void ensureDomainTools().catch(() => undefined);
     setIsOpen(true);
-  }, [availability.status]);
+  }, [availability.status, ensureDomainTools]);
 
   const startVoice = useCallback(async () => {
     setIsOpen(true);
@@ -858,6 +875,7 @@ export function AssistantProvider({
     dispatch({ type: "clear_error" });
     if (transport.connectionState === "error" || transport.connectionState === "disconnected") {
       try {
+        await ensureDomainTools();
         await transport.reconnect();
         armSessionTimers();
       } catch {
@@ -866,7 +884,7 @@ export function AssistantProvider({
     } else {
       await refreshAvailability();
     }
-  }, [armSessionTimers, refreshAvailability, transport]);
+  }, [armSessionTimers, ensureDomainTools, refreshAvailability, transport]);
 
   const handlePanelInteraction = useCallback((interaction: AssistantPanelInteraction) => {
     resetIdleTimer();
