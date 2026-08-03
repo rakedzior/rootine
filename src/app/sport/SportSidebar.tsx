@@ -2,6 +2,7 @@ import {
   Activity,
   ChartNoAxesCombined,
   CalendarRange,
+  History,
   Library,
   Play,
   type LucideIcon,
@@ -26,9 +27,10 @@ const GROUPS: Array<{
     ],
   },
   {
-    label: "Postępy",
+    label: "Pozostałe",
     items: [
       { id: "analysis", label: "Analiza", icon: ChartNoAxesCombined },
+      { id: "history", label: "Historia", icon: History },
     ],
   },
 ];
@@ -71,7 +73,7 @@ export function SportSidebar({
               {group.items.map((item) => (
                 <ContextNavItem
                   key={item.id}
-                  active={item.id === "analysis" ? view === "analysis" || view === "history" : view === item.id}
+                  active={view === item.id}
                   icon={<item.icon />}
                   label={item.label}
                   meta={metaFor(item.id)}

@@ -10,12 +10,20 @@ const DESKTOP_A11Y_ROUTES = [
   { name: "Sport", path: "/sport" },
   { name: "Travel", path: "/podroze" },
   { name: "JDG", path: "/sprawy?widok=jdg" },
+  { name: "Goals", path: "/cele" },
+  { name: "Goal detail", path: "/cele/rehab-app" },
+  { name: "Affairs", path: "/sprawy" },
+  { name: "Affairs travel", path: "/sprawy?widok=travel" },
 ] as const;
 
 const MOBILE_A11Y_ROUTES = [
   { name: "shell and Today", path: "/dzisiaj" },
   { name: "Tasks", path: "/zadania" },
   { name: "Notes", path: "/notatki" },
+  { name: "Goals", path: "/cele" },
+  { name: "Goal detail", path: "/cele/rehab-app" },
+  { name: "Affairs", path: "/sprawy" },
+  { name: "Affairs travel", path: "/sprawy?widok=travel" },
 ] as const;
 
 type AxeViolation = {

@@ -26,7 +26,7 @@ import {
   Trash2,
   WalletCards,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatPercent, pluralize } from "../formatters";
@@ -121,7 +121,13 @@ function PrivateMoney({
   );
 }
 
-export default function Podroze() {
+export default function Podroze({
+  layout,
+  embeddedViewSelect,
+}: {
+  layout?: (header: ReactNode, content: ReactNode) => ReactNode;
+  embeddedViewSelect?: ReactNode;
+} = {}) {
   const [workspace, setWorkspace] = useState(loadTravelWorkspace);
   const [statusFilter, setStatusFilter] = useState<"upcoming" | "all" | "archived" | TripStatus>("upcoming");
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -131,9 +137,11 @@ export default function Podroze() {
   const [tripActionState, setTripActionState] = useState<TripActionState | null>(null);
   const [deletedTripUndo, setDeletedTripUndo] = useState<TravelTrip | null>(null);
   const [storageError, setStorageError] = useState(false);
-  const { tripId } = useParams();
+  const { tripId: routeTripId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const embedded = Boolean(layout);
+  const tripId = routeTripId ?? searchParams.get("podroz") ?? undefined;
   const selectedTrip = workspace.trips.find((trip) => trip.id === tripId);
   const sectionParam = searchParams.get("sekcja");
   const activeSection: TravelSection = isTravelSection(sectionParam) ? sectionParam : "overview";
@@ -147,8 +155,8 @@ export default function Podroze() {
   }), []);
 
   useEffect(() => {
-    if (tripId && !selectedTrip) navigate("/podroze", { replace: true });
-  }, [navigate, selectedTrip, tripId]);
+    if (tripId && !selectedTrip) navigate(embedded ? "/sprawy?widok=travel" : "/podroze", { replace: true });
+  }, [embedded, navigate, selectedTrip, tripId]);
 
   const upcomingTrips = useMemo(
     () => workspace.trips
@@ -208,12 +216,39 @@ export default function Podroze() {
   }, [selectedTrip]);
 
   const setSection = (section: TravelSection) => {
+    if (embedded) {
+      const next = new URLSearchParams();
+      next.set("widok", "travel");
+      if (tripId) next.set("podroz", tripId);
+      if (section !== "overview") next.set("sekcja", section);
+      setSearchParams(next);
+      return;
+    }
     if (section === "overview") setSearchParams({});
     else setSearchParams({ sekcja: section });
   };
 
-  const selectTrip = (id: string) => navigate(`/podroze/${id}`);
-  const showAllTrips = () => navigate("/podroze");
+  const selectTrip = (id: string) => {
+    if (embedded) {
+      const next = new URLSearchParams(searchParams);
+      next.set("widok", "travel");
+      next.set("podroz", id);
+      navigate(`/sprawy?${next.toString()}`);
+      return;
+    }
+    navigate(`/podroze/${id}`);
+  };
+  const showAllTrips = () => {
+    if (embedded) {
+      const next = new URLSearchParams(searchParams);
+      next.set("widok", "travel");
+      next.delete("podroz");
+      next.delete("sekcja");
+      navigate(`/sprawy?${next.toString()}`);
+      return;
+    }
+    navigate("/podroze");
+  };
 
   const updateTrip = (tripIdToUpdate: string, updater: (trip: TravelTrip) => TravelTrip) => {
     setWorkspace((current) => ({
@@ -391,7 +426,7 @@ export default function Podroze() {
             tasks: [],
           }],
         }));
-        navigate(`/podroze/${id}`);
+        selectTrip(id);
       }
       closeEditor();
       return;
@@ -603,7 +638,7 @@ export default function Podroze() {
         trips: current.trips.filter((trip) => trip.id !== tripActionState.trip.id),
       }));
       setDeletedTripUndo(tripActionState.trip);
-      navigate("/podroze");
+      showAllTrips();
     }
     setTripActionState(null);
   };
@@ -619,7 +654,7 @@ export default function Podroze() {
       : { ...current, trips: [...current.trips, deletedTripUndo] });
     const restoredId = deletedTripUndo.id;
     setDeletedTripUndo(null);
-    navigate(`/podroze/${restoredId}`);
+    selectTrip(restoredId);
   };
 
   const toggleTask = (task: TravelTask) => {
@@ -659,7 +694,7 @@ export default function Podroze() {
     <ContextSidebar label="Podróże" className="travel-sidebar">
       <div className="travel-sidebar__nav">
         <p className="travel-sidebar__label">Obszar nadrzędny</p>
-        <ContextNavItem icon={<ArrowLeft />} label="Wróć do Spraw" onClick={() => navigate("/sprawy")} />
+        {!embedded && <ContextNavItem icon={<ArrowLeft />} label="Wróć do Spraw" onClick={() => navigate("/sprawy")} />}
         <p className="travel-sidebar__label travel-sidebar__label--spaced">Wyjazdy</p>
         <ContextNavItem
           active={!selectedTrip}
@@ -779,40 +814,31 @@ export default function Podroze() {
     </Button>
   );
 
-  return (
-    <ModuleShell
-      contextSidebar={contextSidebar}
-      className="travel-module"
-      pageWidth="wide"
-      ambient={{
-        scene: "travel",
-        progress: selectedTrip
-          ? (selectedTrip.tasks.length
-              ? selectedTrip.tasks.filter((task) => task.completed).length / selectedTrip.tasks.length
-              : selectedTrip.status === "completed" ? 1 : 0)
-          : workspace.trips.length ? completedTrips.length / workspace.trips.length : 0,
-        signal: selectedTrip
-          ? `${selectedTrip.id}:${selectedTrip.tasks.filter((task) => task.completed).length}`
-          : completedTrips.length,
-      }}
-      header={(
-        <PageHeader
-          title="Podróże"
-          description={selectedTrip
-            ? `${selectedTrip.name} · ${SECTION_COPY[activeSection]} · ${selectedTrip.destination}`
-            : "Przegląd zaplanowanych i zakończonych wyjazdów"}
-          meta={(
-            <>
-              {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
-              {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
-              {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
-            </>
-          )}
-          actions={tripHeaderActions}
-        />
+  const pageHeader = (
+    <PageHeader
+      title="Podróże"
+      description={selectedTrip
+        ? `${selectedTrip.name} · ${SECTION_COPY[activeSection]} · ${selectedTrip.destination}`
+        : "Przegląd zaplanowanych i zakończonych wyjazdów"}
+      meta={(
+        <>
+          {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
+          {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
+          {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
+        </>
       )}
-    >
+      actions={tripHeaderActions}
+    />
+  );
+
+  const pageContent = (
+    <>
       <ModuleMain>
+        {embeddedViewSelect && (
+          <WorkspaceToolbar className="affairs-toolbar affairs-toolbar--embedded-nav">
+            {embeddedViewSelect}
+          </WorkspaceToolbar>
+        )}
 
         <WorkspaceToolbar className="travel-toolbar">
           <div className="travel-toolbar__trip-select">
@@ -1372,7 +1398,9 @@ export default function Podroze() {
                                   kind: "travel",
                                   entity: `${encodeURIComponent(selectedTrip.id)}/${encodeURIComponent(task.id)}`,
                                   context: `${selectedTrip.name} · ${selectedTrip.destination}`,
-                                  href: `/podroze/${encodeURIComponent(selectedTrip.id)}?sekcja=tasks`,
+                                  href: embedded
+                                    ? `/sprawy?widok=travel&podroz=${encodeURIComponent(selectedTrip.id)}&sekcja=tasks`
+                                    : `/podroze/${encodeURIComponent(selectedTrip.id)}?sekcja=tasks`,
                                 },
                                 text: task.title,
                                 done: task.completed,
@@ -1627,6 +1655,30 @@ export default function Podroze() {
           </p>
         </Modal>
       )}
-    </ModuleShell>
+    </>
   );
+
+  return layout
+    ? layout(pageHeader, pageContent)
+    : (
+      <ModuleShell
+        contextSidebar={contextSidebar}
+        className="travel-module"
+        pageWidth="wide"
+        ambient={{
+          scene: "travel",
+          progress: selectedTrip
+            ? (selectedTrip.tasks.length
+                ? selectedTrip.tasks.filter((task) => task.completed).length / selectedTrip.tasks.length
+                : selectedTrip.status === "completed" ? 1 : 0)
+            : workspace.trips.length ? completedTrips.length / workspace.trips.length : 0,
+          signal: selectedTrip
+            ? `${selectedTrip.id}:${selectedTrip.tasks.filter((task) => task.completed).length}`
+            : completedTrips.length,
+        }}
+        header={pageHeader}
+      >
+        {pageContent}
+      </ModuleShell>
+    );
 }

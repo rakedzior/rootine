@@ -79,7 +79,6 @@ import {
   ModuleShell,
   PageHeader,
   Select,
-  Tabs,
   WorkspaceToolbar,
 } from "../ui";
 import "../../styles/sport.css";
@@ -1067,7 +1066,7 @@ export default function Sport() {
       )}
     >
       <ModuleMain transitionKey={`${view}:${activeWeek}`}>
-        <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""} ${view === "analysis" || view === "history" ? "has-subview" : ""}`.trim()}>
+        <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}>
           <Select
             compact
             fieldClassName="context-mobile-select"
@@ -1077,22 +1076,11 @@ export default function Sport() {
               { value: "today", label: "Dzisiaj" },
               { value: "cycle", label: "Plan treningowy" },
               { value: "templates", label: "Szablony" },
+              { value: "history", label: "Historia" },
               { value: "analysis", label: "Analiza" },
             ]}
             onChange={(event) => changeView(event.target.value as PlannerView)}
           />
-          {(view === "analysis" || view === "history") && (
-            <Tabs
-              className="ui-tabs--segmented"
-              ariaLabel="Zakres analizy"
-              activeId={view}
-              items={[
-                { id: "analysis", label: "Postępy" },
-                { id: "history", label: "Historia" },
-              ]}
-              onChange={(id) => changeView(id as PlannerView)}
-            />
-          )}
           <div className="sport-planner-toolbar__right">
             {view === "cycle" && cycleDraft && (
               <span className={`sport-planner-toolbar__status ${cycleDirty ? "is-dirty" : ""}`.trim()}>

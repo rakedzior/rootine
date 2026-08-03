@@ -22,6 +22,7 @@ import type {
 import { uiColors } from "../ui";
 import {
   Activity,
+  AlertTriangle,
   Briefcase,
   CheckCircle2,
   Circle,
@@ -196,7 +197,7 @@ export const STATUS_META: Record<GoalStatus, { label: string; color: string }> =
 
 export const FILTER_ITEMS: { id: FilterId; label: string; icon: LucideIcon; color?: string }[] = [
   { id: "all", label: "Wszystkie cele", icon: Target },
-  { id: "active", label: "Aktywne", icon: Activity, color: C.iceBlueText },
+  { id: "risk", label: "Zagrożone", icon: AlertTriangle, color: C.warning },
   { id: "paused", label: "Wstrzymane", icon: CirclePause, color: C.textSecond },
   { id: "completed", label: "Zakończone", icon: CheckCircle2, color: C.seaGlass },
   { id: "planned", label: "Zaplanowane", icon: CircleDashed, color: C.textSecond },
@@ -212,8 +213,9 @@ export function deadlineColor(goal: Goal) {
 }
 
 export const countForFilter = (id: FilterId, goals: Goal[]) => {
+  if (id === "overview" || id === "active") return goals.filter((goal) => goal.status === "active" || goal.status === "risk").length;
   if (id === "all") return goals.filter((goal) => goal.status !== "archived").length;
-  if (id === "active") return goals.filter((goal) => goal.status === "active" || goal.status === "risk").length;
+  if (id.startsWith("category:")) return goals.filter((goal) => goal.categoryId === id.slice("category:".length) && goal.status !== "archived").length;
   return goals.filter((goal) => goal.status === id).length;
 };
 

@@ -5,14 +5,9 @@
 }
 
 @media (min-width: 761px) {
-  .sport-planner-toolbar:not(.has-status, .has-subview) {
+  .sport-planner-toolbar:not(.has-status) {
     display: none;
   }
-}
-
-.sport-planner-toolbar .ui-tabs {
-  align-self: stretch;
-  border-bottom: 0;
 }
 
 .sport-planner-toolbar__status {

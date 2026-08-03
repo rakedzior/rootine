@@ -63,7 +63,7 @@ export function RouteTransition({ children, inactive = false }: { children: Reac
           ? [{ opacity: 0.88 }, { opacity: 1 }]
           : moduleChanged
             ? [
-              { opacity: 0.72, transform: `translate3d(${direction * 12}px, 0, 0)` },
+              { opacity: 0.86, transform: `translate3d(${direction * 6}px, 0, 0)` },
               { opacity: 1, transform: "translate3d(0, 0, 0)" },
             ]
             : [
@@ -71,7 +71,7 @@ export function RouteTransition({ children, inactive = false }: { children: Reac
               { opacity: 1, transform: "translate3d(0, 0, 0)" },
             ],
         {
-          duration: reduced ? 90 : moduleChanged ? 420 : 240,
+          duration: reduced ? 90 : moduleChanged ? 300 : 220,
           easing: "cubic-bezier(0.16, 1, 0.3, 1)",
         },
       );

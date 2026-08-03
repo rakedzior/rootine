@@ -987,6 +987,11 @@ export default function Praca() {
          onDragOver={(event) => handleTaskDragOver(event, task)}
          onDrop={(event) => handleTaskDrop(event, task)}
          onDragEnd={handleTaskDragEnd}
+         onClick={(event) => {
+           const target = event.target as HTMLElement;
+           if (target.closest("button, input, select, textarea, [role=\"button\"]")) return;
+           toggleTaskDetails(task.id);
+         }}
          data-drag-over={dragOverTaskId === task.id ? "true" : undefined}
         leading={(
           <button
@@ -1627,60 +1632,75 @@ export default function Praca() {
               {detailTaskContext?.parentLabel && (
                 <span className="work-detail-context__parent"><CornerDownRight size={13} aria-hidden="true" />{detailTaskContext.parentLabel}</span>
               )}
+              {detailTaskProject && (
+                <Button
+                  className="work-detail-project-link"
+                  variant="ghost"
+                  size="sm"
+                  fullWidth
+                  leadingIcon={<FolderKanban size={13} aria-hidden="true" />}
+                  trailingIcon={<ChevronRight size={13} aria-hidden="true" />}
+                  onClick={() => navigate("project", detailTaskProject.companyId, detailTaskProject.id)}
+                >
+                  Otwórz projekt
+                </Button>
+              )}
             </div>
             <div className="work-detail-facts" aria-label="Informacje o zadaniu">
               <div><span>Typ</span><strong>{detailTaskParent ? "Podzadanie" : "Zadanie główne"}</strong></div>
               <div><span>Utworzono</span><strong>{formatDate(detailTask.createdAt.slice(0, 10))}</strong></div>
             </div>
-            {detailTaskDescendantRows.length > 0 && detailTaskProgress !== null && (
-              <section className="work-detail-subtasks" aria-label="Podzadania">
-                <header className="work-detail-subtasks__header">
-                  <div><span>Podzadania</span><strong>{formatSubtaskProgress(detailTaskCompletedDescendants, detailTaskDescendants.length)}</strong></div>
-                  <span>{detailTaskProgress}%</span>
-                </header>
-                <div className="work-detail-subtasks__progress" role="progressbar" aria-label="Postęp podzadań" aria-valuemin={0} aria-valuemax={100} aria-valuenow={detailTaskProgress}>
-                  <span style={{ width: `${detailTaskProgress}%` }} />
-                </div>
-                <div className="work-detail-subtask-list">
-                  {(detailSubtasksExpanded ? detailTaskDescendantRows : detailTaskDescendantRows.slice(0, 4)).map(({ task: child, depth }) => {
-                    const childStatus = getTaskStatus(child);
-                    const childDate = child.dueDate || child.startDate;
-                    return (
-                      <button
-                        key={child.id}
-                        type="button"
-                        className="work-detail-subtask"
-                        style={{ "--work-subtask-depth": depth } as CSSProperties}
-                        title={child.title}
-                        onClick={() => toggleTaskDetails(child.id)}
-                      >
-                        <span className={`work-detail-subtask__status ${taskStatusTone(childStatus)}`}>{taskStatusIcon(childStatus)}</span>
-                        <span className="work-detail-subtask__title">{child.title}</span>
-                        <span className="work-detail-subtask__label">{TASK_STATUS_LABELS[childStatus]}</span>
-                        <span className="work-detail-subtask__date">{childDate ? formatDate(childDate) : "Bez terminu"}</span>
-                        <ChevronRight size={13} aria-hidden="true" />
-                      </button>
-                    );
-                  })}
-                </div>
-                {detailTaskDescendantRows.length > 4 && (
-                  <Button
-                    variant="quiet"
-                    size="sm"
-                    aria-expanded={detailSubtasksExpanded}
-                    onClick={() => setDetailSubtasksExpanded((current) => !current)}
-                  >
-                    {detailSubtasksExpanded ? "Pokaż mniej" : `Pokaż ${detailTaskDescendantRows.length - 4} pozostałe`}
-                  </Button>
-                )}
-              </section>
-            )}
             <div className="work-detail-fields">
               <Select label="Status" value={getTaskStatus(detailTask)} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => applyTaskStatuses([detailTask.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
               <Select label="Priorytet" value={detailTask.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, priority: event.target.value as WorkTaskPriority } : task) })); showSaveNotice(); }} />
               <div className="work-detail-date-grid"><Input type="date" label="Start" value={detailTask.startDate ?? ""} max={detailTask.dueDate || undefined} onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, startDate: event.target.value } : task) })); showSaveNotice(); }} /><Input type="date" label="Termin" value={detailTask.dueDate} min={detailTask.startDate || undefined} onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, dueDate: event.target.value } : task) })); showSaveNotice(); }} /></div>
               <label className="ui-field"><span className="ui-field__label">Notatka</span><textarea className="ui-field__control work-detail-note" value={detailTask.note ?? ""} placeholder="Krótka notatka" onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, note: event.target.value } : task) })); showSaveNotice(); }} /></label>
             </div>
+            {detailTaskDescendantRows.length > 0 && detailTaskProgress !== null && (
+              <section className="work-detail-subtasks" aria-label="Podzadania">
+                <button
+                  type="button"
+                  className="work-detail-subtasks__header"
+                  aria-expanded={detailSubtasksExpanded}
+                  aria-controls="work-detail-subtask-list"
+                  onClick={() => setDetailSubtasksExpanded((current) => !current)}
+                >
+                  <span className="work-detail-subtasks__header-copy"><span>Podzadania</span><strong>{formatSubtaskProgress(detailTaskCompletedDescendants, detailTaskDescendants.length)}</strong></span>
+                  <span className="work-detail-subtasks__header-side"><span>{detailTaskProgress}%</span>{detailSubtasksExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}</span>
+                </button>
+                <div id="work-detail-subtask-list">
+                  {detailSubtasksExpanded && (
+                    <>
+                      <div className="work-detail-subtasks__progress" role="progressbar" aria-label="Postęp podzadań" aria-valuemin={0} aria-valuemax={100} aria-valuenow={detailTaskProgress}>
+                        <span style={{ width: `${detailTaskProgress}%` }} />
+                      </div>
+                      <div className="work-detail-subtask-list">
+                        {detailTaskDescendantRows.map(({ task: child, depth }) => {
+                          const childStatus = getTaskStatus(child);
+                          const childDate = child.dueDate || child.startDate;
+                          return (
+                            <button
+                              key={child.id}
+                              type="button"
+                              className="work-detail-subtask"
+                              style={{ "--work-subtask-depth": depth } as CSSProperties}
+                              title={child.title}
+                              onClick={() => toggleTaskDetails(child.id)}
+                            >
+                              <span className={`work-detail-subtask__status ${taskStatusTone(childStatus)}`}>{taskStatusIcon(childStatus)}</span>
+                              <span className="work-detail-subtask__title">{child.title}</span>
+                              <span className={`work-detail-subtask__label ${taskStatusTone(childStatus)}`}>{TASK_STATUS_LABELS[childStatus]}</span>
+                              <span className={`work-detail-subtask__date ${childDate ? "is-set" : "is-empty"}`}>{childDate ? formatDate(childDate) : "Bez terminu"}</span>
+                              <ChevronRight size={13} aria-hidden="true" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+            )}
           </div>
           <footer className="work-detail-footer">
             <span className={`work-detail-save-status ${saveStatus === "saved" ? "is-saved" : saveStatus === "saving" ? "is-saving" : ""}`} role="status" aria-live="polite">

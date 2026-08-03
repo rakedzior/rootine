@@ -18,7 +18,7 @@ export const SPORT_VIEW_LABELS: Record<PlannerView, { title: string; description
     description: "Wyniki wykonanych i pominiętych treningów",
   },
   analysis: {
-    title: "Postępy",
+    title: "Analiza",
     description: "Regularność, objętość i realizacja planu",
   },
 };

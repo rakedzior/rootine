@@ -56,6 +56,7 @@ import {
 } from "../data/affairsWorkspace";
 import { AffairsEditorFields } from "../affairs/AffairsEditorFields";
 import { JdgWorkspace } from "./Jdg";
+import Podroze from "./Podroze";
 import {
   Badge,
   Button,
@@ -73,8 +74,6 @@ import {
   PageHeader,
   ProgressBar,
   Select,
-  StatCard,
-  StatGrid,
   WorkspaceToolbar,
   AddToTasksButton,
 } from "../ui";
@@ -306,6 +305,7 @@ export default function Sprawy() {
     + workspace.subscriptions.filter((subscription) => subscription.active && isWithinNext30Days(subscription.nextBillingDate)).length
     + workspace.documents.filter((document) => document.expiresAt && isWithinNext30Days(document.expiresAt)).length
     + workspace.vehicleItems.filter((item) => !item.done && item.dueDate && isWithinNext30Days(item.dueDate)).length;
+  const dueThisWeek = upcoming.filter((item) => daysUntil(item.dueDate) <= 7).length;
 
   const openMatterEditor = (matter?: Matter) => {
     setDraft(matter ? {
@@ -798,11 +798,6 @@ export default function Sprawy() {
     return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openMatterEditor()}><span className="header-action-label">Dodaj sprawę</span></Button>;
   };
 
-  const affairsAreaId = ["oneTime", "payments", "subscriptions", "budget"].includes(view)
-    ? "payments"
-    : ["documents", "vehicles"].includes(view)
-      ? "records"
-      : view;
   const navMeta = (itemView: AffairsView) => {
     if (itemView === "matters") return activeMatters.length;
     if (itemView === "oneTime") return workspace.oneTimePayments.filter((item) => !item.paid).length;
@@ -813,18 +808,42 @@ export default function Sprawy() {
     return undefined;
   };
 
+  const mobileViewOptions = [
+    { value: "overview", label: "Przegląd", description: "Radar zobowiązań i plan miesiąca" },
+    ...NAV_ITEMS.map((item) => ({ value: item.view, label: item.label })),
+  ];
+
   const contextSidebar = (
     <ContextSidebar label="Widoki spraw" className="affairs-sidebar">
       <nav className="affairs-sidebar__nav">
         <section>
-          <p className="affairs-sidebar__label">Sprawy</p>
+          <p className="affairs-sidebar__label">Główne</p>
           <div>
             <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label="Przegląd" onClick={() => selectView("overview")} />
             <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label="Do załatwienia" meta={navMeta("matters")} onClick={() => selectView("matters")} />
-            <ContextNavItem active={affairsAreaId === "payments"} icon={<CreditCard />} label="Płatności" meta={navMeta("payments")} onClick={() => selectView("payments")} />
-            <ContextNavItem active={affairsAreaId === "records"} icon={<FileText />} label="Rejestry" meta={documentAlerts + vehicleAlerts || undefined} onClick={() => selectView("documents")} />
+          </div>
+        </section>
+        <section>
+          <p className="affairs-sidebar__label">Finanse</p>
+          <div>
+            <ContextNavItem active={view === "oneTime"} icon={<ReceiptText />} label="Jednorazowe" meta={navMeta("oneTime")} onClick={() => selectView("oneTime")} />
+            <ContextNavItem active={view === "payments"} icon={<RefreshCw />} label="Cykliczne" meta={navMeta("payments")} onClick={() => selectView("payments")} />
+            <ContextNavItem active={view === "subscriptions"} icon={<CreditCard />} label="Subskrypcje" meta={navMeta("subscriptions")} onClick={() => selectView("subscriptions")} />
+            <ContextNavItem active={view === "budget"} icon={<WalletCards />} label="Budżet" onClick={() => selectView("budget")} />
+          </div>
+        </section>
+        <section>
+          <p className="affairs-sidebar__label">Dokumenty i pojazdy</p>
+          <div>
+            <ContextNavItem active={view === "documents"} icon={<FileText />} label="Dokumenty" meta={navMeta("documents")} onClick={() => selectView("documents")} />
+            <ContextNavItem active={view === "vehicles"} icon={<Car />} label="Pojazdy" meta={navMeta("vehicles")} onClick={() => selectView("vehicles")} />
+          </div>
+        </section>
+        <section>
+          <p className="affairs-sidebar__label">Firma i podróże</p>
+          <div>
             <ContextNavItem active={view === "jdg"} icon={<Building2 />} label="JDG" onClick={() => selectView("jdg")} />
-            <ContextNavItem icon={<Map />} label="Podróże" onClick={() => navigate("/podroze")} />
+            <ContextNavItem active={view === "travel"} icon={<Map />} label="Podróże" onClick={() => selectView("travel")} />
           </div>
         </section>
       </nav>
@@ -970,6 +989,34 @@ export default function Sprawy() {
     );
   }
 
+  if (view === "travel") {
+    return (
+      <Podroze
+        embeddedViewSelect={(
+          <Select
+            compact
+            aria-label="Wybierz widok spraw"
+            fieldClassName="context-mobile-select affairs-mobile-view-select"
+            value={view}
+            options={mobileViewOptions}
+            onChange={(event) => selectView(event.target.value as AffairsView)}
+          />
+        )}
+        layout={(header, content) => (
+          <ModuleShell
+            contextSidebar={contextSidebar}
+            className="affairs-module affairs-module--travel"
+            pageWidth="wide"
+            ambient={{ scene: "travel", progress: 0, signal: dueSoon }}
+            header={header}
+          >
+            {content}
+          </ModuleShell>
+        )}
+      />
+    );
+  }
+
   const pageHeader = (
     <PageHeader
       title="Sprawy"
@@ -996,17 +1043,14 @@ export default function Sprawy() {
     >
       <ModuleMain transitionKey={view}>
         <WorkspaceToolbar className="affairs-toolbar">
-          {(affairsAreaId === "payments" || affairsAreaId === "records") && <Select
+          <Select
             compact
             aria-label="Wybierz widok spraw"
+            fieldClassName="context-mobile-select affairs-mobile-view-select"
             value={view}
-            options={NAV_ITEMS
-              .filter((item) => affairsAreaId === "payments"
-                ? ["oneTime", "payments", "subscriptions", "budget"].includes(item.view)
-                : ["documents", "vehicles"].includes(item.view))
-              .map((item) => ({ value: item.view, label: item.label }))}
+            options={mobileViewOptions}
             onChange={(event) => selectView(event.target.value as AffairsView)}
-          />}
+          />
           {view === "matters" && (
             <>
               <Select
@@ -1076,25 +1120,39 @@ export default function Sprawy() {
         <div className="affairs-canvas">
           {view === "overview" && (
             <div className="affairs-overview">
-              <StatGrid className="affairs-overview__summary" aria-label="Podsumowanie miesiąca">
-                <StatCard label="Najbliższe 30 dni" value={dueSoon} hint="wszystkie zobowiązania na radarze" />
-                <StatCard
-                  label="Płatności jednorazowe"
-                  value={<SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>}
-                  hint={`${workspace.oneTimePayments.filter((payment) => !payment.paid).length} nieopłaconych pozycji`}
-                />
-                <StatCard
-                  label="Stałe zobowiązania"
-                  value={<SensitiveValue label="Kwota stałych zobowiązań">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue>}
-                  hint="cykliczne i subskrypcje / mies."
-                />
-                <StatCard
-                  label="Dokumenty i pojazdy"
-                  value={documentAlerts + vehicleAlerts}
-                  tone={documentAlerts + vehicleAlerts ? "danger" : "default"}
-                  hint="wymaga uwagi lub zbliża się"
-                />
-              </StatGrid>
+              <section className="affairs-radar-summary" aria-labelledby="affairs-radar-heading">
+                <header className="affairs-radar-summary__heading">
+                  <div>
+                    <h2 id="affairs-radar-heading">Radar odpowiedzialności</h2>
+                    <p>Najbliższe rzeczy, które mogą wymagać Twojej uwagi.</p>
+                  </div>
+                  <span className={`affairs-radar-summary__window ${dueSoon ? "is-warning" : ""}`}>
+                    {dueSoon} w ciągu 30 dni
+                  </span>
+                </header>
+                <dl className="affairs-radar-summary__signals">
+                  <div>
+                    <dt>Najpilniejsze</dt>
+                    <dd>{dueThisWeek}</dd>
+                    <dd className="affairs-radar-summary__signal-note">do 7 dni</dd>
+                  </div>
+                  <div>
+                    <dt>Do opłacenia</dt>
+                    <dd><SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue></dd>
+                    <dd className="affairs-radar-summary__signal-note">jednorazowe</dd>
+                  </div>
+                  <div>
+                    <dt>Alerty rejestrów</dt>
+                    <dd>{documentAlerts + vehicleAlerts}</dd>
+                    <dd className="affairs-radar-summary__signal-note">{documentAlerts} dok. · {vehicleAlerts} poj.</dd>
+                  </div>
+                  <div>
+                    <dt>Stałe zobowiązania</dt>
+                    <dd><SensitiveValue label="Kwota stałych zobowiązań">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue></dd>
+                    <dd className="affairs-radar-summary__signal-note">miesięcznie</dd>
+                  </div>
+                </dl>
+              </section>
 
               <div className="affairs-overview__grid">
                 <Card as="section" tone="panel" padding="none" className="affairs-agenda">

@@ -41,7 +41,8 @@ export type AffairsView =
   | "documents"
   | "vehicles"
   | "budget"
-  | "jdg";
+  | "jdg"
+  | "travel";
 export type EditorState =
   | { kind: "matter"; mode: "add" | "edit"; id?: string }
   | { kind: "payment"; mode: "add" | "edit"; id?: string }
@@ -106,6 +107,7 @@ export const EMPTY_DRAFT: Draft = {
 };
 
 export const VIEW_COPY: Record<AffairsView, { title: string; description: string }> = {
+  travel: { title: "Sprawy", description: "Podróże · Plan, rezerwacje, budżet i przygotowania" },
   overview: { title: "Sprawy", description: "Najbliższe zobowiązania i plan miesiąca" },
   matters: { title: "Sprawy", description: "Prywatne formalności, decyzje i ważne terminy" },
   oneTime: { title: "Sprawy", description: "Jednorazowe rachunki, opłaty i zobowiązania" },
@@ -192,8 +194,11 @@ export const NAV_GROUPS: Array<{
     ],
   },
   {
-    label: "Firma",
-    items: [{ view: "jdg", label: "JDG", icon: Building2 }],
+    label: "Firma i podróże",
+    items: [
+      { view: "jdg", label: "JDG", icon: Building2 },
+      { view: "travel", label: "Podróże", icon: LayoutDashboard },
+    ],
   },
 ];
 

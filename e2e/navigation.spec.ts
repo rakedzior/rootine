@@ -8,6 +8,7 @@ const ROUTES = [
   { name: "Sport", path: "/sport" },
   { name: "Podróże", path: "/podroze" },
   { name: "JDG", path: "/sprawy?widok=jdg" },
+  { name: "Cele", path: "/cele" },
 ] as const;
 
 test.describe("route smoke", { tag: "@shared" }, () => {

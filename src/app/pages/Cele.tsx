@@ -48,6 +48,7 @@ import {
   List,
   NotebookPen,
   Plus,
+  Settings2,
   Target,
   X,
 } from "lucide-react";
@@ -178,7 +179,13 @@ export default function Cele() {
   }, [activeFilter, goals, sortKey, storedGoals]);
 
   const selectedGoal = goals.find((goal) => goal.id === selectedId) ?? null;
-  const priorityGoals = visibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk");
+  const shouldGroupPriority = activeFilter === "overview"
+    || activeFilter === "active"
+    || activeFilter === "all"
+    || activeFilter.startsWith("category:");
+  const priorityGoals = shouldGroupPriority
+    ? visibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk")
+    : [];
   const remainingGoals = visibleGoals.filter((goal) => !priorityGoals.includes(goal));
   const ambientGoalProgress = selectedGoal?.progress ?? (visibleGoals.length
     ? visibleGoals.reduce((sum, goal) => sum + goal.progress, 0) / visibleGoals.length
@@ -327,7 +334,7 @@ export default function Cele() {
             <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
             <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
             <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
-            <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Target />}>Kategorie i ustawienia</MenuItem>
+            <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Settings2 />}>Ustawienia celów</MenuItem>
           </Menu>}
         </div>
       </>}
@@ -338,6 +345,18 @@ export default function Cele() {
     <ModuleShell
       pageWidth="standard"
       header={pageHeader}
+      contextSidebar={(
+        <GoalSubSidebar
+          activeFilter={activeFilter}
+          onFilter={handleFilter}
+          goals={goals}
+          categories={categories}
+          onCreateCategory={createCategory}
+          onUpdateCategory={updateCategory}
+          onDeleteCategory={setDeleteCategoryId}
+          onSettings={() => setSettingsOpen(true)}
+        />
+      )}
       ambient={{
         scene: "goals",
         progress: ambientGoalProgress / 100,
@@ -374,9 +393,10 @@ export default function Cele() {
             <Select
               aria-label="Widok celów"
               compact
+              fieldClassName="context-mobile-select goals-filter-select"
               value={activeFilter}
               options={[
-                { value: "overview", label: "Przegląd" },
+                { value: "overview", label: "Aktywne cele" },
                 ...FILTER_ITEMS.map((item) => ({ value: item.id, label: item.label })),
                 ...categories.map((category) => ({ value: `category:${category.id}`, label: category.label })),
                 { value: "archived", label: "Archiwum" },
@@ -634,16 +654,6 @@ export default function Cele() {
                 { value: "name", label: "Nazwa" },
               ]}
               ariaLabel="Domyślne sortowanie"
-            />
-            <GoalSubSidebar
-              activeFilter={activeFilter}
-              onFilter={(id) => { handleFilter(id); setSettingsOpen(false); }}
-              goals={goals}
-              categories={categories}
-              onCreateCategory={createCategory}
-              onUpdateCategory={updateCategory}
-              onDeleteCategory={setDeleteCategoryId}
-              onSettings={() => undefined}
             />
           </div>
         </Modal>

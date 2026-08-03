@@ -48,7 +48,8 @@
 }
 
 .ui-page-header__title {
-  view-transition-name: rootine-module-title;
+  /* Keep the module title anchored; the quieter route transition carries the context change. */
+  view-transition-name: none;
 }
 
 .app-profile-privacy {
@@ -718,15 +719,15 @@ button.telemetry-bar__segment {
 }
 
 ::view-transition-new(root) {
-  animation: rootine-route-new var(--motion-page) var(--ease-enter) both;
+  animation: rootine-route-new var(--motion-normal) var(--ease-enter) both;
 }
 
 @keyframes rootine-route-old {
-  to { opacity: 0.72; transform: translate3d(-4px, 0, 0); }
+  to { opacity: 0.84; transform: translate3d(-3px, 0, 0); }
 }
 
 @keyframes rootine-route-new {
-  from { opacity: 0.72; transform: translate3d(10px, 0, 0); }
+  from { opacity: 0.86; transform: translate3d(6px, 0, 0); }
 }
 
 .rootine-sensitive-value {

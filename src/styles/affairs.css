@@ -151,6 +151,11 @@
     height: 100%;
   }
 
+  .affairs-budget-snapshot {
+    height: auto;
+    align-self: start;
+  }
+
   .affairs-ledger,
   .affairs-vehicle-list,
   .jdg-canvas > * {
@@ -1568,6 +1573,23 @@
     justify-content: flex-start;
   }
 
+  .affairs-toolbar .affairs-mobile-view-select {
+    display: block;
+    width: min(240px, 100%);
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .affairs-overview__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+
+  .affairs-overview__summary .ui-stat-card__value {
+    font-size: var(--text-title);
+    overflow-wrap: anywhere;
+  }
+
   .affairs-toolbar .context-mobile-select {
     width: 138px;
   }
@@ -1841,4 +1863,234 @@
   margin-inline: auto;
   padding: 0 var(--space-3xl) var(--space-md);
   background: var(--color-graphite-sidebar);
+}
+
+/* Responsibility radar: a compact reading surface, not a row of hero metrics. */
+.affairs-overview,
+.affairs-budget {
+  width: min(100%, 1120px);
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+.affairs-radar-summary {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-graphite-panel);
+}
+
+.affairs-toolbar--embedded-nav {
+  display: none;
+}
+
+.affairs-radar-summary__heading {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.affairs-radar-summary__heading h2,
+.affairs-radar-summary__heading p {
+  margin: 0;
+}
+
+.affairs-radar-summary__heading h2 {
+  color: var(--color-chalk-white);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+}
+
+.affairs-radar-summary__heading p {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+}
+
+.affairs-radar-summary__window {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+}
+
+.affairs-radar-summary__window.is-warning {
+  color: var(--color-warning-ochre);
+}
+
+.affairs-radar-summary__signals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.affairs-radar-summary__signals > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: var(--space-md) var(--space-lg);
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.affairs-radar-summary__signals > div:last-child {
+  border-right: 0;
+}
+
+.affairs-radar-summary__signals dt,
+.affairs-radar-summary__signals .affairs-radar-summary__signal-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+}
+
+.affairs-radar-summary__signals dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-chalk-white);
+  font-family: var(--font-data);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+}
+
+.affairs-radar-summary__signals .affairs-radar-summary__signal-note {
+  margin: 0;
+  font-family: inherit;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+}
+
+.affairs-budget__summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.affairs-budget__summary > div {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 6px;
+  min-height: 88px;
+  padding: var(--space-md) var(--space-lg);
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.affairs-budget__summary > div:last-child {
+  border-right: 0;
+}
+
+.affairs-budget__summary > div > span {
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  line-height: var(--leading-tight);
+}
+
+.affairs-budget__summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-chalk-white);
+  font-family: var(--font-data);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+}
+
+@media (min-width: 761px) {
+  .jdg-canvas {
+    width: min(100%, 1120px);
+    max-width: 1120px;
+    margin-inline: auto;
+  }
+
+  .jdg-canvas > * {
+    min-height: 0;
+  }
+
+  .jdg-checklist {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .jdg-stage {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 980px) and (min-width: 761px) {
+  .affairs-radar-summary__signals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .affairs-radar-summary__signals > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .affairs-radar-summary__signals > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+}
+
+@media (max-width: 760px) {
+  .affairs-toolbar--embedded-nav {
+    display: flex;
+  }
+
+  .affairs-overview,
+  .affairs-budget {
+    width: 100%;
+  }
+
+  .affairs-radar-summary__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .affairs-radar-summary__signals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .affairs-radar-summary__signals > div {
+    min-height: 78px;
+    padding: var(--space-md);
+    border-right: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .affairs-radar-summary__signals > div:nth-child(even) {
+    border-right: 0;
+  }
+
+  .affairs-radar-summary__signals > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .affairs-radar-summary__signals dd {
+    font-size: var(--text-body);
+  }
+
+  .affairs-budget__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .affairs-budget__summary > div {
+    min-height: 76px;
+    padding: var(--space-md);
+    border-right: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .affairs-budget__summary > div:nth-child(even) {
+    border-right: 0;
+  }
+
+  .affairs-budget__summary > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .affairs-budget__summary strong {
+    font-size: var(--text-body);
+  }
 }
