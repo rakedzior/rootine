@@ -126,7 +126,7 @@ export const CATEGORY_ICON_KEYS: Record<string, LucideIcon> = {
 
 const PROGRESS_LABELS: Record<GoalProgressMode, string> = {
   numeric: "Wartość liczbowa",
-  milestones: "Kamienie milowe",
+  milestones: "Cel etapowy",
   regularity: "Regularność",
   manual: "Postęp ręczny",
 };
@@ -144,12 +144,12 @@ function formatDaysLeft(date: string, status: StoredGoalStatus) {
   if (days === null) return "Nieprawidłowy termin";
   if (days === 0) return "Termin dzisiaj";
   if (days < 0) return `${Math.abs(days)} dni po terminie`;
-  return `${days} dni zostało`;
+  return `za ${days} dni`;
 }
 
 export function toViewGoal(goal: StoredGoal, categories: GoalCategory[]): Goal {
   const category = categories.find((item) => item.id === goal.categoryId) ?? categories[0];
-  const nextMilestone = [...goal.milestones].filter((item) => !item.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+  const nextMilestone = [...goal.milestones].filter((item) => !item.done).sort((a, b) => Number(Boolean(b.isNext)) - Number(Boolean(a.isNext)) || (a.order ?? 0) - (b.order ?? 0) || a.dueDate.localeCompare(b.dueDate))[0]
     ?? [...goal.milestones].sort((a, b) => b.dueDate.localeCompare(a.dueDate))[0];
   const progress = getGoalProgress(goal);
   const current = goal.progressMode === "milestones" ? goal.milestones.filter((item) => item.done).length : getGoalCurrentValue(goal);
@@ -177,7 +177,7 @@ export function toViewGoal(goal: StoredGoal, categories: GoalCategory[]): Goal {
       date: formatGoalDate(nextMilestone.dueDate),
       daysLeft: formatDaysLeft(nextMilestone.dueDate, nextMilestone.done ? "completed" : "active"),
     } : {
-      title: "Dodaj pierwszy kamień milowy",
+      title: "Dodaj pierwszy etap",
       progress: 0,
       date: formatGoalDate(goal.dueDate),
       daysLeft: formatDaysLeft(goal.dueDate, goal.status),
@@ -206,7 +206,7 @@ export const FILTER_ITEMS: { id: FilterId; label: string; icon: LucideIcon; colo
 export function deadlineColor(goal: Goal) {
   if (["paused", "completed", "planned", "archived"].includes(goal.status)) return C.textSecond;
   if (goal.daysLeft.includes("po terminie")) return C.danger;
-  const daysRemaining = Number(goal.daysLeft.match(/^(\d+) dni zostało/)?.[1]);
+  const daysRemaining = Number(goal.daysLeft.match(/^za (\d+) dni/)?.[1]);
   if (Number.isFinite(daysRemaining) && daysRemaining <= 14) return C.warning;
   if (goal.status === "risk") return C.warning;
   return C.textSecond;

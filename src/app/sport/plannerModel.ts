@@ -2,12 +2,19 @@ import {
   INITIAL_TEMPLATES,
   addDays,
   cloneExercises,
+  createInitialExercises,
   createInitialSessions,
   fromDateKey,
   startOfWeekKey,
+  templateSections,
   toDateKey,
   type Discipline,
+  type Exercise,
+  type RunningStage,
+  type ScheduledWorkout,
   type TrainingPlan,
+  type WorkoutExecution,
+  type WorkoutExercise,
   type WorkoutSession,
   type WorkoutTemplate,
 } from "./model";
@@ -15,7 +22,7 @@ import { DISCIPLINE_META } from "./theme";
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "../data/localRepository";
 import { calendarDaysBetween } from "../data/localDate";
 
-export type PlannerView = "today" | "cycle" | "templates" | "history" | "analysis";
+export type PlannerView = "today" | "cycle" | "templates" | "exercises" | "history" | "analysis";
 
 export interface CycleWorkout {
   id: string;
@@ -28,6 +35,11 @@ export interface CycleWorkout {
   seriesId?: string;
   time?: string;
   note?: string;
+  status?: ScheduledWorkout["status"];
+  contentSnapshot?: ScheduledWorkout["contentSnapshot"];
+  sourceTemplateVersion?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TrainingCycle {
@@ -69,7 +81,8 @@ export interface WorkoutOutcome {
 }
 
 export interface SportPlannerState {
-  version: 4;
+  version: 4 | 5;
+  storageSchemaVersion?: 5;
   templates: WorkoutTemplate[];
   activeCycle: TrainingCycle | null;
   cycles: TrainingCycle[];
@@ -77,6 +90,11 @@ export interface SportPlannerState {
   history: WorkoutHistoryEntry[];
   sessions: WorkoutSession[];
   workoutOutcomes: Record<string, WorkoutOutcome>;
+  /** New canonical records. Optional keeps hand-built v4 fixtures compatible. */
+  exercises?: Exercise[];
+  scheduledWorkouts?: ScheduledWorkout[];
+  executions?: WorkoutExecution[];
+  recoveryDays?: string[];
 }
 
 interface SportPlannerStateV3 {
@@ -231,7 +249,7 @@ function isWorkoutOutcome(value: unknown): value is WorkoutOutcome {
 
 function isSportPlannerState(value: unknown): value is SportPlannerState {
   return isRecord(value)
-    && value.version === 4
+    && (value.version === 4 || value.version === 5)
     && Array.isArray(value.templates)
     && value.templates.every(isWorkoutTemplate)
     && (value.activeCycle === null || isTrainingCycle(value.activeCycle))
@@ -297,7 +315,10 @@ function isSportPlannerStateV3(value: unknown): value is SportPlannerStateV3 {
     && Array.isArray(value.sessions)
     && value.sessions.every(isWorkoutSession)
     && isRecord(value.workoutOutcomes)
-    && Object.values(value.workoutOutcomes).every(isWorkoutOutcome);
+    && Object.values(value.workoutOutcomes).every(isWorkoutOutcome)
+    && (value.exercises === undefined || Array.isArray(value.exercises))
+    && (value.scheduledWorkouts === undefined || Array.isArray(value.scheduledWorkouts))
+    && (value.executions === undefined || Array.isArray(value.executions));
 }
 
 export function cycleDateRange(cycle: TrainingCycle) {
@@ -369,7 +390,71 @@ export function createWorkoutFromTemplate(
     templateId: template.id,
     seriesId,
     time: time || undefined,
+    contentSnapshot: templateSections(template),
+    sourceTemplateVersion: template.updatedAt ?? template.createdAt,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
+}
+
+function sessionContentFromSnapshot(
+  snapshot: ScheduledWorkout["contentSnapshot"],
+  template: WorkoutTemplate,
+  sessionId: string,
+): { exercises: WorkoutExercise[]; stages?: RunningStage[] } {
+  const items = snapshot.flatMap((section) => section.items).sort((left, right) => left.order - right.order);
+  const exercises = items.flatMap((item, itemIndex) => {
+    if (!item.exerciseId) return [];
+    const source = template.exercises.find((exercise) => exercise.id === item.id || exercise.exerciseId === item.exerciseId);
+    if (!source) return [];
+    const parameters = item.parametersOverride;
+    const templateSeries = parameters?.series ?? [];
+    const setCount = templateSeries.length || parameters?.sets || source.sets.length;
+    const plannedReps = parameters?.repRange
+      ? Number(parameters.repRange.match(/\d+/)?.[0] ?? 0) || undefined
+      : source.sets[0]?.plannedReps;
+    return [{
+      ...source,
+      id: `${sessionId}-exercise-${itemIndex + 1}`,
+      restSeconds: parameters?.restSeconds ?? source.restSeconds,
+      note: item.note ?? source.note,
+      sets: Array.from({ length: setCount }, (_, setIndex) => {
+        const series = templateSeries[setIndex];
+        const sourceSet = source.sets[setIndex] ?? source.sets[0] ?? { id: `${source.id}-set-${setIndex + 1}`, done: false };
+        return {
+          ...sourceSet,
+          id: `${sessionId}-exercise-${itemIndex + 1}-set-${setIndex + 1}`,
+          plannedReps: series?.reps ?? plannedReps,
+          plannedWeight: series?.weight ?? sourceSet.plannedWeight,
+          plannedSeconds: series?.durationSeconds ?? parameters?.durationSeconds ?? sourceSet.plannedSeconds,
+          rir: series?.rir ?? parameters?.rir ?? sourceSet.rir,
+          rpe: series?.rpe ?? sourceSet.rpe,
+          tempo: series?.tempo ?? parameters?.tempo ?? sourceSet.tempo,
+          actualReps: undefined,
+          actualSeconds: undefined,
+          actualWeight: undefined,
+          done: false,
+        };
+      }),
+    } satisfies WorkoutExercise];
+  });
+  const stages = items.flatMap((item, itemIndex) => {
+    if (!item.stageDefinition) return [];
+    const source = template.stages?.find((stage) => stage.id === item.stageDefinition?.id);
+    return [{
+      ...(source ?? {
+        id: item.stageDefinition.id,
+        label: item.stageDefinition.name,
+        kind: item.stageDefinition.kind === "rest" ? "recovery" : item.stageDefinition.kind,
+        target: item.stageDefinition.target ?? "",
+      }),
+      id: `${sessionId}-stage-${itemIndex + 1}`,
+      label: item.stageDefinition.name,
+      target: item.stageDefinition.target ?? source?.target ?? "",
+      done: false,
+    } satisfies RunningStage];
+  });
+  return { exercises, stages: stages.length ? stages : undefined };
 }
 
 export function createSessionFromCycleWorkout(
@@ -379,6 +464,9 @@ export function createSessionFromCycleWorkout(
   status: WorkoutSession["status"] = "in_progress",
 ): WorkoutSession {
   const sessionId = createPlannerId("session");
+  const snapshotContent = template && workout.contentSnapshot
+    ? sessionContentFromSnapshot(workout.contentSnapshot, template, sessionId)
+    : { exercises: template ? cloneExercises(template.exercises, sessionId) : [], stages: template?.stages?.map((stage, index) => ({ ...stage, id: `${sessionId}-stage-${index + 1}`, done: status === "completed" })) };
   return {
     id: sessionId,
     cycleWorkoutId: workout.id,
@@ -392,12 +480,8 @@ export function createSessionFromCycleWorkout(
     planId: cycle.id,
     templateId: workout.templateId,
     note: workout.note,
-    exercises: template ? cloneExercises(template.exercises, sessionId) : [],
-    stages: template?.stages?.map((stage, index) => ({
-      ...stage,
-      id: `${sessionId}-stage-${index + 1}`,
-      done: status === "completed",
-    })),
+    exercises: snapshotContent.exercises,
+    stages: snapshotContent.stages?.map((stage) => ({ ...stage, done: status === "completed" })),
     startedAt: status === "in_progress" ? Date.now() : undefined,
     completedAt: status === "completed" || status === "incomplete" ? Date.now() : undefined,
   };
@@ -470,6 +554,78 @@ function historyFromSessions(sessions: WorkoutSession[]): WorkoutHistoryEntry[] 
     .sort((left, right) => right.date.localeCompare(left.date));
 }
 
+function templateSnapshot(template: WorkoutTemplate | undefined) {
+  return template ? templateSections(template) : [];
+}
+
+function canonicalScheduledWorkouts(state: SportPlannerState): ScheduledWorkout[] {
+  const templates = new Map(state.templates.map((template) => [template.id, template]));
+  const existing = new Map((state.scheduledWorkouts ?? []).map((scheduled) => [scheduled.id, scheduled]));
+  const outcomes = state.workoutOutcomes;
+  const cycles = state.cycles.length ? state.cycles : state.activeCycle ? [state.activeCycle] : [];
+  return cycles.flatMap((cycle) => cycle.workouts.map((workout) => {
+    const outcome = outcomes[workout.id];
+    const persisted = existing.get(workout.id);
+    const template = workout.templateId ? templates.get(workout.templateId) : undefined;
+    return {
+      id: workout.id,
+      planId: cycle.id,
+      templateId: workout.templateId,
+      date: cycleWorkoutDate(cycle, workout),
+      scheduledTime: workout.time,
+      name: workout.title,
+      sportCategory: workout.discipline,
+      plannedDuration: workout.durationMinutes,
+      status: workout.status ?? persisted?.status
+        ?? (outcome?.status === "completed" ? "completed"
+          : outcome?.status === "incomplete" ? "started"
+            : outcome?.status === "missed" ? "skipped" : "scheduled"),
+      contentSnapshot: workout.contentSnapshot ?? persisted?.contentSnapshot ?? templateSnapshot(template),
+      sourceTemplateVersion: workout.sourceTemplateVersion ?? persisted?.sourceTemplateVersion ?? template?.updatedAt ?? template?.createdAt,
+      notes: workout.note ?? persisted?.notes,
+      createdAt: workout.createdAt ?? persisted?.createdAt ?? new Date().toISOString(),
+      updatedAt: workout.updatedAt ?? persisted?.updatedAt ?? cycle.updatedAt,
+    } satisfies ScheduledWorkout;
+  }));
+}
+
+function canonicalExecutions(state: SportPlannerState): WorkoutExecution[] {
+  if (state.executions?.length) return state.executions;
+  const histories = new Map(state.history.map((entry) => [entry.id, entry]));
+  return state.sessions
+    .filter((session) => Boolean(session.cycleWorkoutId) && (session.status === "completed" || session.status === "incomplete"))
+    .map((session) => {
+      const history = histories.get(session.id);
+      const completedItems = session.exercises.map((exercise) => ({
+        scheduledItemId: exercise.id,
+        exerciseId: exercise.exerciseId,
+        sets: exercise.sets,
+        done: exercise.sets.some((set) => set.done),
+        note: exercise.note,
+      }));
+      return {
+        scheduledWorkoutId: session.cycleWorkoutId!,
+        startedAt: session.startedAt ? new Date(session.startedAt).toISOString() : undefined,
+        finishedAt: session.completedAt ? new Date(session.completedAt).toISOString() : undefined,
+        actualDuration: session.durationMinutes,
+        completedItems,
+        resultSummary: {
+          completedSets: history?.completedUnits,
+          volumeKg: history?.volumeKg,
+          distanceKm: history?.distanceKm,
+          averagePace: history?.averagePace,
+        },
+        effortRating: session.metrics?.rpe,
+        wellbeingRating: undefined,
+        notes: session.note,
+      } satisfies WorkoutExecution;
+    });
+}
+
+function canonicalExercises(state: SportPlannerState): Exercise[] {
+  return state.exercises?.length ? state.exercises : createInitialExercises();
+}
+
 function enrichPlannerState(state: SportPlannerState): SportPlannerState {
   const cycle = state.activeCycle;
   const sessions = state.sessions.map((session) => {
@@ -485,7 +641,38 @@ function enrichPlannerState(state: SportPlannerState): SportPlannerState {
       ? { ...entry, ...derived }
       : { ...entry, plannedDurationMinutes: entry.plannedDurationMinutes ?? entry.durationMinutes };
   });
-  return { ...state, sessions, history };
+  const persistedScheduled = new Map((state.scheduledWorkouts ?? []).map((scheduled) => [scheduled.id, scheduled]));
+  const templates = new Map(state.templates.map((template) => [template.id, template]));
+  const sourceCycles = state.cycles.length ? state.cycles : state.activeCycle ? [state.activeCycle] : [];
+  const cycles = sourceCycles.map((currentCycle) => ({
+    ...currentCycle,
+    workouts: currentCycle.workouts.map((workout) => {
+      const template = workout.templateId ? templates.get(workout.templateId) : undefined;
+      const persisted = persistedScheduled.get(workout.id);
+      return {
+        ...workout,
+        contentSnapshot: workout.contentSnapshot ?? persisted?.contentSnapshot ?? templateSnapshot(template),
+        sourceTemplateVersion: workout.sourceTemplateVersion ?? persisted?.sourceTemplateVersion ?? template?.updatedAt ?? template?.createdAt,
+        createdAt: workout.createdAt ?? persisted?.createdAt ?? new Date().toISOString(),
+        updatedAt: workout.updatedAt ?? persisted?.updatedAt ?? currentCycle.updatedAt,
+      };
+    }),
+  }));
+  const activeCycle = state.activeCycle
+    ? cycles.find((currentCycle) => currentCycle.id === state.activeCycle?.id) ?? state.activeCycle
+    : null;
+  return {
+    ...state,
+    version: 5,
+    storageSchemaVersion: 5,
+    activeCycle,
+    cycles,
+    sessions,
+    history,
+    exercises: canonicalExercises(state),
+    scheduledWorkouts: canonicalScheduledWorkouts({ ...state, activeCycle, cycles, sessions, history }),
+    executions: canonicalExecutions({ ...state, sessions, history }),
+  };
 }
 
 function lastCompletedOccurrenceDate(cycle: TrainingCycle, workout: CycleWorkout, today: string) {
@@ -602,7 +789,8 @@ function migrateLegacyState(legacy: LegacySportState): SportPlannerState {
 
   const activeCycle = cycle.workouts.length ? cycle : seedDefaultCycle(templates);
   return {
-    version: 4,
+    version: 5,
+    storageSchemaVersion: 5,
     templates,
     activeCycle,
     cycles: [activeCycle],
@@ -610,6 +798,12 @@ function migrateLegacyState(legacy: LegacySportState): SportPlannerState {
     history: historyFromSessions(legacy.sessions),
     sessions: legacy.sessions.filter((session) => session.status !== "scheduled"),
     workoutOutcomes: {},
+    exercises: createInitialExercises(),
+    scheduledWorkouts: canonicalScheduledWorkouts({
+      version: 5, storageSchemaVersion: 5, templates, activeCycle, cycles: [activeCycle], activeCycleId: activeCycle.id,
+      history: historyFromSessions(legacy.sessions), sessions: legacy.sessions.filter((session) => session.status !== "scheduled"), workoutOutcomes: {},
+    }),
+    executions: [],
   };
 }
 
@@ -622,7 +816,8 @@ export function createDefaultSportPlannerState(): SportPlannerState {
   const initialSessions = createInitialSessions();
   const activeCycle = seedDefaultCycle(templates);
   return {
-    version: 4,
+    version: 5,
+    storageSchemaVersion: 5,
     templates,
     activeCycle,
     cycles: [activeCycle],
@@ -630,6 +825,9 @@ export function createDefaultSportPlannerState(): SportPlannerState {
     history: historyFromSessions(initialSessions),
     sessions: initialSessions.filter((session) => session.status !== "scheduled"),
     workoutOutcomes: {},
+    exercises: createInitialExercises(),
+    scheduledWorkouts: [],
+    executions: [],
   };
 }
 
@@ -651,7 +849,8 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
   if (isSportPlannerStateV3(value)) {
     const activeCycle = withMigratedSeries(value.activeCycle);
     return {
-      version: 4,
+      version: 5,
+      storageSchemaVersion: 5,
       templates: value.templates,
       activeCycle,
       cycles: activeCycle ? [activeCycle] : [],
@@ -659,6 +858,9 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
       history: value.history,
       sessions: value.sessions,
       workoutOutcomes: value.workoutOutcomes,
+      exercises: createInitialExercises(),
+      scheduledWorkouts: [],
+      executions: [],
     };
   }
   if (isSportPlannerStateV2(value)) {
@@ -671,7 +873,8 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
       }
     })();
     return {
-      version: 4,
+      version: 5,
+      storageSchemaVersion: 5,
       templates: value.templates,
       activeCycle: value.activeCycle,
       cycles: value.activeCycle ? [value.activeCycle] : [],
@@ -681,6 +884,9 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
         ? legacy.sessions.filter((session) => session.status !== "scheduled")
         : [],
       workoutOutcomes: {},
+      exercises: createInitialExercises(),
+      scheduledWorkouts: [],
+      executions: [],
     };
   }
   if (isSportPlannerStateV1(value)) {
@@ -698,7 +904,8 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
     }
     const activeCycle = withMigratedSeries(value.activeCycle);
     return {
-      version: 4,
+      version: 5,
+      storageSchemaVersion: 5,
       templates: value.templates,
       activeCycle,
       cycles: activeCycle ? [activeCycle] : [],
@@ -706,6 +913,9 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
       history,
       sessions,
       workoutOutcomes: {},
+      exercises: createInitialExercises(),
+      scheduledWorkouts: [],
+      executions: [],
     };
   }
   return null;
@@ -722,7 +932,27 @@ export function loadSportPlannerStateResult(): LocalLoadResult<SportPlannerState
 }
 
 export function loadSportPlannerState(): SportPlannerState {
-  return loadSportPlannerStateResult().workspace;
+  const result = loadSportPlannerStateResult();
+  const state = result.workspace;
+  let needsPersist = result.status === "migrated";
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(SPORT_PLANNER_STORAGE_KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === "object") {
+        const record = parsed as { storageSchemaVersion?: unknown; version?: unknown };
+        needsPersist = needsPersist || record.storageSchemaVersion !== 5 || record.version !== 5;
+      }
+    } catch {
+      // readLocalWorkspace already retained malformed payloads for recovery.
+    }
+  }
+  if (typeof window !== "undefined" && needsPersist) {
+    // Persist the normalized v5 envelope after the first successful read.
+    // The repository keeps its recovery copy before replacing an old payload.
+    saveSportPlannerState(state);
+  }
+  return state;
 }
 
 export function withActiveCycle(state: SportPlannerState, cycle: TrainingCycle | null): SportPlannerState {

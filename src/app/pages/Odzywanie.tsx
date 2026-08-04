@@ -125,7 +125,7 @@ export default function Odzywanie() {
   const [weightInlineOpen, setWeightInlineOpen] = useState(false);
   const [weightDraft, setWeightDraft] = useState({ date: nutritionDateKey(), weightKg: "", note: "" });
   const [weightError, setWeightError] = useState("");
-  const [analysisRange, setAnalysisRange] = useState<NutritionAnalysisRange>(30);
+  const [analysisRange, setAnalysisRange] = useState<NutritionAnalysisRange>(7);
 
   useEffect(() => {
     writeModuleMemoryValue("nutrition", "selectedDate", selectedDate);
@@ -176,6 +176,11 @@ export default function Odzywanie() {
     [analysisEndDate, workspace.weightMeasurements],
   );
   const latestWeight = weightHistory[weightHistory.length - 1];
+  const weightTrend7d = useMemo(() => {
+    const recentMeasurements = weightHistory.filter((measurement) => measurement.date >= shiftDate(analysisEndDate, -6));
+    if (recentMeasurements.length < 2) return null;
+    return recentMeasurements.at(-1)!.weightKg - recentMeasurements[0].weightKg;
+  }, [analysisEndDate, weightHistory]);
   const simpleWaterWeightValue = parseDraftNumber(waterSimpleWeight);
   const simpleWaterMin = simpleWaterWeightValue >= 20 && simpleWaterWeightValue <= 500
     ? Math.round((simpleWaterWeightValue * 30) / 50) * 50
@@ -902,7 +907,7 @@ export default function Odzywanie() {
           <ContentHeader
             className="nutrition-content-header"
             title="Dzienny rejestr"
-            description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} kcal`}
+            description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} / ${formatNumber(workspace.goals.calories)} kcal`}
             actions={<>
               <div className="nutrition-date-navigation">
                 <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}><ChevronLeft size={14} /></Button>
@@ -946,8 +951,19 @@ export default function Odzywanie() {
               <section className="nutrition-meals-panel min-w-0">
                 <SectionHeader
                   title="Posiłki"
-                  description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} kcal`}
                 />
+
+                {allEntries.length > 0 && (
+                  <div className="nutrition-entry-table-header" aria-hidden="true">
+                    <span>Produkt</span>
+                    <span>Porcja</span>
+                    <span>B</span>
+                    <span>W</span>
+                    <span>T</span>
+                    <span>kcal</span>
+                    <span>Akcje</span>
+                  </div>
+                )}
 
                 <div className="nutrition-meal-list">
                   {MEAL_META.map(({ id, label, icon: Icon }) => {
@@ -961,13 +977,14 @@ export default function Odzywanie() {
                             <h3 id={`meal-${id}`}>{label}</h3>
                             <Badge tone="neutral">{mealEntries.length}</Badge>
                           </div>
-                          <div className="nutrition-meal-summary" aria-label={`Podsumowanie ${label}`}>
-                            <span className="nutrition-meal-summary__metric is-portion"><small>Porcja</small></span>
-                            <span className="nutrition-meal-summary__metric is-protein"><small>B</small>{formatNumber(mealTotals.protein)} g</span>
-                            <span className="nutrition-meal-summary__metric is-carbs"><small>W</small>{formatNumber(mealTotals.carbs)} g</span>
-                            <span className="nutrition-meal-summary__metric is-fat"><small>T</small>{formatNumber(mealTotals.fat)} g</span>
-                            <span className="nutrition-meal-summary__metric is-calories"><small>kcal</small>{formatNumber(mealTotals.calories)}</span>
-                          </div>
+                          {mealEntries.length > 0 && (
+                            <div className="nutrition-meal-summary" aria-label={`Podsumowanie ${label}`}>
+                              <span className="nutrition-meal-summary__metric is-protein"><small>B</small>{formatNumber(mealTotals.protein)} g</span>
+                              <span className="nutrition-meal-summary__metric is-carbs"><small>W</small>{formatNumber(mealTotals.carbs)} g</span>
+                              <span className="nutrition-meal-summary__metric is-fat"><small>T</small>{formatNumber(mealTotals.fat)} g</span>
+                              <span className="nutrition-meal-summary__metric is-calories"><small>kcal</small>{formatNumber(mealTotals.calories)}</span>
+                            </div>
+                          )}
                           {mealEntries.length > 0 && (
                             <Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
                               Dodaj
@@ -1003,16 +1020,18 @@ export default function Odzywanie() {
                             ))}
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            className="nutrition-meal-card__empty"
-                            disabled={dayClosed}
-                            onClick={() => openEntryDialog(id)}
-                          >
-                            <Plus size={14} aria-hidden="true" />
-                            <span>Dodaj pierwszy produkt</span>
-                            <small>do: {label}</small>
-                          </button>
+                          <div className="nutrition-meal-card__empty">
+                            <span>Nie dodano produktów</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              leadingIcon={<Plus size={12} />}
+                              disabled={dayClosed}
+                              onClick={() => openEntryDialog(id)}
+                            >
+                              Dodaj pierwszy produkt
+                            </Button>
+                          </div>
                         )}
                       </section>
                     );
@@ -1043,6 +1062,11 @@ export default function Odzywanie() {
                       const calorieGoal = workspace.goals.calories;
                       const calorieRatio = calorieGoal > 0 ? totals.calories / calorieGoal : 0;
                       const calorieRemaining = calorieGoal - totals.calories;
+                      const calorieStatus = calorieRemaining < 0
+                        ? `Przekroczono o ${formatNumber(Math.abs(calorieRemaining))} kcal`
+                        : calorieRatio >= 0.9
+                          ? "Blisko celu"
+                          : `Pozostało ${formatNumber(calorieRemaining)} kcal`;
                       return (
                         <>
                           <div className="nutrition-budget-card__primary">
@@ -1050,9 +1074,7 @@ export default function Odzywanie() {
                               <span>Kalorie</span>
                               <strong>{formatNumber(totals.calories)} / {formatNumber(calorieGoal)} kcal</strong>
                             </div>
-                            <p className={calorieRemaining < 0 ? "is-over" : ""}>
-                              {calorieRemaining < 0 ? `Przekroczono o ${formatNumber(Math.abs(calorieRemaining))} kcal` : `Pozostało ${formatNumber(calorieRemaining)} kcal`}
-                            </p>
+                            <p className={calorieRemaining < 0 ? "is-over" : ""}>{calorieStatus}</p>
                             <div className="nutrition-budget-card__bar" role="progressbar" aria-label="Kalorie" aria-valuemin={0} aria-valuemax={Math.max(calorieGoal, totals.calories, 1)} aria-valuenow={totals.calories}>
                               <i style={{ transform: `scaleX(${Math.min(1, calorieRatio)})` }} />
                             </div>
@@ -1063,13 +1085,22 @@ export default function Odzywanie() {
                               const goal = workspace.goals[key];
                               const remaining = goal - current;
                               const ratio = goal > 0 ? current / goal : 0;
+                              const status = key === "protein"
+                                ? ratio >= 1
+                                  ? "Cel osiągnięty"
+                                  : ratio >= 0.9
+                                    ? "Cel prawie osiągnięty"
+                                    : `Pozostało ${formatNumber(remaining)} ${unit}`
+                                : remaining < 0
+                                  ? `Przekroczono o ${formatNumber(Math.abs(remaining))} ${unit}`
+                                  : `Pozostało ${formatNumber(remaining)} ${unit}`;
                               return (
                                 <div key={key} className="nutrition-budget-card__macro">
                                   <div className="nutrition-budget-card__macro-head">
                                     <span>{label}</span>
                                     <strong>{formatNumber(current)} / {formatNumber(goal)} {unit}</strong>
                                   </div>
-                                  <p className={remaining < 0 ? "is-over" : ""}>{remaining < 0 ? `Przekroczono o ${formatNumber(Math.abs(remaining))} ${unit}` : `Pozostało ${formatNumber(remaining)} ${unit}`}</p>
+                                  <p className={key === "fat" && remaining < 0 ? "is-over" : ""}>{status}</p>
                                   <div className="nutrition-budget-card__bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={Math.max(goal, current, 1)} aria-valuenow={current}>
                                     <i style={{ transform: `scaleX(${Math.min(1, ratio)})`, background: ratio > 1 ? uiColors.danger : color }} />
                                   </div>
@@ -1102,10 +1133,6 @@ export default function Odzywanie() {
                   />
                   <Card tone="panel" padding="default">
                     <div className="nutrition-water-card__summary">
-                      <div className="nutrition-water-card__label">
-                        <Droplets size={15} strokeWidth={1.5} />
-                        <span>Wypita woda</span>
-                      </div>
                       <div className="nutrition-water-card__value">
                         {waterEditOpen ? (
                           <div className="nutrition-water-card__editor">
@@ -1143,6 +1170,19 @@ export default function Odzywanie() {
                         ) : (
                           <strong>{day.waterMl.toLocaleString("pl-PL")} ml / {workspace.goals.waterMl.toLocaleString("pl-PL")} ml</strong>
                         )}
+                        {!waterEditOpen && (
+                          <span>
+                            {day.waterMl >= workspace.goals.waterMl
+                              ? day.waterMl === workspace.goals.waterMl
+                                ? "Cel osiągnięty"
+                                : `Przekroczono o ${(day.waterMl - workspace.goals.waterMl).toLocaleString("pl-PL")} ml`
+                              : `Pozostało ${(workspace.goals.waterMl - day.waterMl).toLocaleString("pl-PL")} ml`}
+                          </span>
+                        )}
+                      </div>
+                      <div className="nutrition-water-card__label">
+                        <Droplets size={15} strokeWidth={1.5} />
+                        <span>Wypita woda</span>
                       </div>
                     </div>
                     {waterEditError && <p className="nutrition-inline-error" role="alert">{waterEditError}</p>}
@@ -1197,7 +1237,7 @@ export default function Odzywanie() {
                     )}
                   />
                   <NutritionWeightCard
-                    latestWeight={latestWeight} inlineOpen={weightInlineOpen} draft={weightDraft}
+                    latestWeight={latestWeight} trend7d={weightTrend7d} inlineOpen={weightInlineOpen} draft={weightDraft}
                     error={weightError} disabled={dayClosed} setDraft={setWeightDraft}
                     onRegister={openWeightMeasurement} onSubmit={saveWeightMeasurement}
                     onCancel={() => { setWeightInlineOpen(false); setWeightError(""); }}
@@ -1430,10 +1470,10 @@ export default function Odzywanie() {
 
       {weightDialog === "analysis" && (
         <Modal
-          title="Analiza odżywiania"
-          eyebrow="Trendy"
-          description="Porównaj zapisane posiłki z pomiarami masy w wybranym okresie."
-          width={1180}
+      title="Analiza odżywiania"
+      eyebrow="Trendy"
+      description="Porównaj zapisane posiłki, nawodnienie i pomiary masy w wybranym okresie."
+      width="min(1360px, calc(100vw - 32px))"
           bodyClassName="nutrition-analysis-modal"
           onClose={closeWeightDialog}
         >

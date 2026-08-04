@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Archive,
@@ -9,7 +9,6 @@ import {
   CircleDot,
   Ellipsis,
   Flag,
-  ListChecks,
   Pencil,
   Plus,
   RotateCcw,
@@ -27,11 +26,11 @@ import { formatLocalDate } from "../data/localDate";
 import { ConfirmDialog, GoalFormDialog, MilestoneDialog, ProgressDialog } from "../goals/GoalDialogs";
 import type { GoalEditorData } from "../goals/GoalDialogs";
 import { GoalNoteTextarea } from "../goals/GoalNoteTextarea";
-import { Badge, Button, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader } from "../ui";
+import { AddToTasksButton, Badge, Button, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader } from "../ui";
+import type { ExternalTaskInput } from "../data/taskLinks";
+import { loadTaskWorkspace } from "../data/taskWorkspace";
 import { C } from "../goals/goalPresentationModel";
 import "../../styles/goals.css";
-
-type GoalViewMode = "summary" | "execution";
 
 const fmtDate = (date: string) => formatLocalDate(date);
 const statusLabels: Record<GoalStatus, string> = {
@@ -68,7 +67,10 @@ export default function CelSzczegoly() {
   const store = useGoalsStore();
   const goal = store.goals.find((item) => item.id === goalId);
   const category = store.categories.find((item) => item.id === goal?.categoryId);
-  const [viewMode, setViewMode] = useState<GoalViewMode>("summary");
+  const [showCompletedStages, setShowCompletedStages] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [dragStageId, setDragStageId] = useState<string | null>(null);
+  const [stageMenuId, setStageMenuId] = useState<string | null>(null);
   const [noteEditing, setNoteEditing] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
@@ -80,30 +82,9 @@ export default function CelSzczegoly() {
   const [deleteGoalOpen, setDeleteGoalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
-  const [hydratedGoalId, setHydratedGoalId] = useState<string | null>(null);
   const menuId = useId();
-
-  useEffect(() => {
-    setHydratedGoalId(null);
-    if (!goalId) return;
-    const fallback: GoalViewMode = goal?.progressMode === "milestones" ? "execution" : "summary";
-    try {
-      const saved = localStorage.getItem(`rootine.goal-detail-view:${goalId}`);
-      setViewMode(saved === "execution" || saved === "summary" ? saved : fallback);
-    } catch {
-      setViewMode(fallback);
-    }
-    setHydratedGoalId(goalId);
-  }, [goalId, goal?.progressMode]);
-
-  useEffect(() => {
-    if (!goalId || hydratedGoalId !== goalId) return;
-    try {
-      localStorage.setItem(`rootine.goal-detail-view:${goalId}`, viewMode);
-    } catch {
-      // View preference persistence is best-effort.
-    }
-  }, [goalId, hydratedGoalId, viewMode]);
+  const taskGoalId = goal?.id;
+  const linkedTasks = taskGoalId ? loadTaskWorkspace().tasks.filter((task) => task.source?.kind === "goals" && task.source.entity === `${encodeURIComponent(taskGoalId)}/goal`) : [];
 
   if (!goal) {
     return (
@@ -125,16 +106,15 @@ export default function CelSzczegoly() {
   const semanticStatusColor = statusColor(goal);
   const nextMilestone = goal.milestones
     .filter((item) => !item.done)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
-  const sortedMilestones = [...goal.milestones].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    .sort((a, b) => Number(Boolean(b.isNext)) - Number(Boolean(a.isNext)) || (a.order ?? 0) - (b.order ?? 0) || a.dueDate.localeCompare(b.dueDate))[0];
+  const sortedMilestones = [...goal.milestones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.dueDate.localeCompare(b.dueDate));
   const sortedProgress = [...goal.progressEntries].sort((a, b) => b.date.localeCompare(a.date));
   const latestProgress = sortedProgress[0];
   const measurementLabel = goal.progressMode === "milestones"
-    ? "Kamienie milowe"
+    ? "Etapy"
     : goal.progressMode === "regularity"
       ? goal.regularityMode === "frequency" ? "Wykonania" : "Dni serii"
       : goal.progressMode === "manual" ? "Postęp" : "Wartość";
-
   const openProgress = () => {
     if (goal.progressMode === "milestones") { setEditingMilestoneId(null); setMilestoneOpen(true); }
     else { setEditingProgressId(null); setProgressOpen(true); }
@@ -142,10 +122,6 @@ export default function CelSzczegoly() {
 
   const submitEdit = (data: GoalEditorData) => { store.updateGoal(goal.id, data); setEditOpen(false); };
   const openMilestone = (milestoneId: string | null = null) => { setEditingMilestoneId(milestoneId); setMilestoneOpen(true); };
-  const switchView = (mode: GoalViewMode) => {
-    setViewMode(mode);
-    setNoteEditing(false);
-  };
 
   const renderFacts = () => (
     <section className="goal-detail-facts" aria-labelledby="goal-facts-heading">
@@ -157,37 +133,13 @@ export default function CelSzczegoly() {
     </section>
   );
 
-  const renderNote = () => (
-    <section className="goal-detail-note-preview" aria-labelledby="goal-note-preview-heading">
-      <SectionHeading
-        title="Notatka"
-        action={<button type="button" className="goal-detail-text-action" onClick={() => setNoteEditing((editing) => !editing)}>{noteEditing ? "Zamknij" : goal.note ? "Edytuj" : "Dodaj"}</button>}
-      />
-      {noteEditing ? (
-        <GoalNoteTextarea
-          key={`${goal.id}-inline-note`}
-          aria-label="Notatka do celu"
-          value={goal.note}
-          onCommit={(value) => store.updateGoal(goal.id, { note: value }, { persistence: "immediate" })}
-          rows={viewMode === "execution" ? 5 : 7}
-          placeholder="Dodaj założenia, kolejne kroki i ważne informacje…"
-          className="goal-detail-notes-editor goal-detail-notes-editor--inline"
-        />
-      ) : goal.note ? (
-        <p>{goal.note}</p>
-      ) : (
-        <p className="is-empty">Dodaj założenia, kolejne kroki i ważne informacje.</p>
-      )}
-    </section>
-  );
-
   const renderNextStep = (compact = false) => (
     <section className={`goal-detail-next ${compact ? "goal-detail-next--compact" : ""}`} aria-labelledby="goal-next-step-heading">
       <div className="goal-detail-next-icon" style={{ color: goal.color }}><CircleDot size={17} /></div>
       <div className="min-w-0 flex-1">
         <h2 id="goal-next-step-heading">Następny krok</h2>
         {goal.progressMode === "milestones" ? (
-          nextMilestone ? <><p className="goal-detail-next-title">{nextMilestone.title}</p><p>Termin: {fmtDate(nextMilestone.dueDate)} · waga {nextMilestone.weight}</p></> : <><p className="goal-detail-next-title">Dodaj pierwszy etap tego celu</p><p>Etapy pomagają rozłożyć większy cel na mniejsze kroki.</p></>
+          nextMilestone ? <><p className="goal-detail-next-title">{nextMilestone.title}</p><p>Termin: {fmtDate(nextMilestone.dueDate)} · {nextMilestone.note || "Najbliższy etap do wykonania"}</p></> : <><p className="goal-detail-next-title">Wszystkie etapy ukończone</p><p>Dodaj kolejny etap, jeśli cel ma być kontynuowany.</p></>
         ) : latestProgress ? <><p className="goal-detail-next-title">Zapisz kolejną aktualizację</p><p>Ostatni wpis: {latestProgress.note || "bez notatki"} · {fmtDate(latestProgress.date)}</p></> : <><p className="goal-detail-next-title">Zapisz pierwszy pomiar</p><p>Jedna aktualizacja wystarczy, żeby rozpocząć historię celu.</p></>}
       </div>
       <Button variant={goal.progressMode === "milestones" && nextMilestone ? "quiet" : "primary"} size="sm" onClick={() => {
@@ -195,73 +147,81 @@ export default function CelSzczegoly() {
         else if (goal.progressMode === "milestones") openMilestone();
         else openProgress();
       }} leadingIcon={goal.progressMode === "milestones" && nextMilestone ? <Check size={12} /> : <Plus size={12} />}>
-        {goal.progressMode === "milestones" && nextMilestone ? "Ukończ etap" : goal.progressMode === "milestones" ? "Dodaj etap" : "Dodaj postęp"}
+        {goal.progressMode === "milestones" && nextMilestone ? "Ukończ etap" : goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}
       </Button>
     </section>
   );
 
-  const renderMilestoneTimeline = () => (
-    goal.milestones.length === 0 ? (
-      <EmptyGoalState text="Ten cel nie ma jeszcze kamieni milowych" action="Dodaj pierwszy kamień" onAction={() => openMilestone()} />
+  const renderMilestoneTimeline = () => {
+    const activeStages = sortedMilestones.filter((item) => !item.done);
+    const completedStages = sortedMilestones.filter((item) => item.done);
+    const stages = [...activeStages, ...(showCompletedStages ? completedStages : [])];
+    return goal.milestones.length === 0 ? (
+      <EmptyGoalState text="Ten cel nie ma jeszcze etapów" action="Dodaj pierwszy etap" onAction={() => openMilestone()} />
     ) : (
-      <div className="goal-detail-timeline">
-        {sortedMilestones.map((item, index) => (
-          <article key={item.id} className={`goal-detail-timeline-item ${item.done ? "is-complete" : ""}`}>
-            <div className="goal-detail-timeline-rail">
-              <button
-                type="button"
-                aria-label={`${item.done ? "Oznacz jako nieukończony" : "Oznacz jako ukończony"}: ${item.title}`}
-                aria-pressed={item.done}
-                onClick={() => store.updateMilestone(goal.id, item.id, { done: !item.done })}
-                className="goal-detail-check"
-                style={{ color: C.seaGlass, borderColor: item.done ? C.seaGlass : C.borderStrong, background: item.done ? "var(--color-success-subtle)" : C.panel }}
-              >
-                {item.done && <Check size={12} />}
-              </button>
-            </div>
-            <div className="goal-detail-timeline-content">
-              <div className="goal-detail-timeline-heading">
-                <p style={{ color: item.done ? C.textMuted : C.textPrimary, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</p>
-                <span>{String(index + 1).padStart(2, "0")}</span>
+      <div className="goal-detail-timeline" onDragOver={(event) => event.preventDefault()}>
+        {stages.map((item) => {
+          const isNext = nextMilestone?.id === item.id;
+          const isOverdue = !item.done && item.dueDate < new Date().toISOString().slice(0, 10);
+          return (
+            <article
+              key={item.id}
+              draggable
+              onDragStart={() => setDragStageId(item.id)}
+              onDragEnd={() => setDragStageId(null)}
+              onDrop={() => { if (dragStageId) store.reorderMilestones(goal.id, dragStageId, item.id); setDragStageId(null); }}
+              className={`goal-detail-timeline-item ${item.done ? "is-complete" : ""} ${isNext ? "is-next" : ""} ${isOverdue ? "is-overdue" : ""}`}
+            >
+              <div className="goal-detail-timeline-rail">
+                <button
+                  type="button"
+                  aria-label={`${item.done ? "Oznacz jako niewykonany" : "Ukończ etap"}: ${item.title}`}
+                  aria-pressed={item.done}
+                  onClick={() => store.updateMilestone(goal.id, item.id, { done: !item.done })}
+                  className="goal-detail-check"
+                  style={{ color: C.seaGlass, borderColor: item.done ? C.seaGlass : C.borderStrong, background: item.done ? "var(--color-success-subtle)" : C.panel }}
+                >
+                  {item.done && <Check size={12} />}
+                </button>
               </div>
-              <span>Termin: {fmtDate(item.dueDate)} · waga {item.weight}</span>
-            </div>
-            <div className="goal-detail-timeline-actions">
-              <button type="button" aria-label={`Edytuj kamień milowy ${item.title}`} onClick={() => openMilestone(item.id)}><Pencil size={12} /></button>
-              <button type="button" aria-label={`Usuń kamień milowy ${item.title}`} onClick={() => setDeleteMilestoneId(item.id)}><Trash2 size={12} /></button>
-            </div>
-          </article>
-        ))}
+              <div className="goal-detail-timeline-content">
+                <div className="goal-detail-timeline-heading">
+                  <p style={{ color: item.done ? C.textMuted : C.textPrimary, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</p>
+                  {isNext && <span className="goal-stage-next-label">Następny</span>}
+                </div>
+                {item.note && <span>{item.note}</span>}
+                <span className={isOverdue ? "goal-stage-overdue" : ""}>Termin: {fmtDate(item.dueDate)} · {isOverdue ? "po terminie" : item.done ? "ukończony" : "do wykonania"}</span>
+              </div>
+              <div className="goal-detail-timeline-actions">
+                <button type="button" aria-label={`Opcje etapu ${item.title}`} aria-expanded={stageMenuId === item.id} onClick={() => setStageMenuId(stageMenuId === item.id ? null : item.id)}><Ellipsis size={14} /></button>
+                {stageMenuId === item.id && <Menu id={`stage-menu-${item.id}`} onDismiss={() => setStageMenuId(null)} className="absolute right-2 top-10 z-30 w-44">
+                  <MenuItem onClick={() => { openMilestone(item.id); setStageMenuId(null); }} leadingIcon={<Pencil />}>Edytuj etap</MenuItem>
+                  <MenuItem onClick={() => { store.updateMilestone(goal.id, item.id, { isNext: true }); setStageMenuId(null); }} leadingIcon={<Target />}>Oznacz jako następny</MenuItem>
+                  <MenuItem tone="danger" onClick={() => { setDeleteMilestoneId(item.id); setStageMenuId(null); }} leadingIcon={<Trash2 />}>Usuń etap</MenuItem>
+                </Menu>}
+              </div>
+            </article>
+          );
+        })}
+        {completedStages.length > 0 && <button type="button" className="goal-detail-text-action goal-stage-completed-toggle" onClick={() => setShowCompletedStages((open) => !open)}>{showCompletedStages ? "Zwiń" : "Pokaż"} ukończone ({completedStages.length})</button>}
       </div>
-    )
-  );
+    );
+  };
 
-  const renderProgressTimeline = () => (
-    goal.progressEntries.length === 0 ? (
-      <EmptyGoalState text="Brak zapisanych aktualizacji" action="Dodaj pierwszy postęp" onAction={openProgress} />
-    ) : (
-      <div className="goal-detail-timeline">
-        {sortedProgress.map((item) => (
-          <article key={item.id} className="goal-detail-timeline-item goal-detail-timeline-item--history">
-            <div className="goal-detail-timeline-rail">
-              <span className="goal-detail-timeline-marker" style={{ color: goal.color, background: `${goal.color}18` }}><BarChart3 size={15} /></span>
-            </div>
-            <div className="goal-detail-timeline-content">
-              <div className="goal-detail-timeline-heading">
-                <p className="goal-detail-history-value">{item.kind === "delta" && item.value > 0 ? "+" : ""}{item.value.toLocaleString("pl-PL")} {goal.progressMode === "regularity" && goal.regularityMode === "frequency" ? "wykonań" : goal.unit}</p>
-                <time dateTime={item.date}>{fmtDate(item.date)}</time>
-              </div>
-              <span>{item.note || "Bez notatki"} · {item.kind === "absolute" ? "wartość" : "zmiana"}</span>
-            </div>
-            <div className="goal-detail-timeline-actions">
-              <button type="button" aria-label={`Edytuj wpis postępu z ${fmtDate(item.date)}`} onClick={() => { setEditingProgressId(item.id); setProgressOpen(true); }}><Pencil size={12} /></button>
-              <button type="button" aria-label={`Usuń wpis postępu z ${fmtDate(item.date)}`} onClick={() => setDeleteProgressId(item.id)}><Trash2 size={12} /></button>
-            </div>
-          </article>
-        ))}
+  const renderHistory = () => {
+    const history = [
+      ...goal.progressEntries.map((item) => ({ id: item.id, title: "Zmieniono postęp", detail: item.note || "Zapisano nową wartość", date: item.createdAt || `${item.date}T12:00:00.000Z`, icon: BarChart3 })),
+      ...goal.milestones.filter((item) => item.done).map((item) => ({ id: `stage-${item.id}`, title: "Ukończono etap", detail: item.title, date: item.completedAt ?? goal.updatedAt, icon: Check })),
+      { id: "goal-updated", title: "Zaktualizowano cel", detail: "Szczegóły celu zapisano lokalnie", date: goal.updatedAt, icon: Pencil },
+    ].sort((a, b) => b.date.localeCompare(a.date));
+    const visibleHistory = showAllHistory ? history : history.slice(0, 5);
+    return (
+      <div className="goal-detail-history-list">
+        {visibleHistory.map((item) => { const HistoryIcon = item.icon; return <article key={item.id} className="goal-detail-history-row"><span className="goal-detail-history-icon" style={{ color: goal.color, background: `${goal.color}18` }}><HistoryIcon size={14} /></span><div><strong>{item.title}</strong><p>{item.detail}</p></div><time dateTime={item.date}>{fmtDate(item.date.slice(0, 10))}</time></article>; })}
+        {history.length > 5 && <button type="button" className="goal-detail-text-action" onClick={() => setShowAllHistory((open) => !open)}>{showAllHistory ? "Pokaż mniej" : "Pokaż więcej"}</button>}
       </div>
-    )
-  );
+    );
+  };
 
   const pageHeader = (
     <PageHeader
@@ -282,21 +242,21 @@ export default function CelSzczegoly() {
           className="goal-detail-content-header"
           title={goal.title}
           description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
-          meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot style={{ color: semanticStatusColor }}>{statusLabels[goal.status]}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
+          meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot style={{ color: semanticStatusColor }}>{statusLabels[goal.status]}</Badge><Badge appearance="plain" dot style={{ color: goal.health === "risk" ? C.warning : C.seaGlass }}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
           actions={<>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : "Dodaj postęp"}</span></Button>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</span></Button>
             <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={12} />}><span className="header-action-label">Edytuj</span></Button>
-            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-44"><MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "archived" ? "active" : "archived" }); setMenuOpen(false); }} leadingIcon={goal.status === "archived" ? <RotateCcw /> : <Archive />}>{goal.status === "archived" ? "Przywróć" : "Archiwizuj"}</MenuItem><MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem><MenuItem tone="danger" onClick={() => { setDeleteGoalOpen(true); setMenuOpen(false); }} leadingIcon={<Trash2 />}>Usuń</MenuItem></Menu>}</div>
+            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-48">
+              <MenuItem onClick={() => { openProgress(); setMenuOpen(false); }} leadingIcon={<BarChart3 />}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</MenuItem>
+              <MenuItem onClick={() => { setEditOpen(true); setMenuOpen(false); }} leadingIcon={<Pencil />}>Edytuj cel</MenuItem>
+              <MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem>
+              <MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "paused" ? "active" : "paused" }); setMenuOpen(false); }} leadingIcon={<RotateCcw />}>{goal.status === "paused" ? "Wznów" : "Wstrzymaj"}</MenuItem>
+              <MenuItem onClick={() => { store.updateGoal(goal.id, { status: "completed" }); setMenuOpen(false); }} leadingIcon={<Check />}>Zakończ</MenuItem>
+              <MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "archived" ? "active" : "archived" }); setMenuOpen(false); }} leadingIcon={goal.status === "archived" ? <RotateCcw /> : <Archive />}>{goal.status === "archived" ? "Przywróć" : "Archiwizuj"}</MenuItem>
+              <div className="my-1 h-px" style={{ background: C.borderSubtle }} />
+              <MenuItem tone="danger" onClick={() => { setDeleteGoalOpen(true); setMenuOpen(false); }} leadingIcon={<Trash2 />}>Usuń</MenuItem>
+            </Menu>}</div>
           </>}
-          controls={(
-          <div className="goal-detail-view-controls" role="group" aria-label="Tryb widoku celu">
-            <span className="goal-detail-view-controls__label">Widok</span>
-            <div className="ui-view-switch">
-              <Button variant="ghost" size="sm" leadingIcon={<BarChart3 size={13} />} aria-pressed={viewMode === "summary"} onClick={() => switchView("summary")}>Podsumowanie</Button>
-              <Button variant="ghost" size="sm" leadingIcon={<ListChecks size={13} />} aria-pressed={viewMode === "execution"} onClick={() => switchView("execution")}>Realizacja</Button>
-            </div>
-          </div>
-          )}
         />
 
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5">
@@ -325,44 +285,42 @@ export default function CelSzczegoly() {
               </div>
               <aside className="goal-detail-hero-details" aria-label="Szczegóły celu">
                 {renderFacts()}
-                {renderNote()}
               </aside>
             </section>
 
-            {viewMode === "summary" ? (
-              <div className="goal-detail-overview-grid">
-                <div className="space-y-5">
-                  {renderNextStep()}
-
-                  {goal.progressMode === "milestones" ? (
-                    <section>
-                      <SectionHeading title="Najbliższe kamienie milowe" action={<button type="button" className="goal-detail-text-action" onClick={() => switchView("execution")}>Otwórz realizację</button>} />
-                      {goal.milestones.length === 0 ? <EmptyGoalState text="Nie dodano jeszcze kamieni milowych" action="Dodaj pierwszy kamień" onAction={() => openMilestone()} /> : <div className="goal-detail-list">{goal.milestones.slice().sort((a, b) => Number(a.done) - Number(b.done) || a.dueDate.localeCompare(b.dueDate)).slice(0, 4).map((item) => <button key={item.id} type="button" onClick={() => store.updateMilestone(goal.id, item.id, { done: !item.done })} className="goal-detail-list-row"><span className="goal-detail-check" style={{ color: C.seaGlass, borderColor: item.done ? C.seaGlass : C.borderStrong, background: item.done ? "var(--color-success-subtle)" : "transparent" }}>{item.done && <Check size={11} />}</span><span className="min-w-0 flex-1" style={{ color: item.done ? C.textMuted : C.textPrimary, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</span><span>{fmtDate(item.dueDate)}</span></button>)}</div>}
-                    </section>
-                  ) : (
-                    <section>
-                      <SectionHeading title="Ostatnie aktualizacje" action={<button type="button" className="goal-detail-text-action" onClick={() => switchView("execution")}>Otwórz realizację</button>} />
-                      {goal.progressEntries.length === 0 ? <EmptyGoalState text="Nie zapisano jeszcze postępu" action="Dodaj aktualizację" onAction={openProgress} /> : <div className="goal-detail-list">{sortedProgress.slice(0, 4).map((item) => <button key={item.id} type="button" onClick={() => { setEditingProgressId(item.id); setProgressOpen(true); }} className="goal-detail-list-row"><BarChart3 size={14} style={{ color: goal.color }} /><span className="min-w-0 flex-1 truncate" style={{ color: C.textSecond }}>{item.note || "Aktualizacja postępu"}</span><strong>{item.kind === "delta" && item.value > 0 ? "+" : ""}{item.value.toLocaleString("pl-PL")}</strong><span>{fmtDate(item.date)}</span></button>)}</div>}
-                    </section>
+            <div className="goal-detail-overview-grid">
+              <div className="space-y-5">
+                {renderNextStep()}
+                <section id="etapy" className="goal-detail-timeline-panel">
+                  <SectionHeading
+                    title={goal.progressMode === "milestones" ? "Etapy celu" : "Historia postępu"}
+                    action={<Button type="button" variant="primary" size="sm" leadingIcon={<Plus size={12} />} onClick={openProgress}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</Button>}
+                  />
+                  <p className="goal-detail-supporting-copy">{goal.progressMode === "milestones" ? `${completedMilestones} z ${goal.milestones.length} etapów ukończonych · przeciągnij, aby zmienić kolejność.` : "Każda zmiana wpływa na aktualną wartość celu."}</p>
+                  {goal.progressMode === "milestones" ? renderMilestoneTimeline() : (
+                    <div className="goal-detail-progress-note">
+                      <strong>{getGoalMetric(goal)}</strong>
+                      <span>{goal.progressMode === "numeric" ? "Postęp liczony jako aktualna wartość względem celu." : goal.progressMode === "regularity" ? "Postęp wynika z zapisanych wykonań w wybranym okresie." : "Procent jest ustawiany bezpośrednio przez użytkownika."}</span>
+                    </div>
                   )}
-                </div>
-
+                </section>
+                <section id="notatki" className="goal-detail-note-preview goal-detail-notes-section">
+                  <SectionHeading title="Opis i notatki" action={<button type="button" className="goal-detail-text-action" onClick={() => setNoteEditing((editing) => !editing)}>{noteEditing ? "Zamknij" : "Edytuj"}</button>} />
+                  {goal.description && <p>{goal.description}</p>}
+                  <GoalNoteTextarea key={`${goal.id}-full-note`} aria-label="Notatki do celu" value={goal.note} onCommit={(value) => store.updateGoal(goal.id, { note: value }, { persistence: "immediate" })} rows={4} placeholder="Dodaj bieżące obserwacje i ustalenia…" className="goal-detail-notes-editor goal-detail-notes-editor--inline" />
+                </section>
+                <section className="goal-detail-note-preview" aria-labelledby="goal-linked-tasks-heading">
+                  <SectionHeading title="Powiązane zadania" />
+                  <p id="goal-linked-tasks-heading" className="goal-detail-supporting-copy">Zadania zapisane z tym celem zachowują jego kontekst i termin.</p>
+                  {linkedTasks.length > 0 && <div className="goal-linked-task-list">{linkedTasks.map((task) => <a key={task.id} href="/zadania" className="goal-linked-task"><span>{task.done ? "✓" : "○"}</span><strong>{task.text}</strong><small>Otwórz w zadaniach</small></a>)}</div>}
+                  <AddToTasksButton input={({ source: { kind: "goals", entity: `${encodeURIComponent(goal.id)}/goal`, context: goal.title, href: `/cele/${encodeURIComponent(goal.id)}` }, text: goal.title, done: goal.status === "completed", calendarDate: goal.dueDate, date: goal.dueDate, priority: goal.priority, list: "cele", tags: ["cele"], notes: goal.note } satisfies ExternalTaskInput)} onAdded={(taskId) => { store.updateGoal(goal.id, { linkedTaskIds: [...new Set([...(goal.linkedTaskIds ?? []), taskId])] }, { persistence: "immediate" }); }} />
+                </section>
+                <section id="historia" className="goal-detail-timeline-panel">
+                  <SectionHeading title="Historia" />
+                  {renderHistory()}
+                </section>
               </div>
-            ) : (
-              <div className="goal-detail-execution-grid">
-                <div className="space-y-5">
-                  {renderNextStep(true)}
-                  <section className="goal-detail-timeline-panel">
-                    <SectionHeading
-                      title={goal.progressMode === "milestones" ? "Oś realizacji" : "Historia postępu"}
-                      action={<Button type="button" variant="primary" size="sm" leadingIcon={<Plus size={12} />} onClick={openProgress}>{goal.progressMode === "milestones" ? "Dodaj etap" : "Dodaj wpis"}</Button>}
-                    />
-                    <p className="goal-detail-supporting-copy">{goal.progressMode === "milestones" ? `${completedMilestones} z ${goal.milestones.length} ukończonych · kliknij kółko, żeby zmienić status.` : "Każda zmiana wpływa na aktualną wartość celu."}</p>
-                    {goal.progressMode === "milestones" ? renderMilestoneTimeline() : renderProgressTimeline()}
-                  </section>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -370,7 +328,7 @@ export default function CelSzczegoly() {
         {progressOpen && <ProgressDialog goal={goal} progress={goal.progressEntries.find((item) => item.id === editingProgressId)} onClose={() => { setProgressOpen(false); setEditingProgressId(null); }} onSubmit={(draft) => { const nextDraft = { ...draft, value: goal.progressMode === "manual" ? Math.max(0, Math.min(100, draft.value)) : draft.value }; if (editingProgressId) store.updateProgress(goal.id, editingProgressId, nextDraft); else store.addProgress(goal.id, nextDraft); setProgressOpen(false); setEditingProgressId(null); }} />}
         {milestoneOpen && <MilestoneDialog milestone={goal.milestones.find((item) => item.id === editingMilestoneId)} onClose={() => { setMilestoneOpen(false); setEditingMilestoneId(null); }} onSubmit={(draft) => { if (editingMilestoneId) store.updateMilestone(goal.id, editingMilestoneId, draft); else store.addMilestone(goal.id, draft); setMilestoneOpen(false); setEditingMilestoneId(null); }} />}
         {deleteProgressId && <ConfirmDialog title="Usuń aktualizację?" message="Aktualna wartość i procent celu zostaną ponownie przeliczone na podstawie pozostałych wpisów." onClose={() => setDeleteProgressId(null)} onConfirm={() => { store.deleteProgress(goal.id, deleteProgressId); setDeleteProgressId(null); }} />}
-        {deleteMilestoneId && <ConfirmDialog title="Usuń kamień milowy?" message="Postęp celu zostanie automatycznie przeliczony po usunięciu tego etapu." onClose={() => setDeleteMilestoneId(null)} onConfirm={() => { store.deleteMilestone(goal.id, deleteMilestoneId); setDeleteMilestoneId(null); }} />}
+        {deleteMilestoneId && <ConfirmDialog title="Usuń etap?" message="Postęp celu zostanie automatycznie przeliczony po usunięciu tego etapu." onClose={() => setDeleteMilestoneId(null)} onConfirm={() => { store.deleteMilestone(goal.id, deleteMilestoneId); setDeleteMilestoneId(null); }} />}
         {deleteGoalOpen && <ConfirmDialog title="Usuń cel?" message="Cel wraz z całą historią postępu i kamieniami milowymi zostanie usunięty." onClose={() => setDeleteGoalOpen(false)} onConfirm={() => { store.deleteGoal(goal.id); navigate("/cele"); }} />}
       </ModuleMain>
     </ModuleShell>

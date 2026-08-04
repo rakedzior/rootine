@@ -1,7 +1,7 @@
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
 
 export const WORK_STORAGE_KEY = "rootine.work-workspace.v1";
-const WORKSPACE_VERSION = 2 as const;
+const WORKSPACE_VERSION = 3 as const;
 
 export type WorkProjectStatus = "active" | "paused" | "completed";
 export type WorkTaskPriority = "none" | "low" | "medium" | "high";
@@ -12,6 +12,7 @@ export type WorkCompany = {
   name: string;
   description: string;
   color: string;
+  archived?: boolean;
 };
 
 export type WorkProject = {
@@ -60,6 +61,7 @@ export type WorkTask = {
   dueDate: string;
   note?: string;
   createdAt: string;
+  updatedAt?: string;
   linkedTask?: WorkLinkedTaskDetails;
 };
 
@@ -71,8 +73,16 @@ export type WorkWorkspace = {
   tasks: WorkTask[];
 };
 
-type LegacyWorkWorkspace = Omit<WorkWorkspace, "version"> & {
-  version: 1;
+type LegacyWorkTask = Omit<WorkTask, "dueDate" | "updatedAt"> & {
+  dueDate?: string;
+  startDate?: string;
+  deadline?: string;
+  updatedAt?: string;
+};
+
+type LegacyWorkWorkspace = Omit<WorkWorkspace, "version" | "tasks"> & {
+  version: 1 | 2;
+  tasks: LegacyWorkTask[];
 };
 
 const DEFAULT_WORKSPACE: WorkWorkspace = {
@@ -208,7 +218,8 @@ function isCompany(value: unknown): value is WorkCompany {
     && typeof value.id === "string"
     && typeof value.name === "string"
     && typeof value.description === "string"
-    && typeof value.color === "string";
+    && typeof value.color === "string"
+    && (value.archived === undefined || typeof value.archived === "boolean");
 }
 
 function isProject(value: unknown): value is WorkProject {
@@ -285,10 +296,12 @@ function isTask(value: unknown): value is WorkTask {
     && typeof value.completed === "boolean"
     && (value.status === undefined || ["todo", "in_progress", "blocked", "waiting", "completed"].includes(String(value.status)))
     && ["none", "low", "medium", "high"].includes(String(value.priority))
+    && (value.dueDate === undefined || typeof value.dueDate === "string")
     && (value.startDate === undefined || typeof value.startDate === "string")
-    && typeof value.dueDate === "string"
+    && (value.deadline === undefined || typeof value.deadline === "string")
     && (value.note === undefined || typeof value.note === "string")
     && typeof value.createdAt === "string"
+    && (value.updatedAt === undefined || typeof value.updatedAt === "string")
     && (value.linkedTask === undefined || isLinkedTaskDetails(value.linkedTask));
 }
 
@@ -305,25 +318,33 @@ function hasWorkspaceShape(value: unknown): value is Omit<WorkWorkspace, "versio
 }
 
 function isWorkspace(value: unknown): value is WorkWorkspace {
-  return hasWorkspaceShape(value) && value.version === WORKSPACE_VERSION;
+  return hasWorkspaceShape(value)
+    && value.version === WORKSPACE_VERSION
+    && value.tasks.every((task) => typeof task.dueDate === "string");
 }
 
 function migrateLegacyWorkspace(value: unknown): WorkWorkspace | null {
-  if (!hasWorkspaceShape(value) || value.version !== 1) return null;
+  if (!hasWorkspaceShape(value) || (value.version !== 1 && value.version !== 2)) return null;
   const legacy = value as LegacyWorkWorkspace;
   return {
     ...legacy,
     version: WORKSPACE_VERSION,
-    companies: legacy.companies.map((company) => ({ ...company })),
+    companies: legacy.companies.map((company) => ({ ...company, archived: company.archived ?? false })),
     projects: legacy.projects.map((project) => ({ ...project })),
-    tasks: legacy.tasks.map((task) => ({ ...task })),
+    tasks: legacy.tasks.map((task) => {
+      const { startDate, deadline, ...current } = task;
+      return {
+        ...current,
+        dueDate: current.dueDate || deadline || startDate || "",
+      };
+    }),
   };
 }
 
 export function createDefaultWorkWorkspace(): WorkWorkspace {
   return {
     ...DEFAULT_WORKSPACE,
-    companies: DEFAULT_WORKSPACE.companies.map((company) => ({ ...company })),
+    companies: DEFAULT_WORKSPACE.companies.map((company) => ({ ...company, archived: false })),
     projects: DEFAULT_WORKSPACE.projects.map((project) => ({ ...project })),
     tasks: DEFAULT_WORKSPACE.tasks.map((task) => ({ ...task })),
   };

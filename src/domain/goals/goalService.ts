@@ -54,13 +54,13 @@ export async function updateGoalProgress(input: unknown): Promise<DomainMutation
 
 export async function completeMilestone(input: unknown): Promise<DomainMutationResult<Goal>> {
   const parsed = completeMilestoneSchema.safeParse(input);
-  if (!parsed.success) return domainFailure("VALIDATION", parsed.error.issues[0]?.message ?? "Nieprawidłowy milestone.");
+  if (!parsed.success) return domainFailure("VALIDATION", parsed.error.issues[0]?.message ?? "Nieprawidłowy etap.");
   const workspace = loadGoalsWorkspace();
   const before = workspace.goals.find((goal) => goal.id === parsed.data.goalId);
   if (!before) return domainFailure("NOT_FOUND", "Cel nie istnieje.");
   const milestone = before.milestones.find((candidate) => candidate.id === parsed.data.milestoneId);
-  if (!milestone) return domainFailure("NOT_FOUND", "Milestone nie istnieje.");
-  if (milestone.done === parsed.data.completed) return domainFailure("CONFLICT", "Milestone ma już wybrany status.");
+  if (!milestone) return domainFailure("NOT_FOUND", "Etap nie istnieje.");
+  if (milestone.done === parsed.data.completed) return domainFailure("CONFLICT", "Etap ma już wybrany status.");
   const next = patchGoalMilestone(
     workspace,
     before.id,
@@ -75,7 +75,7 @@ export async function completeMilestone(input: unknown): Promise<DomainMutationR
     save: () => saveGoalsWorkspace(next), read: loadGoalsWorkspace,
     verify: (current) => current.goals.find((goal) => goal.id === before.id)?.milestones.find((candidate) => candidate.id === milestone.id)?.done === parsed.data.completed,
     selectSnapshot: (current) => current.goals.find((goal) => goal.id === before.id) ?? after,
-    message: parsed.data.completed ? "Oznaczono milestone jako wykonany." : "Cofnięto wykonanie milestone.",
-    compensation: goalUndo(before, after, parsed.data.completed ? "Cofnięto wykonanie milestone." : "Przywrócono wykonanie milestone."),
+    message: parsed.data.completed ? "Oznaczono etap jako wykonany." : "Cofnięto wykonanie etapu.",
+    compensation: goalUndo(before, after, parsed.data.completed ? "Cofnięto wykonanie etapu." : "Przywrócono wykonanie etapu."),
   });
 }

@@ -234,9 +234,33 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         updatedAt: nowIso(),
       } : goal),
     })),
-    updateMilestone: (goalId, milestoneId, patch) => applyWorkspace((current) => (
-      patchGoalMilestone(current, goalId, milestoneId, patch, nowIso())
-    )),
+    updateMilestone: (goalId, milestoneId, patch) => applyWorkspace((current) => {
+      const updatedAt = nowIso();
+      if (patch.isNext) {
+        return {
+          ...current,
+          goals: current.goals.map((goal) => goal.id === goalId ? {
+            ...goal,
+            milestones: goal.milestones.map((item) => item.id === milestoneId ? { ...item, ...patch, isNext: true } : { ...item, isNext: false }),
+            updatedAt,
+          } : goal),
+        };
+      }
+      return patchGoalMilestone(current, goalId, milestoneId, { ...patch, ...(patch.done === true ? { completedAt: updatedAt } : patch.done === false ? { completedAt: undefined } : {}) }, updatedAt);
+    }),
+    reorderMilestones: (goalId, sourceId, targetId) => applyWorkspace((current) => ({
+      ...current,
+      goals: current.goals.map((goal) => {
+        if (goal.id !== goalId || sourceId === targetId) return goal;
+        const ordered = [...goal.milestones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const sourceIndex = ordered.findIndex((item) => item.id === sourceId);
+        const targetIndex = ordered.findIndex((item) => item.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return goal;
+        const [source] = ordered.splice(sourceIndex, 1);
+        ordered.splice(targetIndex, 0, source);
+        return { ...goal, milestones: ordered.map((item, index) => ({ ...item, order: index })), updatedAt: nowIso() };
+      }),
+    })),
     deleteMilestone: (goalId, milestoneId) => applyWorkspace((current) => ({
       ...current,
       goals: current.goals.map((goal) => goal.id === goalId ? {

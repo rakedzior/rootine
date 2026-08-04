@@ -39,6 +39,7 @@ describe("work workspace", () => {
         completed: false,
         priority: "high",
         dueDate: "2026-07-29",
+        startDate: "2026-07-20",
         createdAt: "2026-07-28T08:00:00.000Z",
       }],
     }));
@@ -46,10 +47,11 @@ describe("work workspace", () => {
     const result = loadWorkWorkspaceResult();
 
     expect(result.status).toBe("migrated");
-    expect(result.workspace.version).toBe(2);
+    expect(result.workspace.version).toBe(3);
     expect(result.workspace.tasks[0]).not.toHaveProperty("linkedTask");
+    expect(result.workspace.tasks[0]).not.toHaveProperty("startDate");
     expect(saveWorkWorkspace(result.workspace)).toBe(true);
-    expect(JSON.parse(window.localStorage.getItem(WORK_STORAGE_KEY) ?? "{}").version).toBe(2);
+    expect(JSON.parse(window.localStorage.getItem(WORK_STORAGE_KEY) ?? "{}").version).toBe(3);
   });
 
   it("shares one immutable completion mutation for single and cascaded work tasks", () => {

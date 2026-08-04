@@ -167,7 +167,7 @@ const HELP_GUIDES = {
   },
   goals: {
     title: "Cele",
-    steps: ["Zapisz mierzalny rezultat i realny termin.", "Podziel cel na kamienie milowe, które da się jednoznacznie zakończyć.", "Regularnie aktualizuj postęp i reaguj na status „Zagrożony”."],
+    steps: ["Zapisz mierzalny rezultat i realny termin.", "Podziel cel na etapy, które da się jednoznacznie zakończyć.", "Regularnie aktualizuj postęp i reaguj na kondycję celu „Zagrożony”."],
   },
   affairs: {
     title: "Sprawy",

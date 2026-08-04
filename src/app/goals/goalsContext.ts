@@ -32,6 +32,7 @@ export type GoalsStoreValue = {
   deleteProgress: (goalId: string, progressId: string) => void;
   addMilestone: (goalId: string, draft: Omit<GoalMilestone, "id">) => void;
   updateMilestone: (goalId: string, milestoneId: string, patch: Partial<GoalMilestone>) => void;
+  reorderMilestones: (goalId: string, sourceId: string, targetId: string) => void;
   deleteMilestone: (goalId: string, milestoneId: string) => void;
   createCategory: (draft: Omit<GoalCategory, "id">) => void;
   updateCategory: (id: string, patch: Partial<GoalCategory>) => void;

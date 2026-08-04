@@ -13,6 +13,10 @@ export const SPORT_VIEW_LABELS: Record<PlannerView, { title: string; description
     title: "Szablony",
     description: "Powtarzalne jednostki według kategorii sportu",
   },
+  exercises: {
+    title: "Ćwiczenia",
+    description: "Biblioteka ćwiczeń, etapów i domyślnych parametrów",
+  },
   history: {
     title: "Historia",
     description: "Wyniki wykonanych i pominiętych treningów",

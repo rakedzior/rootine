@@ -13,6 +13,7 @@ interface WeightDraft {
 
 export function NutritionWeightCard({
   latestWeight,
+  trend7d,
   inlineOpen,
   draft,
   error,
@@ -24,6 +25,7 @@ export function NutritionWeightCard({
   onClearError,
 }: {
   latestWeight?: WeightMeasurement;
+  trend7d: number | null;
   inlineOpen: boolean;
   draft: WeightDraft;
   error: string;
@@ -44,6 +46,16 @@ export function NutritionWeightCard({
               <div><p>Ostatni pomiar</p><span>{formatCompactDate(latestWeight.date)}</span></div>
             </div>
             <strong><SensitiveValue label="Masa ciała">{formatNumber(latestWeight.weightKg)} kg</SensitiveValue></strong>
+          </div>
+          <div className="nutrition-weight-card__trend">
+            <span>Trend 7 dni</span>
+            <strong>
+              <SensitiveValue label="Trend masy ciała">
+                {trend7d === null
+                  ? "Za mało danych"
+                  : `${trend7d > 0 ? "+" : trend7d < 0 ? "−" : ""}${formatNumber(Math.abs(trend7d))} kg`}
+              </SensitiveValue>
+            </strong>
           </div>
           <Button variant="quiet" size="sm" fullWidth onClick={onRegister}>Zarejestruj wagę</Button>
         </div>

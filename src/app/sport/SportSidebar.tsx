@@ -2,6 +2,7 @@ import {
   Activity,
   ChartNoAxesCombined,
   CalendarRange,
+  Dumbbell,
   History,
   Library,
   Play,
@@ -24,6 +25,7 @@ const GROUPS: Array<{
     items: [
       { id: "cycle", label: "Plan treningowy", icon: CalendarRange },
       { id: "templates", label: "Szablony", icon: Library },
+      { id: "exercises", label: "Ćwiczenia", icon: Dumbbell },
     ],
   },
   {

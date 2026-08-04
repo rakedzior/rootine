@@ -29,10 +29,10 @@ import {
   CycleDialog,
   CyclePlanner,
   MoveWorkoutDialog,
-  TemplateDialog,
-  TemplateLibrary,
   WorkoutDialog,
 } from "../sport/SportPlanner";
+import { ExerciseDetailPanel, SportExercises } from "../sport/SportExercises";
+import { SportTemplates, TemplateDetailPanel } from "../sport/SportTemplates";
 import {
   createSessionFromCycleWorkout,
   createPlannerId,
@@ -62,6 +62,7 @@ import {
   type WorkoutExercise,
   type WorkoutSession,
   type WorkoutTemplate,
+  type Exercise,
 } from "../sport/model";
 import { SportSidebar } from "../sport/SportSidebar";
 import {
@@ -83,7 +84,7 @@ import {
 } from "../ui";
 import "../../styles/sport.css";
 
-type PlannerDialog = "cycle" | "new-cycle" | "new-template" | null;
+type PlannerDialog = "cycle" | "new-cycle" | null;
 
 interface WorkoutDialogState {
   workoutId?: string;
@@ -161,6 +162,7 @@ function getInitialSportUrlState() {
   const requestedView = params.get("widok") ?? storedView;
   const view: PlannerView = requestedView === "cycle"
     || requestedView === "templates"
+    || requestedView === "exercises"
     || requestedView === "history"
     || requestedView === "analysis"
     ? requestedView
@@ -205,6 +207,32 @@ function finalizeSession(
   };
 }
 
+function executionFromSession(session: WorkoutSession) {
+  const completedSets = session.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.done).length, 0);
+  const volumeKg = session.exercises.flatMap((exercise) => exercise.sets).filter((set) => set.done).reduce((total, set) => total + (set.actualWeight ?? set.plannedWeight ?? 0) * (set.actualReps ?? set.plannedReps ?? 0), 0);
+  return {
+    scheduledWorkoutId: session.cycleWorkoutId ?? session.id,
+    startedAt: session.startedAt ? new Date(session.startedAt).toISOString() : undefined,
+    finishedAt: session.completedAt ? new Date(session.completedAt).toISOString() : undefined,
+    actualDuration: session.durationMinutes,
+    completedItems: session.exercises.map((exercise) => ({
+      scheduledItemId: exercise.id,
+      exerciseId: exercise.exerciseId,
+      sets: exercise.sets,
+      done: exercise.sets.some((set) => set.done),
+      note: exercise.note,
+    })),
+    resultSummary: {
+      completedSets,
+      volumeKg: volumeKg > 0 ? Math.round(volumeKg) : undefined,
+      distanceKm: session.metrics?.distanceKm,
+      averagePace: session.metrics?.averagePace,
+    },
+    effortRating: session.metrics?.rpe,
+    notes: session.note,
+  };
+}
+
 export default function Sport() {
   const [commandParams, setCommandParams] = useSearchParams();
   const quickAddAction = commandParams.get("akcja");
@@ -218,7 +246,9 @@ export default function Sport() {
   const [activeWeek, setActiveWeek] = useState(() => initialUrlState.week
     || (plannerState.activeCycle ? todayCycleWeek(plannerState.activeCycle) : 1));
   const [dialog, setDialog] = useState<PlannerDialog>(quickAddRequested && !cycleDraft ? "cycle" : null);
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateEditRequest, setTemplateEditRequest] = useState<{ id: string; token: number } | null>(null);
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [workoutDialog, setWorkoutDialog] = useState<WorkoutDialogState | null>(() => (
     quickAddRequested && cycleDraft
       ? {
@@ -275,7 +305,6 @@ export default function Sport() {
   );
   const draftCycleSignature = useMemo(() => JSON.stringify(cycleDraft), [cycleDraft]);
   const cycleDirty = savedCycleSignature !== draftCycleSignature;
-  const editingTemplate = plannerState.templates.find((template) => template.id === editingTemplateId);
   const editingWorkout = workoutDialog?.workoutId
     ? cycleDraft?.workouts.find((workout) => workout.id === workoutDialog.workoutId)
     : undefined;
@@ -409,7 +438,6 @@ export default function Sport() {
 
   const closeDialogs = useCallback(() => {
     setDialog(null);
-    setEditingTemplateId(null);
     setWorkoutDialog(null);
     setMoveDialogWorkout(null);
   }, []);
@@ -604,6 +632,39 @@ export default function Sport() {
     setPlannerState((current) => withActiveCycle(current, updatedCycle));
   };
 
+  const copyWeek = (fromWeek: number, toWeek: number) => {
+    if (!cycleDraft || fromWeek === toWeek) return;
+    const source = cycleDraft.workouts.filter((workout) => workout.week === fromWeek);
+    if (!source.length) {
+      setAutosaveNotice("Nie można skopiować pustego tygodnia.");
+      return;
+    }
+    const target = cycleDraft.workouts.filter((workout) => workout.week === toWeek);
+    if (target.some((workout) => workout.status === "completed") && typeof window !== "undefined"
+      && !window.confirm("Tydzień docelowy zawiera wykonane treningi. Zastąpić tylko przyszłe jednostki?")) return;
+    const now = new Date().toISOString();
+    const copied = source.map((workout) => ({
+      ...workout,
+      id: createPlannerId("cycle-workout"),
+      week: toWeek,
+      status: "scheduled" as const,
+      seriesId: undefined,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    const nextCycle = {
+      ...cycleDraft,
+      workouts: [
+        ...cycleDraft.workouts.filter((workout) => workout.week !== toWeek || workout.status === "completed"),
+        ...copied,
+      ],
+      updatedAt: now,
+    };
+    setCycleDraft(nextCycle);
+    setActiveWeek(toWeek);
+    setAutosaveNotice(`Skopiowano tydzień ${fromWeek} do tygodnia ${toWeek}.`);
+  };
+
   const undoMove = () => {
     if (!moveUndo || !cycleDraft) return;
     const updatedCycle = {
@@ -747,47 +808,77 @@ export default function Sport() {
     const nextTemplates = templateExists
       ? plannerState.templates.map((item) => item.id === template.id ? template : item)
       : [...plannerState.templates, template];
-    const linkedCycle = cycleDraft && templateExists
-      ? {
-          ...cycleDraft,
-          workouts: cycleDraft.workouts.map((workout) => workout.templateId === template.id
-            ? {
-                ...workout,
-                title: template.name,
-                discipline: template.discipline,
-                durationMinutes: template.durationMinutes,
-              }
-            : workout),
-          updatedAt: new Date().toISOString(),
-        }
-      : undefined;
-    setPlannerState((current) => {
-      const nextState = { ...current, templates: nextTemplates };
-      return view === "today" && linkedCycle ? withActiveCycle(nextState, linkedCycle) : nextState;
-    });
-    if (linkedCycle) setCycleDraft(linkedCycle);
+    setPlannerState((current) => ({ ...current, templates: nextTemplates }));
     setAutosaveNotice(templateExists
-      ? view === "today"
-        ? "Szablon zapisano i zaktualizowano powiązane treningi."
-        : "Szablon zapisano. Zapisz plan, aby zatwierdzić powiązane treningi."
+      ? "Szablon zapisano. Zaplanowane jednostki zachowują własny snapshot zawartości."
       : "Utworzono szablon treningu.");
     closeDialogs();
   };
 
   const duplicateTemplate = (template: WorkoutTemplate) => {
     const id = createPlannerId("template");
+    const itemIdMap = new Map((template.sections ?? []).flatMap((section, sectionIndex) => section.items.map((item, itemIndex) => [item.id, `${id}-item-${sectionIndex + 1}-${itemIndex + 1}`] as const)));
     const duplicate: WorkoutTemplate = {
       ...template,
       id,
       name: `${template.name} — kopia`,
       exercises: cloneExercises(template.exercises, id),
+      sections: template.sections?.map((section, sectionIndex) => ({
+        ...section,
+        id: `${id}-section-${sectionIndex + 1}`,
+        items: section.items.map((item, itemIndex) => ({
+          ...item,
+          id: `${id}-item-${sectionIndex + 1}-${itemIndex + 1}`,
+          parametersOverride: item.parametersOverride
+            ? { ...item.parametersOverride, series: item.parametersOverride.series?.map((series) => ({ ...series, id: createPlannerId("template-series") })) }
+            : undefined,
+          supersetExerciseIds: item.supersetExerciseIds?.map((supersetId) => itemIdMap.get(supersetId) ?? supersetId),
+        })),
+      })),
       stages: template.stages?.map((stage, index) => ({
         ...stage,
         id: `${id}-stage-${index + 1}`,
       })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     setPlannerState((current) => ({ ...current, templates: [...current.templates, duplicate] }));
     setAutosaveNotice("Utworzono kopię szablonu.");
+  };
+
+  const saveExerciseRecord = (exercise: Exercise) => {
+    setPlannerState((current) => ({
+      ...current,
+      exercises: current.exercises?.some((item) => item.id === exercise.id)
+        ? current.exercises.map((item) => item.id === exercise.id ? exercise : item)
+        : [...(current.exercises ?? []), exercise],
+    }));
+    setAutosaveNotice("Ćwiczenie zapisano w bibliotece.");
+  };
+
+  const markRecoveryDay = (date: string) => {
+    setPlannerState((current) => ({
+      ...current,
+      recoveryDays: [...new Set([...(current.recoveryDays ?? []), date])],
+    }));
+    setAutosaveNotice("Oznaczono dzień regeneracyjny.");
+  };
+
+  const duplicateExerciseRecord = (exercise: Exercise) => {
+    const now = new Date().toISOString();
+    const duplicate: Exercise = { ...exercise, id: createPlannerId("exercise"), name: `${exercise.name} — kopia`, favorite: false, createdAt: now, updatedAt: now };
+    setPlannerState((current) => ({ ...current, exercises: [...(current.exercises ?? []), duplicate] }));
+    setAutosaveNotice("Utworzono kopię ćwiczenia.");
+  };
+
+  const deleteExerciseRecord = (exercise: Exercise) => {
+    const usage = plannerState.templates.reduce((count, template) => count + template.exercises.filter((item) => item.exerciseId === exercise.id).length, 0);
+    if (typeof window !== "undefined" && !window.confirm(usage > 0
+      ? `Ćwiczenie jest używane ${usage} razy. Usunąć je mimo to?`
+      : `Usunąć ćwiczenie „${exercise.name}”?`)) return;
+    setPlannerState((current) => ({ ...current, exercises: (current.exercises ?? []).filter((item) => item.id !== exercise.id) }));
+    setSelectedExerciseId(null);
+    setAutosaveNotice("Usunięto ćwiczenie.");
   };
 
   const openTemplateWorkoutDialog = (template: WorkoutTemplate, today = false) => {
@@ -810,15 +901,6 @@ export default function Sport() {
     setWorkoutDialog({ week, day, templateId: template.id });
   };
 
-  const deleteTemplate = () => {
-    if (!editingTemplate) return;
-    setPlannerState((current) => ({
-      ...current,
-      templates: current.templates.filter((template) => template.id !== editingTemplate.id),
-    }));
-    closeDialogs();
-  };
-
   const recordSessionOutcome = (
     session: WorkoutSession,
     status: "completed" | "incomplete" | "missed",
@@ -839,6 +921,17 @@ export default function Sport() {
           updatedAt: new Date().toISOString(),
         },
       } : current.workoutOutcomes,
+      scheduledWorkouts: finished.cycleWorkoutId
+        ? current.scheduledWorkouts?.map((scheduled) => scheduled.id === finished.cycleWorkoutId
+          ? { ...scheduled, status: status === "completed" ? "completed" : "started", updatedAt: new Date().toISOString() }
+          : scheduled)
+        : current.scheduledWorkouts,
+      executions: finished.cycleWorkoutId
+        ? [
+          ...(current.executions ?? []).filter((execution) => execution.scheduledWorkoutId !== finished.cycleWorkoutId),
+          executionFromSession(finished),
+        ]
+        : current.executions,
     }));
     recordActivity({
       moduleId: "sport",
@@ -873,6 +966,9 @@ export default function Sport() {
       workoutOutcomes: Object.fromEntries(
         Object.entries(current.workoutOutcomes).filter(([id]) => id !== workout.id),
       ),
+      scheduledWorkouts: current.scheduledWorkouts?.map((scheduled) => scheduled.id === workout.id
+        ? { ...scheduled, status: "started", updatedAt: new Date().toISOString() }
+        : scheduled),
     }));
     setSelectedWorkoutId(null);
     setActiveMode(true);
@@ -908,6 +1004,15 @@ export default function Sport() {
             updatedAt: new Date().toISOString(),
           },
         },
+        scheduledWorkouts: current.scheduledWorkouts?.map((scheduled) => scheduled.id === workout.id
+          ? { ...scheduled, status: status === "completed" ? "completed" : status === "missed" ? "skipped" : "started", updatedAt: new Date().toISOString() }
+          : scheduled),
+        executions: status === "missed"
+          ? current.executions
+          : [
+            ...(current.executions ?? []).filter((execution) => execution.scheduledWorkoutId !== workout.id),
+            executionFromSession(session),
+          ],
       };
     });
     recordActivity({
@@ -939,6 +1044,10 @@ export default function Sport() {
         sessions: outcome?.sessionId
           ? current.sessions.filter((session) => session.id !== outcome.sessionId)
           : current.sessions,
+        scheduledWorkouts: current.scheduledWorkouts?.map((scheduled) => scheduled.id === workout.id
+          ? { ...scheduled, status: "scheduled", updatedAt: new Date().toISOString() }
+          : scheduled),
+        executions: current.executions?.filter((execution) => execution.scheduledWorkoutId !== workout.id),
       };
     });
     setAutosaveNotice("Przywrócono status Zaplanowany.");
@@ -1061,8 +1170,40 @@ export default function Sport() {
           activeSession={activeSession}
           onChange={changeView}
           onResume={() => setActiveMode(true)}
-        />
-      )}
+          />
+        )}
+      detailPanel={view === "exercises" && selectedExerciseId
+        ? (
+          <ExerciseDetailPanel
+            exercise={plannerState.exercises?.find((exercise) => exercise.id === selectedExerciseId)}
+            templates={plannerState.templates}
+            onClose={() => setSelectedExerciseId(null)}
+            onEdit={() => setView("exercises")}
+            onDuplicate={() => {
+              const exercise = plannerState.exercises?.find((candidate) => candidate.id === selectedExerciseId);
+              if (exercise) duplicateExerciseRecord(exercise);
+            }}
+            onUpdate={saveExerciseRecord}
+          />
+        )
+        : view === "templates" && selectedTemplateId
+          ? (
+            <TemplateDetailPanel
+              template={plannerState.templates.find((template) => template.id === selectedTemplateId)}
+              exercises={plannerState.exercises ?? []}
+              onClose={() => setSelectedTemplateId(null)}
+              onEdit={() => setTemplateEditRequest({ id: selectedTemplateId, token: Date.now() })}
+              onAddToPlan={() => {
+                const template = plannerState.templates.find((candidate) => candidate.id === selectedTemplateId);
+                if (template) openTemplateWorkoutDialog(template);
+              }}
+              onTrainToday={() => {
+                const template = plannerState.templates.find((candidate) => candidate.id === selectedTemplateId);
+                if (template) openTemplateWorkoutDialog(template, true);
+              }}
+            />
+          )
+          : undefined}
     >
       <ModuleMain transitionKey={`${view}:${activeWeek}`}>
         <ContentHeader
@@ -1078,6 +1219,7 @@ export default function Sport() {
               { value: "today", label: "Dzisiaj" },
               { value: "cycle", label: "Plan treningowy" },
               { value: "templates", label: "Szablony" },
+              { value: "exercises", label: "Ćwiczenia" },
               { value: "history", label: "Historia" },
               { value: "analysis", label: "Analiza" },
             ]}
@@ -1106,6 +1248,7 @@ export default function Sport() {
             {view === "today" && (
               <SportOverview
                 cycle={cycleDraft}
+                templates={plannerState.templates}
                 activeSession={activeSession}
                 outcomes={plannerState.workoutOutcomes}
                 selectedWorkoutId={selectedWorkoutId}
@@ -1118,11 +1261,13 @@ export default function Sport() {
                 onResetWorkout={clearWorkoutOutcome}
                 onMoveWorkout={moveWorkoutFromOverview}
                 onOpenCycle={openCycleView}
+                onMarkRecovery={markRecoveryDay}
               />
             )}
             {view === "cycle" && (
               <CyclePlanner
                 cycle={cycleDraft!}
+                templates={plannerState.templates}
                 cycles={plannerState.cycles}
                 activeWeek={activeWeek}
                 selectedWorkoutId={selectedWorkoutId}
@@ -1137,19 +1282,49 @@ export default function Sport() {
                 onAddWorkout={(week, day) => setWorkoutDialog({ week, day })}
                 onSelectWorkout={toggleWorkoutDetails}
                 onMoveWorkout={moveWorkout}
+                onCopyWeek={copyWeek}
               />
             )}
             {view === "templates" && (
-              <TemplateLibrary
+              <SportTemplates
                 templates={plannerState.templates}
-                onCreate={() => setDialog("new-template")}
-                onEdit={(template) => setEditingTemplateId(template.id)}
+                exercises={plannerState.exercises ?? []}
                 onDuplicate={duplicateTemplate}
-                onAddToCycle={(template) => openTemplateWorkoutDialog(template)}
-                onUseToday={(template) => openTemplateWorkoutDialog(template, true)}
+                onAddToPlan={(template) => openTemplateWorkoutDialog(template)}
+                onTrainToday={(template) => openTemplateWorkoutDialog(template, true)}
+                onSave={saveTemplate}
+                onDelete={(template) => {
+                  if (typeof window !== "undefined" && !window.confirm(`Usunąć szablon „${template.name}”?`)) return;
+                  setPlannerState((current) => ({ ...current, templates: current.templates.filter((item) => item.id !== template.id) }));
+                  setSelectedTemplateId(null);
+                  setAutosaveNotice("Usunięto szablon.");
+                }}
+                selectedId={selectedTemplateId}
+                onSelect={(id) => setSelectedTemplateId((current) => current === id ? null : id)}
+                onDoubleSelect={(id) => {
+                  setSelectedTemplateId(id);
+                  setTemplateEditRequest({ id, token: Date.now() });
+                }}
+                editRequest={templateEditRequest}
+                onEditorClose={() => setTemplateEditRequest(null)}
+                onCreateExercise={() => {
+                  setView("exercises");
+                  setAutosaveNotice("Ćwiczenie utwórz w bibliotece, a potem wróć do edytora szablonu.");
+                }}
               />
             )}
-            {view === "history" && <SportHistory history={plannerState.history} />}
+            {view === "exercises" && (
+              <SportExercises
+                exercises={plannerState.exercises ?? []}
+                templates={plannerState.templates}
+                onCreate={saveExerciseRecord}
+                onUpdate={saveExerciseRecord}
+                onDuplicate={duplicateExerciseRecord}
+                onDelete={deleteExerciseRecord}
+                onSelect={(id) => setSelectedExerciseId(id)}
+              />
+            )}
+            {view === "history" && <SportHistory history={plannerState.history} sessions={plannerState.sessions} templates={plannerState.templates} exercises={plannerState.exercises ?? []} />}
             {view === "analysis" && <SportAnalysis history={plannerState.history} />}
           </div>
         </div>
@@ -1174,7 +1349,11 @@ export default function Sport() {
           onClearOutcome={() => clearWorkoutOutcome(selectedWorkout)}
           onEditSingle={() => openWorkoutEditor(selectedWorkout, "single")}
           onEditSeries={() => openWorkoutEditor(selectedWorkout, "series")}
-          onEditTemplate={selectedTemplate ? () => setEditingTemplateId(selectedTemplate.id) : undefined}
+          onEditTemplate={selectedTemplate ? () => {
+            setView("templates");
+            setSelectedTemplateId(selectedTemplate.id);
+            setTemplateEditRequest({ id: selectedTemplate.id, token: Date.now() });
+          } : undefined}
           onDelete={requestWorkoutDelete}
         />
       )}
@@ -1219,19 +1398,6 @@ export default function Sport() {
 
       {dialog === "new-cycle" && (
         <CycleDialog cycle={null} onClose={closeDialogs} onSubmit={createNewCycle} />
-      )}
-
-      {dialog === "new-template" && (
-        <TemplateDialog onClose={closeDialogs} onSubmit={saveTemplate} />
-      )}
-
-      {editingTemplate && (
-        <TemplateDialog
-          template={editingTemplate}
-          onClose={closeDialogs}
-          onSubmit={saveTemplate}
-          onDelete={deleteTemplate}
-        />
       )}
 
       {workoutDialog && cycleDraft && (

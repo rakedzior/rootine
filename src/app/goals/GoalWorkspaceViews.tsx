@@ -447,7 +447,7 @@ export function GoalCard({
                 className="absolute right-0 top-9 z-30 w-44"
               >
                 {[
-                  { label: "Dodaj postęp", icon: BarChart3, action: onProgress },
+                  { label: goal.rhythm === "Cel etapowy" ? "Dodaj etap" : goal.rhythm === "Wartość liczbowa" ? "Zaktualizuj wartość" : goal.rhythm === "Regularność" ? "Zapisz wykonanie" : "Zaktualizuj postęp", icon: BarChart3, action: onProgress },
                   { label: "Edytuj cel", icon: Pencil, action: onEdit },
                   { label: "Otwórz pełny widok", icon: Target, action: onOpen },
                   { label: "Duplikuj", icon: Plus, action: onDuplicate },
@@ -538,7 +538,7 @@ export function GoalDetail({
   const priority = goal.priority === "high" ? { label: "Wysoki", color: C.textSecond } : goal.priority === "medium" ? { label: "Średni", color: C.textSecond } : { label: "Niski", color: C.textSecond };
   const dueColor = deadlineColor(goal);
   const measurementLabel = rawGoal.progressMode === "milestones"
-    ? "Kamienie milowe"
+    ? "Etapy"
     : rawGoal.progressMode === "regularity"
       ? rawGoal.regularityMode === "frequency" ? "Wykonania" : "Dni serii"
       : rawGoal.progressMode === "manual" ? "Postęp" : "Wartość";
@@ -575,7 +575,7 @@ export function GoalDetail({
           <div className="h-2 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
             <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: goal.color }} />
           </div>
-          <button type="button" onClick={onProgress} className="mt-3 flex items-center gap-1.5 text-[11px] font-medium" style={{ color: C.iceBlueText }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj kamień milowy" : "Dodaj aktualizację postępu"}</button>
+          <button type="button" onClick={rawGoal.progressMode === "milestones" ? onAddMilestone : onProgress} className="mt-3 flex items-center gap-1.5 text-[11px] font-medium" style={{ color: C.iceBlueText }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj etap" : rawGoal.progressMode === "numeric" ? "Zaktualizuj wartość" : rawGoal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</button>
         </div>
 
         <div className="mb-5">
@@ -595,7 +595,7 @@ export function GoalDetail({
         </div>
 
         {rawGoal.progressMode === "milestones" && <>
-          <PanelSection title="Najbliższy kamień milowy">
+          <PanelSection title="Najbliższy etap">
             <button type="button" onClick={() => {
               const next = [...rawGoal.milestones].filter((item) => !item.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
               if (next) onToggleMilestone(next.id, true); else onAddMilestone();
@@ -615,12 +615,12 @@ export function GoalDetail({
           <div className="my-5 border-t" style={{ borderColor: C.borderSubtle }} />
         </>}
 
-        <PanelSection title="Statystyki">
+        <PanelSection title="Ostatnia aktywność">
           <div className="grid grid-cols-2 gap-2">
             {[
               { value: `${goal.current} / ${goal.total}`, label: measurementLabel, color: C.textPrimary },
               { value: `${goal.progress}%`, label: "Ogólny postęp", color: C.iceBlueText },
-              { value: goal.status === "risk" ? "Uwaga" : "Na planie", label: "Status planu", color: status.color },
+              { value: goal.status === "risk" ? "Wymaga uwagi" : "Na planie", label: "Kondycja celu", color: status.color },
               { value: goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski", label: "Priorytet", color: priority.color },
             ].map((stat) => (
               <div key={stat.label} className="rounded-lg border p-2.5" style={{ background: C.panel, borderColor: C.borderSubtle }}>

@@ -454,21 +454,21 @@ export default function Cele() {
         {activeFilter === "overview" && (
           <section className="goals-radar" aria-label="Najważniejsze sygnały celów">
             <div className="goals-radar__grid">
-              <div className={`goals-radar__signal ${goalsRadar.risk.length ? "is-warning" : "is-clear"}`}>
+              <button type="button" onClick={() => handleFilter("risk")} className={`goals-radar__signal ${goalsRadar.risk.length ? "is-warning" : "is-clear"}`}>
                 <AlertTriangle size={15} aria-hidden="true" />
                 <strong>{goalsRadar.risk.length}</strong>
                 <span>{goalsRadar.risk.length === 1 ? "cel wymaga uwagi" : "cele wymagają uwagi"}</span>
-              </div>
-              <div className="goals-radar__signal">
+              </button>
+              <button type="button" onClick={() => goalsRadar.upcoming && navigate(`/cele/${goalsRadar.upcoming.id}`)} className="goals-radar__signal">
                 <CalendarDays size={15} aria-hidden="true" />
                 <strong>{goalsRadar.upcoming?.due ?? "—"}</strong>
                 <span>{goalsRadar.upcoming ? `Najbliższy termin · ${goalsRadar.upcoming.title}` : "Brak nadchodzącego terminu"}</span>
-              </div>
-              <div className={`goals-radar__signal ${goalsRadar.stale.length ? "is-muted" : "is-clear"}`}>
+              </button>
+              <button type="button" onClick={() => handleFilter("all")} className={`goals-radar__signal ${goalsRadar.stale.length ? "is-muted" : "is-clear"}`}>
                 <Activity size={15} aria-hidden="true" />
                 <strong>{goalsRadar.stale.length}</strong>
-                <span>{goalsRadar.stale.length === 1 ? "cel bez świeżej aktualizacji" : "cele bez świeżej aktualizacji"}</span>
-              </div>
+                <span>{goalsRadar.stale.length === 1 ? "cel nieaktualizowany od 14 dni" : `cele nieaktualizowane od 14 dni`}</span>
+              </button>
             </div>
             {goalsRadar.focus && (
               <button type="button" className="goals-radar__focus" onClick={() => navigate(`/cele/${goalsRadar.focus!.id}`)}>
@@ -629,7 +629,7 @@ export default function Cele() {
       {deleteGoalId && storedGoals.find((goal) => goal.id === deleteGoalId) && (
         <ConfirmDialog
           title="Usunąć cel?"
-          message={`Cel „${storedGoals.find((goal) => goal.id === deleteGoalId)?.title}” wraz z historią postępów i kamieniami milowymi zostanie usunięty.`}
+          message={`Cel „${storedGoals.find((goal) => goal.id === deleteGoalId)?.title}” wraz z historią postępów i etapami zostanie usunięty.`}
           onClose={() => setDeleteGoalId(null)}
           onConfirm={() => {
             const deleted = deleteGoal(deleteGoalId);
@@ -679,7 +679,7 @@ export default function Cele() {
                 ["Cele", importCandidate.preview.goalCount],
                 ["Aktywne cele", importCandidate.preview.activeCount],
                 ["Kategorie", importCandidate.preview.categoryCount],
-                ["Kamienie milowe", importCandidate.preview.milestoneCount],
+                ["Etapy", importCandidate.preview.milestoneCount],
                 ["Wpisy postępu", importCandidate.preview.progressCount],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border p-3" style={{ background: C.inputBg, borderColor: C.borderSubtle }}>

@@ -34,13 +34,6 @@ const C = {
   danger: uiColors.danger,
 };
 
-const inputStyle = {
-  color: C.primary,
-  background: C.input,
-  borderColor: C.border,
-  colorScheme: "dark" as const,
-};
-
 type SelectOption = { value: string; label: string; description?: string };
 
 export function ThemedSelect({
@@ -462,7 +455,7 @@ export function GoalFormDialog({
             value={form.progressMode}
             onChange={(value) => set("progressMode", value as GoalProgressMode)}
             options={[
-              { value: "milestones", label: "Kamienie milowe", description: "Postęp z ukończonych etapów" },
+              { value: "milestones", label: "Cel etapowy", description: "Postęp z ukończonych etapów" },
               { value: "numeric", label: "Wartość liczbowa", description: "Np. kwota, kilometry lub książki" },
               { value: "regularity", label: "Regularność", description: "Seria dni albo częstotliwość" },
               { value: "manual", label: "Procent ręczny", description: "Samodzielnie ustawiany procent" },
@@ -492,14 +485,6 @@ export function GoalFormDialog({
               ]}
               ariaLabel="Rodzaj regularności"
             />
-          )}
-          {form.progressMode === "milestones" && (
-            <div className="ui-field">
-              <span className="ui-field__label">Kamienie milowe</span>
-              <p className="rounded-lg border px-3 py-2.5 text-[11px]" style={{ ...inputStyle, color: C.muted }}>
-                Etapy dodasz po utworzeniu celu.
-              </p>
-            </div>
           )}
           {form.progressMode === "numeric" && (
             <Input
@@ -686,7 +671,7 @@ export function ProgressDialog({
 
   return (
     <DialogShell
-      title={progress ? "Edytuj aktualizację" : "Dodaj postęp"}
+      title={progress ? "Edytuj aktualizację" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : goal.progressMode === "manual" ? "Zaktualizuj postęp" : "Etapy celu"}
       subtitle={goal.title}
       onClose={onClose}
       width={500}
@@ -762,7 +747,7 @@ export function ProgressDialog({
         </div>
         <div className="flex justify-end gap-2 border-t px-6 py-4" style={{ borderColor: C.border }}>
           <Button variant="quiet" onClick={onClose}>Anuluj</Button>
-          <Button variant="primary" type="submit">Zapisz postęp</Button>
+          <Button variant="primary" type="submit">Zapisz zmianę</Button>
         </div>
       </form>
     </DialogShell>
@@ -780,28 +765,29 @@ export function MilestoneDialog({
 }) {
   const [title, setTitle] = useState(current?.title ?? "");
   const [dueDate, setDueDate] = useState(current?.dueDate ?? shiftLocalDateKey(todayLocalDateKey(), 30));
+  const [note, setNote] = useState(current?.note ?? "");
   const [weight, setWeight] = useState(current?.weight ?? 1);
   const [done, setDone] = useState(current?.done ?? false);
   const [submitted, setSubmitted] = useState(false);
-  const titleError = title.trim() ? "" : "Podaj nazwę kamienia milowego.";
+  const titleError = title.trim() ? "" : "Podaj nazwę etapu.";
   const dueDateError = dueDate ? "" : "Wybierz termin.";
-  const weightError = Number.isFinite(weight) && weight > 0 ? "" : "Waga musi być większa od zera.";
+  const weightError = Number.isFinite(weight) && weight > 0 ? "" : "Wpływ etapu musi być większy od zera.";
 
   return (
-    <DialogShell title={current ? "Edytuj kamień milowy" : "Nowy kamień milowy"} onClose={onClose} width={480}>
+    <DialogShell title={current ? "Edytuj etap" : "Dodaj etap"} onClose={onClose} width={480}>
       <form
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitted(true);
           if (titleError || dueDateError || weightError) return;
-          onSubmit({ title: title.trim(), dueDate, weight, done });
+          onSubmit({ title: title.trim(), note: note.trim(), dueDate, weight, done });
         }}
       >
         <div className="grid grid-cols-2 gap-4 px-6 py-5">
           <Input
             autoFocus
-            label="Nazwa"
+            label="Nazwa etapu"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={200}
@@ -815,7 +801,9 @@ export function MilestoneDialog({
             onChange={(event) => setDueDate(event.target.value)}
             error={submitted ? dueDateError : undefined}
           />
+          <TextareaField label="Notatka" value={note} onChange={setNote} placeholder="Opcjonalna notatka do etapu" rows={3} maxLength={2_000} wide />
           <Input
+            fieldClassName={current ? "" : "hidden"}
             label="Waga"
             type="number"
             min={0.01}
@@ -856,7 +844,7 @@ export function MilestoneDialog({
             type="submit"
             leadingIcon={current ? <Check size={12} aria-hidden="true" /> : <Plus size={12} aria-hidden="true" />}
           >
-            {current ? "Zapisz" : "Dodaj"}
+            {current ? "Zapisz zmiany" : "Dodaj etap"}
           </Button>
         </div>
       </form>

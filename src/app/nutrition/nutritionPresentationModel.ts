@@ -280,10 +280,10 @@ export function formatWater(value: number) {
 }
 
 export function formatEntryCount(count: number) {
-  if (count === 1) return "1 pozycja";
+  if (count === 1) return "1 produkt";
   const lastTwo = count % 100;
   const last = count % 10;
-  return `${count} ${last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? "pozycje" : "pozycji"}`;
+  return `${count} ${last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? "produkty" : "produktów"}`;
 }
 
 export function entrySuggestion(entry: NutritionEntry): FoodSuggestion | null {

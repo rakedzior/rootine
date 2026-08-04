@@ -22,7 +22,7 @@ import {
 
 function workFixture(): WorkWorkspace {
   return {
-    version: 2,
+    version: 3,
     updatedAt: "2026-07-28T08:00:00.000Z",
     companies: [
       { id: "company-a", name: "Acme", description: "", color: "#4772fa" },

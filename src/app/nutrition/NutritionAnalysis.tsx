@@ -1,3 +1,13 @@
+import {
+  CalendarDays,
+  ChevronDown,
+  Droplets,
+  Flame,
+  Info,
+  Scale,
+  Sparkles,
+  Sprout,
+} from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import type { NutritionDay, NutritionGoals, WeightMeasurement } from "../data/nutritionWorkspace";
 import { SensitiveValue, usePrivacy } from "../experience/preferences";
@@ -24,18 +34,17 @@ interface AnalysisPoint {
   weightKg?: number;
 }
 
-type ChartMode = "weight" | "calories";
+type InsightTone = "info" | "warning" | "danger" | "positive" | "neutral";
 
 const RANGE_OPTIONS = [
   { id: "7", label: "7 dni" },
   { id: "14", label: "14 dni" },
   { id: "30", label: "30 dni" },
   { id: "90", label: "3 miesiące" },
-];
+  { id: "custom", label: "Własny zakres" },
+] as const;
 
-RANGE_OPTIONS.push({ id: "custom", label: "Własny zakres" });
-
-const CHART = { width: 760, height: 260, left: 42, right: 58, top: 24, bottom: 210 };
+const CHART = { width: 720, left: 48, right: 28, top: 24 };
 
 function shiftDateKey(dateKey: string, days: number) {
   const date = new Date(`${dateKey}T12:00:00`);
@@ -89,8 +98,43 @@ function formatDateShort(dateKey: string) {
     .replace(".", "");
 }
 
+function formatDateRange(startDate: string, endDate: string) {
+  const end = new Date(`${endDate}T12:00:00`);
+  const year = new Intl.DateTimeFormat("pl-PL", { year: "numeric" }).format(end);
+  return `${formatDateShort(startDate)} – ${formatDateShort(endDate)} ${year}`;
+}
+
+function formatChartDate(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return {
+    date: new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short" }).format(date).replace(".", ""),
+    weekday: new Intl.DateTimeFormat("pl-PL", { weekday: "short" }).format(date).replace(".", ""),
+  };
+}
+
 function signed(value: number, unit: string) {
-  return `${value > 0 ? "+" : ""}${formatNumber(value)} ${unit}`;
+  if (Math.abs(value) < 0.05) return `0 ${unit}`;
+  return `${value > 0 ? "+" : "−"}${formatNumber(Math.abs(value))} ${unit}`;
+}
+
+function percentage(value: number, goal: number) {
+  return goal > 0 ? Math.round(value / goal * 100) : 0;
+}
+
+function progress(value: number, goal: number) {
+  return goal > 0 ? Math.min(1, Math.max(0, value / goal)) : 0;
+}
+
+function StatusChip({ tone, children }: { tone: InsightTone; children: string }) {
+  return <span className={`nutrition-analysis-v2__status is-${tone}`}>{children}</span>;
+}
+
+function InfoButton({ label }: { label: string }) {
+  return (
+    <button type="button" className="nutrition-analysis-v2__info" aria-label={label} title={label}>
+      <Info size={13} strokeWidth={1.7} />
+    </button>
+  );
 }
 
 export function NutritionAnalysis({
@@ -103,17 +147,21 @@ export function NutritionAnalysis({
 }: NutritionAnalysisProps) {
   const { enabled: privacyMode } = usePrivacy();
   const rangeName = useId();
-  const [chartMode, setChartMode] = useState<ChartMode>("weight");
-  const [customStartDate, setCustomStartDate] = useState(() => shiftDateKey(endDate, -29));
+  const [customStartDate, setCustomStartDate] = useState(() => shiftDateKey(endDate, -6));
   const [customEndDate, setCustomEndDate] = useState(endDate);
+
   useEffect(() => {
     setCustomEndDate(endDate);
-    setCustomStartDate(shiftDateKey(endDate, -29));
+    setCustomStartDate(shiftDateKey(endDate, -6));
   }, [endDate]);
-  const standardRange = range === "custom" ? 30 : range;
+
+  const standardRange = range === "custom" ? 7 : range;
   const activeStartDate = range === "custom" ? customStartDate : shiftDateKey(endDate, -standardRange + 1);
   const activeEndDate = range === "custom" ? customEndDate : endDate;
-  const points = useMemo(() => buildPoints(activeStartDate, activeEndDate, days, weightMeasurements), [activeEndDate, activeStartDate, days, weightMeasurements]);
+  const points = useMemo(
+    () => buildPoints(activeStartDate, activeEndDate, days, weightMeasurements),
+    [activeEndDate, activeStartDate, days, weightMeasurements],
+  );
   const dietPoints = points.filter((point) => point.hasDietEntry);
   const weightPoints = points.filter((point): point is AnalysisPoint & { weightKg: number } => point.weightKg !== undefined);
   const waterPoints = points.filter((point) => point.waterMl > 0);
@@ -124,30 +172,112 @@ export function NutritionAnalysis({
   const averageWater = average(waterPoints.map((point) => point.waterMl));
   const averageWeight = average(weightPoints.map((point) => point.weightKg));
   const weightChange = weightPoints.length > 1 ? weightPoints.at(-1)!.weightKg - weightPoints[0].weightKg : null;
-  const hasChartData = chartMode === "weight" ? weightPoints.length > 0 : dietPoints.length > 0;
-
-  const plotWidth = CHART.width - CHART.left - CHART.right;
-  const plotHeight = CHART.bottom - CHART.top;
-  const pointX = (index: number, count = points.length) => CHART.left + (count <= 1 ? plotWidth / 2 : index / (count - 1) * plotWidth);
-  const weights = weightPoints.map((point) => point.weightKg);
-  const weightMin = weights.length ? Math.min(...weights) - Math.max(0.4, (Math.max(...weights) - Math.min(...weights)) * 0.2) : 0;
-  const weightMax = weights.length ? Math.max(...weights) + Math.max(0.4, (Math.max(...weights) - Math.min(...weights)) * 0.2) : 1;
-  const weightY = (value: number) => CHART.bottom - (value - weightMin) / Math.max(0.1, weightMax - weightMin) * plotHeight;
-  const weightPolyline = weightPoints.map((point) => `${pointX(points.findIndex((candidate) => candidate.date === point.date))},${weightY(point.weightKg)}`).join(" ");
-  const maxCalories = Math.max(goals.calories, ...dietPoints.map((point) => point.calories), 1);
-  const calorieY = (value: number) => CHART.bottom - value / maxCalories * plotHeight;
-  const calorieBarWidth = Math.max(4, Math.min(18, plotWidth / points.length * 0.58));
-  const tickIndexes = [...new Set([0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.max(0, Math.round((points.length - 1) * ratio))))];
+  const calorieShare = percentage(averageCalories, goals.calories);
+  const proteinShare = percentage(averageProtein, goals.protein);
+  const fatOverDays = dietPoints.filter((point) => point.fat > goals.fat).length;
+  const proteinBelowDays = dietPoints.filter((point) => point.protein < goals.protein).length;
+  const calorieStatus = !dietPoints.length
+    ? { tone: "neutral" as const, label: "Brak wpisów" }
+    : averageCalories > goals.calories
+      ? { tone: "danger" as const, label: "Powyżej celu" }
+      : calorieShare >= 90
+        ? { tone: "positive" as const, label: "Blisko celu" }
+        : { tone: "info" as const, label: "Poniżej celu" };
+  const proteinStatus = !dietPoints.length
+    ? { tone: "neutral" as const, label: "Brak wpisów" }
+    : proteinShare >= 100
+      ? { tone: "positive" as const, label: "Cel osiągnięty" }
+      : proteinShare >= 90
+        ? { tone: "positive" as const, label: "Białko: blisko celu" }
+        : { tone: "warning" as const, label: "Białko: do uzupełnienia" };
+  const waterStatus = !waterPoints.length
+    ? { tone: "neutral" as const, label: "Brak wpisów" }
+    : averageWater >= goals.waterMl
+      ? { tone: "positive" as const, label: "Cel osiągnięty" }
+      : { tone: "info" as const, label: "Do uzupełnienia" };
   const customRangeInvalid = range === "custom" && customStartDate > customEndDate;
 
+  const insights = useMemo(() => {
+    const result: Array<{ tone: InsightTone; text: string }> = [];
+    result.push({
+      tone: "info",
+      text: dietPoints.length && goals.calories > 0
+        ? `Średnie kalorie wynoszą ${calorieShare}% celu w dniach z wpisem.`
+        : "Brak wpisów kalorii w wybranym okresie.",
+    });
+    result.push({
+      tone: "warning",
+      text: dietPoints.length && goals.protein > 0
+        ? proteinBelowDays > dietPoints.length / 2
+          ? "Białko było poniżej celu w większości dni z wpisem."
+          : "Białko było poniżej celu w części dni z wpisem."
+        : "Brak wystarczających danych o białku.",
+    });
+    result.push({
+      tone: "danger",
+      text: fatOverDays > 0
+        ? `Tłuszcze przekroczyły cel w ${fatOverDays} ${fatOverDays === 1 ? "dniu" : "dniach"}.`
+        : "Tłuszcze nie przekroczyły celu w dniach z wpisem.",
+    });
+    if (privacyMode) {
+      result.push({ tone: "neutral", text: "Trend masy jest ukryty w Privacy Mode." });
+    } else if (weightChange !== null) {
+      result.push({
+        tone: "positive",
+        text: Math.abs(weightChange) < 0.05
+          ? "Masa pozostała bez większej zmiany w wybranym okresie."
+          : `Masa ${weightChange > 0 ? "wzrosła" : "spadła"} o ${formatNumber(Math.abs(weightChange))} kg w wybranym okresie.`,
+      });
+    } else {
+      result.push({ tone: "positive", text: "Do pokazania trendu masy potrzebne są co najmniej 2 pomiary." });
+    }
+    result.push({
+      tone: "info",
+      text: points.length
+        ? waterPoints.length === points.length
+          ? `Nawodnienie zapisano w każdym z ${points.length} dni.`
+          : `Nawodnienie zapisano tylko w ${waterPoints.length} z ${points.length} dni.`
+        : "Brak wpisów nawodnienia w wybranym okresie.",
+    });
+    result.push({ tone: "neutral", text: "Braki wpisów nie są liczone jako zero." });
+    return result;
+  }, [calorieShare, dietPoints.length, fatOverDays, goals.calories, goals.protein, points.length, privacyMode, proteinBelowDays, waterPoints.length, weightChange]);
+
+  const chartHeight = points.length <= 3 ? 190 : 280;
+  const chartBottom = points.length <= 3 ? 150 : 230;
+  const plotWidth = CHART.width - CHART.left - CHART.right;
+  const plotHeight = chartBottom - CHART.top;
+  const pointX = (index: number) => CHART.left + (points.length <= 1 ? plotWidth / 2 : index / (points.length - 1) * plotWidth);
+  const tickIndexes = [...new Set([0, 0.25, 0.5, 0.75, 1]
+    .map((ratio) => Math.max(0, Math.round((points.length - 1) * ratio))))]
+    .filter((index) => Boolean(points[index]));
+  const calorieMax = Math.max(goals.calories, ...dietPoints.map((point) => point.calories), 1);
+  const calorieY = (value: number) => chartBottom - value / calorieMax * plotHeight;
+  const calorieBarWidth = Math.max(8, Math.min(28, plotWidth / Math.max(points.length, 1) * 0.58));
+  const weightValues = weightPoints.map((point) => point.weightKg);
+  const weightMin = weightValues.length ? Math.min(...weightValues) - Math.max(0.5, (Math.max(...weightValues) - Math.min(...weightValues)) * 0.2) : 0;
+  const weightMax = weightValues.length ? Math.max(...weightValues) + Math.max(0.5, (Math.max(...weightValues) - Math.min(...weightValues)) * 0.2) : 1;
+  const weightY = (value: number) => chartBottom - (value - weightMin) / Math.max(0.1, weightMax - weightMin) * plotHeight;
+  const weightPolyline = weightPoints.map((point) => {
+    const index = points.findIndex((candidate) => candidate.date === point.date);
+    return `${pointX(index)},${weightY(point.weightKg)}`;
+  }).join(" ");
+  const weightArea = weightPoints.length
+    ? `${CHART.left},${chartBottom} ${weightPolyline} ${pointX(points.findIndex((point) => point.date === weightPoints.at(-1)!.date))},${chartBottom}`
+    : "";
+  const weightTicks = weightValues.length
+    ? [0, 0.5, 1].map((ratio) => weightMin + (weightMax - weightMin) * ratio)
+    : [];
+
   return (
-    <div className="nutrition-analysis">
-      <div className="nutrition-analysis__range-bar">
-        <div>
-          <strong>Zakres danych</strong>
-          <span>{formatDateShort(points[0]?.date ?? activeStartDate)} — {formatDateShort(activeEndDate)}</span>
+    <div className="nutrition-analysis-v2">
+      <div className="nutrition-analysis-v2__toolbar">
+        <div className="nutrition-analysis-v2__date-summary">
+          <span>Zakres:</span>
+          <strong>{formatDateRange(activeStartDate, activeEndDate)}</strong>
+          <CalendarDays size={15} strokeWidth={1.6} aria-hidden="true" />
         </div>
-        <fieldset className="nutrition-analysis__range">
+        <fieldset className="nutrition-analysis-v2__range">
           <legend className="ui-sr-only">Zakres analizy</legend>
           {RANGE_OPTIONS.map((option) => (
             <label key={option.id}>
@@ -164,8 +294,9 @@ export function NutritionAnalysis({
           ))}
         </fieldset>
       </div>
+
       {range === "custom" && (
-        <div className="nutrition-analysis__custom-range">
+        <div className="nutrition-analysis-v2__custom-range">
           <label>
             <span>Od</span>
             <input type="date" value={customStartDate} max={customEndDate} onChange={(event) => setCustomStartDate(event.target.value)} />
@@ -178,74 +309,215 @@ export function NutritionAnalysis({
         </div>
       )}
 
-      <div className="nutrition-analysis__kpis" aria-label="Podsumowanie wybranego okresu">
-        <div className="nutrition-analysis__kpi is-calories"><span>Średnie kcal</span><strong>{dietPoints.length ? `${formatNumber(averageCalories, 0)} kcal` : "—"}</strong><small>{dietPoints.length ? `${formatNumber(averageCalories / goals.calories * 100, 0)}% celu` : "Brak posiłków"}</small></div>
-        <div className="nutrition-analysis__kpi is-macros">
-          <span>Średnie makro</span>
-          {dietPoints.length ? (
-            <div className="nutrition-analysis__macro-kpi-values">
-              <strong className="is-protein">B {formatNumber(averageProtein)} g</strong>
-              <strong className="is-carbs">W {formatNumber(averageCarbs)} g</strong>
-              <strong className="is-fat">T {formatNumber(averageFat)} g</strong>
+      <div className="nutrition-analysis-v2__overview">
+        <div className="nutrition-analysis-v2__kpis" aria-label="Podsumowanie wybranego okresu">
+          <article className="nutrition-analysis-v2__metric-card is-calories">
+            <div className="nutrition-analysis-v2__metric-top">
+              <span className="nutrition-analysis-v2__metric-icon"><Flame size={20} strokeWidth={1.8} /></span>
+              <span>Średnie kcal</span>
             </div>
-          ) : <strong>—</strong>}
-          <small>na dzień z wpisem</small>
+            <div className="nutrition-analysis-v2__metric-value-row">
+              <strong><SensitiveValue label="Średnie kalorie">{dietPoints.length ? `${formatNumber(averageCalories, 0)} kcal` : "—"}</SensitiveValue></strong>
+              <span>Cel {formatNumber(goals.calories, 0)} kcal</span>
+            </div>
+            <div className="nutrition-analysis-v2__metric-support">
+              <span>{dietPoints.length ? `${calorieShare}% celu` : "Brak posiłków"}</span>
+              <i role="progressbar" aria-label="Realizacja celu kalorii" aria-valuemin={0} aria-valuemax={goals.calories} aria-valuenow={averageCalories} style={{ transform: `scaleX(${progress(averageCalories, goals.calories)})` }} />
+            </div>
+            <StatusChip tone={calorieStatus.tone}>{calorieStatus.label}</StatusChip>
+          </article>
+
+          <article className="nutrition-analysis-v2__metric-card is-macros">
+            <div className="nutrition-analysis-v2__metric-top">
+              <span className="nutrition-analysis-v2__metric-icon"><Sprout size={20} strokeWidth={1.8} /></span>
+              <span>Średnie makro</span>
+            </div>
+            {dietPoints.length ? (
+              <div className="nutrition-analysis-v2__macro-values">
+                <strong className="is-protein">B <SensitiveValue label="Średnie białko">{formatNumber(averageProtein)} g</SensitiveValue></strong>
+                <strong className="is-carbs">W <SensitiveValue label="Średnie węglowodany">{formatNumber(averageCarbs)} g</SensitiveValue></strong>
+                <strong className="is-fat">T <SensitiveValue label="Średnie tłuszcze">{formatNumber(averageFat)} g</SensitiveValue></strong>
+              </div>
+            ) : <strong className="nutrition-analysis-v2__metric-empty">—</strong>}
+            <span className="nutrition-analysis-v2__metric-note">na dzień z wpisem</span>
+            <StatusChip tone={proteinStatus.tone}>{proteinStatus.label}</StatusChip>
+          </article>
+
+          <article className="nutrition-analysis-v2__metric-card is-weight">
+            <div className="nutrition-analysis-v2__metric-top">
+              <span className="nutrition-analysis-v2__metric-icon"><Scale size={20} strokeWidth={1.8} /></span>
+              <span>Średnia masa</span>
+            </div>
+            <div className="nutrition-analysis-v2__metric-value-row">
+              <strong><SensitiveValue label="Średnia masa">{weightPoints.length ? `${formatNumber(averageWeight)} kg` : "—"}</SensitiveValue></strong>
+            </div>
+            <div className="nutrition-analysis-v2__metric-note">
+              {privacyMode ? "Dane ukryte w Privacy Mode" : weightChange === null ? "Potrzebne 2 pomiary" : <>Zmiana w okresie: <SensitiveValue label="Zmiana masy">{signed(weightChange, "kg")}</SensitiveValue></>}
+            </div>
+            <StatusChip tone={privacyMode || weightChange === null ? "neutral" : weightChange > 0.05 ? "danger" : "positive"}>
+              {privacyMode ? "Dane ukryte" : weightChange === null ? "Brak pełnego trendu" : weightChange > 0.05 ? "Trend wzrostowy" : weightChange < -0.05 ? "Trend spadkowy" : "Trend stabilny"}
+            </StatusChip>
+          </article>
+
+          <article className="nutrition-analysis-v2__metric-card is-water">
+            <div className="nutrition-analysis-v2__metric-top">
+              <span className="nutrition-analysis-v2__metric-icon"><Droplets size={20} strokeWidth={1.8} /></span>
+              <span>Średnie nawodnienie</span>
+            </div>
+            <div className="nutrition-analysis-v2__metric-value-row">
+              <strong>{waterPoints.length ? `${formatNumber(averageWater, 0)} ml` : "—"}</strong>
+              <span>Cel {formatNumber(goals.waterMl, 0)} ml</span>
+            </div>
+            <div className="nutrition-analysis-v2__metric-support">
+              <span>{waterPoints.length ? `z ${waterPoints.length} zapisanych dni` : "Brak wpisów wody"}</span>
+              <i role="progressbar" aria-label="Realizacja celu nawodnienia" aria-valuemin={0} aria-valuemax={goals.waterMl} aria-valuenow={averageWater} style={{ transform: `scaleX(${progress(averageWater, goals.waterMl)})` }} />
+            </div>
+            <StatusChip tone={waterStatus.tone}>{waterStatus.label}</StatusChip>
+          </article>
         </div>
-        <div className="nutrition-analysis__kpi is-weight">
-          <span>Średnia masa</span>
-          <strong><SensitiveValue label="Średnia masa">{weightPoints.length ? `${formatNumber(averageWeight)} kg` : "—"}</SensitiveValue></strong>
-          <small>{privacyMode ? "Dane ukryte w Privacy Mode" : weightChange === null ? "Potrzebne 2 pomiary" : `Zmiana ${signed(weightChange, "kg")}`}</small>
-        </div>
-        <div className="nutrition-analysis__kpi is-water"><span>Średnie nawodnienie</span><strong>{waterPoints.length ? `${formatNumber(averageWater, 0)} ml` : "—"}</strong><small>{waterPoints.length ? `z ${waterPoints.length} zapisanych dni` : "Brak wpisów wody"}</small></div>
+
+        <section className="nutrition-analysis-v2__insights" aria-labelledby="nutrition-analysis-v2-insights-title">
+          <div className="nutrition-analysis-v2__insights-heading">
+            <h3 id="nutrition-analysis-v2-insights-title"><Sparkles size={18} strokeWidth={1.8} /> Wnioski</h3>
+          </div>
+          <ul>
+            {insights.map((insight) => (
+              <li key={insight.text}>
+                <span className={`nutrition-analysis-v2__insight-dot is-${insight.tone}`} aria-hidden="true" />
+                <span>{insight.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
 
-      <section className="nutrition-analysis__chart-panel" aria-label="Wykres trendu">
-        <div className="nutrition-analysis__chart-heading">
-          <div>
-            <h3>{chartMode === "weight" ? "Masa ciała w czasie" : "Kalorie w czasie"}</h3>
-            <p>{chartMode === "weight" ? "Zapisane pomiary w wybranym okresie." : "Dni z posiłkami względem celu kalorii."}</p>
+      <div className="nutrition-analysis-v2__charts">
+        <section className="nutrition-analysis-v2__chart-panel" aria-labelledby="nutrition-analysis-v2-calories-title">
+          <div className="nutrition-analysis-v2__chart-heading">
+            <h3 id="nutrition-analysis-v2-calories-title">Kalorie w czasie <InfoButton label="Dni bez wpisu nie są liczone do średniej." /></h3>
+            <label className="nutrition-analysis-v2__chart-select">
+              <span className="ui-sr-only">Częstotliwość wykresu kalorii</span>
+              <select defaultValue="daily" aria-label="Częstotliwość wykresu kalorii">
+                <option value="daily">Dziennie</option>
+              </select>
+              <ChevronDown size={13} aria-hidden="true" />
+            </label>
           </div>
-          <div className="nutrition-analysis__chart-switch" role="group" aria-label="Widok wykresu">
-            <button type="button" className={chartMode === "weight" ? "is-active" : ""} onClick={() => setChartMode("weight")}>Masa</button>
-            <button type="button" className={chartMode === "calories" ? "is-active" : ""} onClick={() => setChartMode("calories")}>Kalorie</button>
+          <div className="nutrition-analysis-v2__legend">
+            <span><i className="is-goal" /> Cel {formatNumber(goals.calories, 0)} kcal</span>
+            <span><i className="is-average" /> Średnia {formatNumber(averageCalories, 0)} kcal</span>
           </div>
-        </div>
-        {privacyMode && chartMode === "weight" ? (
-          <div className="nutrition-analysis__empty" role="status">Wartości masy ciała są ukryte w Privacy Mode.</div>
-        ) : hasChartData ? (
-          <svg className="nutrition-analysis__chart" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label={chartMode === "weight" ? "Wykres masy ciała" : "Wykres kalorii z celem"}>
-            <line className="nutrition-analysis__axis" x1={CHART.left} y1={CHART.bottom} x2={CHART.width - CHART.right} y2={CHART.bottom} />
-            {chartMode === "weight" ? (
-              <>
-                <polyline className="nutrition-analysis__weight-line" points={weightPolyline} />
-                {weightPoints.map((point) => {
-                  const index = points.findIndex((candidate) => candidate.date === point.date);
-                  return <circle key={point.date} className="nutrition-analysis__weight-point" cx={pointX(index)} cy={weightY(point.weightKg)} r={4}><title>{formatDateShort(point.date)}: {formatNumber(point.weightKg)} kg</title></circle>;
-                })}
-                <text className="nutrition-analysis__weight-label" x={CHART.width - CHART.right + 8} y={CHART.top + 4}>{formatNumber(weightMax)} kg</text>
-                <text className="nutrition-analysis__weight-label" x={CHART.width - CHART.right + 8} y={CHART.bottom}>{formatNumber(weightMin)} kg</text>
-              </>
-            ) : (
-              <>
-                <line className="nutrition-analysis__goal-line" x1={CHART.left} y1={calorieY(goals.calories)} x2={CHART.width - CHART.right} y2={calorieY(goals.calories)} />
-                <text className="nutrition-analysis__axis-label" x={CHART.left} y={calorieY(goals.calories) - 7}>cel {formatNumber(goals.calories, 0)} kcal</text>
-                {points.map((point, index) => point.hasDietEntry && (
-                  <rect key={point.date} className={point.calories > goals.calories ? "nutrition-analysis__bar is-over" : "nutrition-analysis__bar"} x={pointX(index) - calorieBarWidth / 2} y={calorieY(point.calories)} width={calorieBarWidth} height={CHART.bottom - calorieY(point.calories)} rx={3}>
-                    <title>{formatDateShort(point.date)}: {formatNumber(point.calories, 0)} kcal</title>
-                  </rect>
-                ))}
-              </>
-            )}
-            {tickIndexes.map((index) => (
-              <text key={points[index].date} className="nutrition-analysis__date-label" x={pointX(index)} y={CHART.bottom + 25} textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}>{formatDateShort(points[index].date)}</text>
-            ))}
-          </svg>
-        ) : (
-          <div className="nutrition-analysis__empty">Brak danych dla tego widoku w wybranym okresie.</div>
-        )}
-      </section>
+          {dietPoints.length ? (
+            <svg className="nutrition-analysis-v2__chart" viewBox={`0 0 ${CHART.width} ${chartHeight}`} role="img" aria-label="Kalorie w czasie">
+              {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+                const value = calorieMax * ratio;
+                const y = calorieY(value);
+                return (
+                  <g key={ratio}>
+                    <line className="nutrition-analysis-v2__grid-line" x1={CHART.left} y1={y} x2={CHART.width - CHART.right} y2={y} />
+                    <text className="nutrition-analysis-v2__axis-label" x={CHART.left - 10} y={y + 4} textAnchor="end">{formatNumber(value, 0)}</text>
+                  </g>
+                );
+              })}
+              <line className="nutrition-analysis-v2__goal-line" x1={CHART.left} y1={calorieY(goals.calories)} x2={CHART.width - CHART.right} y2={calorieY(goals.calories)} />
+              <line className="nutrition-analysis-v2__average-line" x1={CHART.left} y1={calorieY(averageCalories)} x2={CHART.width - CHART.right} y2={calorieY(averageCalories)} />
+              {points.map((point, index) => {
+                const x = pointX(index);
+                const barHeight = point.hasDietEntry ? chartBottom - calorieY(point.calories) : 0;
+                return point.hasDietEntry ? (
+                  <g key={point.date}>
+                    <rect
+                      className={point.calories > goals.calories ? "nutrition-analysis-v2__bar is-over" : "nutrition-analysis-v2__bar"}
+                      x={x - calorieBarWidth / 2}
+                      y={calorieY(point.calories)}
+                      width={calorieBarWidth}
+                      height={barHeight}
+                      rx={3}
+                      tabIndex={0}
+                    >
+                      <title>{formatDateShort(point.date)}: {formatNumber(point.calories, 0)} kcal</title>
+                    </rect>
+                    <text className="nutrition-analysis-v2__value-label" x={x} y={Math.max(CHART.top + 12, calorieY(point.calories) - 8)} textAnchor="middle">{formatNumber(point.calories, 0)}</text>
+                  </g>
+                ) : (
+                  <text key={point.date} className="nutrition-analysis-v2__missing-label" x={x} y={chartBottom - 6} textAnchor="middle">—</text>
+                );
+              })}
+              {tickIndexes.map((index) => {
+                const label = formatChartDate(points[index].date);
+                return (
+                  <text key={points[index].date} className="nutrition-analysis-v2__date-label" x={pointX(index)} y={chartBottom + 24} textAnchor="middle">
+                    <tspan x={pointX(index)}>{label.date}</tspan>
+                    <tspan x={pointX(index)} dy="14">{label.weekday}</tspan>
+                  </text>
+                );
+              })}
+            </svg>
+          ) : <div className="nutrition-analysis-v2__empty">Brak wpisów kalorii w wybranym okresie.</div>}
+          <div className="nutrition-analysis-v2__chart-footer">
+            <span><i className="is-in-range" /> W normie (≤ {formatNumber(goals.calories, 0)} kcal)</span>
+            <span><i className="is-over" /> Powyżej celu (&gt; {formatNumber(goals.calories, 0)} kcal)</span>
+            <span><i className="is-missing" /> Brak wpisu</span>
+          </div>
+        </section>
 
-      <p className="nutrition-analysis__note">Brak wpisu nie jest liczony jako zero. Średnie dotyczą wyłącznie dni z odpowiednim zapisem.</p>
+        <section className="nutrition-analysis-v2__chart-panel" aria-labelledby="nutrition-analysis-v2-weight-title">
+          <div className="nutrition-analysis-v2__chart-heading">
+            <h3 id="nutrition-analysis-v2-weight-title">Masa ciała w czasie <InfoButton label="Wykres pokazuje zapisane pomiary masy." /></h3>
+            <label className="nutrition-analysis-v2__chart-select">
+              <span className="ui-sr-only">Częstotliwość wykresu masy</span>
+              <select defaultValue="daily" aria-label="Częstotliwość wykresu masy">
+                <option value="daily">Dziennie</option>
+              </select>
+              <ChevronDown size={13} aria-hidden="true" />
+            </label>
+          </div>
+          <div className="nutrition-analysis-v2__chart-axis-caption">kg</div>
+          {privacyMode ? (
+            <div className="nutrition-analysis-v2__empty" role="status">Wartości masy ciała są ukryte w Privacy Mode.</div>
+          ) : weightPoints.length ? (
+            <svg className="nutrition-analysis-v2__chart" viewBox={`0 0 ${CHART.width} ${chartHeight}`} role="img" aria-label="Masa ciała w czasie">
+              {weightTicks.map((value) => {
+                const y = weightY(value);
+                return (
+                  <g key={value}>
+                    <line className="nutrition-analysis-v2__grid-line" x1={CHART.left} y1={y} x2={CHART.width - CHART.right} y2={y} />
+                    <text className="nutrition-analysis-v2__axis-label" x={CHART.left - 10} y={y + 4} textAnchor="end">{formatNumber(value)} </text>
+                  </g>
+                );
+              })}
+              <polygon className="nutrition-analysis-v2__weight-area" points={weightArea} />
+              <polyline className="nutrition-analysis-v2__weight-line" points={weightPolyline} />
+              {weightPoints.map((point) => {
+                const index = points.findIndex((candidate) => candidate.date === point.date);
+                const x = pointX(index);
+                return (
+                  <g key={point.date}>
+                    <circle className="nutrition-analysis-v2__weight-point" cx={x} cy={weightY(point.weightKg)} r={4} tabIndex={0}>
+                      <title>{formatDateShort(point.date)}: {formatNumber(point.weightKg)} kg</title>
+                    </circle>
+                    <text className="nutrition-analysis-v2__value-label is-weight" x={x} y={weightY(point.weightKg) - 10} textAnchor="middle">{formatNumber(point.weightKg)}</text>
+                  </g>
+                );
+              })}
+              {tickIndexes.map((index) => {
+                const label = formatChartDate(points[index].date);
+                return (
+                  <text key={points[index].date} className="nutrition-analysis-v2__date-label" x={pointX(index)} y={chartBottom + 24} textAnchor="middle">
+                    <tspan x={pointX(index)}>{label.date}</tspan>
+                    <tspan x={pointX(index)} dy="14">{label.weekday}</tspan>
+                  </text>
+                );
+              })}
+            </svg>
+          ) : <div className="nutrition-analysis-v2__empty">Brak pomiarów masy w wybranym okresie.</div>}
+          <div className="nutrition-analysis-v2__chart-summary">
+            <span>Ostatni pomiar: <strong><SensitiveValue label="Ostatni pomiar masy">{weightPoints.length ? `${formatNumber(weightPoints.at(-1)!.weightKg)} kg` : "—"}</SensitiveValue></strong></span>
+            <span>Zmiana w okresie: <strong className={weightChange !== null && weightChange > 0.05 ? "is-danger" : ""}><SensitiveValue label="Zmiana masy">{weightChange === null ? "—" : signed(weightChange, "kg")}</SensitiveValue></strong></span>
+            <span>Średnia masa: <strong><SensitiveValue label="Średnia masa">{weightPoints.length ? `${formatNumber(averageWeight)} kg` : "—"}</SensitiveValue></strong></span>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

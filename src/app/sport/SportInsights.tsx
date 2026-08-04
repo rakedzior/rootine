@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Bike,
@@ -64,6 +64,7 @@ import {
   type WorkoutSession,
   type WorkoutTemplate,
   type WorkoutExercise,
+  type Exercise,
 } from "./model";
 import { DisciplineLabel, StatusLabel } from "./Shared";
 import { DISCIPLINE_META } from "./theme";
@@ -93,6 +94,18 @@ function stageCountLabel(count: number) {
   if (count === 1) return "etap";
   if (count >= 2 && count <= 4) return "etapy";
   return "etapów";
+}
+
+function contentPreview(template?: WorkoutTemplate) {
+  if (!template) return null;
+  const labels = [
+    ...template.exercises.map((exercise) => exercise.name),
+    ...(template.stages ?? []).map((stage) => stage.label),
+  ];
+  if (!labels.length) return null;
+  return labels.length > 4
+    ? `${labels.slice(0, 3).join(" · ")} · +${labels.length - 3}`
+    : labels.join(" · ");
 }
 
 function formatDayHeading(dateKey: string) {
@@ -239,6 +252,7 @@ function ActiveSessionStrip({
 
 function PlannedWorkoutRow({
   workout,
+  template,
   selected,
   outcome,
   active,
@@ -248,6 +262,7 @@ function PlannedWorkoutRow({
   onResetStatus,
 }: {
   workout: CycleWorkout;
+  template?: WorkoutTemplate;
   selected: boolean;
   outcome?: WorkoutOutcome;
   active: boolean;
@@ -292,6 +307,7 @@ function PlannedWorkoutRow({
               </>
             )}
           </span>
+          {contentPreview(template) && <span className="sport-overview-workout__content-preview">{contentPreview(template)}</span>}
         </span>
       </button>
       {active ? (
@@ -313,6 +329,7 @@ function PlannedWorkoutRow({
 
 export function SportOverview({
   cycle,
+  templates = [],
   activeSession,
   selectedWorkoutId,
   outcomes,
@@ -325,8 +342,10 @@ export function SportOverview({
   onResetWorkout,
   onMoveWorkout,
   onOpenCycle,
+  onMarkRecovery,
 }: {
   cycle: TrainingCycle | null;
+  templates?: WorkoutTemplate[];
   activeSession?: WorkoutSession;
   selectedWorkoutId?: string | null;
   outcomes: Record<string, WorkoutOutcome>;
@@ -339,6 +358,7 @@ export function SportOverview({
   onResetWorkout: (workout: CycleWorkout) => void;
   onMoveWorkout: (workout: CycleWorkout, day: number) => void;
   onOpenCycle: (week: number) => void;
+  onMarkRecovery: (date: string) => void;
 }) {
   const [draggedWorkoutId, setDraggedWorkoutId] = useState<string | null>(null);
   const [dropTargetDay, setDropTargetDay] = useState<number | null>(null);
@@ -394,6 +414,7 @@ export function SportOverview({
     <PlannedWorkoutRow
       key={workout.id}
       workout={workout}
+      template={templates.find((template) => template.id === workout.templateId)}
       selected={selectedWorkoutId === workout.id}
       outcome={outcomeFor(workout, today)}
       active={workout.id === activeWorkoutId}
@@ -470,6 +491,10 @@ export function SportOverview({
                 <p>{todayInCycle
                   ? "W planie nie ma dziś żadnej jednostki."
                   : `Pokazujemy najbliższy tydzień planu: T${week}.`}</p>
+              </div>
+              <div className="sport-today-card__rest-actions">
+                <Button variant="quiet" size="sm" onClick={onAddWorkout}>Dodaj trening spontaniczny</Button>
+                <Button variant="ghost" size="sm" onClick={() => onMarkRecovery(today)}>Oznacz dzień regeneracyjny</Button>
               </div>
             </div>
           )}
@@ -635,7 +660,7 @@ export function SportOverview({
 function historyResultLabel(entry: WorkoutHistoryEntry) {
   if (entry.status === "missed") return "Nie wykonano";
   if (entry.discipline === "strength" && entry.volumeKg) {
-    return `${entry.volumeKg.toLocaleString("pl-PL")} kg · ${entry.completedUnits ?? 0} serii`;
+    return `${entry.completedUnits ?? 0} serii · ${entry.volumeKg.toLocaleString("pl-PL")} kg`;
   }
   if (entry.discipline === "running" && entry.distanceKm) {
     return `${entry.distanceKm.toLocaleString("pl-PL")} km${entry.averagePace ? ` · ${entry.averagePace}` : ""}`;
@@ -648,16 +673,27 @@ function historyResultLabel(entry: WorkoutHistoryEntry) {
   return "Tylko czas i status";
 }
 
-export function SportHistory({ history }: { history: WorkoutHistoryEntry[] }) {
+export function SportHistory({ history, sessions = [], templates = [], exercises = [] }: { history: WorkoutHistoryEntry[]; sessions?: WorkoutSession[]; templates?: WorkoutTemplate[]; exercises?: Exercise[] }) {
   const [discipline, setDiscipline] = useState<"all" | Discipline>("all");
   const [status, setStatus] = useState<"all" | WorkoutHistoryEntry["status"]>("all");
+  const [period, setPeriod] = useState<"all" | "30" | "90">("all");
+  const [templateId, setTemplateId] = useState("all");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const query = normalizeSearch(search);
+  const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
+  const today = toDateKey(new Date());
   const visible = history
     .filter((entry) => discipline === "all" || entry.discipline === discipline)
     .filter((entry) => status === "all" || entry.status === status)
-    .filter((entry) => !query || normalizeSearch(entry.title).includes(query));
+    .filter((entry) => period === "all" || entry.date >= addDays(today, -Number(period)))
+    .filter((entry) => templateId === "all" || sessionById.get(entry.id)?.templateId === templateId)
+    .filter((entry) => {
+      if (!query) return true;
+      const session = sessionById.get(entry.id);
+      const exerciseNames = session?.exercises.map((exercise) => exercises.find((candidate) => candidate.id === exercise.exerciseId)?.name ?? exercise.name).join(" ") ?? "";
+      return normalizeSearch(`${entry.title} ${entry.discipline} ${session?.note ?? ""} ${exerciseNames}`).includes(query);
+    });
 
   return (
     <div className="sport-insights">
@@ -700,6 +736,8 @@ export function SportHistory({ history }: { history: WorkoutHistoryEntry[] }) {
           ]}
           onChange={(event) => setStatus(event.target.value as "all" | WorkoutHistoryEntry["status"])}
         />
+        <Select compact fieldClassName="sport-history-period-filter" aria-label="Filtruj historię po okresie" value={period} options={[{ value: "all", label: "Cały okres" }, { value: "30", label: "Ostatnie 30 dni" }, { value: "90", label: "Ostatnie 90 dni" }]} onChange={(event) => setPeriod(event.target.value as "all" | "30" | "90")} />
+        {templates.length > 0 && <Select compact fieldClassName="sport-history-template-filter" aria-label="Filtruj historię po szablonie" value={templateId} options={[{ value: "all", label: "Wszystkie szablony" }, ...templates.map((template) => ({ value: template.id, label: template.name }))]} onChange={(event) => setTemplateId(event.target.value)} />}
       </div>
       {visible.length ? (
         <Card padding="none">
@@ -742,6 +780,7 @@ export function SportHistory({ history }: { history: WorkoutHistoryEntry[] }) {
                     {entry.rpe !== undefined && <div><span>Odczuwalny wysiłek</span><strong>RPE {entry.rpe}/10</strong></div>}
                     {entry.pain !== undefined && <div><span>Ból</span><strong>{entry.pain}/10</strong></div>}
                     {entry.averageHeartRate !== undefined && <div><span>Średnie tętno</span><strong>{entry.averageHeartRate} bpm</strong></div>}
+                    {sessionById.get(entry.id) && <div className="sport-history-detail__items"><span>Zawartość</span><ul>{sessionById.get(entry.id)!.exercises.map((exercise) => <li key={exercise.id}>{exercise.name} · {exercise.sets.filter((set) => set.done).length}/{exercise.sets.length} serii</li>)}{sessionById.get(entry.id)!.stages?.map((stage) => <li key={stage.id}>{stage.label} · {stage.done ? "wykonano" : "pominięto"}</li>)}</ul></div>}
                   </div>
                 )}
               </div>
@@ -888,6 +927,12 @@ export function SportAnalysis({ history }: { history: WorkoutHistoryEntry[] }) {
             </div>
           </Card>
         ))}
+      </div>
+
+      <div className="sport-analysis-secondary-metrics">
+        <Card><span>Regularność tygodniowa</span><strong>{rangeWeeks ? `${Math.round(completed.length / rangeWeeks * 10) / 10}` : "0"}</strong><small>wykonanych jednostek / tydzień</small></Card>
+        <Card><span>Zaplanowane kontra wykonane</span><strong>{completed.length}/{plannedCount}</strong><small>zakres: {rangeWeeks} tygodni</small></Card>
+        <Card><span>Pominięte treningi</span><strong>{visible.filter((entry) => entry.status === "missed").length}</strong><small>bez zmiany zapisanych wykonań</small></Card>
       </div>
 
       <div className="sport-analysis-grid">

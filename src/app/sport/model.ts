@@ -4,6 +4,142 @@ export type Discipline = keyof typeof DISCIPLINE_META;
 export type SessionStatus = keyof typeof STATUS_META;
 export type SportView = "overview" | "week" | "plans" | "history" | "progress" | "exercises" | "integrations";
 
+/**
+ * Canonical Sport records. The legacy WorkoutExercise/WorkoutTemplate shapes
+ * below remain supported because old localStorage entries and other modules
+ * still consume them.
+ */
+export type ExerciseType = "strength" | "duration" | "distance" | "mobility" | "stage";
+
+export type ExerciseDefaultParameters = {
+  sets?: number;
+  repRange?: string;
+  durationSeconds?: number;
+  distanceMeters?: number;
+  restSeconds?: number;
+  rir?: number;
+  rpe?: number;
+  tempo?: string;
+};
+
+export type WorkoutMetricMode = "strength" | "time" | "distance" | "time-distance" | "all";
+
+export type WorkoutTemplateSeries = {
+  id: string;
+  reps?: number;
+  weight?: number;
+  rir?: number;
+  rpe?: number;
+  tempo?: string;
+  durationSeconds?: number;
+  distanceMeters?: number;
+  restSeconds?: number;
+};
+
+export type Exercise = {
+  id: string;
+  name: string;
+  sportCategory: Discipline;
+  primaryMuscle: string;
+  secondaryMuscles: string[];
+  equipment: string[];
+  exerciseType: ExerciseType;
+  description: string;
+  instructions: string;
+  defaultParameters: ExerciseDefaultParameters;
+  note?: string;
+  instructionalLink?: string;
+  favorite: boolean;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StageDefinition = {
+  id: string;
+  name: string;
+  kind: RunningStage["kind"] | "rest";
+  target?: string;
+  durationSeconds?: number;
+  distanceMeters?: number;
+  pace?: string;
+  note?: string;
+};
+
+export type WorkoutItemParameters = ExerciseDefaultParameters & {
+  weight?: number;
+  reps?: number;
+  timeSeconds?: number;
+  distanceMeters?: number;
+  restSeconds?: number;
+  metricMode?: WorkoutMetricMode;
+  series?: WorkoutTemplateSeries[];
+};
+
+export type WorkoutTemplateSection = {
+  id: string;
+  name: string;
+  order: number;
+  items: WorkoutTemplateItem[];
+};
+
+export type WorkoutTemplateItem = {
+  id: string;
+  exerciseId?: string;
+  stageDefinition?: StageDefinition;
+  order: number;
+  parametersOverride?: WorkoutItemParameters;
+  note?: string;
+  supersetId?: string;
+  supersetExerciseIds?: string[];
+};
+
+export type ScheduledWorkoutStatus = "scheduled" | "started" | "completed" | "skipped" | "rescheduled" | "canceled";
+
+export type ScheduledWorkout = {
+  id: string;
+  planId: string;
+  templateId?: string;
+  date: string;
+  scheduledTime?: string;
+  name: string;
+  sportCategory: Discipline;
+  plannedDuration: number;
+  status: ScheduledWorkoutStatus;
+  contentSnapshot: WorkoutTemplateSection[];
+  sourceTemplateVersion?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompletedWorkoutItem = {
+  scheduledItemId: string;
+  exerciseId?: string;
+  stageDefinition?: StageDefinition;
+  sets?: WorkoutSet[];
+  done: boolean;
+  skipped?: boolean;
+  note?: string;
+};
+
+export type WorkoutExecution = {
+  scheduledWorkoutId: string;
+  startedAt?: string;
+  finishedAt?: string;
+  actualDuration: number;
+  completedItems: CompletedWorkoutItem[];
+  resultSummary: {
+    completedSets?: number;
+    volumeKg?: number;
+    distanceKm?: number;
+    averagePace?: string;
+  };
+  effortRating?: number;
+  wellbeingRating?: number;
+  notes?: string;
+};
+
 export type WorkoutSet = {
   id: string;
   plannedReps?: number;
@@ -13,6 +149,7 @@ export type WorkoutSet = {
   actualSeconds?: number;
   actualWeight?: number;
   rir?: number;
+  rpe?: number;
   pain?: number;
   tempo?: string;
   note?: string;
@@ -77,6 +214,11 @@ export type WorkoutTemplate = {
   exercises: WorkoutExercise[];
   stages?: RunningStage[];
   durationMinutes: number;
+  sportCategory?: Discipline;
+  sections?: WorkoutTemplateSection[];
+  archived?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type TrainingPlan = {
@@ -91,6 +233,12 @@ export type TrainingPlan = {
   totalSessions: number;
   templateIds: string[];
   source: "manual" | "ai";
+  startDate?: string;
+  endDate?: string | null;
+  durationWeeks?: number;
+  status?: "draft" | "planned" | "active" | "paused" | "completed" | "archived";
+  indefinite?: boolean;
+  updatedAt?: string;
   blocks?: {
     id: string;
     name: string;
@@ -194,6 +342,86 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
   { id: "hip-flexor-stretch", name: "Rozciąganie zginaczy biodra", aliases: ["hip flexor stretch", "biodra wykrok"], discipline: "mobility", primaryMuscles: ["Zginacze biodra"], secondaryMuscles: ["Czworogłowe uda"], equipment: ["Mata"], instruction: "Podwiń miednicę i przesuń ciężar delikatnie do przodu." },
   { id: "cat-cow", name: "Koci grzbiet", aliases: ["cat cow", "mobilizacja kręgosłupa"], discipline: "mobility", primaryMuscles: ["Kręgosłup"], secondaryMuscles: ["Core"], equipment: ["Mata"], instruction: "Poruszaj kręgosłupem płynnie w rytmie oddechu." },
 ];
+
+function exerciseTypeForDiscipline(discipline: Discipline): ExerciseType {
+  if (discipline === "running" || discipline === "cycling") return "stage";
+  if (discipline === "mobility") return "mobility";
+  return discipline === "strength" || discipline === "rehab" ? "strength" : "duration";
+}
+
+/** Build the durable library records from the original demo catalog. */
+export function createInitialExercises(now = new Date().toISOString()): Exercise[] {
+  return EXERCISE_LIBRARY.map((item) => ({
+    id: item.id,
+    name: item.name,
+    sportCategory: item.discipline,
+    primaryMuscle: item.primaryMuscles[0] ?? "Całe ciało",
+    secondaryMuscles: item.secondaryMuscles,
+    equipment: item.equipment,
+    exerciseType: exerciseTypeForDiscipline(item.discipline),
+    description: item.instruction,
+    instructions: item.instruction,
+    defaultParameters: item.discipline === "mobility"
+      ? { sets: 2, durationSeconds: 45, restSeconds: 15 }
+      : item.discipline === "strength" || item.discipline === "rehab"
+        ? { sets: 3, repRange: "8–12", restSeconds: item.discipline === "rehab" ? 45 : 90, rir: 2 }
+        : { durationSeconds: 300 },
+    favorite: ["bench-press", "squat", "hamstring-stretch"].includes(item.id),
+    archived: false,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
+export function templateSections(template: WorkoutTemplate): WorkoutTemplateSection[] {
+  if (template.sections?.length) return template.sections;
+  const sections: WorkoutTemplateSection[] = [];
+  if (template.exercises.length) {
+    sections.push({
+      id: `${template.id}-main`,
+      name: "Część główna",
+      order: 0,
+      items: template.exercises.map((exercise, index) => ({
+        id: exercise.id,
+        exerciseId: exercise.exerciseId,
+        order: index,
+        parametersOverride: {
+          sets: exercise.sets.length,
+          repRange: exercise.sets[0]?.plannedReps ? `${exercise.sets[0].plannedReps}` : undefined,
+          restSeconds: exercise.restSeconds,
+          series: exercise.sets.map((set) => ({
+            id: set.id,
+            reps: set.plannedReps,
+            weight: set.plannedWeight,
+            rir: set.rir,
+            rpe: set.rpe,
+            tempo: set.tempo,
+            durationSeconds: set.plannedSeconds,
+          })),
+        },
+        note: exercise.note,
+      })),
+    });
+  }
+  if (template.stages?.length) {
+    sections.push({
+      id: `${template.id}-stages`,
+      name: "Część główna",
+      order: sections.length,
+      items: template.stages.map((stage, index) => ({
+        id: stage.id,
+        order: index,
+        stageDefinition: {
+          id: stage.id,
+          name: stage.label,
+          kind: stage.kind,
+          target: stage.target,
+        },
+      })),
+    });
+  }
+  return sections;
+}
 
 export function cloneExercises(items: WorkoutExercise[], prefix = String(Date.now())): WorkoutExercise[] {
   return items.map((item, itemIndex) => ({

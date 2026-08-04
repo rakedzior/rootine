@@ -44,6 +44,7 @@ import {
   fromDateKey,
   normalizeSearch,
   startOfWeekKey,
+  templateSections,
   toDateKey,
   type Discipline,
   type WorkoutTemplate,
@@ -365,8 +366,15 @@ function WeekSelector({
   );
 }
 
+function workoutContentPreview(template?: WorkoutTemplate) {
+  if (!template) return "";
+  const labels = [...template.exercises.map((exercise) => exercise.name), ...(template.stages ?? []).map((stage) => stage.label)];
+  return labels.length > 4 ? `${labels.slice(0, 3).join(" · ")} · +${labels.length - 3}` : labels.join(" · ");
+}
+
 function WeekBoard({
   cycle,
+  templates = [],
   activeWeek,
   selectedWorkoutId,
   onWeekChange,
@@ -375,6 +383,7 @@ function WeekBoard({
   onAdd,
 }: {
   cycle: TrainingCycle;
+  templates?: WorkoutTemplate[];
   activeWeek: number;
   selectedWorkoutId?: string | null;
   onWeekChange: (week: number) => void;
@@ -483,6 +492,7 @@ function WeekBoard({
                         <span>{workout.durationMinutes} min</span>
                         <DisciplineLabel discipline={workout.discipline} compact />
                       </span>
+                      {workoutContentPreview(templates.find((template) => template.id === workout.templateId)) && <span className="sport-cycle-workout__preview">{workoutContentPreview(templates.find((template) => template.id === workout.templateId))}</span>}
                     </button>
                   ))}
                   <button
@@ -509,6 +519,7 @@ function WeekBoard({
 
 export function CyclePlanner({
   cycle,
+  templates = [],
   cycles,
   activeWeek,
   selectedWorkoutId,
@@ -523,8 +534,10 @@ export function CyclePlanner({
   onAddWorkout,
   onSelectWorkout,
   onMoveWorkout,
+  onCopyWeek,
 }: {
   cycle: TrainingCycle;
+  templates?: WorkoutTemplate[];
   cycles: TrainingCycle[];
   activeWeek: number;
   selectedWorkoutId?: string | null;
@@ -539,6 +552,7 @@ export function CyclePlanner({
   onAddWorkout: (week: number, day: number) => void;
   onSelectWorkout: (workout: CycleWorkout) => void;
   onMoveWorkout: (id: string, week: number, day?: number) => void;
+  onCopyWeek: (fromWeek: number, toWeek: number) => void;
 }) {
   if (!cycle) {
     return (
@@ -553,6 +567,7 @@ export function CyclePlanner({
   return (
     <CyclePlannerLayout
       cycle={cycle}
+      templates={templates}
       cycles={cycles}
       activeWeek={activeWeek}
       selectedWorkoutId={selectedWorkoutId}
@@ -566,6 +581,7 @@ export function CyclePlanner({
       onAddWorkout={onAddWorkout}
       onSelectWorkout={onSelectWorkout}
       onMoveWorkout={onMoveWorkout}
+      onCopyWeek={onCopyWeek}
     />
   );
 
@@ -657,6 +673,7 @@ export function CyclePlanner({
 
 function CyclePlannerLayout({
   cycle,
+  templates = [],
   cycles,
   activeWeek,
   selectedWorkoutId,
@@ -670,8 +687,10 @@ function CyclePlannerLayout({
   onAddWorkout,
   onSelectWorkout,
   onMoveWorkout,
+  onCopyWeek,
 }: {
   cycle: TrainingCycle;
+  templates?: WorkoutTemplate[];
   cycles: TrainingCycle[];
   activeWeek: number;
   selectedWorkoutId?: string | null;
@@ -685,7 +704,9 @@ function CyclePlannerLayout({
   onAddWorkout: (week: number, day: number) => void;
   onSelectWorkout: (workout: CycleWorkout) => void;
   onMoveWorkout: (id: string, week: number, day?: number) => void;
+  onCopyWeek: (fromWeek: number, toWeek: number) => void;
 }) {
+  const [copySourceWeek, setCopySourceWeek] = useState<number | null>(null);
   const range = cycleDateRange(cycle);
   const totalWeeks = cycleWeekCount(cycle);
   const indefinite = isIndefiniteCycle(cycle);
@@ -799,10 +820,28 @@ function CyclePlannerLayout({
             <p>{formatLongDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatLongDate(cycleWeekDate(cycle, activeWeek, 6))}</p>
           </div>
           {activeWeek === todayCycleWeek(cycle) && <Badge tone="neutral">Obecny tydzień</Badge>}
+          <div className="sport-cycle-workspace__actions">
+            {copySourceWeek === null ? (
+              <Button variant="ghost" size="sm" leadingIcon={<Copy size={12} />} onClick={() => setCopySourceWeek(activeWeek)}>
+                Kopiuj tydzień
+              </Button>
+            ) : (
+              <>
+                <span className="sport-data">Źródło: tydz. {copySourceWeek}</span>
+                {copySourceWeek !== activeWeek && (
+                  <Button variant="quiet" size="sm" onClick={() => { onCopyWeek(copySourceWeek, activeWeek); setCopySourceWeek(null); }}>
+                    Wklej do tygodnia {activeWeek}
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setCopySourceWeek(null)}>Anuluj</Button>
+              </>
+            )}
+          </div>
         </div>
         <WeekSelector cycle={cycle} activeWeek={activeWeek} onWeekChange={onWeekChange} onMove={onMoveWorkout} />
         <WeekBoard
           cycle={cycle}
+          templates={templates}
           activeWeek={activeWeek}
           selectedWorkoutId={selectedWorkoutId}
           onWeekChange={onWeekChange}
@@ -1214,7 +1253,16 @@ export function WorkoutDialog({
         ? Array.from({ length: cycle.weeks - parsedWeek + 1 }, (_, index) => parsedWeek + index)
         : [...selectedWeeks].sort((left, right) => left - right);
     const seriesId = workout?.seriesId ?? (weeks.length > 1 ? createPlannerId("series") : undefined);
+    const sourceTemplate = mode === "template" ? templates.find((template) => template.id === templateId) : undefined;
+    const now = new Date().toISOString();
+    const plannedRecordMeta = {
+      contentSnapshot: sourceTemplate ? templateSections(sourceTemplate) : workout?.contentSnapshot,
+      sourceTemplateVersion: sourceTemplate?.updatedAt ?? sourceTemplate?.createdAt ?? workout?.sourceTemplateVersion,
+      createdAt: workout?.createdAt ?? now,
+      updatedAt: now,
+    };
     const next = weeks.map((targetWeek) => ({
+      ...plannedRecordMeta,
       id: workout?.id ?? createPlannerId("cycle-workout"),
       week: targetWeek,
       day: parsedDay,

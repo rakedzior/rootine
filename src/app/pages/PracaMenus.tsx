@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Archive, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Menu, MenuItem, MenuTrigger } from "../ui";
@@ -115,6 +115,46 @@ type WorkProjectActionsMenuProps = {
   onEdit: () => void;
   onDelete: () => void;
 };
+
+type WorkCompanyActionsMenuProps = {
+  companyId: string;
+  companyName: string;
+  onEdit: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+};
+
+export function WorkCompanyActionsMenu({ companyId, companyName, onEdit, onArchive, onDelete }: WorkCompanyActionsMenuProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const position = useFloatingMenuPosition(triggerRef, open, 190, 128);
+  const menuId = `work-company-actions-${companyId}`;
+  const close = () => setOpen(false);
+
+  return (
+    <div className="work-project-actions-menu">
+      <MenuTrigger
+        ref={triggerRef}
+        open={open}
+        menuId={menuId}
+        className="work-project-actions-menu__trigger"
+        aria-label={`Więcej akcji dla firmy ${companyName}`}
+        title="Więcej akcji"
+        onClick={() => open ? close() : setOpen(true)}
+      >
+        <MoreHorizontal size={14} aria-hidden="true" />
+      </MenuTrigger>
+      {open && position && createPortal(
+        <Menu id={menuId} className="work-project-actions-menu__panel" style={position} triggerRef={triggerRef} onDismiss={close} initialFocus="first">
+          <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { onEdit(); close(); }}>Edytuj firmę</MenuItem>
+          <MenuItem leadingIcon={<Archive size={13} />} onClick={() => { onArchive(); close(); }}>Archiwizuj firmę</MenuItem>
+          <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { onDelete(); close(); }}>Usuń firmę</MenuItem>
+        </Menu>,
+        document.body,
+      )}
+    </div>
+  );
+}
 
 export function WorkProjectActionsMenu({ projectId, projectName, onEdit, onDelete }: WorkProjectActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);

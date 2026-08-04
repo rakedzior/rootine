@@ -42,6 +42,7 @@ export type TaskStatusFilter = WorkTaskStatus | "all";
 export type PriorityFilter = WorkTaskPriority | "all";
 export type CompanyProjectStatusFilter = WorkProjectStatus | "all";
 export type CompanyProjectSort = "name" | "progress" | "endDate";
+export type ActiveTaskSort = "dueDate" | "priority" | "company" | "project" | "updated";
 
 export type EditorState =
   | { kind: "company"; mode: "add" | "edit"; id?: string }
@@ -59,7 +60,7 @@ export type CompletionUndo = {
   previous: Array<{ id: string; completed: boolean; status?: WorkTaskStatus }>;
 };
 
-export type SaveStatus = "idle" | "saving" | "saved";
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export type EditorDraft = {
   name: string;
@@ -90,6 +91,10 @@ export const EMPTY_DRAFT: EditorDraft = {
   startDate: "",
   endDate: "",
 };
+
+export function formatProjectCount(count: number): string {
+  return `${count} ${countWord(count, "projekt", "projekty", "projektów")}`;
+}
 
 export function localDateKey(date = new Date()): string {
   const year = date.getFullYear();
@@ -127,7 +132,7 @@ export function formatDateRange(startDate = "", endDate = ""): string {
   if (startDate && endDate) return `${formatDate(startDate)} → ${formatDate(endDate)}`;
   if (startDate) return `od ${formatDate(startDate)}`;
   if (endDate) return `do ${formatDate(endDate)}`;
-  return "Brak dat";
+  return "Bez terminu";
 }
 
 export function taskCountLabel(count: number): string {
@@ -173,7 +178,7 @@ export function formatProjectProgress(count: { total: number; completed: number;
 }
 
 export function formatSubtaskProgress(completed: number, total: number): string {
-  return `${completed} ${completedTaskLabel(completed)} z ${total} ${subtaskCountLabel(total)}`;
+  return `${completed}/${total}`;
 }
 
 export function collectTaskDescendantRows(
@@ -200,7 +205,22 @@ export function isTaskOpen(task: WorkTask): boolean {
 }
 
 export function taskAnchorDate(task: WorkTask): string {
-  return task.dueDate || task.startDate || "";
+  return task.dueDate;
+}
+
+export function relativeDateLabel(value: string, today = localDateKey()): string {
+  if (!value) return "Bez terminu";
+  const valueDate = dateFromKey(value);
+  const todayDate = dateFromKey(today);
+  if (!valueDate || !todayDate) return formatDate(value);
+  if (value === today) return "Dziś";
+  if (value === addDays(today, 1)) return "Jutro";
+  if (value < today) {
+    const days = Math.max(1, Math.round((todayDate.getTime() - valueDate.getTime()) / 86_400_000));
+    return `${days} ${countWord(days, "dzień", "dni", "dni")} po terminie`;
+  }
+  const days = Math.max(1, Math.round((valueDate.getTime() - todayDate.getTime()) / 86_400_000));
+  return `za ${days} ${countWord(days, "dzień", "dni", "dni")}`;
 }
 
 export function collectTaskBranch(tasks: WorkTask[], taskId: string): Set<string> {
@@ -274,4 +294,3 @@ export function taskStatusIcon(status: WorkTaskStatus): ReactNode {
   if (status === "completed") return <Check size={11} aria-hidden="true" />;
   return <Circle size={11} aria-hidden="true" />;
 }
-

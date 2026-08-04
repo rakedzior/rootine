@@ -513,7 +513,114 @@
 }
 
 .goal-detail-timeline-item.is-complete {
-  background: color-mix(in srgb, var(--color-graphite-panel) 88%, var(--color-success-seaglass));
+  opacity: 0.72;
+  background: var(--color-graphite-panel);
+}
+
+.goal-detail-timeline-item {
+  position: relative;
+  cursor: grab;
+}
+
+.goal-detail-timeline-item:active {
+  cursor: grabbing;
+}
+
+.goal-detail-timeline-item.is-next {
+  border-color: color-mix(in srgb, var(--color-precision-blue) 48%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-graphite-panel) 92%, var(--color-precision-blue));
+}
+
+.goal-detail-timeline-item.is-overdue {
+  border-color: color-mix(in srgb, var(--color-warning-ochre) 45%, var(--color-border-subtle));
+}
+
+.goal-detail-timeline-actions {
+  position: relative;
+}
+
+.goal-stage-next-label {
+  color: var(--color-precision-blue-text) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 10px !important;
+}
+
+.goal-stage-overdue {
+  color: var(--color-warning-ochre) !important;
+}
+
+.goal-stage-completed-toggle {
+  width: max-content;
+  margin-top: 4px;
+}
+
+.goal-detail-notes-section p {
+  margin: 0 0 var(--space-md);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.goal-detail-progress-note {
+  display: grid;
+  gap: 6px;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-panel);
+}
+
+.goal-detail-progress-note strong {
+  color: var(--color-precision-blue-text);
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.goal-detail-progress-note span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.goal-linked-task-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.goal-linked-task {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  background: var(--color-graphite-panel);
+  font-size: 11px;
+}
+
+.goal-linked-task:hover,
+.goal-linked-task:focus-visible {
+  border-color: var(--color-border-strong);
+  background: var(--color-graphite-hover);
+}
+
+.goal-linked-task strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-linked-task small {
+  color: var(--color-text-muted);
+  font-size: 10px;
 }
 
 .goal-detail-timeline-rail {

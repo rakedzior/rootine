@@ -18,9 +18,22 @@ export type GoalCategory = {
 export type GoalMilestone = {
   id: string;
   title: string;
+  note?: string;
   dueDate: string;
   done: boolean;
+  completedAt?: string;
   weight: number;
+  order?: number;
+  isNext?: boolean;
+  linkedTaskIds?: number[];
+};
+
+export type GoalHistoryEntry = {
+  id: string;
+  type: "progress" | "stage_completed" | "stage_added" | "deadline_changed" | "status_changed" | "note_added" | "resumed" | "paused" | "updated";
+  label: string;
+  detail?: string;
+  createdAt: string;
 };
 
 export type GoalProgressEntry = {
@@ -55,6 +68,8 @@ export type Goal = {
   manualProgress: number;
   milestones: GoalMilestone[];
   progressEntries: GoalProgressEntry[];
+  linkedTaskIds?: number[];
+  history?: GoalHistoryEntry[];
   note: string;
   createdAt: string;
   updatedAt: string;
@@ -109,7 +124,7 @@ const SEED_GOALS: Goal[] = [
   {
     id: "rehab-app", title: "Stworzyć aplikację do rehabilitacji", description: "Zaprojektować i wydać pierwszą wersję aplikacji wspierającej rehabilitację.",
     categoryId: "work", iconKey: "laptop", color: "#7FA6C9", status: "active", health: "ontrack", priority: "high",
-    startDate: "2026-06-01", dueDate: "2027-03-31", progressMode: "milestones", initialValue: 0, targetValue: 12, unit: "kamieni milowych", manualProgress: 0,
+    startDate: "2026-06-01", dueDate: "2027-03-31", progressMode: "milestones", initialValue: 0, targetValue: 12, unit: "etapów", manualProgress: 0,
     milestones: [
       milestone("m-app-1", "Badanie potrzeb użytkowników", "2026-06-15", true),
       milestone("m-app-2", "Makiety i architektura informacji", "2026-06-30", true),
@@ -146,7 +161,7 @@ const SEED_GOALS: Goal[] = [
   {
     id: "spanish", title: "Nauczyć się hiszpańskiego na poziomie B2", description: "Swobodnie rozmawiać i czytać teksty na poziomie B2.",
     categoryId: "growth", iconKey: "languages", color: "#9B8CE8", status: "active", health: "ontrack", priority: "medium",
-    startDate: "2026-05-01", dueDate: "2027-06-30", progressMode: "milestones", initialValue: 0, targetValue: 10, unit: "kamieni milowych", manualProgress: 0,
+    startDate: "2026-05-01", dueDate: "2027-06-30", progressMode: "milestones", initialValue: 0, targetValue: 10, unit: "etapów", manualProgress: 0,
     milestones: [
       milestone("m-es-1", "Poziom A1", "2026-05-31", true), milestone("m-es-2", "Poziom A2", "2026-06-30", true),
       milestone("m-es-3", "1000 aktywnych słów", "2026-07-10", true), milestone("m-es-4", "Pierwsza rozmowa 15 min", "2026-07-20", true),
@@ -220,7 +235,7 @@ export function getGoalProgress(goal: Goal): number {
 }
 
 export function getGoalMetric(goal: Goal): string {
-  if (goal.progressMode === "milestones") return `${goal.milestones.filter((item) => item.done).length} z ${goal.milestones.length} kamieni milowych`;
+  if (goal.progressMode === "milestones") return `${goal.milestones.filter((item) => item.done).length} z ${goal.milestones.length} etapów`;
   if (goal.progressMode === "manual") return `${getGoalProgress(goal)}% realizacji`;
   const current = getGoalCurrentValue(goal).toLocaleString("pl-PL");
   const targetValue = goal.progressMode === "regularity" ? getRegularityTarget(goal) : goal.targetValue;
@@ -258,7 +273,19 @@ export type GoalsImportResult =
   | { ok: false; error: string };
 
 export function normalizeGoal(goal: Goal): Goal {
-  const cleanGoal = { ...goal, color: normalizeGoalAccentColor(goal.color) } as Goal & { modules?: unknown };
+  const cleanGoal = {
+    ...goal,
+    color: normalizeGoalAccentColor(goal.color),
+    unit: goal.progressMode === "milestones" ? "etapów" : goal.unit,
+    milestones: goal.milestones.map((item, index) => ({
+      ...item,
+      note: item.note ?? "",
+      order: item.order ?? index,
+      weight: item.weight || 1,
+    })),
+    linkedTaskIds: goal.linkedTaskIds ?? [],
+    history: goal.history ?? [],
+  } as Goal & { modules?: unknown };
   delete cleanGoal.modules;
   return cleanGoal;
 }
@@ -332,7 +359,12 @@ function isGoalMilestone(value: unknown): value is GoalMilestone {
     && isBoundedString(value.title, 200, false)
     && isLocalDateKey(value.dueDate)
     && typeof value.done === "boolean"
-    && isFiniteBoundedNumber(value.weight, 0.01, 10_000);
+    && (value.completedAt === undefined || isIsoTimestamp(value.completedAt))
+    && isFiniteBoundedNumber(value.weight, 0.01, 10_000)
+    && (value.note === undefined || isBoundedString(value.note, 2_000))
+    && (value.order === undefined || isFiniteBoundedNumber(value.order, 0, 100_000))
+    && (value.isNext === undefined || typeof value.isNext === "boolean")
+    && (value.linkedTaskIds === undefined || (Array.isArray(value.linkedTaskIds) && value.linkedTaskIds.every((id) => typeof id === "number")));
 }
 
 function isGoalProgressEntry(value: unknown): value is GoalProgressEntry {
