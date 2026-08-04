@@ -36,14 +36,12 @@ import { formatDate as formatPolishDate } from "../formatters";
 import {
   AFFAIRS_STORAGE_KEY,
   advancePaymentDateToFuture,
-  createAffairsId,
   createBudgetMonth,
   getMonthKey,
   loadAffairsWorkspace,
   saveAffairsWorkspace,
   setMatterCompletionState,
   setOneTimePaymentPaidState,
-  type DocumentCategory,
   type DocumentRecord,
   type Matter,
   type MatterCategory,
@@ -55,6 +53,7 @@ import {
   monthlyEquivalent,
 } from "../data/affairsWorkspace";
 import { AffairsEditorFields } from "../affairs/AffairsEditorFields";
+import { applyAffairsEditor } from "../affairs/affairsMutations";
 import { JdgWorkspace } from "./Jdg";
 import Podroze from "./Podroze";
 import {
@@ -98,6 +97,7 @@ import {
   formatMileage,
   formatMoney,
   formatMonth,
+  getEditorPresentation,
   getInitialView,
   shiftMonthKey,
   vehicleItemDueCopy,
@@ -452,215 +452,29 @@ export default function Sprawy() {
   const submitEditor = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editor) return;
-    const title = draft.title.trim();
-    if (!title) {
-      setEditorError("Wpisz nazwę.");
+
+    const submission = applyAffairsEditor({
+      editor,
+      draft,
+      workspace,
+      budgetMonthKey,
+    });
+    if ("error" in submission) {
+      setEditorError(submission.error);
       return;
     }
 
-    if (editor.kind === "matter") {
-      if (!draft.dueDate) {
-        setEditorError("Wybierz termin sprawy.");
-        return;
-      }
-      const matter: Matter = {
-        id: editor.id ?? createAffairsId("matter"),
-        title,
-        category: draft.category as MatterCategory,
-        priority: draft.priority,
-        status: draft.status,
-        dueDate: draft.dueDate,
-        note: draft.note.trim(),
-        createdAt: workspace.matters.find((item) => item.id === editor.id)?.createdAt ?? new Date().toISOString(),
-      };
-      setWorkspace((current) => ({
-        ...current,
-        matters: editor.mode === "edit"
-          ? current.matters.map((item) => item.id === editor.id ? matter : item)
-          : [...current.matters, matter],
-      }));
-      setSelectedMatterId(matter.id);
-    }
-
-    if (editor.kind === "payment") {
-      const amount = Number(draft.amount.replace(",", "."));
-      if (!draft.dueDate || !Number.isFinite(amount) || amount < 0) {
-        setEditorError("Podaj prawidłową kwotę i najbliższy termin.");
-        return;
-      }
-      const payment = {
-        id: editor.id ?? createAffairsId("payment"),
-        name: title,
-        category: draft.category.trim() || "Inne",
-        amount,
-        cadence: draft.cadence,
-        nextDueDate: draft.dueDate,
-        automatic: draft.automatic,
-        active: workspace.payments.find((item) => item.id === editor.id)?.active ?? true,
-        note: draft.note.trim(),
-      };
-      setWorkspace((current) => ({
-        ...current,
-        payments: editor.mode === "edit"
-          ? current.payments.map((item) => item.id === editor.id ? payment : item)
-          : [...current.payments, payment],
-      }));
-    }
-
-    if (editor.kind === "oneTime") {
-      const amount = Number(draft.amount.replace(",", "."));
-      if (!draft.dueDate || !Number.isFinite(amount) || amount < 0) {
-        setEditorError("Podaj prawidłową kwotę i termin płatności.");
-        return;
-      }
-      const existing = workspace.oneTimePayments.find((item) => item.id === editor.id);
-      const payment: OneTimePayment = {
-        id: editor.id ?? createAffairsId("one-time"),
-        title,
-        category: draft.category.trim() || "Inne",
-        amount,
-        dueDate: draft.dueDate,
-        paid: existing?.paid ?? false,
-        paidAt: existing?.paidAt ?? "",
-        note: draft.note.trim(),
-      };
-      setWorkspace((current) => ({
-        ...current,
-        oneTimePayments: editor.mode === "edit"
-          ? current.oneTimePayments.map((item) => item.id === editor.id ? payment : item)
-          : [...current.oneTimePayments, payment],
-      }));
-    }
-
-    if (editor.kind === "subscription") {
-      const amount = Number(draft.amount.replace(",", "."));
-      if (!draft.dueDate || !Number.isFinite(amount) || amount < 0) {
-        setEditorError("Podaj prawidłową kwotę i datę kolejnego rozliczenia.");
-        return;
-      }
-      const subscription: Subscription = {
-        id: editor.id ?? createAffairsId("subscription"),
-        name: title,
-        category: draft.category.trim() || "Inne",
-        amount,
-        cadence: draft.cadence,
-        nextBillingDate: draft.dueDate,
-        renewal: draft.renewal,
-        commitmentEndDate: draft.secondaryDate,
-        active: workspace.subscriptions.find((item) => item.id === editor.id)?.active ?? true,
-        note: draft.note.trim(),
-      };
-      setWorkspace((current) => ({
-        ...current,
-        subscriptions: editor.mode === "edit"
-          ? current.subscriptions.map((item) => item.id === editor.id ? subscription : item)
-          : [...current.subscriptions, subscription],
-      }));
-    }
-
-    if (editor.kind === "document") {
-      const reminderDays = Number(draft.reminderDays);
-      if (!Number.isInteger(reminderDays) || reminderDays < 0 || reminderDays > 730) {
-        setEditorError("Wyprzedzenie przypomnienia musi mieścić się między 0 a 730 dni.");
-        return;
-      }
-      const document: DocumentRecord = {
-        id: editor.id ?? createAffairsId("document"),
-        name: title,
-        category: draft.category as DocumentCategory,
-        holder: draft.holder.trim() || "Ja",
-        expiresAt: draft.dueDate,
-        reminderDays,
-        note: draft.note.trim(),
-      };
-      setWorkspace((current) => ({
-        ...current,
-        documents: editor.mode === "edit"
-          ? current.documents.map((item) => item.id === editor.id ? document : item)
-          : [...current.documents, document],
-      }));
-    }
-
-    if (editor.kind === "vehicle") {
-      const mileage = Number(draft.mileage.replace(/\s/g, ""));
-      if (!Number.isFinite(mileage) || mileage < 0) {
-        setEditorError("Podaj prawidłowy przebieg pojazdu.");
-        return;
-      }
-      const vehicle: Vehicle = {
-        id: editor.id ?? createAffairsId("vehicle"),
-        name: title,
-        registration: draft.registration.trim().toLocaleUpperCase("pl-PL"),
-        mileage,
-      };
-      setWorkspace((current) => ({
-        ...current,
-        vehicles: editor.mode === "edit"
-          ? current.vehicles.map((item) => item.id === editor.id ? vehicle : item)
-          : [...current.vehicles, vehicle],
-      }));
-    }
-
-    if (editor.kind === "vehicleItem") {
-      const dueMileage = draft.dueMileage.trim() ? Number(draft.dueMileage.replace(/\s/g, "")) : null;
-      if (!draft.dueDate && dueMileage === null) {
-        setEditorError("Podaj termin lub przebieg graniczny.");
-        return;
-      }
-      if (dueMileage !== null && (!Number.isFinite(dueMileage) || dueMileage < 0)) {
-        setEditorError("Podaj prawidłowy przebieg graniczny.");
-        return;
-      }
-      const existing = workspace.vehicleItems.find((item) => item.id === editor.id);
-      const item: VehicleItem = {
-        id: editor.id ?? createAffairsId("vehicle-item"),
-        vehicleId: draft.vehicleId || editor.vehicleId,
-        title,
-        type: draft.vehicleType,
-        dueDate: draft.dueDate,
-        dueMileage,
-        done: existing?.done ?? false,
-        note: draft.note.trim(),
-      };
-      setWorkspace((current) => ({
-        ...current,
-        vehicleItems: editor.mode === "edit"
-          ? current.vehicleItems.map((candidate) => candidate.id === editor.id ? item : candidate)
-          : [...current.vehicleItems, item],
-      }));
-    }
-
-    if (editor.kind === "budget") {
-      const planned = Number(draft.planned.replace(",", "."));
-      const actual = Number(draft.actual.replace(",", ".") || "0");
-      if (!Number.isFinite(planned) || planned < 0 || !Number.isFinite(actual) || actual < 0) {
-        setEditorError("Podaj prawidłowe kwoty.");
-        return;
-      }
-      setWorkspace((current) => ({
-        ...current,
-        budgets: current.budgets.map((budget) => budget.month === budgetMonthKey
-          ? {
-              ...budget,
-              lines: [...budget.lines, {
-                id: createAffairsId("budget"),
-                label: title,
-                kind: draft.budgetKind,
-                planned,
-                actual,
-              }],
-            }
-          : budget),
-      }));
-    }
+    setWorkspace(submission.nextWorkspace);
+    if (submission.selectedMatterId) setSelectedMatterId(submission.selectedMatterId);
     recordActivity({
       moduleId: "affairs",
       kind: editor.mode === "edit" ? "save" : "create",
-      title,
+      title: submission.title,
       detail: editor.mode === "edit" ? "Zaktualizowano wpis" : "Dodano wpis",
     });
     closeEditor();
   };
+
 
   const confirmDelete = () => {
     if (!deleteState) return;
@@ -960,64 +774,7 @@ export default function Sprawy() {
     </DetailPanel>
   ) : undefined;
 
-  const editorPresentation = editor ? (() => {
-    if (editor.kind === "matter") return {
-      eyebrow: "Sprawa prywatna",
-      title: editor.mode === "edit" ? "Edytuj sprawę" : "Nowa sprawa",
-      description: "Zapisz termin i kontekst, którego nie chcesz później odtwarzać z pamięci.",
-      label: "Nazwa sprawy",
-      placeholder: "np. Przedłużyć polisę mieszkania",
-    };
-    if (editor.kind === "payment") return {
-      eyebrow: "Płatność cykliczna",
-      title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
-      description: "Pilnuj kolejnego terminu, kwoty i sposobu opłacania stałego rachunku.",
-      label: "Nazwa płatności",
-      placeholder: "np. Czynsz za mieszkanie",
-    };
-    if (editor.kind === "oneTime") return {
-      eyebrow: "Finanse jednorazowe",
-      title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
-      description: "Zapisz kwotę i termin zobowiązania, które pojawia się tylko raz.",
-      label: "Nazwa płatności",
-      placeholder: "np. Opłata za wydanie paszportu",
-    };
-    if (editor.kind === "subscription") return {
-      eyebrow: "Subskrypcje",
-      title: editor.mode === "edit" ? "Edytuj subskrypcję" : "Nowa subskrypcja",
-      description: "Kontroluj koszt, cykl odnowienia oraz ewentualny koniec zobowiązania.",
-      label: "Nazwa subskrypcji",
-      placeholder: "np. Dysk w chmurze",
-    };
-    if (editor.kind === "document") return {
-      eyebrow: "Rejestr dokumentów",
-      title: editor.mode === "edit" ? "Edytuj dokument" : "Nowy dokument",
-      description: "Zapisuj tylko informacje potrzebne do pilnowania ważności — bez pełnych numerów dokumentów.",
-      label: "Nazwa dokumentu",
-      placeholder: "np. Dowód osobisty",
-    };
-    if (editor.kind === "vehicle") return {
-      eyebrow: "Rejestr pojazdów",
-      title: editor.mode === "edit" ? "Edytuj pojazd" : "Nowy pojazd",
-      description: "Aktualny przebieg pozwala poprawnie ostrzegać o serwisach i wymianach.",
-      label: "Nazwa pojazdu",
-      placeholder: "np. Samochód rodzinny",
-    };
-    if (editor.kind === "vehicleItem") return {
-      eyebrow: "Termin pojazdu",
-      title: editor.mode === "edit" ? "Edytuj termin" : "Nowy termin",
-      description: "Ustaw datę, przebieg graniczny albo oba warunki jednocześnie.",
-      label: "Nazwa terminu",
-      placeholder: "np. Wymiana oleju i filtrów",
-    };
-    return {
-      eyebrow: formatMonth(budgetMonthKey),
-      title: "Nowa pozycja budżetu",
-      description: "Przydziel pieniądze zanim zaczniesz je wydawać.",
-      label: "Nazwa kategorii",
-      placeholder: "np. Jedzenie",
-    };
-  })() : null;
+  const editorPresentation = getEditorPresentation(editor, budgetMonthKey);
 
   if (view === "jdg") {
     return (

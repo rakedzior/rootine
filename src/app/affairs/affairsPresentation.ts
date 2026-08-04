@@ -232,6 +232,74 @@ export function formatMonth(value: string): string {
   return date.toLocaleDateString("pl-PL", { month: "long", year: "numeric" });
 }
 
+export type EditorPresentation = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  label: string;
+  placeholder: string;
+};
+
+export function getEditorPresentation(editor: EditorState | null, budgetMonthKey: string): EditorPresentation | null {
+  if (!editor) return null;
+  if (editor.kind === "matter") return {
+    eyebrow: "Sprawa prywatna",
+    title: editor.mode === "edit" ? "Edytuj sprawę" : "Nowa sprawa",
+    description: "Zapisz termin i kontekst, którego nie chcesz później odtwarzać z pamięci.",
+    label: "Nazwa sprawy",
+    placeholder: "np. Przedłużyć polisę mieszkania",
+  };
+  if (editor.kind === "payment") return {
+    eyebrow: "Płatność cykliczna",
+    title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
+    description: "Pilnuj kolejnego terminu, kwoty i sposobu opłacania stałego rachunku.",
+    label: "Nazwa płatności",
+    placeholder: "np. Czynsz za mieszkanie",
+  };
+  if (editor.kind === "oneTime") return {
+    eyebrow: "Finanse jednorazowe",
+    title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
+    description: "Zapisz kwotę i termin zobowiązania, które pojawia się tylko raz.",
+    label: "Nazwa płatności",
+    placeholder: "np. Opłata za wydanie paszportu",
+  };
+  if (editor.kind === "subscription") return {
+    eyebrow: "Subskrypcje",
+    title: editor.mode === "edit" ? "Edytuj subskrypcję" : "Nowa subskrypcja",
+    description: "Kontroluj koszt, cykl odnowienia oraz ewentualny koniec zobowiązania.",
+    label: "Nazwa subskrypcji",
+    placeholder: "np. Dysk w chmurze",
+  };
+  if (editor.kind === "document") return {
+    eyebrow: "Rejestr dokumentów",
+    title: editor.mode === "edit" ? "Edytuj dokument" : "Nowy dokument",
+    description: "Zapisuj tylko informacje potrzebne do pilnowania ważności — bez pełnych numerów dokumentów.",
+    label: "Nazwa dokumentu",
+    placeholder: "np. Dowód osobisty",
+  };
+  if (editor.kind === "vehicle") return {
+    eyebrow: "Rejestr pojazdów",
+    title: editor.mode === "edit" ? "Edytuj pojazd" : "Nowy pojazd",
+    description: "Aktualny przebieg pozwala poprawnie ostrzegać o serwisach i wymianach.",
+    label: "Nazwa pojazdu",
+    placeholder: "np. Samochód rodzinny",
+  };
+  if (editor.kind === "vehicleItem") return {
+    eyebrow: "Termin pojazdu",
+    title: editor.mode === "edit" ? "Edytuj termin" : "Nowy termin",
+    description: "Ustaw datę, przebieg graniczny albo oba warunki jednocześnie.",
+    label: "Nazwa terminu",
+    placeholder: "np. Wymiana oleju i filtrów",
+  };
+  return {
+    eyebrow: formatMonth(budgetMonthKey),
+    title: "Nowa pozycja budżetu",
+    description: "Przydziel pieniądze zanim zaczniesz je wydawać.",
+    label: "Nazwa kategorii",
+    placeholder: "np. Jedzenie",
+  };
+}
+
 export function formatMoney(value: number): string {
   return formatCurrency(value);
 }
