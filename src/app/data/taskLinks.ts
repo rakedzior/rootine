@@ -48,7 +48,7 @@ export function addExternalTask(input: ExternalTaskInput): ExternalTaskResult {
     id: externalTaskId(input.source.kind, input.source.entity),
     text: input.text,
     done: input.done ?? false,
-    view: input.calendarDate ? taskViewForCalendarDate(input.calendarDate) : "skrzynka",
+    view: input.calendarDate ? taskViewForCalendarDate(input.calendarDate) : "bezterminu",
     source: { ...input.source, managed: "native" },
     ...(input.calendarDate ? { calendarDate: input.calendarDate } : {}),
     ...(input.date ? { date: input.date } : {}),

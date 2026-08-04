@@ -61,6 +61,49 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await expect(tasksLink).toHaveAttribute("aria-current", "page");
     await expect(primaryNavigation.getByRole("link", { name: "Kalendarz" })).toHaveCount(0);
   });
+
+  test("uses one global calendar and returns to the selected list subview", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/zadania?widok=jutro");
+
+    await page.getByRole("button", { name: "Widok kalendarza" }).click();
+    await expect(page).toHaveURL(/\/kalendarz$/);
+    const taskSidebar = page.getByRole("complementary", { name: "Widoki i listy zadań" });
+    await expect(taskSidebar.getByRole("button", { name: /^Wszystkie/ })).toHaveAttribute("aria-current", "page");
+
+    await taskSidebar.getByRole("button", { name: /^Dziś/ }).click();
+    await expect(page).toHaveURL(/\/zadania$/);
+    await expect(taskSidebar.getByRole("button", { name: /^Dziś/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  test("does not add a selected priority label to the list header", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/zadania");
+
+    await page.getByRole("button", { name: "Średni", exact: true }).click();
+    await expect(page.locator(".ui-content-header__meta")).toHaveCount(0);
+  });
+
+  test("keeps the habit quick-add row stable while choosing days and priority", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/zadania?widok=nawyki");
+
+    const addHabitForm = page.getByRole("form", { name: "Dodaj nawyk" });
+    const before = await addHabitForm.boundingBox();
+    const schedule = page.getByRole("combobox", { name: "Cykliczność nawyku Codziennie" });
+    await schedule.click();
+    await page.getByRole("option", { name: "Wybrane dni", exact: true }).click();
+
+    const weekdayDialog = page.getByRole("dialog", { name: "Wybrane dni" });
+    await expect(weekdayDialog).toBeVisible();
+    const afterWeekdayPicker = await addHabitForm.boundingBox();
+    expect(afterWeekdayPicker?.height).toBe(before?.height);
+
+    await weekdayDialog.getByRole("button", { name: "So", exact: true }).click();
+    await expect(weekdayDialog.getByRole("button", { name: "So", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "Priorytet nawyku", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Średni", exact: true }).click();
+    const afterPriority = await addHabitForm.boundingBox();
+    expect(afterPriority?.height).toBe(before?.height);
+  });
 });
 
 test.describe("mobile navigation", { tag: "@mobile" }, () => {

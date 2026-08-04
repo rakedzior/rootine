@@ -37,7 +37,7 @@ import {
 } from "./taskPageModel";
 
 export function TaskRow({
-  task, selected, onToggle, onSelect, onUpdate, tagi, listy, deadlineLabel, railLabel,
+  task, selected, onToggle, onSelect, onUpdate, tagi, listy, railLabel,
   bulkMode = false, bulkSelected = false, bulkDisabled = false, onBulkToggle,
 }: {
   task: Task; selected: boolean;
@@ -46,7 +46,6 @@ export function TaskRow({
   onUpdate: (id: number, patch: Partial<Task>) => void;
   tagi: TagItem[];
   listy: ListItem[];
-  deadlineLabel?: string;
   bulkMode?: boolean;
   bulkSelected?: boolean;
   bulkDisabled?: boolean;
@@ -68,13 +67,11 @@ export function TaskRow({
   const priorityColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.seaGlass : null;
   const priorityLabel = task.priority === "high" ? "Wysoki" : task.priority === "medium" ? "Średni" : task.priority === "low" ? "Niski" : "Brak";
   const sourceLabel = task.source ? commitmentSourceLabel(task.source.kind) : null;
-  const listLabel = task.source ? sourceLabel : listy.find((list) => list.id === task.list)?.label ?? "Skrzynka";
+  const listLabel = task.source ? sourceLabel : listy.find((list) => list.id === task.list)?.label ?? "Bez listy";
 
   const subtitle = task.source
     ? `${sourceLabel} · ${task.source.context}`
-    : task.date && !deadlineLabel
-      ? task.date
-      : undefined;
+    : undefined;
 
   return (
     <ListRow
@@ -236,11 +233,11 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
   }, [anchorEl, onClose]);
 
   const all = [
-    { id: null as string | null, label: "Skrzynka zadań", color: C.textMuted },
+    { id: null as string | null, label: "Bez listy", color: C.textMuted },
     ...listy.map(l => ({ id: l.id as string | null, label: l.label, color: l.color })),
   ].filter(l => l.label.toLowerCase().includes(q.toLowerCase()));
 
-  const currentLabel = listy.find(l => l.id === current)?.label ?? "Skrzynka zadań";
+  const currentLabel = listy.find(l => l.id === current)?.label ?? "Bez listy";
 
   return (
     <Menu ref={ref} style={{
@@ -425,7 +422,7 @@ export function TaskDetail({
   const [showTagInput, setShowTagInput] = useState(false);
 
   const flagColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.iceBlue : C.textMuted;
-  const listLabel = listy.find(l => l.id === task.list)?.label ?? "Skrzynka zadań";
+  const listLabel = listy.find(l => l.id === task.list)?.label ?? "Bez listy";
   const listColor = listy.find(l => l.id === task.list)?.color ?? C.textMuted;
   const taskTagDefs = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
   const dateStr   = task.date ?? "Bez terminu";

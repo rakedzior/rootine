@@ -2,7 +2,6 @@ import {
   BarChart2,
   Circle,
   Flame,
-  Inbox,
   LayoutGrid,
   Calendar,
   TrendingUp,
@@ -65,11 +64,12 @@ export const PRIORITY_COLOR: Record<Priority, string> = {
 };
 
 export const SMART_VIEWS = [
-  { id: "dzis",       label: "Dziś",            icon: LayoutGrid },
-  { id: "wszystkie",   label: "Wszystkie",      icon: Circle     },
-  { id: "skrzynka",   label: "Skrzynka",       icon: Inbox      },
-  { id: "jutro",      label: "Jutro",           icon: Calendar   },
-  { id: "7dni",       label: "Następne 7 dni",  icon: TrendingUp },
+  { id: "dzis",       label: "Dziś",             icon: LayoutGrid },
+  { id: "jutro",      label: "Jutro",            icon: Calendar   },
+  { id: "7dni",       label: "Następne 7 dni",   icon: TrendingUp },
+  { id: "30dni",      label: "Następne 30 dni",  icon: TrendingUp },
+  { id: "bezterminu", label: "Bez terminu",      icon: Calendar   },
+  { id: "wszystkie",  label: "Wszystkie",        icon: Circle     },
   { id: "nawyki",     label: "Nawyki",           icon: Flame      },
   { id: "podsumowanie", label: "Podsumowanie",  icon: BarChart2  },
 ];
@@ -77,21 +77,35 @@ export const SMART_VIEWS = [
 export const PRIMARY_SMART_VIEWS = SMART_VIEWS.filter((view) => view.id !== "nawyki" && view.id !== "podsumowanie");
 export const SPECIAL_SMART_VIEWS = SMART_VIEWS.filter((view) => view.id === "nawyki" || view.id === "podsumowanie");
 
+export function taskViewSupportsCalendar(view: string): boolean {
+  return view === "dzis"
+    || view === "wszystkie"
+    || view === "jutro"
+    || view === "7dni"
+    || view === "30dni"
+    || view === "bezterminu";
+}
+
 export const VIEW_LABELS: Record<string, string> = {
   wszystkie:    "Wszystkie zadania",
-  skrzynka:     "Skrzynka zadań",
+  bezterminu:   "Bez terminu",
   dzis:         "Dziś",
   jutro:        "Jutro",
   "7dni":       "Następne 7 dni",
+  "30dni":      "Następne 30 dni",
   podsumowanie: "Podsumowanie",
   nawyki:       "Nawyki",
   ukonczone:    "Ukończone",
   kosz:         "Kosz",
 };
 
+export function normalizeTaskView(view: string): string {
+  return view === "skrzynka" ? "bezterminu" : view;
+}
+
 export function initialTaskView() {
   if (typeof window === "undefined") return "dzis";
-  const requested = new URLSearchParams(window.location.search).get("widok");
+  const requested = normalizeTaskView(new URLSearchParams(window.location.search).get("widok") ?? "");
   return requested && VIEW_LABELS[requested] ? requested : "dzis";
 }
 
@@ -118,6 +132,39 @@ export type TaskSidebarState = {
   tagiOpen: boolean;
 };
 
+export type TasksViewMode = "list" | "calendar";
+
+export type TaskListGroup = {
+  id: string;
+  kind: "overdue" | "date" | "undated" | "completed";
+  label: string;
+  tasks: Task[];
+  defaultCollapsed: boolean;
+};
+
+export const TASKS_VIEW_MODE_STORAGE_KEY = "rootine.tasks.view-mode.v1";
+const DEFAULT_TASKS_VIEW_MODE: TasksViewMode = "list";
+
+export function loadTasksViewMode(): TasksViewMode {
+  if (typeof window === "undefined") return DEFAULT_TASKS_VIEW_MODE;
+  try {
+    const value = window.localStorage.getItem(TASKS_VIEW_MODE_STORAGE_KEY);
+    return value === "calendar" ? "calendar" : DEFAULT_TASKS_VIEW_MODE;
+  } catch {
+    return DEFAULT_TASKS_VIEW_MODE;
+  }
+}
+
+export function saveTasksViewMode(mode: TasksViewMode): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TASKS_VIEW_MODE_STORAGE_KEY, mode);
+    window.dispatchEvent(new CustomEvent("rootine:tasks-view-mode-change", { detail: mode }));
+  } catch {
+    // The view preference is optional; navigation must continue without storage.
+  }
+}
+
 const TASK_SIDEBAR_STATE_KEY = "rootine.tasks.sidebar.v2";
 const DEFAULT_TASK_SIDEBAR_STATE: TaskSidebarState = {
   taskView: "dzis",
@@ -138,6 +185,7 @@ export function loadTaskSidebarState(): TaskSidebarState {
     return {
       ...DEFAULT_TASK_SIDEBAR_STATE,
       ...parsed,
+      taskView: normalizeTaskView(typeof parsed.taskView === "string" ? parsed.taskView : DEFAULT_TASK_SIDEBAR_STATE.taskView),
       listFilter: typeof parsed.listFilter === "string" ? parsed.listFilter : null,
       tagFilter: typeof parsed.tagFilter === "string" ? parsed.tagFilter : null,
       listyOpen: parsed.listyOpen === true,
@@ -234,8 +282,8 @@ export function overdueDateLabel(calendarDate: string): string {
 export function overdueRailLabel(calendarDate: string): string {
   const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
   if (daysAgo === null) return "";
-  if (daysAgo === 1) return "1 dzień po terminie";
-  if (daysAgo > 1) return `${daysAgo} dni po terminie`;
+  if (daysAgo === 1) return "1 dzień";
+  if (daysAgo > 1) return `${daysAgo} dni`;
   return "";
 }
 
@@ -298,8 +346,95 @@ export function smartDateViewRange(view: string, todayKey: string): [string, str
     const tomorrow = shiftLocalDateKey(todayKey, 1);
     return [tomorrow, tomorrow];
   }
-  if (view === "7dni") return [shiftLocalDateKey(todayKey, 2), shiftLocalDateKey(todayKey, 7)];
+  if (view === "7dni") return [todayKey, shiftLocalDateKey(todayKey, 6)];
+  if (view === "30dni") return [todayKey, shiftLocalDateKey(todayKey, 29)];
   return null;
+}
+
+export function isTaskUndated(task: Pick<Task, "calendarDate">): boolean {
+  return task.calendarDate === undefined || task.calendarDate === null || task.calendarDate === "";
+}
+
+function taskDateGroupLabel(calendarDate: string, todayKey: string): string {
+  const parsed = new Date(`${calendarDate}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "Bez terminu";
+  const weekday = parsed.toLocaleDateString("pl-PL", { weekday: "long" });
+  const relative = calendarDate === todayKey
+    ? "Dziś"
+    : calendarDate === shiftLocalDateKey(todayKey, 1)
+      ? "Jutro"
+      : parsed.toLocaleDateString("pl-PL", { day: "numeric", month: "long" });
+  return `${weekday}, ${relative}`;
+}
+
+export function groupTasksForListView(tasks: readonly Task[], todayKey: string, view = "wszystkie"): TaskListGroup[] {
+  const pending = tasks.filter((task) => !task.done && !task.deleted);
+  const completed = tasks.filter((task) => task.done && !task.deleted);
+  const overdue = pending
+    .filter((task) => Boolean(task.calendarDate && task.calendarDate < todayKey))
+    .sort((left, right) => (left.calendarDate ?? "").localeCompare(right.calendarDate ?? ""));
+  const dated = pending
+    .filter((task) => !overdue.includes(task) && !isTaskUndated(task))
+    .sort((left, right) => {
+      const dateOrder = (left.calendarDate ?? "").localeCompare(right.calendarDate ?? "");
+      if (dateOrder) return dateOrder;
+      if (left.time && right.time) return left.time.localeCompare(right.time);
+      if (left.time) return -1;
+      if (right.time) return 1;
+      return left.id - right.id;
+    });
+  const undated = pending.filter(isTaskUndated);
+  const groups: TaskListGroup[] = [];
+
+  if (overdue.length > 0) {
+    groups.push({ id: "overdue", kind: "overdue", label: "Po terminie", tasks: overdue, defaultCollapsed: false });
+  }
+
+  if (view === "wszystkie") {
+    const tomorrow = shiftLocalDateKey(todayKey, 1);
+    const nextSevenDays = shiftLocalDateKey(todayKey, 6);
+    const nextThirtyDays = shiftLocalDateKey(todayKey, 29);
+    const buckets = [
+      { id: "today", label: "Dziś", match: (date: string) => date === todayKey },
+      { id: "tomorrow", label: "Jutro", match: (date: string) => date === tomorrow },
+      { id: "next-7-days", label: "Następne 7 dni", match: (date: string) => date > tomorrow && date <= nextSevenDays },
+      { id: "next-30-days", label: "Następne 30 dni", match: (date: string) => date > nextSevenDays && date <= nextThirtyDays },
+      { id: "later", label: "Później", match: (date: string) => date > nextThirtyDays },
+    ];
+    for (const bucket of buckets) {
+      const bucketTasks = dated.filter((task) => bucket.match(task.calendarDate!));
+      if (bucketTasks.length > 0) {
+        groups.push({ id: bucket.id, kind: "date", label: bucket.label, tasks: sortByScheduledTime(bucketTasks), defaultCollapsed: false });
+      }
+    }
+  } else {
+    const byDate = new Map<string, Task[]>();
+    for (const task of dated) {
+      const date = task.calendarDate!;
+      byDate.set(date, [...(byDate.get(date) ?? []), task]);
+    }
+    for (const [date, dateTasks] of byDate) {
+      groups.push({
+        id: `date:${date}`,
+        kind: "date",
+        label: taskDateGroupLabel(date, todayKey),
+        tasks: sortByScheduledTime(dateTasks),
+        defaultCollapsed: false,
+      });
+    }
+  }
+
+  if (undated.length > 0) {
+    groups.push({ id: "undated", kind: "undated", label: "Bez terminu", tasks: undated, defaultCollapsed: false });
+  }
+  if (completed.length > 0) {
+    groups.push({ id: "completed", kind: "completed", label: "Ukończone", tasks: completed, defaultCollapsed: true });
+  }
+  return groups;
+}
+
+export function tasksForCalendarView(tasks: readonly Task[], _view: string, _todayKey: string): Task[] {
+  return tasks.filter((task) => !task.deleted && !task.done && !isTaskUndated(task));
 }
 
 export function tasksForSmartDateView(tasks: readonly Task[], view: string, todayKey: string) {
@@ -310,7 +445,6 @@ export function tasksForSmartDateView(tasks: readonly Task[], view: string, toda
   const byId = new Map<number, Task>();
   for (const task of tasks) {
     if (task.deleted) continue;
-    if (!task.calendarDate && task.view === view) byId.set(task.id, task);
     if (view === "dzis" && task.calendarDate && task.calendarDate < todayKey && !task.done) {
       byId.set(task.id, task);
     }

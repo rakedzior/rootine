@@ -99,14 +99,15 @@ export function toCalendarDateKey(date: Date): string {
 
 export function taskViewForCalendarDate(calendarDate: string, referenceDate = new Date()): string {
   const [year, month, day] = calendarDate.split("-").map(Number);
-  if (!year || !month || !day) return "skrzynka";
+  if (!year || !month || !day) return "bezterminu";
   const targetDay = Date.UTC(year, month - 1, day);
   const referenceDay = Date.UTC(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
   const dayDifference = Math.round((targetDay - referenceDay) / 86_400_000);
   if (dayDifference <= 0) return "dzis";
   if (dayDifference === 1) return "jutro";
   if (dayDifference <= 7) return "7dni";
-  return "skrzynka";
+  if (dayDifference <= 30) return "30dni";
+  return "wszystkie";
 }
 
 const DEFAULT_TASKS: WorkspaceTask[] = [
@@ -116,11 +117,11 @@ const DEFAULT_TASKS: WorkspaceTask[] = [
   { id: 4, text: "Przejrzeć raporty finansowe Q2", done: false, time: "14:00", tags: ["praca"], list: "praca", view: "jutro", priority: "high" },
   { id: 5, text: "Kupić bilety na koncert", done: false, tags: ["hobby"], list: "hobby", view: "7dni" },
   { id: 6, text: "Przegląd samochodu", done: false, time: "10:00", tags: ["dom"], list: "dom", view: "7dni", priority: "medium" },
-  { id: 7, text: "Wysłać ofertę do klienta", done: false, time: "09:00", tags: ["praca"], list: "praca", view: "skrzynka", priority: "high" },
-  { id: 8, text: "Zamówić suplementy", done: false, tags: ["zdrowie"], list: "zdrowie", view: "skrzynka" },
+  { id: 7, text: "Wysłać ofertę do klienta", done: false, time: "09:00", tags: ["praca"], list: "praca", view: "bezterminu", priority: "high" },
+  { id: 8, text: "Zamówić suplementy", done: false, tags: ["zdrowie"], list: "zdrowie", view: "bezterminu" },
   { id: 9, text: "Tomasz Karcz – zadzwonić", done: true, tags: ["praca"], list: "praca", view: "dzis" },
   { id: 10, text: "Black Gallery Pub – nie odbierają", done: true, tags: ["hobby"], list: "hobby", view: "dzis" },
-  { id: 11, text: "Stara Zajezdnia – rezerwacja", done: true, tags: ["dom"], list: "dom", view: "skrzynka" },
+  { id: 11, text: "Stara Zajezdnia – rezerwacja", done: true, tags: ["dom"], list: "dom", view: "bezterminu" },
   ...CALENDAR_TASKS.map(({ dateLabel, ...task }) => ({ ...task, date: dateLabel, view: taskViewForCalendarDate(task.calendarDate) })),
 ];
 
@@ -316,9 +317,13 @@ function normalizeLoadedWorkspace(workspace: TaskWorkspace): TaskWorkspace {
     const todayKey = toCalendarDateKey(new Date());
     return {
       ...workspace,
-      tasks: workspace.tasks.map((task) => isCalendarTask(task) && task.view === "kalendarz"
-        ? { ...task, view: taskViewForCalendarDate(task.calendarDate) }
-        : task),
+      tasks: workspace.tasks.map((task) => {
+        if (isCalendarTask(task) && (task.view === "kalendarz" || task.view === "skrzynka")) {
+          return { ...task, view: taskViewForCalendarDate(task.calendarDate) };
+        }
+        if (!isCalendarTask(task) && task.view === "skrzynka") return { ...task, view: "bezterminu" };
+        return task;
+      }),
       habits: workspace.habits.map((habit) => normalizeHabitState(habit, todayKey)),
     };
 }

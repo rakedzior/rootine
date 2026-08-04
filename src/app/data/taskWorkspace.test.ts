@@ -203,6 +203,8 @@ describe("task workspace", () => {
 
     expect(taskViewForCalendarDate("2026-03-29", springReference)).toBe("jutro");
     expect(taskViewForCalendarDate("2026-10-25", autumnReference)).toBe("jutro");
+    expect(taskViewForCalendarDate("2026-04-20", new Date(2026, 3, 1))).toBe("30dni");
+    expect(taskViewForCalendarDate("2026-05-15", new Date(2026, 3, 1))).toBe("wszystkie");
   });
 
   it("supports trash, restore, purge, and empty-trash commands", () => {

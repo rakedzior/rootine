@@ -100,6 +100,7 @@ describe("Kalendarz canonical occurrences integration", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 6, 29, 10, 0));
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -107,6 +108,7 @@ describe("Kalendarz canonical occurrences integration", () => {
     fixtures.taskWorkspace.tasks = [];
     fixtures.taskWorkspace.lists = [];
     fixtures.taskWorkspace.tags = [];
+    window.localStorage.clear();
     vi.useRealTimers();
   });
 
@@ -186,5 +188,74 @@ describe("Kalendarz canonical occurrences integration", () => {
 
     expect(screen.getByRole("button", { name: "Otwórz szczegóły: Zakupy spożywcze" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Otwórz szczegóły: Wysłać raport" })).not.toBeInTheDocument();
+  });
+
+  it("opens as Wszystkie and switches every other subview to the list", () => {
+    fixtures.taskWorkspace.tasks = [
+      {
+        id: 1,
+        text: "Zadanie dziś",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+      },
+      {
+        id: 2,
+        text: "Zadanie jutro",
+        done: false,
+        view: "jutro",
+        calendarDate: "2026-07-30",
+      },
+      {
+        id: 3,
+        text: "Bez terminu",
+        done: false,
+        view: "bezterminu",
+      },
+      {
+        id: 4,
+        text: "Ukończone",
+        done: true,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+      },
+    ];
+
+    render(<Kalendarz />);
+    expect(screen.getByRole("button", { name: /Otw.*Zadanie dziś/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Otw.*Zadanie jutro/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Otw.*Ukończone/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Wszystkie/ })).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Jutro/ }));
+
+    expect(window.location.pathname).toBe("/zadania");
+    expect(window.location.search).toBe("?widok=jutro");
+    expect(window.localStorage.getItem("rootine.tasks.view-mode.v1")).toBe("list");
+    expect(JSON.parse(window.localStorage.getItem("rootine.tasks.sidebar.v2") ?? "{}")).toMatchObject({
+      taskView: "jutro",
+      listFilter: null,
+      tagFilter: null,
+    });
+  });
+
+  it("sends the undated chip to the undated list view", () => {
+    fixtures.taskWorkspace.tasks = [{
+      id: 10,
+      text: "Bez daty",
+      done: false,
+      view: "bezterminu",
+    }];
+
+    render(<Kalendarz />);
+    fireEvent.click(screen.getByRole("button", { name: "Bez terminu · 1" }));
+
+    expect(window.location.pathname).toBe("/zadania");
+    expect(window.location.search).toBe("?widok=bezterminu");
+    expect(JSON.parse(window.localStorage.getItem("rootine.tasks.sidebar.v2") ?? "{}")).toMatchObject({
+      taskView: "bezterminu",
+      listFilter: null,
+      tagFilter: null,
+    });
   });
 });

@@ -60,7 +60,6 @@ import {
   C,
   DEFAULT_DATE_VAL,
   PALETTE,
-  PRIORITY_COLOR,
   SMART_VIEWS,
   PRIMARY_SMART_VIEWS,
   SPECIAL_SMART_VIEWS,
@@ -68,23 +67,27 @@ import {
   VISIBLE_TAG_LIMIT,
   formatOpenTaskCount,
   formatDateLabel,
+  groupTasksForListView,
   initialTaskView,
+  loadTasksViewMode,
   loadTaskSidebarState,
-  overdueDateLabel,
+  isTaskUndated,
+  normalizeTaskView,
+  saveTasksViewMode,
   saveTaskSidebarState,
   overdueRailLabel,
-  sortByScheduledTime,
   scheduleFromDateValue,
   smartDateViewRange,
+  taskViewSupportsCalendar,
   tasksForSmartDateView,
   todayStr,
-  viewedTaskDayHeading,
   type DateVal,
   type Habit,
   type ListItem,
   type Priority,
   type TagItem,
   type Task,
+  type TasksViewMode,
 } from "./tasks/taskPageModel";
 import { DatePickerPopup } from "./tasks/TaskSchedulePicker";
 import { TaskDetail, TaskRow } from "./tasks/TaskViews";
@@ -101,10 +104,11 @@ export default function Zadania() {
   const navigate = useNavigate();
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
+  const [tasksViewMode, setTasksViewMode] = useState<TasksViewMode>(loadTasksViewMode);
   const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(() => {
     const requestedView = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("widok") : null;
-    return requestedView ? initialTaskView() : initialSidebarState.taskView;
+    return requestedView ? initialTaskView() : normalizeTaskView(initialSidebarState.taskView);
   });
   const [listFilter,    setListFilter]    = useState<string | null>(initialSidebarState.listFilter);
   const [tagFilter,     setTagFilter]     = useState<string | null>(initialSidebarState.tagFilter);
@@ -122,8 +126,7 @@ export default function Zadania() {
   const [newPriority,   setNewPriority]   = useState<Priority | null>(null);
   const [newDateVal,    setNewDateVal]    = useState<DateVal>(DEFAULT_DATE_VAL);
   const [inputDropdown, setInputDropdown] = useState<"priority" | "list" | "tags" | null>(null);
-  const [showOverdue,   setShowOverdue]   = useState(true);
-  const [showDone,      setShowDone]      = useState(false);
+  const [collapsedTaskGroups, setCollapsedTaskGroups] = useState<Record<string, boolean>>({});
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
@@ -177,6 +180,78 @@ export default function Zadania() {
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     writeModuleMemoryValue("tasks", "location", `${url.pathname}${url.search}`);
   }, [taskView]);
+
+  const taskRoute = (view: string, base = "/zadania") => (
+    view === "dzis" ? base : `${base}?widok=${encodeURIComponent(view)}`
+  );
+
+  const openTaskView = (view: string, resetFilters = true) => {
+    setTaskView(view);
+    if (resetFilters) {
+      setListFilter(null);
+      setTagFilter(null);
+    }
+    saveTaskSidebarState(resetFilters
+      ? { taskView: view, listFilter: null, tagFilter: null }
+      : { taskView: view });
+
+    if (tasksViewMode === "calendar" && taskViewSupportsCalendar(view)) {
+      navigate(taskRoute(view, "/kalendarz"));
+    } else if (tasksViewMode === "calendar" && !taskViewSupportsCalendar(view)) {
+      navigate(taskRoute(view));
+    }
+  };
+
+  const openTaskFilter = (kind: "list" | "tag", id: string | null) => {
+    if (!id) {
+      setListFilter(null);
+      setTagFilter(null);
+      saveTaskSidebarState({ taskView, listFilter: null, tagFilter: null });
+      if (tasksViewMode === "calendar" && taskViewSupportsCalendar(taskView)) {
+        navigate(taskRoute(taskView, "/kalendarz"));
+      }
+      return;
+    }
+    const nextState = {
+      taskView: "wszystkie",
+      listFilter: kind === "list" ? id : null,
+      tagFilter: kind === "tag" ? id : null,
+    } as const;
+    setTaskView(nextState.taskView);
+    setListFilter(nextState.listFilter);
+    setTagFilter(nextState.tagFilter);
+    saveTaskSidebarState(nextState);
+    if (tasksViewMode === "calendar") navigate(taskRoute("wszystkie", "/kalendarz"));
+  };
+
+  const switchTasksViewMode = (mode: TasksViewMode) => {
+    if (mode === "calendar") {
+      saveTasksViewMode("calendar");
+      setTasksViewMode("calendar");
+      setTaskView("wszystkie");
+      setListFilter(null);
+      setTagFilter(null);
+      saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
+      navigate("/kalendarz");
+      return;
+    }
+
+    saveTasksViewMode(mode);
+    setTasksViewMode(mode);
+    saveTaskSidebarState({ taskView, listFilter, tagFilter });
+    navigate(taskRoute(taskView, "/zadania"));
+  };
+
+  useEffect(() => {
+    if (tasksViewMode !== "calendar") return;
+    if (new URLSearchParams(window.location.search).has("akcja")) return;
+    if (window.location.pathname !== "/zadania") return;
+    setTaskView("wszystkie");
+    setListFilter(null);
+    setTagFilter(null);
+    saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
+    navigate("/kalendarz", { replace: true });
+  }, [navigate, tasksViewMode]);
 
   // Sidebar collapse state
   const [listyOpen,     setListyOpen]     = useState(initialSidebarState.listyOpen);
@@ -284,37 +359,42 @@ export default function Zadania() {
     .slice(0, normalizedTagSearch || showAllTags ? undefined : VISIBLE_TAG_LIMIT);
 
   const hasSmartDateRange = smartDateViewRange(taskView, todayKey) !== null;
-  const taskPool = hasSmartDateRange
+  const taskPool = useMemo(() => hasSmartDateRange
     ? smartDateTasks.tasks
     : taskView === "ukonczone"
       ? [...tasks, ...completedOccurrences]
-      : tasks;
-  const visible = taskPool.filter(t => {
+      : tasks, [completedOccurrences, hasSmartDateRange, smartDateTasks.tasks, taskView, tasks]);
+  const matchesTaskFilters = useCallback((task: Task) => {
+    const listMatch = listFilter ? task.list === listFilter : true;
+    const tagMatch  = tagFilter  ? (task.tags ?? []).includes(tagFilter) : true;
+    const prioMatch = priorityFilter ? task.priority === priorityFilter : true;
+    return listMatch && tagMatch && prioMatch;
+  }, [listFilter, priorityFilter, tagFilter]);
+  const scopedVisible = useMemo(() => taskPool.filter(t => {
     if (taskView === "kosz") return Boolean(t.deleted);
     if (t.deleted) return false;
     if (taskView === "ukonczone") return t.done;
-    const viewMatch = taskView === "wszystkie" || taskView === "podsumowanie" || taskView === "nawyki"
-      ? true : hasSmartDateRange || t.view === taskView;
-    const listMatch = listFilter ? t.list === listFilter : true;
-    const tagMatch  = tagFilter  ? (t.tags ?? []).includes(tagFilter) : true;
-    const prioMatch = priorityFilter ? t.priority === priorityFilter : true;
-    return viewMatch && listMatch && tagMatch && prioMatch;
-  });
+    if (taskView === "bezterminu") return !t.done && isTaskUndated(t) && matchesTaskFilters(t);
+    const viewMatch = hasSmartDateRange
+      ? !isTaskUndated(t)
+        : taskView === "wszystkie" || taskView === "podsumowanie" || taskView === "nawyki"
+        ? true
+        : t.view === taskView;
+    return !t.done && viewMatch && matchesTaskFilters(t);
+  }), [hasSmartDateRange, matchesTaskFilters, taskPool, taskView]);
+  const undatedHelper = useMemo(() => hasSmartDateRange
+    ? tasks.filter((task) => !task.deleted && !task.done && isTaskUndated(task) && matchesTaskFilters(task))
+    : [], [hasSmartDateRange, matchesTaskFilters, tasks]);
+  const visible = useMemo(() => [...scopedVisible, ...undatedHelper], [scopedVisible, undatedHelper]);
   const pending   = visible.filter(t => !t.done);
   const completed = visible.filter(t => t.done);
-  const overdue = taskView === "dzis"
-    ? pending.filter(t => Boolean(t.calendarDate) && t.calendarDate! < todayKey)
-    : [];
-  const overdueIds = new Set(overdue.map(task => task.id));
-  // Every task below belongs to one day, so a clock time is a real position in sequence.
-  // The overdue group above spans many days and stays ordered by how late it is.
-  const currentPending = sortByScheduledTime(pending.filter(task => !overdueIds.has(task.id)));
-  const dayHeading = viewedTaskDayHeading(taskView);
-  const dayHeadingCount = currentPending.length + completed.length;
-  const selectableVisibleIds = Array.from(new Set((taskView === "ukonczone"
-    ? completed
-    : [...overdue, ...currentPending]
-  ).filter((task) => !occurrenceById.get(task.id)?.occurrence.virtual).map((task) => task.id)));
+  const overdue = pending.filter(t => Boolean(t.calendarDate) && t.calendarDate! < todayKey);
+  const taskGroups = useMemo(() => groupTasksForListView(visible, todayKey, taskView), [taskView, todayKey, visible]);
+  const selectableVisibleIds = Array.from(new Set(
+    visible
+      .filter((task) => !task.done && !occurrenceById.get(task.id)?.occurrence.virtual)
+      .map((task) => task.id),
+  ));
 
   const viewCounts = Object.fromEntries(
     SMART_VIEWS.map(v => {
@@ -325,11 +405,13 @@ export default function Zadania() {
         v.id,
         v.id === "nawyki"
         ? habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey) && !isHabitDoneOnDate(habit, todayKey)).length
-        : countTasks.filter(t => !t.deleted && !t.done && (
-          v.id === "wszystkie" || v.id === "podsumowanie" || smartDateViewRange(v.id, todayKey)
-            ? true
-            : t.view === v.id
-        )).length,
+        : v.id === "bezterminu"
+          ? tasks.filter((task) => !task.deleted && !task.done && isTaskUndated(task)).length
+          : countTasks.filter(t => !t.deleted && !t.done && (
+            v.id === "wszystkie" || v.id === "podsumowanie" || smartDateViewRange(v.id, todayKey)
+              ? true
+              : t.view === v.id
+          )).length,
       ];
     }),
   );
@@ -359,13 +441,7 @@ export default function Zadania() {
     const id = Date.now();
     const dateLabel = formatDateLabel(newDateVal);
     const calendarDate = newDateVal.date ? toCalendarDateKey(newDateVal.date) : undefined;
-    const fallbackView = taskView === "wszystkie"
-      || taskView === "podsumowanie"
-      || taskView === "nawyki"
-      || taskView === "kosz"
-      || taskView === "ukonczone"
-      ? "dzis"
-      : taskView;
+    const fallbackView = calendarDate ? taskViewForCalendarDate(calendarDate) : "bezterminu";
     const task: Task = {
       id, text, done: false, view: calendarDate ? taskViewForCalendarDate(calendarDate) : fallbackView,
       tags: newTaskTags.length > 0 ? newTaskTags : undefined,
@@ -655,6 +731,37 @@ export default function Zadania() {
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
+  const isTaskGroupCollapsed = (groupId: string, defaultCollapsed: boolean) => (
+    collapsedTaskGroups[groupId] ?? defaultCollapsed
+  );
+
+  const toggleTaskGroup = (groupId: string) => {
+    setCollapsedTaskGroups((current) => ({
+      ...current,
+      [groupId]: !isTaskGroupCollapsed(groupId, groupId === "completed"),
+    }));
+  };
+
+  const renderTaskRow = (task: Task, groupKind: "overdue" | "date" | "undated" | "completed") => (
+    <TaskRow
+      key={task.id}
+      task={task}
+      tagi={tagi}
+      listy={listy}
+      railLabel={groupKind === "overdue"
+        ? overdueRailLabel(task.calendarDate ?? "")
+        : groupKind === "undated" ? "Bez terminu" : task.time || ""}
+      selected={selectedId === task.id}
+      bulkMode={bulkMode}
+      bulkSelected={bulkSelectedIds.has(task.id)}
+      bulkDisabled={Boolean(occurrenceById.get(task.id)?.occurrence.virtual)}
+      onBulkToggle={toggleBulkTask}
+      onToggle={id => updateTask(id, { done: !task.done })}
+      onUpdate={updateTask}
+      onSelect={id => setSelectedId(selectedId === id ? null : id)}
+    />
+  );
+
   const pageHeader = (
     <PageHeader
       title="Zadania"
@@ -710,7 +817,7 @@ export default function Zadania() {
               <ContextNavItem
                 key={v.id}
                 active={active}
-                onClick={() => { setTaskView(v.id); setListFilter(null); setTagFilter(null); }}
+                onClick={() => openTaskView(v.id)}
                 icon={<Icon />}
                 label={v.label}
                 meta={v.id !== "podsumowanie" && count > 0 ? count : undefined}
@@ -733,7 +840,7 @@ export default function Zadania() {
                 <ContextNavItem
                   key={v.id}
                   active={active}
-                  onClick={() => { setTaskView(v.id); setListFilter(null); setTagFilter(null); }}
+                  onClick={() => openTaskView(v.id)}
                   icon={<Icon />}
                   label={v.label}
                   meta={v.id !== "podsumowanie" && count > 0 ? count : undefined}
@@ -813,9 +920,7 @@ export default function Zadania() {
                     <ContextNavItem
                       active={active}
                       onClick={() => {
-                        if (taskView === "podsumowanie" || taskView === "nawyki") setTaskView("wszystkie");
-                        setListFilter(active ? null : l.id);
-                        setTagFilter(null);
+                        openTaskFilter("list", active ? null : l.id);
                       }}
                       icon={<span className="h-2 w-2 rounded-full" style={{ background: l.color, opacity: active ? 1 : 0.7 }} />}
                       label={l.label}
@@ -928,9 +1033,7 @@ export default function Zadania() {
                     <ContextNavItem
                       active={active}
                       onClick={() => {
-                        if (taskView === "podsumowanie" || taskView === "nawyki") setTaskView("wszystkie");
-                        setTagFilter(active ? null : t.id);
-                        setListFilter(null);
+                        openTaskFilter("tag", active ? null : t.id);
                       }}
                       icon={<span className="h-2 w-2 rounded-full" style={{ background: t.color, opacity: active ? 1 : 0.7 }} />}
                       label={`#${t.label}`}
@@ -984,7 +1087,7 @@ export default function Zadania() {
               <ContextNavItem
                 key={label}
                 active={active}
-                onClick={() => { setTaskView(view); setListFilter(null); setTagFilter(null); }}
+                onClick={() => openTaskView(view)}
                 icon={<Icon />}
                 label={label}
               />
@@ -1038,6 +1141,7 @@ export default function Zadania() {
           <HabitsWorkspace
             habits={habits}
             onToggleHabit={toggleHabit}
+            selectedHabitId={selectedHabitId}
             onSelectHabit={(id) => { setSelectedHabitId((current) => current === id ? null : id); setSelectedId(null); }}
             onAddHabit={addHabit}
             quickCaptureTitle={habitQuickCapture.title}
@@ -1069,7 +1173,7 @@ export default function Zadania() {
               ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
-          meta={(listFilter || tagFilter || priorityFilter) ? (
+          meta={(listFilter || tagFilter) ? (
               <div className="flex flex-wrap items-center gap-1.5">
               {listFilter && (
                 <Button variant="quiet" size="sm" onClick={() => setListFilter(null)}
@@ -1083,14 +1187,8 @@ export default function Zadania() {
                   #{tagFilter} <X size={9} strokeWidth={2} />
                 </Button>
               )}
-              {priorityFilter && (
-                <Button variant="quiet" size="sm" onClick={() => setPriorityFilter(null)}
-                  style={{ background: PRIORITY_COLOR[priorityFilter]+"18", color: PRIORITY_COLOR[priorityFilter] }}>
-                  {priorityFilter === "high" ? "Wysoki" : priorityFilter === "medium" ? "Średni" : "Niski"} <X size={9} strokeWidth={2} />
-                </Button>
-              )}
-              </div>
-            ) : undefined}
+            </div>
+          ) : undefined}
           actions={<div className="task-toolbar-actions">
             <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
               {([
@@ -1121,29 +1219,32 @@ export default function Zadania() {
                 {bulkMode ? "Anuluj wybór" : "Wybierz"}
               </Button>
             )}
-            <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
-              <Button
-                variant="quiet"
-                size="sm"
-                iconOnly
-                aria-label="Widok listy"
-                aria-pressed="true"
-                title="Lista"
-              >
-                <List size={14} strokeWidth={1.7} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                iconOnly
-                aria-label="Widok kalendarza"
-                aria-pressed="false"
-                title="Kalendarz"
-                onClick={() => navigate("/kalendarz")}
-              >
-                <Calendar size={14} strokeWidth={1.7} />
-              </Button>
-            </div>
+            {taskViewSupportsCalendar(taskView) && (
+              <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
+                <Button
+                  variant={tasksViewMode === "list" ? "quiet" : "ghost"}
+                  size="sm"
+                  iconOnly
+                  aria-label="Widok listy"
+                  aria-pressed={tasksViewMode === "list"}
+                  title="Lista"
+                  onClick={() => switchTasksViewMode("list")}
+                >
+                  <List size={14} strokeWidth={1.7} />
+                </Button>
+                <Button
+                  variant={tasksViewMode === "calendar" ? "quiet" : "ghost"}
+                  size="sm"
+                  iconOnly
+                  aria-label="Widok kalendarza"
+                  aria-pressed={tasksViewMode === "calendar"}
+                  title="Kalendarz"
+                  onClick={() => switchTasksViewMode("calendar")}
+                >
+                  <Calendar size={14} strokeWidth={1.7} />
+                </Button>
+              </div>
+            )}
           </div>}
         />
 
@@ -1316,89 +1417,7 @@ export default function Zadania() {
             </div>
           </form>
 
-          {overdue.length > 0 && (
-            <section className="task-overdue-section" aria-labelledby="task-overdue-heading">
-              <div className="task-overdue-header">
-                <div className="task-overdue-heading">
-                  <button
-                    type="button"
-                    className="task-overdue-toggle"
-                    aria-label={showOverdue ? "Zwiń zadania po terminie" : "Rozwiń zadania po terminie"}
-                    aria-expanded={showOverdue}
-                    aria-controls="task-overdue-list"
-                    onClick={() => setShowOverdue(open => !open)}
-                  >
-                    <ChevronDown
-                      size={13}
-                      strokeWidth={1.6}
-                      aria-hidden="true"
-                      style={{ transform: showOverdue ? "none" : "rotate(-90deg)" }}
-                    />
-                  </button>
-                  <h2 id="task-overdue-heading" className="task-overdue-title">Po terminie</h2>
-                  <span className="task-overdue-count">{overdue.length}</span>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setRescheduleOpen(true)}>
-                  Przełóż
-                </Button>
-              </div>
-              {showOverdue && (
-                <div id="task-overdue-list" className="task-list">
-                  {overdue.map(task => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      tagi={tagi}
-                      listy={listy}
-                      railLabel={overdueRailLabel(task.calendarDate!)}
-                      deadlineLabel={overdueDateLabel(task.calendarDate!)}
-                      selected={selectedId === task.id}
-                      bulkMode={bulkMode}
-                      bulkSelected={bulkSelectedIds.has(task.id)}
-                      bulkDisabled={Boolean(occurrenceById.get(task.id)?.occurrence.virtual)}
-                      onBulkToggle={toggleBulkTask}
-                      onToggle={id => updateTask(id, { done: true })}
-                      onUpdate={updateTask}
-                      onSelect={id => setSelectedId(selectedId === id ? null : id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {dayHeading && dayHeadingCount > 0 && (
-            <div className="task-day-heading" aria-label={`${dayHeading}. ${dayHeadingCount} zadań`}>
-              <ChevronDown size={13} strokeWidth={1.6} aria-hidden="true" />
-              <h2 className="task-day-heading__title">{dayHeading}</h2>
-              <span className="task-day-heading__count">{dayHeadingCount}</span>
-            </div>
-          )}
-
-          {taskView === "ukonczone" ? (
-            /* Ukończone view — flat list of all done tasks */
-            <div className="task-list">
-              {visible.length === 0 && (
-                <EmptyState
-                  className="task-empty-state"
-                  icon={<RotateCcw size={18} />}
-                  title="Nie ma jeszcze ukończonych zadań"
-                  description="Zadania oznaczone jako wykonane pojawią się tutaj w jednym spokojnym archiwum."
-                />
-              )}
-              {visible.map(t => (
-                <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
-                  selected={selectedId === t.id}
-                  bulkMode={bulkMode}
-                  bulkSelected={bulkSelectedIds.has(t.id)}
-                  bulkDisabled={Boolean(occurrenceById.get(t.id)?.occurrence.virtual)}
-                  onBulkToggle={toggleBulkTask}
-                  onToggle={id => updateTask(id, { done: false })}
-                  onUpdate={updateTask}
-                  onSelect={id => setSelectedId(selectedId === id ? null : id)} />
-              ))}
-            </div>
-          ) : taskView === "kosz" ? (
+          {taskView === "kosz" ? (
             <div className="task-list">
               {visible.length === 0 ? (
                 <EmptyState
@@ -1436,55 +1455,49 @@ export default function Zadania() {
                 </div>
               ))}
             </div>
+          ) : taskView === "ukonczone" && visible.length === 0 ? (
+            <EmptyState
+              className="task-empty-state"
+              icon={<RotateCcw size={18} />}
+              title="Nie ma jeszcze ukończonych zadań"
+              description="Zadania oznaczone jako wykonane pojawią się tutaj w jednym spokojnym archiwum."
+            />
           ) : (
-            <>
-              {/* Pending tasks */}
-              {currentPending.length > 0 && (
-                <div className="task-list task-list--pending">
-                  {currentPending.map(t => (
-                    <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
-                      selected={selectedId === t.id}
-                      bulkMode={bulkMode}
-                      bulkSelected={bulkSelectedIds.has(t.id)}
-                      bulkDisabled={Boolean(occurrenceById.get(t.id)?.occurrence.virtual)}
-                      onBulkToggle={toggleBulkTask}
-                      onToggle={id => updateTask(id, { done: true })}
-                      onUpdate={updateTask}
-                      onSelect={id => setSelectedId(selectedId === id ? null : id)} />
-                  ))}
-                </div>
-              )}
-
-              {/* Completed */}
-              {completed.length > 0 && (
-                <div className="task-completed">
-                   <button type="button" onClick={() => setShowDone(v => !v)}
-                     aria-expanded={showDone}
-                     aria-controls="task-completed-list"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] transition-colors mb-1"
-                    style={{ color: C.textMuted }}>
-                    <ChevronDown size={12} strokeWidth={1.5}
-                      style={{ transform: showDone ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .2s" }} />
-                    Ukończone · {completed.length}
-                  </button>
-                  {showDone && (
-                     <div id="task-completed-list" className="task-list">
-                      {completed.map(t => (
-                        <TaskRow key={t.id} task={t} tagi={tagi} listy={listy}
-                          selected={selectedId === t.id}
-                          bulkMode={bulkMode}
-                          bulkSelected={bulkSelectedIds.has(t.id)}
-                          bulkDisabled={Boolean(occurrenceById.get(t.id)?.occurrence.virtual)}
-                          onBulkToggle={toggleBulkTask}
-                          onToggle={id => updateTask(id, { done: false })}
-                          onUpdate={updateTask}
-                          onSelect={id => setSelectedId(selectedId === id ? null : id)} />
-                      ))}
+            <div className="task-groups" aria-label="Grupy zadań">
+              {taskGroups.map((group) => {
+                const collapsed = isTaskGroupCollapsed(group.id, group.defaultCollapsed);
+                const headingId = `task-group-heading-${group.id.replace(/[^a-z0-9-]/gi, "-")}`;
+                const listId = `${headingId}-list`;
+                return (
+                  <section key={group.id} className={`task-group task-group--${group.kind}`} aria-labelledby={headingId}>
+                    <div className="task-group-heading">
+                      <button
+                        type="button"
+                        className="task-group-heading__toggle"
+                        aria-label={`${collapsed ? "Rozwiń" : "Zwiń"} grupę ${group.label}`}
+                        aria-expanded={!collapsed}
+                        aria-controls={listId}
+                        onClick={() => toggleTaskGroup(group.id)}
+                      >
+                        <ChevronDown size={13} strokeWidth={1.6} aria-hidden="true" />
+                      </button>
+                      <h2 id={headingId} className="task-group-heading__title">{group.label}</h2>
+                      <span className="task-group-heading__count">{group.tasks.length}</span>
+                      {group.kind === "overdue" && (
+                        <Button variant="ghost" size="sm" onClick={() => setRescheduleOpen(true)}>
+                          Przełóż
+                        </Button>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
-            </>
+                    {!collapsed && (
+                      <div id={listId} className="task-list">
+                        {group.tasks.map((task) => renderTaskRow(task, group.kind))}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
           )}
 
           {taskView !== "kosz" && taskView !== "ukonczone" && pending.length === 0 && completed.length === 0 && (
@@ -1664,7 +1677,7 @@ export default function Zadania() {
       {/* ── Input list dropdown ── */}
       {inputDropdown === "list" && listBtnInputRef.current && (
         <InputFloatMenu anchorEl={listBtnInputRef.current} onClose={() => setInputDropdown(null)}>
-          {[{ id: null as string | null, label: "Skrzynka zadań", color: C.textMuted }, ...listy.map(l => ({ ...l, id: l.id as string | null }))].map(l => (
+          {[{ id: null as string | null, label: "Bez listy", color: C.textMuted }, ...listy.map(l => ({ ...l, id: l.id as string | null }))].map(l => (
             <MenuItem key={String(l.id)}
               selected={newTaskList === l.id}
               onClick={() => {

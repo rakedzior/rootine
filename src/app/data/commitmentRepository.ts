@@ -138,7 +138,7 @@ function isIsoCalendarDate(value: string): boolean {
 }
 
 function viewForDueDate(dueDate: string, referenceDate: Date): string {
-  if (!isIsoCalendarDate(dueDate)) return "skrzynka";
+  if (!isIsoCalendarDate(dueDate)) return "bezterminu";
   const [year, month, day] = dueDate.split("-").map(Number);
   const targetDay = Date.UTC(year, month - 1, day);
   const referenceDay = Date.UTC(
@@ -150,7 +150,8 @@ function viewForDueDate(dueDate: string, referenceDate: Date): string {
   if (dayDifference <= 0) return "dzis";
   if (dayDifference === 1) return "jutro";
   if (dayDifference <= 7) return "7dni";
-  return "skrzynka";
+  if (dayDifference <= 30) return "30dni";
+  return "wszystkie";
 }
 
 function calendarFields(dueDate: string, referenceDate: Date) {
@@ -226,7 +227,7 @@ function projectWorkTask(
     ...(priority ? { priority } : {}),
     list: "praca",
     tags: ["praca"],
-    view: task.linkedTask?.view ?? "skrzynka",
+    view: task.linkedTask?.view ?? "bezterminu",
     ...calendarFields(task.dueDate, referenceDate),
     source: {
       kind: "work",
@@ -260,7 +261,7 @@ function projectTravelTask(
     id: commitmentTaskId("travel", entity),
     text: task.title,
     done: task.completed,
-    view: "skrzynka",
+    view: "bezterminu",
     ...calendarFields(task.dueDate, referenceDate),
     source: {
       kind: "travel",

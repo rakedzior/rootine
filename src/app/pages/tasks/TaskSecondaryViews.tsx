@@ -150,6 +150,7 @@ export function SummaryPanel({ tasks, habits, onToggleHabit }: {
 export function HabitsWorkspace({
   habits,
   onToggleHabit,
+  selectedHabitId,
   onSelectHabit,
   onAddHabit,
   quickCaptureTitle,
@@ -157,6 +158,7 @@ export function HabitsWorkspace({
 }: {
   habits: Habit[];
   onToggleHabit: (id: number) => void;
+  selectedHabitId?: number | null;
   onSelectHabit: (id: number) => void;
   onAddHabit: (name: string, draft: HabitMetaDraft) => void;
   quickCaptureTitle?: string;
@@ -257,8 +259,11 @@ export function HabitsWorkspace({
                   ? (habitDayState(habit, todayKey) === "paused" ? "Wstrzymany" : "Dziś wolne")
                   : getHabitCurrentStreak(habit, todayKey) > 0 ? `${getHabitCurrentStreak(habit, todayKey)} dni serii` : "Nowy rytm"}
                 onTitleClick={() => onSelectHabit(habit.id)}
-                titleLabel={`Otwórz szczegóły nawyku: ${habit.name}`}
                 trailing={<span className="task-habit-row__schedule">{habitScheduleLabel(habit.schedule ?? { type: "daily", startDate: todayKey })}</span>}
+                selected={selectedHabitId === habit.id}
+                titleLabel={selectedHabitId === habit.id
+                  ? `Zamknij szczegóły nawyku: ${habit.name}`
+                  : `Otwórz szczegóły nawyku: ${habit.name}`}
               />
             );
           })}
@@ -293,6 +298,13 @@ export type HabitMetaDraft = {
   reminderMinutes?: number;
 };
 
+const HABIT_PRIORITY_OPTIONS = [
+  { value: "high" as TaskPriority, label: "Wysoki", color: C.danger },
+  { value: "medium" as TaskPriority, label: "Średni", color: C.warning },
+  { value: "low" as TaskPriority, label: "Niski", color: C.iceBlue },
+  { value: "", label: "Brak", color: C.textMuted },
+] as const;
+
 function HabitSelectField({
   label,
   value,
@@ -324,8 +336,85 @@ function HabitSelectField({
         compact={compact}
         fieldClassName={compact ? "task-habit-select-field--icon" : ""}
         className={compact ? "task-habit-select-trigger--icon" : ""}
+        menuPlacement={compact ? "end" : "start"}
+        menuClassName={compact ? "task-habit-select-menu" : ""}
         onChange={(event) => onChange(event.target.value)}
       />
+    </div>
+  );
+}
+
+function HabitPriorityField({ value, compact = false, onChange }: {
+  value?: TaskPriority;
+  compact?: boolean;
+  onChange: (priority: TaskPriority | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const currentValue = value ?? "";
+  const currentOption = HABIT_PRIORITY_OPTIONS.find((option) => option.value === currentValue) ?? HABIT_PRIORITY_OPTIONS.at(-1)!;
+
+  if (!compact) {
+    return (
+      <HabitSelectField
+        label="Priorytet nawyku"
+        value={currentValue}
+        options={HABIT_PRIORITY_OPTIONS.map(({ value: optionValue, label }) => ({ value: optionValue, label }))}
+        icon={<Flag size={13} strokeWidth={1.6} aria-hidden="true" />}
+        active={Boolean(value)}
+        onChange={(next) => onChange((next || undefined) as TaskPriority | undefined)}
+      />
+    );
+  }
+
+  const color = currentOption.color;
+
+  return (
+    <div
+      className={`task-habit-setting task-habit-setting--icon${value ? " is-set" : ""}`}
+      title="Priorytet nawyku"
+      style={{ color }}
+    >
+      <Flag size={13} strokeWidth={1.6} fill={value ? color : "none"} aria-hidden="true" />
+      <span className="sr-only">Priorytet nawyku</span>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="task-habit-select-trigger--icon task-habit-priority-trigger"
+        aria-label="Priorytet nawyku"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      />
+      {open && (
+        <Menu
+          triggerRef={triggerRef}
+          onDismiss={() => setOpen(false)}
+          initialFocus="selected"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            width: 148,
+            zIndex: 70,
+          }}
+        >
+          {HABIT_PRIORITY_OPTIONS.map(({ value: priority, label, color: priorityColor }) => (
+            <MenuItem
+              key={priority || "none"}
+              selected={currentValue === priority}
+              onClick={() => {
+                onChange((priority || undefined) as TaskPriority | undefined);
+                setOpen(false);
+              }}
+              leadingIcon={<Flag fill={priority ? priorityColor : "none"} style={{ color: priorityColor }} />}
+              trailingIcon={currentValue === priority ? <Check /> : undefined}
+            >
+              {label}
+            </MenuItem>
+          ))}
+        </Menu>
+      )}
     </div>
   );
 }
@@ -335,66 +424,67 @@ function HabitScheduleFields({ value, onChange, compact = false }: {
   onChange: (schedule: HabitSchedule) => void;
   compact?: boolean;
 }) {
+  const [weekdayPickerOpen, setWeekdayPickerOpen] = useState(false);
   const changeType = (type: HabitSchedule["type"]) => {
-    if (type === "daily") onChange({ type, startDate: value.startDate });
-    if (type === "weekly") onChange({
-      type,
-      startDate: value.startDate,
-      weekdays: value.weekdays?.length ? value.weekdays : [1, 2, 3, 4, 5],
-      interval: value.interval ?? 1,
-    });
-    if (type === "interval") onChange({ type, startDate: value.startDate, interval: value.interval ?? 2 });
+    if (type === "daily") {
+      setWeekdayPickerOpen(false);
+      onChange({ type, startDate: value.startDate });
+    }
+    if (type === "weekly") {
+      onChange({
+        type,
+        startDate: value.startDate,
+        weekdays: value.weekdays?.length ? value.weekdays : [1, 2, 3, 4, 5],
+        interval: value.interval ?? 1,
+      });
+      if (compact) setWeekdayPickerOpen(true);
+    }
+    if (type === "interval") {
+      setWeekdayPickerOpen(false);
+      onChange({ type, startDate: value.startDate, interval: value.interval ?? 2 });
+    }
   };
-  const weekdays = value.weekdays ?? [];
   return (
     <div className={`task-habit-schedule-fields${compact ? " is-compact" : ""}`}>
-      <HabitSelectField
-        label="Cykliczność nawyku"
-        value={value.type}
-        options={[
-          { value: "daily", label: "Codziennie" },
-          { value: "weekly", label: "Wybrane dni tygodnia" },
-          { value: "interval", label: "Co kilka dni" },
-        ]}
-        icon={<Repeat2 size={13} strokeWidth={1.6} aria-hidden="true" />}
-        compact={compact}
-        active={value.type !== "daily"}
-        onChange={(next) => changeType(next as HabitSchedule["type"])}
-      />
-
-      {value.type === "weekly" && (
-        <div className="task-habit-weekday-picker" aria-label="Dni tygodnia">
-          {HABIT_WEEKDAYS.map((day) => {
-            const selected = weekdays.includes(day.value);
-            return (
-              <button
-                key={day.value}
-                type="button"
-                className={`task-habit-day-chip${selected ? " is-selected" : ""}`}
-                aria-pressed={selected}
-                onClick={() => {
-                  const next = selected ? weekdays.filter((item) => item !== day.value) : [...weekdays, day.value];
-                  if (next.length > 0) onChange({ ...value, weekdays: next.sort() });
-                }}
-              >
-                {day.label}
-              </button>
-            );
-          })}
-          <label className="task-habit-interval-input">
-            <span>co</span>
-            <input
-              aria-label="Co ile tygodni"
-              type="number"
-              min={1}
-              max={52}
-              value={value.interval ?? 1}
-              onChange={(event) => onChange({ ...value, interval: Math.max(1, Number(event.target.value) || 1) })}
+      {compact ? (
+        <div className="task-habit-schedule-control">
+          <HabitSelectField
+            label="Cykliczność nawyku"
+            value={value.type}
+            options={[
+              { value: "daily", label: "Codziennie" },
+              { value: "weekly", label: "Wybrane dni" },
+              { value: "interval", label: "Co kilka dni" },
+            ]}
+            icon={<Repeat2 size={13} strokeWidth={1.6} aria-hidden="true" />}
+            compact
+            active={value.type !== "daily"}
+            onChange={(next) => changeType(next as HabitSchedule["type"])}
+          />
+          {value.type === "weekly" && weekdayPickerOpen && (
+            <HabitWeekdayPopover
+              value={value}
+              onChange={onChange}
+              onClose={() => setWeekdayPickerOpen(false)}
             />
-            <span>tyg.</span>
-          </label>
+          )}
         </div>
+      ) : (
+        <HabitSelectField
+          label="Cykliczność nawyku"
+          value={value.type}
+          options={[
+            { value: "daily", label: "Codziennie" },
+            { value: "weekly", label: "Wybrane dni" },
+            { value: "interval", label: "Co kilka dni" },
+          ]}
+          icon={<Repeat2 size={13} strokeWidth={1.6} aria-hidden="true" />}
+          active={value.type !== "daily"}
+          onChange={(next) => changeType(next as HabitSchedule["type"])}
+        />
       )}
+
+      {value.type === "weekly" && !compact && <HabitWeekdayButtons value={value} onChange={onChange} />}
 
       {value.type === "interval" && (
         <label className="task-habit-interval-input">
@@ -414,6 +504,88 @@ function HabitScheduleFields({ value, onChange, compact = false }: {
   );
 }
 
+function HabitWeekdayButtons({ value, onChange, className = "" }: {
+  value: HabitSchedule;
+  onChange: (schedule: HabitSchedule) => void;
+  className?: string;
+}) {
+  const weekdays = value.weekdays ?? [];
+  return (
+    <div className={`task-habit-weekday-picker${className ? ` ${className}` : ""}`} role="group" aria-label="Dni tygodnia">
+      {HABIT_WEEKDAYS.map((day) => {
+        const selected = weekdays.includes(day.value);
+        return (
+          <button
+            key={day.value}
+            type="button"
+            className={`task-habit-day-chip${selected ? " is-selected" : ""}`}
+            aria-pressed={selected}
+            onClick={() => {
+              const next = selected ? weekdays.filter((item) => item !== day.value) : [...weekdays, day.value];
+              if (next.length > 0) onChange({ ...value, weekdays: next.sort() });
+            }}
+          >
+            {day.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function HabitWeekdayPopover({ value, onChange, onClose }: {
+  value: HabitSchedule;
+  onChange: (schedule: HabitSchedule) => void;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) onClose();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div ref={panelRef} className="task-habit-weekday-popover" role="dialog" aria-label="Wybrane dni">
+      <div className="task-habit-weekday-popover__header">
+        <div>
+          <strong>Wybrane dni</strong>
+          <span>Wybierz dni, w których nawyk ma się pojawiać.</span>
+        </div>
+        <button type="button" aria-label="Zamknij wybór dni" onClick={onClose}>
+          <X size={13} strokeWidth={1.8} />
+        </button>
+      </div>
+      <HabitWeekdayButtons value={value} onChange={onChange} className="task-habit-weekday-picker--popover" />
+      <label className="task-habit-weekday-popover__interval">
+        <span>Powtarzaj co</span>
+        <input
+          aria-label="Co ile tygodni"
+          type="number"
+          min={1}
+          max={52}
+          value={value.interval ?? 1}
+          onChange={(event) => onChange({ ...value, interval: Math.max(1, Number(event.target.value) || 1) })}
+        />
+        <span>tydzień</span>
+      </label>
+    </div>
+  );
+}
+
 function HabitMetaFields({ draft, onChange, compact = false }: {
   draft: HabitMetaDraft;
   onChange: (patch: Partial<HabitMetaDraft>) => void;
@@ -421,19 +593,10 @@ function HabitMetaFields({ draft, onChange, compact = false }: {
 }) {
   return (
     <div className={`task-habit-meta-fields${compact ? " is-compact" : ""}`}>
-      <HabitSelectField
-        label="Priorytet nawyku"
-        value={draft.priority ?? ""}
-        options={[
-          { value: "", label: "Bez priorytetu" },
-          { value: "high", label: "Wysoki" },
-          { value: "medium", label: "Średni" },
-          { value: "low", label: "Niski" },
-        ]}
-        icon={<Flag size={13} strokeWidth={1.6} aria-hidden="true" />}
+      <HabitPriorityField
+        value={draft.priority}
         compact={compact}
-        active={Boolean(draft.priority)}
-        onChange={(next) => onChange({ priority: (next || undefined) as TaskPriority | undefined })}
+        onChange={(priority) => onChange({ priority })}
       />
       <HabitSelectField
         label="Pora dnia"
@@ -904,12 +1067,16 @@ export function InputFloatMenu({ anchorEl, onClose, children }: {
   const triggerRef = useRef<HTMLElement | null>(anchorEl);
   triggerRef.current = anchorEl;
   const rect = anchorEl.getBoundingClientRect();
+  const viewportGap = 12;
+  const menuWidth = Math.min(190, Math.max(0, window.innerWidth - viewportGap * 2));
+  const left = Math.max(viewportGap, Math.min(rect.left, window.innerWidth - menuWidth - viewportGap));
   return (
     <Menu ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" style={{
       position: "fixed",
       top: rect.bottom + 6,
-      left: rect.left,
-      minWidth: 170,
+      left,
+      width: menuWidth,
+      minWidth: Math.min(170, menuWidth),
       zIndex: 9999,
     }}>
       {children}

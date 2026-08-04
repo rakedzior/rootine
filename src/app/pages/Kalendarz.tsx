@@ -49,13 +49,16 @@ import {
 } from "../ui";
 import {
   loadTaskSidebarState,
+  isTaskUndated,
   saveTaskSidebarState,
   SMART_VIEWS,
   PRIMARY_SMART_VIEWS,
   SPECIAL_SMART_VIEWS,
   VISIBLE_TAG_LIMIT,
   formatOpenTaskCount,
+  saveTasksViewMode,
   smartDateViewRange,
+  tasksForCalendarView,
   tasksForSmartDateView,
 } from "./tasks/taskPageModel";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
@@ -242,6 +245,7 @@ export default function Kalendarz() {
   const now = new Date();
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
+  const activeTaskView = "wszystkie";
   const [occurrenceSources, setOccurrenceSources] = useState(loadCalendarOccurrenceSources);
   const [viewDate, setViewDate] = useState(() => {
     const saved = readModuleMemoryValue(
@@ -260,13 +264,7 @@ export default function Kalendarz() {
   const [tagiOpen, setTagiOpen] = useState(initialSidebarState.tagiOpen);
   const [showAllLists, setShowAllLists] = useState(false);
   const [showAllTags, setShowAllTags] = useState(false);
-  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>(() => (
-    initialSidebarState.listFilter
-      ? { kind: "list", id: initialSidebarState.listFilter }
-      : initialSidebarState.tagFilter
-        ? { kind: "tag", id: initialSidebarState.tagFilter }
-        : { kind: "all" }
-  ));
+  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>({ kind: "all" });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedOccurrenceDate, setSelectedOccurrenceDate] = useState<string | null>(null);
   const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null);
@@ -299,6 +297,17 @@ export default function Kalendarz() {
   const suppressCellClickRef = useRef(false);
   const [storageFailed, setStorageFailed] = useState(false);
   const [focusedDateKey, setFocusedDateKey] = useState(todayKey);
+  const sidebarTasks = workspaceRef.current.tasks;
+
+  useEffect(() => {
+    saveTasksViewMode("calendar");
+    saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("widok")) {
+      url.searchParams.delete("widok");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
 
   useEffect(() => {
     const persistedEvents = events.filter((event) => event.text.trim().length > 0);
@@ -332,14 +341,29 @@ export default function Kalendarz() {
     () => Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7)),
     [cells],
   );
+  const scopedEventIds = useMemo(
+    () => new Set(tasksForCalendarView(events, activeTaskView, todayKey()).map((task) => task.id)),
+    [activeTaskView, events],
+  );
   const filteredEvents = useMemo(
-    () => events.filter((event) => taskMatchesCalendarFilter(event, calendarFilter)),
-    [calendarFilter, events],
+    () => events.filter((event) => scopedEventIds.has(event.id) && taskMatchesCalendarFilter(event, calendarFilter)),
+    [calendarFilter, events, scopedEventIds],
   );
   const openCalendarCount = useMemo(
     () => filteredEvents.filter((event) => !event.deleted && !event.done).length,
     [filteredEvents],
   );
+  const openUndatedCount = useMemo(() => (
+    sidebarTasks.filter((task) => {
+      if (task.deleted || task.done || task.calendarDate) return false;
+      const viewMatch = activeTaskView === "wszystkie"
+        ? true
+        : activeTaskView === "bezterminu"
+          ? isTaskUndated(task)
+          : task.view === activeTaskView;
+      return viewMatch && taskMatchesCalendarFilter(task, calendarFilter);
+    }).length
+  ), [activeTaskView, calendarFilter, sidebarTasks]);
   const calendarFilterChoices = useMemo(() => [
     { value: "all", label: "Wszystkie zadania", filter: { kind: "all" } as CalendarFilter },
     ...lists.map((list) => ({
@@ -358,15 +382,14 @@ export default function Kalendarz() {
       filter: { kind: "priority", id: priority.id } as CalendarFilter,
     })),
   ], [lists, tags]);
-  const listUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => {
-    if (!event.deleted && event.list) counts[event.list] = (counts[event.list] ?? 0) + 1;
+  const listUsage = useMemo(() => sidebarTasks.reduce<Record<string, number>>((counts, task) => {
+    if (!task.deleted && task.list) counts[task.list] = (counts[task.list] ?? 0) + 1;
     return counts;
-  }, {}), [events]);
-  const tagUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => {
-    if (!event.deleted) for (const tag of event.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
+  }, {}), [sidebarTasks]);
+  const tagUsage = useMemo(() => sidebarTasks.reduce<Record<string, number>>((counts, task) => {
+    if (!task.deleted) for (const tag of task.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
     return counts;
-  }, {}), [events]);
-  const sidebarTasks = workspaceRef.current.tasks;
+  }, {}), [sidebarTasks]);
   const sidebarViewCounts = useMemo(() => {
     const habits = workspaceRef.current.habits;
     const currentDay = todayKey();
@@ -379,11 +402,13 @@ export default function Kalendarz() {
         : sidebarTasks;
       return [
         view.id,
-        taskSource.filter((task) => !task.deleted && !task.done && (
-          view.id === "wszystkie" || view.id === "podsumowanie" || smartDateViewRange(view.id, currentDay)
-            ? true
-            : task.view === view.id
-        )).length,
+        view.id === "bezterminu"
+          ? sidebarTasks.filter((task) => !task.deleted && !task.done && isTaskUndated(task)).length
+          : taskSource.filter((task) => !task.deleted && !task.done && (
+            view.id === "wszystkie" || view.id === "podsumowanie" || smartDateViewRange(view.id, currentDay)
+              ? true
+              : task.view === view.id
+          )).length,
       ];
     }));
   }, [sidebarTasks]);
@@ -401,7 +426,7 @@ export default function Kalendarz() {
       { ...occurrenceSources, tasks: filteredEvents },
       dateKey(first.year, first.month, first.day),
       dateKey(last.year, last.month, last.day),
-    );
+    ).filter((occurrence) => occurrence.kind !== "task" || !occurrence.status.completed);
   }, [cells, filteredEvents, occurrenceSources]);
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarOccurrence[]>();
@@ -562,10 +587,23 @@ export default function Kalendarz() {
   };
 
   const openTaskView = (view: string, resetFilters = true) => {
-    saveTaskSidebarState(resetFilters
-      ? { taskView: view, listFilter: null, tagFilter: null }
-      : { taskView: view });
-    switchRoute(view === "dzis" ? "/zadania" : `/zadania?widok=${view}`);
+    if (view === "wszystkie") {
+      if (resetFilters) setCalendarFilter({ kind: "all" });
+      saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
+      return;
+    }
+
+    saveTasksViewMode("list");
+    if (resetFilters) setCalendarFilter({ kind: "all" });
+    saveTaskSidebarState({ taskView: view, listFilter: null, tagFilter: null });
+    switchRoute(view === "dzis" ? "/zadania" : `/zadania?widok=${encodeURIComponent(view)}`);
+  };
+
+  const switchTasksViewMode = (mode: "list" | "calendar") => {
+    if (mode === "calendar") return;
+    saveTasksViewMode("list");
+    saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
+    switchRoute("/zadania");
   };
 
   const applyCalendarFilter = (nextFilter: CalendarFilter) => {
@@ -812,7 +850,7 @@ export default function Kalendarz() {
               return (
                 <ContextNavItem
                   key={view.id}
-                  active={initialSidebarState.taskView === view.id && !initialSidebarState.listFilter && !initialSidebarState.tagFilter}
+                  active={activeTaskView === view.id}
                   onClick={() => openTaskView(view.id)}
                   icon={<Icon />}
                   label={view.label}
@@ -832,7 +870,7 @@ export default function Kalendarz() {
               return (
                 <ContextNavItem
                   key={view.id}
-                  active={initialSidebarState.taskView === view.id && !initialSidebarState.listFilter && !initialSidebarState.tagFilter}
+                  active={activeTaskView === view.id}
                   onClick={() => openTaskView(view.id)}
                   icon={<Icon />}
                   label={view.label}
@@ -910,7 +948,7 @@ export default function Kalendarz() {
         </div>
       </ContextSidebar>
 
-      <ModuleMain transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
+      <ModuleMain className="calendar-module-main" transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
         <ContentHeader
           title={formatHeaderDate(viewDate)}
           description="Kalendarz zadań"
@@ -925,9 +963,18 @@ export default function Kalendarz() {
                 if (choice) applyCalendarFilter(choice.filter);
               }}
             />}
-          meta={openCalendarCount > 0 ? <Badge tone="neutral">{formatOpenTaskCount(openCalendarCount)}</Badge> : undefined}
+          meta={(openCalendarCount > 0 || openUndatedCount > 0) ? (
+            <div className="calendar-header-summary">
+              {openCalendarCount > 0 && <Badge tone="neutral">{formatOpenTaskCount(openCalendarCount)}</Badge>}
+              {openUndatedCount > 0 && (
+                <Button variant="quiet" size="sm" onClick={() => openTaskView("bezterminu")}>
+                  Bez terminu · {openUndatedCount}
+                </Button>
+              )}
+            </div>
+          ) : undefined}
           actions={<>
-          <div className="flex items-center gap-1">
+          <div className="calendar-period-controls flex items-center gap-1">
             <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
             <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={15} strokeWidth={1.5} /></Button>
@@ -960,7 +1007,7 @@ export default function Kalendarz() {
                 aria-label="Widok listy"
                 aria-pressed="false"
                 title="Lista"
-                onClick={() => openTaskView("dzis", false)}
+                onClick={() => switchTasksViewMode("list")}
               >
                 <List size={14} strokeWidth={1.7} />
               </Button>

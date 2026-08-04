@@ -242,7 +242,7 @@ describe("commitment projection", () => {
     const nativeWorkspace: TaskWorkspace = {
       version: 2,
       updatedAt: "2026-07-28T08:00:00.000Z",
-      tasks: [{ id: 42, text: "Native task", done: false, view: "skrzynka" }],
+      tasks: [{ id: 42, text: "Native task", done: false, view: "bezterminu" }],
       habits: [],
       lists: [],
       tags: [],

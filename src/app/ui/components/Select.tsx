@@ -28,6 +28,8 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
   options: SelectOption[];
   compact?: boolean;
   fieldClassName?: string;
+  menuPlacement?: "start" | "end";
+  menuClassName?: string;
 }
 
 type MenuPosition = {
@@ -56,6 +58,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     options,
     compact = false,
     fieldClassName = "",
+    menuPlacement = "start",
+    menuClassName = "",
     className = "",
     value,
     defaultValue,
@@ -115,15 +119,17 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     const above = Math.max(0, rect.top - viewportGap);
     const opensAbove = below < Math.min(preferredHeight, 180) && above > below;
     const maxHeight = Math.max(48, Math.min(preferredHeight, opensAbove ? above : below));
-    const width = Math.min(rect.width, Math.max(0, window.innerWidth - viewportGap * 2));
+    const availableWidth = Math.max(0, window.innerWidth - viewportGap * 2);
+    const width = Math.min(Math.max(rect.width, 148), availableWidth);
+    const preferredLeft = menuPlacement === "end" ? rect.right - width : rect.left;
     setPosition({
-      left: Math.max(viewportGap, Math.min(rect.left, window.innerWidth - width - viewportGap)),
+      left: Math.max(viewportGap, Math.min(preferredLeft, window.innerWidth - width - viewportGap)),
       top: opensAbove ? Math.max(viewportGap, rect.top - maxHeight - 6) : rect.bottom + 6,
       width,
       maxHeight,
       above: opensAbove,
     });
-  }, [options.length]);
+  }, [menuPlacement, options.length]);
 
   const close = (restoreFocus = false) => {
     setOpen(false);
@@ -325,7 +331,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           id={listboxId}
           role="listbox"
           aria-labelledby={purposeLabelId}
-          className={`ui-select-menu ${position.above ? "ui-select-menu--above" : ""}`.trim()}
+          className={`ui-select-menu ${position.above ? "ui-select-menu--above" : ""} ${menuClassName}`.trim()}
           style={{
             left: position.left,
             top: position.top,
