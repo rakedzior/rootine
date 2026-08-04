@@ -1,14 +1,6 @@
 /* Route-owned sport styles. Loaded only by the relevant lazy route. */
 
-.sport-planner-toolbar {
-  gap: var(--space-lg);
-}
-
-@media (min-width: 761px) {
-  .sport-planner-toolbar:not(.has-status) {
-    display: none;
-  }
-}
+.sport-planner-toolbar .ui-content-header__inner { max-width: 1440px; }
 
 .sport-planner-toolbar__status {
   display: inline-flex;
@@ -492,9 +484,9 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-planner-content--cycle {
-  max-width: none;
-  margin: 0;
-  padding: var(--space-lg) var(--space-xl) var(--space-xl);
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: var(--space-xl) var(--space-3xl) var(--space-3xl);
 }
 
 .sport-cycle-layout {

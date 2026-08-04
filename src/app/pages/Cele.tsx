@@ -28,6 +28,7 @@ import {
   Badge,
   Button,
   CompletedSection,
+  ContentHeader,
   DetailPanel,
   EmptyState,
   Menu,
@@ -38,7 +39,6 @@ import {
   PageHeader,
   SectionHeader,
   Select,
-  WorkspaceToolbar,
 } from "../ui";
 import {
   Activity,
@@ -417,9 +417,10 @@ export default function Cele() {
           </div>
         )}
 
-        <WorkspaceToolbar>
-          <div className="flex min-w-0 items-center gap-2">
-            <Select
+        <ContentHeader
+          title={filterLabel}
+          description={`${visibleGoals.length} ${visibleGoals.length === 1 ? "cel" : "celów"}`}
+          mobileNavigation={<Select
               aria-label="Widok celów"
               compact
               fieldClassName="context-mobile-select goals-filter-select"
@@ -431,10 +432,8 @@ export default function Cele() {
                 { value: "archived", label: "Archiwum" },
               ]}
               onChange={(event) => handleFilter(event.target.value as FilterId)}
-            />
-            <span className="workspace-context-label">{filterLabel}</span>
-          </div>
-          <div className="flex items-center gap-2">
+            />}
+          actions={<div className="flex items-center gap-2">
             <div className="relative goals-sort">
               <Button ref={sortMenuTriggerRef} variant="quiet" size="sm" onClick={() => setSortMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortMenuOpen} aria-controls={sortMenuId} trailingIcon={<ChevronDown size={11} />}>
                 Sortuj: <span className="goals-sort-label">{({ priority: "Priorytet", due: "Termin", progress: "Postęp", updated: "Ostatnia zmiana", name: "Nazwa" } as const)[sortKey]}</span>
@@ -449,8 +448,8 @@ export default function Cele() {
                 <Grid2X2 size={14} strokeWidth={1.8} />
               </Button>
             </div>
-          </div>
-        </WorkspaceToolbar>
+          </div>}
+        />
 
         {activeFilter === "overview" && (
           <section className="goals-radar" aria-label="Najważniejsze sygnały celów">

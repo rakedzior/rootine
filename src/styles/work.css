@@ -75,18 +75,8 @@
   background: var(--color-graphite-canvas);
 }
 
-.work-toolbar {
-  --work-toolbar-max: var(--work-content-standard);
-  min-height: 58px;
-  justify-content: space-between;
-  padding-right: max(var(--space-3xl), calc((100% - var(--work-toolbar-max)) / 2 + var(--space-3xl)));
-  padding-left: max(var(--space-3xl), calc((100% - var(--work-toolbar-max)) / 2 + var(--space-3xl)));
-  background: transparent;
-}
-
-.work-toolbar--table {
-  --work-toolbar-max: var(--work-content-table);
-}
+.work-content-header .ui-content-header__inner { max-width: var(--work-content-standard); }
+.work-content-header--table .ui-content-header__inner { max-width: var(--work-content-table); }
 
 .work-toolbar__context {
   display: grid;

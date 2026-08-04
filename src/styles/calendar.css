@@ -173,7 +173,7 @@
   .app-sidebar,
   .app-mobile-nav,
   .ui-page-header__actions,
-  .ui-workspace-toolbar,
+  .ui-content-header__actions,
   .calendar-task-detail,
   .calendar-agenda,
   .calendar-undo {
@@ -288,51 +288,6 @@
 }
 
 @media (max-width: 760px) {
-  .calendar-module .ui-workspace-toolbar {
-    min-width: 0;
-    flex-wrap: nowrap;
-    gap: var(--space-xs);
-  }
-
-  .calendar-module .ui-workspace-toolbar > div:first-child {
-    min-width: 0;
-    flex: 1;
-    width: 100%;
-  }
-
-  .calendar-module .ui-workspace-toolbar > div:first-child > .ui-button {
-    flex: 0 0 44px;
-    min-width: 44px;
-    min-height: 44px;
-  }
-
-  .calendar-module .ui-workspace-toolbar > div:first-child > .ui-button:not([aria-label]) {
-    display: none;
-  }
-
-  .calendar-module .context-mobile-select {
-    display: none;
-  }
-
-  .calendar-toolbar-period {
-    display: block !important;
-    max-width: none;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .calendar-module .task-priority-filters,
-  .calendar-module .task-toolbar-actions > .ui-button,
-  .calendar-module .task-view-switch {
-    display: none;
-  }
-
-  .calendar-module .task-toolbar-actions {
-    display: none;
-  }
-
   .calendar-grid-rows {
     grid-template-rows: repeat(var(--calendar-row-count), minmax(88px, 1fr));
   }

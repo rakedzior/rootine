@@ -287,6 +287,80 @@
 .ui-page-header__actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-sm); }
 .ui-page-header__below { width: 100%; padding: 0 var(--space-3xl) var(--space-md); }
 
+.ui-content-header {
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: transparent;
+}
+
+.ui-module-shell--ambient .ui-content-header { border-bottom-color: transparent; }
+
+.ui-content-header__inner {
+  width: 100%;
+  min-width: 0;
+  margin-inline: auto;
+  padding: var(--space-md) var(--space-3xl);
+}
+
+.ui-content-header__row {
+  display: flex;
+  min-height: 36px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.ui-content-header__identity,
+.ui-content-header__heading,
+.ui-content-header__actions,
+.ui-content-header__controls,
+.ui-content-header__below {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ui-content-header__identity { flex: 1 1 auto; gap: var(--space-md); }
+.ui-content-header__leading { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-xs); }
+.ui-content-header__mobile-nav { display: none; }
+.ui-content-header__copy { min-width: 0; }
+.ui-content-header__heading { flex-wrap: wrap; gap: var(--space-sm); }
+.ui-content-header__title {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-content-header__description {
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-content-header__meta { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); color: var(--color-text-secondary); font-size: var(--text-meta); }
+.ui-content-header__actions { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-sm); }
+.ui-content-header__actions > * { max-width: 100%; }
+.ui-content-header__controls,
+.ui-content-header__below { width: 100%; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
+.ui-content-header__controls { justify-content: space-between; }
+
+.ui-content-header .context-mobile-select { flex: 0 1 180px; }
+
+@media (max-width: 1100px) {
+  .ui-content-header__row { flex-wrap: wrap; }
+  .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
+}
+
 .ui-module-shell {
   position: relative;
   display: flex;
@@ -1466,23 +1540,6 @@
   max-width: 180px;
 }
 
-.ui-workspace-toolbar {
-  display: flex;
-  min-height: 52px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-3xl);
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-graphite-canvas);
-}
-
-.ui-module-shell--ambient .ui-workspace-toolbar {
-  border-bottom-color: transparent;
-  background: transparent;
-}
-
 .ui-view-switch {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1639,8 +1696,17 @@
   .ui-page-header__below { padding-right: var(--space-lg); padding-left: var(--space-lg); }
   .ui-page-header__description { display: none; }
   .ui-page-header__actions { gap: var(--space-xs); }
+  .ui-content-header__inner { padding: var(--space-md) var(--space-lg); }
+  .ui-content-header__row { min-height: 36px; flex-wrap: wrap; align-items: flex-start; row-gap: var(--space-sm); }
+  .ui-content-header__identity { width: 100%; }
+  .ui-content-header__mobile-nav { display: flex; min-width: 0; flex: 0 1 180px; }
+  .ui-content-header__mobile-nav .ui-field { width: 100%; min-width: 0; }
+  .ui-content-header__copy { flex: 1 1 auto; }
+  .ui-content-header__description { white-space: normal; }
+  .ui-content-header__actions { width: 100%; justify-content: flex-start; }
+  .ui-content-header__actions > .ui-field,
+  .ui-content-header__controls > .ui-field { min-width: 0; flex: 1 1 140px; }
   .ui-context-sidebar { display: none; }
-  .ui-workspace-toolbar { min-height: var(--control-height-lg); padding: var(--space-sm) var(--space-lg); }
   .context-mobile-select { display: block; }
   .workspace-context-label { display: none; }
   .ui-modal-backdrop { align-items: flex-end; padding: 0; }

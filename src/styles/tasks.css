@@ -7,12 +7,12 @@
  */
 .task-module-main {
   --task-content-width: 1280px;
-  --list-rail-width: 116px;
+  --list-rail-width: 136px;
   --task-priority-color: var(--color-text-muted);
 }
 
-.task-module-main .task-workspace-toolbar {
-  padding-inline: var(--space-3xl);
+.task-module-main .task-workspace-toolbar .ui-content-header__inner {
+  max-width: calc(var(--task-content-width) + (2 * var(--space-3xl)));
 }
 
 .task-module-main .task-content {
@@ -22,15 +22,50 @@
 
 .task-module-main .task-content::-webkit-scrollbar { display: none; }
 
-.task-module-main .task-content > * {
+.task-module-main .task-content__inner {
   width: min(100%, var(--task-content-width));
   margin-inline: auto;
 }
 
 .task-module-main .task-entry {
+  width: 100%;
   margin: 0 0 var(--space-xl);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-graphite-input) 88%, transparent);
+}
+
+.task-entry__row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.task-entry__lead {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.task-entry__lead:hover,
+.task-entry__lead:focus-visible {
+  color: var(--color-precision-blue-text);
+}
+
+.task-entry__field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .task-module-main .task-list {
@@ -167,12 +202,23 @@
 
 @media (max-width: 760px) {
 
+  .task-entry__row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .task-entry__field {
+    min-width: 0;
+    flex: 1 1 calc(100% - 40px);
+  }
+
   .task-workspace-toolbar {
     flex-wrap: wrap;
   }
 
   .task-priority-filters {
     width: 100%;
+    flex: 1 1 100%;
     justify-content: flex-start;
     overflow-x: auto;
     scrollbar-width: none;
@@ -180,7 +226,10 @@
 
   .task-toolbar-actions {
     width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: var(--space-sm);
   }
 
   .task-detail-panel {
@@ -196,11 +245,7 @@
     padding: var(--space-lg) !important;
   }
 
-  .task-module-main .task-workspace-toolbar {
-    padding-inline: var(--space-lg);
-  }
-
-  .task-module-main .task-content > * {
+  .task-module-main .task-content__inner {
     width: 100%;
   }
 
@@ -213,6 +258,10 @@
   .task-row__context,
   .task-row__priority {
     display: none;
+  }
+
+  .task-overdue-section .ui-list-row__rail {
+    flex-basis: 126px;
   }
 }
 

@@ -9,6 +9,10 @@
   padding-bottom: var(--space-3xl);
 }
 
+.goal-detail-content-header .ui-content-header__inner {
+  max-width: calc(1180px + (2 * var(--space-3xl)));
+}
+
 .goal-detail-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);

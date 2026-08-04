@@ -875,16 +875,6 @@ export function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListIt
 
   return (
     <div className="task-doc">
-      <div className="task-doc__head">
-        <div className="task-doc__title-row">
-          <span className="task-doc__title">
-            <span className="task-doc__glyph" aria-hidden="true"><i /><i /><i /></span>
-            Podsumowanie
-          </span>
-          <span className="task-doc__week">{weekLabel}</span>
-        </div>
-      </div>
-
       <div className="task-doc__hero">{weekLabel}</div>
 
       <div className="task-doc__body">

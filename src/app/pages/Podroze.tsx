@@ -59,6 +59,7 @@ import {
 import {
   Badge,
   Button,
+  ContentHeader,
   ContextNavItem,
   ContextSidebar,
   CompletedSection,
@@ -70,7 +71,6 @@ import {
   PageHeader,
   Select,
   Tabs,
-  WorkspaceToolbar,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/travel.css";
@@ -865,31 +865,20 @@ export default function Podroze({
   const pageHeader = (
     <PageHeader
       title="Podróże"
-      description={selectedTrip
-        ? `${selectedTrip.name} · ${SECTION_COPY[activeSection]} · ${selectedTrip.destination}`
-        : "Przegląd zaplanowanych i zakończonych wyjazdów"}
-      meta={(
-        <>
-          {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
-          {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
-          {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
-        </>
-      )}
-      actions={tripHeaderActions}
+      description="Plany, rezerwacje i przygotowania do wyjazdów"
+      meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
     />
   );
 
   const pageContent = (
     <>
       <ModuleMain>
-        {embeddedViewSelect && (
-          <WorkspaceToolbar className="affairs-toolbar affairs-toolbar--embedded-nav">
-            {embeddedViewSelect}
-          </WorkspaceToolbar>
-        )}
-
-        <WorkspaceToolbar className="travel-toolbar">
-          <div className="travel-toolbar__trip-select">
+        <ContentHeader
+          className="travel-toolbar"
+          title={selectedTrip?.name ?? "Przegląd podróży"}
+          description={selectedTrip ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}` : "Zaplanowane i zakończone wyjazdy"}
+          mobileNavigation={embeddedViewSelect}
+          leading={<div className="travel-toolbar__trip-select">
             <Select
               compact
               aria-label="Wybierz podróż"
@@ -900,8 +889,30 @@ export default function Podroze({
               ]}
               onChange={(event) => event.target.value ? selectTrip(event.target.value) : showAllTrips()}
             />
-          </div>
-          {selectedTrip && (
+            </div>}
+          meta={<>
+            {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
+            {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
+          </>}
+          actions={<>
+            {!selectedTrip && <Select
+              compact
+              aria-label="Filtr statusu podróży"
+              value={statusFilter}
+              options={[
+                { value: "upcoming", label: "Nadchodzące" },
+                { value: "all", label: "Wszystkie" },
+                { value: "idea", label: "Pomysły" },
+                { value: "planning", label: "W planowaniu" },
+                { value: "ready", label: "Gotowe" },
+                { value: "completed", label: "Zakończone" },
+                { value: "archived", label: "Archiwum" },
+              ]}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            />}
+            {tripHeaderActions}
+          </>}
+          controls={selectedTrip ? <>
             <Tabs
               items={SECTION_TABS}
               activeId={activeSection}
@@ -909,10 +920,7 @@ export default function Podroze({
               onChange={(id) => setSection(id as TravelSection)}
               className="travel-tabs ui-tabs--segmented"
             />
-          )}
-          {selectedTrip ? (
-            <>
-              <div className="travel-toolbar__route">
+            <div className="travel-toolbar__route">
                 <CalendarDays size={13} aria-hidden="true" />
                 <strong>{formatDate(selectedTrip.startDate)} — {formatDate(selectedTrip.endDate)}</strong>
                 <span>{pluralize(tripDuration(selectedTrip), "dzień", "dni", "dni")}</span>
@@ -922,31 +930,13 @@ export default function Podroze({
                 <i><b style={{ transform: `scaleX(${readinessScore(selectedTrip) / 100})` }} /></i>
                 <strong>{formatPercent(readinessScore(selectedTrip))}</strong>
               </div>
-            </>
-          ) : (
-            <>
+          </> : (
               <div className="travel-toolbar__summary">
                 <span>{upcomingTrips.length} nadchodzące</span>
                 <span>{completedTrips.length} zakończone</span>
               </div>
-              <Select
-                compact
-                aria-label="Filtr statusu podróży"
-                value={statusFilter}
-                options={[
-                  { value: "upcoming", label: "Nadchodzące" },
-                  { value: "all", label: "Wszystkie" },
-                  { value: "idea", label: "Pomysły" },
-                  { value: "planning", label: "W planowaniu" },
-                  { value: "ready", label: "Gotowe" },
-                  { value: "completed", label: "Zakończone" },
-                  { value: "archived", label: "Archiwum" },
-                ]}
-                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-              />
-            </>
           )}
-        </WorkspaceToolbar>
+        />
 
         {!selectedTrip ? (
           <section className="travel-overview" aria-label="Przegląd podróży">

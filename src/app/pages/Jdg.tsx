@@ -55,11 +55,11 @@ import {
   Card,
   Checkbox,
   CompletedSection,
+  ContentHeader,
   Input,
   Modal,
   PageHeader,
   Select,
-  WorkspaceToolbar,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
@@ -367,52 +367,36 @@ export function JdgWorkspace({
   const header = (
     <PageHeader
         title="Sprawy"
-        description="JDG · Miesięczne dokumenty, podatki i zamknięcie działalności"
-        meta={(
-          <div className="flex items-center gap-2">
-            {storageError
-              ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
-              : closed
-                ? <Badge tone="success" dot>Miesiąc zamknięty</Badge>
-                : <Badge tone="warning" dot>W toku</Badge>}
-            <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>
-              {profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}
-            </Badge>
-          </div>
-        )}
-        actions={(
-          <>
-            <Button variant="quiet" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>
-              <span className="header-action-label">Profil i szablony</span>
-            </Button>
-            <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={openEditor}>
-              <span className="header-action-label">Dodaj punkt</span>
-            </Button>
-          </>
-        )}
+        description="Zobowiązania, finanse i ważne rejestry"
+        meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
     />
   );
 
   const content = (
     <>
-      <WorkspaceToolbar className="jdg-toolbar">
-        <div className="jdg-month-switcher">
+      <ContentHeader
+        className="jdg-toolbar"
+        title="JDG"
+        description={`Miesięczne zamknięcie · ${formatMonth(monthKey)}`}
+        leading={<div className="jdg-month-switcher">
           <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
-          <div>
-            <span>Rozliczenie za</span>
-            <strong>{formatMonth(monthKey)}</strong>
-          </div>
           <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
-        </div>
-        <div className="jdg-toolbar__status">
-          <span>{requiredCompleted}/{requiredItems.length} wymaganych</span>
-          <span className="jdg-toolbar__divider" />
-          <span>{completedCount}/{items.length} wszystkich</span>
-        </div>
-        <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={12} />} onClick={requestMonthReset} disabled={completedCount === 0}>
-          Wyczyść miesiąc
-        </Button>
-      </WorkspaceToolbar>
+        </div>}
+        meta={<>
+          {closed ? <Badge tone="success" dot>Miesiąc zamknięty</Badge> : <Badge tone="warning" dot>W toku</Badge>}
+          <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>{profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}</Badge>
+          <div className="jdg-toolbar__status">
+            <span>{requiredCompleted}/{requiredItems.length} wymaganych</span>
+            <span className="jdg-toolbar__divider" />
+            <span>{completedCount}/{items.length} wszystkich</span>
+          </div>
+        </>}
+        actions={<>
+          <Button variant="quiet" size="sm" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>Profil i szablony</Button>
+          <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={12} />} onClick={requestMonthReset} disabled={completedCount === 0}>Wyczyść miesiąc</Button>
+          <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={openEditor}>Dodaj punkt</Button>
+        </>}
+      />
 
       <div className="jdg-canvas">
           <section className={`jdg-month-state ${closed ? "is-closed" : ""}`}>

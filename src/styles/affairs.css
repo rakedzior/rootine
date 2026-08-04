@@ -50,9 +50,7 @@
   font-size: var(--text-micro);
 }
 
-.affairs-toolbar {
-  justify-content: flex-start;
-}
+.affairs-toolbar--compact .ui-content-header__inner { max-width: calc(1120px + (2 * var(--space-3xl))); }
 
 .affairs-toolbar .ui-field:not(.context-mobile-select) {
   width: 168px;
@@ -1864,6 +1862,8 @@
   padding: 0 var(--space-3xl) var(--space-md);
   background: var(--color-graphite-sidebar);
 }
+
+.jdg-toolbar .ui-content-header__inner { max-width: 1120px; }
 
 /* Responsibility radar: a compact reading surface, not a row of hero metrics. */
 .affairs-overview,

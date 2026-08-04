@@ -48,6 +48,7 @@ import {
 import {
   Badge,
   Button,
+  ContentHeader,
   ContextNavItem,
   ContextSidebar,
   DetailPanel,
@@ -58,7 +59,6 @@ import {
   ModuleShell,
   PageHeader,
   Select,
-  WorkspaceToolbar,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/notes.css";
@@ -986,17 +986,17 @@ export default function Notatki() {
     );
   };
 
-  const renderSection = (title: string, notes: NoteRecord[], pinned = false) => {
+  const renderSection = (title: string | undefined, notes: NoteRecord[], pinned = false) => {
     if (!notes.length) return null;
     return (
-      <section className="notes-shelf" aria-labelledby={`notes-shelf-${pinned ? "pinned" : "main"}`}>
-        <header className="notes-shelf__heading">
+      <section className="notes-shelf" aria-labelledby={title ? `notes-shelf-${pinned ? "pinned" : "main"}` : undefined} aria-label={title ? undefined : viewTitle}>
+        {title && <header className="notes-shelf__heading">
           <div>
             {pinned ? <Pin size={13} /> : <FileText size={13} />}
             <h2 id={`notes-shelf-${pinned ? "pinned" : "main"}`}>{title}</h2>
           </div>
           <span>{notes.length}</span>
-        </header>
+        </header>}
         <div className={`notes-grid notes-grid--${layout}`}>{notes.map(renderNoteCard)}</div>
       </section>
     );
@@ -1266,9 +1266,11 @@ export default function Notatki() {
       )}
     >
       <ModuleMain transitionKey={view}>
-        <WorkspaceToolbar className="notes-toolbar">
-          <div className="notes-toolbar__mobile">
-            <Select
+        <ContentHeader
+          className="notes-toolbar"
+          title={viewTitle}
+          description={viewDescription}
+          mobileNavigation={<Select
               compact
               aria-label="Widok notatek"
               value={view}
@@ -1279,8 +1281,9 @@ export default function Notatki() {
                 ...workspace.lists.map((list) => ({ value: `list:${list.id}`, label: list.name })),
               ]}
               onChange={(event) => selectView(event.target.value as NotesView)}
-            />
-          </div>
+            />}
+          meta={<span className="notes-toolbar__count">{visibleNotes.length} {visibleNotes.length === 1 ? "notatka" : "notatek"}</span>}
+          actions={<>
           <label className="notes-search">
             <Search size={13} aria-hidden="true" />
             <span className="sr-only">Szukaj w notatkach</span>
@@ -1291,7 +1294,6 @@ export default function Notatki() {
               </button>
             )}
           </label>
-          <span className="notes-toolbar__count">{visibleNotes.length} {visibleNotes.length === 1 ? "notatka" : "notatek"}</span>
           <Select
             compact
             aria-label="Sortowanie notatek"
@@ -1311,7 +1313,13 @@ export default function Notatki() {
               <LayoutGrid size={14} />
             </Button>
           </div>
-        </WorkspaceToolbar>
+          {view.startsWith("list:") && (
+            <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openNewNote()}>
+              Dodaj do listy
+            </Button>
+          )}
+          </>}
+        />
 
         {deletedNoteUndo && (
           <div className="notes-undo" role="status" aria-live="polite">
@@ -1321,18 +1329,6 @@ export default function Notatki() {
         )}
 
         <div className="notes-canvas">
-          <div className="notes-canvas__heading">
-            <div>
-              <h2>{viewTitle}</h2>
-              <p>{viewDescription}</p>
-            </div>
-            {view.startsWith("list:") && (
-              <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openNewNote()}>
-                Dodaj do listy
-              </Button>
-            )}
-          </div>
-
           {visibleNotes.length === 0 ? (
             <EmptyState
               icon={search ? <Search size={18} /> : view === "archive" ? <Archive size={18} /> : <NotebookPen size={18} />}
@@ -1349,7 +1345,7 @@ export default function Notatki() {
           ) : (
             <>
               {renderSection("Przypięte", pinnedNotes, true)}
-              {renderSection(view === "all" && pinnedNotes.length ? "Pozostałe notatki" : viewTitle, regularNotes)}
+              {renderSection(view === "all" && pinnedNotes.length ? "Pozostałe notatki" : undefined, regularNotes)}
             </>
           )}
         </div>

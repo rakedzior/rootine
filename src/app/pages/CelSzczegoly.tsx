@@ -27,7 +27,7 @@ import { formatLocalDate } from "../data/localDate";
 import { ConfirmDialog, GoalFormDialog, MilestoneDialog, ProgressDialog } from "../goals/GoalDialogs";
 import type { GoalEditorData } from "../goals/GoalDialogs";
 import { GoalNoteTextarea } from "../goals/GoalNoteTextarea";
-import { Badge, Button, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader, WorkspaceToolbar } from "../ui";
+import { Badge, Button, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader } from "../ui";
 import { C } from "../goals/goalPresentationModel";
 import "../../styles/goals.css";
 
@@ -265,15 +265,9 @@ export default function CelSzczegoly() {
 
   const pageHeader = (
     <PageHeader
-      title={goal.title}
-      description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
+      title="Cele"
+      description="Przegląd celów i postępów"
       leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
-      meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot style={{ color: semanticStatusColor }}>{statusLabels[goal.status]}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
-      actions={<>
-        <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : "Dodaj postęp"}</span></Button>
-        <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={12} />}><span className="header-action-label">Edytuj</span></Button>
-        <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-44"><MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "archived" ? "active" : "archived" }); setMenuOpen(false); }} leadingIcon={goal.status === "archived" ? <RotateCcw /> : <Archive />}>{goal.status === "archived" ? "Przywróć" : "Archiwizuj"}</MenuItem><MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem><MenuItem tone="danger" onClick={() => { setDeleteGoalOpen(true); setMenuOpen(false); }} leadingIcon={<Trash2 />}>Usuń</MenuItem></Menu>}</div>
-      </>}
     />
   );
 
@@ -284,7 +278,17 @@ export default function CelSzczegoly() {
       ambient="quiet"
     >
       <ModuleMain>
-        <WorkspaceToolbar>
+        <ContentHeader
+          className="goal-detail-content-header"
+          title={goal.title}
+          description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
+          meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot style={{ color: semanticStatusColor }}>{statusLabels[goal.status]}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
+          actions={<>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : "Dodaj postęp"}</span></Button>
+            <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={12} />}><span className="header-action-label">Edytuj</span></Button>
+            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-44"><MenuItem onClick={() => { store.updateGoal(goal.id, { status: goal.status === "archived" ? "active" : "archived" }); setMenuOpen(false); }} leadingIcon={goal.status === "archived" ? <RotateCcw /> : <Archive />}>{goal.status === "archived" ? "Przywróć" : "Archiwizuj"}</MenuItem><MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem><MenuItem tone="danger" onClick={() => { setDeleteGoalOpen(true); setMenuOpen(false); }} leadingIcon={<Trash2 />}>Usuń</MenuItem></Menu>}</div>
+          </>}
+          controls={(
           <div className="goal-detail-view-controls" role="group" aria-label="Tryb widoku celu">
             <span className="goal-detail-view-controls__label">Widok</span>
             <div className="ui-view-switch">
@@ -292,7 +296,8 @@ export default function CelSzczegoly() {
               <Button variant="ghost" size="sm" leadingIcon={<ListChecks size={13} />} aria-pressed={viewMode === "execution"} onClick={() => switchView("execution")}>Realizacja</Button>
             </div>
           </div>
-        </WorkspaceToolbar>
+          )}
+        />
 
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5">
           <div className="goal-detail-page mx-auto max-w-[1180px]">

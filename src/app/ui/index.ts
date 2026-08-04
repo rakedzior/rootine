@@ -5,6 +5,7 @@ export { Card, type CardProps } from "./components/Card";
 export { Checkbox, type CheckboxProps, type CheckboxShape, type CheckboxSize } from "./components/Checkbox";
 export { ConfirmDialog, type ConfirmDialogProps } from "./components/ConfirmDialog";
 export { CompletedSection, type CompletedSectionProps } from "./components/CompletedSection";
+export { ContentHeader, type ContentHeaderProps } from "./components/ContentHeader";
 export { IconButton, type IconButtonProps } from "./components/IconButton";
 export { ListRow, type ListRowProps, type ListRowDensity } from "./components/ListRow";
 export { ProgressBar, type ProgressBarProps, type ProgressSize, type ProgressTone } from "./components/ProgressBar";
@@ -34,7 +35,6 @@ export {
   DetailPanel,
   ModuleMain,
   ModuleShell,
-  WorkspaceToolbar,
   type ContextSidebarProps,
   type AmbientConfig,
   type AmbientSceneProps,
@@ -44,7 +44,6 @@ export {
   type ModuleMainProps,
   type ModuleShellProps,
   type PageWidth,
-  type WorkspaceToolbarProps,
 } from "./components/Shell";
 export { Tabs, type TabItem, type TabsProps } from "./components/Tabs";
 export { uiColors, uiLayout, uiRadii, uiShadows, uiSpacing } from "./tokens";

@@ -64,6 +64,7 @@ import {
   Checkbox,
   ConfirmDialog,
   CompletedSection,
+  ContentHeader,
   ContextNavItem,
   ContextSidebar,
   DetailPanel,
@@ -75,7 +76,6 @@ import {
   PageHeader,
   ProgressBar,
   Select,
-  WorkspaceToolbar,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
@@ -1056,13 +1056,19 @@ export default function Sprawy() {
             onChange={(event) => selectView(event.target.value as AffairsView)}
           />
         )}
-        layout={(header, content) => (
+        layout={(_header, content) => (
           <ModuleShell
             contextSidebar={contextSidebar}
             className="affairs-module affairs-module--travel"
             pageWidth="wide"
             ambient={{ scene: "travel", progress: 0, signal: dueSoon }}
-            header={header}
+            header={(
+              <PageHeader
+                title="Sprawy"
+                description="Zobowiązania, finanse i ważne rejestry"
+                meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+              />
+            )}
           >
             {content}
           </ModuleShell>
@@ -1074,9 +1080,8 @@ export default function Sprawy() {
   const pageHeader = (
     <PageHeader
       title="Sprawy"
-      description={VIEW_COPY[view].description}
+      description="Zobowiązania, finanse i ważne rejestry"
       meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-      actions={renderPrimaryAction()}
     />
   );
 
@@ -1096,15 +1101,19 @@ export default function Sprawy() {
       header={pageHeader}
     >
       <ModuleMain transitionKey={view}>
-        <WorkspaceToolbar className="affairs-toolbar">
-          <Select
+        <ContentHeader
+          className={`affairs-toolbar ${view === "overview" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
+          title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
+          description={VIEW_COPY[view].description}
+          mobileNavigation={<Select
             compact
             aria-label="Wybierz widok spraw"
             fieldClassName="context-mobile-select affairs-mobile-view-select"
             value={view}
             options={mobileViewOptions}
             onChange={(event) => selectView(event.target.value as AffairsView)}
-          />
+          />}
+          actions={<>
           {view === "matters" && (
             <>
               <Select
@@ -1169,7 +1178,9 @@ export default function Sprawy() {
               <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => changeBudgetMonth(1)}><ChevronRight size={13} /></Button>
             </div>
           )}
-        </WorkspaceToolbar>
+          {renderPrimaryAction()}
+          </>}
+        />
 
         <div className="affairs-canvas">
           {view === "overview" && (

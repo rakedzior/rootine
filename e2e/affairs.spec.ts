@@ -46,7 +46,7 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
     }
 
     await expect(page).toHaveURL(/\/sprawy\?widok=travel/);
-    await expect(page.getByRole("heading", { name: /Podr/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /podróż/i }).first()).toBeVisible();
     if (isMobile) {
       await expect(page.getByRole("combobox", { name: "Wybierz widok spraw" })).toContainText("Podr");
     } else {

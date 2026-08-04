@@ -74,12 +74,12 @@ import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   Badge,
   Button,
+  ContentHeader,
   Modal,
   ModuleMain,
   ModuleShell,
   PageHeader,
   Select,
-  WorkspaceToolbar,
 } from "../ui";
 import "../../styles/sport.css";
 
@@ -1049,9 +1049,8 @@ export default function Sport() {
       header={(
         <PageHeader
           title="Sport"
-          description={viewMeta.description}
+          description="Treningi, plan i historia aktywności"
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={headerAction}
         />
       )}
       contextSidebar={(
@@ -1066,8 +1065,11 @@ export default function Sport() {
       )}
     >
       <ModuleMain transitionKey={`${view}:${activeWeek}`}>
-        <WorkspaceToolbar className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}>
-          <Select
+        <ContentHeader
+          className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}
+          title={viewMeta.title}
+          description={viewMeta.description}
+          mobileNavigation={<Select
             compact
             fieldClassName="context-mobile-select"
             aria-label="Widok Sportu"
@@ -1080,16 +1082,17 @@ export default function Sport() {
               { value: "analysis", label: "Analiza" },
             ]}
             onChange={(event) => changeView(event.target.value as PlannerView)}
-          />
-          <div className="sport-planner-toolbar__right">
+          />}
+          actions={<div className="sport-planner-toolbar__right">
+            {headerAction}
             {view === "cycle" && cycleDraft && (
               <span className={`sport-planner-toolbar__status ${cycleDirty ? "is-dirty" : ""}`.trim()}>
                 {!cycleDirty && <Check size={12} aria-hidden="true" />}
                 {cycleDirty ? "Zmiany czekają na zapis" : "Zapisano"}
               </span>
             )}
-          </div>
-        </WorkspaceToolbar>
+          </div>}
+        />
 
         {moveNotice && (
           <div className="sport-inline-notice" role="status">

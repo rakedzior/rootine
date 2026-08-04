@@ -37,6 +37,7 @@ import {
 import {
   Badge,
   Button,
+  ContentHeader,
   ContextNavItem,
   ContextSidebar,
   DetailPanel,
@@ -48,7 +49,6 @@ import {
   PageHeader,
   SectionHeader,
   Select,
-  WorkspaceToolbar,
 } from "../ui";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
 import { recordActivity } from "../experience/activityLog";
@@ -655,23 +655,10 @@ export default function Zadania() {
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const pageHeader = taskView === "podsumowanie" ? (
+  const pageHeader = (
     <PageHeader
       title="Zadania"
-      description={`Podsumowanie · ${todayStr()}`}
-      meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-      actions={<Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}><span className="header-action-label">Dodaj zadanie</span></Button>}
-    />
-  ) : taskView === "nawyki" ? (
-    <PageHeader
-      title="Nawyki"
-      description={`Codzienny rytm · ${todayStr()}`}
-      meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-    />
-  ) : (
-    <PageHeader
-      title="Zadania"
-      description={`${listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]} · ${todayStr()}`}
+      description="Listy, terminy i codzienny rytm w jednym miejscu"
       meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
       actions={(
         taskView === "kosz" && visible.length > 0 ? (
@@ -1009,8 +996,10 @@ export default function Zadania() {
       {/* ── Summary document (replaces task list in podsumowanie mode) ── */}
       {taskView === "podsumowanie" && (
         <ModuleMain>
-          <WorkspaceToolbar>
-            <Select
+          <ContentHeader
+            title="Podsumowanie"
+            description={`Przegląd realizacji zadań · ${todayStr()}`}
+            mobileNavigation={<Select
               aria-label="Widok zadań"
               fieldClassName="context-mobile-select"
               compact
@@ -1021,17 +1010,19 @@ export default function Zadania() {
                 { value: "kosz", label: "Kosz" },
               ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
-            />
-            <span className="workspace-context-label">Podsumowanie</span>
-          </WorkspaceToolbar>
+            />}
+          />
           <SummaryDocument tasks={tasks.filter(t => !t.deleted)} listy={listy} />
         </ModuleMain>
       )}
 
       {taskView === "nawyki" && (
         <ModuleMain className="task-module-main">
-          <WorkspaceToolbar>
-            <Select
+          <ContentHeader
+            title="Nawyki"
+            description={`Codzienny rytm · ${todayStr()}`}
+            meta={<span>{habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey)).length} na dzisiaj</span>}
+            mobileNavigation={<Select
               aria-label="Widok zadań"
               fieldClassName="context-mobile-select"
               compact
@@ -1042,9 +1033,8 @@ export default function Zadania() {
                 { value: "kosz", label: "Kosz" },
               ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
-            />
-            <span className="workspace-context-label">Nawyki</span>
-          </WorkspaceToolbar>
+            />}
+          />
           <HabitsWorkspace
             habits={habits}
             onToggleHabit={toggleHabit}
@@ -1063,9 +1053,11 @@ export default function Zadania() {
           background: C.bg,
           display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
         }}>
-        <WorkspaceToolbar className="task-workspace-toolbar">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Select
+        <ContentHeader
+          className="task-workspace-toolbar"
+          title={listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
+          description={`${formatOpenTaskCount(pending.length)} · ${todayStr()}`}
+          mobileNavigation={<Select
               aria-label="Widok zadań"
               fieldClassName="context-mobile-select"
               compact
@@ -1076,11 +1068,8 @@ export default function Zadania() {
                 { value: "kosz", label: "Kosz" },
               ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
-            />
-            <span className="workspace-context-label">
-              {listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
-            </span>
-            {(listFilter || tagFilter || priorityFilter) && (
+            />}
+          meta={(listFilter || tagFilter || priorityFilter) ? (
               <div className="flex flex-wrap items-center gap-1.5">
               {listFilter && (
                 <Button variant="quiet" size="sm" onClick={() => setListFilter(null)}
@@ -1101,9 +1090,8 @@ export default function Zadania() {
                 </Button>
               )}
               </div>
-            )}
-          </div>
-          <div className="task-toolbar-actions">
+            ) : undefined}
+          actions={<div className="task-toolbar-actions">
             <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
               {([
                 { id: "high" as Priority, label: "Wysoki", color: C.danger },
@@ -1156,8 +1144,8 @@ export default function Zadania() {
                 <Calendar size={14} strokeWidth={1.7} />
               </Button>
             </div>
-          </div>
-        </WorkspaceToolbar>
+          </div>}
+        />
 
         {bulkMode && (
           <div className="task-bulk-bar" role="toolbar" aria-label="Operacje zbiorcze na zadaniach">
@@ -1186,6 +1174,7 @@ export default function Zadania() {
         )}
 
         <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="task-content__inner">
           {/* Add task input */}
           <form
             className="task-entry"
@@ -1199,8 +1188,16 @@ export default function Zadania() {
               border: `1px solid ${C.borderSubtle}`,
               boxShadow: "none",
             }}>
-            <div className="flex items-center gap-2 px-3.5 py-2.5 flex-wrap">
-              <Plus size={13} strokeWidth={1.75} className="task-entry__lead" />
+            <div className="task-entry__row">
+              <button
+                type="button"
+                className="task-entry__lead"
+                aria-label="Dodaj zadanie"
+                onClick={addTask}
+              >
+                <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+              <div className="task-entry__field">
               {/* Tag chips in input */}
               {newTaskTags.map(tagId => {
                 const td = tagi.find(t => t.id === tagId);
@@ -1231,6 +1228,8 @@ export default function Zadania() {
                 onKeyDown={handleTaskKeyDown}
                 className="task-entry-input task-entry__input flex-1 bg-transparent outline-none text-[13px] min-w-0"
               />
+
+              </div>
 
               {/* Controls */}
               <div className="task-entry-controls flex items-center gap-0.5 flex-shrink-0">
@@ -1501,6 +1500,7 @@ export default function Zadania() {
               )}
             />
           )}
+          </div>
         </div>
       </ModuleMain>
 

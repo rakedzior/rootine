@@ -237,7 +237,7 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 
 Aplikacja używa jednego `AppShell` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. Kontekstowy sidebar służy wyłącznie rosnącym kolekcjom i drzewom w Zadaniach, Pracy i Notatkach. Sport, Cele, Sprawy oraz Podróże używają zakładek i filtrów nad treścią.
 
-Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. Akcje tworzenia należą do głównego `PageHeader`, dzięki czemu nie są dublowane w panelu pomocniczym. Filtry i sortowanie należą do `WorkspaceToolbar`. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i toolbarze. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
+Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `PageHeader` nazywa cały moduł, a `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
 Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Zadania, Kalendarz, Cele, Sport i Odżywianie używają wspólnego `PageHeader` o wysokości 70px i poziomym paddingu 28px. Ten sam komponent jest obowiązkowy dla nowych ekranów.
 
@@ -311,7 +311,7 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 ### Select
 
 - **Style:** dziedziczy Input, z chevronem po prawej i menu na warstwie Floating Menu.
-- **Density:** pola formularzowe mają 40px, a filtry w `WorkspaceToolbar` używają wariantu compact 28px.
+- **Density:** pola formularzowe mają 40px, a filtry w `ContentHeader` używają wariantu compact 28px.
 - **Menu:** Grafit panelu bocznego lub Grafit karty, promień 8px, mocna linia i kompaktowe wiersze 28px.
 - **Selected:** Precyzyjny błękit w tekście lub subtelnym tle; nie oba w pełnym nasyceniu.
 
@@ -355,7 +355,7 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 
 - **Structure:** opcjonalny `ContextSidebar`, elastyczny `ModuleMain` oraz opcjonalny `DetailPanel`.
 - **ContextSidebar:** 250px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
-- **WorkspaceToolbar:** minimum 52px, padding 12px × 28px, filtry, sortowanie i kontrolki widoku.
+- **ContentHeader:** wspólny nagłówek aktualnego widoku z tytułem, opisem, metadanymi, lokalnymi akcjami, filtrami i opcjonalnym drugim wierszem; jego wewnętrzna rama jest identyczna z ramą treści.
 - **DetailPanel:** 370px, Grafit panelu bocznego; dockowany na szerokim ekranie i nakładany poniżej 1380px.
 - **Mobile:** sidebar kontekstowy znika, toolbar pokazuje Select podwidoku, a główna nawigacja przechodzi na dół ekranu.
 - **Calendar detail:** szczegóły wydarzenia są pływającym panelem zakotwiczonym przy wybranej komórce, nie centralnym modalem ani stałym prawym panelem. Kliknięcie poza panelem go zamyka; kliknięcie innego dnia najpierw zamyka bieżący panel, a dopiero kolejne kliknięcie tworzy zadanie. Picker daty otwiera się przy przycisku z ikoną kalendarza.
@@ -409,7 +409,7 @@ Precyzyjny błękit ma trzy role kontrastowe: `precision-blue` pozostaje sygnał
 
 ### Do:
 
-- **Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Select, Menu, Modal, Tabs, Badge, PageHeader, SectionHeader, EmptyState, ModuleShell, ContextSidebar, WorkspaceToolbar oraz DetailPanel.
+- **Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Select, Menu, Modal, Tabs, Badge, PageHeader, ContentHeader, SectionHeader, EmptyState, ModuleShell, ContextSidebar oraz DetailPanel.
 - **Do** używaj różnic tonu grafitu i obramowań jako podstawowego mechanizmu grupowania.
 - **Do** rezerwuj Precyzyjny błękit dla aktywnego wyboru, focusu i głównej akcji.
 - **Do** używaj DM Mono dla czasu, dat, wartości, liczników i procentów.

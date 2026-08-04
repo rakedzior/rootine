@@ -12,7 +12,7 @@ import {
   LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, Save, Settings, Trash2, X,
 } from "lucide-react";
 import {
-  Badge, Button, Card, DatePicker, Input, Modal, ModuleMain, ModuleShell,
+  Badge, Button, Card, ContentHeader, DatePicker, Input, Modal, ModuleMain, ModuleShell,
   PageHeader, SectionHeader, Select, uiColors,
 } from "../ui";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
@@ -899,24 +899,17 @@ export default function Odzywanie() {
         </div>
       ) : (
         <>
-          <div className="nutrition-toolbar" style={{ borderColor: uiColors.border }}>
-            <div className="nutrition-toolbar__date">
-              <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}>
-                <ChevronLeft size={14} />
-              </Button>
-              <DatePicker
-                value={selectedDate}
-                onChange={(value) => setSelectedDate(value || today)}
-                aria-label="Wybrany dzień"
-                displayValue={formatDate(selectedDate)}
-                fieldClassName="nutrition-date-input"
-              />
-              <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}>
-                <ChevronRight size={14} />
-              </Button>
-              {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => setSelectedDate(today)}>Dzisiaj</Button>}
-            </div>
-            <div className="nutrition-toolbar__actions">
+          <ContentHeader
+            className="nutrition-content-header"
+            title="Dzienny rejestr"
+            description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} kcal`}
+            actions={<>
+              <div className="nutrition-date-navigation">
+                <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}><ChevronLeft size={14} /></Button>
+                <DatePicker value={selectedDate} onChange={(value) => setSelectedDate(value || today)} aria-label="Wybrany dzień" displayValue={formatDate(selectedDate)} fieldClassName="nutrition-date-input" />
+                <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}><ChevronRight size={14} /></Button>
+                {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => setSelectedDate(today)}>Dzisiaj</Button>}
+              </div>
               <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={13} />} onClick={() => setWeightDialog("analysis")}>
                 Analiza
               </Button>
@@ -938,8 +931,8 @@ export default function Odzywanie() {
               >
                 {dayClosed ? "Otwórz dzień" : "Zamknij dzień"}
               </Button>
-            </div>
-          </div>
+            </>}
+          />
 
           <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {dayClosed && (

@@ -376,12 +376,6 @@ export function ContextNavItem({ active = false, icon, label, meta, className, t
   );
 }
 
-export type WorkspaceToolbarProps = HTMLAttributes<HTMLDivElement>;
-
-export function WorkspaceToolbar({ className, ...props }: WorkspaceToolbarProps) {
-  return <div className={cx("ui-workspace-toolbar", className)} {...props} />;
-}
-
 export interface DetailPanelProps extends HTMLAttributes<HTMLElement> {
   label: string;
   onDismiss?: () => void;

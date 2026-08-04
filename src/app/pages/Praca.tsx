@@ -49,6 +49,7 @@ import { formatShortDate } from "../formatters";
 import {
   Badge,
   Button,
+  ContentHeader,
   ContextNavItem,
   ContextSidebar,
   DatePicker,
@@ -64,7 +65,6 @@ import {
   ModuleShell,
   PageHeader,
   Select,
-  WorkspaceToolbar,
 } from "../ui";
 import { TaskInlineMenu, WorkProjectActionsMenu } from "./PracaMenus";
 import "../../styles/work.css";
@@ -1201,7 +1201,6 @@ export default function Praca() {
     const tasks = filterTaskList(relevantTasks);
     const overdue = tasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today);
     const todayTasks = tasks.filter((task) => taskAnchorDate(task) === today);
-    const openTasks = tasks.filter((task) => isTaskOpen(task));
     const upcoming = tasks.filter((task) => {
       const anchor = taskAnchorDate(task);
       return anchor > today && weekDates.includes(anchor);
@@ -1209,13 +1208,6 @@ export default function Praca() {
     const withoutDate = tasks.filter((task) => !taskAnchorDate(task));
     return (
       <div className="work-screen work-screen--focus">
-        <header className="work-screen-heading">
-          <div>
-            <h2>Dzisiaj w pracy</h2>
-            <p>{todayTasks.length} na dziś · {overdue.length} po terminie · {formatOpenTaskCount(openTasks.length)}</p>
-          </div>
-          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
-        </header>
         <div className="work-focus-stack">
           {renderTaskSection("Po terminie", overdue, <CircleAlert size={14} aria-hidden="true" />, "Brak zadań po terminie")}
           {renderTaskSection(
@@ -1244,13 +1236,6 @@ export default function Praca() {
     const tasks = filterTaskList(relevantTasks);
     return (
       <div className="work-screen work-screen--focus">
-        <header className="work-screen-heading">
-          <div>
-            <h2>Ten tydzień</h2>
-            <p>Praca do zaplanowania od dziś przez najbliższe siedem dni</p>
-          </div>
-          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
-        </header>
         <div className="work-focus-stack">{renderWeekGroups(tasks)}</div>
       </div>
     );
@@ -1265,10 +1250,6 @@ export default function Praca() {
     });
     return (
       <div className="work-screen work-screen--table">
-        <header className="work-screen-heading">
-          <div><h2>Wszystkie aktywne</h2><p>{sorted.length} {statusFilter === "completed" ? "ukończonych zadań" : "otwartych zadań"} w aktywnych i wstrzymanych projektach oraz bez przypisania</p></div>
-          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
-        </header>
         <section className="work-task-section" aria-label="Wszystkie aktywne zadania">
           {sorted.length ? <div className="work-task-list">{sorted.map((task) => renderTaskRow(task))}</div> : <EmptyState icon={<Check size={18} />} title="Brak aktywnych zadań" description="Wszystko jest zamknięte albo nie ma jeszcze zadań." />}
         </section>
@@ -1280,10 +1261,6 @@ export default function Praca() {
     const tasks = filterTaskList(workspace.tasks.filter((task) => !task.projectId));
     return (
       <div className="work-screen">
-        <header className="work-screen-heading">
-          <div><h2>Nieprzypisane</h2><p>Zadania, które nie mają jeszcze projektu</p></div>
-          <Button variant="quiet" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Zadanie</Button>
-        </header>
         <section className="work-task-section" aria-label="Nieprzypisane zadania">
           {tasks.length ? <div className="work-task-list">{tasks.map((task) => renderTaskRow(task))}</div> : <EmptyState icon={<Inbox size={18} />} title="Brak nieprzypisanych zadań" description="Nowe zadanie możesz przypisać później albo zostawić bez projektu." />}
         </section>
@@ -1295,7 +1272,6 @@ export default function Praca() {
     const projects = workspace.projects.filter((project) => project.status === "completed");
     return (
       <div className="work-screen">
-        <header className="work-screen-heading"><div><h2>Archiwum</h2><p>Zakończone projekty i ich kontekst</p></div></header>
         <section className="work-project-list" aria-label="Zakończone projekty">
           {projects.length ? projects.map((project) => {
             const company = companyById.get(project.companyId);
@@ -1321,16 +1297,6 @@ export default function Praca() {
     const allProjects = companyProjects.filter((project) => project.status !== "completed");
     return (
       <div className="work-screen work-screen--table">
-        <header className="work-company-header">
-          <div className="work-company-header__identity">
-            <span className="work-company-marker" style={{ background: selectedCompany.color }} />
-            <div><h2>{selectedCompany.name}</h2><p>{selectedCompany.description || "Dodaj krótki opis firmy, aby zachować kontekst."}</p></div>
-          </div>
-          <div className="work-company-header__actions">
-            <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj firmę" title="Edytuj firmę" onClick={() => openCompanyEditor(selectedCompany)}><Pencil size={12} /></Button>
-            <Button variant="ghost" size="sm" iconOnly aria-label="Usuń firmę" title="Usuń firmę" onClick={() => setDeleteState({ kind: "company", id: selectedCompany.id, name: selectedCompany.name })}><Trash2 size={12} /></Button>
-          </div>
-        </header>
         <section className="work-project-list work-project-list--company" aria-labelledby="work-company-projects-title">
           <header className="work-section-heading">
             <div><h3 id="work-company-projects-title">Projekty</h3><span>{projects.length}</span></div>
@@ -1505,20 +1471,6 @@ export default function Praca() {
     }).length;
     return (
       <div className="work-screen work-screen--project">
-        <header className="work-project-header">
-          <div className="work-project-header__identity">
-            <button type="button" className="work-back-link" onClick={() => navigate("company", selectedProject.companyId)}><ChevronRight size={13} className="is-back" /> {selectedProjectCompany?.name ?? "Firma"}</button>
-            <div className="work-project-header__copy">
-              <div className="work-project-title-row"><h2>{selectedProject.name}</h2><Badge tone={projectStatusTone(selectedProject.status)}>{PROJECT_STATUS_LABELS[selectedProject.status]}</Badge></div>
-              <p>{selectedProject.description || "Dodaj krótki opis projektu, aby zachować kontekst."}</p>
-              <div className="work-project-dates"><CalendarDays size={12} aria-hidden="true" /> {formatDateRange(selectedProject.startDate, selectedProject.endDate)}</div>
-            </div>
-          </div>
-          <div className="work-project-header__actions">
-            <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj projekt" title="Edytuj projekt" onClick={() => openProjectEditor(selectedProject)}><Pencil size={12} /></Button>
-            <Button variant="ghost" size="sm" iconOnly aria-label="Usuń projekt" title="Usuń projekt" onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}><Trash2 size={12} /></Button>
-          </div>
-        </header>
         <section className="work-project-summary" aria-label="Podsumowanie projektu">
           <div className="work-project-summary__progress">
             <div className="work-project-summary__heading"><span><ListTree size={13} aria-hidden="true" /> Postęp projektu</span><b>{progress}%</b></div>
@@ -1574,25 +1526,48 @@ export default function Praca() {
     };
     const showTaskFilters = view !== "company" && view !== "archive";
     const showProjectFilters = view === "company";
-    const toolbarWidthClass = view === "company" || view === "active" ? "work-toolbar--table" : "";
     return (
-      <WorkspaceToolbar className={`work-toolbar ${toolbarWidthClass}`}>
-        <div className="work-toolbar__context"><span>{labels[view]}</span>{view !== "company" && view !== "project" && <small>{view === "today" ? "Najważniejsze rzeczy na teraz" : "Widok roboczy"}</small>}</div>
-        {showTaskFilters && (
+      <ContentHeader
+        className={view === "company" || view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
+        title={labels[view]}
+        description={view === "today"
+          ? "Najważniejsze rzeczy na teraz"
+          : view === "project"
+            ? selectedCompany?.name ?? "Zadania i kontekst projektu"
+            : view === "company"
+              ? "Projekty, postęp i najbliższe terminy"
+              : "Widok roboczy"}
+        meta={view === "project" && selectedProject
+          ? <><Badge tone={projectStatusTone(selectedProject.status)}>{PROJECT_STATUS_LABELS[selectedProject.status]}</Badge><span>{formatDateRange(selectedProject.startDate, selectedProject.endDate)}</span></>
+          : view === "company" && selectedCompany
+            ? <span className="work-company-marker" style={{ background: selectedCompany.color }} />
+            : undefined}
+        actions={<>
+          {showTaskFilters && (
           <div className="work-toolbar__controls">
             <label className="work-search"><Search size={13} aria-hidden="true" /><span className="sr-only">Szukaj w pracy</span><input value={search} placeholder="Szukaj w pracy" onChange={(event) => setSearch(event.target.value)} /></label>
             <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Każdy status" }, ...TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
             <Select compact aria-label="Filtruj po priorytecie" value={priorityFilter} options={[{ value: "all", label: "Każdy priorytet" }, ...PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))]} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} />
           </div>
-        )}
-        {showProjectFilters && (
+          )}
+          {showProjectFilters && (
           <div className="work-toolbar__controls">
             <label className="work-search"><Search size={13} aria-hidden="true" /><span className="sr-only">Szukaj projektów</span><input value={companySearch} placeholder="Szukaj projektów" onChange={(event) => setCompanySearch(event.target.value)} /></label>
             <Select compact aria-label="Filtruj projekty po statusie" value={companyStatusFilter} options={[{ value: "all", label: "Każdy status" }, ...Object.entries(PROJECT_STATUS_LABELS).filter(([value]) => value !== "completed").map(([value, label]) => ({ value, label }))]} onChange={(event) => setCompanyStatusFilter(event.target.value as CompanyProjectStatusFilter)} />
             <Select compact aria-label="Sortuj projekty" value={companySort} options={[{ value: "name", label: "Sortuj: nazwa" }, { value: "progress", label: "Sortuj: postęp" }, { value: "endDate", label: "Sortuj: termin" }]} onChange={(event) => setCompanySort(event.target.value as CompanyProjectSort)} />
           </div>
-        )}
-      </WorkspaceToolbar>
+          )}
+          {view === "company" && selectedCompany && <>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj firmę" title="Edytuj firmę" onClick={() => openCompanyEditor(selectedCompany)}><Pencil size={12} /></Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Usuń firmę" title="Usuń firmę" onClick={() => setDeleteState({ kind: "company", id: selectedCompany.id, name: selectedCompany.name })}><Trash2 size={12} /></Button>
+          </>}
+          {view === "project" && selectedProject && <>
+            <Button variant="ghost" size="sm" leadingIcon={<ChevronRight size={13} className="is-back" />} onClick={() => navigate("company", selectedProject.companyId)}>{companyById.get(selectedProject.companyId)?.name ?? "Firma"}</Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj projekt" title="Edytuj projekt" onClick={() => openProjectEditor(selectedProject)}><Pencil size={12} /></Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Usuń projekt" title="Usuń projekt" onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}><Trash2 size={12} /></Button>
+          </>}
+        </>}
+      />
     );
   };
 

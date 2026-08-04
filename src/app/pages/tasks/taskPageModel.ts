@@ -223,7 +223,7 @@ export function overdueDateLabel(calendarDate: string): string {
   const daysAgo = calendarDaysBetween(calendarDate, todayLocalDateKey());
   if (daysAgo === null) return "Po terminie";
   if (daysAgo === 1) return "1 dzień po terminie";
-  if (daysAgo > 1) return `${daysAgo} dni temu`;
+  if (daysAgo > 1) return `${daysAgo} dni po terminie`;
   return "Po terminie";
 }
 

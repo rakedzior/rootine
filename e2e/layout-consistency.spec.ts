@@ -62,6 +62,9 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
       const headerRow = moduleHeader.locator(".ui-page-header__row");
       const visibleMain = workspace.locator("main:visible");
       const visibleH1 = workspace.locator("h1:visible");
+      const contentHeader = visibleMain.locator(":scope > .ui-content-header");
+      const contentHeaderInner = contentHeader.locator(":scope > .ui-content-header__inner");
+      const visibleH2 = contentHeader.locator("h2:visible");
 
       await expect(workspace).toHaveCount(1);
       await expect(moduleShell).toHaveCount(1);
@@ -69,24 +72,45 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
       await expect(headerRow).toBeVisible();
       await expect(visibleMain).toHaveCount(1);
       await expect(visibleH1).toHaveCount(1);
+      await expect(contentHeader).toHaveCount(1);
+      await expect(contentHeader).toBeVisible();
+      await expect(visibleH2).toHaveCount(1);
 
-      const [workspaceBox, shellBox, headerBox, headerRowBox, headingBox] = await Promise.all([
+      const [workspaceBox, shellBox, headerBox, headerRowBox, headingBox, mainBox, contentHeaderBox, contentHeaderInnerBox] = await Promise.all([
         workspace.boundingBox(),
         moduleShell.boundingBox(),
         moduleHeader.boundingBox(),
         headerRow.boundingBox(),
         visibleH1.boundingBox(),
+        visibleMain.boundingBox(),
+        contentHeader.boundingBox(),
+        contentHeaderInner.boundingBox(),
       ]);
       expect(workspaceBox).not.toBeNull();
       expect(shellBox).not.toBeNull();
       expect(headerBox).not.toBeNull();
       expect(headerRowBox).not.toBeNull();
       expect(headingBox).not.toBeNull();
+      expect(mainBox).not.toBeNull();
+      expect(contentHeaderBox).not.toBeNull();
+      expect(contentHeaderInnerBox).not.toBeNull();
 
       expectInsideViewport(workspaceBox!, viewport!, `${route.name} workspace`);
       expectInsideViewport(shellBox!, viewport!, `${route.name} module shell`);
       expectInsideViewport(headerBox!, viewport!, `${route.name} module header`);
       expectInsideViewport(headingBox!, viewport!, `${route.name} h1`);
+      expectInsideViewport(contentHeaderBox!, viewport!, `${route.name} content header`);
+      expect(
+        Math.abs(contentHeaderBox!.x - mainBox!.x),
+        `${route.name}: content header must share the main workspace edge`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(contentHeaderBox!.width - mainBox!.width),
+        `${route.name}: content header must share the main workspace width`,
+      ).toBeLessThanOrEqual(1);
+      expect(contentHeaderInnerBox!.x).toBeGreaterThanOrEqual(mainBox!.x - 1);
+      expect(contentHeaderInnerBox!.x + contentHeaderInnerBox!.width)
+        .toBeLessThanOrEqual(mainBox!.x + mainBox!.width + 1);
 
       expect(
         Math.abs(headerBox!.x - shellBox!.x),
@@ -115,45 +139,6 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
           Math.abs(sidebarBox!.x - shellBox!.x),
           `${route.name}: context sidebar must attach to the global navigation edge`,
         ).toBeLessThanOrEqual(1);
-      }
-
-      if (route.path === "/zadania") {
-        const contextSidebar = moduleShell.locator(".ui-context-sidebar");
-        const collapseButton = contextSidebar.locator(".ui-context-sidebar__collapse");
-        const firstSection = contextSidebar.locator(".ui-section-header").first();
-        await expect(collapseButton).toBeVisible();
-        await expect(collapseButton.locator("svg")).toBeVisible();
-        await expect(collapseButton).not.toContainText("Zwiń panel");
-        await expect(firstSection).toBeVisible();
-
-        const [sidebarBox, collapseBox, sectionBox] = await Promise.all([
-          contextSidebar.boundingBox(),
-          collapseButton.boundingBox(),
-          firstSection.boundingBox(),
-        ]);
-        expect(sidebarBox).not.toBeNull();
-        expect(collapseBox).not.toBeNull();
-        expect(sectionBox).not.toBeNull();
-
-        expect(
-          collapseBox!.x + collapseBox!.width,
-          "Zadania: collapse control is aligned to the sidebar's right edge",
-        ).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width - 8);
-        expect(
-          Math.abs(
-            collapseBox!.y + collapseBox!.height / 2
-              - (sectionBox!.y + sectionBox!.height / 2),
-          ),
-          "Zadania: collapse control shares the first sidebar section's vertical rhythm",
-        ).toBeLessThanOrEqual(7);
-
-        const expandedIconPath = await collapseButton.locator("svg path").getAttribute("d");
-        await collapseButton.click();
-        await expect(collapseButton).toHaveAttribute("aria-expanded", "false");
-        const collapsedIconPath = await collapseButton.locator("svg path").getAttribute("d");
-        expect(collapsedIconPath).not.toBe(expandedIconPath);
-        await collapseButton.click();
-        await expect(collapseButton).toHaveAttribute("aria-expanded", "true");
       }
 
       await expectNoGlobalHorizontalOverflow(page, route.name);

@@ -35,6 +35,7 @@ import {
 import {
   Badge,
   Button,
+  ContentHeader,
   ContextNavItem,
   ContextSidebar,
   Menu,
@@ -44,7 +45,6 @@ import {
   PageHeader,
   SectionHeader,
   Select,
-  WorkspaceToolbar,
   uiColors,
 } from "../ui";
 import {
@@ -793,8 +793,8 @@ export default function Kalendarz() {
       }}
       header={(
         <PageHeader
-          title="Kalendarz"
-          description={`Plan zadań · ${formatHeaderDate(viewDate)}`}
+          title="Zadania"
+          description="Listy, terminy i codzienny rytm w jednym miejscu"
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>}
         />
@@ -911,9 +911,10 @@ export default function Kalendarz() {
       </ContextSidebar>
 
       <ModuleMain transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
-        <WorkspaceToolbar>
-          <div className="flex items-center gap-1">
-            <Select
+        <ContentHeader
+          title={formatHeaderDate(viewDate)}
+          description="Kalendarz zadań"
+          mobileNavigation={<Select
               aria-label="Filtr kalendarza"
               fieldClassName="context-mobile-select"
               compact
@@ -923,11 +924,13 @@ export default function Kalendarz() {
                 const choice = calendarFilterChoices.find((item) => item.value === event.target.value);
                 if (choice) applyCalendarFilter(choice.filter);
               }}
-            />
+            />}
+          meta={openCalendarCount > 0 ? <Badge tone="neutral">{formatOpenTaskCount(openCalendarCount)}</Badge> : undefined}
+          actions={<>
+          <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
             <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={15} strokeWidth={1.5} /></Button>
-            <span className="calendar-toolbar-period workspace-context-label capitalize">{formatHeaderDate(viewDate)}</span>
           </div>
           <div className="task-toolbar-actions">
             <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
@@ -947,11 +950,6 @@ export default function Kalendarz() {
                   </Button>
                 );
               })}
-              {openCalendarCount > 0 && (
-                <Badge tone="neutral">
-                  {formatOpenTaskCount(openCalendarCount)}
-                </Badge>
-              )}
             </div>
             <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={15} strokeWidth={1.5} /></Button>
             <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
@@ -978,7 +976,8 @@ export default function Kalendarz() {
               </Button>
             </div>
           </div>
-        </WorkspaceToolbar>
+          </>}
+        />
 
         <p id="calendar-keyboard-move-instructions" className="ui-sr-only">
           Aby przesunąć zadanie o jeden dzień, użyj Alt i strzałki w lewo lub w prawo.

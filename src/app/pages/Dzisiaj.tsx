@@ -14,7 +14,6 @@ import {
 import { Link } from "react-router";
 import {
   AlertTriangle,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
   CircleMinus,
@@ -78,6 +77,7 @@ import {
 import { toDateKey } from "../sport/model";
 import {
   Button,
+  ContentHeader,
   ModuleMain,
   ModuleShell,
   PageHeader,
@@ -836,6 +836,11 @@ export default function Dzisiaj() {
       }}
     >
       <ModuleMain>
+        <ContentHeader
+          title="Plan dnia"
+          description="Dzisiejszy bilans wszystkich aktywnych obszarów"
+          meta={<span>{remainingDailyItems} pozostało · {activeAreaCount} wymaga uwagi</span>}
+        />
         <div className="today-scroll">
           <div className="today-content" data-active-area={activeAreaId ?? undefined}>
             <section
@@ -843,10 +848,6 @@ export default function Dzisiaj() {
               aria-labelledby="today-day-balance-title"
             >
               <div className="today-day-balance__main">
-                <div className="today-day-balance__eyebrow">
-                  <CalendarDays size={18} aria-hidden="true" />
-                  <span>Plan dnia</span>
-                </div>
                 <div className="today-day-balance__headline">
                   <h2 id="today-day-balance-title">
                     <AnimatedNumber value={remainingDailyItems} /> <span>pozostało</span>
