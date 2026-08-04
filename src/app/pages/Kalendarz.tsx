@@ -37,7 +37,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   Menu,
   MenuItem,
   ModuleMain,
@@ -821,7 +821,8 @@ export default function Kalendarz() {
 
   return (
     <ModuleShell
-      pageWidth="canvas"
+      pageWidth="fluid"
+      title="Kalendarz"
       className="task-module calendar-module"
       ambient={{
         scene: "calendar",
@@ -838,7 +839,7 @@ export default function Kalendarz() {
         />
       )}
     >
-      <ContextSidebar
+      <ModuleSidebar
         label="Widoki i listy zadań"
         className="task-context-sidebar calendar-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
@@ -946,10 +947,11 @@ export default function Kalendarz() {
           <ContextNavItem label="Ukończone" icon={<RotateCcw />} onClick={() => openTaskView("ukonczone")} />
           <ContextNavItem label="Kosz" icon={<Trash2 />} onClick={() => openTaskView("kosz")} />
         </div>
-      </ContextSidebar>
+      </ModuleSidebar>
 
       <ModuleMain className="calendar-module-main" transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
         <ContentHeader
+          headingLevel={false}
           title={formatHeaderDate(viewDate)}
           description="Kalendarz zadań"
           mobileNavigation={<Select

@@ -276,7 +276,7 @@
 .ui-page-header__row { display: flex; width: 100%; min-height: var(--page-header-height); align-items: center; justify-content: space-between; gap: var(--space-lg); padding: 0 var(--space-3xl); }
 .ui-page-header__identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); }
 /* Navigation-only slot (e.g. a back control on detail routes). Module root pages must not
-   set `leading`, otherwise the page title shifts horizontally between tabs. The fixed width
+   set `leading`, otherwise the header identity shifts horizontally between tabs. The fixed width
    keeps the title offset identical regardless of the control rendered inside. */
 .ui-page-header__leading { display: grid; width: 28px; flex: 0 0 auto; place-items: center; color: var(--color-text-secondary); }
 .ui-page-header__copy { min-width: 0; }
@@ -1407,17 +1407,8 @@
   background: var(--color-graphite-canvas);
 }
 
-.ui-module-shell[data-page-width="reading"] { --current-page-width: var(--page-width-reading); }
 .ui-module-shell[data-page-width="standard"] { --current-page-width: var(--page-width-standard); }
 .ui-module-shell[data-page-width="wide"] { --current-page-width: var(--page-width-wide); }
-.ui-module-shell[data-page-width="canvas"] { --current-page-width: none; }
-
-.ui-module-shell:not([data-page-width="canvas"]) > .ui-module-shell__body > .ui-module-main {
-  width: min(100%, calc(var(--current-page-width) + (2 * var(--space-3xl))));
-  max-width: calc(var(--current-page-width) + (2 * var(--space-3xl)));
-  flex-basis: auto;
-  margin-inline: auto;
-}
 
 .ui-context-sidebar {
   position: relative;
@@ -1604,7 +1595,7 @@
 .ui-detail-panel-backdrop { display: none; }
 
 .ui-section-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-sm); }
-/* Section titles must stay below --text-title so they read as subordinate to the page title. */
+/* Section titles stay compact; the page shell does not introduce a display title. */
 .ui-section-header__title { margin: 0; color: var(--color-chalk-white); font-size: var(--text-section); font-weight: var(--weight-semibold); line-height: var(--leading-snug); }
 .ui-section-header--label .ui-section-header__title { color: var(--color-text-muted); font-size: var(--text-label); letter-spacing: var(--tracking-label); line-height: var(--leading-tight); text-transform: uppercase; }
 .ui-section-header__description { margin: 4px 0 0; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--leading-normal); }
@@ -2038,4 +2029,116 @@
 
 @media (max-width: 760px) {
   .app-save-feedback { right: var(--space-sm); bottom: calc(64px + var(--space-sm)); }
+}
+
+/* Final layout contract: these rules intentionally live after legacy module selectors so
+ * route-specific content styles cannot reclaim global page positioning. */
+.ui-module-shell__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.ui-module-shell__body.is-with-module-sidebar {
+  grid-template-columns: var(--context-sidebar-width) minmax(0, 1fr) auto;
+}
+.ui-main-content {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--color-graphite-canvas);
+  scrollbar-gutter: stable;
+}
+.ui-page-shell {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin-inline: auto;
+  padding: var(--space-2xl) var(--space-3xl) var(--space-3xl);
+}
+.ui-page-shell--standard { max-width: var(--page-width-standard); }
+.ui-page-shell--wide { max-width: var(--page-width-wide); }
+.ui-page-shell--fluid { max-width: none; }
+.ui-page-shell__content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.ui-page-shell__content > .ui-module-main { min-height: 0; flex: 1; }
+.ui-page-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-xl);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ui-page-header {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+.ui-page-header__row { min-height: 0; padding: 0; align-items: flex-start; }
+.ui-page-header__identity,
+.ui-page-header__copy { min-width: 0; }
+.ui-page-header__identity { flex: 1 1 auto; align-items: flex-start; }
+.ui-page-header__title {
+  overflow: visible;
+  color: var(--color-text-primary);
+  font-size: var(--text-title);
+  line-height: var(--leading-tight);
+  white-space: normal;
+}
+.ui-page-header__description {
+  max-width: 68ch;
+  overflow: visible;
+  margin-top: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  white-space: normal;
+}
+.ui-page-header__actions { flex-wrap: wrap; justify-content: flex-end; padding-left: var(--space-lg); }
+.ui-context-sidebar,
+.ui-module-sidebar { width: var(--context-sidebar-width); min-width: var(--context-sidebar-width); }
+.ui-section-header__heading { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
+.ui-section-header__body { min-width: 0; }
+.ui-section-header__count,
+.ui-section-header__meta {
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+}
+.ui-section-header__meta { font-family: var(--font-sans); }
+.ui-section-header__toggle {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+@media (max-width: 980px) {
+  .ui-page-shell { padding-inline: var(--space-xl); }
+}
+@media (max-width: 760px) {
+  .ui-module-shell__body,
+  .ui-module-shell__body.is-with-module-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .ui-page-shell { padding: var(--space-xl) var(--space-lg) var(--space-2xl); }
+  .ui-page-header__row { flex-wrap: wrap; gap: var(--space-md); }
+  .ui-page-header__actions { width: 100%; justify-content: flex-start; padding-left: 0; }
+  .ui-page-toolbar { align-items: stretch; }
 }

@@ -10,6 +10,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   ChevronsDown,
   ChevronsUp,
   Circle,
@@ -50,7 +51,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   DatePicker,
   DetailPanel,
   EmptyState,
@@ -977,10 +978,11 @@ export default function Praca() {
     icon: ReactNode,
     emptyText?: string,
     emptyAction?: ReactNode,
-    options: { collapseKey?: string; defaultCollapsed?: boolean; collapsible?: boolean; today?: boolean } = {},
+    options: { collapseKey?: string; defaultCollapsed?: boolean; collapsible?: boolean; today?: boolean; tone?: "danger" | "today" | "neutral" | "success" } = {},
   ) => {
     if (!tasks.length && !emptyText) return null;
     const isCollapsed = options.collapseKey ? collapsedSections.has(options.collapseKey) : false;
+    const sectionTone = options.tone ?? (title === "Po terminie" ? "danger" : title === "Dzisiaj" ? "today" : title === "Bez terminu" ? "neutral" : title.startsWith("Uko") ? "success" : undefined);
     const toggleSection = () => {
       if (!options.collapseKey) return;
       setCollapsedSections((current) => {
@@ -991,7 +993,7 @@ export default function Praca() {
       });
     };
     return (
-      <section className={`work-task-section ${isCollapsed ? "is-collapsed" : ""} ${options.today ? "is-today" : ""}`} aria-label={title}>
+      <section className={`work-task-section ${isCollapsed ? "is-collapsed" : ""} ${options.today ? "is-today" : ""} ${sectionTone ? `is-${sectionTone}` : ""}`} aria-label={title}>
         <header className="work-task-section__header">
           <div>
             {icon}
@@ -1264,9 +1266,16 @@ export default function Praca() {
                   <button
                     type="button"
                     className="work-project-record__identity work-project-record__identity-trigger"
-                    aria-label={`Otwórz projekt ${project.name}`}
-                    title="Otwórz projekt"
-                    onClick={() => navigate("project", project.companyId, project.id)}
+                    aria-expanded={isExpanded}
+                    aria-controls={`work-project-preview-${project.id}`}
+                    title="Kliknij, aby rozwinąć; dwuklik otwiera szczegóły projektu"
+                    onClick={() => setExpandedCompanyProjectIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(project.id)) next.delete(project.id);
+                      else next.add(project.id);
+                      return next;
+                    })}
+                    onDoubleClick={() => navigate("project", project.companyId, project.id)}
                   >
                     <FolderKanban size={15} aria-hidden="true" />
                     <span><strong>{project.name}</strong><small>{project.description || "Bez opisu projektu"}</small></span>
@@ -1313,13 +1322,14 @@ export default function Praca() {
                       return next;
                     })}
                   >
-                    {isExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                    {isExpanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
                   </button>
                 </div>
                 <div className="work-project-record__actions">
                   <WorkProjectActionsMenu
                     projectId={project.id}
                     projectName={project.name}
+                    onOpenDetails={() => navigate("project", project.companyId, project.id)}
                     onEdit={() => openProjectEditor(project)}
                     onDelete={() => setDeleteState({ kind: "project", id: project.id, name: project.name })}
                   />
@@ -1358,7 +1368,6 @@ export default function Praca() {
 
   const renderProjectView = () => {
     if (!selectedProject) return null;
-    const selectedProjectCompany = companyById.get(selectedProject.companyId);
     const count = projectCounts.get(selectedProject.id) ?? { total: 0, completed: 0, open: 0 };
     const progress = count.total ? Math.round((count.completed / count.total) * 100) : 0;
     const projectSubtaskCount = projectTasks.filter((task) => Boolean(task.parentId)).length;
@@ -1378,11 +1387,28 @@ export default function Praca() {
             <div className="work-progress" role="progressbar" aria-label="Postęp projektu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><i style={{ width: `${progress}%` }} /></div>
             <p>{formatProjectProgress(count)}{projectSubtaskCount ? ` · w tym ${projectSubtaskCount} ${subtaskCountLabel(projectSubtaskCount)}` : ""}</p>
           </div>
-          <dl className="work-project-summary__facts">
-            <div><dt>Firma</dt><dd>{selectedProjectCompany?.name ?? "Bez firmy"}</dd></div>
-            <div><dt>Termin końcowy</dt><dd>{selectedProject.endDate ? formatDate(selectedProject.endDate) : "Bez terminu"}</dd></div>
-            <div><dt>Otwarte zadania</dt><dd>{count.open}</dd><small>{taskCountLabel(count.open)}</small></div>
-          </dl>
+          <div className="work-project-summary__context-shell">
+            <div className="work-project-summary__context" aria-label="Kontekst projektu">
+              <section className="work-project-summary__context-section">
+                <header className="work-project-summary__context-header"><h3>Kontekst projektu</h3><Button variant="ghost" size="sm" onClick={() => openProjectEditor(selectedProject)}>Edytuj</Button></header>
+                <p className="work-project-summary__context-copy">{selectedProject.description || "Dodaj opis projektu, aby przy kolejnym wejściu od razu wiedzieć, czego dotyczy."}</p>
+              </section>
+              <section className="work-project-summary__context-section">
+                <header className="work-project-summary__context-header"><h3>Najbliższe zadanie</h3>{overdueProjectTaskCount > 0 && <span className="work-project-context__warning"><CircleAlert size={12} aria-hidden="true" /> {overdueProjectTaskCount} po terminie</span>}</header>
+                {nextProjectTask ? (
+                  <button type="button" className="work-project-next-task" onClick={() => toggleTaskDetails(nextProjectTask.id)}>
+                    <span className={`work-project-next-task__status ${taskStatusTone(getTaskStatus(nextProjectTask))}`}>{taskStatusIcon(getTaskStatus(nextProjectTask))}</span>
+                    <span className="work-project-next-task__copy"><strong>{nextProjectTask.title}</strong><small>{relativeDateLabel(taskAnchorDate(nextProjectTask), today)} · {PRIORITY_LABELS[nextProjectTask.priority]}</small></span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                ) : <p className="work-project-summary__context-empty">Brak otwartych zadań. Możesz dodać pierwsze zadanie do projektu.</p>}
+              </section>
+              <section className="work-project-summary__context-section">
+                <header className="work-project-summary__context-header"><h3>Notatka projektu</h3></header>
+                {selectedProject.note ? <p className="work-project-summary__context-note">{selectedProject.note}</p> : <button type="button" className="work-project-add-note" onClick={() => openProjectEditor(selectedProject)}>Dodaj notatkę <ChevronRight size={13} aria-hidden="true" /></button>}
+              </section>
+            </div>
+          </div>
         </section>
         <div className="work-project-layout">
           <section className="work-project-task-panel" aria-labelledby="work-project-tasks-title">
@@ -1390,26 +1416,6 @@ export default function Praca() {
             {completionUndo && <div className="work-completion-undo" role="status"><span>{completionUndo.label}</span><Button variant="quiet" size="sm" onClick={undoCompletionChange}>Cofnij</Button><button type="button" aria-label="Zamknij komunikat" onClick={() => setCompletionUndo(null)}><X size={13} /></button></div>}
             {renderTaskTree()}
           </section>
-          <aside className="work-project-context" aria-label="Kontekst projektu">
-            <section className="work-project-context__section">
-              <header className="work-project-context__header"><h3>Kontekst projektu</h3><Button variant="ghost" size="sm" onClick={() => openProjectEditor(selectedProject)}>Edytuj</Button></header>
-              <p className="work-project-context__description">{selectedProject.description || "Dodaj opis projektu, aby przy kolejnym wejściu od razu wiedzieć, czego dotyczy."}</p>
-            </section>
-            <section className="work-project-context__section">
-              <header className="work-project-context__header"><h3>Najbliższe zadanie</h3>{overdueProjectTaskCount > 0 && <span className="work-project-context__warning"><CircleAlert size={12} aria-hidden="true" /> {overdueProjectTaskCount} po terminie</span>}</header>
-              {nextProjectTask ? (
-                <button type="button" className="work-project-next-task" onClick={() => toggleTaskDetails(nextProjectTask.id)}>
-                  <span className={`work-project-next-task__status ${taskStatusTone(getTaskStatus(nextProjectTask))}`}>{taskStatusIcon(getTaskStatus(nextProjectTask))}</span>
-                  <span className="work-project-next-task__copy"><strong>{nextProjectTask.title}</strong><small>{relativeDateLabel(taskAnchorDate(nextProjectTask), today)} · {PRIORITY_LABELS[nextProjectTask.priority]}</small></span>
-                  <ChevronRight size={14} aria-hidden="true" />
-                </button>
-              ) : <p className="work-project-context__empty">Brak otwartych zadań. Możesz dodać pierwsze zadanie do projektu.</p>}
-            </section>
-            <section className="work-project-context__section work-project-context__section--note">
-              <header className="work-project-context__header"><h3>Notatka projektu</h3></header>
-              {selectedProject.note ? <p className="work-project-context__note">{selectedProject.note}</p> : <button type="button" className="work-project-add-note" onClick={() => openProjectEditor(selectedProject)}>Dodaj notatkę <ChevronRight size={13} aria-hidden="true" /></button>}
-            </section>
-          </aside>
         </div>
       </div>
     );
@@ -1437,6 +1443,7 @@ export default function Praca() {
     const searchPlaceholder = view === "company" ? "Szukaj projektów" : view === "project" ? "Szukaj w projekcie" : "Szukaj zadań";
     return (
       <ContentHeader
+        headingLevel={false}
         className={view === "company" || view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
         leading={<span className="work-breadcrumb">Praca{selectedCompany ? ` / ${selectedCompany.name}` : ""}{selectedProject ? ` / ${selectedProject.name}` : ""}</span>}
         title={labels[view]}
@@ -1496,17 +1503,17 @@ export default function Praca() {
   const primaryAddKind = view === "company" ? "project" : view === "project" ? "task" : "task";
 
   const sidebar = (
-    <ContextSidebar label="Widoki pracy" className="work-context-sidebar">
+    <ModuleSidebar label="Widoki pracy" className="work-context-sidebar">
       <nav className="work-sidebar-nav" aria-label="Widoki pracy">
         <p className="work-sidebar-section-label">Widoki</p>
-        <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today || (taskAnchorDate(task) && taskAnchorDate(task) < today)).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span>}</>} onClick={() => navigate("today")} />
+        <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
         <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
         <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie aktywne" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
 
         <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Firmy</p>
         {workspace.companies.filter((company) => !company.archived).map((company) => {
           const projectCount = workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length;
-          return <ContextNavItem key={company.id} active={view === "company" && selectedCompanyId === company.id} icon={<span className="work-company-dot" style={{ background: company.color }} />} label={company.name} meta={projectCount ? formatProjectCount(projectCount) : undefined} onClick={() => navigate("company", company.id)} />;
+          return <ContextNavItem key={company.id} active={view === "company" && selectedCompanyId === company.id} icon={<span className="work-company-dot" style={{ background: company.color }} />} label={company.name} meta={projectCount || undefined} onClick={() => navigate("company", company.id)} />;
         })}
         {!workspace.companies.length && <p className="work-sidebar-empty">Dodaj firmę, aby uporządkować projekty.</p>}
 
@@ -1515,7 +1522,7 @@ export default function Praca() {
         <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length + workspace.companies.filter((company) => company.archived).length || undefined} onClick={() => navigate("archive")} />
       </nav>
       <div className="work-sidebar-footer"><CircleDot size={12} aria-hidden="true" /><span>Dane zapisują się lokalnie</span></div>
-    </ContextSidebar>
+    </ModuleSidebar>
   );
 
   const renderMobileContextNav = () => {
@@ -1556,6 +1563,7 @@ export default function Praca() {
     <ModuleShell
       className="work-module"
       pageWidth="wide"
+      title="Praca"
       ambient={{ scene: "work", progress: workspace.tasks.length ? workspace.tasks.filter((task) => getTaskStatus(task) === "completed").length / workspace.tasks.length : 0 }}
       header={(
         <PageHeader

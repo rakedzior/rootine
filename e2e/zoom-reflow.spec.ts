@@ -27,13 +27,13 @@ function zoomMetadata(testInfo: TestInfo): ZoomMetadata {
 
 async function expectReflowAtCurrentScale(page: Page, routeName: string) {
   const layout = await page.evaluate(() => {
-    const headerRow = document.querySelector<HTMLElement>(".ui-page-header__row");
+    const contentHeader = document.querySelector<HTMLElement>(".ui-content-header");
     return {
       viewportWidth: document.documentElement.clientWidth,
       documentWidth: document.documentElement.scrollWidth,
       bodyWidth: document.body.scrollWidth,
-      headerClientWidth: headerRow?.clientWidth ?? 0,
-      headerScrollWidth: headerRow?.scrollWidth ?? 0,
+      contentHeaderClientWidth: contentHeader?.clientWidth ?? 0,
+      contentHeaderScrollWidth: contentHeader?.scrollWidth ?? 0,
     };
   });
 
@@ -46,9 +46,9 @@ async function expectReflowAtCurrentScale(page: Page, routeName: string) {
     `${routeName}: body overflows horizontally after scaling`,
   ).toBeLessThanOrEqual(layout.viewportWidth + 1);
   expect(
-    layout.headerScrollWidth,
-    `${routeName}: page-header controls are clipped after scaling`,
-  ).toBeLessThanOrEqual(layout.headerClientWidth + 1);
+    layout.contentHeaderScrollWidth,
+    `${routeName}: content-header controls are clipped after scaling`,
+  ).toBeLessThanOrEqual(layout.contentHeaderClientWidth + 1);
 }
 
 test.describe("browser zoom and reflow", { tag: "@zoom-matrix" }, () => {
@@ -78,8 +78,8 @@ test.describe("browser zoom and reflow", { tag: "@zoom-matrix" }, () => {
       await test.step(`${route.name} at ${profile.zoomPercent}%`, async () => {
         await openRootineRoute(page, route.path);
         await expect(page.locator("#primary-workspace main:visible")).toHaveCount(1);
-        await expect(page.locator("#primary-workspace h1:visible")).toHaveCount(1);
-        await expect(page.locator(".ui-module-shell__header")).toBeVisible();
+        await expect(page.locator("#primary-workspace .ui-content-header:visible")).toHaveCount(1);
+        await expect(page.locator(".ui-page-shell")).toBeVisible();
         await expectReflowAtCurrentScale(page, route.name);
       });
     }

@@ -50,7 +50,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   DetailPanel,
   EmptyState,
   Input,
@@ -752,7 +752,7 @@ export default function Notatki() {
   };
 
   const contextSidebar = (
-    <ContextSidebar label="Widoki notatek" className="notes-sidebar">
+    <ModuleSidebar label="Widoki notatek" className="notes-sidebar">
       <div className="notes-sidebar__nav">
         <p className="notes-sidebar__label">Główne</p>
         <ContextNavItem active={view === "all"} icon={<LayoutGrid />} label="Wszystkie" meta={activeNotes.length} onClick={() => selectView("all")} />
@@ -870,7 +870,7 @@ export default function Notatki() {
         <FileText size={13} />
         <span>Notatki zapisują się lokalnie</span>
       </div>
-    </ContextSidebar>
+    </ModuleSidebar>
   );
 
   const renderNoteCard = (note: NoteRecord) => {
@@ -1245,6 +1245,7 @@ export default function Notatki() {
       detailPanel={detailPanel}
       className="notes-module"
       pageWidth="standard"
+      title={viewTitle}
       ambient={{
         scene: "notes",
         progress: activeNotes.length ? activeNotes.filter((note) => note.pinned).length / activeNotes.length : 0,
@@ -1267,6 +1268,7 @@ export default function Notatki() {
     >
       <ModuleMain transitionKey={view}>
         <ContentHeader
+          headingLevel={false}
           className="notes-toolbar"
           title={viewTitle}
           description={viewDescription}

@@ -220,7 +220,7 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 
 ### Hierarchy
 
-- **Headline** (`typography.headline`): tytuł pełnego obszaru roboczego; najwyżej jeden na ekran.
+- **Headline** (`typography.headline`): wartości liczbowe i wyróżnione stany; nie służy do tytułów zakładek ani podzakładek.
 - **Title** (`typography.title`): nagłówki modułów, dialogów i paneli.
 - **Body** (`typography.body`): zadania, wartości pól i podstawowa treść operacyjna.
 - **Label** (`typography.label`): krótkie etykiety sekcji, zwykle uppercase z poszerzonym trackingiem.
@@ -235,13 +235,15 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 
 ## Layout
 
-Aplikacja używa jednego `AppShell` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. Kontekstowy sidebar służy wyłącznie rosnącym kolekcjom i drzewom w Zadaniach, Pracy i Notatkach. Sport, Cele, Sprawy oraz Podróże używają zakładek i filtrów nad treścią.
+Global `PageHeader` is not rendered on application routes. Each tab and subtab starts directly with its workspace; the current view, metadata, filters, and local actions belong to `ContentHeader`.
 
-Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `PageHeader` nazywa cały moduł, a `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
+Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Kontekstowy sidebar służy wyłącznie rosnącym kolekcjom i drzewom w Zadaniach, Pracy i Notatkach. Sport, Cele, Sprawy oraz Podróże używają zakładek i filtrów nad treścią.
 
-Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Zadania, Kalendarz, Cele, Sport i Odżywianie używają wspólnego `PageHeader` o wysokości 70px i poziomym paddingu 28px. Ten sam komponent jest obowiązkowy dla nowych ekranów.
+Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `PageHeader` pozostaje bez dużego tytułu, a `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
-Układ jest przede wszystkim desktopowy i gęsty. Ramy szerokości to Reading 840px, Standard 1200px, Wide 1560px oraz pełny Canvas; cała kompozycja sidebar + treść jest centrowana jako jeden układ. Przy 1380px każdy `DetailPanel` przechodzi w warstwę nakładaną, przy 980px globalny sidebar zwęża się do ikon, a przy 760px zastępuje go dolna nawigacja z czterema priorytetowymi modułami i pozycją „Więcej”. „Więcej” udostępnia wszystkie obszary, ustawienia, profil oraz przywrócenie ukrytych modułów bez poziomego przewijania paska. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
+Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Każda trasa używa wspólnego `PageShell`, który renderuje titleless `PageHeader`, opcjonalny `PageToolbar` i wspólną oś treści. Ten sam komponent jest obowiązkowy dla nowych ekranów.
+
+Układ jest przede wszystkim desktopowy i gęsty. Globalne warianty szerokości to `standard` 1280px, `wide` 1480px oraz `fluid` bez maksymalnej szerokości; cała kompozycja sidebar + treść jest centrowana względem faktycznego `MainContent`. Przy 1380px każdy `DetailPanel` przechodzi w warstwę nakładaną, przy 980px globalny sidebar zwęża się do ikon, a przy 760px zastępuje go dolna nawigacja z czterema priorytetowymi modułami i pozycją „Więcej”. „Więcej” udostępnia wszystkie obszary, ustawienia, profil oraz przywrócenie ukrytych modułów bez poziomego przewijania paska. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
 
 **The Workspace First Rule.** Szerokość należy oddać głównej czynności. Panele pomocnicze mogą znikać lub nakładać się wcześniej niż treść robocza.
 
@@ -346,10 +348,12 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 
 ### PageHeader
 
+This remains a compatibility contract only. `PageShell` intentionally ignores the legacy header slot, so the removed top bar cannot reappear on existing routes. Screen-level status and actions stay in `ContentHeader` or the content area.
+
 - **Style:** wysokość 70px, padding poziomy 28px i dolna Linia subtelna.
-- **Content:** po lewej pojedynczy tytuł z krótkim opisem, po prawej 1–3 akcje.
-- **Hierarchy:** tytuł korzysta z `typography.title` lub `typography.headline`, zależnie od złożoności przestrzeni.
-- **Contract:** tytuł nazywa moduł, opis nazywa aktualny podwidok, a prawa strona zawiera jedną główną akcję: Nowe zadanie, Nowe wydarzenie, Nowy cel, Dodaj trening albo Dodaj produkt.
+- **Content:** bez dużego tytułu; po lewej może pozostać krótki opis lub metadane, po prawej 1–3 akcje.
+- **Hierarchy:** nazwa bieżącego widoku pozostaje w kompaktowym `ContentHeader`, a `typography.headline` nie jest używana do tytułów stron.
+- **Contract:** `PageHeader` porządkuje akcje globalne i informacje pomocnicze; `ContentHeader` nazywa podwidok oraz jego filtry.
 
 ### ModuleShell
 

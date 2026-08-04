@@ -75,7 +75,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
           }));
         }, { key: TASK_STORAGE_KEY, recordCount: count });
         await page.reload();
-        await expect(page.locator(".ui-page-header__title")).toHaveText("Zadania");
+        await expect(page.locator(".ui-content-header__title")).toBeVisible();
         await expect(page.getByRole("button", { name: /^Otwórz szczegóły zadania: Wolumen/ })).toHaveCount(count);
         await expectNoDocumentOverflow(page);
 

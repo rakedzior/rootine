@@ -100,9 +100,8 @@
 }
 
 :root {
-  --page-width-reading: 840px;
-  --page-width-standard: 1200px;
-  --page-width-wide: 1560px;
+  --page-width-standard: 1280px;
+  --page-width-wide: 1480px;
   --color-category-sky: #7fa6c9;
   --color-category-teal: #79a8a4;
   --color-category-sand: #b9a171;

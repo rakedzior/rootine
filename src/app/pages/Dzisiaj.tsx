@@ -824,6 +824,7 @@ export default function Dzisiaj() {
     <ModuleShell
       className="today-module"
       pageWidth="standard"
+      title="Dzisiaj"
       header={pageHeader}
       ambient={{
         scene: "today",
@@ -837,6 +838,7 @@ export default function Dzisiaj() {
     >
       <ModuleMain>
         <ContentHeader
+          headingLevel={false}
           title="Plan dnia"
           description="Dzisiejszy bilans wszystkich aktywnych obszarów"
           meta={<span>{remainingDailyItems} pozostało · {activeAreaCount} wymaga uwagi</span>}

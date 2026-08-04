@@ -8,7 +8,7 @@ import {
   Play,
   type LucideIcon,
 } from "lucide-react";
-import { Button, ContextNavItem, ContextSidebar, SectionHeader } from "../ui";
+import { Button, ContextNavItem, ModuleSidebar, SectionHeader } from "../ui";
 import type { WorkoutSession } from "./model";
 import type { PlannerView } from "./plannerModel";
 
@@ -66,7 +66,7 @@ export function SportSidebar({
   };
 
   return (
-    <ContextSidebar label="Widoki Sportu" className="sport-context-sidebar">
+    <ModuleSidebar label="Widoki Sportu" className="sport-context-sidebar">
       <div className="sport-context-sidebar__nav">
         {GROUPS.map((group) => (
           <section key={group.label}>
@@ -96,6 +96,6 @@ export function SportSidebar({
           </Button>
         </div>
       )}
-    </ContextSidebar>
+    </ModuleSidebar>
   );
 }

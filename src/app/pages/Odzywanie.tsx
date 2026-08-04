@@ -875,6 +875,7 @@ export default function Odzywanie() {
     <ModuleShell
       className="nutrition-module"
       pageWidth="wide"
+      title="Dzienny rejestr"
       ambient={{ scene: "nutrition", progress: workspace.goals.calories > 0 ? totals.calories / workspace.goals.calories : 0, signal: `${allEntries.length}:${day.waterMl}` }}
       header={(
         <PageHeader
@@ -905,6 +906,7 @@ export default function Odzywanie() {
       ) : (
         <>
           <ContentHeader
+            headingLevel={false}
             className="nutrition-content-header"
             title="Dzienny rejestr"
             description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} / ${formatNumber(workspace.goals.calories)} kcal`}

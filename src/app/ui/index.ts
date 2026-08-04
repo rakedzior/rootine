@@ -26,15 +26,21 @@ export {
 } from "./components/Menu";
 export { Modal, type ModalProps } from "./components/Modal";
 export { PageHeader, type PageHeaderProps } from "./components/PageHeader";
+export { PageShell, type PageShellProps, type PageWidth } from "./components/PageShell";
+export { PageToolbar, type PageToolbarProps } from "./components/PageToolbar";
 export { SectionHeader, type SectionHeaderProps } from "./components/SectionHeader";
 export { Select, type SelectOption, type SelectProps } from "./components/Select";
 export {
   AmbientScene,
+  MainContent,
+  WorkspaceLayout,
+  ModuleSidebar,
   ContextSidebar,
   ContextNavItem,
   DetailPanel,
   ModuleMain,
   ModuleShell,
+  type ModuleSidebarProps,
   type ContextSidebarProps,
   type AmbientConfig,
   type AmbientSceneProps,
@@ -43,7 +49,8 @@ export {
   type DetailPanelProps,
   type ModuleMainProps,
   type ModuleShellProps,
-  type PageWidth,
+  type MainContentProps,
+  type WorkspaceLayoutProps,
 } from "./components/Shell";
 export { Tabs, type TabItem, type TabsProps } from "./components/Tabs";
 export { uiColors, uiLayout, uiRadii, uiShadows, uiSpacing } from "./tokens";

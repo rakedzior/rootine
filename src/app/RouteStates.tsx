@@ -5,6 +5,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Link, isRouteErrorResponse, useLocation, useRouteError } from "react-router";
+import { PageShell } from "./ui";
 
 type RouteStateFrameProps = {
   eyebrow: string;
@@ -25,17 +26,23 @@ function RouteStateFrame({
 }: RouteStateFrameProps) {
   return (
     <main className={`app-route-state${compact ? " is-compact" : ""}`}>
-      <section className="app-route-state__panel" aria-labelledby="app-route-state-title">
+      <PageShell
+        title={title}
+        subtitle={description}
+        width="standard"
+        className="app-route-state__page-shell"
+        contentClassName="app-route-state__page-content"
+      >
+        <section className="app-route-state__panel">
         <div className="app-route-state__brand" aria-hidden="true">
           <span>R</span>
           <strong>Rootine</strong>
         </div>
         <div className="app-route-state__icon" aria-hidden="true">{icon}</div>
         <p className="app-route-state__eyebrow">{eyebrow}</p>
-        <h1 id="app-route-state-title">{title}</h1>
-        <p className="app-route-state__description">{description}</p>
         {children && <div className="app-route-state__actions">{children}</div>}
-      </section>
+        </section>
+      </PageShell>
     </main>
   );
 }

@@ -373,6 +373,7 @@ export default function Cele() {
   return (
     <ModuleShell
       pageWidth="standard"
+      title={filterLabel}
       header={pageHeader}
       contextSidebar={(
         <GoalSubSidebar
@@ -418,6 +419,7 @@ export default function Cele() {
         )}
 
         <ContentHeader
+          headingLevel={false}
           title={filterLabel}
           description={`${visibleGoals.length} ${visibleGoals.length === 1 ? "cel" : "celów"}`}
           mobileNavigation={<Select

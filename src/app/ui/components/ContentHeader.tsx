@@ -13,15 +13,15 @@ export interface ContentHeaderProps extends Omit<HTMLAttributes<HTMLElement>, "t
   actions?: ReactNode;
   controls?: ReactNode;
   below?: ReactNode;
+  headingLevel?: 2 | 3 | false;
   innerClassName?: string;
 }
 
 /**
- * The shared header for the current view inside a module.
+ * The shared toolbar/header for a view inside a page.
  *
- * PageHeader names the module. ContentHeader names the selected sub-view and
- * owns its local navigation, filters and actions. It deliberately lives inside
- * ModuleMain so its horizontal frame is the same frame as the view content.
+ * PageShell owns the page frame without a display title. ContentHeader owns
+ * the compact current-view label, local navigation, filters and actions.
  */
 export function ContentHeader({
   title,
@@ -32,6 +32,7 @@ export function ContentHeader({
   actions,
   controls,
   below,
+  headingLevel = 2,
   innerClassName,
   className,
   ...props
@@ -45,7 +46,11 @@ export function ContentHeader({
             {leading && <div className="ui-content-header__leading">{leading}</div>}
             <div className="ui-content-header__copy">
               <div className="ui-content-header__heading">
-                <h2 className="ui-content-header__title">{title}</h2>
+                {headingLevel === false
+                  ? <div className="ui-content-header__title" role="presentation">{title}</div>
+                  : headingLevel === 3
+                    ? <h3 className="ui-content-header__title">{title}</h3>
+                    : <h2 className="ui-content-header__title">{title}</h2>}
                 {meta && <div className="ui-content-header__meta">{meta}</div>}
               </div>
               {description && <p className="ui-content-header__description">{description}</p>}

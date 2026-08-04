@@ -39,7 +39,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   DetailPanel,
   EmptyState,
   MenuItem,
@@ -783,7 +783,8 @@ export default function Zadania() {
 
   return (
     <ModuleShell
-      pageWidth="canvas"
+      pageWidth="fluid"
+      title={listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
       header={pageHeader}
       className="task-module"
       ambient={{
@@ -803,7 +804,7 @@ export default function Zadania() {
     >
 
       {/* ── Sub-sidebar ── */}
-      <ContextSidebar label="Widoki i listy zadań" className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ModuleSidebar label="Widoki i listy zadań" className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* Smart views */}
         <div className="px-2 pb-4 pt-4">
@@ -1094,12 +1095,13 @@ export default function Zadania() {
             );
           })}
         </div>
-      </ContextSidebar>
+      </ModuleSidebar>
 
       {/* ── Summary document (replaces task list in podsumowanie mode) ── */}
       {taskView === "podsumowanie" && (
         <ModuleMain>
           <ContentHeader
+            headingLevel={false}
             title="Podsumowanie"
             description={`Przegląd realizacji zadań · ${todayStr()}`}
             mobileNavigation={<Select
@@ -1122,6 +1124,7 @@ export default function Zadania() {
       {taskView === "nawyki" && (
         <ModuleMain className="task-module-main">
           <ContentHeader
+            headingLevel={false}
             title="Nawyki"
             description={`Codzienny rytm · ${todayStr()}`}
             meta={<span>{habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey)).length} na dzisiaj</span>}
@@ -1158,6 +1161,7 @@ export default function Zadania() {
           display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
         }}>
         <ContentHeader
+          headingLevel={false}
           className="task-workspace-toolbar"
           title={listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
           description={`${formatOpenTaskCount(pending.length)} · ${todayStr()}`}

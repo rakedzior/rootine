@@ -48,7 +48,7 @@ async function expectNoGlobalHorizontalOverflow(page: Page, routeName: string) {
 
 test.describe("responsive shell and module invariants", { tag: "@viewport-matrix" }, () => {
   for (const route of ROUTES) {
-    test(`${route.name} reflows without shifting the module header`, async ({
+    test(`${route.name} reflows without a global page header`, async ({
       rootinePage: page,
     }) => {
       await openRootineRoute(page, route.path);
@@ -58,80 +58,52 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
 
       const workspace = page.locator("#primary-workspace");
       const moduleShell = workspace.locator(":scope > .rootine-route-transition > .ui-module-shell");
-      const moduleHeader = moduleShell.locator(":scope > .ui-module-shell__header");
-      const headerRow = moduleHeader.locator(".ui-page-header__row");
-      const visibleMain = workspace.locator("main:visible");
-      const visibleH1 = workspace.locator("h1:visible");
-      const contentHeader = visibleMain.locator(":scope > .ui-content-header");
-      const contentHeaderInner = contentHeader.locator(":scope > .ui-content-header__inner");
-      const visibleH2 = contentHeader.locator("h2:visible");
+      const pageShell = moduleShell.locator(":scope .ui-page-shell");
+      const pageContent = pageShell.locator(":scope > .ui-page-shell__content");
+      const visibleMain = workspace.locator("main.ui-main-content:visible");
+      const contentHeader = visibleMain.locator(".ui-content-header:visible").first();
+      const contentHeaderInner = contentHeader.locator(".ui-content-header__inner");
 
       await expect(workspace).toHaveCount(1);
       await expect(moduleShell).toHaveCount(1);
-      await expect(moduleHeader).toBeVisible();
-      await expect(headerRow).toBeVisible();
+      await expect(pageShell.locator(":scope > .ui-page-header")).toHaveCount(0);
       await expect(visibleMain).toHaveCount(1);
-      await expect(visibleH1).toHaveCount(1);
       await expect(contentHeader).toHaveCount(1);
       await expect(contentHeader).toBeVisible();
-      await expect(visibleH2).toHaveCount(1);
 
-      const [workspaceBox, shellBox, headerBox, headerRowBox, headingBox, mainBox, contentHeaderBox, contentHeaderInnerBox] = await Promise.all([
+      const [workspaceBox, shellBox, pageShellBox, pageContentBox, contentHeaderBox, contentHeaderInnerBox] = await Promise.all([
         workspace.boundingBox(),
         moduleShell.boundingBox(),
-        moduleHeader.boundingBox(),
-        headerRow.boundingBox(),
-        visibleH1.boundingBox(),
-        visibleMain.boundingBox(),
+        pageShell.boundingBox(),
+        pageContent.boundingBox(),
         contentHeader.boundingBox(),
         contentHeaderInner.boundingBox(),
       ]);
       expect(workspaceBox).not.toBeNull();
       expect(shellBox).not.toBeNull();
-      expect(headerBox).not.toBeNull();
-      expect(headerRowBox).not.toBeNull();
-      expect(headingBox).not.toBeNull();
-      expect(mainBox).not.toBeNull();
+      expect(pageShellBox).not.toBeNull();
+      expect(pageContentBox).not.toBeNull();
       expect(contentHeaderBox).not.toBeNull();
       expect(contentHeaderInnerBox).not.toBeNull();
 
       expectInsideViewport(workspaceBox!, viewport!, `${route.name} workspace`);
       expectInsideViewport(shellBox!, viewport!, `${route.name} module shell`);
-      expectInsideViewport(headerBox!, viewport!, `${route.name} module header`);
-      expectInsideViewport(headingBox!, viewport!, `${route.name} h1`);
+      expectInsideViewport(pageShellBox!, viewport!, `${route.name} page shell`);
       expectInsideViewport(contentHeaderBox!, viewport!, `${route.name} content header`);
       expect(
-        Math.abs(contentHeaderBox!.x - mainBox!.x),
-        `${route.name}: content header must share the main workspace edge`,
+        Math.abs(contentHeaderBox!.x - pageContentBox!.x),
+        `${route.name}: content header must share the page content edge`,
       ).toBeLessThanOrEqual(1);
       expect(
-        Math.abs(contentHeaderBox!.width - mainBox!.width),
-        `${route.name}: content header must share the main workspace width`,
+        Math.abs(contentHeaderBox!.width - pageContentBox!.width),
+        `${route.name}: content header must share the page content width`,
       ).toBeLessThanOrEqual(1);
-      expect(contentHeaderInnerBox!.x).toBeGreaterThanOrEqual(mainBox!.x - 1);
+      expect(contentHeaderInnerBox!.x).toBeGreaterThanOrEqual(pageContentBox!.x - 1);
       expect(contentHeaderInnerBox!.x + contentHeaderInnerBox!.width)
-        .toBeLessThanOrEqual(mainBox!.x + mainBox!.width + 1);
-
-      expect(
-        Math.abs(headerBox!.x - shellBox!.x),
-        `${route.name}: a context sidebar must not shift the page header`,
-      ).toBeLessThanOrEqual(1);
-      expect(
-        Math.abs(headerBox!.width - shellBox!.width),
-        `${route.name}: the page header must span the module shell`,
-      ).toBeLessThanOrEqual(1);
-      expect(
-        Math.abs(headerRowBox!.x - shellBox!.x),
-        `${route.name}: the page header row must use the shared left gutter`,
-      ).toBeLessThanOrEqual(1);
-      expect(
-        Math.abs(headerRowBox!.width - shellBox!.width),
-        `${route.name}: the page header row must not be centered by content width`,
-      ).toBeLessThanOrEqual(1);
-      await expect(visibleH1).toHaveCSS("text-align", "left");
+        .toBeLessThanOrEqual(pageContentBox!.x + pageContentBox!.width + 1);
 
       if (["/zadania", "/kalendarz", "/praca", "/notatki"].includes(route.path)) {
-        const contextSidebar = moduleShell.locator(":scope > .ui-module-shell__body > .ui-context-sidebar");
+        const contextSidebar = moduleShell.locator(":scope > .ui-module-shell__body > .ui-module-sidebar");
         await expect(contextSidebar).toBeVisible();
         const sidebarBox = await contextSidebar.boundingBox();
         expect(sidebarBox).not.toBeNull();

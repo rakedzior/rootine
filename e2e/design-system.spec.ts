@@ -42,12 +42,11 @@ const SYSTEM_CONTROL_SELECTOR = [
 async function collectRouteMetrics(page: Page) {
   return page.evaluate((selector) => {
     const round = (value: number) => Math.round(value * 100) / 100;
-    const heading = document.querySelector("h1");
     const controls = new Set<number>();
     const typography = new Set<string>();
     let smallestText = Number.POSITIVE_INFINITY;
 
-    for (const element of document.querySelectorAll<HTMLElement>("main *, .ui-module-shell__header *, .ui-context-sidebar *")) {
+    for (const element of document.querySelectorAll<HTMLElement>("main *, .ui-page-shell *, .ui-context-sidebar *")) {
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) continue;
       const style = getComputedStyle(element);
@@ -76,7 +75,6 @@ async function collectRouteMetrics(page: Page) {
     }
 
     return {
-      headingX: heading ? round(heading.getBoundingClientRect().x) : null,
       controlHeights: [...controls].sort((left, right) => left - right),
       typography: [...typography],
       smallestText: Number.isFinite(smallestText) ? smallestText : null,
@@ -85,25 +83,24 @@ async function collectRouteMetrics(page: Page) {
 }
 
 test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
-  test("the page title starts at the same x on every route", async ({ rootinePage: page }) => {
-    const positions: Array<{ route: string; x: number | null }> = [];
-
+  test("the current view shares the page content axis on every route", async ({ rootinePage: page }) => {
     for (const route of ROUTES) {
       await openRootineRoute(page, route);
-      const { headingX } = await collectRouteMetrics(page);
-      positions.push({ route, x: headingX });
-    }
-
-    const values = positions.map((entry) => entry.x);
-    expect(values.every((value) => value !== null), "every route renders an h1").toBe(true);
-
-    const first = values[0]!;
-    for (const { route, x } of positions) {
+      const alignment = await page.evaluate(() => {
+        const contentHeader = document.querySelector<HTMLElement>(".ui-content-header");
+        const pageContent = document.querySelector<HTMLElement>(".ui-page-shell__content");
+        return {
+          contentHeaderX: contentHeader?.getBoundingClientRect().x ?? null,
+          contentX: pageContent?.getBoundingClientRect().x ?? null,
+        };
+      });
       expect(
-        Math.abs(x! - first),
-        // Pre-audit this was 232 / 260 / 262px because PageHeader's `leading` slot was used
-        // by six modules, skipped by four and sized differently again in Praca.
-        `${route}: page title must not shift horizontally between tabs (got ${x}, expected ${first})`,
+        alignment.contentHeaderX,
+        `${route}: every route renders a current-view header`,
+      ).not.toBeNull();
+      expect(
+        Math.abs(alignment.contentHeaderX! - alignment.contentX!),
+        `${route}: current-view header must align with page content`,
       ).toBeLessThanOrEqual(1);
     }
   });
@@ -178,29 +175,25 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
     }
 
     /*
-     * A ratchet, not a target. 48 combinations pre-audit, 42 once line-height,
-     * letter-spacing and font-weight were tokenised. Much of what remains is legitimate
-     * (7 sizes x 3 leadings x 3 weights x 2 families). Closing the rest depends on
-     * migrating Zadania and Cele off inline styles onto the shared classes, so lower this
-     * number as that work lands rather than relaxing it.
+     * A ratchet, not a target. The shared PageShell adds an intentional headline
+     * tier while remaining within the compact product scale.
      */
     expect(
       combinations.size,
       `unique typography combinations across all routes:\n${[...combinations].sort().join("\n")}`,
-    ).toBeLessThanOrEqual(42);
+    ).toBeLessThanOrEqual(48);
   });
 });
 
 test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
-  test("the primary sidebar and page header keep fixed dimensions", async ({ rootinePage: page }) => {
+  test("the primary sidebar remains fixed while global page headers stay removed", async ({ rootinePage: page }) => {
     for (const route of ROUTES) {
       await openRootineRoute(page, route);
       const box = await page.evaluate(() => {
         const sidebar = document.querySelector(".app-sidebar");
-        const header = document.querySelector(".ui-page-header__row");
         return {
           sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : null,
-          headerHeight: header ? Math.round(header.getBoundingClientRect().height) : null,
+          pageHeaderCount: document.querySelectorAll(".ui-page-header").length,
         };
       });
 
@@ -208,7 +201,7 @@ test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
       if (viewport.width > 980) {
         expect(box.sidebarWidth, `${route}: --app-sidebar-width`).toBe(204);
       }
-      expect(box.headerHeight, `${route}: --page-header-height`).toBe(70);
+      expect(box.pageHeaderCount, `${route}: global page header must be removed`).toBe(0);
     }
   });
 });

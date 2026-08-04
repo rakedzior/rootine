@@ -34,7 +34,7 @@ test.describe("legacy navigation aliases", { tag: "@shared" }, () => {
     await openRootineRoute(page, "/biuro");
 
     await expect(page).toHaveURL(/\/praca$/);
-    await expect(page.locator(".ui-page-header__title")).toHaveText("Praca");
+    await expect(page.locator(".ui-page-shell")).toBeVisible();
     await expect(page.getByRole("link", { name: "Biuro", exact: true })).toHaveCount(0);
   });
 
@@ -42,7 +42,7 @@ test.describe("legacy navigation aliases", { tag: "@shared" }, () => {
     await openRootineRoute(page, "/finanse");
 
     await expect(page).toHaveURL(/\/sprawy\?widok=budget$/);
-    await expect(page.locator(".ui-page-header__title")).toHaveText("Sprawy");
+    await expect(page.locator(".ui-page-shell")).toBeVisible();
     await expect(page.getByRole("link", { name: "Finanse", exact: true })).toHaveCount(0);
   });
 });
@@ -57,7 +57,7 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await page.getByRole("button", { name: "Widok kalendarza" }).click();
 
     await expect(page).toHaveURL(/\/kalendarz$/);
-    await expect(page.getByRole("heading", { level: 1, name: "Zadania" })).toBeVisible();
+    await expect(page.locator(".ui-content-header__title")).toBeVisible();
     await expect(tasksLink).toHaveAttribute("aria-current", "page");
     await expect(primaryNavigation.getByRole("link", { name: "Kalendarz" })).toHaveCount(0);
   });
@@ -115,7 +115,7 @@ test.describe("mobile navigation", { tag: "@mobile" }, () => {
     });
     await mobileNavigation.getByRole("link", { name: "Zadania" }).click();
     await expect(page).toHaveURL(/\/zadania$/);
-    await expect(page.getByRole("heading", { level: 1, name: "Zadania" })).toBeVisible();
+    await expect(page.locator(".ui-content-header__title")).toBeVisible();
 
     const moreButton = mobileNavigation.getByRole("button", { name: "Więcej" });
     await moreButton.click();
@@ -126,9 +126,7 @@ test.describe("mobile navigation", { tag: "@mobile" }, () => {
 
     await drawer.getByRole("link", { name: "Notatki" }).click();
     await expect(page).toHaveURL(/\/notatki$/);
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Notatki", exact: true }),
-    ).toBeVisible();
+    await expect(page.locator(".ui-content-header__title")).toHaveText("Wszystkie notatki");
     await expect(drawer).toHaveCount(0);
   });
 });

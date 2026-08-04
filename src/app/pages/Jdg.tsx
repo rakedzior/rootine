@@ -375,6 +375,7 @@ export function JdgWorkspace({
   const content = (
     <>
       <ContentHeader
+        headingLevel={false}
         className="jdg-toolbar"
         title="JDG"
         description={`Miesięczne zamknięcie · ${formatMonth(monthKey)}`}

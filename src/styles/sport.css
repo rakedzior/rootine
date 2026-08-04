@@ -3155,10 +3155,10 @@ button.sport-cycle-plan-card:focus-visible {
   text-transform: uppercase;
 }
 
-.sport-strength-session__heading h1 {
+.sport-strength-session__heading h2 {
   margin: var(--space-xs) 0 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-headline);
+  font-size: var(--text-title);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }

@@ -743,11 +743,11 @@ export default function Layout() {
     : assistant.state.status;
 
   return (
-    <div className="app-shell">
+    <div className="app-layout app-shell">
       <a className="app-skip-link" href="#primary-workspace">Przejdź do treści</a>
       <aside
         id="primary-sidebar"
-        className={`app-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
+        className={`app-primary-sidebar app-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
         aria-label="Główna nawigacja"
       >
         <div className="app-brand">
@@ -1086,10 +1086,10 @@ export default function Layout() {
         {dayReplayOpen && <DayReplay open onClose={() => setDayReplayOpen(false)} />}
       </Suspense>
 
-      <div className="app-shell__body">
+      <div className="workspace-layout app-shell__body">
         <div
           id="primary-workspace"
-          className={`app-shell__content${assistant.isOpen ? " is-assistant-active" : ""}`}
+          className={`main-content app-shell__content${assistant.isOpen ? " is-assistant-active" : ""}`}
           tabIndex={-1}
         >
           <Suspense fallback={<RouteLoadingState />}>

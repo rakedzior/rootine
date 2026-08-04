@@ -61,7 +61,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   CompletedSection,
   EmptyState,
   Input,
@@ -739,7 +739,7 @@ export default function Podroze({
               : `${editor?.mode === "edit" ? "Edytuj" : "Nowa"} sprawa`;
 
   const contextSidebar = (
-    <ContextSidebar label="Podróże" className="travel-sidebar">
+    <ModuleSidebar label="Podróże" className="travel-sidebar">
       <div className="travel-sidebar__nav">
         <p className="travel-sidebar__label">Obszar nadrzędny</p>
         {!embedded && <ContextNavItem icon={<ArrowLeft />} label="Wróć do Spraw" onClick={() => navigate("/sprawy")} />}
@@ -786,7 +786,7 @@ export default function Podroze({
         <MapIcon size={13} aria-hidden="true" />
         <span>Dane zapisują się lokalnie</span>
       </div>
-    </ContextSidebar>
+    </ModuleSidebar>
   );
 
   const tripHeaderActions = selectedTrip ? (
@@ -874,6 +874,7 @@ export default function Podroze({
     <>
       <ModuleMain>
         <ContentHeader
+          headingLevel={false}
           className="travel-toolbar"
           title={selectedTrip?.name ?? "Przegląd podróży"}
           description={selectedTrip ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}` : "Zaplanowane i zakończone wyjazdy"}
@@ -1715,6 +1716,7 @@ export default function Podroze({
         contextSidebar={contextSidebar}
         className="travel-module"
         pageWidth="wide"
+        title={selectedTrip?.name ?? "Przegląd podróży"}
         ambient={{
           scene: "travel",
           progress: selectedTrip

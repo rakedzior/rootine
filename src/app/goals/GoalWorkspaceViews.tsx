@@ -24,7 +24,7 @@ import {
   Badge,
   Button,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   Menu,
   MenuItem,
   SectionHeader,
@@ -115,7 +115,7 @@ export function GoalSubSidebar({
   };
 
   return (
-    <ContextSidebar label="Widoki i kategorie celów">
+    <ModuleSidebar label="Widoki i kategorie celów">
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <SectionLabel>Główne</SectionLabel>
         <div className="mb-6">{item("overview", "Aktywne cele", BarChart3, countForFilter("overview", goals))}</div>
@@ -284,7 +284,7 @@ export function GoalSubSidebar({
           <ContextNavItem onClick={onSettings} icon={<Settings2 />} label="Ustawienia celów" />
         </div>
       </div>
-    </ContextSidebar>
+    </ModuleSidebar>
   );
 }
 

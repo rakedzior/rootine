@@ -278,7 +278,7 @@
   margin: 0 0 var(--space-xl);
 }
 
-/* Section titles stay below the page title in --text-title; see tokens.css. */
+/* Section titles stay compact and subordinate to the current-view toolbar. */
 .notes-canvas__heading h2 {
   margin: 0;
   color: var(--color-chalk-white);

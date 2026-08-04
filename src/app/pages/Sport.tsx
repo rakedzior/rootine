@@ -1149,6 +1149,7 @@ export default function Sport() {
     <ModuleShell
       className="sport-module sport-planner-module"
       pageWidth="wide"
+      title={viewMeta.title}
       ambient={{
         scene: "sport",
         progress: activeSessionProgress,
@@ -1207,6 +1208,7 @@ export default function Sport() {
     >
       <ModuleMain transitionKey={`${view}:${activeWeek}`}>
         <ContentHeader
+          headingLevel={false}
           className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}
           title={viewMeta.title}
           description={viewMeta.description}

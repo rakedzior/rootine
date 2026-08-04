@@ -36,7 +36,7 @@ test.describe("task persistence", { tag: "@desktop" }, () => {
       .toBe("true");
 
     await page.reload();
-    await expect(page.getByRole("heading", { level: 1, name: "Zadania" })).toBeVisible();
+    await expect(page.locator(".ui-content-header__title")).toBeVisible();
     await expect(taskButton).toBeVisible();
   });
 });

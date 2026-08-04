@@ -1,5 +1,7 @@
 import {
+  Children,
   forwardRef,
+  isValidElement,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -16,6 +18,9 @@ import { useModuleMemory } from "../../experience/moduleMemory";
 import { useSubtabTransition } from "../../experience/transitions";
 import { LivingDay, type LivingDayArea } from "../../experience/LivingDay";
 import type { RootineAreaId } from "../../experience/activeArea";
+import { PageShell } from "./PageShell";
+import type { PageWidth } from "./PageShell";
+import { PageHeader, type PageHeaderProps } from "./PageHeader";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -44,7 +49,14 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-export interface ModuleShellProps extends HTMLAttributes<HTMLDivElement> {
+export interface ModuleShellProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  leading?: ReactNode;
+  meta?: ReactNode;
+  actions?: ReactNode;
+  toolbar?: ReactNode;
+  /** @deprecated Use the PageShell props. Kept for embedded legacy renderers during migration. */
   header?: ReactNode;
   contextSidebar?: ReactNode;
   detailPanel?: ReactNode;
@@ -53,7 +65,6 @@ export interface ModuleShellProps extends HTMLAttributes<HTMLDivElement> {
   memoryKey?: string;
 }
 
-export type PageWidth = "reading" | "standard" | "wide" | "canvas";
 export type AmbientVariant =
   | "quiet"
   | "warm"
@@ -289,6 +300,12 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
 }
 
 export function ModuleShell({
+  title,
+  subtitle,
+  leading,
+  meta,
+  actions,
+  toolbar,
   header,
   contextSidebar,
   detailPanel,
@@ -303,56 +320,120 @@ export function ModuleShell({
   const ambientConfig = typeof ambient === "string" ? { scene: ambient } : ambient;
   const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
   const resolvedMemoryKey = memoryKey ?? findModuleForPath(pathname)?.id ?? pathname;
+  const legacyHeaderProps = header && isValidElement<PageHeaderProps>(header) && header.type === PageHeader
+    ? header.props
+    : undefined;
+  const resolvedTitle = title ?? legacyHeaderProps?.title;
+  const resolvedSubtitle = subtitle ?? legacyHeaderProps?.description;
+  const resolvedLeading = leading ?? legacyHeaderProps?.leading;
+  const resolvedMeta = meta ?? legacyHeaderProps?.meta;
+  const resolvedActions = actions ?? legacyHeaderProps?.actions;
+  const childItems = Children.toArray(children);
+  const inlineModuleSidebar = childItems.find((child) => (
+    isValidElement(child) && child.type === ModuleSidebar
+  ));
+  const resolvedModuleSidebar = contextSidebar ?? inlineModuleSidebar;
+  const contentChildren = contextSidebar || inlineModuleSidebar
+    ? childItems.filter((child) => child !== inlineModuleSidebar)
+    : children;
   useModuleMemory(shellRef, resolvedMemoryKey);
+
+  const hasPageShell = resolvedTitle !== undefined || header !== undefined;
 
   return (
     <div
       ref={shellRef}
-      className={cx("ui-module-shell", ambientConfig && "ui-module-shell--ambient", className)}
+      className={cx("ui-module-shell", Boolean(ambientConfig) && "ui-module-shell--ambient", className)}
       data-page-width={pageWidth}
       data-ambient={ambientConfig?.scene}
       data-module-memory={resolvedMemoryKey}
       {...props}
     >
       {ambientConfig && <AmbientScene config={ambientConfig} />}
-      {header && <div className="ui-module-shell__header">{header}</div>}
-      <div className="ui-module-shell__body">
-        {contextSidebar}
-        {children}
+      <WorkspaceLayout
+        className="ui-module-shell__body"
+        moduleSidebar={resolvedModuleSidebar}
+      >
+        <MainContent>
+          {hasPageShell ? (
+            <PageShell
+              title={resolvedTitle}
+              subtitle={resolvedSubtitle}
+              leading={resolvedLeading}
+              meta={resolvedMeta}
+              actions={resolvedActions}
+              toolbar={toolbar}
+              header={legacyHeaderProps ? undefined : header}
+              width={pageWidth}
+            >
+              {contentChildren}
+            </PageShell>
+          ) : (
+            <>
+              {header && <div className="ui-module-shell__header">{header}</div>}
+              {contentChildren}
+            </>
+          )}
+        </MainContent>
         {detailPanel}
-      </div>
+      </WorkspaceLayout>
     </div>
   );
 }
 
-export type ModuleMainProps = HTMLAttributes<HTMLElement> & { transitionKey?: string };
-
-export function ModuleMain({ className, transitionKey, ...props }: ModuleMainProps) {
-  const mainRef = useRef<HTMLElement>(null);
-  useSubtabTransition(mainRef, transitionKey);
-  return <main ref={mainRef} className={cx("ui-module-main", className)} {...props} />;
+export interface WorkspaceLayoutProps extends HTMLAttributes<HTMLDivElement> {
+  moduleSidebar?: ReactNode;
 }
 
-export interface ContextSidebarProps extends HTMLAttributes<HTMLElement> {
+export function WorkspaceLayout({ moduleSidebar, children, className, ...props }: WorkspaceLayoutProps) {
+  return (
+    <div className={cx("ui-workspace-layout", Boolean(moduleSidebar) && "is-with-module-sidebar", className)} {...props}>
+      {moduleSidebar}
+      {children}
+    </div>
+  );
+}
+
+export type MainContentProps = HTMLAttributes<HTMLElement>;
+
+export function MainContent({ className, children, ...props }: MainContentProps) {
+  return <main className={cx("ui-main-content", className)} {...props}>{children}</main>;
+}
+
+export type ModuleMainProps = HTMLAttributes<HTMLDivElement> & { transitionKey?: string };
+
+export function ModuleMain({ className, transitionKey, ...props }: ModuleMainProps) {
+  const mainRef = useRef<HTMLDivElement>(null);
+  useSubtabTransition(mainRef, transitionKey);
+  return <div ref={mainRef} className={cx("ui-module-main", className)} {...props} />;
+}
+
+export interface ModuleSidebarProps extends HTMLAttributes<HTMLElement> {
   label: string;
 }
 
-export function ContextSidebar({
+/** @deprecated Use ModuleSidebarProps. */
+export type ContextSidebarProps = ModuleSidebarProps;
+
+export function ModuleSidebar({
   label,
   className,
   children,
   ...props
-}: ContextSidebarProps) {
+}: ModuleSidebarProps) {
   return (
     <aside
       aria-label={label}
-      className={cx("ui-context-sidebar", className)}
+      className={cx("ui-context-sidebar", "ui-module-sidebar", className)}
       {...props}
     >
       {children}
     </aside>
   );
 }
+
+/** @deprecated Use ModuleSidebar. */
+export const ContextSidebar = ModuleSidebar;
 
 export interface ContextNavItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;

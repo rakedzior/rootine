@@ -65,7 +65,7 @@ import {
   CompletedSection,
   ContentHeader,
   ContextNavItem,
-  ContextSidebar,
+  ModuleSidebar,
   DetailPanel,
   EmptyState,
   Input,
@@ -682,7 +682,7 @@ export default function Sprawy() {
   ];
 
   const contextSidebar = (
-    <ContextSidebar label="Widoki spraw" className="affairs-sidebar">
+    <ModuleSidebar label="Widoki spraw" className="affairs-sidebar">
       <nav className="affairs-sidebar__nav">
         <section>
           <p className="affairs-sidebar__label">Główne</p>
@@ -719,7 +719,7 @@ export default function Sprawy() {
         <Clock3 size={13} aria-hidden="true" />
         <span>{dueSoon} w ciągu 30 dni</span>
       </div>
-    </ContextSidebar>
+    </ModuleSidebar>
   );
 
   const detailPanel = selectedMatter && view === "matters" ? (
@@ -784,6 +784,7 @@ export default function Sprawy() {
             contextSidebar={contextSidebar}
             className="affairs-module"
             pageWidth="wide"
+            title="JDG"
             ambient={{
               scene: "affairs",
               progress: workspace.matters.length
@@ -818,6 +819,7 @@ export default function Sprawy() {
             contextSidebar={contextSidebar}
             className="affairs-module affairs-module--travel"
             pageWidth="wide"
+            title="Podróże"
             ambient={{ scene: "travel", progress: 0, signal: dueSoon }}
             header={(
               <PageHeader
@@ -848,6 +850,7 @@ export default function Sprawy() {
       detailPanel={detailPanel}
       className="affairs-module"
       pageWidth="wide"
+      title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
       ambient={{
         scene: "affairs",
         progress: workspace.matters.length
@@ -859,6 +862,7 @@ export default function Sprawy() {
     >
       <ModuleMain transitionKey={view}>
         <ContentHeader
+          headingLevel={false}
           className={`affairs-toolbar ${view === "overview" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
           title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
           description={VIEW_COPY[view].description}

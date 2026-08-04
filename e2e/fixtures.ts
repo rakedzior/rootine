@@ -65,9 +65,8 @@ export { expect };
 
 export async function openRootineRoute(page: Page, path: string) {
   await page.goto(path);
-  const pageTitle = page.locator(".ui-page-header__title");
-  await expect(pageTitle).toBeVisible({ timeout: 15_000 });
-  await expect(pageTitle).not.toHaveText("");
+  const pageShell = page.locator(".ui-page-shell:visible");
+  await expect(pageShell).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".app-route-state")).toHaveCount(0, { timeout: 15_000 });
-  return pageTitle;
+  return pageShell;
 }

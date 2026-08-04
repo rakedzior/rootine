@@ -1,4 +1,4 @@
-import { Archive, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Archive, FolderOpen, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Menu, MenuItem, MenuTrigger } from "../ui";
@@ -113,6 +113,7 @@ type WorkProjectActionsMenuProps = {
   projectId: string;
   projectName: string;
   onEdit: () => void;
+  onOpenDetails: () => void;
   onDelete: () => void;
 };
 
@@ -156,10 +157,10 @@ export function WorkCompanyActionsMenu({ companyId, companyName, onEdit, onArchi
   );
 }
 
-export function WorkProjectActionsMenu({ projectId, projectName, onEdit, onDelete }: WorkProjectActionsMenuProps) {
+export function WorkProjectActionsMenu({ projectId, projectName, onEdit, onOpenDetails, onDelete }: WorkProjectActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const position = useFloatingMenuPosition(triggerRef, open, 178, 86);
+  const position = useFloatingMenuPosition(triggerRef, open, 178, 128);
   const menuId = `work-project-actions-${projectId}`;
 
   const close = () => setOpen(false);
@@ -179,6 +180,7 @@ export function WorkProjectActionsMenu({ projectId, projectName, onEdit, onDelet
       </MenuTrigger>
       {open && position && createPortal(
         <Menu id={menuId} className="work-project-actions-menu__panel" style={position} triggerRef={triggerRef} onDismiss={close} initialFocus="first">
+          <MenuItem leadingIcon={<FolderOpen size={13} />} onClick={() => { onOpenDetails(); close(); }}>Szczegóły projektu</MenuItem>
           <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { onEdit(); close(); }}>Edytuj projekt</MenuItem>
           <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { onDelete(); close(); }}>Usuń projekt</MenuItem>
         </Menu>,

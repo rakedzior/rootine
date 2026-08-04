@@ -88,11 +88,11 @@ export default function CelSzczegoly() {
 
   if (!goal) {
     return (
-      <ModuleShell pageWidth="reading" ambient="quiet">
+      <ModuleShell pageWidth="standard" title="Cel" subtitle="Nie znaleziono wybranego celu" ambient="quiet">
         <ModuleMain>
           <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}>
             <Target size={38} strokeWidth={1.2} />
-            <h1 className="text-[22px] font-semibold" style={{ color: C.textPrimary }}>Nie znaleziono celu</h1>
+            <h2 className="text-[22px] font-semibold" style={{ color: C.textPrimary }}>Nie znaleziono celu</h2>
             <Button variant="primary" onClick={() => navigate("/cele")}>Wróć do celów</Button>
           </div>
         </ModuleMain>
@@ -233,12 +233,15 @@ export default function CelSzczegoly() {
 
   return (
     <ModuleShell
-      pageWidth="canvas"
+      pageWidth="fluid"
+      title={goal.title}
+      leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
       header={pageHeader}
       ambient="quiet"
     >
       <ModuleMain>
         <ContentHeader
+          headingLevel={false}
           className="goal-detail-content-header"
           title={goal.title}
           description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}

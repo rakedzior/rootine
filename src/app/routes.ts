@@ -14,6 +14,32 @@ const PracaPage = lazy(() => import("./pages/Praca"));
 const SprawyPage = lazy(() => import("./pages/Sprawy"));
 const PodrozePage = lazy(() => import("./pages/Podroze"));
 
+/**
+ * Reviewable inventory of every URL declared by the router. Runtime layout behavior
+ * stays generic in ModuleShell/PageShell; this registry documents coverage without
+ * becoming a second routing source of truth.
+ */
+export const ROUTE_LAYOUT_AUDIT = [
+  { path: "/dzisiaj", component: "DzisiajPage", width: "standard", moduleSidebar: false, h1: "none", layout: "dashboard" },
+  { path: "/zadania", component: "ZadaniaPage", width: "fluid", moduleSidebar: true, h1: "none", layout: "list + detail" },
+  { path: "/kalendarz", component: "KalendarzPage", width: "fluid", moduleSidebar: true, h1: "none", layout: "calendar" },
+  { path: "/notatki", component: "NotatkiPage", width: "standard", moduleSidebar: true, h1: "none", layout: "collection + editor" },
+  { path: "/cele", component: "CelePage", width: "standard", moduleSidebar: true, h1: "none", layout: "collection + detail" },
+  { path: "/cele/:goalId", component: "CelSzczegolyPage", width: "fluid", moduleSidebar: false, h1: "none", layout: "detail" },
+  { path: "/sport", component: "SportPage", width: "wide", moduleSidebar: true, h1: "none", layout: "planner + detail" },
+  { path: "/odzywianie", component: "OdzywianiePage", width: "wide", moduleSidebar: false, h1: "none", layout: "register + analysis" },
+  { path: "/praca", component: "PracaPage", width: "wide", moduleSidebar: true, h1: "none", layout: "workspace + detail" },
+  { path: "/sprawy", component: "SprawyPage", width: "wide", moduleSidebar: true, h1: "none", layout: "register + detail" },
+  { path: "/sprawy?widok=jdg", component: "JdgWorkspace", width: "wide", moduleSidebar: true, h1: "none", layout: "monthly checklist" },
+  { path: "/sprawy?widok=travel", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "none", layout: "dossier" },
+  { path: "/podroze", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "none", layout: "dossier" },
+  { path: "/podroze/:tripId", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "none", layout: "dossier detail" },
+  { path: "/biuro", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /praca" },
+  { path: "/finanse", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=budget" },
+  { path: "/jdg", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=jdg" },
+  { path: "*", component: "RouteNotFoundState", width: "route state", moduleSidebar: false, h1: "none", layout: "error state" },
+] as const;
+
 export const router = createBrowserRouter([
   {
     path: "/",

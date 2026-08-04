@@ -499,7 +499,7 @@ function StrengthSession({
           <div className="sport-strength-session__heading">
             <div>
               <span>Ćwiczenie {exerciseIndex + 1} z {session.exercises.length}</span>
-              <h1>{currentExercise.name}</h1>
+              <h2>{currentExercise.name}</h2>
               <p>Seria {setIndex + 1} z {currentExercise.sets.length}</p>
             </div>
             <Button variant="quiet" size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => setSwapOpen(true)}>
