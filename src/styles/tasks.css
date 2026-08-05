@@ -11,7 +11,22 @@
   --task-priority-color: var(--color-text-muted);
 }
 
-.task-module-main .task-workspace-toolbar .ui-content-header__inner,
+/*
+ * Every view header in the module sits on the same axis as the content under it. The header
+ * used to span the whole frame while the list was capped at --task-list-measure and centred,
+ * so the title started ~190px left of the first task at wide viewports. Moving the padding
+ * onto the header element keeps its bottom rule full-bleed while the text lines up.
+ */
+.task-module-main .ui-content-header {
+  padding-inline: var(--task-workspace-inline-padding);
+}
+
+.task-module-main .ui-content-header__inner {
+  max-width: var(--task-list-measure);
+  padding-inline: 0;
+}
+
+/* Calendar is the documented edge-to-edge exception: its grid uses the full frame. */
 .calendar-module-main .ui-content-header__inner {
   max-width: none;
   padding-inline: var(--task-workspace-inline-padding, var(--space-3xl));
@@ -25,9 +40,10 @@
 .task-module-main .task-content::-webkit-scrollbar { display: none; }
 
 /*
- * AD-2: the Tasks page keeps the full-width frame (header and toolbar span it), but the list
- * itself is capped and centred. Left full-bleed, rows stretched to 2072px at 2560 and opened a
- * ~700px gap between a task title and its list column.
+ * AD-2: the Tasks page keeps the full-width frame, but the working content is capped and
+ * centred. Left full-bleed, rows stretched to 2072px at 2560 and opened a ~700px gap between
+ * a task title and its list column. The view header shares this measure (see above) — it used
+ * to span the frame, which put the title on a different left edge than the first task.
  */
 .task-module-main .task-content__inner {
   width: 100%;
@@ -908,124 +924,369 @@ input.task-entry-input:focus-visible {
 .task-progress-fill.is-complete { background: var(--color-success-seaglass); }
 
 /* ---------------------------------------------------------------------------
- * Podsumowanie (weekly summary document).
+ * Podsumowanie (task report + weekly note).
  * ------------------------------------------------------------------------- */
 
-.task-doc {
-  display: flex;
+.task-report {
+  min-width: 0;
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--color-graphite-canvas);
+  overflow-y: auto;
+  padding: var(--space-xl) var(--task-workspace-inline-padding) var(--space-2xl);
+  scrollbar-width: none;
 }
 
-.task-doc__head { flex: 0 0 auto; padding: var(--space-lg) var(--space-2xl) 0; }
+.task-report::-webkit-scrollbar { display: none; }
 
-.task-doc__title-row {
+/*
+ * The summary detail panel is absolutely positioned over the workspace rather than taking a
+ * grid track, and on this view it is always open — so the report has to reserve its width or
+ * the metrics and chart run underneath it. Below the context breakpoint the panel is hidden
+ * (see the 1180px block), so the reservation lifts with it.
+ */
+@media (min-width: 1181px) {
+  .task-summary-main .ui-content-header,
+  .task-summary-main .task-report {
+    padding-right: calc(var(--detail-panel-width) + var(--task-workspace-inline-padding));
+  }
+}
+
+/* Same capped, centred measure as the task list, so switching subtabs never moves the axis. */
+.task-report > * {
+  width: 100%;
+  max-width: var(--task-list-measure);
+  margin-inline: auto;
+}
+
+.task-report > * + * { margin-top: var(--space-xl); }
+
+.task-report__controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-md);
+  gap: var(--space-md);
 }
 
-.task-doc__title {
+.task-report__stepper,
+.task-report__custom {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--color-chalk-white);
+}
+
+.task-report__stepper strong {
+  min-width: 15ch;
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+
+.task-report__custom-dash { color: var(--color-text-muted); }
+
+.task-report__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.task-report__metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-graphite-card);
+}
+
+.task-report__metric > span {
+  color: var(--color-text-muted);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.task-report__metric > strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-headline);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.task-report__metric > small {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-nano);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-report__metric.is-warning > strong { color: var(--color-warning-ochre); }
+
+.task-report__meter {
+  /* Runtime fill, 0–1, written as an inline style by TaskSummaryReport. */
+  --task-report-meter: 0;
+
+  overflow: hidden;
+  height: 4px;
+  margin-top: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+/* Scales rather than animating width: the same trick `.goal-detail-progress-fill` uses, and
+   it keeps the fill off the layout path. */
+.task-report__meter > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-precision-blue);
+  transform: scaleX(var(--task-report-meter));
+  transform-origin: left center;
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+
+.task-report__panel {
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-graphite-panel);
+}
+
+.task-report__panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.task-report__panel-head h2 {
+  margin: 0;
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 
-.task-doc__glyph { display: grid; flex: 0 0 auto; gap: 3px; }
-.task-doc__glyph > i { width: 14px; height: 1.5px; border-radius: var(--radius-pill); background: var(--color-text-muted); }
-
-.task-doc__week {
-  color: var(--color-text-muted);
-  font-family: var(--font-data);
-  font-size: var(--text-label);
-}
-
-.task-doc__toolbar {
+.task-report__note-hint,
+.task-report__legend {
   display: flex;
   align-items: center;
-  gap: 1px;
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-lg);
-  background: var(--color-graphite-card);
-}
-
-.task-doc__toolbar button {
-  padding: 3px 7px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
+  gap: var(--space-xs);
   color: var(--color-text-muted);
-  font-family: var(--font-sans);
-  font-size: var(--text-label);
-  font-weight: var(--weight-semibold);
-  line-height: 1;
-  cursor: pointer;
+  font-size: var(--text-nano);
 }
 
-.task-doc__toolbar button:hover { background: var(--color-graphite-hover); }
-.task-doc__toolbar button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
-.task-doc__toolbar > i { width: 1px; height: 13px; margin: 0 var(--space-xs); background: var(--color-border-strong); }
-
-.task-doc__hero {
-  flex: 0 0 auto;
-  padding: 0 var(--space-2xl) var(--space-lg);
-  color: var(--color-chalk-white);
-  font-size: var(--text-headline);
-  font-weight: var(--weight-semibold);
+.task-report__legend > i {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-xs);
 }
 
-.task-doc__body {
+.task-report__legend > i.is-done { background: var(--color-precision-blue); }
+.task-report__legend > i.is-planned { background: var(--color-border-strong); }
+.task-report__legend > i.is-planned { margin-left: var(--space-sm); }
+
+.task-report__split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+/* The split is a layout wrapper, so its panels carry the measure instead of the wrapper. */
+.task-report__split > * { max-width: none; }
+
+.task-report__chart {
+  display: flex;
+  height: 132px;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.task-report__bar {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* Takes the space the label leaves. `height: 100%` here resolved against an auto-height
+   parent, so every bar collapsed to nothing and the chart rendered as a bare axis. */
+.task-report__bar-track {
+  display: flex;
+  width: 100%;
   min-height: 0;
   flex: 1;
-  padding: 0 var(--space-2xl) var(--space-lg);
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.task-report__bar-planned {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 28px;
+  min-height: 2px;
+  align-items: flex-end;
+  border-radius: var(--radius-xs);
+  background: var(--color-border-strong);
+}
+
+/*
+ * Deliberately not transitioned. Changing the range remounts every bar (the keys are dates),
+ * so a height transition would never actually run — and scaling instead would smear the 3px
+ * corner radius on a 28px-wide bar.
+ */
+.task-report__bar-done {
+  width: 100%;
+  border-radius: inherit;
+  background: var(--color-precision-blue);
+}
+
+.task-report__bar-label {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-nano);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-report__breakdown {
+  display: grid;
+  gap: var(--space-sm);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.task-report__breakdown > li {
+  display: grid;
+  align-items: center;
+  gap: var(--space-md);
+  grid-template-columns: minmax(0, 10ch) minmax(0, 1fr) auto;
+}
+
+.task-report__breakdown-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-report__breakdown-label > i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+}
+
+.task-report__breakdown-track {
+  /* Runtime fill, 0–1, written as an inline style by TaskSummaryReport. */
+  --task-report-bar: 0;
+
+  overflow: hidden;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-graphite-input);
+}
+
+.task-report__breakdown-track > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  opacity: 0.75;
+  transform: scaleX(var(--task-report-bar));
+  transform-origin: left center;
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+
+.task-report__breakdown-value {
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+}
+
+.task-report__list {
+  display: grid;
+  max-height: 264px;
+  gap: 1px;
+  padding: 0;
+  margin: 0;
   overflow-y: auto;
-  scrollbar-width: none;
+  list-style: none;
+  scrollbar-width: thin;
 }
 
-.task-doc__section + .task-doc__section { margin-top: var(--space-2xl); }
-
-.task-doc__section-title {
-  margin-bottom: var(--space-sm);
-  font-size: var(--text-body);
-  font-weight: var(--weight-semibold);
+.task-report__row {
+  display: grid;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
 }
 
-.task-doc__section-title.is-done { color: var(--color-success-seaglass); }
-.task-doc__section-title.is-open { color: var(--color-danger-coral); }
+.task-report__row-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
 
-.task-doc__empty {
-  padding-left: var(--space-md);
+.task-report__row-text {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-report__row-priority { font-size: var(--text-nano); }
+
+.task-report__row-date {
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-nano);
+}
+
+.task-report__note {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-meta);
 }
 
-.task-doc__line {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-  padding: 3px 0;
+.task-report__empty { margin-top: var(--space-xl); }
+
+.task-report__editor { margin-top: var(--space-md); }
+
+@media ((max-width: 980px)) {
+  .task-report__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-report__split { grid-template-columns: minmax(0, 1fr); }
 }
 
-.task-doc__dot {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: var(--radius-pill);
-  opacity: 0.9;
+@media ((max-width: 760px)) {
+  .task-report { padding: var(--space-lg); }
+  .task-report__metrics { grid-template-columns: minmax(0, 1fr); }
+  .task-report__controls { align-items: stretch; }
+  .task-report__stepper { justify-content: space-between; }
 }
-
-.task-doc__date { flex: 0 0 auto; color: var(--color-text-muted); font-size: var(--text-meta); }
-.task-doc__text { color: var(--color-text-secondary); font-size: var(--text-meta); line-height: var(--leading-normal); }
 
 /* ---------------------------------------------------------------------------
  * Schedule popup (date, time, reminder, repeat).

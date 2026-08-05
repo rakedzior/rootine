@@ -32,15 +32,11 @@ import {
 } from "../../data/taskWorkspace";
 import { formatLocalDate, parseLocalDateKey, shiftLocalDateKey } from "../../data/localDate";
 import { Button, DatePicker, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
-import { SummaryEditor } from "./SummaryEditor";
 import { DurationTimePicker } from "./TaskSchedulePicker";
 import {
   C,
-  fmtTaskDate,
   getMiniWeek,
-  getWeekRangeLabel,
   type Habit,
-  type ListItem,
   type Task,
 } from "./taskPageModel";
 
@@ -1015,46 +1011,6 @@ export function HabitDetail({
         </section>}
       </div>
 
-    </div>
-  );
-}
-
-export function SummaryDocument({ tasks, listy }: { tasks: Task[]; listy: ListItem[] }) {
-  const done   = tasks.filter(t => t.done);
-  const undone = tasks.filter(t => !t.done);
-  const weekLabel = getWeekRangeLabel();
-
-  function Line({ task, showDate }: { task: Task; showDate: boolean }) {
-    // The dot carries the list's own colour, so it stays inline.
-    const col = listy.find(l => l.id === task.list)?.color ?? C.danger;
-    return (
-      <div className="task-doc__line">
-        <span className="task-doc__dot" style={{ background: col }} />
-        {showDate && task.date && <span className="task-doc__date">[{fmtTaskDate(task.date)}]</span>}
-        <span className="task-doc__text">{task.text}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="task-doc">
-      <div className="task-doc__hero">{weekLabel}</div>
-
-      <div className="task-doc__body">
-        <SummaryEditor />
-        <section className="task-doc__section">
-          <h3 className="task-doc__section-title is-done">Ukończone</h3>
-          {done.length === 0
-            ? <p className="task-doc__empty">Brak ukończonych zadań w tym okresie.</p>
-            : done.map(t => <Line key={t.id} task={t} showDate={true} />)}
-        </section>
-        <section className="task-doc__section">
-          <h3 className="task-doc__section-title is-open">Niewykonane</h3>
-          {undone.length === 0
-            ? <p className="task-doc__empty">Brak niewykonanych. Świetna robota!</p>
-            : undone.map(t => <Line key={t.id} task={t} showDate={false} />)}
-        </section>
-      </div>
     </div>
   );
 }

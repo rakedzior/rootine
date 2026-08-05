@@ -202,6 +202,20 @@
   padding: var(--space-xl) var(--space-3xl) var(--space-2xl);
 }
 
+/*
+ * ...including its width. The scroller stays full-bleed so the scrollbar keeps to the frame
+ * edge, and each block inside is capped and centred on the same measure the task list uses.
+ * Without this the habit rows ran the full frame while tasks stopped at 1120px, so switching
+ * subtabs moved every row.
+ */
+.task-module-main .task-habits-workspace--list > * {
+  width: 100%;
+  max-width: var(--task-list-measure);
+  /* Beats `.task-module-main .task-entry { margin: 0 ... }`, which zeroes the inline margins
+     the add-habit form needs to centre. Equal specificity would leave it to file order. */
+  margin-inline: auto;
+}
+
 .task-habits-workspace--list .task-habits-add {
   align-items: center;
   min-height: 46px;

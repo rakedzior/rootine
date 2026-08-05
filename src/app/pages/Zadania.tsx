@@ -52,6 +52,7 @@ import {
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
 import { recordActivity } from "../experience/activityLog";
 import { writeModuleMemoryValue } from "../experience/moduleMemory";
+import { TaskSummaryReport } from "./tasks/TaskSummaryReport";
 import "../../styles/tasks.css";
 import "../../styles/task-habits.css";
 
@@ -94,7 +95,6 @@ import {
   HabitsWorkspace,
   HabitDetail,
   InputFloatMenu,
-  SummaryDocument,
   SummaryPanel,
 } from "./tasks/TaskSecondaryViews";
 import type { HabitMetaDraft } from "./tasks/TaskSecondaryViews";
@@ -1087,7 +1087,7 @@ export default function Zadania() {
 
       {/* ── Summary document (replaces task list in podsumowanie mode) ── */}
       {taskView === "podsumowanie" && (
-        <ModuleMain>
+        <ModuleMain className="task-module-main task-summary-main">
           <ContentHeader
             headingLevel={false}
             title="Podsumowanie"
@@ -1105,7 +1105,7 @@ export default function Zadania() {
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
           />
-          <SummaryDocument tasks={tasks.filter(t => !t.deleted)} listy={listy} />
+          <TaskSummaryReport tasks={tasks.filter(t => !t.deleted)} listy={listy} />
         </ModuleMain>
       )}
 
