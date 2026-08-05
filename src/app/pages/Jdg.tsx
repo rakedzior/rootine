@@ -366,7 +366,7 @@ export function JdgWorkspace({
   const content = (
     <>
       <ContentHeader
-        headingLevel={false}
+        headingLevel={1}
         className="jdg-toolbar"
         title="JDG"
         description="Miesięczne zamknięcie działalności"

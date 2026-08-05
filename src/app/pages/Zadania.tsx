@@ -51,7 +51,6 @@ import {
 } from "../ui";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
 import { recordActivity } from "../experience/activityLog";
-import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import { TaskSummaryReport } from "./tasks/TaskSummaryReport";
 import "../../styles/tasks.css";
 import "../../styles/task-habits.css";
@@ -69,10 +68,8 @@ import {
   formatDateLabel,
   groupTasksForListView,
   initialTaskView,
-  loadTasksViewMode,
   loadTaskSidebarState,
   isTaskUndated,
-  normalizeTaskView,
   saveTasksViewMode,
   saveTaskSidebarState,
   overdueRailLabel,
@@ -103,14 +100,13 @@ export default function Zadania() {
   const navigate = useNavigate();
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
-  const [tasksViewMode, setTasksViewMode] = useState<TasksViewMode>(loadTasksViewMode);
+  const [tasksViewMode, setTasksViewMode] = useState<TasksViewMode>("list");
   const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(() => {
-    const requestedView = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("widok") : null;
-    return requestedView ? initialTaskView() : normalizeTaskView(initialSidebarState.taskView);
+    return initialTaskView();
   });
-  const [listFilter,    setListFilter]    = useState<string | null>(initialSidebarState.listFilter);
-  const [tagFilter,     setTagFilter]     = useState<string | null>(initialSidebarState.tagFilter);
+  const [listFilter,    setListFilter]    = useState<string | null>(null);
+  const [tagFilter,     setTagFilter]     = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
   const [tasks,         setTasks]         = useState<Task[]>(initialWorkspace.tasks);
   const [habits,        setHabits]        = useState<Habit[]>(initialWorkspace.habits);
@@ -177,7 +173,6 @@ export default function Zadania() {
     if (taskView === "dzis") url.searchParams.delete("widok");
     else url.searchParams.set("widok", taskView);
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-    writeModuleMemoryValue("tasks", "location", `${url.pathname}${url.search}`);
   }, [taskView]);
 
   const taskRoute = (view: string, base = "/zadania") => (
@@ -240,17 +235,6 @@ export default function Zadania() {
     saveTaskSidebarState({ taskView, listFilter, tagFilter });
     navigate(taskRoute(taskView, "/zadania"));
   };
-
-  useEffect(() => {
-    if (tasksViewMode !== "calendar") return;
-    if (new URLSearchParams(window.location.search).has("akcja")) return;
-    if (window.location.pathname !== "/zadania") return;
-    setTaskView("wszystkie");
-    setListFilter(null);
-    setTagFilter(null);
-    saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
-    navigate("/kalendarz", { replace: true });
-  }, [navigate, tasksViewMode]);
 
   // Sidebar collapse state
   const [listyOpen,     setListyOpen]     = useState(initialSidebarState.listyOpen);
@@ -542,14 +526,15 @@ export default function Zadania() {
   const updateTask = (id: number, patch: Partial<Task>) => {
     const occurrence = occurrenceById.get(id);
     const sourceId = occurrence?.occurrence.sourceTaskId ?? id;
+    const completedAt = patch.done === true ? new Date().toISOString() : undefined;
     if (typeof patch.done === "boolean" && !occurrence?.occurrence.virtual) {
-      persistTaskCompletion(sourceId, patch.done);
+      persistTaskCompletion(sourceId, patch.done, completedAt);
     }
     setTasks((current) => current.map((task) => {
       if (task.id !== sourceId) return task;
       if (!occurrence?.occurrence.virtual || typeof patch.done !== "boolean") {
         const withCompletion = typeof patch.done === "boolean"
-          ? setTaskDoneState(task, patch.done)
+          ? setTaskDoneState(task, patch.done, completedAt)
           : task;
         return { ...withCompletion, ...patch };
       }
@@ -637,8 +622,11 @@ export default function Zadania() {
     const sourceIds = new Set(selectedBulkSourceIds());
     if (!sourceIds.size) return;
     const previous = tasks;
-    sourceIds.forEach((id) => persistTaskCompletion(id, true));
-    setTasks((current) => current.map((task) => sourceIds.has(task.id) ? { ...task, done: true } : task));
+    const completedAt = new Date().toISOString();
+    sourceIds.forEach((id) => persistTaskCompletion(id, true, completedAt));
+    setTasks((current) => current.map((task) => sourceIds.has(task.id)
+      ? setTaskDoneState(task, true, completedAt)
+      : task));
     finishBulkAction(
       previous,
       `Ukończono ${sourceIds.size} ${bulkTaskNoun(sourceIds.size)}.`,
@@ -709,7 +697,7 @@ export default function Zadania() {
           date: "Dziś",
           view: "dzis",
           ...(task.schedule?.recurrence
-            ? { schedule: { ...task.schedule, completedDates: undefined } }
+            ? { schedule: { ...task.schedule, completedDates: undefined, completedAtByDate: undefined } }
             : {}),
         }
       : task));
@@ -1089,7 +1077,7 @@ export default function Zadania() {
       {taskView === "podsumowanie" && (
         <ModuleMain className="task-module-main task-summary-main">
           <ContentHeader
-            headingLevel={false}
+            headingLevel={1}
             title="Podsumowanie"
             description={`Przegląd realizacji zadań · ${todayStr()}`}
             mobileNavigation={<Select
@@ -1112,7 +1100,7 @@ export default function Zadania() {
       {taskView === "nawyki" && (
         <ModuleMain className="task-module-main">
           <ContentHeader
-            headingLevel={false}
+            headingLevel={1}
             title="Nawyki"
             description={`Codzienny rytm · ${todayStr()}`}
             meta={<span>{remainingHabitsToday} do zrobienia</span>}
@@ -1149,7 +1137,7 @@ export default function Zadania() {
           display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
         }}>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           className="task-workspace-toolbar"
           title={listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
           description={`${formatOpenTaskCount(pending.length)} · ${todayStr()}`}

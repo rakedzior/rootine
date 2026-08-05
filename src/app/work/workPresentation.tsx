@@ -8,7 +8,19 @@ import type {
   WorkTaskStatus,
 } from "../data/workWorkspace";
 
-export const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#B9A171", "#7D7FA8", "#BC8EA5", "#8793A1"];
+export const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#8793A1"];
+
+const LEGACY_COMPANY_COLOR_MAP: Record<string, string> = {
+  "#B9A171": "#79A8A4",
+  "#7D7FA8": "#8793A1",
+  "#BC8EA5": "#8793A1",
+};
+
+export function normalizeCompanyColor(color: string): string {
+  const normalized = color.toUpperCase();
+  if (COMPANY_COLORS.includes(normalized)) return normalized;
+  return LEGACY_COMPANY_COLOR_MAP[normalized] ?? COMPANY_COLORS[0];
+}
 
 export const PROJECT_STATUS_LABELS: Record<WorkProjectStatus, string> = {
   active: "Aktywny",

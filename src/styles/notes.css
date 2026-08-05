@@ -402,27 +402,27 @@
 
 .notes-card--blue,
 .notes-color--blue {
-  --note-accent: var(--color-category-sky);
+  --note-accent: var(--color-primary-text);
 }
 
 .notes-card--green,
 .notes-color--green {
-  --note-accent: var(--color-category-teal);
+  --note-accent: var(--color-success-text);
 }
 
 .notes-card--amber,
 .notes-color--amber {
-  --note-accent: var(--color-category-sand);
+  --note-accent: var(--color-warning-text);
 }
 
 .notes-card--violet,
 .notes-color--violet {
-  --note-accent: var(--color-accent-violet);
+  --note-accent: var(--color-primary-text);
 }
 
 .notes-card--coral,
 .notes-color--coral {
-  --note-accent: var(--color-category-rose);
+  --note-accent: var(--color-danger-text);
 }
 
 .notes-card__color {

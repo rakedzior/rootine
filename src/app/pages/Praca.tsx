@@ -33,7 +33,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, typ
 import { useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { recordActivity } from "../experience/activityLog";
-import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   createWorkId,
   loadWorkWorkspace,
@@ -93,6 +92,7 @@ import {
   isTaskOpen,
   localDateKey,
   normalize,
+  normalizeCompanyColor,
   projectStatusTone,
   relativeDateLabel,
   taskAnchorDate,
@@ -239,7 +239,6 @@ export default function Praca() {
     if (search.trim()) url.searchParams.set("q", search);
     else url.searchParams.delete("q");
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
-    writeModuleMemoryValue("work", "location", `${url.pathname}${url.search}`);
   }, [search, selectedCompanyId, selectedProjectId, view]);
 
   useEffect(() => {
@@ -370,7 +369,7 @@ export default function Praca() {
 
   const openCompanyEditor = (company?: WorkCompany) => {
     const nextDraft = company
-      ? { ...EMPTY_DRAFT, name: company.name, description: company.description, color: company.color }
+      ? { ...EMPTY_DRAFT, name: company.name, description: company.description, color: normalizeCompanyColor(company.color) }
       : { ...EMPTY_DRAFT, color: COMPANY_COLORS[workspace.companies.length % COMPANY_COLORS.length] };
     setDraft(nextDraft);
     setEditorInitialDraft(nextDraft);
@@ -855,7 +854,7 @@ export default function Praca() {
     const hasChildren = workspace.tasks.some((candidate) => candidate.parentId === task.id);
     const rowStyle = {
       "--work-task-depth": depth,
-      "--work-company-accent": context.company?.color ?? "#8793A1",
+      "--work-company-accent": normalizeCompanyColor(context.company?.color ?? ""),
     } as CSSProperties;
     const isProjectTreeTask = view === "project" && task.projectId === selectedProject?.id;
     const dateLabel = task.dueDate ? (task.dueDate < today ? relativeDateLabel(task.dueDate, today) : formatDate(task.dueDate)) : "Bez terminu";
@@ -1442,7 +1441,7 @@ export default function Praca() {
     const searchPlaceholder = view === "company" ? "Szukaj projektów" : view === "project" ? "Szukaj w projekcie" : "Szukaj zadań";
     return (
       <ContentHeader
-        headingLevel={false}
+        headingLevel={1}
         className={view === "company" || view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
         title={labels[view]}
         description={view === "today"
@@ -1521,7 +1520,7 @@ export default function Praca() {
         <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Firmy</p>
         {workspace.companies.filter((company) => !company.archived).map((company) => {
           const projectCount = workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length;
-          return <ContextNavItem key={company.id} active={view === "company" && selectedCompanyId === company.id} icon={<span className="work-company-dot" style={{ background: company.color }} />} label={company.name} meta={projectCount || undefined} onClick={() => navigate("company", company.id)} />;
+          return <ContextNavItem key={company.id} active={view === "company" && selectedCompanyId === company.id} icon={<span className="work-company-dot" style={{ background: normalizeCompanyColor(company.color) }} />} label={company.name} meta={projectCount || undefined} onClick={() => navigate("company", company.id)} />;
         })}
         {!workspace.companies.length && <p className="work-sidebar-empty">Dodaj firmę, aby uporządkować projekty.</p>}
 
@@ -1542,7 +1541,7 @@ export default function Praca() {
       ...workspace.companies.map((company) => ({
         key: `company-${company.id}`,
         label: company.name,
-        icon: <span className="work-company-dot" style={{ background: company.color }} />,
+        icon: <span className="work-company-dot" style={{ background: normalizeCompanyColor(company.color) }} />,
         meta: workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length,
         onClick: () => navigate("company", company.id),
       })),

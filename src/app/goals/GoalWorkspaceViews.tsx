@@ -338,7 +338,6 @@ export function GoalCard({
       className={`goal-card group border transition-all duration-150 ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
       data-status={goal.status}
       style={{
-        "--goal-color": goal.color,
         "--goal-progress": `${goal.progress}%`,
         "--goal-status-glow": `${statusColor}40`,
       } as React.CSSProperties}
@@ -553,7 +552,7 @@ export function GoalDetail({
         </div>
 
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: goal.color, background: `${goal.color}18`, borderColor: `${goal.color}55` }}>
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: C.textMuted, background: C.card, borderColor: C.borderSubtle }}>
             {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={18} strokeWidth={1.55} />}
           </div>
           <div className="min-w-0 flex-1">
@@ -572,8 +571,8 @@ export function GoalDetail({
             <span className="font-semibold" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace", fontSize: "var(--text-headline)" }}>{goal.progress}%</span>
             <span className="text-[11px]" style={{ color: C.textMuted }}>{goal.progressLabel}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>
-            <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: goal.color }} />
+          <div className="h-2 overflow-hidden rounded-full" style={{ background: C.progressTrack }}>
+            <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: C.progressAccent }} />
           </div>
           <button type="button" onClick={rawGoal.progressMode === "milestones" ? onAddMilestone : onProgress} className="mt-3 flex items-center gap-1.5 text-[11px] font-medium" style={{ color: C.iceBlueText }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj etap" : rawGoal.progressMode === "numeric" ? "Zaktualizuj wartość" : rawGoal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</button>
         </div>

@@ -71,7 +71,6 @@ import {
 } from "../sport/sportPersistence";
 import { SPORT_VIEW_LABELS } from "../sport/sportViewMeta";
 import { recordActivity } from "../experience/activityLog";
-import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   Badge,
   Button,
@@ -152,13 +151,7 @@ function outcomeForDate(
 function getInitialSportUrlState() {
   if (typeof window === "undefined") return { view: "today" as PlannerView, week: 0 };
   const params = new URLSearchParams(window.location.search);
-  let storedView: string | null = null;
-  try {
-    storedView = window.localStorage.getItem("rootine.sport.view");
-  } catch {
-    // Fall back to the URL/default when preference storage is unavailable.
-  }
-  const requestedView = params.get("widok") ?? storedView;
+  const requestedView = params.get("widok");
   const view: PlannerView = requestedView === "cycle"
     || requestedView === "templates"
     || requestedView === "exercises"
@@ -412,16 +405,7 @@ export default function Sport() {
     if (view === "cycle") url.searchParams.set("tydzien", String(activeWeek));
     else url.searchParams.delete("tydzien");
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
-    writeModuleMemoryValue("sport", "location", `${url.pathname}${url.search}`);
   }, [activeWeek, view]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("rootine.sport.view", view);
-    } catch {
-      // The view preference is optional.
-    }
-  }, [view]);
 
   useEffect(() => {
     if (!moveUndo) return;
@@ -1199,7 +1183,7 @@ export default function Sport() {
     >
       <ModuleMain transitionKey={`${view}:${activeWeek}`}>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}
           title={viewMeta.title}
           description={viewMeta.description}

@@ -748,6 +748,9 @@ export function TaskDetail({
                 calendarDate === task.calendarDate && v.repeat === task.schedule?.recurrence
                   ? task.schedule?.completedDates
                   : undefined,
+                calendarDate === task.calendarDate && v.repeat === task.schedule?.recurrence
+                  ? task.schedule?.completedAtByDate
+                  : undefined,
               ),
               ...(calendarDate ? { view: taskViewForCalendarDate(calendarDate) } : {}),
             });

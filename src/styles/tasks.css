@@ -26,10 +26,14 @@
   padding-inline: 0;
 }
 
-/* Calendar is the documented edge-to-edge exception: its grid uses the full frame. */
-.calendar-module-main .ui-content-header__inner {
-  max-width: none;
+/* Calendar shares the task-list header axis; only the calendar grid stays fluid below it. */
+.calendar-module-main .ui-content-header {
   padding-inline: var(--task-workspace-inline-padding, var(--space-3xl));
+}
+
+.calendar-module-main .ui-content-header__inner {
+  max-width: var(--task-list-measure);
+  padding-inline: 0;
 }
 
 .task-module-main .task-content {

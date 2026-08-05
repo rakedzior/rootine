@@ -230,7 +230,7 @@ export default function CelSzczegoly() {
     >
       <ModuleMain>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           className="goal-detail-content-header"
           leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={16} /></Button>}
           title={goal.title}

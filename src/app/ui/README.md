@@ -44,6 +44,7 @@ Globalny pasek `PageHeader` jest usunięty z każdej zakładki i podzakładki �
 13. Zadanie z terminem zawsze ma `calendarDate`; Zadania i Kalendarz aktualizują ten sam rekord oraz jego inteligentny widok daty.
 14. Każdy moduł waliduje stan odczytany z `localStorage` i pokazuje `Brak zapisu lokalnego`, jeśli zapis się nie powiedzie.
 15. Pozycje `Menu` obsługują strzałki oraz Home/End. Niestandardowy `menuitem` musi być fokusowalny i aktywowany klawiaturą.
+16. `ContentHeader` trasy renderuje jeden `<h1>`; `headingLevel={2 | 3}` służy wyłącznie nagłówkom zagnieżdżonym, a `false` usuwa element z hierarchii.
 
 ## Szkielet zakładki
 

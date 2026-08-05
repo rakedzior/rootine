@@ -449,7 +449,11 @@ export function tasksForSmartDateView(tasks: readonly Task[], view: string, toda
   return { tasks: [...byId.values()], occurrences };
 }
 
-export function scheduleFromDateValue(value: DateVal, completedDates?: string[]): TaskSchedule | undefined {
+export function scheduleFromDateValue(
+  value: DateVal,
+  completedDates?: string[],
+  completedAtByDate?: Record<string, string>,
+): TaskSchedule | undefined {
   if (!value.date) return undefined;
   const hasTime = value.duration ? Boolean(value.startTime && value.endTime) : Boolean(value.time);
   const allDay = value.allDay || !hasTime;
@@ -460,6 +464,7 @@ export function scheduleFromDateValue(value: DateVal, completedDates?: string[])
     reminderMinutes: allDay || value.reminder === "" ? undefined : Number(value.reminder),
     recurrence: (value.repeat || undefined) as TaskRecurrence | undefined,
     completedDates: completedDates?.length ? [...completedDates].sort() : undefined,
+    completedAtByDate: completedAtByDate && Object.keys(completedAtByDate).length ? { ...completedAtByDate } : undefined,
     timezone: browserTimezone(),
   };
 }

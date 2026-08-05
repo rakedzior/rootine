@@ -86,8 +86,6 @@ export const GOAL_ACCENT_OPTIONS = [
   { value: "#7FA6C9", label: "Błękit" },
   { value: "#79A8A4", label: "Morskie szkło" },
   { value: "#B9A171", label: "Piasek" },
-  { value: "#7D7FA8", label: "Fiolet" },
-  { value: "#BC8EA5", label: "Róż" },
   { value: "#8793A1", label: "Neutralny" },
 ] as const;
 
@@ -100,8 +98,7 @@ export function normalizeGoalAccentColor(color: string) {
   if (normalized === "#4772FA" || normalized === "#3E63DA" || normalized === "#809AF4") return "#7FA6C9";
   if (normalized === "#70B89F") return "#79A8A4";
   if (normalized === "#D4AA68") return "#B9A171";
-  if (normalized === "#C77DBB" || normalized === "#9B8CE8") return "#7D7FA8";
-  if (normalized === "#CF777C") return "#BC8EA5";
+  if (normalized === "#C77DBB" || normalized === "#9B8CE8" || normalized === "#CF777C") return "#8793A1";
   if (normalized === "#A0A0A0") return "#8793A1";
   return DEFAULT_GOAL_ACCENT;
 }

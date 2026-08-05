@@ -898,7 +898,7 @@ export default function Odzywanie() {
       ) : (
         <>
           <ContentHeader
-            headingLevel={false}
+            headingLevel={1}
             className="nutrition-content-header"
             title="Dzienny rejestr"
             description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} / ${formatNumber(workspace.goals.calories)} kcal`}

@@ -29,7 +29,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { calendarDaysBetween, todayLocalDateKey, toLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { recordActivity } from "../experience/activityLog";
-import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import {
   POLISH_TIME_ZONE,
   formatDate,
@@ -349,7 +348,6 @@ export default function Notatki() {
     if (sort === "updated") url.searchParams.delete("sort");
     else url.searchParams.set("sort", sort);
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
-    writeModuleMemoryValue("notes", "location", `${url.pathname}${url.search}`);
   }, [search, sort, view]);
 
   useEffect(() => {
@@ -1252,7 +1250,7 @@ export default function Notatki() {
     >
       <ModuleMain transitionKey={view}>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           className="notes-toolbar"
           title={viewTitle}
           description={viewDescription}

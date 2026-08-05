@@ -30,7 +30,6 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { SensitiveValue } from "../experience/preferences";
 import { recordActivity } from "../experience/activityLog";
-import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatDate as formatPolishDate, pluralize } from "../formatters";
 import {
@@ -642,7 +641,6 @@ export default function Sprawy() {
     if (url.href !== window.location.href) {
       window.history.pushState({}, "", url);
     }
-    writeModuleMemoryValue("affairs", "location", `${url.pathname}${url.search}`);
   };
 
   const renderPrimaryAction = () => {
@@ -846,7 +844,7 @@ export default function Sprawy() {
     >
       <ModuleMain transitionKey={view}>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           className={`affairs-toolbar ${view === "overview" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
           title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
           description={VIEW_COPY[view].description}

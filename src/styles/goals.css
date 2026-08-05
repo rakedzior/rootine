@@ -878,25 +878,25 @@
   /* Matches every other card in the app; the Tailwind rounded-xl utility used to render 16px. */
   border-radius: var(--radius-lg);
 
-  --goal-color: var(--color-precision-blue);
   --goal-progress: 0%;
   --goal-status-glow: transparent;
 
-  border-color: var(--color-border-subtle);
-  background: var(--color-graphite-card);
+  border-color: var(--color-border);
+  background: var(--color-surface-1);
   box-shadow: none;
 }
 
 .goal-card.is-selected {
-  border-color: var(--color-precision-blue);
-  background: var(--color-precision-blue-soft);
+  border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
+  background: var(--color-surface-hover);
 }
 
 /* A 320px floor on the title plus the fixed action columns could exceed the page column and
    push the card past the shell edge. The title truncates instead. */
 .goal-card-layout {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 272px;
   align-items: center;
+  min-height: 56px;
 }
 
 .goal-card-inline-date {
@@ -920,9 +920,9 @@
 }
 
 .goal-card-icon {
-  border-color: color-mix(in srgb, var(--goal-color) 34%, transparent);
-  background: color-mix(in srgb, var(--goal-color) 10%, transparent);
-  color: var(--goal-color);
+  border-color: var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text-tertiary);
 }
 
 .goal-card-title,
@@ -931,12 +931,12 @@
 }
 
 .goal-card-progress-track {
-  background: var(--color-border-strong);
+  background: var(--color-progress-track);
 }
 
 .goal-card-progress-fill {
   width: var(--goal-progress);
-  background: var(--goal-color);
+  background: color-mix(in srgb, var(--color-primary) 72%, var(--color-text-secondary));
 }
 
 .goal-card-progress-value {
@@ -986,6 +986,7 @@
   display: grid;
   grid-column: 2;
   grid-row: 1;
+  width: 272px;
   min-height: 40px;
   min-width: 0;
   grid-template-columns: minmax(0, 96px) minmax(0, 108px) 28px;
@@ -997,6 +998,7 @@
 }
 
 .goal-card-date {
+  width: 108px;
   min-width: 0;
   overflow: hidden;
   justify-self: start;
@@ -1005,6 +1007,7 @@
 }
 
 .goal-card-status {
+  width: 96px;
   min-width: 0;
   justify-self: start;
 }
@@ -1116,111 +1119,21 @@
   background: var(--color-graphite-panel);
 }
 
-.goals-radar {
-  display: grid;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-3xl) var(--space-lg);
-}
-
-.goals-radar__grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-sm);
-}
-
-.goals-radar__signal {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: var(--space-sm);
-  align-items: center;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-graphite-card);
-  color: var(--color-text-muted);
-}
-
-.goals-radar__signal svg {
-  grid-row: span 2;
-  color: var(--color-primary-text);
-}
-
-.goals-radar__signal strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-family: var(--font-data);
-  font-size: var(--text-body-emphasis);
-  font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.goals-radar__signal span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-micro);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.goals-radar__signal.is-warning svg { color: var(--color-warning); }
-.goals-radar__signal.is-muted svg { color: var(--color-text-muted); }
-.goals-radar__signal.is-clear svg { color: var(--color-success); }
-
-.goals-radar__focus {
+.goals-overview-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 32%, var(--color-border-subtle));
-  border-radius: var(--radius-md);
-  background: var(--color-primary-subtle);
-  color: var(--color-primary-text);
-  text-align: left;
-  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
-}
-
-.goals-radar__focus:hover,
-.goals-radar__focus:focus-visible {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary-subtle) 72%, var(--color-graphite-panel));
-}
-
-.goals-radar__focus-copy {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.goals-radar__focus-copy small {
-  margin-top: 3px;
-  color: var(--color-text-secondary);
-  font-size: var(--text-meta);
-}
-
-.goals-radar__focus-copy > span {
-  color: var(--color-primary-text);
+  gap: var(--space-xs) var(--space-sm);
+  padding: 0 var(--space-3xl) var(--space-sm);
+  color: var(--color-text-muted);
   font-size: var(--text-micro);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  line-height: var(--leading-normal);
 }
 
-.goals-radar__focus-copy strong {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--text-body);
-  font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.goals-overview-summary span:nth-child(2n) {
+  color: var(--color-border-strong);
 }
 
 @media (max-width: 760px) {
-  .goals-radar { padding-inline: var(--space-lg); }
-  .goals-radar__grid { grid-template-columns: 1fr; }
+  .goals-overview-summary { padding-inline: var(--space-lg); }
 }

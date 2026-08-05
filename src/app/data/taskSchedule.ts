@@ -6,7 +6,7 @@ import {
   shiftLocalDateKey,
   toLocalDateKey,
 } from "./localDate";
-import type { TaskRecurrence, WorkspaceTask } from "./taskWorkspace";
+import { setTaskDoneState, type TaskRecurrence, type WorkspaceTask } from "./taskWorkspace";
 
 export type TaskOccurrenceMeta = {
   key: string;
@@ -180,16 +180,20 @@ export function setTaskOccurrenceCompletion(
   done: boolean,
 ): WorkspaceTask {
   if (!sourceTask.schedule?.recurrence || occurrenceDate === sourceTask.calendarDate) {
-    return { ...sourceTask, done };
+    return setTaskDoneState(sourceTask, done);
   }
   const completedDates = new Set(sourceTask.schedule.completedDates ?? []);
+  const completedAtByDate = { ...(sourceTask.schedule.completedAtByDate ?? {}) };
   if (done) completedDates.add(occurrenceDate);
   else completedDates.delete(occurrenceDate);
+  if (done) completedAtByDate[occurrenceDate] = new Date().toISOString();
+  else delete completedAtByDate[occurrenceDate];
   return {
     ...sourceTask,
     schedule: {
       ...sourceTask.schedule,
       completedDates: [...completedDates].filter(isLocalDateKey).sort(),
+      completedAtByDate: Object.keys(completedAtByDate).length ? completedAtByDate : undefined,
     },
   };
 }

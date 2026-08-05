@@ -305,7 +305,7 @@
 
 .work-task-row {
   --work-task-depth: 0;
-  --work-company-accent: #8793A1;
+  --work-company-accent: var(--color-category-slate);
 
   padding-left: calc(var(--space-lg) + (var(--work-task-depth) * 24px));
   background: var(--work-surface);

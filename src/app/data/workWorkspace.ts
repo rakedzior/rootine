@@ -33,6 +33,7 @@ export type WorkLinkedTaskSchedule = {
   reminderMinutes?: number;
   recurrence?: "daily" | "weekly" | "monthly" | "yearly";
   completedDates?: string[];
+  completedAtByDate?: Record<string, string>;
   timezone: string;
 };
 
@@ -238,6 +239,10 @@ function isClockTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(new Date(value).getTime());
+}
+
 function isLinkedTaskSchedule(value: unknown): value is WorkLinkedTaskSchedule {
   if (!isRecord(value)) return false;
   if (typeof value.allDay !== "boolean" || typeof value.startTime !== "string") return false;
@@ -257,6 +262,9 @@ function isLinkedTaskSchedule(value: unknown): value is WorkLinkedTaskSchedule {
       || (Array.isArray(value.completedDates)
         && value.completedDates.every((date) => typeof date === "string")
         && new Set(value.completedDates).size === value.completedDates.length))
+    && (value.completedAtByDate === undefined
+      || (isRecord(value.completedAtByDate)
+        && Object.entries(value.completedAtByDate).every(([date, timestamp]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && isTimestamp(timestamp))))
     && typeof value.timezone === "string"
     && value.timezone.trim().length > 0;
 }

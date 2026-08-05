@@ -866,7 +866,7 @@ export default function Podroze({
     <>
       <ModuleMain>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           className="travel-toolbar"
           title={selectedTrip?.name ?? "Przegląd podróży"}
           description={selectedTrip ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}` : "Zaplanowane i zakończone wyjazdy"}

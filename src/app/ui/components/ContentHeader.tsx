@@ -13,7 +13,7 @@ export interface ContentHeaderProps extends Omit<HTMLAttributes<HTMLElement>, "t
   actions?: ReactNode;
   controls?: ReactNode;
   below?: ReactNode;
-  headingLevel?: 2 | 3 | false;
+  headingLevel?: 1 | 2 | 3 | false;
   innerClassName?: string;
 }
 
@@ -21,7 +21,7 @@ export interface ContentHeaderProps extends Omit<HTMLAttributes<HTMLElement>, "t
  * The shared toolbar/header for a view inside a page.
  *
  * PageShell owns the page frame without a display title. ContentHeader owns
- * the compact current-view label, local navigation, filters and actions.
+ * the current-view heading, local navigation, filters and actions.
  */
 export function ContentHeader({
   title,
@@ -32,7 +32,7 @@ export function ContentHeader({
   actions,
   controls,
   below,
-  headingLevel = 2,
+  headingLevel = 1,
   innerClassName,
   className,
   ...props
@@ -48,9 +48,11 @@ export function ContentHeader({
               <div className="ui-content-header__heading">
                 {headingLevel === false
                   ? <div className="ui-content-header__title" role="presentation">{title}</div>
-                  : headingLevel === 3
-                    ? <h3 className="ui-content-header__title">{title}</h3>
-                    : <h2 className="ui-content-header__title">{title}</h2>}
+                  : headingLevel === 1
+                    ? <h1 className="ui-content-header__title">{title}</h1>
+                    : headingLevel === 3
+                      ? <h3 className="ui-content-header__title">{title}</h3>
+                      : <h2 className="ui-content-header__title">{title}</h2>}
                 {meta && <div className="ui-content-header__meta">{meta}</div>}
               </div>
               {description && <p className="ui-content-header__description">{description}</p>}

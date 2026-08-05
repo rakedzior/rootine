@@ -60,8 +60,13 @@ export const C = {
   seaGlass: uiColors.success,
   warning: uiColors.warning,
   danger: uiColors.danger,
+  progressTrack: uiColors.progressTrack,
+  progressAccent: "color-mix(in srgb, var(--color-primary) 72%, var(--color-text-secondary))",
   blueBorder: "color-mix(in srgb, var(--color-precision-blue) 35%, transparent)",
 } as const;
+
+// Goal identity stays neutral across the workspace. Color is reserved for status and deadline meaning.
+export const GOAL_UI_ACCENT = C.iceBlue;
 
 export type GoalStatus = "active" | "risk" | "paused" | "completed" | "planned" | "archived";
 export type GoalPriority = "high" | "medium" | "low";
@@ -161,7 +166,7 @@ export function toViewGoal(goal: StoredGoal, categories: GoalCategory[]): Goal {
     categoryId: goal.categoryId,
     icon: GOAL_ICONS[goal.iconKey] ?? Target,
     customIcon: goal.customIcon,
-    color: goal.color || category?.color || C.iceBlue,
+    color: GOAL_UI_ACCENT,
     progress,
     current,
     total,

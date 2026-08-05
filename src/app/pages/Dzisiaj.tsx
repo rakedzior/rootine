@@ -815,7 +815,7 @@ export default function Dzisiaj() {
     >
       <ModuleMain>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           title="Plan dnia"
           // The date used to live in the page header; it is the only place the user reads
           // which day the balance describes, so it moves into the description rather than out.

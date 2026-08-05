@@ -26,6 +26,7 @@ import {
   replaceCalendarTasks,
   restoreTask,
   saveTaskWorkspace,
+  setTaskDoneState,
   taskViewForCalendarDate,
   trashTask,
   type WorkspaceList as ListItem,
@@ -691,10 +692,23 @@ export default function Kalendarz() {
     closeTaskDetail();
   };
   const updateTask = (id: number, patch: Partial<CalendarEvent>) => {
-    if (typeof patch.done === "boolean") persistTaskCompletion(id, patch.done);
+    const completedAt = patch.done === true ? new Date().toISOString() : undefined;
+    if (typeof patch.done === "boolean") persistTaskCompletion(id, patch.done, completedAt);
+    const applyTaskPatch = (task: Task) => {
+      const withCompletion = typeof patch.done === "boolean"
+        ? setTaskDoneState(task, patch.done, completedAt)
+        : task;
+      return { ...withCompletion, ...patch };
+    };
+    const applyEventPatch = (event: CalendarEvent): CalendarEvent => ({
+      ...applyTaskPatch(event),
+      calendarDate: patch.calendarDate || event.calendarDate,
+    });
     const dateWasCleared = Object.prototype.hasOwnProperty.call(patch, "calendarDate") && !patch.calendarDate;
     if (dateWasCleared) {
-      const tasks = workspaceRef.current.tasks.map((task) => task.id === id ? { ...task, ...patch, calendarDate: undefined } : task);
+      const tasks = workspaceRef.current.tasks.map((task) => task.id === id
+        ? { ...applyTaskPatch(task), calendarDate: undefined }
+        : task);
       const nextWorkspace = { ...workspaceRef.current, tasks };
       setStorageFailed(!saveTaskWorkspace(nextWorkspace));
       workspaceRef.current = nextWorkspace;
@@ -708,7 +722,7 @@ export default function Kalendarz() {
       }
       return;
     }
-    setEvents((current) => current.map((event) => event.id === id ? { ...event, ...patch } : event));
+    setEvents((current) => current.map((event) => event.id === id ? applyEventPatch(event) : event));
     if (selectedId === id && patch.calendarDate) {
       const nextDate = new Date(`${patch.calendarDate}T12:00:00`);
       setAnchorDateKey(patch.calendarDate);
@@ -747,7 +761,7 @@ export default function Kalendarz() {
       date: formatTaskDate(calendarDate),
       view: taskViewForCalendarDate(calendarDate),
       ...(source?.schedule?.recurrence && source.calendarDate !== calendarDate
-        ? { schedule: { ...source.schedule, completedDates: undefined } }
+        ? { schedule: { ...source.schedule, completedDates: undefined, completedAtByDate: undefined } }
         : {}),
     });
   };
@@ -946,7 +960,7 @@ export default function Kalendarz() {
 
       <ModuleMain className="calendar-module-main" transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           title={formatHeaderDate(viewDate)}
           meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           // The open count belongs in the description, exactly as in the task list. As a badge in

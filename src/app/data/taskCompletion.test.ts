@@ -13,6 +13,20 @@ describe("task completion repository", () => {
     expect(completion.hydrateTaskCompletion([{ id: 7, done: false }])).toEqual([{ id: 7, done: true }]);
   });
 
+  it("hydrates a completion timestamp from the versioned record", async () => {
+    const completion = await import("./taskCompletion");
+    const completedAt = "2026-08-05T10:15:00.000Z";
+    window.localStorage.setItem(completion.TASK_COMPLETION_STORAGE_KEY, JSON.stringify({
+      version: 2,
+      updatedAt: completedAt,
+      completion: { "7": { done: true, completedAt } },
+    }));
+
+    expect(completion.hydrateTaskCompletion([{ id: 7, done: false }])).toEqual([
+      { id: 7, done: true, completedAt },
+    ]);
+  });
+
   it("retains corrupt source data until a real user mutation", async () => {
     const completion = await import("./taskCompletion");
     const raw = "{broken";
@@ -24,6 +38,6 @@ describe("task completion repository", () => {
 
     window.dispatchEvent(new Event("pointerup", { bubbles: true }));
     completion.persistTaskCompletion(3, true);
-    expect(JSON.parse(window.localStorage.getItem(completion.TASK_COMPLETION_STORAGE_KEY) ?? "{}").completion["3"]).toBe(true);
+    expect(JSON.parse(window.localStorage.getItem(completion.TASK_COMPLETION_STORAGE_KEY) ?? "{}").completion["3"]).toMatchObject({ done: true });
   });
 });

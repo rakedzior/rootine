@@ -244,26 +244,11 @@
   color: var(--color-text-muted);
 }
 
-.affairs-agenda-row__icon--matter {
-  color: var(--color-precision-blue-text);
-}
-
-.affairs-agenda-row__icon--payment {
-  color: var(--color-warning-ochre);
-}
-
-.affairs-agenda-row__icon--oneTime {
-  color: var(--color-warning-ochre);
-}
-
-.affairs-agenda-row__icon--subscription {
-  color: var(--color-precision-blue-text);
-}
-
-.affairs-agenda-row__icon--document {
-  color: var(--color-success-seaglass);
-}
-
+.affairs-agenda-row__icon--matter,
+.affairs-agenda-row__icon--payment,
+.affairs-agenda-row__icon--oneTime,
+.affairs-agenda-row__icon--subscription,
+.affairs-agenda-row__icon--document,
 .affairs-agenda-row__icon--vehicle {
   color: var(--color-text-secondary);
 }

@@ -30,6 +30,7 @@ export type TaskSchedule = {
   reminderMinutes?: number;
   recurrence?: TaskRecurrence;
   completedDates?: string[];
+  completedAtByDate?: Record<string, string>;
   timezone: string;
 };
 
@@ -37,6 +38,7 @@ export type WorkspaceTask = {
   id: number;
   text: string;
   done: boolean;
+  completedAt?: string;
   time?: string;
   endTime?: string;
   tags?: string[];
@@ -177,6 +179,7 @@ function isWorkspaceTask(value: unknown): value is WorkspaceTask {
   return typeof value.id === "number"
     && typeof value.text === "string"
     && typeof value.done === "boolean"
+    && (value.completedAt === undefined || isTimestamp(value.completedAt))
     && typeof value.view === "string"
     && (value.calendarDate === undefined || typeof value.calendarDate === "string")
     && (value.tags === undefined || (Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === "string")))
@@ -186,6 +189,15 @@ function isWorkspaceTask(value: unknown): value is WorkspaceTask {
 
 function isClockTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(new Date(value).getTime());
+}
+
+function isCompletionTimestampMap(value: unknown): value is Record<string, string> {
+  return isRecord(value)
+    && Object.entries(value).every(([date, timestamp]) => isLocalDateKey(date) && isTimestamp(timestamp));
 }
 
 function isTaskSchedule(value: unknown): value is TaskSchedule {
@@ -206,6 +218,7 @@ function isTaskSchedule(value: unknown): value is TaskSchedule {
       || (Array.isArray(value.completedDates)
         && value.completedDates.every(isLocalDateKey)
         && new Set(value.completedDates).size === value.completedDates.length))
+    && (value.completedAtByDate === undefined || isCompletionTimestampMap(value.completedAtByDate))
     && typeof value.timezone === "string"
     && value.timezone.trim().length > 0;
 }
@@ -526,8 +539,11 @@ export function setHabitCompletionOnDate(habit: WorkspaceHabit, dateKey: string,
   return normalizeHabitState({ ...habit, completedDates: [...completedDates].sort() });
 }
 
-export function setTaskDoneState(task: WorkspaceTask, done: boolean): WorkspaceTask {
-  return task.done === done ? task : { ...task, done };
+export function setTaskDoneState(task: WorkspaceTask, done: boolean, completedAt?: string): WorkspaceTask {
+  if (task.done === done) return task;
+  if (done) return { ...task, done, completedAt: completedAt ?? new Date().toISOString() };
+  const { completedAt: _completedAt, ...withoutCompletion } = task;
+  return { ...withoutCompletion, done };
 }
 
 export function toggleHabitOnDate(habit: WorkspaceHabit, dateKey: string): WorkspaceHabit {

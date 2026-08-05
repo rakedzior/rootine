@@ -11,6 +11,7 @@ import { pluralize } from "../../formatters";
 import { Badge, Button, DatePicker, EmptyState, Tabs } from "../../ui";
 import { SummaryEditor } from "./SummaryEditor";
 import { PL_MONTHS_SHORT, PRIORITY_COLOR, type ListItem, type Priority, type Task } from "./taskPageModel";
+import { latestTaskActivityDate, taskCompletionDates } from "./TaskSummaryModel";
 
 type RangeMode = "day" | "week" | "month" | "custom";
 
@@ -72,20 +73,19 @@ function formatRangeLabel(mode: RangeMode, start: string, end: string) {
 }
 
 type Bucket = { key: string; label: string; planned: number; done: number };
+type TaskReportEntry = { task: Task; date: string };
 
 /**
  * Task-completion report for a chosen period.
  *
- * A task belongs to a period by its `calendarDate` — the day it is planned for. The workspace
- * stores no completion timestamp (`taskCompletion` keeps a plain id → boolean map), so the
- * report cannot claim "ukończono tego dnia" and does not pretend to: it reports how many of
- * the tasks *planned* in the period are done. Undated tasks are counted separately rather
- * than silently folded into whichever period is on screen.
+ * Planned work stays attached to `calendarDate`, while completed work is attached to its
+ * recorded completion date. Older records without history fall back to their planned date so
+ * a migration cannot make existing reports disappear. Undated tasks remain outside date ranges.
  */
 export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: ListItem[] }) {
   const today = todayLocalDateKey();
   const [mode, setMode] = useState<RangeMode>("week");
-  const [anchor, setAnchor] = useState(today);
+  const [anchor, setAnchor] = useState(() => latestTaskActivityDate(tasks, today));
   const [customStart, setCustomStart] = useState(() => shiftLocalDateKey(today, -13));
   const [customEnd, setCustomEnd] = useState(today);
 
@@ -103,11 +103,16 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
 
   const stats = useMemo(() => {
     const live = tasks.filter((task) => !task.deleted);
-    const inRange = live.filter((task) => Boolean(task.calendarDate)
+    const planned = live.filter((task) => Boolean(task.calendarDate)
       && task.calendarDate! >= start
       && task.calendarDate! <= end);
-    const done = inRange.filter((task) => task.done);
-    const open = inRange.filter((task) => !task.done);
+    const done: TaskReportEntry[] = live.flatMap((task) => taskCompletionDates(task)
+      .filter((date) => date >= start && date <= end)
+      .map((date) => ({ task, date })));
+    const scope = [...new Map(
+      [...planned, ...done.map((entry) => entry.task)].map((task) => [task.id, task]),
+    ).values()];
+    const open = planned.filter((task) => !task.done);
     const overdue = open.filter((task) => task.calendarDate! < today);
     const undated = live.filter((task) => !task.calendarDate && !task.done).length;
     /*
@@ -128,51 +133,57 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
       let cursor = startOfWeek(start);
       while (cursor <= end) {
         const bucketEnd = shiftLocalDateKey(cursor, 6);
-        const slice = inRange.filter((task) => task.calendarDate! >= cursor && task.calendarDate! <= bucketEnd);
+        const plannedSlice = planned.filter((task) => task.calendarDate! >= cursor && task.calendarDate! <= bucketEnd);
         buckets.push({
           key: cursor,
           label: formatDay(cursor),
-          planned: slice.length,
-          done: slice.filter((task) => task.done).length,
+          planned: plannedSlice.length,
+          done: done.filter((entry) => entry.date >= cursor && entry.date <= bucketEnd).length,
         });
         cursor = shiftLocalDateKey(cursor, 7);
       }
     } else {
       for (let index = 0; index < span; index += 1) {
         const key = shiftLocalDateKey(start, index);
-        const slice = inRange.filter((task) => task.calendarDate === key);
+        const plannedSlice = planned.filter((task) => task.calendarDate === key);
         const date = parseLocalDateKey(key);
         buckets.push({
           key,
           label: span <= 8 && date ? WEEKDAY_SHORT[(date.getDay() + 6) % 7] : String(date?.getDate() ?? ""),
-          planned: slice.length,
-          done: slice.filter((task) => task.done).length,
+          planned: plannedSlice.length,
+          done: done.filter((entry) => entry.date === key).length,
         });
       }
     }
 
     const byList = listy
       .map((list) => {
-        const slice = inRange.filter((task) => task.list === list.id);
-        return { id: list.id, label: list.label, color: list.color, total: slice.length, done: slice.filter((t) => t.done).length };
+        const slice = scope.filter((task) => task.list === list.id);
+        const doneIds = new Set(done.filter((entry) => entry.task.list === list.id).map((entry) => entry.task.id));
+        return { id: list.id, label: list.label, color: list.color, total: slice.length, done: doneIds.size };
       })
       .filter((row) => row.total > 0)
       .sort((left, right) => right.total - left.total);
 
-    const unlisted = inRange.filter((task) => !task.list || !listy.some((list) => list.id === task.list));
+    const unlisted = scope.filter((task) => !task.list || !listy.some((list) => list.id === task.list));
     if (unlisted.length > 0) {
-      byList.push({ id: "__none", label: "Bez listy", color: "#8793A1", total: unlisted.length, done: unlisted.filter((t) => t.done).length });
+      const doneIds = new Set(done
+        .filter((entry) => !entry.task.list || !listy.some((list) => list.id === entry.task.list))
+        .map((entry) => entry.task.id));
+      byList.push({ id: "__none", label: "Bez listy", color: "#8793A1", total: unlisted.length, done: doneIds.size });
     }
 
     const byPriority = (["high", "medium", "low"] as const)
       .map((priority) => {
-        const slice = inRange.filter((task) => task.priority === priority);
-        return { id: priority, label: PRIORITY_LABEL[priority], color: PRIORITY_COLOR[priority], total: slice.length, done: slice.filter((t) => t.done).length };
+        const slice = scope.filter((task) => task.priority === priority);
+        const doneIds = new Set(done.filter((entry) => entry.task.priority === priority).map((entry) => entry.task.id));
+        return { id: priority, label: PRIORITY_LABEL[priority], color: PRIORITY_COLOR[priority], total: slice.length, done: doneIds.size };
       })
       .filter((row) => row.total > 0);
 
     return {
-      inRange,
+      scope,
+      planned,
       done,
       open,
       overdue,
@@ -182,7 +193,9 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
       groupByWeek,
       byList,
       byPriority,
-      rate: inRange.length > 0 ? Math.round((done.length / inRange.length) * 100) : 0,
+      rate: scope.length > 0
+        ? Math.round((new Set(done.map((entry) => entry.task.id)).size / scope.length) * 100)
+        : 0,
     };
   }, [tasks, listy, start, end, today]);
 
@@ -198,14 +211,14 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
     }
   };
 
-  const peak = Math.max(1, ...stats.buckets.map((bucket) => bucket.planned));
+  const peak = Math.max(1, ...stats.buckets.flatMap((bucket) => [bucket.planned, bucket.done]));
   const listPeak = Math.max(1, ...stats.byList.map((row) => row.total));
   const priorityPeak = Math.max(1, ...stats.byPriority.map((row) => row.total));
 
-  const renderRow = (task: Task) => {
+  const renderRow = ({ task, date }: TaskReportEntry) => {
     const list = listy.find((item) => item.id === task.list);
     return (
-      <li key={task.id} className="task-report__row">
+      <li key={`${task.id}-${date}`} className="task-report__row">
         <span className="task-report__row-dot" style={{ background: list?.color ?? "var(--color-text-muted)" }} aria-hidden="true" />
         <span className="task-report__row-text">{task.text}</span>
         {task.priority && (
@@ -213,7 +226,7 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
             {PRIORITY_LABEL[task.priority]}
           </span>
         )}
-        <time className="task-report__row-date" dateTime={task.calendarDate}>{formatDay(task.calendarDate!)}</time>
+        <time className="task-report__row-date" dateTime={date}>{formatDay(date)}</time>
       </li>
     );
   };
@@ -253,7 +266,7 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
         <article className="task-report__metric">
           <span>Ukończone</span>
           <strong>{stats.done.length}</strong>
-          <small>{pluralize(stats.inRange.length, "zaplanowane zadanie", "zaplanowane zadania", "zaplanowanych zadań")}</small>
+          <small>{pluralize(stats.planned.length, "zaplanowane zadanie", "zaplanowane zadania", "zaplanowanych zadań")}</small>
         </article>
         <article className="task-report__metric">
           <span>Do zrobienia</span>
@@ -295,11 +308,11 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
           <p className="task-report__note">
             Otwarte zadania z terminem wcześniejszym niż {formatDay(start)}. Nie wliczają się do liczb tego okresu.
           </p>
-          <ul className="task-report__list">{stats.carried.map(renderRow)}</ul>
+          <ul className="task-report__list">{stats.carried.map((task) => renderRow({ task, date: task.calendarDate! }))}</ul>
         </section>
       )}
 
-      {stats.inRange.length === 0 ? (
+      {stats.scope.length === 0 ? (
         <EmptyState
           className="task-report__empty"
           title="Brak zadań w tym zakresie"
@@ -325,8 +338,8 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
                   title={`${bucket.label}: ${bucket.done}/${bucket.planned}`}
                 >
                   <span className="task-report__bar-track">
-                    <span className="task-report__bar-planned" style={{ height: `${(bucket.planned / peak) * 100}%` }}>
-                      <span className="task-report__bar-done" style={{ height: bucket.planned > 0 ? `${(bucket.done / bucket.planned) * 100}%` : "0%" }} />
+                    <span className="task-report__bar-planned" style={{ height: `${(Math.max(bucket.planned, bucket.done) / peak) * 100}%` }}>
+                      <span className="task-report__bar-done" style={{ height: Math.max(bucket.planned, bucket.done) > 0 ? `${(bucket.done / Math.max(bucket.planned, bucket.done)) * 100}%` : "0%" }} />
                     </span>
                   </span>
                   <span className="task-report__bar-label">{bucket.label}</span>
@@ -397,7 +410,7 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
               </header>
               {stats.open.length === 0
                 ? <p className="task-report__note">Cały zakres domknięty.</p>
-                : <ul className="task-report__list">{stats.open.map(renderRow)}</ul>}
+                : <ul className="task-report__list">{stats.open.map((task) => renderRow({ task, date: task.calendarDate! }))}</ul>}
             </section>
           </div>
         </>

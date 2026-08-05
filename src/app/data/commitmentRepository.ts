@@ -190,6 +190,9 @@ function linkedTaskProjectionFields(task: WorkTask): Partial<WorkspaceTask> {
           completedDates: linked.schedule.completedDates
             ? [...linked.schedule.completedDates]
             : undefined,
+          completedAtByDate: linked.schedule.completedAtByDate
+            ? { ...linked.schedule.completedAtByDate }
+            : undefined,
         }
       : undefined,
   };
@@ -330,6 +333,9 @@ function linkedDetailsFromTask(task: WorkspaceTask): WorkLinkedTaskDetails {
           completedDates: task.schedule.completedDates
             ? [...task.schedule.completedDates]
             : undefined,
+          completedAtByDate: task.schedule.completedAtByDate
+            ? { ...task.schedule.completedAtByDate }
+            : undefined,
         }
       : undefined,
   };
@@ -352,6 +358,9 @@ function updateLinkedDetailsFromTask(
           ...task.schedule,
           completedDates: task.schedule.completedDates
             ? [...task.schedule.completedDates]
+            : undefined,
+          completedAtByDate: task.schedule.completedAtByDate
+            ? { ...task.schedule.completedAtByDate }
             : undefined,
         }
       : undefined,

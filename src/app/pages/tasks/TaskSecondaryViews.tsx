@@ -254,6 +254,11 @@ export function HabitsWorkspace({
                 subtitle={!scheduledToday
                   ? (habitDayState(habit, todayKey) === "paused" ? "Wstrzymany" : "Dziś wolne")
                   : getHabitCurrentStreak(habit, todayKey) > 0 ? `${getHabitCurrentStreak(habit, todayKey)} dni serii` : "Nowy rytm"}
+                onClick={(event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, a, input, textarea, select")) return;
+                  onSelectHabit(habit.id);
+                }}
                 onTitleClick={() => onSelectHabit(habit.id)}
                 trailing={<span className="task-habit-row__schedule">{habitScheduleLabel(habit.schedule ?? { type: "daily", startDate: todayKey })}</span>}
                 selected={selectedHabitId === habit.id}

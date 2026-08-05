@@ -79,7 +79,6 @@ import {
   usePrivacy,
 } from "../experience/preferences";
 import { RouteTransition } from "../experience/transitions";
-import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
 import { useAssistantSettings } from "../../assistant/config/useAssistantSettings";
 import { useAssistant } from "../../assistant/runtime/useAssistant";
 import { AssistantEntryButton } from "../../assistant/ui/AssistantEntryButton";
@@ -105,20 +104,6 @@ type WeatherState =
   | { status: "error"; message: string };
 
 type OpenMenu = "settings" | "profile" | "mobileMore" | "mobileSettings" | "mobileProfile" | null;
-
-const TRANSIENT_COMMAND_PARAMS = ["akcja", "tytul", "data", "godzina", "priorytet"] as const;
-
-function rememberedModuleLocation(item: AppModule) {
-  return readModuleMemoryValue(
-    item.id,
-    "location",
-    (value): value is string => {
-      if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return false;
-      const pathname = value.split(/[?#]/, 1)[0];
-      return isModulePath(item, pathname);
-    },
-  );
-}
 
 const MOBILE_MENU_FOCUSABLE = [
   "a[href]",
@@ -231,12 +216,7 @@ function PrimaryNavItem({
   const location = useLocation();
   const { activeAreaId, setActiveAreaId } = useActiveArea();
   const active = isModulePath(item, location.pathname);
-  const rememberedDestination = rememberedModuleLocation(item);
-  const destination = active && location.pathname === item.to
-    ? `${location.pathname}${location.search}`
-    : active
-      ? `${location.pathname}${location.search}`
-      : rememberedDestination ?? item.to;
+  const destination = active ? `${location.pathname}${location.search}` : item.to;
   return (
     <Link
       to={destination}
@@ -563,15 +543,6 @@ export default function Layout() {
   useEffect(() => {
     if (assistant.isOpen) setAssistantUiRequested(true);
   }, [assistant.isOpen]);
-
-  useEffect(() => {
-    const module = findModuleForPath(location.pathname);
-    if (!module) return;
-    const params = new URLSearchParams(location.search);
-    TRANSIENT_COMMAND_PARAMS.forEach((key) => params.delete(key));
-    const search = params.toString();
-    writeModuleMemoryValue(module.id, "location", `${location.pathname}${search ? `?${search}` : ""}`);
-  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const openCommandCenter = () => setCommandCenterOpen(true);

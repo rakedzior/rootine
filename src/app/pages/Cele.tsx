@@ -41,11 +41,7 @@ import {
   Select,
 } from "../ui";
 import {
-  Activity,
-  AlertTriangle,
   Archive,
-  ArrowRight,
-  CalendarDays,
   Check,
   ChevronDown,
   Ellipsis,
@@ -186,18 +182,11 @@ export default function Cele() {
   const goalsRadar = useMemo(() => {
     const actionable = goals.filter((goal) => goal.status === "active" || goal.status === "risk");
     const risk = actionable.filter((goal) => goal.status === "risk" || goal.daysLeft.includes("po terminie"));
-    const stale = actionable.filter((goal) => {
-      const raw = storedGoals.find((item) => item.id === String(goal.id));
-      if (!raw?.updatedAt) return true;
-      const updatedAt = Date.parse(raw.updatedAt);
-      return !Number.isFinite(updatedAt) || (Date.now() - updatedAt) / 86_400_000 >= 14;
-    });
     const upcoming = [...actionable]
       .map((goal) => ({ goal, days: calendarDaysBetween(todayLocalDateKey(), storedGoals.find((item) => item.id === String(goal.id))?.dueDate ?? "") ?? 99999 }))
       .filter(({ days }) => days >= 0)
       .sort((a, b) => a.days - b.days)[0]?.goal ?? null;
-    const focus = risk[0] ?? upcoming ?? stale[0] ?? actionable[0] ?? null;
-    return { risk, stale, upcoming, focus };
+    return { risk, upcoming };
   }, [goals, storedGoals]);
 
   const selectedGoal = goals.find((goal) => goal.id === selectedId) ?? null;
@@ -368,7 +357,7 @@ export default function Cele() {
         )}
 
         <ContentHeader
-          headingLevel={false}
+          headingLevel={1}
           title={filterLabel}
           description={`${visibleGoals.length} ${visibleGoals.length === 1 ? "cel" : "celów"}`}
           mobileNavigation={<Select
@@ -406,7 +395,6 @@ export default function Cele() {
                 <Grid2X2 size={13} strokeWidth={1.8} />
               </Button>
             </div>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={16} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
             <div className="relative">
               <Button
                 ref={headerMenuTriggerRef}
@@ -439,39 +427,18 @@ export default function Cele() {
                 <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Settings2 />}>Ustawienia celów</MenuItem>
               </Menu>}
             </div>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={16} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
           </div>}
         />
 
         {activeFilter === "overview" && (
-          <section className="goals-radar" aria-label="Najważniejsze sygnały celów">
-            <div className="goals-radar__grid">
-              <button type="button" onClick={() => handleFilter("risk")} className={`goals-radar__signal ${goalsRadar.risk.length ? "is-warning" : "is-clear"}`}>
-                <AlertTriangle size={16} aria-hidden="true" />
-                <strong>{goalsRadar.risk.length}</strong>
-                <span>{goalsRadar.risk.length === 1 ? "cel wymaga uwagi" : "cele wymagają uwagi"}</span>
-              </button>
-              <button type="button" onClick={() => goalsRadar.upcoming && navigate(`/cele/${goalsRadar.upcoming.id}`)} className="goals-radar__signal">
-                <CalendarDays size={16} aria-hidden="true" />
-                <strong>{goalsRadar.upcoming?.due ?? "—"}</strong>
-                <span>{goalsRadar.upcoming ? `Najbliższy termin · ${goalsRadar.upcoming.title}` : "Brak nadchodzącego terminu"}</span>
-              </button>
-              <button type="button" onClick={() => handleFilter("all")} className={`goals-radar__signal ${goalsRadar.stale.length ? "is-muted" : "is-clear"}`}>
-                <Activity size={16} aria-hidden="true" />
-                <strong>{goalsRadar.stale.length}</strong>
-                <span>{pluralize(goalsRadar.stale.length, "cel nieaktualizowany", "cele nieaktualizowane", "celów nieaktualizowanych")} od 14 dni</span>
-              </button>
-            </div>
-            {goalsRadar.focus && (
-              <button type="button" className="goals-radar__focus" onClick={() => navigate(`/cele/${goalsRadar.focus!.id}`)}>
-                <span className="goals-radar__focus-copy">
-                  <span>Następny krok</span>
-                  <strong>{goalsRadar.focus.nextMilestone.title}</strong>
-                  <small>{goalsRadar.focus.title} · {goalsRadar.focus.nextMilestone.daysLeft}</small>
-                </span>
-                <ArrowRight size={16} aria-hidden="true" />
-              </button>
-            )}
-          </section>
+          <div className="goals-overview-summary" aria-label="Podsumowanie aktywnych celów">
+            <span>{goalsRadar.risk.length === 0 ? "Brak zagrożeń" : `${goalsRadar.risk.length} ${pluralize(goalsRadar.risk.length, "zagrożony", "zagrożone", "zagrożonych")}`}</span>
+            <span aria-hidden="true">·</span>
+            <span>{goalsRadar.upcoming ? `Najbliższy termin ${goalsRadar.upcoming.due}` : "Brak nadchodzących terminów"}</span>
+            <span aria-hidden="true">·</span>
+            <span>{visibleGoals.length} aktywnych celów</span>
+          </div>
         )}
 
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

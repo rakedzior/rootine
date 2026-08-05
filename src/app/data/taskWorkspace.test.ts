@@ -231,7 +231,8 @@ describe("task workspace", () => {
     const task = { id: 99, text: "Test", done: false, view: "dzis" };
     const completed = setTaskDoneState(task, true);
 
-    expect(completed).toEqual({ ...task, done: true });
+    expect(completed).toMatchObject({ ...task, done: true });
+    expect(completed.completedAt).toEqual(expect.any(String));
     expect(setTaskDoneState(completed, true)).toBe(completed);
     expect(task.done).toBe(false);
   });

@@ -437,7 +437,7 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 Jedyny nagłówek ekranu. Nazywa bieżący widok i skupia wszystko, co go dotyczy: metadane, status, filtry i akcje lokalne. Komponent `PageHeader` nie istnieje — został usunięty w 2026-08 razem z globalnym paskiem.
 
 - **Slots:** `leading` (nawigacja wsteczna na trasach szczegółu), `title`, `description`, `meta`, `actions`, `controls`, `below` oraz `mobileNavigation` na Select podwidoku.
-- **Hierarchy:** `headingLevel` przyjmuje `2 | 3 | false`; główny nagłówek trasy używa `false` i renderuje `role="presentation"`, więc struktura nagłówków zaczyna się od `<h2>` sekcji. `typography.headline` nie jest używana do tytułów stron.
+- **Hierarchy:** `headingLevel` przyjmuje `1 | 2 | 3 | false`; `ContentHeader` trasy używa `<h1>`, a `2` i `3` są przeznaczone dla lokalnych nagłówków zagnieżdżonych. `false` pozostaje wyłącznie dla wizualnych etykiet bez udziału w strukturze dokumentu. `typography.headline` nie jest używana do tytułów stron.
 - **Meta:** miejsce na status ekranu — badge zamknięcia dnia, ostrzeżenie o nieudanym zapisie lokalnym, licznik pozycji. Wiersz meta może zawijać.
 - **Actions:** jedna akcja główna w bieżącym kontekście, reszta `quiet` lub `ghost`; nadmiar chowa się do `Menu`.
 - **Contract:** rama wewnętrzna `ContentHeader` jest identyczna z ramą treści, więc nagłówek i treść stoją na jednej osi.
