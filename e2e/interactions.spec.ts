@@ -4,12 +4,12 @@ test.describe("modal keyboard behavior", { tag: "@desktop" }, () => {
   test("Escape closes and returns focus to its trigger", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/sport?widok=templates");
 
-    const trigger = page.getByRole("button", { name: "Nowy szablon" });
+    const trigger = page.getByRole("button", { name: "Dodaj szablon" });
     await trigger.click();
 
     const dialog = page.getByRole("dialog", { name: "Nowy szablon" });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("textbox", { name: "Nazwa" })).toBeFocused();
+    await expect(dialog.getByRole("textbox", { name: "Nazwa", exact: true })).toBeFocused();
 
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);

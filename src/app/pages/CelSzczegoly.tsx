@@ -26,7 +26,7 @@ import { formatLocalDate } from "../data/localDate";
 import { ConfirmDialog, GoalFormDialog, MilestoneDialog, ProgressDialog } from "../goals/GoalDialogs";
 import type { GoalEditorData } from "../goals/GoalDialogs";
 import { GoalNoteTextarea } from "../goals/GoalNoteTextarea";
-import { AddToTasksButton, Badge, Button, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PageHeader } from "../ui";
+import { AddToTasksButton, Badge, Button, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell } from "../ui";
 import type { ExternalTaskInput } from "../data/taskLinks";
 import { loadTaskWorkspace } from "../data/taskWorkspace";
 import { C } from "../goals/goalPresentationModel";
@@ -223,26 +223,17 @@ export default function CelSzczegoly() {
     );
   };
 
-  const pageHeader = (
-    <PageHeader
-      title="Cele"
-      description="Przegląd celów i postępów"
-      leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
-    />
-  );
-
   return (
     <ModuleShell
       pageWidth="fluid"
       title={goal.title}
-      leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
-      header={pageHeader}
       ambient="quiet"
     >
       <ModuleMain>
         <ContentHeader
           headingLevel={false}
           className="goal-detail-content-header"
+          leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
           title={goal.title}
           description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
           meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot style={{ color: semanticStatusColor }}>{statusLabels[goal.status]}</Badge><Badge appearance="plain" dot style={{ color: goal.health === "risk" ? C.warning : C.seaGlass }}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}

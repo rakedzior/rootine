@@ -27,8 +27,6 @@ function RouteStateFrame({
   return (
     <main className={`app-route-state${compact ? " is-compact" : ""}`}>
       <PageShell
-        title={title}
-        subtitle={description}
         width="standard"
         className="app-route-state__page-shell"
         contentClassName="app-route-state__page-content"
@@ -40,6 +38,13 @@ function RouteStateFrame({
         </div>
         <div className="app-route-state__icon" aria-hidden="true">{icon}</div>
         <p className="app-route-state__eyebrow">{eyebrow}</p>
+        {/*
+         * A route state replaces the whole workspace, so it owns the page's only
+         * <h1>. PageShell renders no title of its own — passing one here would
+         * silently drop the message, which is how it went missing before.
+         */}
+        <h1>{title}</h1>
+        <p className="app-route-state__description">{description}</p>
         {children && <div className="app-route-state__actions">{children}</div>}
         </section>
       </PageShell>

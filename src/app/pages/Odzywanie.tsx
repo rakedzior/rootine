@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import {
   Badge, Button, Card, ContentHeader, DatePicker, Input, Modal, ModuleMain, ModuleShell,
-  PageHeader, SectionHeader, Select, uiColors,
+  SectionHeader, Select, uiColors,
 } from "../ui";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { calculateNutritionTargets, MACRO_MODE_OPTIONS, MACRO_PRESET_OPTIONS } from "../data/nutritionCalculator";
@@ -877,13 +877,6 @@ export default function Odzywanie() {
       pageWidth="wide"
       title="Dzienny rejestr"
       ambient={{ scene: "nutrition", progress: workspace.goals.calories > 0 ? totals.calories / workspace.goals.calories : 0, signal: `${allEntries.length}:${day.waterMl}` }}
-      header={(
-        <PageHeader
-          title="Odżywianie"
-          description="Dzienny rejestr posiłków, makroskładników i nawodnienia"
-          meta={headerMeta}
-        />
-      )}
     >
       <ModuleMain transitionKey={selectedDate} className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: uiColors.appBg, color: uiColors.textPrimary }}>
       {loadStatus === "corrupt" ? (
@@ -910,6 +903,7 @@ export default function Odzywanie() {
             className="nutrition-content-header"
             title="Dzienny rejestr"
             description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} / ${formatNumber(workspace.goals.calories)} kcal`}
+            meta={headerMeta}
             actions={<>
               <div className="nutrition-date-navigation">
                 <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}><ChevronLeft size={14} /></Button>

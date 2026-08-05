@@ -1,123 +1,100 @@
-# Pięć padających testów e2e — diagnoza wstępna
+# Pięć padających testów e2e — naprawione
 
-Stan: **zdiagnozowane, nienaprawione.** Ten dokument istnieje po to, żeby praca dała się podjąć
-z zupełnie czystym kontekstem.
+Stan: **naprawione.** Cały zestaw `desktop-1440` + `mobile-390` przechodzi (112 passed, 4 skipped),
+`npm run typecheck`, `npm run lint` i `npm run test` (277 testów) są czyste.
 
-Kontekst: te testy padały **przed** pracami nad design systemem (paczki 01–14, commit `40750c1`).
-Potwierdzone przez uruchomienie na `git stash` z nietkniętym `src/` na początku tamtej sesji.
-Nie są regresjami tamtej pracy — z jednym wyjątkiem opisanym niżej.
-
-Uruchomienie: `npx playwright test --project=desktop-1440` przy dev serverze na `127.0.0.1:4174`
-(`node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4174`).
+Diagnoza wstępna z poprzedniej sesji okazała się trafna w dwóch punktach i **myląca w dwóch**.
+Poniżej co naprawdę było przyczyną.
 
 ---
 
-## 1. `goals.spec.ts:30` — „double-clicking a goal opens its full view" (desktop + mobile)
+## Wspólny mianownik: `PageShell` po cichu połyka propsy nagłówka
 
-```
-Locator: getByRole('button', { name: 'Wróć do celów' })
-Expected: visible — element(s) not found
-```
+Commit `14d7e97` („Remove global page headers…") zostawił w `PageShell` sygnaturę przyjmującą
+`title`, `subtitle`, `leading`, `meta`, `actions` i `header`, ale **nic ich nie renderuje** —
+wpadają do `..._legacyHeaderProps` i giną (`src/app/ui/components/PageShell.tsx:27`).
 
-Asercja `toHaveURL(/\/cele\/[^/?]+/)` w linii 35 **przechodzi**, więc nawigacja działa.
-Nie renderuje się przycisk powrotu.
+`ModuleShell` nadal je przyjmuje i przekazuje dalej, więc każde call site wygląda poprawnie,
+kompiluje się i nie generuje ostrzeżenia — a treść znika z ekranu.
 
-Przycisk istnieje w dwóch miejscach:
-
-- `src/app/pages/CelSzczegoly.tsx:96` — widoczny `<Button variant="primary">Wróć do celów</Button>`,
-  ale tylko w stanie „nie znaleziono celu"
-- `src/app/pages/CelSzczegoly.tsx:230` — `aria-label="Wróć do celów"` na `<Button iconOnly>`
-  w slocie `leading` nagłówka
-
-**Do sprawdzenia najpierw:** który z dwóch wariantów `ContentHeader` w `CelSzczegoly` faktycznie
-się renderuje po dwukliku (są dwa: linie ~230 i ~238) i czy `leading` trafia do drzewa.
-Podejrzenie: renderuje się gałąź bez slotu `leading`, albo cel nie zostaje znaleziony i wchodzi
-stan pusty o innej treści.
-
-**Uwaga:** paczka 04 usuwała slot `leading` z Pracy, JDG i Podróży — **nie** z `CelSzczegoly`.
-Ten test padał wcześniej, więc to nie jest skutek tamtej zmiany, ale warto to potwierdzić
-`git stash`em przed diagnozą.
+**Trzy z pięciu padających testów to ta jedna przyczyna.** Nie były to usterki testów.
+Testy wykrywały prawdziwą regresję, tylko diagnoza szukała jej w złym miejscu.
 
 ---
 
-## 2. `interactions.spec.ts:4` — „Escape closes and returns focus to its trigger"
+## 1. `goals.spec.ts:30` — przycisk powrotu ✅
 
-```
-locator.click: Test timeout of 30000ms exceeded
-waiting for getByRole('button', { name: 'Nowy szablon' })
-```
+Przyczyna: oba warianty „Wróć do celów" w `CelSzczegoly` szły przez `ModuleShell`
+(`leading` i `header`), więc żaden się nie renderował. **Widok szczegółów celu nie miał
+w ogóle powrotu do listy** — poza przyciskiem wstecz przeglądarki.
 
-**To jedyny przypadek, w którym praca nad design systemem zmieniła obraz błędu.**
-Paczka 06 ujednoliciła czasownik akcji tworzenia na „Dodaj" (36:11 na korzyść „Dodaj"),
-więc przycisk nazywa się teraz **„Dodaj szablon"**.
+Naprawa: przycisk przeniesiony do slotu `leading` w `ContentHeader`, który faktycznie go
+renderuje (`ContentHeader.tsx:46`). Martwy `PageHeader` i `leading` na `ModuleShell` usunięte.
 
-Powiązana literówka w treści została już naprawiona: `SportPlanner.tsx:220` odwoływał się do
-nieistniejącego przycisku „Nowy szablon" — poprawione na „Dodaj szablon".
+## 2. `interactions.spec.ts:4` — Escape i powrót fokusu ✅
 
-**Do zrobienia:**
+Jedyny przypadek, który **naprawdę był usterką testu**, i to podwójną:
 
-1. Zaktualizować test na „Dodaj szablon" (linia 7 i 10 — również tytuł dialogu, który
-   pozostał „Nowy szablon", bo nazywa tworzony obiekt, nie akcję).
-2. **Dopiero wtedy zobaczymy pierwotną przyczynę**, bo ten test padał również przed zmianą nazwy.
-   Test sprawdza powrót fokusu na trigger po zamknięciu modala Escape'em.
+1. Trigger nazywał się „Nowy szablon"; paczka 06 przemianowała go na „Dodaj szablon".
+2. Po poprawce nazwy wyszła druga usterka: `getByRole("textbox", { name: "Nazwa" })` łapał
+   **dwa** pola — „Nazwa" i „Nazwa nowej sekcji" (strict mode violation). Dodane `exact: true`.
 
----
+Powrót fokusu na trigger działał przez cały czas — `Modal.tsx:115` robi to poprawnie.
+Diagnoza podejrzewała tu problem z fokusem; nie było go.
 
-## 3. `production-validation.spec.ts:150` — „a failed lazy route module is contained by the route error state"
+## 3. `production-validation.spec.ts:150` — stan błędu trasy ✅
 
-```
-Locator: getByRole('heading', { name: 'Nie możemy wyświetlić tego widoku', level: 1 })
-Expected: visible — element(s) not found
-```
+Diagnoza mówiła, że tekst istnieje, ale jako `<h2>` zamiast `<h1>`. **Było gorzej:**
+`RouteStateFrame` przekazywał `title` i `description` do `PageShell`, więc stan błędu
+renderował **wyłącznie eyebrow, ikonę i przyciski** — komunikat nie pojawiał się wcale.
 
-Tekst **istnieje** w `src/app/RouteStates.tsx:106`, ale jako prop `title`, nie jako `<h1>`.
+Dowód, że to regresja, a nie decyzja projektowa: `app-base.css:217` i `:226` nadal stylują
+`.app-route-state h1` oraz `.app-route-state__description`. Reguły osierocone przez refaktor.
 
-Pomiar z audytu 2026-08-04: **`h1Count === 0` na każdej z 38 tras.** Aplikacja nie renderuje
-`<h1>` nigdzie — `ContentHeader` używa `<h2>` albo `<div role="presentation">`.
+Naprawa: `<h1>` i opis renderowane bezpośrednio w panelu. Pełnoekranowy stan trasy zastępuje
+cały workspace, więc jest naturalnym właścicielem jedynego `<h1>` strony.
 
-Czyli test oczekuje `level: 1`, a stan błędu trasy renderuje inny poziom.
+## 4. `production-validation.spec.ts:218` — nieudany zapis lokalny ✅
 
-**Decyzja do podjęcia:** czy stan błędu ma dostać prawdziwy `<h1>` (lepsze dla czytników ekranu
-i spójne z tym, że to pełnoekranowy stan, a nie sekcja), czy test ma zejść na faktyczny poziom.
-Skłaniałbym się do pierwszego — pełnoekranowy komunikat błędu to naturalne miejsce na `h1`.
+**Diagnoza była błędna.** Twierdziła, że to luka produktowa: „Odżywianie nie ma odpowiednika"
+badge'a „Brak zapisu lokalnego". Odżywianie **ma** ten badge — `Odzywanie.tsx:829`, w zmiennej
+`headerMeta`. Był martwy, bo szedł przez `PageHeader meta` → `ModuleShell` → `PageShell`.
 
----
-
-## 4. `production-validation.spec.ts:218` — „a local write failure is surfaced without discarding the in-memory change"
-
-```
-Locator: getByText('Brak zapisu lokalnego', { exact: true })
-Expected: visible — element(s) not found
-```
-
-Test działa na **module Odżywianie** (klika `+250 ml` w nawodnieniu), ale komunikat
-„Brak zapisu lokalnego" istnieje wyłącznie w module **Cele**:
-
-- `src/app/pages/Cele.tsx:330`
-- `src/app/pages/CelSzczegoly.tsx:248`
-
-Odżywianie nie ma odpowiednika. Globalnie jest tylko
-`src/app/layout/Layout.tsx:1074` → „Zapis wymaga uwagi — otwórz Centrum odzyskiwania".
-
-**To nie jest usterka testu — to luka w produkcie.** Cele informują o nieudanym zapisie
-lokalnym w miejscu, w którym użytkownik pracuje; Odżywianie nie.
-
-**Decyzja do podjęcia:** czy dodać spójny wskaźnik nieudanego zapisu do wszystkich modułów
-(wtedy warto zrobić z tego jeden komponent, nie trzeci wariant), czy uznać globalny toast
-za wystarczający i przepisać asercję testu.
+Nie trzeba było więc żadnej decyzji produktowej ani nowego komponentu. Naprawa:
+`meta={headerMeta}` na `ContentHeader`, który już tam był.
 
 ---
 
-## Kolejność, którą proponuję
+## Co zostaje do zrobienia: osiem modułów z martwym wskaźnikiem zapisu
 
-1. **#2** — najtańsze: poprawić nazwę w teście, zobaczyć prawdziwą przyczynę problemu z fokusem.
-2. **#3** — decyzja o `<h1>`; przy okazji warto sprawdzić, czy brak `h1` w całej aplikacji
-   nie jest osobnym problemem dostępności (audyt to zmierzył, ale nie rozstrzygnął).
-3. **#1** — wymaga diagnozy w przeglądarce, którą z gałęzi `CelSzczegoly` renderuje.
-4. **#4** — wymaga decyzji produktowej, więc na końcu.
+To samo `Brak zapisu lokalnego` jest podpięte pod martwy `PageHeader meta` w **ośmiu** modułach.
+Każdy z nich ma własny `ContentHeader`, więc naprawa jest taka sama jak w Odżywianiu:
 
-Punkty #3 i #4 dotyczą **zachowania i dostępności**, nie wyglądu — inna klasa problemu
-niż paczki 01–14 i warto trzymać je w osobnych commitach.
+| Moduł | Martwy badge | Docelowy `ContentHeader` |
+| --- | --- | --- |
+| `Cele.tsx` | `:329` | `:422` |
+| `Zadania.tsx` | `:779` | `:1173` |
+| `Kalendarz.tsx` | `:842` | `:958` |
+| `Notatki.tsx` | `:1260` | `:1270` |
+| `Podroze.tsx` | `:870` | `:877` |
+| `Sport.tsx` | `:1163` | `:1210` |
+| `Jdg.tsx` | `:371` | `:377` |
+| `Sprawy.tsx` | `:833`, `:848` | `:869` |
+
+Uwaga: `Cele.tsx:329` gubi też `Oryginał danych zabezpieczony` i status importu, a `Jdg`
+i `Podroze` renderują się przez `layout(header, content)` z `Sprawy`, więc tam trzeba usunąć
+również nieużywany parametr `header`.
+
+**To nie jest kosmetyka — użytkownik nie dowiaduje się, że jego zmiana nie została zapisana.**
+Zostaje tylko globalny toast z `Layout.tsx:1074`.
+
+## Druga sprawa: pułapka w sygnaturze
+
+Dopóki `PageShell` i `ModuleShell` przyjmują propsy, których nie renderują, każdy kolejny
+`title`/`meta`/`actions` zniknie tak samo cicho. Warto usunąć te propsy z sygnatur, żeby
+kompilator wskazał wszystkie call sites, zamiast pozwalać im wyglądać na poprawne.
+`h1Count === 0` na wszystkich 38 trasach (pomiar z audytu 2026-08-04) to prawdopodobnie
+ten sam mechanizm — moduły oddają tytuł do `PageShell`, który go nie renderuje.
 
 ---
 
