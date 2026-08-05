@@ -335,7 +335,7 @@ export function GoalCard({
 
   return (
     <article
-      className={`goal-card group rounded-xl border transition-all duration-150 ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
+      className={`goal-card group border transition-all duration-150 ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
       data-status={goal.status}
       style={{
         "--goal-color": goal.color,
@@ -569,7 +569,7 @@ export function GoalDetail({
 
         <div className="my-5 border-y py-4" style={{ borderColor: C.borderSubtle }}>
           <div className="mb-3 flex items-end justify-between">
-            <span className="text-[22px] font-semibold" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace" }}>{goal.progress}%</span>
+            <span className="font-semibold" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace", fontSize: "var(--text-headline)" }}>{goal.progress}%</span>
             <span className="text-[11px]" style={{ color: C.textMuted }}>{goal.progressLabel}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full" style={{ background: C.borderStrong }}>

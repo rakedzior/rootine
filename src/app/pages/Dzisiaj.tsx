@@ -265,7 +265,7 @@ function ModuleSummary({
       </span>
       <span className="today-module-row__overdue-column">
         {overdueMessage && (
-          <span className="today-module-row__overdue" aria-label={overdueMessage}>
+          <span className="today-module-row__overdue" aria-label={overdueMessage} title={overdueMessage}>
             {overdueMessage}
           </span>
         )}

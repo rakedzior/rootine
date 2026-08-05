@@ -24,7 +24,7 @@ export {
   type MenuProps,
   type MenuTriggerProps,
 } from "./components/Menu";
-export { Modal, type ModalProps } from "./components/Modal";
+export { Modal, type ModalProps, type ModalSize } from "./components/Modal";
 export { PageHeader, type PageHeaderProps } from "./components/PageHeader";
 export { PageShell, type PageShellProps, type PageWidth } from "./components/PageShell";
 export { PageToolbar, type PageToolbarProps } from "./components/PageToolbar";

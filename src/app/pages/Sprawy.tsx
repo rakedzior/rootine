@@ -32,7 +32,7 @@ import { SensitiveValue } from "../experience/preferences";
 import { recordActivity } from "../experience/activityLog";
 import { writeModuleMemoryValue } from "../experience/moduleMemory";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
-import { formatDate as formatPolishDate } from "../formatters";
+import { formatDate as formatPolishDate, pluralize } from "../formatters";
 import {
   AFFAIRS_STORAGE_KEY,
   advancePaymentDateToFuture,
@@ -86,6 +86,7 @@ import {
   DOCUMENT_LABELS,
   EMPTY_DRAFT,
   NAV_ITEMS,
+  NAV_LABELS,
   STATUS_LABELS,
   UPCOMING_ICONS,
   VEHICLE_ITEM_LABELS,
@@ -584,6 +585,7 @@ export default function Sprawy() {
           <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={12} /></Button>
           <Button
             variant="ghost"
+                          className="ui-button--ghost-danger"
             size="sm"
             iconOnly
             aria-label={`Usuń ${payment.title}`}
@@ -676,10 +678,13 @@ export default function Sprawy() {
     return undefined;
   };
 
-  const mobileViewOptions = [
-    { value: "overview", label: "Przegląd", description: "Radar zobowiązań i plan miesiąca" },
-    ...NAV_ITEMS.map((item) => ({ value: item.view, label: item.label })),
-  ];
+  // NAV_ITEMS already starts with "overview"; prepending it again produced two options sharing
+  // the same React key, which React warns about and which can duplicate or drop options.
+  const mobileViewOptions = NAV_ITEMS.map((item) => (
+    item.view === "overview"
+      ? { value: item.view, label: item.label, description: "Radar zobowiązań i plan miesiąca" }
+      : { value: item.view, label: item.label }
+  ));
 
   const contextSidebar = (
     <ModuleSidebar label="Widoki spraw" className="affairs-sidebar">
@@ -687,31 +692,31 @@ export default function Sprawy() {
         <section>
           <p className="affairs-sidebar__label">Główne</p>
           <div>
-            <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label="Przegląd" onClick={() => selectView("overview")} />
-            <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label="Do załatwienia" meta={navMeta("matters")} onClick={() => selectView("matters")} />
+            <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label={NAV_LABELS.overview} onClick={() => selectView("overview")} />
+            <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label={NAV_LABELS.matters} meta={navMeta("matters")} onClick={() => selectView("matters")} />
           </div>
         </section>
         <section>
           <p className="affairs-sidebar__label">Finanse</p>
           <div>
-            <ContextNavItem active={view === "oneTime"} icon={<ReceiptText />} label="Jednorazowe" meta={navMeta("oneTime")} onClick={() => selectView("oneTime")} />
-            <ContextNavItem active={view === "payments"} icon={<RefreshCw />} label="Cykliczne" meta={navMeta("payments")} onClick={() => selectView("payments")} />
-            <ContextNavItem active={view === "subscriptions"} icon={<CreditCard />} label="Subskrypcje" meta={navMeta("subscriptions")} onClick={() => selectView("subscriptions")} />
-            <ContextNavItem active={view === "budget"} icon={<WalletCards />} label="Budżet" onClick={() => selectView("budget")} />
+            <ContextNavItem active={view === "oneTime"} icon={<ReceiptText />} label={NAV_LABELS.oneTime} meta={navMeta("oneTime")} onClick={() => selectView("oneTime")} />
+            <ContextNavItem active={view === "payments"} icon={<RefreshCw />} label={NAV_LABELS.payments} meta={navMeta("payments")} onClick={() => selectView("payments")} />
+            <ContextNavItem active={view === "subscriptions"} icon={<CreditCard />} label={NAV_LABELS.subscriptions} meta={navMeta("subscriptions")} onClick={() => selectView("subscriptions")} />
+            <ContextNavItem active={view === "budget"} icon={<WalletCards />} label={NAV_LABELS.budget} onClick={() => selectView("budget")} />
           </div>
         </section>
         <section>
           <p className="affairs-sidebar__label">Dokumenty i pojazdy</p>
           <div>
-            <ContextNavItem active={view === "documents"} icon={<FileText />} label="Dokumenty" meta={navMeta("documents")} onClick={() => selectView("documents")} />
-            <ContextNavItem active={view === "vehicles"} icon={<Car />} label="Pojazdy" meta={navMeta("vehicles")} onClick={() => selectView("vehicles")} />
+            <ContextNavItem active={view === "documents"} icon={<FileText />} label={NAV_LABELS.documents} meta={navMeta("documents")} onClick={() => selectView("documents")} />
+            <ContextNavItem active={view === "vehicles"} icon={<Car />} label={NAV_LABELS.vehicles} meta={navMeta("vehicles")} onClick={() => selectView("vehicles")} />
           </div>
         </section>
         <section>
           <p className="affairs-sidebar__label">Firma i podróże</p>
           <div>
-            <ContextNavItem active={view === "jdg"} icon={<Building2 />} label="JDG" onClick={() => selectView("jdg")} />
-            <ContextNavItem active={view === "travel"} icon={<Map />} label="Podróże" onClick={() => selectView("travel")} />
+            <ContextNavItem active={view === "jdg"} icon={<Building2 />} label={NAV_LABELS.jdg} onClick={() => selectView("jdg")} />
+            <ContextNavItem active={view === "travel"} icon={<Map />} label={NAV_LABELS.travel} onClick={() => selectView("travel")} />
           </div>
         </section>
       </nav>
@@ -929,7 +934,7 @@ export default function Sprawy() {
           {view === "vehicles" && (
             <span className="affairs-toolbar__context">
               <Car size={13} aria-hidden="true" />
-              {workspace.vehicles.length} {workspace.vehicles.length === 1 ? "pojazd" : "pojazdy"} · {vehicleAlerts} bliskich terminów
+              {pluralize(workspace.vehicles.length, "pojazd", "pojazdy", "pojazdów")} · {pluralize(vehicleAlerts, "bliski termin", "bliskie terminy", "bliskich terminów")}
             </span>
           )}
           {view === "budget" && (
@@ -1175,6 +1180,7 @@ export default function Sprawy() {
                         <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={12} /></Button>
                         <Button
                           variant="ghost"
+                          className="ui-button--ghost-danger"
                           size="sm"
                           iconOnly
                           aria-label={`Usuń ${payment.title}`}
@@ -1257,6 +1263,7 @@ export default function Sprawy() {
                       </Button>
                       <Button
                         variant="ghost"
+                          className="ui-button--ghost-danger"
                         size="sm"
                         iconOnly
                         aria-label={`Usuń ${payment.name}`}
@@ -1345,6 +1352,7 @@ export default function Sprawy() {
                         </Button>
                         <Button
                           variant="ghost"
+                          className="ui-button--ghost-danger"
                           size="sm"
                           iconOnly
                           aria-label={`Usuń ${subscription.name}`}
@@ -1400,6 +1408,7 @@ export default function Sprawy() {
                         <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={12} /></Button>
                         <Button
                           variant="ghost"
+                          className="ui-button--ghost-danger"
                           size="sm"
                           iconOnly
                           aria-label={`Usuń ${document.name}`}
@@ -1453,6 +1462,7 @@ export default function Sprawy() {
                         <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={12} /></Button>
                         <Button
                           variant="ghost"
+                          className="ui-button--ghost-danger"
                           size="sm"
                           iconOnly
                           aria-label={`Usuń ${item.title}`}
@@ -1477,6 +1487,7 @@ export default function Sprawy() {
                         <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${vehicle.name}`} onClick={() => openVehicleEditor(vehicle)}><Pencil size={12} /></Button>
                         <Button
                           variant="ghost"
+                          className="ui-button--ghost-danger"
                           size="sm"
                           iconOnly
                           aria-label={`Usuń ${vehicle.name}`}
@@ -1530,6 +1541,7 @@ export default function Sprawy() {
                                 <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={12} /></Button>
                                 <Button
                                   variant="ghost"
+                          className="ui-button--ghost-danger"
                                   size="sm"
                                   iconOnly
                                   aria-label={`Usuń ${item.title}`}
@@ -1579,7 +1591,7 @@ export default function Sprawy() {
                         {BUDGET_KIND_LABELS[line.kind]}
                       </Badge>
                       <label>
-                        <span className="sr-only">Plan dla {line.label}</span>
+                        <span className="ui-sr-only">Plan dla {line.label}</span>
                         <input
                           type="number"
                           min="0"
@@ -1595,7 +1607,7 @@ export default function Sprawy() {
                         <span>zł</span>
                       </label>
                       <label>
-                        <span className="sr-only">Kwota rzeczywista dla {line.label}</span>
+                        <span className="ui-sr-only">Kwota rzeczywista dla {line.label}</span>
                         <input
                           type="number"
                           min="0"
@@ -1612,6 +1624,7 @@ export default function Sprawy() {
                       </label>
                       <Button
                         variant="ghost"
+                          className="ui-button--ghost-danger"
                         size="sm"
                         iconOnly
                         aria-label={`Usuń ${line.label}`}

@@ -84,7 +84,7 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-border-subtle) 82%, transparent);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-graphite-panel) 82%, transparent);
+  background: var(--color-surface-veil);
   transition:
     border-color var(--motion-fast) var(--ease-out),
     background-color var(--motion-fast) var(--ease-out);
@@ -93,7 +93,7 @@
 .nutrition-meal-card:hover,
 .nutrition-meal-card:focus-within {
   border-color: color-mix(in srgb, var(--color-success-seaglass) 22%, var(--color-border-strong));
-  background: color-mix(in srgb, var(--color-graphite-panel) 90%, transparent);
+  background: var(--color-surface-veil);
 }
 
 .nutrition-meal-card__header {
@@ -117,7 +117,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--color-chalk-white);
-  font-size: var(--text-label);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -298,7 +298,7 @@
 }
 
 .nutrition-budget-card {
-  background: color-mix(in srgb, var(--color-graphite-panel) 90%, transparent);
+  background: var(--color-surface-veil);
 }
 
 .nutrition-budget-card__content {
@@ -2606,28 +2606,21 @@
     padding: 16px;
   }
 
+  /*
+   * This dialog is much wider than the rest, but it is still a dialog: it keeps the shared
+   * radius, header padding and close-button position. Opting out of them made it the one
+   * window in the app that looked like it came from somewhere else.
+   */
   .ui-modal:has(.nutrition-analysis-v2) {
     height: auto;
     max-height: calc(100vh - 32px);
     overflow-y: auto;
-    border-radius: var(--radius-lg);
   }
 
   .ui-modal:has(.nutrition-analysis-v2) .nutrition-analysis-modal {
     max-height: none;
     overflow-y: visible;
-    padding: 24px;
-  }
-
-  .ui-modal:has(.nutrition-analysis-v2) .ui-modal__header {
-    position: relative;
-    padding: 32px 24px 0;
-  }
-
-  .ui-modal:has(.nutrition-analysis-v2) .ui-modal__header > .ui-button {
-    position: absolute;
-    top: 18px;
-    right: 24px;
+    padding: var(--space-xl);
   }
 
   .ui-modal:has(.nutrition-analysis-v2) .nutrition-analysis-v2__toolbar {
@@ -2769,13 +2762,20 @@
   margin-top: -8px;
 }
 
-.nutrition-analysis-v2__custom-range label {
+.nutrition-analysis-v2__custom-range label,
+.nutrition-analysis-v2__custom-range-field {
   display: flex;
   min-width: 160px;
   align-items: center;
   gap: 8px;
   color: var(--color-text-muted);
   font-size: var(--text-label);
+}
+
+/* The range pickers use the shared DatePicker now; only the field width is local. */
+.nutrition-analysis-v2__custom-range-field > .ui-field {
+  min-width: 0;
+  flex: 1;
 }
 
 .nutrition-analysis-v2__custom-range input {
@@ -2918,7 +2918,7 @@
   height: 6px;
   flex: 1 1 auto;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-graphite-input);
   transform-origin: left center;
 }
@@ -3166,7 +3166,7 @@
   display: inline-block;
   width: 13px;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-precision-blue);
 }
 
@@ -3262,7 +3262,7 @@
   width: 12px;
   height: 8px;
   margin-right: 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--color-precision-blue);
   vertical-align: middle;
 }
@@ -3342,7 +3342,8 @@
     margin-top: -4px;
   }
 
-  .nutrition-analysis-v2__custom-range label {
+  .nutrition-analysis-v2__custom-range label,
+.nutrition-analysis-v2__custom-range-field {
     min-width: 0;
   }
 

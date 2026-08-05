@@ -174,7 +174,9 @@ export const NAV_GROUPS: Array<{
     label: "Główne",
     items: [
       { view: "overview", label: "Przegląd", icon: LayoutDashboard },
-      { view: "matters", label: "Sprawy", icon: ShieldCheck },
+      // "Sprawy" is the name of the whole module, so it could not also name one of its views:
+      // the sidebar said "Do załatwienia" while the page title said "Sprawy" on the same screen.
+      { view: "matters", label: "Do załatwienia", icon: ShieldCheck },
     ],
   },
   {
@@ -204,6 +206,14 @@ export const NAV_GROUPS: Array<{
 
 export const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 export const AFFAIRS_VIEWS = new Set<AffairsView>(NAV_ITEMS.map((item) => item.view));
+
+/**
+ * One name per view. The sidebar used to hard-code its own labels, so a view could be called
+ * one thing in the navigation and another in the page title it opened.
+ */
+export const NAV_LABELS = Object.fromEntries(
+  NAV_ITEMS.map((item) => [item.view, item.label]),
+) as Record<AffairsView, string>;
 
 export const UPCOMING_ICONS = {
   matter: ShieldCheck,
@@ -344,8 +354,9 @@ export function vehicleItemDueCopy(item: VehicleItem, vehicle: Vehicle): { text:
   if (mileageLeft <= 0) return { text: "Przebieg przekroczony", tone: "danger" };
   if (dateDays <= 30) return dueCopy(item.dueDate);
   if (mileageLeft <= 1_000) return { text: `Za ${formatMileage(mileageLeft)}`, tone: "warning" };
-  if (item.dueDate) return { text: formatDate(item.dueDate), tone: "neutral" };
-  return { text: `Przy ${formatMileage(item.dueMileage ?? 0)}`, tone: "neutral" };
+  // The row already prints the due date and the due mileage in its own column. Repeating either
+  // one here rendered the same value twice side by side; the badge carries the status instead.
+  return { text: "W terminie", tone: "neutral" };
 }
 
 export function shiftMonthKey(value: string, offset: number): string {

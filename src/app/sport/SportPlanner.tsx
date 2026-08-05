@@ -121,7 +121,7 @@ export function TemplateLibrary({
         description={`${templates.length} zapisanych jednostek · wybierz szablon, aby go edytować albo dodać do planu.`}
         action={(
           <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreate}>
-            Nowy szablon
+            Dodaj szablon
           </Button>
         )}
       />
@@ -559,7 +559,7 @@ export function CyclePlanner({
       <EmptyState
         title="Brak planu treningowego"
         description="Utwórz plan bezterminowy albo określ jego zakres, a następnie przypisz treningi do dni."
-        action={<Button variant="primary" onClick={onCreateCycle}>Utwórz plan</Button>}
+        action={<Button variant="primary" onClick={onCreateCycle}>Dodaj plan</Button>}
       />
     );
   }
@@ -729,8 +729,8 @@ function CyclePlannerLayout({
     <div className="sport-cycle-layout">
       <aside className="sport-cycle-sidebar" aria-label="Zarządzanie planem treningowym">
         <div className="sport-cycle-sidebar__heading">
-          <h2>Plany treningowe</h2>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreateNewCycle}>Nowy plan</Button>
+          <h2>Twoje plany</h2>
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreateNewCycle}>Dodaj plan</Button>
         </div>
         <section className="sport-cycle-sidebar__section sport-cycle-sidebar__active">
           <div className="sport-cycle-sidebar__section-heading">
@@ -878,7 +878,7 @@ export function MoveWorkoutDialog({
       title="Przenieś trening"
       eyebrow={workout.title}
       description="Wybierz tydzień i dzień. Przeciąganie pozostaje szybkim skrótem na planszy."
-      width={460}
+      size="sm"
       onClose={onClose}
       footer={(
         <>
@@ -966,7 +966,7 @@ export function TemplateDialog({
       title={template ? "Edytuj szablon" : "Nowy szablon"}
       eyebrow="Biblioteka treningów"
       description="Szablon opisuje powtarzalny trening i jego kategorię sportu."
-      width={560}
+      size="md"
       onClose={onClose}
       footer={(
         <>
@@ -1087,7 +1087,7 @@ export function CycleDialog({
       title={cycle ? "Ustawienia planu" : "Nowy plan treningowy"}
       eyebrow="Jeden aktywny plan"
       description="Zaplanuj tydzień powtarzany bezterminowo albo określony zakres tygodni."
-      width={620}
+      size="md"
       onClose={onClose}
       footer={(
         <>
@@ -1284,7 +1284,7 @@ export function WorkoutDialog({
       description={workout && editScope === "series"
         ? `Zmiany obejmą wszystkie wystąpienia tej serii (${seriesCount}).`
         : "Wybierz szablon albo dodaj pojedynczy trening ręcznie."}
-      width={650}
+      size="md"
       onClose={onClose}
       footer={(
         <>

@@ -776,7 +776,7 @@ export default function Notatki() {
             <button
               type="button"
               className="notes-sidebar__group-action"
-              aria-label="Utwórz listę"
+              aria-label="Dodaj listę"
               title="Utwórz listę"
               onClick={() => openListEditor()}
             >
@@ -839,7 +839,7 @@ export default function Notatki() {
                 {tagCounts.length > 7 && (
                   <label className="notes-sidebar__tag-search">
                     <Search size={11} aria-hidden="true" />
-                    <span className="sr-only">Filtruj wszystkie tagi</span>
+                    <span className="ui-sr-only">Filtruj wszystkie tagi</span>
                     <input
                       value={tagSearch}
                       placeholder="Filtruj tagi"
@@ -1056,7 +1056,7 @@ export default function Notatki() {
 
         <div className="notes-editor__scroll">
           <label className="notes-editor__title-field">
-            <span className="sr-only">Tytuł notatki</span>
+            <span className="ui-sr-only">Tytuł notatki</span>
             <input
               autoFocus
               data-autofocus
@@ -1288,7 +1288,7 @@ export default function Notatki() {
           actions={<>
           <label className="notes-search">
             <Search size={13} aria-hidden="true" />
-            <span className="sr-only">Szukaj w notatkach</span>
+            <span className="ui-sr-only">Szukaj w notatkach</span>
             <input value={search} placeholder="Szukaj w notatkach" onChange={(event) => setSearch(event.target.value)} />
             {search && (
               <button type="button" aria-label="Wyczyść wyszukiwanie" onClick={() => setSearch("")}>
@@ -1341,7 +1341,7 @@ export default function Notatki() {
                   ? "Zarchiwizowane notatki pojawią się tutaj i będzie można je przywrócić."
                   : "Dodaj szybki tekst albo listę punktowaną, a potem przypisz kolor, listę i tagi."}
               action={!search && view !== "archive"
-                ? <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>Nowa notatka</Button>
+                ? <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>Dodaj notatkę</Button>
                 : undefined}
             />
           ) : (

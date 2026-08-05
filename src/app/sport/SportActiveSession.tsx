@@ -109,7 +109,7 @@ function FinishSessionDialog({
       description={completion.total
         ? `Zapisano ${completion.done} z ${completion.total} ${completion.unit}. Wynik automatycznie trafi do Historii i Analizy.`
         : "Wynik automatycznie trafi do Historii i Analizy."}
-      width={480}
+      size="sm"
       onClose={onClose}
       footer={(
         <>
@@ -625,7 +625,7 @@ function StrengthSession({
           title="Zamień ćwiczenie"
           eyebrow="Aktywna sesja"
           description="Zmiana może dotyczyć tylko tego treningu albo także jego szablonu."
-          width={500}
+          size="sm"
           onClose={() => setSwapOpen(false)}
           footer={(
             <>
@@ -744,7 +744,7 @@ export function ActiveSessionConflictDialog({
       title="Inny trening jest już aktywny"
       eyebrow="Jedna aktywna sesja"
       description={`Trwa „${active.title}”. Zanim rozpoczniesz „${requestedTitle}”, zdecyduj co zrobić z bieżącą sesją.`}
-      width={500}
+      size="sm"
       onClose={onCancel}
       footer={(
         <>

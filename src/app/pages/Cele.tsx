@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useGoalsStore } from "../goals/goalsContext";
 import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import { recordActivity } from "../experience/activityLog";
+import { pluralize } from "../formatters";
 import type {
   Goal as StoredGoal,
   GoalDraft,
@@ -469,7 +470,7 @@ export default function Cele() {
               <button type="button" onClick={() => handleFilter("all")} className={`goals-radar__signal ${goalsRadar.stale.length ? "is-muted" : "is-clear"}`}>
                 <Activity size={15} aria-hidden="true" />
                 <strong>{goalsRadar.stale.length}</strong>
-                <span>{goalsRadar.stale.length === 1 ? "cel nieaktualizowany od 14 dni" : `cele nieaktualizowane od 14 dni`}</span>
+                <span>{pluralize(goalsRadar.stale.length, "cel nieaktualizowany", "cele nieaktualizowane", "celów nieaktualizowanych")} od 14 dni</span>
               </button>
             </div>
             {goalsRadar.focus && (
@@ -487,7 +488,7 @@ export default function Cele() {
 
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {visibleGoals.length === 0 ? (
-            <EmptyState className="h-full" icon={<Target size={20} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo utwórz nowy cel." action={<Button variant="primary" size="sm" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={12} />}>Nowy cel</Button>} />
+            <EmptyState className="h-full" icon={<Target size={20} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo dodaj nowy cel." action={<Button variant="primary" size="sm" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={12} />}>Dodaj cel</Button>} />
           ) : (
             <div className="w-full">
               {priorityGoals.length > 0 && (
@@ -664,7 +665,7 @@ export default function Cele() {
           title="Sprawdź import celów"
           description={`Plik: ${importCandidate.fileName}`}
           onClose={() => setImportCandidate(null)}
-          width={520}
+          size="md"
           footer={(
             <>
               <Button variant="quiet" onClick={() => setImportCandidate(null)}>Anuluj</Button>
@@ -699,7 +700,7 @@ export default function Cele() {
           title="Ustawienia celów"
           description="Preferencje są zapamiętywane na tym urządzeniu."
           onClose={() => setSettingsOpen(false)}
-          width={460}
+          size="sm"
           footer={<Button variant="primary" size="sm" onClick={() => setSettingsOpen(false)}>Gotowe</Button>}
         >
           <div className="space-y-5">

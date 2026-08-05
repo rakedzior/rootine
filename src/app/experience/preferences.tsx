@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Select } from "../ui";
 
 const EXPERIENCE_STORAGE_KEY = "rootine.experience.preferences.v1";
 const EXPERIENCE_VERSION = 1 as const;
@@ -208,22 +209,36 @@ export function ExperienceSettings({ compact = false }: { compact?: boolean }) {
         <strong id={`experience-settings-title${compact ? "-compact" : ""}`}>Komfort pracy</strong>
         <small>Ruch, gęstość i prywatność są zapisywane lokalnie.</small>
       </div>
-      <label>
-        <span>Ruch</span>
-        <select value={motion.preference} onChange={(event) => motion.setPreference(event.target.value as MotionPreference)}>
-          <option value="system">Zgodnie z systemem</option>
-          <option value="full">Pełny</option>
-          <option value="reduced">Ograniczony</option>
-        </select>
-      </label>
-      <label>
-        <span>Gęstość</span>
-        <select value={density.density} onChange={(event) => density.setDensity(event.target.value as DensityPreference)}>
-          <option value="calm">Calm</option>
-          <option value="standard">Standard</option>
-          <option value="compact">Compact</option>
-        </select>
-      </label>
+      {/* Native selects rendered with the OS chevron at the browser default font size, so the
+          only two dropdowns in Settings looked nothing like every other select in the app. */}
+      <div className="experience-settings__field">
+        <span id="experience-settings-motion">Ruch</span>
+        <Select
+          compact
+          aria-labelledby="experience-settings-motion"
+          value={motion.preference}
+          options={[
+            { value: "system", label: "Zgodnie z systemem" },
+            { value: "full", label: "Pełny" },
+            { value: "reduced", label: "Ograniczony" },
+          ]}
+          onChange={(event) => motion.setPreference(event.target.value as MotionPreference)}
+        />
+      </div>
+      <div className="experience-settings__field">
+        <span id="experience-settings-density">Gęstość</span>
+        <Select
+          compact
+          aria-labelledby="experience-settings-density"
+          value={density.density}
+          options={[
+            { value: "calm", label: "Spokojna" },
+            { value: "standard", label: "Standardowa" },
+            { value: "compact", label: "Zwarta" },
+          ]}
+          onChange={(event) => density.setDensity(event.target.value as DensityPreference)}
+        />
+      </div>
       <label className="experience-settings__toggle">
         <input type="checkbox" checked={privacy.enabled} onChange={(event) => privacy.setEnabled(event.target.checked)} />
         <span>Privacy Mode <kbd>Ctrl ⇧ P</kbd></span>

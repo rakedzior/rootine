@@ -126,14 +126,13 @@ export function SportExercises({
   };
 
   return (
-    <section className="sport-record-view sport-exercises-view" aria-labelledby="sport-exercises-title">
+    <section className="sport-record-view sport-exercises-view" aria-label="Biblioteka ćwiczeń">
       <div className="sport-record-view__intro">
         <div>
-          <h2 id="sport-exercises-title">Biblioteka ćwiczeń</h2>
           <p>Jedna biblioteka dla siłowni, rehabilitacji, mobilności i treningów etapowych.</p>
         </div>
         <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setEditing(createBlankExercise())}>
-          Nowe ćwiczenie
+          Dodaj ćwiczenie
         </Button>
       </div>
 
@@ -161,7 +160,7 @@ export function SportExercises({
           <span>Nazwa</span><span>Partia główna</span><span>Sprzęt</span><span>Domyślne parametry</span><span>W szablonach</span><span aria-hidden="true" />
         </div>
         {filtered.length === 0 ? (
-          <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo dodaj pierwsze ćwiczenie do biblioteki." action={<Button variant="quiet" onClick={() => setEditing(createBlankExercise())}>Nowe ćwiczenie</Button>} />
+          <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo dodaj pierwsze ćwiczenie do biblioteki." action={<Button variant="quiet" onClick={() => setEditing(createBlankExercise())}>Dodaj ćwiczenie</Button>} />
         ) : filtered.map((exercise) => {
           const usage = templates.reduce((count, template) => count + (exerciseCountForTemplate(template, exercise.id) > 0 ? 1 : 0), 0);
           return (
@@ -208,7 +207,7 @@ function ExerciseEditor({ exercise, onClose, onSubmit }: { exercise: Exercise; o
     onSubmit({ ...draft, name: draft.name.trim(), description: draft.description.trim(), instructions: draft.instructions.trim() });
   };
   return (
-    <Modal title={exercise.name ? "Edytuj ćwiczenie" : "Nowe ćwiczenie"} eyebrow="Biblioteka ćwiczeń" description="Podstawowe pola wystarczą, a zaawansowane ustawienia możesz rozwinąć później." width={700} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Anuluj</Button><Button variant="primary" type="submit" form="exercise-editor-form">Zapisz ćwiczenie</Button></>}>
+    <Modal title={exercise.name ? "Edytuj ćwiczenie" : "Nowe ćwiczenie"} eyebrow="Biblioteka ćwiczeń" description="Podstawowe pola wystarczą, a zaawansowane ustawienia możesz rozwinąć później." size="lg" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Anuluj</Button><Button variant="primary" type="submit" form="exercise-editor-form">Zapisz ćwiczenie</Button></>}>
       <form id="exercise-editor-form" className="sport-exercise-editor" onSubmit={submit}>
         <div className="sport-planner-form__grid">
           <Input label="Nazwa" value={draft.name} data-autofocus onChange={(event) => set("name", event.target.value)} />

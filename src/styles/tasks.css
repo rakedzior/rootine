@@ -24,9 +24,15 @@
 
 .task-module-main .task-content::-webkit-scrollbar { display: none; }
 
+/*
+ * AD-2: the Tasks page keeps the full-width frame (header and toolbar span it), but the list
+ * itself is capped and centred. Left full-bleed, rows stretched to 2072px at 2560 and opened a
+ * ~700px gap between a task title and its list column.
+ */
 .task-module-main .task-content__inner {
   width: 100%;
-  margin-inline: 0;
+  max-width: var(--task-list-measure);
+  margin-inline: auto;
 }
 
 .task-module-main .task-entry {
@@ -133,7 +139,7 @@
   min-width: 0;
   margin: 0;
   color: var(--color-chalk-white);
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }
@@ -141,7 +147,7 @@
 .task-group-heading__count {
   color: var(--color-text-muted);
   font-family: var(--font-data);
-  font-size: var(--text-micro);
+  font-size: var(--text-nano);
   line-height: 1;
 }
 
@@ -243,33 +249,29 @@
   border-radius: var(--radius-sm);
 }
 
-.task-toolbar-actions,
-.task-view-switch {
-  display: flex;
-  align-items: center;
-}
-
 .task-toolbar-actions {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
   gap: var(--space-md);
-}
-
-.task-view-switch {
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-}
-
-.task-view-switch .ui-button {
-  min-width: 28px;
-  height: 28px;
 }
 
 .task-detail-panel {
   width: 408px;
   min-width: 408px;
+}
+
+@media (max-width: 1180px) {
+  /* Same trade as the mobile block: the rail, title and tag survive; list and priority move
+     into the detail panel rather than forcing the row wider than its column. */
+  .task-module-main .task-item-row {
+    grid-template-columns: var(--list-rail-width) 24px minmax(0, 1fr) minmax(96px, 190px);
+  }
+
+  .task-row__context,
+  .task-row__priority {
+    display: none;
+  }
 }
 
 @media (max-width: 1380px) {
@@ -363,7 +365,7 @@
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--task-checkbox-color);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: transparent;
   transition: background-color 140ms ease-out, border-color 140ms ease-out;
 }
@@ -457,7 +459,7 @@
 .task-day-heading__title {
   margin: 0;
   color: var(--color-chalk-white);
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }
@@ -514,7 +516,7 @@
 .task-overdue-title {
   margin: 0;
   color: var(--color-danger-coral);
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }
@@ -579,7 +581,7 @@ input.task-entry-input:focus-visible {
 .task-schedule-tabs .ui-tab {
   flex: 1;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--text-meta);
 }
 
 .task-occurrence-context {
@@ -1255,7 +1257,7 @@ input.task-entry-input:focus-visible {
   background: transparent;
   color: var(--color-text-secondary);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--text-micro);
   line-height: var(--leading-snug);
   cursor: pointer;
 }
@@ -1907,7 +1909,7 @@ input.task-entry-input:focus-visible {
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-lg);
   border-bottom: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-graphite-panel) 88%, transparent);
+  background: var(--color-surface-veil);
 }
 
 .task-bulk-bar strong,

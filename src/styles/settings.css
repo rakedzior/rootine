@@ -27,7 +27,7 @@
 
 .app-theme-settings__heading small {
   color: var(--color-text-secondary);
-  font-size: var(--text-micro);
+  font-size: var(--text-nano);
   line-height: var(--leading-snug);
 }
 
@@ -145,7 +145,7 @@
 
 .app-theme-option__copy em {
   color: var(--color-text-tertiary);
-  font-size: 10px;
+  font-size: var(--text-micro);
   font-style: normal;
   font-weight: var(--weight-medium);
   letter-spacing: 0.04em;
@@ -203,20 +203,19 @@
   font-size: var(--text-micro);
 }
 
-.experience-settings > label:not(.experience-settings__toggle) {
+/* The two preference rows now use the shared Select, so they only need the label/control grid;
+   the control itself is styled by the design system like every other dropdown. */
+.experience-settings > label:not(.experience-settings__toggle),
+.experience-settings__field {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(190px, 0.8fr);
   align-items: center;
   gap: var(--space-lg);
 }
 
-.experience-settings select {
-  min-height: var(--control-height-md);
-  padding: 0 var(--space-md);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-1);
-  color: var(--color-text-primary);
+.experience-settings__field > span {
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
 }
 
 .experience-settings__toggle {

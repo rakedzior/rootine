@@ -186,7 +186,7 @@
   overflow: hidden;
   margin: 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -272,7 +272,7 @@
 .sport-cycle-sidebar__active .sport-cycle-sidebar__section-heading h3 {
   color: var(--color-precision-blue-text);
   font-size: var(--text-label);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -476,7 +476,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-week-header h2 {
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 
@@ -533,7 +533,7 @@ button.sport-cycle-plan-card:focus-visible {
   overflow: hidden;
   margin: 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -626,7 +626,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-workspace__heading h2 {
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 
@@ -665,7 +665,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-workspace .sport-cycle-day {
   min-height: 0;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
   border: 0;
   border-bottom: 1px solid var(--color-border-subtle);
   border-radius: 0;
@@ -808,7 +808,8 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-week-tab {
   display: grid;
   min-width: 86px;
-  min-height: 44px;
+  /* Two-line tab: the medium control height, not a bespoke 44. */
+  min-height: var(--control-height-md);
   place-items: center;
   gap: 1px;
   padding: var(--space-xs) var(--space-sm);
@@ -1128,7 +1129,8 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-tools,
 .sport-history-tools {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 220px 210px;
+  /* Floors summed to 706px inside a 700px column once the module sidebar collapsed. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 220px) minmax(0, 210px);
   gap: var(--space-sm);
 }
 
@@ -1411,12 +1413,16 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-insights {
   display: grid;
+  min-width: 0;
+  /* Auto-placed rows inherit min-width:auto, which let the filter row size to its content
+     and overflow the page column instead of wrapping. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2xl);
 }
 
 .sport-overview-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.44fr) minmax(0, 0.56fr);
+  grid-template-columns: minmax(0, 0.44fr) minmax(0, 0.56fr);
   align-items: start;
   gap: var(--space-lg);
 }
@@ -1533,7 +1539,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-active-strip__header > div > strong {
   overflow: hidden;
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1647,7 +1653,7 @@ button.sport-cycle-plan-card:focus-visible {
   padding: var(--space-md);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-graphite-panel) 90%, transparent);
+  background: var(--color-surface-veil);
   color: var(--color-text-secondary);
   transition:
     border-color var(--motion-fast) var(--ease-out),
@@ -1809,7 +1815,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-current-week > .ui-card {
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-graphite-card) 86%, transparent);
+  background: var(--color-surface-veil);
 }
 
 .sport-section-header-actions > .ui-button:first-child {
@@ -1828,16 +1834,53 @@ button.sport-cycle-plan-card:focus-visible {
 
 @media (max-width: 1180px) {
   .sport-overview-week-grid { grid-template-columns: minmax(0, 1fr); }
+
+  /* Side by side the two panels leave the week grid ~180px; stacked they both stay readable. */
+  .sport-overview-layout { grid-template-columns: minmax(0, 1fr); }
+
+  .sport-history-tools { flex-wrap: wrap; }
 }
 
 @media (max-width: 760px) {
   .sport-overview-week-grid { grid-template-columns: minmax(0, 1fr); }
+
+  /*
+   * The workout chip carries a 220px floor for the desktop planner. On a 390px screen the day
+   * label already takes half the row, so the chip must be free to shrink and let its own text
+   * truncate; the week header stacks for the same reason.
+   */
+  .sport-cycle-workspace .sport-cycle-workout {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .sport-cycle-workspace .sport-cycle-workout__meta {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .sport-cycle-workspace .sport-cycle-workout__meta > * {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sport-cycle-workspace .sport-cycle-day {
+    grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+  }
+
+  .sport-cycle-week-header__identity {
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+  }
 }
 
 /* ------------------------------------------------------------------------- *
  * Sport records: exercises and template content
  * ------------------------------------------------------------------------- */
-.sport-record-view { display: grid; min-width: 0; gap: var(--space-lg); padding: var(--space-xl) var(--space-3xl) var(--space-3xl); }
+/* PageShell already owns the horizontal page padding; repeating it here inset Szablony and
+   Ćwiczenia 28px further than their own header and every other view. */
+.sport-record-view { display: grid; min-width: 0; gap: var(--space-lg); padding: 0 0 var(--space-3xl); }
 .sport-record-view__intro { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); }
 .sport-record-view__intro > div { min-width: 0; flex: 1 1 auto; }
 .sport-record-view__intro > .ui-button { flex: 0 0 auto; }
@@ -1846,11 +1889,13 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-record-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: var(--color-graphite-panel); }
 .sport-record-toolbar .ui-field { min-width: 150px; flex: 0 0 auto; }
 .sport-record-toolbar .sport-record-toolbar__search { min-width: min(340px, 100%); flex: 1 1 260px; }
-.sport-record-toolbar .ui-field__control { height: 32px; }
-.sport-record-toolbar .ui-button { min-height: 32px; }
+.sport-record-toolbar .ui-field__control { height: var(--control-height-sm); }
+.sport-record-toolbar .ui-button { min-height: var(--control-height-sm); }
 .sport-record-table { min-width: 0; overflow: visible; border: 1px solid var(--color-border-subtle); background: var(--color-graphite-card); }
 .sport-record-table__head,
-.sport-record-table__row { min-width: 0; display: grid; grid-template-columns: minmax(220px, 1.35fr) minmax(120px, .8fr) minmax(120px, .8fr) minmax(160px, 1fr) 110px 44px; align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); }
+/* The floors summed to 866px inside an 838px card, so the last column escaped the table.
+   Columns keep their proportions but may shrink; the cells already truncate. */
+.sport-record-table__row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1fr) 110px 44px; align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); }
 .sport-record-table__head { min-height: 36px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
 .sport-record-table__row { position: relative; min-height: 64px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-secondary); font-size: var(--text-label); }
 .sport-record-table__row:last-child { border-bottom: 0; }
@@ -1862,7 +1907,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-record-table__name svg { flex: 0 0 auto; color: var(--color-precision-blue-text); }
 .sport-record-table__sub { display: flex; align-items: center; gap: var(--space-xs); color: var(--color-text-muted); font-size: var(--text-micro); }
 .sport-record-table__actions { position: relative; display: flex; justify-content: flex-end; }
-.sport-icon-button { display: inline-grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); cursor: pointer; }
+.sport-icon-button { display: inline-grid; width: var(--control-height-sm); height: var(--control-height-sm); place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); cursor: pointer; }
 .sport-icon-button:hover { border-color: var(--color-border-strong); background: var(--color-graphite-panel); color: var(--color-chalk-white); }
 .sport-icon-button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .sport-row-menu { position: absolute; z-index: 8; top: calc(100% + 4px); right: 0; min-width: 180px; box-shadow: var(--shadow-floating); }
@@ -1927,7 +1972,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-editor__item-details .sport-planner-form__grid { align-items: end; }
 .sport-template-editor__section { position: relative; transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out); }
 .sport-template-editor__section.is-drop-target { border-color: var(--color-precision-blue); background: color-mix(in srgb, var(--color-precision-blue-soft) 46%, var(--color-graphite-panel)); }
-.sport-template-editor__section.is-drop-target::before { position: absolute; top: -3px; right: var(--space-md); left: var(--space-md); height: 3px; border-radius: 2px; background: var(--color-precision-blue); content: ""; }
+.sport-template-editor__section.is-drop-target::before { position: absolute; top: -3px; right: var(--space-md); left: var(--space-md); height: 3px; border-radius: var(--radius-pill); background: var(--color-precision-blue); content: ""; }
 .sport-template-editor__section.is-dragging { opacity: .58; }
 .sport-template-editor__section-heading { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
 .sport-template-editor__section-heading > div { min-width: 0; }
@@ -1935,9 +1980,9 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-editor__section-drag-handle:active { cursor: grabbing; }
 .sport-template-editor__section-heading-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
 .sport-template-editor__section-position { display: grid; gap: 1px; justify-items: center; }
-.sport-template-editor__section-position > span { color: var(--color-text-muted); font-size: 10px; line-height: 1; }
+.sport-template-editor__section-position > span { color: var(--color-text-muted); font-size: var(--text-micro); line-height: 1; }
 .sport-template-editor__section-position > div { display: flex; gap: 1px; }
-.sport-template-editor__item-columns { display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 66px 64px; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs) 3px; color: var(--color-text-muted); font-size: 10px; letter-spacing: var(--tracking-label); text-transform: uppercase; }
+.sport-template-editor__item-columns { display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 66px 64px; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs) 3px; color: var(--color-text-muted); font-size: var(--text-micro); letter-spacing: var(--tracking-label); text-transform: uppercase; }
 .sport-template-editor__item-columns span:nth-child(4),
 .sport-template-editor__item-columns span:nth-child(5) { text-align: center; }
 .sport-template-editor__item { display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 66px 64px; min-height: 48px; align-items: center; gap: var(--space-xs); }
@@ -1946,7 +1991,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-editor__item-order-actions,
 .sport-template-editor__item-actions { display: flex; align-items: center; justify-content: center; gap: 1px; }
 .sport-template-editor__item-wrap.is-drop-target { position: relative; border-radius: var(--radius-sm); background: var(--color-precision-blue-soft); }
-.sport-template-editor__item-wrap.is-drop-target::before { position: absolute; top: -4px; right: 0; left: 0; height: 3px; border-radius: 2px; background: var(--color-precision-blue); content: ""; }
+.sport-template-editor__item-wrap.is-drop-target::before { position: absolute; top: -4px; right: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-precision-blue); content: ""; }
 .sport-template-editor__item-wrap.is-dragging { opacity: .46; }
 .sport-template-editor__series-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border-subtle); }
 .sport-template-editor__series-toolbar strong { display: block; color: var(--color-chalk-white); font-size: var(--text-label); font-weight: var(--weight-semibold); }
@@ -2055,7 +2100,7 @@ button.sport-cycle-plan-card:focus-visible {
   position: relative;
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(176px, 200px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
   align-items: stretch;
   border-top: 1px solid var(--color-border-subtle);
   transition:
@@ -2068,7 +2113,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-day.is-today {
-  background: color-mix(in srgb, var(--color-graphite-card) 72%, transparent);
+  background: var(--color-surface-veil-soft);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-precision-blue-text) 48%, transparent);
 }
 
@@ -2184,18 +2229,6 @@ button.sport-cycle-plan-card:focus-visible {
   grid-column: 1 / -1;
 }
 
-.sport-overview-drag-hint {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
 .sport-overview-day__workouts > button.is-completed {
   border-color: var(--color-border-subtle);
   background: var(--color-graphite-input);
@@ -2239,46 +2272,12 @@ button.sport-cycle-plan-card:focus-visible {
   width: 210px;
 }
 
-.sport-history-list {
-  display: grid;
-}
-
-.sport-history-row {
-  display: grid;
-  min-height: 58px;
-  grid-template-columns: 126px minmax(220px, 1fr) 100px 126px;
-  align-items: center;
-  gap: var(--space-lg);
-  padding: var(--space-sm) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.sport-history-row:last-child {
-  border-bottom: 0;
-}
-
 .sport-history-row__date,
 .sport-history-row__duration {
   color: var(--color-text-muted);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
-}
-
-.sport-history-row__main {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.sport-history-row__main > strong {
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-body);
-  font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sport-history-row__duration {
@@ -2330,49 +2329,14 @@ button.sport-cycle-plan-card:focus-visible {
   font-weight: var(--weight-semibold);
 }
 
-.sport-analysis-chart {
-  display: flex;
-  min-height: 220px;
-  align-items: stretch;
-  gap: var(--space-sm);
-}
-
-.sport-analysis-chart > div {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  grid-template-rows: 22px minmax(120px, 1fr) 22px;
-  gap: var(--space-xs);
-  text-align: center;
-}
-
-.sport-analysis-chart span,
-.sport-analysis-chart small {
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-family: var(--font-data);
-  font-size: var(--text-micro);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sport-analysis-chart > div > div {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: linear-gradient(to top, var(--color-border-subtle) 1px, transparent 1px);
-  background-size: 100% 25%;
-}
-
-.sport-analysis-chart i {
-  display: block;
-  width: min(28px, 64%);
-  min-height: 2px;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: var(--color-precision-blue-text);
-  opacity: 0.78;
-}
+/*
+ * The weekly-minutes chart is styled further down, against the current
+ * `.sport-analysis-chart > .sport-analysis-bars > div` markup. An earlier generation of these
+ * rules targeted `.sport-analysis-chart > div > div`, which still matched the new bar cell and
+ * outranked `.sport-analysis-bars > div` on specificity (two type selectors against one). That
+ * forced the three-row bar cell into `display: flex`, collapsing the plot area to 3px and
+ * flattening every bar to 1-2px while the values themselves were correct.
+ */
 
 .sport-analysis-disciplines {
   display: grid;
@@ -2426,7 +2390,9 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-history-head,
 .sport-history-row {
   display: grid;
-  grid-template-columns: 116px minmax(190px, 1.2fr) 140px 136px minmax(150px, 0.9fr) 124px;
+  /* The floors summed to 948px inside an 894px card, so the status column escaped the table.
+     Proportions are kept; the cells already truncate. */
+  grid-template-columns: 116px minmax(0, 1.2fr) 140px 136px minmax(0, 0.9fr) 124px;
   align-items: center;
   gap: var(--space-md);
   padding: 0 var(--space-lg);
@@ -2752,7 +2718,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-workout-detail__header h2 {
   margin: 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }
@@ -3158,7 +3124,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-strength-session__heading h2 {
   margin: var(--space-xs) 0 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
 }
@@ -3477,7 +3443,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-active-section-heading h2 {
   margin: 4px 0 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-title);
+  font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 

@@ -40,13 +40,39 @@
 .ui-button--ghost { background: transparent; color: var(--color-text-secondary); }
 .ui-button--ghost:hover:not(:disabled) { background: var(--color-graphite-hover); color: var(--color-chalk-white); }
 .ui-button--danger { border-color: color-mix(in srgb, var(--color-danger) 35%, transparent); background: var(--color-danger-subtle); color: var(--color-danger-text); }
+/* Destructive icon-only actions keep the quiet ghost shape but must never read as neutral:
+   a bare trash icon in a row of ghost buttons was indistinguishable from "Edytuj". */
+.ui-button--ghost.ui-button--ghost-danger { color: var(--color-danger-text); }
+.ui-button--ghost.ui-button--ghost-danger:hover:not(:disabled) { background: var(--color-danger-subtle); color: var(--color-danger-text); }
 .ui-button:active:not(:disabled) { transform: translateY(1px); }
 .ui-button--primary:active:not(:disabled) { transform: translateY(0); }
 .ui-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 
-.ui-button > svg,
-.ui-empty-state__icon > svg {
+/*
+ * One line weight for the whole product. Lucide defaults to 2, and the app only passed
+ * strokeWidth={1.7} in some places, so 1.7 and 2.0 icons sat side by side on the same screen
+ * (212 vs 170 occurrences). CSS wins over the SVG presentation attribute, so this normalises
+ * every icon without touching hundreds of call sites.
+ */
+.ui-main-content svg,
+.ui-context-sidebar svg,
+.ui-detail-panel svg,
+.ui-modal svg,
+.ui-menu svg,
+.ui-select-menu svg,
+.app-sidebar svg {
   stroke-width: var(--icon-stroke-width);
+}
+
+/*
+ * Glyphs under ~12px need a heavier stroke to stay legible: a check mark drawn at 8px with a
+ * 1.7 stroke reads as a smudge. These are the deliberate exceptions to the rule above.
+ */
+.task-checkbox svg,
+.ui-checkbox__box svg,
+.task-tag-control svg,
+.calendar-event .task-checkbox svg {
+  stroke-width: 2.5;
 }
 
 .ui-card {
@@ -99,6 +125,9 @@
 .ui-field__label { color: var(--color-text-secondary); font-size: var(--text-label); font-weight: var(--weight-semibold); }
 .ui-field__control {
   width: 100%;
+  /* Grid and flex items default to min-width:auto, so a control refuses to shrink below its
+     own content and escapes a fixed-width field instead of letting its value truncate. */
+  min-width: 0;
   height: var(--control-height-md);
   padding: 0 var(--space-md);
   border: 1px solid var(--color-border-subtle);
@@ -164,6 +193,9 @@
 .ui-select-option__copy small { color: var(--color-text-muted); font-size: var(--text-micro); line-height: var(--leading-snug); }
 
 .ui-date-trigger > svg { flex: 0 0 auto; color: var(--color-text-muted); }
+/* Relative labels such as "1 dzień po terminie" are longer than the field they sit in inside a
+   task row, and without this the value pushed the calendar icon outside the control. */
+.ui-date-trigger > span { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-date-picker {
   position: fixed;
   z-index: 250;
@@ -178,7 +210,7 @@
   box-shadow: var(--shadow-floating);
 }
 .ui-date-picker__header { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-sm); }
-.ui-date-picker__header > strong { color: var(--color-chalk-white); font-size: var(--text-body); font-weight: var(--weight-semibold); text-transform: capitalize; }
+.ui-date-picker__header > strong { color: var(--color-chalk-white); font-size: var(--text-body); font-weight: var(--weight-semibold); }
 .ui-date-picker__header > div { display: flex; align-items: center; gap: 2px; }
 .ui-date-picker__calendar { display: grid; gap: 3px; }
 .ui-date-picker__weekdays,
@@ -332,7 +364,7 @@
   overflow: hidden;
   margin: 0;
   color: var(--color-text-primary);
-  font-size: var(--text-body-emphasis);
+  font-size: var(--text-page-title);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
   text-overflow: ellipsis;
@@ -347,7 +379,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ui-content-header__meta { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); color: var(--color-text-secondary); font-size: var(--text-meta); }
+.ui-content-header__meta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-xs); color: var(--color-text-secondary); font-size: var(--text-meta); }
 .ui-content-header__actions { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-sm); }
 .ui-content-header__actions > * { max-width: 100%; }
 .ui-content-header__controls,
@@ -356,9 +388,26 @@
 
 .ui-content-header .context-mobile-select { flex: 0 1 180px; }
 
-@media (max-width: 1100px) {
+/*
+ * The header has to react to the width of the column it sits in, not to the width of the window.
+ * Opening a 408px detail panel narrows that column without changing the viewport, so a media
+ * query left the toolbar at its wide layout and the filters were clipped by the panel edge.
+ */
+.ui-main-content {
+  container: workspace / inline-size;
+}
+
+@container workspace (max-width: 860px) {
   .ui-content-header__row { flex-wrap: wrap; }
   .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
+}
+
+/* Fallback for engines without container queries: keep the previous viewport behaviour. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 1100px) {
+    .ui-content-header__row { flex-wrap: wrap; }
+    .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
+  }
 }
 
 .ui-module-shell {
@@ -1426,6 +1475,9 @@
   position: relative;
   display: flex;
   width: 100%;
+  /* Without this the item keeps its content width and pushes past a narrow module sidebar
+     instead of letting the label ellipsis do its job. */
+  min-width: 0;
   /* Was a bare 34px, the single most repeated off-scale height in the app (7 routes). */
   min-height: var(--row-height-compact);
   align-items: center;
@@ -1594,6 +1646,28 @@
 
 .ui-detail-panel-backdrop { display: none; }
 
+/*
+ * AD-6 - shared detail-panel frame. Content and edit model stay per module; geometry does not.
+ * Before this the close button sat at 12/12, 20/20 and 20/16 in three panels, titles ran 16px
+ * and 20px, and footers used three different paddings.
+ */
+.ui-detail-panel [aria-label^="Zamknij"],
+.ui-detail-panel [aria-label*="zamknij"] {
+  position: absolute;
+  z-index: 2;
+  top: var(--space-xl);
+  right: var(--space-xl);
+}
+
+.ui-detail-panel {
+  position: relative;
+}
+
+.ui-detail-panel [class$="__footer"],
+.ui-detail-panel [class*="__footer "] {
+  padding: var(--space-lg) var(--space-xl);
+}
+
 .ui-section-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-sm); }
 /* Section titles stay compact; the page shell does not introduce a display title. */
 .ui-section-header__title { margin: 0; color: var(--color-chalk-white); font-size: var(--text-section); font-weight: var(--weight-semibold); line-height: var(--leading-snug); }
@@ -1612,7 +1686,7 @@
 .ui-tabs[aria-orientation="vertical"] .ui-tab { border-radius: var(--radius-md) 0 0 var(--radius-md); text-align: left; }
 .ui-tabs[aria-orientation="vertical"] .ui-tab[aria-selected="true"]::after { inset: var(--space-sm) -1px var(--space-sm) auto; width: 2px; height: auto; }
 
-.ui-empty-state { position: relative; display: flex; min-height: 208px; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2xl); border: 1px solid var(--color-border); border-top-color: color-mix(in srgb, var(--color-border-strong) 72%, var(--color-border)); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-surface-1) 76%, transparent); text-align: center; }
+.ui-empty-state { position: relative; display: flex; min-height: 208px; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2xl); border: 1px solid var(--color-border); border-top-color: color-mix(in srgb, var(--color-border-strong) 72%, var(--color-border)); border-radius: var(--radius-lg); background: var(--color-surface-veil-soft); text-align: center; }
 .ui-empty-state::before { position: absolute; top: -1px; left: 50%; width: 32px; height: 1px; border-radius: var(--radius-pill); background: var(--theme-signature); content: ""; opacity: 0.72; transform: translateX(-50%); }
 .ui-empty-state__icon { display: grid; width: 40px; height: 40px; margin-bottom: var(--space-md); place-items: center; border: 1px solid var(--color-border); border-top-color: var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface-2); color: var(--theme-signature); }
 .ui-empty-state__title { margin: 0; color: var(--color-text-primary); font-size: var(--text-body-emphasis); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-tight); }
@@ -1623,7 +1697,7 @@
 .ui-modal { width: 100%; max-height: min(88vh, 900px); overflow-y: auto; border: 0; border-radius: var(--radius-xl); background: var(--color-graphite-card); color: var(--color-chalk-white); box-shadow: var(--shadow-modal); }
 .ui-modal__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); padding: var(--space-xl); border-bottom: 1px solid var(--color-border-subtle); }
 .ui-modal__eyebrow { margin: 0 0 4px; color: var(--color-text-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
-.ui-modal__title { margin: 0; color: var(--color-chalk-white); font-size: var(--text-title); font-weight: var(--weight-semibold); line-height: var(--leading-snug); }
+.ui-modal__title { margin: 0; color: var(--color-chalk-white); font-size: var(--text-page-title); font-weight: var(--weight-semibold); line-height: var(--leading-snug); }
 .ui-modal__description { max-width: 65ch; margin: 5px 0 0; color: var(--color-text-muted); font-size: var(--text-label); line-height: var(--leading-normal); }
 .ui-modal__body { padding: var(--space-xl); }
 .ui-modal__footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm); padding: var(--space-lg) var(--space-xl); border-top: 1px solid var(--color-border-subtle); }
@@ -1734,15 +1808,21 @@
 }
 
 @media ((max-width: 760px)) {
+  /*
+   * Third hand-rolled copy of the visually-hidden pattern. It behaves like .ui-sr-only, so it
+   * reuses the same declarations rather than restating them - and clip-audit stops reporting a
+   * 1px box as clipped content.
+   */
   .header-action-label {
     position: absolute;
     width: 1px;
     height: 1px;
     padding: 0;
     overflow: hidden;
-    margin: -1px;
     border: 0;
-    clip: rect(0, 0, 0, 0);
+    margin: -1px;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
     white-space: nowrap;
   }
   .ui-page-header__actions .ui-button--primary.ui-button--icon-mobile {
@@ -1901,6 +1981,9 @@
 .ui-list-row--meta-end > .ui-list-row__copy { flex: 1 1 auto; }
 .ui-list-row--meta-inline > .ui-list-row__trailing { margin-left: auto; }
 .ui-list-row__title { overflow: hidden; color: var(--color-chalk-white); font-size: var(--text-body); line-height: var(--leading-snug); text-overflow: ellipsis; white-space: nowrap; }
+/* Call sites wrap the title in their own span; without this the wrapper keeps its content
+   width and escapes the ellipsised parent instead of truncating with it. */
+.ui-list-row__title > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ui-list-row__subtitle { overflow: hidden; color: var(--color-text-secondary); font-size: var(--text-micro); line-height: var(--leading-normal); text-overflow: ellipsis; white-space: nowrap; }
 .ui-list-row__meta { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-md); color: var(--color-text-secondary); font-size: var(--text-micro); }
 .ui-list-row__trailing { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-xs); color: var(--color-text-muted); }
@@ -2017,7 +2100,7 @@
   padding: 0 var(--space-md);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-graphite-panel) 94%, transparent);
+  background: var(--color-surface-veil);
   box-shadow: var(--shadow-floating);
   color: var(--color-text-secondary);
   font-size: var(--text-label);
@@ -2131,6 +2214,16 @@
   font: inherit;
   text-align: left;
 }
+@media (max-width: 1180px) {
+  .ui-module-shell__body,
+  .ui-module-shell__body.is-with-module-sidebar { grid-template-columns: minmax(0, 1fr) auto; }
+  .ui-context-sidebar,
+  .ui-module-sidebar { display: none; }
+  /* The in-header select takes over navigation the moment the sidebar goes away. */
+  .ui-content-header__mobile-nav { display: flex; min-width: 0; flex: 0 1 180px; }
+  .ui-content-header__mobile-nav .ui-field { width: 100%; min-width: 0; }
+}
+
 @media (max-width: 980px) {
   .ui-page-shell { padding-inline: var(--space-xl); }
 }

@@ -232,9 +232,14 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
         className="flex min-h-6 min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left"
         style={{ color: "inherit", cursor: "pointer" }}
       >
-        <span className="calendar-event__title" title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
+        <span className="calendar-event__title" title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "1 1 auto", textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
         {virtual && <span aria-hidden="true" title="Wystąpienie cykliczne" style={{ color: C.blueText, flexShrink: 0 }}>↻</span>}
-        <span className="calendar-event__source" style={{ flexShrink: 0, fontSize: 11, color: C.second }}>{event.source.label}</span>
+        {/* The source label only earns space when the entry comes from another module. In a task
+            calendar "Zadania" is redundant, and as a non-shrinking element it used to consume the
+            whole chip and collapse the task name to zero width. */}
+        {event.source.kind !== "task" && (
+          <span className="calendar-event__source" style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, color: C.second }}>{event.source.label}</span>
+        )}
         {event.time && <span className="calendar-event__time" style={{ fontFamily: "var(--font-data)", fontSize: 11, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
       </button>
     </div>
@@ -953,7 +958,12 @@ export default function Kalendarz() {
         <ContentHeader
           headingLevel={false}
           title={formatHeaderDate(viewDate)}
-          description="Kalendarz zadań"
+          // The open count belongs in the description, exactly as in the task list. As a badge in
+          // `meta` it sat next to a 28px button and made the calendar header 9px taller than the
+          // list header, so switching views nudged the whole grid down.
+          description={openCalendarCount > 0
+            ? `${formatOpenTaskCount(openCalendarCount)} · Kalendarz zadań`
+            : "Kalendarz zadań"}
           mobileNavigation={<Select
               aria-label="Filtr kalendarza"
               fieldClassName="context-mobile-select"
@@ -965,17 +975,12 @@ export default function Kalendarz() {
                 if (choice) applyCalendarFilter(choice.filter);
               }}
             />}
-          meta={(openCalendarCount > 0 || openUndatedCount > 0) ? (
-            <div className="calendar-header-summary">
-              {openCalendarCount > 0 && <Badge tone="neutral">{formatOpenTaskCount(openCalendarCount)}</Badge>}
-              {openUndatedCount > 0 && (
-                <Button variant="quiet" size="sm" onClick={() => openTaskView("bezterminu")}>
-                  Bez terminu · {openUndatedCount}
-                </Button>
-              )}
-            </div>
-          ) : undefined}
           actions={<>
+          {openUndatedCount > 0 && (
+            <Button variant="quiet" size="sm" onClick={() => openTaskView("bezterminu")}>
+              Bez terminu · {openUndatedCount}
+            </Button>
+          )}
           <div className="calendar-period-controls flex items-center gap-1">
             <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
             <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
@@ -1001,7 +1006,7 @@ export default function Kalendarz() {
               })}
             </div>
             <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={15} strokeWidth={1.5} /></Button>
-            <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
+            <div className="ui-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
                 variant="ghost"
                 size="sm"

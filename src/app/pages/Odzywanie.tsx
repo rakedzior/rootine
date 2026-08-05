@@ -1260,7 +1260,7 @@ export default function Odzywanie() {
           description={editingEntry
             ? `Zmieniasz wpis z dnia: ${formatDate(selectedDate)}.`
             : `Wpis zostanie dodany do dnia: ${formatDate(selectedDate)}.`}
-          width={660}
+          size="md"
           onClose={closeEntryDialog}
           footer={(
             <>
@@ -1413,7 +1413,7 @@ export default function Odzywanie() {
           title="Pomiar masy ciała"
           eyebrow="Masa ciała"
           description="Zapisz jeden pomiar dla wybranego dnia. Ponowny zapis tej samej daty zaktualizuje wartość."
-          width={460}
+          size="sm"
           onClose={closeWeightDialog}
           footer={(
             <>
@@ -1425,15 +1425,14 @@ export default function Odzywanie() {
           )}
         >
           <form id="weight-measurement-form" className="nutrition-weight-form" onSubmit={saveWeightMeasurement}>
-            <Input
+            <DatePicker
               label="Data pomiaru"
-              type="date"
               max={today}
               value={weightDraft.date}
-              onChange={(event) => {
-                const existing = workspace.weightMeasurements[event.target.value];
+              onChange={(value) => {
+                const existing = workspace.weightMeasurements[value];
                 setWeightDraft((current) => ({
-                  date: event.target.value,
+                  date: value,
                   weightKg: existing ? String(existing.weightKg) : current.weightKg,
                   note: existing?.note ?? current.note,
                 }));
@@ -1495,7 +1494,7 @@ export default function Odzywanie() {
           title="Cele kalorii i makroskładników"
           eyebrow="Budżet dnia"
           description="Wylicz orientacyjne zapotrzebowanie albo wpisz własne wartości."
-          width={860}
+          size="xl"
           onClose={closeGoalDialog}
           footer={(
             <>
@@ -1684,7 +1683,7 @@ export default function Odzywanie() {
           title="Cel nawodnienia"
           eyebrow="Nawodnienie"
           description="Wylicz orientacyjny cel z profilu dnia albo wpisz własną ilość."
-          width={860}
+          size="xl"
           onClose={closeGoalDialog}
           footer={(
             <>

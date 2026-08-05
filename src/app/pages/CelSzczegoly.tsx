@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Archive,
@@ -92,7 +92,7 @@ export default function CelSzczegoly() {
         <ModuleMain>
           <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}>
             <Target size={38} strokeWidth={1.2} />
-            <h2 className="text-[22px] font-semibold" style={{ color: C.textPrimary }}>Nie znaleziono celu</h2>
+            <h2 className="font-semibold" style={{ color: C.textPrimary, fontSize: "var(--text-headline)" }}>Nie znaleziono celu</h2>
             <Button variant="primary" onClick={() => navigate("/cele")}>Wróć do celów</Button>
           </div>
         </ModuleMain>
@@ -278,7 +278,7 @@ export default function CelSzczegoly() {
                 <div className="goal-detail-hero-value"><strong>{progress}%</strong><span>ukończone</span></div>
                 <div className="goal-detail-progress" role="progressbar" aria-label="Postęp celu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
                   <div className="goal-detail-progress-meta"><span>Postęp</span><span>{getGoalMetric(goal)}</span></div>
-                  <div className="goal-detail-progress-track"><div className="goal-detail-progress-fill" style={{ width: `${progress}%`, background: goal.color }} /></div>
+                  <div className="goal-detail-progress-track" style={{ "--goal-detail-progress": progress / 100 } as CSSProperties}><div className="goal-detail-progress-fill" style={{ background: goal.color }} /></div>
                 </div>
                 <div className="goal-detail-summary-grid">
                   <div><strong>{goal.progressMode === "milestones" ? `${completedMilestones}/${goal.milestones.length}` : current.toLocaleString("pl-PL")}</strong><span>{measurementLabel}</span></div>

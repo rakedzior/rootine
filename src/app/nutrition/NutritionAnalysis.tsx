@@ -11,6 +11,7 @@ import {
 import { useEffect, useId, useMemo, useState } from "react";
 import type { NutritionDay, NutritionGoals, WeightMeasurement } from "../data/nutritionWorkspace";
 import { SensitiveValue, usePrivacy } from "../experience/preferences";
+import { DatePicker } from "../ui";
 
 export type NutritionAnalysisRange = 7 | 14 | 30 | 90 | "custom";
 
@@ -297,14 +298,25 @@ export function NutritionAnalysis({
 
       {range === "custom" && (
         <div className="nutrition-analysis-v2__custom-range">
-          <label>
-            <span>Od</span>
-            <input type="date" value={customStartDate} max={customEndDate} onChange={(event) => setCustomStartDate(event.target.value)} />
-          </label>
-          <label>
-            <span>Do</span>
-            <input type="date" value={customEndDate} min={customStartDate} max={endDate} onChange={(event) => setCustomEndDate(event.target.value)} />
-          </label>
+          <div className="nutrition-analysis-v2__custom-range-field">
+            <span id="nutrition-range-from">Od</span>
+            <DatePicker
+              aria-labelledby="nutrition-range-from"
+              value={customStartDate}
+              max={customEndDate}
+              onChange={setCustomStartDate}
+            />
+          </div>
+          <div className="nutrition-analysis-v2__custom-range-field">
+            <span id="nutrition-range-to">Do</span>
+            <DatePicker
+              aria-labelledby="nutrition-range-to"
+              value={customEndDate}
+              min={customStartDate}
+              max={endDate}
+              onChange={setCustomEndDate}
+            />
+          </div>
           {customRangeInvalid && <p role="alert">Data początkowa musi być wcześniejsza od końcowej.</p>}
         </div>
       )}

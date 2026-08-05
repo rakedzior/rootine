@@ -31,7 +31,7 @@ import {
   toCalendarDateKey,
 } from "../../data/taskWorkspace";
 import { formatLocalDate, parseLocalDateKey, shiftLocalDateKey } from "../../data/localDate";
-import { Button, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
+import { Button, DatePicker, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
 import { SummaryEditor } from "./SummaryEditor";
 import { DurationTimePicker } from "./TaskSchedulePicker";
 import {
@@ -328,7 +328,7 @@ function HabitSelectField({
       title={compact ? label : undefined}
     >
       {icon}
-      <span className="sr-only">{label}</span>
+      <span className="ui-sr-only">{label}</span>
       <Select
         aria-label={label}
         value={value}
@@ -376,7 +376,7 @@ function HabitPriorityField({ value, compact = false, onChange }: {
       style={{ color }}
     >
       <Flag size={13} strokeWidth={1.6} fill={value ? color : "none"} aria-hidden="true" />
-      <span className="sr-only">Priorytet nawyku</span>
+      <span className="ui-sr-only">Priorytet nawyku</span>
       <button
         ref={triggerRef}
         type="button"
@@ -657,7 +657,7 @@ function HabitTimeField({ value, compact = false, onChange }: {
   return (
     <div ref={rootRef} className={`task-habit-setting task-habit-time-field${compact ? " task-habit-setting--icon" : ""}${compact && value ? " is-set" : ""}`} title={compact ? "Godzina" : undefined}>
       <Clock3 size={13} strokeWidth={1.6} aria-hidden="true" />
-      <span className="sr-only">Godzina nawyku</span>
+      <span className="ui-sr-only">Godzina nawyku</span>
       <button
         type="button"
         className="task-habit-time-trigger"
@@ -979,15 +979,15 @@ export function HabitDetail({
           />
           <label className="task-habit-date-setting">
             <span>Aktywny od</span>
-            <input type="date" value={schedule.startDate} onChange={(event) => {
-              const next = { ...schedule, startDate: event.target.value || todayKey };
+            <DatePicker aria-label="Aktywny od" value={schedule.startDate} onChange={(value) => {
+              const next = { ...schedule, startDate: value || todayKey };
               setSchedule(next); onUpdate(habit.id, { schedule: next });
             }} />
           </label>
           <label className="task-habit-date-setting">
             <span>Aktywny do</span>
-            <input type="date" min={schedule.startDate} value={schedule.endDate ?? ""} onChange={(event) => {
-              const next = { ...schedule, endDate: event.target.value || undefined };
+            <DatePicker aria-label="Aktywny do" min={schedule.startDate} value={schedule.endDate ?? ""} onChange={(value) => {
+              const next = { ...schedule, endDate: value || undefined };
               setSchedule(next); onUpdate(habit.id, { schedule: next });
             }} />
           </label>
@@ -1007,8 +1007,8 @@ export function HabitDetail({
             <Button variant="ghost" size="sm" onClick={() => setShowPause(false)}>Gotowe</Button>
           </div>
           <div className="task-habit-pause-form">
-            <label><span>Od</span><input type="date" value={pauseStart} onChange={(event) => setPauseStart(event.target.value)} /></label>
-            <label><span>Do</span><input type="date" min={pauseStart} value={pauseEnd} onChange={(event) => setPauseEnd(event.target.value)} /></label>
+            <div className="task-habit-pause-form__field"><span id="habit-pause-from">Od</span><DatePicker aria-labelledby="habit-pause-from" value={pauseStart} onChange={setPauseStart} /></div>
+            <div className="task-habit-pause-form__field"><span id="habit-pause-to">Do</span><DatePicker aria-labelledby="habit-pause-to" min={pauseStart} value={pauseEnd} onChange={setPauseEnd} /></div>
             <Button variant="quiet" size="sm" leadingIcon={activePause ? <Play size={12} /> : <Pause size={12} />} onClick={activePause ? resumeToday : savePause}>{activePause ? "Wznów dziś" : "Wstrzymaj"}</Button>
           </div>
           {!activePause && (habit.pausePeriods ?? []).length > 0 && <p className="task-habit-detail__hint">Wcześniejsze przerwy: {(habit.pausePeriods ?? []).length}</p>}

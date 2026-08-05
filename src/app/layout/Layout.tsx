@@ -908,7 +908,7 @@ export default function Layout() {
             <Modal
               title="Ustawienia"
               description="Dostosuj wygląd, panel, kolejność obszarów i wspólną prognozę aplikacji."
-              width={620}
+              size="md"
               bodyClassName="app-settings-dialog"
               onClose={() => setOpenMenu(null)}
             >
@@ -965,7 +965,7 @@ export default function Layout() {
             <Modal
               title="Profil lokalny"
               description="Informacje o profilu i sposobie przechowywania danych."
-              width={460}
+              size="sm"
               bodyClassName="app-profile-dialog"
               onClose={() => setOpenMenu(null)}
             >
@@ -979,7 +979,7 @@ export default function Layout() {
         <Modal
           title="Pomoc i szybkie przejście"
           description="Przejdź do obszaru bez szukania go w nawigacji albo sprawdź, jak bezpiecznie zarządzać lokalnymi danymi."
-          width={640}
+          size="md"
           bodyClassName="app-help-dialog"
           onClose={() => setHelpOpen(false)}
         >

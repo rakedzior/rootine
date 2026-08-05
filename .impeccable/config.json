@@ -1,0 +1,32 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "src/styles/ui.css"
+        ],
+        "createdAt": "2026-08-05T09:11:31.711Z",
+        "reason": "Motyw ambientowy modulu Praca: siatka blueprint z perspective/rotateY, jeden z dziesieciu motywow semantycznych ambientu. Potwierdzone przez wlasciciela 2026-08-05."
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/styles/experience.css"
+        ],
+        "createdAt": "2026-08-05T09:15:24.952Z",
+        "reason": "Wszystkie trafienia w tym pliku to transition: stroke-width na SVG (warstwa Living Day), nie width/height layoutu. Detektor dopasowuje 'width' jako podciag."
+      },
+      {
+        "rule": "overused-font",
+        "value": "plus jakarta sans",
+        "createdAt": "2026-08-05T09:15:25.093Z",
+        "reason": "Krój produktu udokumentowany w DESIGN.md jako Display i Body font. Zmiana to decyzja brandingowa, nie porzadkowanie."
+      }
+    ]
+  }
+}

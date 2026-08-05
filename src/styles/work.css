@@ -476,8 +476,10 @@
 }
 
 .work-task-row--with-context > .ui-list-row__trailing {
-  width: min(100%, 620px);
-  flex-basis: 620px;
+  /* The percentage ceiling matters more than the pixel one: at 1024 a flat 620px left the task
+     title 5px wide. */
+  width: min(62%, 620px);
+  flex-basis: min(62%, 620px);
 }
 
 .work-task-row__disclosure-slot {
@@ -1283,7 +1285,7 @@
   border-bottom: 1px solid var(--work-border);
 }
 
-.work-detail-header h2 { margin: 2px 0 0; color: var(--color-chalk-white); font-size: var(--text-title); font-weight: var(--weight-semibold); }
+.work-detail-header h2 { margin: 2px 0 0; color: var(--color-chalk-white); font-size: var(--text-page-title); font-weight: var(--weight-semibold); }
 .work-detail-kicker { color: var(--color-text-muted); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: var(--tracking-label); }
 .work-detail-body { display: grid; gap: var(--space-xl); overflow-y: auto; padding: var(--space-xl); }
 .work-detail-context { display: grid; gap: 3px; padding-bottom: var(--space-lg); border-bottom: 1px solid var(--work-border); }
@@ -1306,8 +1308,8 @@
 .work-detail-subtasks__header-side { color: var(--color-text-muted); font-family: var(--font-data); font-size: var(--text-micro); font-weight: var(--weight-regular); }
 .work-detail-subtasks__header-copy > strong { color: var(--color-text-secondary); font-family: var(--font-sans); font-size: var(--text-label); }
 .work-detail-subtasks__header-side { display: inline-flex; align-items: center; gap: var(--space-xs); }
-.work-detail-subtasks__progress { height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-graphite-input); }
-.work-detail-subtasks__progress > span { display: block; height: 100%; border-radius: inherit; background: var(--color-precision-blue); transition: width var(--motion-fast) var(--ease-out); }
+.work-detail-subtasks__progress { --work-subtask-progress: 0; height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-graphite-input); }
+.work-detail-subtasks__progress > span { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--color-precision-blue); transform: scaleX(var(--work-subtask-progress, 0)); transform-origin: left center; transition: transform var(--motion-fast) var(--ease-out); }
 .work-detail-subtask-list { display: grid; max-height: 220px; gap: 0; overflow-y: auto; border-top: 1px solid var(--work-border); border-bottom: 1px solid var(--work-border); }
 .work-detail-subtask { --work-subtask-depth: 1; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto 13px; min-height: 32px; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) 0 calc(var(--space-sm) + (var(--work-subtask-depth) * 12px)); border: 0; border-bottom: 1px solid var(--work-border); border-radius: 0; background: transparent; color: var(--color-text-secondary); font: inherit; font-size: var(--text-label); line-height: var(--leading-tight); text-align: left; cursor: pointer; }
 .work-detail-subtask:last-child { border-bottom: 0; }
@@ -1450,7 +1452,10 @@
   .work-task-row--with-context > .ui-list-row__trailing { width: auto; flex-basis: auto; }
   .work-task-row__controls { grid-template-columns: 20px 28px 28px minmax(72px, 92px); width: auto; gap: 2px; }
   .work-task-row__context-column { display: none; }
-  .work-task-row__controls--with-context { grid-template-columns: 20px 28px 28px minmax(72px, 92px); }
+  .work-task-row__controls--with-context { grid-template-columns: 20px 28px 28px minmax(0, 92px); }
+  /* At 390px the cluster took two thirds of the row; the title needs the larger share. */
+  .work-task-row > .ui-list-row__trailing,
+  .work-task-row--with-context > .ui-list-row__trailing { width: min(44%, 170px); flex-basis: min(44%, 170px); }
   .work-task-status,
   .work-task-priority { max-width: 28px; overflow: hidden; padding-inline: 6px; font-size: 0; }
   .work-task-status svg,

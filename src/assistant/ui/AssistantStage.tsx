@@ -293,7 +293,7 @@ export function AssistantStage({
 
       <form className="assistant-stage__composer" onSubmit={submit}>
         <KeyboardIcon size={16} aria-hidden="true" />
-        <label className="sr-only" htmlFor="assistant-text-command">Wpisz polecenie dla asystenta</label>
+        <label className="ui-sr-only" htmlFor="assistant-text-command">Wpisz polecenie dla asystenta</label>
         <input
           ref={inputRef}
           id="assistant-text-command"

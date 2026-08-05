@@ -347,6 +347,6 @@ input.tag-search-input:focus-visible {
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-clip: padding-box;
 }

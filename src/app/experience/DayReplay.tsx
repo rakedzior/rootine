@@ -62,7 +62,7 @@ export function DayReplay({ open, onClose }: DayReplayProps) {
       title="Oś dnia"
       description={`${fullDate(now)} · historia zapisywana wyłącznie lokalnie`}
       onClose={onClose}
-      width={680}
+      size="md"
       bodyClassName="day-replay"
     >
       <div className="day-replay__scale" aria-label={`Skala dnia: 08:00, 12:00, 16:00, teraz ${formatTime(now)}`}>

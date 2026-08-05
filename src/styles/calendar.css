@@ -208,29 +208,29 @@
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
-    background: #ffffff !important;
-    color: #111111 !important;
+    background: var(--print-paper) !important;
+    color: var(--print-ink) !important;
   }
 
   .calendar-page [role="grid"] {
     min-height: 175mm;
     overflow: visible !important;
-    border-block-start: 1px solid #777777;
-    border-inline-start: 1px solid #777777;
+    border-block-start: 1px solid var(--print-rule);
+    border-inline-start: 1px solid var(--print-rule);
   }
 
   .calendar-page [role="gridcell"] {
     min-height: 28mm !important;
     break-inside: avoid;
-    background: #ffffff !important;
-    border-color: #777777 !important;
+    background: var(--print-paper) !important;
+    border-color: var(--print-rule) !important;
     box-shadow: none !important;
-    color: #111111 !important;
+    color: var(--print-ink) !important;
   }
 
   .calendar-event {
-    background: #eeeeee !important;
-    color: #111111 !important;
+    background: var(--print-fill) !important;
+    color: var(--print-ink) !important;
     print-color-adjust: exact;
   }
 }

@@ -18,7 +18,7 @@ import type {
   SubscriptionRenewal,
   VehicleItemType,
 } from "../data/affairsWorkspace";
-import { Input, Select } from "../ui";
+import { DatePicker, Input, Select } from "../ui";
 
 export interface AffairsEditorFieldsProps {
   editor: EditorState;
@@ -44,7 +44,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
           options={Object.entries(CATEGORY_META).map(([value, meta]) => ({ value, label: meta.label }))}
           onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
         />
-        <Input type="date" label="Termin" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+        <DatePicker label="Termin" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
       </div>
       <div className="affairs-form__grid">
         <Select
@@ -79,7 +79,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
           options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({ value, label }))}
           onChange={(event) => setDraft((current) => ({ ...current, cadence: event.target.value as PaymentCadence }))}
         />
-        <Input type="date" label="Następna płatność" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+        <DatePicker label="Następna płatność" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
       </div>
       <label className="affairs-form__check">
         <input type="checkbox" checked={draft.automatic} onChange={(event) => setDraft((current) => ({ ...current, automatic: event.target.checked }))} />
@@ -94,7 +94,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
         <Input label="Kategoria" placeholder="np. Dokumenty" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} />
         <Input label="Kwota" inputMode="decimal" placeholder="0,00" value={draft.amount} onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))} />
       </div>
-      <Input type="date" label="Termin płatności" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+      <DatePicker label="Termin płatności" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
     </>
   )}
 
@@ -111,7 +111,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
           options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({ value, label }))}
           onChange={(event) => setDraft((current) => ({ ...current, cadence: event.target.value as PaymentCadence }))}
         />
-        <Input type="date" label="Następne rozliczenie" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+        <DatePicker label="Następne rozliczenie" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
       </div>
       <div className="affairs-form__grid">
         <Select
@@ -123,7 +123,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
           ]}
           onChange={(event) => setDraft((current) => ({ ...current, renewal: event.target.value as SubscriptionRenewal }))}
         />
-        <Input type="date" label="Koniec zobowiązania (opcjonalnie)" value={draft.secondaryDate} onChange={(event) => setDraft((current) => ({ ...current, secondaryDate: event.target.value }))} />
+        <DatePicker label="Koniec zobowiązania (opcjonalnie)" value={draft.secondaryDate} onChange={(value) => setDraft((current) => ({ ...current, secondaryDate: value }))} />
       </div>
     </>
   )}
@@ -140,7 +140,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
         <Input label="Właściciel / obszar" placeholder="np. Ja, Dziecko, Dom" value={draft.holder} onChange={(event) => setDraft((current) => ({ ...current, holder: event.target.value }))} />
       </div>
       <div className="affairs-form__grid">
-        <Input type="date" label="Ważny do (opcjonalnie)" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+        <DatePicker label="Ważny do (opcjonalnie)" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
         <Input type="number" min="0" max="730" label="Przypomnij wcześniej (dni)" value={draft.reminderDays} onChange={(event) => setDraft((current) => ({ ...current, reminderDays: event.target.value }))} />
       </div>
     </>
@@ -170,7 +170,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
         />
       </div>
       <div className="affairs-form__grid">
-        <Input type="date" label="Termin (opcjonalnie)" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+        <DatePicker label="Termin (opcjonalnie)" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
         <Input type="number" min="0" label="Przebieg graniczny (opcjonalnie)" placeholder="np. 90000" value={draft.dueMileage} onChange={(event) => setDraft((current) => ({ ...current, dueMileage: event.target.value }))} />
       </div>
     </>

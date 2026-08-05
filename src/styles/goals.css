@@ -81,7 +81,7 @@
 .goal-detail-supporting-copy {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.5;
 }
 
@@ -98,14 +98,14 @@
 .goal-detail-summary-grid strong {
   color: var(--color-precision-blue-text);
   font-family: var(--font-data);
-  font-size: 18px;
-  font-weight: 500;
+  font-size: var(--text-title);
+  font-weight: var(--weight-medium);
 }
 
 .goal-detail-hero-value span,
 .goal-detail-summary-grid span {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-progress {
@@ -121,7 +121,7 @@
   gap: var(--space-md);
   margin-bottom: 8px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-progress-meta span:last-child {
@@ -137,10 +137,12 @@
 }
 
 .goal-detail-progress-fill {
+  width: 100%;
   height: 100%;
-  min-width: 2px;
   border-radius: inherit;
-  transition: width var(--motion-normal) var(--ease-out);
+  transform: scaleX(var(--goal-detail-progress, 0));
+  transform-origin: left center;
+  transition: transform var(--motion-normal) var(--ease-out);
 }
 
 .goal-detail-summary-grid {
@@ -161,7 +163,7 @@
 
 .goal-detail-summary-grid strong {
   color: var(--color-chalk-white);
-  font-size: 13px;
+  font-size: var(--text-body);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -203,7 +205,7 @@
 .goal-detail-next-title {
   margin-top: 5px !important;
   color: var(--color-chalk-white) !important;
-  font-size: 13px !important;
+  font-size: var(--text-body) !important;
   font-weight: 600;
 }
 
@@ -218,7 +220,7 @@
 
 .goal-detail-section-heading h2 {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-label);
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
@@ -227,7 +229,7 @@
   flex: 0 0 auto;
   padding: 4px 0;
   color: var(--color-precision-blue-text);
-  font-size: 11px;
+  font-size: var(--text-label);
 }
 
 .goal-detail-list,
@@ -248,7 +250,7 @@
   color: var(--color-text-muted);
   background: var(--color-graphite-panel);
   text-align: left;
-  font-size: 11px;
+  font-size: var(--text-label);
   transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
 }
 
@@ -263,7 +265,7 @@
   flex: 0 0 auto;
   color: var(--color-text-muted);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-check {
@@ -303,7 +305,7 @@
   border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
   text-align: left;
-  font-size: 11px;
+  font-size: var(--text-label);
 }
 
 .goal-detail-facts > button:last-child {
@@ -323,7 +325,7 @@
   max-width: 126px;
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-label);
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -336,7 +338,7 @@
 .goal-detail-note-preview p {
   margin: 10px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -374,7 +376,7 @@
 .goal-detail-history-value {
   color: var(--color-chalk-white);
   font-family: var(--font-data);
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 500;
 }
 
@@ -385,7 +387,7 @@
   color: var(--color-text-muted);
   background: var(--color-graphite-input);
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-history-row p,
@@ -394,7 +396,7 @@
   display: block;
   margin: 4px 0 0;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -426,13 +428,13 @@
 .goal-detail-milestone-index {
   color: var(--color-text-muted);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-milestone-row p {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: var(--text-meta);
   font-weight: 500;
 }
 
@@ -450,7 +452,7 @@
   outline: none;
   color: var(--color-text-secondary);
   background: var(--color-graphite-panel);
-  font-size: 13px;
+  font-size: var(--text-body);
   line-height: 1.7;
 }
 
@@ -467,7 +469,7 @@
 
 .goal-detail-view-controls__label {
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: var(--text-nano);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -480,7 +482,7 @@
 .goal-detail-notes-editor--inline {
   min-height: 148px;
   padding: var(--space-md);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.55;
 }
 
@@ -542,7 +544,7 @@
 .goal-stage-next-label {
   color: var(--color-precision-blue-text) !important;
   font-family: var(--font-sans) !important;
-  font-size: 10px !important;
+  font-size: var(--text-nano) !important;
 }
 
 .goal-stage-overdue {
@@ -557,7 +559,7 @@
 .goal-detail-notes-section p {
   margin: 0 0 var(--space-md);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.6;
 }
 
@@ -573,13 +575,13 @@
 .goal-detail-progress-note strong {
   color: var(--color-precision-blue-text);
   font-family: var(--font-data);
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 500;
 }
 
 .goal-detail-progress-note span {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.5;
 }
 
@@ -600,7 +602,7 @@
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   background: var(--color-graphite-panel);
-  font-size: 11px;
+  font-size: var(--text-label);
 }
 
 .goal-linked-task:hover,
@@ -620,7 +622,7 @@
 
 .goal-linked-task small {
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-timeline-rail {
@@ -664,7 +666,7 @@
 .goal-detail-timeline-heading p {
   min-width: 0;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-meta);
   font-weight: 500;
   line-height: 1.4;
 }
@@ -673,7 +675,7 @@
   flex: 0 0 auto;
   color: var(--color-text-muted);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--text-nano);
 }
 
 .goal-detail-timeline-content > span,
@@ -681,7 +683,7 @@
   display: block;
   margin-top: 5px;
   color: var(--color-text-muted);
-  font-size: 11px;
+  font-size: var(--text-label);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -763,7 +765,7 @@
   }
 
   .goal-detail-hero-value strong {
-    font-size: 16px;
+    font-size: var(--text-page-title);
   }
 
   .goal-detail-hero-value span {
@@ -868,6 +870,9 @@
 }
 
 .goal-card {
+  /* Matches every other card in the app; the Tailwind rounded-xl utility used to render 16px. */
+  border-radius: var(--radius-lg);
+
   --goal-color: var(--color-precision-blue);
   --goal-progress: 0%;
   --goal-status-glow: transparent;
@@ -882,8 +887,10 @@
   background: var(--color-precision-blue-soft);
 }
 
+/* A 320px floor on the title plus the fixed action columns could exceed the page column and
+   push the card past the shell edge. The title truncates instead. */
 .goal-card-layout {
-  grid-template-columns: minmax(320px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
 }
 
@@ -965,11 +972,18 @@
   opacity: 0.42;
 }
 
+/*
+ * A flex row anchored on its right edge let every element upstream of the kebab shift whenever
+ * a status label or a date changed width: the percentage and the status chip moved up to 14px
+ * between neighbouring rows. Fixed columns keep the whole cluster on one axis down the list.
+ */
 .goal-card-actions {
-  display: flex;
+  display: grid;
   grid-column: 2;
   grid-row: 1;
   min-height: 40px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 96px) minmax(0, 108px) 28px;
   align-items: center;
   gap: var(--space-md);
   padding-inline-start: var(--space-lg);
@@ -978,7 +992,16 @@
 }
 
 .goal-card-date {
+  min-width: 0;
+  overflow: hidden;
+  justify-self: start;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.goal-card-status {
+  min-width: 0;
+  justify-self: start;
 }
 
 .goal-card-more > button:hover {

@@ -2,81 +2,116 @@
 name: Rootine
 description: "Grafitowy warsztat do spokojnego zarządzania codziennymi obszarami życia."
 colors:
-  precision-blue: "#4772FA"
-  precision-blue-text: "#809AF4"
-  precision-blue-strong: "#3E63DA"
-  precision-blue-soft: "rgba(71,114,250,0.11)"
-  graphite-shell: "#1C1C1C"
-  graphite-sidebar: "#1E1E1E"
-  graphite-input: "#222222"
-  graphite-canvas: "#242424"
-  graphite-panel: "#2A2A2A"
-  graphite-card: "#2E2E2E"
-  graphite-hover: "#333333"
-  border-subtle: "#383838"
-  border-strong: "#484848"
-  chalk-white: "#F0F0F0"
-  text-secondary: "#A0A0A0"
-  text-muted: "#969696"
-  text-disabled: "#444444"
-  success-seaglass: "#70B89F"
-  warning-ochre: "#D4AA68"
-  danger-coral: "#CF777C"
-  accent-violet: "#9B8CE8"
+  precision-blue: "#657FCE"
+  precision-blue-text: "#8CA1E0"
+  precision-blue-strong: "#657FCE"
+  precision-blue-hover: "#7891DA"
+  precision-blue-soft: "rgba(101,127,206,0.12)"
+  graphite-shell: "#101214"
+  graphite-sidebar: "#0B0D0F"
+  graphite-input: "#1A1D21"
+  graphite-canvas: "#101214"
+  graphite-panel: "#1A1D21"
+  graphite-card: "#20242A"
+  graphite-hover: "#282D35"
+  border-subtle: "rgba(222,229,244,0.08)"
+  border-strong: "rgba(222,229,244,0.16)"
+  chalk-white: "#F2F3F5"
+  text-secondary: "#AEB3BB"
+  text-muted: "#818791"
+  text-disabled: "#818791"
+  success-seaglass: "#78B789"
+  warning-ochre: "#D2A04D"
+  danger-coral: "#DF7C7C"
+  accent-violet: "#7D7FA8"
   category-sky: "#7FA6C9"
   category-teal: "#79A8A4"
   category-sand: "#B9A171"
   category-rose: "#BC8EA5"
   category-slate: "#8793A1"
+  print-paper: "#FFFFFF"
+  print-ink: "#111111"
+  print-rule: "#777777"
+  print-fill: "#EEEEEE"
 typography:
+  nano:
+    fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "10px"
+    fontWeight: 400
+    lineHeight: 1.35
+    letterSpacing: "normal"
   micro:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
-    fontSize: "9px"
-    fontWeight: 500
+    fontSize: "11px"
+    fontWeight: 400
     lineHeight: 1.35
     letterSpacing: "normal"
   label:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
-    fontSize: "10px"
+    fontSize: "11px"
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "0.16em"
   meta:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
-    fontSize: "11px"
+    fontSize: "12px"
     fontWeight: 400
-    lineHeight: 1.4
+    lineHeight: 1.5
     letterSpacing: "normal"
   data:
     fontFamily: "DM Mono, monospace"
-    fontSize: "10px"
+    fontSize: "11px"
     fontWeight: 400
     lineHeight: 1.4
     letterSpacing: "normal"
   body:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
-    fontSize: "12px"
+    fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.5
     letterSpacing: "normal"
-  body-emphasis:
+  section:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
     fontSize: "13px"
-    fontWeight: 500
-    lineHeight: 1.45
+    fontWeight: 600
+    lineHeight: 1.35
     letterSpacing: "normal"
-  title:
+  body-emphasis:
+    fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 600
+    lineHeight: 1.35
+    letterSpacing: "normal"
+  page-title:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
     fontSize: "16px"
     fontWeight: 600
-    lineHeight: 1.3
+    lineHeight: 1.35
     letterSpacing: "normal"
+  title:
+    fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "20px"
+    fontWeight: 600
+    lineHeight: 1.35
+    letterSpacing: "-0.02em"
   headline:
     fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
-    fontSize: "22px"
+    fontSize: "24px"
     fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "-0.025em"
+    letterSpacing: "-0.02em"
+  display:
+    fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "36px"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.03em"
+  display-compact:
+    fontFamily: "Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "28px"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-0.03em"
 rounded:
   xs: "3px"
   sm: "6px"
@@ -206,6 +241,18 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 - **Linia subtelna** (`border-subtle`): standardowe separatory.
 - **Linia mocna** (`border-strong`): kontrolki, aktywne obrysy i pływające warstwy.
 
+### Print
+
+Papier to osobne medium, nie kolejny motyw. Wydruk zawsze zakłada białą kartkę, więc powierzchnie
+i tekst muszą się odwrócić — przeniesienie tokenów ekranowych na papier dałoby czarną stronę
+z nieczytelną siatką. Te trzy wartości są jedynymi dopuszczonymi w blokach `@media print`
+i nie zmieniają się razem z motywem aplikacji.
+
+- **Papier** (`print-paper`): tło strony i komórek wydruku.
+- **Tusz** (`print-ink`): tekst i wartości na wydruku.
+- **Linia wydruku** (`print-rule`): siatki, obrysy i separatory na papierze.
+- **Wypełnienie wydruku** (`print-fill`): wyróżnione bloki na papierze, np. wpisy w siatce kalendarza.
+
 **The Signal, Not Paint Rule.** Precyzyjny błękit jest sygnałem działania, nie dekoracyjną farbą; na jednym ekranie powinien wskazywać tylko najważniejsze aktywne miejsca.
 
 **The Semantic Honesty Rule.** Zieleń, ochra i koral opisują rzeczywisty status. Nie służą do przypadkowego różnicowania kart.
@@ -226,6 +273,24 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 - **Label** (`typography.label`): krótkie etykiety sekcji, zwykle uppercase z poszerzonym trackingiem.
 - **Data** (`typography.data`): czas, daty, wyniki, serie, procenty i liczniki.
 - **Supporting microcopy:** 9–11px, tylko dla metadata i informacji trzeciego rzędu; nie dla głównej instrukcji lub podstawowej akcji.
+
+### Role nagłówków
+
+Pięć ról, od największej. Skala pozostaje zwarta — to instrument pracy, nie strona marketingowa.
+Zasada nadrzędna: **tytuł strony jest największym nagłówkiem na ekranie.** Jeśli sekcja pod nim
+wygląda na ważniejszą, hierarchia jest odwrócona i trzeba to naprawić, a nie obejść.
+
+| Rola | Token / styl | Gdzie |
+|---|---|---|
+| **Tytuł strony** | `--text-page-title` 16px / 600 | `ContentHeader` — jeden na widok |
+| **Tytuł sekcji** | `--text-section` 13px / 600 | `SectionHeader` (wariant `title`), nagłówki grup |
+| **Tytuł rekordu** | 14px / 600 | tytuł karty (np. cel); w wierszach listy 13px |
+| **Etykieta sekcji** | `--text-label` 11px / 600, uppercase, `--tracking-label` | `SectionHeader` (wariant `label`), kickery |
+| **Metadana gęsta** | `--text-nano` 10px | informacja trzeciego rzędu; nigdy dla instrukcji ani akcji |
+| **Wartość eksponowana** | `--text-display` 36px / 600, przy wąskim oknie `--text-display-compact` 28px | pojedyncza liczba-bohater na pulpicie Dzisiaj |
+
+Nagłówek sekcji renderuje się przez `SectionHeader`. Lokalne `<h2>`/`<h3>` z własnym rozmiarem
+to dług — w audycie z 2026-08-04 było ich dwanaście wariantów dla pięciu ról.
 
 **The Compact Legibility Rule.** Mały tekst musi mieć wyraźną rolę pomocniczą, wystarczający kontrast i krótką długość. Rozmiar nie może zastępować hierarchii.
 

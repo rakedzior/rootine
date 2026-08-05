@@ -256,7 +256,7 @@ export function RecoveryCenterButton() {
         <Modal
           title="Kopia i odzyskiwanie"
           description="Eksportuj wszystkie lokalne dane albo przywróć zachowaną kopię. Przed importem Rootine automatycznie zabezpiecza aktualne wpisy."
-          width={680}
+          size="md"
           onClose={() => {
             setPendingImport(null);
             setOpen(false);
@@ -368,7 +368,7 @@ export function RecoveryCenterButton() {
                 </Button>
                 <input
                   ref={inputRef}
-                  className="sr-only"
+                  className="ui-sr-only"
                   type="file"
                   accept="application/json,.json"
                   aria-label="Wybierz plik kopii danych Rootine"

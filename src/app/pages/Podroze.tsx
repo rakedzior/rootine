@@ -61,6 +61,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
+  DatePicker,
   ModuleSidebar,
   CompletedSection,
   EmptyState,
@@ -858,7 +859,7 @@ export default function Podroze({
     </>
   ) : (
     <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTripEditor()}>
-      Nowa podróż
+      Dodaj podróż
     </Button>
   );
 
@@ -879,19 +880,22 @@ export default function Podroze({
           title={selectedTrip?.name ?? "Przegląd podróży"}
           description={selectedTrip ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}` : "Zaplanowane i zakończone wyjazdy"}
           mobileNavigation={embeddedViewSelect}
-          leading={<div className="travel-toolbar__trip-select">
-            <Select
-              compact
-              aria-label="Wybierz podróż"
-              value={selectedTrip?.id ?? ""}
-              options={[
-                { value: "", label: "Przegląd podróży" },
-                ...workspace.trips.map((trip) => ({ value: trip.id, label: trip.name })),
-              ]}
-              onChange={(event) => event.target.value ? selectTrip(event.target.value) : showAllTrips()}
-            />
-            </div>}
           meta={<>
+            {/* The trip picker always shows the same text as the title next to it, and in the
+                `leading` slot it pushed that title 192px right of every other module. It is a
+                navigation control, so it sits with the other controls. */}
+            <div className="travel-toolbar__trip-select">
+              <Select
+                compact
+                aria-label="Wybierz podróż"
+                value={selectedTrip?.id ?? ""}
+                options={[
+                  { value: "", label: "Przegląd podróży" },
+                  ...workspace.trips.map((trip) => ({ value: trip.id, label: trip.name })),
+                ]}
+                onChange={(event) => event.target.value ? selectTrip(event.target.value) : showAllTrips()}
+              />
+            </div>
             {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
             {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
           </>}
@@ -1480,7 +1484,7 @@ export default function Podroze({
           title={editorTitle}
           description={editor.kind === "trip" ? "Najpierw ustal ramy wyjazdu. Szczegóły uzupełnisz w jego zakładkach." : `Element zostanie zapisany w podróży ${selectedTrip?.name ?? ""}.`}
           onClose={closeEditor}
-          width={editor.kind === "trip" || editor.kind === "transport" ? 640 : 540}
+          size={editor.kind === "trip" || editor.kind === "transport" ? "md" : "sm"}
           footer={(
             <>
               <Button variant="ghost" onClick={closeEditor}>Anuluj</Button>
@@ -1507,8 +1511,8 @@ export default function Podroze({
               <>
                 <Input label="Trasa / kierunek" placeholder="np. Tokio · Kioto · Osaka" value={draft.destination} onChange={(event) => setDraft((current) => ({ ...current, destination: event.target.value }))} />
                 <div className="travel-form__grid">
-                  <Input type="date" label="Początek" value={draft.startDate} max={draft.endDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
-                  <Input type="date" label="Koniec" value={draft.endDate} min={draft.startDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
+                  <DatePicker label="Początek" value={draft.startDate} max={draft.endDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
+                  <DatePicker label="Koniec" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
                 </div>
                 <div className="travel-form__grid">
                   <Select
@@ -1526,7 +1530,7 @@ export default function Podroze({
             {editor.kind === "itinerary" && (
               <>
                 <div className="travel-form__grid">
-                  <Input type="date" label="Dzień" min={selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.date} onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))} />
+                  <DatePicker label="Dzień" min={selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.date} onChange={(value) => setDraft((current) => ({ ...current, date: value }))} />
                   <Input type="time" label="Godzina" value={draft.time} onChange={(event) => setDraft((current) => ({ ...current, time: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
@@ -1553,8 +1557,8 @@ export default function Podroze({
                 </div>
                 <Input label="Adres" value={draft.address} onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))} />
                 <div className="travel-form__grid">
-                  <Input type="date" label="Zameldowanie" min={selectedTrip?.startDate} max={draft.endDate || selectedTrip?.endDate} value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
-                  <Input type="date" label="Wymeldowanie" min={draft.startDate || selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
+                  <DatePicker label="Zameldowanie" min={selectedTrip?.startDate} max={draft.endDate || selectedTrip?.endDate} value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
+                  <DatePicker label="Wymeldowanie" min={draft.startDate || selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
                 </div>
                 <div className="travel-form__grid">
                   <Input label="Numer rezerwacji" value={draft.bookingRef} onChange={(event) => setDraft((current) => ({ ...current, bookingRef: event.target.value }))} />
@@ -1629,7 +1633,7 @@ export default function Podroze({
                     onChange={(event) => setDraft((current) => ({ ...current, documentStatus: event.target.value as DocumentStatus }))}
                   />
                 </div>
-                <Input type="date" label="Ważny do (opcjonalnie)" value={draft.expiresAt} onChange={(event) => setDraft((current) => ({ ...current, expiresAt: event.target.value }))} />
+                <DatePicker label="Ważny do (opcjonalnie)" value={draft.expiresAt} onChange={(value) => setDraft((current) => ({ ...current, expiresAt: value }))} />
               </>
             )}
 
@@ -1641,7 +1645,7 @@ export default function Podroze({
                   options={Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
                   onChange={(event) => setDraft((current) => ({ ...current, taskCategory: event.target.value as TravelTaskCategory }))}
                 />
-                <Input type="date" label="Termin" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+                <DatePicker label="Termin" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
               </div>
             )}
 

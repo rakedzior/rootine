@@ -71,7 +71,7 @@ const ACTIONS: readonly CommandCenterAction[] = [
   {
     id: "habit",
     label: "Nawyk",
-    description: "Utwórz powtarzalny element dnia.",
+    description: "Dodaj powtarzalny element dnia.",
     icon: Repeat2,
     target: "/zadania?widok=nawyki&akcja=nowy-nawyk",
   },
@@ -375,7 +375,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
     <Modal
       title="Dodaj"
       description="Wybierz formularz albo opisz element jednym zdaniem. Rootine tylko rozpoznaje proste reguły i niczego nie zapisze bez Twojego potwierdzenia."
-      width={760}
+      size="lg"
       bodyClassName="command-center"
       onClose={onClose}
     >

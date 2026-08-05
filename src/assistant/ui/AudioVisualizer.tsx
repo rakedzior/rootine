@@ -69,7 +69,7 @@ export function AudioVisualizer({
   return (
     <div className={`assistant-audio-visualizer${active ? " is-active" : ""}`}>
       <canvas ref={canvasRef} aria-hidden="true" />
-      <span className="sr-only">{label}</span>
+      <span className="ui-sr-only">{label}</span>
     </div>
   );
 }

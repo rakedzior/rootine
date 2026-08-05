@@ -800,7 +800,7 @@ export function TaskDetail({
           title="Przenieść całą serię do Kosza?"
           description={`Wybrane wystąpienie przypada na ${occurrenceDateLabel}. Nie zostanie usunięte osobno.`}
           onClose={() => setConfirmSeriesDelete(false)}
-          width={480}
+          size="sm"
           footer={(
             <>
               <Button variant="quiet" onClick={() => setConfirmSeriesDelete(false)}>Anuluj</Button>

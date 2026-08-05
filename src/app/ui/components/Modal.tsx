@@ -10,10 +10,30 @@ export interface ModalProps {
   description?: string;
   eyebrow?: string;
   footer?: ReactNode;
+  /**
+   * Named width step. The app used sixteen ad-hoc pixel widths for roughly five kinds of
+   * dialog, so two forms of the same shape opened at different sizes.
+   *
+   * - `sm` confirmations and single-field dialogs
+   * - `md` single-column forms (default)
+   * - `lg` two-column forms and the command centre
+   * - `xl` rich editors with their own inner layout
+   */
+  size?: ModalSize;
+  /** Escape hatch for the one dialog that behaves like a full page. Prefer `size`. */
   width?: number | string;
   bodyClassName?: string;
   labelledBy?: string;
 }
+
+export type ModalSize = "sm" | "md" | "lg" | "xl";
+
+const MODAL_WIDTHS: Record<ModalSize, number> = {
+  sm: 500,
+  md: 680,
+  lg: 780,
+  xl: 960,
+};
 
 const focusableSelector = [
   "a[href]",
@@ -24,7 +44,7 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-export function Modal({ title, description, eyebrow, onClose, children, footer, width = 520, bodyClassName = "", labelledBy }: ModalProps) {
+export function Modal({ title, description, eyebrow, onClose, children, footer, size = "md", width, bodyClassName = "", labelledBy }: ModalProps) {
   const generatedId = useId();
   const titleId = labelledBy ?? `${generatedId}-title`;
   const descriptionId = description ? `${generatedId}-description` : undefined;
@@ -106,7 +126,7 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         tabIndex={-1}
-        style={{ maxWidth: typeof width === "number" ? `${width}px` : width }}
+        style={{ maxWidth: width === undefined ? `${MODAL_WIDTHS[size]}px` : typeof width === "number" ? `${width}px` : width }}
       >
         <header className="ui-modal__header">
           <div>

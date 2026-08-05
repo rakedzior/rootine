@@ -396,6 +396,12 @@ export default function Zadania() {
       .map((task) => task.id),
   ));
 
+  // Single source for the habit count. The sidebar badge and the view header used to derive it
+  // separately, so one showed what is left and the other showed everything scheduled.
+  const remainingHabitsToday = habits.filter(
+    (habit) => isHabitScheduledOnDate(habit, todayKey) && !isHabitDoneOnDate(habit, todayKey),
+  ).length;
+
   const viewCounts = Object.fromEntries(
     SMART_VIEWS.map(v => {
       const countTasks = smartDateViewRange(v.id, todayKey)
@@ -404,7 +410,7 @@ export default function Zadania() {
       return [
         v.id,
         v.id === "nawyki"
-        ? habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey) && !isHabitDoneOnDate(habit, todayKey)).length
+        ? remainingHabitsToday
         : v.id === "bezterminu"
           ? tasks.filter((task) => !task.deleted && !task.done && isTaskUndated(task)).length
           : countTasks.filter(t => !t.deleted && !t.done && (
@@ -720,6 +726,10 @@ export default function Zadania() {
     if (tagFilter)  return `Dodaj zadanie z #${tagFilter}`;
     return `Dodaj zadanie do "${VIEW_LABELS[taskView] ?? taskView}"`;
   };
+
+  // Kosz and Ukończone are read-only archives. `startNewTask` already refuses to add there and
+  // bounces the user to "Dziś", so offering the composer only promised something it never did.
+  const canAddTaskInView = taskView !== "kosz" && taskView !== "ukonczone";
 
   const dateLabel = formatDateLabel(newDateVal);
   const flagColor = newPriority === "high" ? C.danger : newPriority === "medium" ? C.warning : newPriority === "low" ? C.iceBlue : null;
@@ -1127,7 +1137,7 @@ export default function Zadania() {
             headingLevel={false}
             title="Nawyki"
             description={`Codzienny rytm · ${todayStr()}`}
-            meta={<span>{habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey)).length} na dzisiaj</span>}
+            meta={<span>{remainingHabitsToday} do zrobienia</span>}
             mobileNavigation={<Select
               aria-label="Widok zadań"
               fieldClassName="context-mobile-select"
@@ -1224,9 +1234,9 @@ export default function Zadania() {
               </Button>
             )}
             {taskViewSupportsCalendar(taskView) && (
-              <div className="task-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
+              <div className="ui-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
                 <Button
-                  variant={tasksViewMode === "list" ? "quiet" : "ghost"}
+                  variant="ghost"
                   size="sm"
                   iconOnly
                   aria-label="Widok listy"
@@ -1237,7 +1247,7 @@ export default function Zadania() {
                   <List size={14} strokeWidth={1.7} />
                 </Button>
                 <Button
-                  variant={tasksViewMode === "calendar" ? "quiet" : "ghost"}
+                  variant="ghost"
                   size="sm"
                   iconOnly
                   aria-label="Widok kalendarza"
@@ -1281,6 +1291,7 @@ export default function Zadania() {
         <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="task-content__inner">
           {/* Add task input */}
+          {canAddTaskInView && (
           <form
             className="task-entry"
             aria-label="Dodaj zadanie"
@@ -1420,6 +1431,7 @@ export default function Zadania() {
               </div>
             </div>
           </form>
+          )}
 
           {taskView === "kosz" ? (
             <div className="task-list">
@@ -1583,7 +1595,7 @@ export default function Zadania() {
         <Modal
           title="Przełożyć zaległe zadania na dziś?"
           onClose={() => setRescheduleOpen(false)}
-          width={480}
+          size="sm"
           footer={(
             <>
               <Button variant="quiet" onClick={() => setRescheduleOpen(false)}>Anuluj</Button>

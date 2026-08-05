@@ -378,12 +378,15 @@ export function JdgWorkspace({
         headingLevel={false}
         className="jdg-toolbar"
         title="JDG"
-        description={`Miesięczne zamknięcie · ${formatMonth(monthKey)}`}
-        leading={<div className="jdg-month-switcher">
-          <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
-          <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
-        </div>}
+        description="Miesięczne zamknięcie działalności"
         meta={<>
+          {/* Shared with the budget view: one month stepper for the whole module. It also names
+              the month it steps through, so the description no longer has to repeat it. */}
+          <div className="affairs-month-switcher">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
+            <strong>{formatMonth(monthKey)}</strong>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
+          </div>
           {closed ? <Badge tone="success" dot>Miesiąc zamknięty</Badge> : <Badge tone="warning" dot>W toku</Badge>}
           <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>{profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}</Badge>
           <div className="jdg-toolbar__status">
@@ -608,7 +611,7 @@ export function JdgWorkspace({
           title="Profil podatkowy i szablony"
           description="Ustaw zgodnie z informacją od księgowości. Rootine organizuje obowiązki, ale nie wylicza podatku."
           onClose={() => setSettingsOpen(false)}
-          width={680}
+          size="md"
           footer={(
             <>
               <Button variant="quiet" onClick={() => setSettingsOpen(false)}>Zamknij</Button>
@@ -773,7 +776,7 @@ export function JdgWorkspace({
               ? pendingDestructiveAction.item.label
               : `${pendingDestructiveAction.templateName} · ${formatMonth(pendingDestructiveAction.monthKey)}`}
           onClose={() => setPendingDestructiveAction(null)}
-          width={460}
+          size="sm"
           footer={(
             <>
               <Button variant="quiet" onClick={() => setPendingDestructiveAction(null)}>Anuluj</Button>

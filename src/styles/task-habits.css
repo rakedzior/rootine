@@ -253,9 +253,9 @@
 
 .task-habits-workspace--list .task-habit-setting--icon {
   position: relative;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  flex: 0 0 var(--control-height-sm);
   justify-content: center;
   gap: 0;
   border-radius: var(--radius-sm);
@@ -266,9 +266,9 @@
 
 .task-habits-workspace--list .task-habit-schedule-control {
   position: relative;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  flex: 0 0 var(--control-height-sm);
 }
 
 .task-habits-workspace--list .task-habit-schedule-control > .task-habit-setting--icon {
@@ -379,7 +379,7 @@
 }
 
 .task-habits-workspace--list .task-habit-setting:not(.task-habit-setting--icon) > .ui-field .ui-select-trigger {
-  height: 30px;
+  height: var(--control-height-sm);
   padding-inline: var(--space-xs);
   border-radius: var(--radius-sm);
   font-size: var(--text-meta);
@@ -391,7 +391,7 @@
 
 .task-habit-time-trigger {
   min-width: 0;
-  height: 30px;
+  height: var(--control-height-sm);
   flex: 1 1 auto;
   padding: 0 var(--space-xs);
   overflow: hidden;
@@ -504,7 +504,8 @@
 
 .task-habit-setting,
 .task-habit-date-setting,
-.task-habit-pause-form label {
+.task-habit-pause-form label,
+.task-habit-pause-form__field {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -519,7 +520,7 @@
 .task-habit-pause-form input,
 .task-habit-interval-input input {
   min-width: 0;
-  height: 30px;
+  height: var(--control-height-sm);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   outline: 0;
@@ -1190,7 +1191,8 @@
 }
 
 .task-habit-date-setting span,
-.task-habit-pause-form label span {
+.task-habit-pause-form label span,
+.task-habit-pause-form__field > span {
   flex: 1;
   color: var(--color-text-muted);
 }
@@ -1199,6 +1201,12 @@
 .task-habit-pause-form input {
   width: 142px;
   padding: 0 var(--space-xs);
+}
+
+.task-habit-date-setting > .ui-field,
+.task-habit-pause-form__field > .ui-field {
+  width: 142px;
+  min-width: 0;
 }
 
 .task-habit-pause-form {

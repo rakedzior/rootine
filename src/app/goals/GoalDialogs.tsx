@@ -6,7 +6,7 @@ import {
   normalizeGoalAccentColor,
 } from "./goalsModel";
 import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
-import { Button, Input, Modal, Select, uiColors } from "../ui";
+import { Button, DatePicker, Input, Modal, Select, uiColors, type ModalSize } from "../ui";
 import type {
   Goal,
   GoalCategory,
@@ -119,20 +119,20 @@ function DialogShell({
   subtitle,
   onClose,
   children,
-  width = 700,
+  size = "lg",
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
-  width?: number;
+  size?: ModalSize;
 }) {
   return (
     <Modal
       title={title}
       description={subtitle}
       onClose={onClose}
-      width={width}
+      size={size}
       bodyClassName="p-0"
     >
       {children}
@@ -302,7 +302,7 @@ export function GoalFormDialog({
       title={goal ? "Edytuj cel" : "Nowy cel"}
       subtitle={goal ? "Zmień ustawienia i sposób mierzenia celu" : "Zdefiniuj rezultat i sposób mierzenia postępu"}
       onClose={onClose}
-      width={720}
+      size="lg"
     >
       <form
         noValidate
@@ -385,7 +385,7 @@ export function GoalFormDialog({
                 id={uploadId}
                 type="file"
                 accept="image/png,image/webp"
-                className="sr-only"
+                className="ui-sr-only"
                 aria-describedby={`${uploadId}-help`}
                 aria-invalid={Boolean(iconError)}
                 onChange={(event) => {
@@ -435,19 +435,17 @@ export function GoalFormDialog({
             ariaLabel="Priorytet celu"
           />
           <div aria-hidden="true" />
-          <Input
+          <DatePicker
             label="Data rozpoczęcia"
-            type="date"
             value={form.startDate}
-            onChange={(event) => set("startDate", event.target.value)}
+            onChange={(value) => set("startDate", value)}
             error={submitted ? startError : undefined}
           />
-          <Input
+          <DatePicker
             label="Termin"
-            type="date"
             min={form.startDate}
             value={form.dueDate}
-            onChange={(event) => set("dueDate", event.target.value)}
+            onChange={(value) => set("dueDate", value)}
             error={submitted || dueError ? dueError : undefined}
           />
           <ThemedSelect
@@ -628,7 +626,7 @@ export function GoalFormDialog({
         </div>
         <div className="flex justify-end gap-2 border-t px-6 py-4" style={{ borderColor: C.border }}>
           <Button variant="quiet" onClick={onClose}>Anuluj</Button>
-          <Button variant="primary" type="submit">{goal ? "Zapisz zmiany" : "Utwórz cel"}</Button>
+          <Button variant="primary" type="submit">{goal ? "Zapisz zmiany" : "Dodaj cel"}</Button>
         </div>
       </form>
     </DialogShell>
@@ -674,7 +672,7 @@ export function ProgressDialog({
       title={progress ? "Edytuj aktualizację" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : goal.progressMode === "manual" ? "Zaktualizuj postęp" : "Etapy celu"}
       subtitle={goal.title}
       onClose={onClose}
-      width={500}
+      size="sm"
     >
       <form
         noValidate
@@ -702,11 +700,11 @@ export function ProgressDialog({
             onChange={(event) => setValue(Number(event.target.value))}
             error={submitted ? valueError : undefined}
           />
-          <Input
+          <DatePicker
             label="Data"
-            type="date"
+            
             value={date}
-            onChange={(event) => setDate(event.target.value)}
+            onChange={(value) => setDate(value)}
             error={submitted ? dateError : undefined}
           />
           {!isManual && !isFrequency && !isStreak && (
@@ -774,7 +772,7 @@ export function MilestoneDialog({
   const weightError = Number.isFinite(weight) && weight > 0 ? "" : "Wpływ etapu musi być większy od zera.";
 
   return (
-    <DialogShell title={current ? "Edytuj etap" : "Dodaj etap"} onClose={onClose} width={480}>
+    <DialogShell title={current ? "Edytuj etap" : "Dodaj etap"} onClose={onClose} size="sm">
       <form
         noValidate
         onSubmit={(event) => {
@@ -794,11 +792,11 @@ export function MilestoneDialog({
             error={submitted ? titleError : undefined}
             fieldClassName="col-span-2"
           />
-          <Input
+          <DatePicker
             label="Termin"
-            type="date"
+            
             value={dueDate}
-            onChange={(event) => setDueDate(event.target.value)}
+            onChange={(value) => setDueDate(value)}
             error={submitted ? dueDateError : undefined}
           />
           <TextareaField label="Notatka" value={note} onChange={setNote} placeholder="Opcjonalna notatka do etapu" rows={3} maxLength={2_000} wide />
@@ -868,7 +866,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <DialogShell title={title} onClose={onClose} width={420}>
+    <DialogShell title={title} onClose={onClose} size="sm">
       <div className="px-6 py-5">
         <div
           className="flex items-start gap-3 rounded-xl border p-4"

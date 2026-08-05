@@ -1445,7 +1445,6 @@ export default function Praca() {
       <ContentHeader
         headingLevel={false}
         className={view === "company" || view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
-        leading={<span className="work-breadcrumb">Praca{selectedCompany ? ` / ${selectedCompany.name}` : ""}{selectedProject ? ` / ${selectedProject.name}` : ""}</span>}
         title={labels[view]}
         description={view === "today"
           ? "Najważniejsze rzeczy na teraz"
@@ -1462,7 +1461,7 @@ export default function Praca() {
         actions={<>
           {showTaskFilters && (
           <div className="work-toolbar__controls">
-            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="sr-only">{searchPlaceholder}</span><input value={search} placeholder={searchPlaceholder} onChange={(event) => setSearch(event.target.value)} /></label>
+            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">{searchPlaceholder}</span><input value={search} placeholder={searchPlaceholder} onChange={(event) => setSearch(event.target.value)} /></label>
             <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...TASK_STATUS_ORDER.filter((status) => view !== "active" || status !== "completed").map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
             <Select compact aria-label="Filtruj po priorytecie" value={priorityFilter} options={[{ value: "all", label: "Wszystkie priorytety" }, ...PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))]} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} />
             {view === "active" && <>
@@ -1474,7 +1473,7 @@ export default function Praca() {
           )}
           {showProjectFilters && (
           <div className="work-toolbar__controls">
-            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="sr-only">Szukaj projektów</span><input value={companySearch} placeholder="Szukaj projektów" onChange={(event) => setCompanySearch(event.target.value)} /></label>
+            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">Szukaj projektów</span><input value={companySearch} placeholder="Szukaj projektów" onChange={(event) => setCompanySearch(event.target.value)} /></label>
             <Select compact aria-label="Filtruj projekty po statusie" value={companyStatusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...Object.entries(PROJECT_STATUS_LABELS).filter(([value]) => value !== "completed").map(([value, label]) => ({ value, label }))]} onChange={(event) => setCompanyStatusFilter(event.target.value as CompanyProjectStatusFilter)} />
             <Select compact aria-label="Sortuj projekty" value={companySort} options={[{ value: "name", label: "Sortuj: nazwa" }, { value: "progress", label: "Sortuj: postęp" }, { value: "endDate", label: "Sortuj: termin" }]} onChange={(event) => setCompanySort(event.target.value as CompanyProjectSort)} />
           </div>
@@ -1574,9 +1573,9 @@ export default function Praca() {
               <MenuTrigger ref={addTriggerRef} open={addMenuOpen} menuId="work-add-menu" className="ui-button ui-button--primary" onClick={() => setAddMenuOpen((current) => !current)}><Plus size={13} /> Dodaj</MenuTrigger>
               {addMenuOpen && (
                 <Menu id="work-add-menu" className="work-add-menu__panel" triggerRef={addTriggerRef} onDismiss={() => setAddMenuOpen(false)}>
-                   <MenuItem leadingIcon={<Building2 size={14} />} onClick={() => { setAddMenuOpen(false); openCompanyEditor(); }}>Nowa firma</MenuItem>
-                   <MenuItem selected={primaryAddKind === "project"} leadingIcon={<FolderKanban size={14} />} onClick={() => { setAddMenuOpen(false); openProjectEditor(); }}>Nowy projekt</MenuItem>
-                   <MenuItem selected={primaryAddKind === "task"} leadingIcon={<ListTree size={14} />} onClick={() => { setAddMenuOpen(false); openTaskEditor(); }}>Nowe zadanie</MenuItem>
+                   <MenuItem leadingIcon={<Building2 size={14} />} onClick={() => { setAddMenuOpen(false); openCompanyEditor(); }}>Dodaj firmę</MenuItem>
+                   <MenuItem selected={primaryAddKind === "project"} leadingIcon={<FolderKanban size={14} />} onClick={() => { setAddMenuOpen(false); openProjectEditor(); }}>Dodaj projekt</MenuItem>
+                   <MenuItem selected={primaryAddKind === "task"} leadingIcon={<ListTree size={14} />} onClick={() => { setAddMenuOpen(false); openTaskEditor(); }}>Dodaj zadanie</MenuItem>
                 </Menu>
               )}
             </div>
@@ -1622,7 +1621,7 @@ export default function Praca() {
               <Select label="Zadanie nadrzędne" value={detailTask.parentId ?? ""} options={detailParentOptions} disabled={!detailTask.projectId} onChange={(event) => updateTaskValues(detailTask.id, { parentId: event.target.value || null })} />
               <Select label="Status" value={getTaskStatus(detailTask)} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => applyTaskStatuses([detailTask.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
               <Select label="Priorytet" value={detailTask.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => updateTaskValues(detailTask.id, { priority: event.target.value as WorkTaskPriority })} />
-              <Input type="date" label="Termin" value={detailTask.dueDate} onChange={(event) => updateTaskValues(detailTask.id, { dueDate: event.target.value })} />
+              <DatePicker  label="Termin" value={detailTask.dueDate} onChange={(value) => updateTaskValues(detailTask.id, { dueDate: value })} />
               <label className="ui-field"><span className="ui-field__label">Notatka</span><textarea className="ui-field__control work-detail-note" value={detailTask.note ?? ""} placeholder="Krótka notatka" onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, note: event.target.value, updatedAt: new Date().toISOString() } : task) })); }} /></label>
             </div>
             {detailTask && (
@@ -1638,7 +1637,7 @@ export default function Praca() {
                   <span className="work-detail-subtasks__header-side"><span>{detailTaskProgress ?? 0}%</span>{detailSubtasksExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}</span>
                 </button>
                 <div className="work-detail-subtasks__progress" role="progressbar" aria-label="Postęp podzadań" aria-valuemin={0} aria-valuemax={100} aria-valuenow={detailTaskProgress ?? 0}>
-                  <span style={{ width: `${detailTaskProgress ?? 0}%` }} />
+                  <span style={{ "--work-subtask-progress": (detailTaskProgress ?? 0) / 100 } as CSSProperties} />
                 </div>
                 <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openTaskEditor(undefined, detailTask.id)}>Dodaj podzadanie</Button>
                 <div id="work-detail-subtask-list">
@@ -1714,8 +1713,8 @@ export default function Praca() {
                 </div>
                 <div className="work-editor-section"><h3>Harmonogram</h3>
                 <div className="work-editor-grid work-editor-grid--dates">
-                  <Input type="date" label="Start" value={draft.startDate} max={draft.endDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
-                  <Input type="date" label="Termin końcowy" value={draft.endDate} min={draft.startDate || undefined} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
+                  <DatePicker  label="Start" value={draft.startDate} max={draft.endDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
+                  <DatePicker  label="Termin końcowy" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
                 </div>
                 </div>
                 <div className="work-editor-section"><h3>Kontekst</h3>
@@ -1728,7 +1727,7 @@ export default function Praca() {
               </>
             )}
 
-            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><Input type="date" label="Termin" value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} /></div><label className="ui-field"><span className="ui-field__label">Notatka <span className="work-optional">opcjonalnie</span></span><textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label></>}
+            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><DatePicker  label="Termin" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} /></div><label className="ui-field"><span className="ui-field__label">Notatka <span className="work-optional">opcjonalnie</span></span><textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label></>}
           </form>
         </Modal>
       )}

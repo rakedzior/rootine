@@ -371,7 +371,7 @@ export function SportOverview({
         <EmptyState
           title="Brak planu treningowego"
           description="Utwórz plan treningowy, aby zobaczyć dzisiejsze i kolejne treningi."
-          action={<Button variant="primary" onClick={onCreateCycle}>Utwórz plan</Button>}
+          action={<Button variant="primary" onClick={onCreateCycle}>Dodaj plan</Button>}
         />
       </div>
     );
@@ -506,7 +506,7 @@ export function SportOverview({
         <SectionHeader
           title="Obecny tydzień"
           description={`${formatShortDate(cycleWeekDate(cycle, week, 0))} — ${formatShortDate(cycleWeekDate(cycle, week, 6))}`}
-          action={<span className="sport-current-week__summary">{weekWorkouts.length} treningów · {weekMinutes} min</span>}
+          action={<span className="sport-current-week__summary">{weekWorkouts.length} {workoutCountLabel(weekWorkouts.length)} · {weekMinutes} min</span>}
         />
         <Card padding="none">
           <div className="sport-overview-week-grid">
@@ -607,7 +607,7 @@ export function SportOverview({
             })}
           </div>
         </Card>
-        <p id="sport-overview-drag-hint" className="sport-overview-drag-hint">
+        <p id="sport-overview-drag-hint" className="ui-sr-only">
           Przeciągnij trening na inny dzień. Klawiatura: Alt + ←/→.
         </p>
           </section>
@@ -697,9 +697,12 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
 
   return (
     <div className="sport-insights">
+      {/* ContentHeader already names this view "Historia"; repeating it as a section title
+          gave the screen two page headings. Only the helper line carries new information. */}
       <SectionHeader
-        title="Historia treningów"
-        description={`${visible.length} z ${history.length} wpisów · kliknij wiersz, aby zobaczyć plan i wynik.`}
+        variant="label"
+        title={`${visible.length} z ${history.length} wpisów`}
+        description="Kliknij wiersz, aby zobaczyć plan i wynik."
       />
       <div className="sport-history-tools" aria-label="Filtry historii">
         <div className="sport-history-search">
