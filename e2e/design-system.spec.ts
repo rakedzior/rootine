@@ -127,9 +127,12 @@ test.describe("design system invariants", { tag: "@viewport-matrix" }, () => {
 
       expect(
         smallestText,
-        // Kalendarz, Odżywianie and Cele rendered 9px copy before the audit.
+        // Kalendarz, Odżywianie and Cele rendered 9px copy before the audit. The floor is
+        // 10px because `--text-nano` (DESIGN.md: "metadana gęsta") is a real step of the
+        // ramp, used by dense third-order counts such as .task-group-heading__count.
+        // Anything below 10px is off the scale.
         `${route}: smallest rendered font-size`,
-      ).toBeGreaterThanOrEqual(11);
+      ).toBeGreaterThanOrEqual(10);
     });
   }
 

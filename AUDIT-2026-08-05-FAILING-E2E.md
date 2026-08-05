@@ -94,16 +94,33 @@ Sama pułapka też zniknęła:
 Weryfikacja: `desktop-1440` + `mobile-390` 112 passed / 4 skipped, 277 testów jednostkowych,
 `typecheck`, `lint` i `clip-audit` (0 przycięć) czyste.
 
-### Znane, **wcześniejsze** porażki matrycy viewportów (13)
+### Matryca viewportów — 13 porażek, wszystkie po stronie testów (naprawione)
 
-Potwierdzone `git stash`em jako niezależne od tych zmian:
+Potwierdzone `git stash`em jako wcześniejsze. Po zdiagnozowaniu okazało się, że **żadna
+nie była usterką produktu** — każda kodyfikowała stan sprzed decyzji projektowych:
 
-- `design-system.spec.ts:124` — `/zadania` ma tekst 10px (`.task-group-heading__count`,
-  `tasks.css:147`) na 7 szerokościach
-- `design-system.spec.ts:86` — oś treści na 1920 i 1366
-- `layout-consistency.spec.ts:51` — reflow Zadań, Kalendarza, Notatek i Pracy na 1024x768
+| Test | Oczekiwał | Rzeczywistość | Naprawa |
+| --- | --- | --- | --- |
+| `design-system.spec.ts:124` (7 szerokości) | tekst ≥ 11px | `--text-nano: 10px` to udokumentowany krok rampy (DESIGN.md, „metadana gęsta"), dodany w paczce 10 i użyty przez `.task-group-heading__count` | próg 11 → 10 |
+| `layout-consistency.spec.ts:51` (4 moduły @1024) | widoczny sidebar modułu | `breakpoints.ts:11` — `context: 1180` „Context sidebar collapses"; 1024 < 1180, więc sidebar **ma** być schowany, a nawigację przejmuje select w nagłówku | asercja tylko powyżej 1180px |
+| `design-system.spec.ts:86` (zmienne szerokości) | nagłówek na osi treści | **pomiar w trakcie animacji wejścia** — `useSubtabTransition` przesuwa `.ui-module-main` o 8px na 240ms; stąd dokładnie 8px odchyłki | `openRootineRoute` czeka na wyciszenie przejścia |
 
-Oraz `stylelint`: `goals.css:143` — nieznana zmienna `--goal-detail-progress` (też wcześniejsze).
+Trzeci przypadek był najciekawszy: `/cele` mierzone bezpośrednio ma odchyłkę **0**.
+Pojedyncze odczekanie nie wystarczyło, bo Cele dopisują `widok` do query stringa **po**
+montażu, co zmienia klucz przejścia i uruchamia animację już po sprawdzeniu. Dlatego
+helper wymaga, żeby element **pozostał** wyciszony przez 200 ms, a nie był wyciszony raz.
+
+Wynik: matryca viewportów **245/245**, matryca zoomu **9/9**.
+
+### Nadal otwarte, drobne
+
+- `stylelint goals.css:143` — `--goal-detail-progress` zgłaszane jako nieznane. To **fałszywy
+  alarm**: zmienna jest ustawiana inline w `CelSzczegoly.tsx:271`, a plugin nie widzi custom
+  properties z `style={{}}`. Do wyciszenia w konfiguracji, nie do naprawy w kodzie.
+- `clipping.spec.ts:90` („dokument nie przewija się w poziomie") chodzi ~19 s i **sporadycznie
+  przekracza limit 30 s** przy 4 workerach. Padł raz na trzy przebiegi, przechodzi w izolacji
+  i przy powtórce. Sprawdza 5 szerokości × wszystkie trasy w jednym teście — wart rozbicia
+  na osobne testy per szerokość albo własnego `test.slow()`.
 
 ## Pozostaje: brak `<h1>` poza stanami trasy
 

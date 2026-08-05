@@ -68,5 +68,43 @@ export async function openRootineRoute(page: Page, path: string) {
   const pageShell = page.locator(".ui-page-shell:visible");
   await expect(pageShell).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".app-route-state")).toHaveCount(0, { timeout: 15_000 });
+  await settleModuleTransition(page);
   return pageShell;
+}
+
+/**
+ * The module entry animation translates `.ui-module-main` by 8px for 240ms
+ * (`useSubtabTransition`). Measuring geometry before it lands reports the module as
+ * 8px out of alignment with the page content — which is exactly what /cele looked like.
+ *
+ * Waiting once is not enough: a module that writes its view into the query string after
+ * mount (Cele does) changes the transition key a beat later, so the animation can start
+ * *after* a naive check has already passed. The helper therefore requires the element to
+ * stay settled for a stability window rather than to be settled once.
+ *
+ * Only this element's own animations are awaited: the ambient scenes run infinite CSS
+ * animations, so waiting on `document.getAnimations()` would never resolve.
+ */
+const TRANSITION_STABLE_MS = 200;
+
+async function settleModuleTransition(page: Page) {
+  await page.evaluate(() => {
+    delete (window as unknown as { __rootineSettledAt?: number }).__rootineSettledAt;
+  });
+  await page.waitForFunction((stableMs) => {
+    const store = window as unknown as { __rootineSettledAt?: number };
+    const main = document.querySelector(".ui-module-main");
+    const idle = !main || (
+      main.getAnimations().every((animation) => (
+        animation.playState === "finished" || animation.playState === "idle"
+      ))
+      && ["none", "matrix(1, 0, 0, 1, 0, 0)"].includes(getComputedStyle(main).transform)
+    );
+    if (!idle) {
+      delete store.__rootineSettledAt;
+      return false;
+    }
+    store.__rootineSettledAt ??= performance.now();
+    return performance.now() - store.__rootineSettledAt >= stableMs;
+  }, TRANSITION_STABLE_MS, { timeout: 10_000 });
 }

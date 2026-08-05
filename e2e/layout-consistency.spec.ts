@@ -102,7 +102,11 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
       expect(contentHeaderInnerBox!.x + contentHeaderInnerBox!.width)
         .toBeLessThanOrEqual(pageContentBox!.x + pageContentBox!.width + 1);
 
-      if (["/zadania", "/kalendarz", "/praca", "/notatki"].includes(route.path)) {
+      // The context sidebar collapses at or below the `context` breakpoint (1180px, see
+      // src/app/ui/breakpoints.ts) and the in-header select takes over navigation. Below it
+      // there is no sidebar to attach to the navigation edge, so the invariant does not apply.
+      const sidebarRoute = ["/zadania", "/kalendarz", "/praca", "/notatki"].includes(route.path);
+      if (sidebarRoute && viewport!.width > 1180) {
         const contextSidebar = moduleShell.locator(":scope > .ui-module-shell__body > .ui-module-sidebar");
         await expect(contextSidebar).toBeVisible();
         const sidebarBox = await contextSidebar.boundingBox();
