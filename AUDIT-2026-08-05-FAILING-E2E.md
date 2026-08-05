@@ -1,7 +1,11 @@
 # Pięć padających testów e2e — naprawione
 
-Stan: **naprawione.** Cały zestaw `desktop-1440` + `mobile-390` przechodzi (112 passed, 4 skipped),
+Stan: **naprawione.** Cały zestaw `desktop-1440` + `mobile-390` przechodzi,
 `npm run typecheck`, `npm run lint` i `npm run test` (277 testów) są czyste.
+
+> Liczba testów w tym zestawie wynosiła 112 w chwili pisania; później w tej samej sesji
+> `clipping.spec.ts` został rozbity na test per trasa i jest ich 146. Aktualny stan całości
+> opisuje `HANDOVER-2026-08-05.md`.
 
 Diagnoza wstępna z poprzedniej sesji okazała się trafna w dwóch punktach i **myląca w dwóch**.
 Poniżej co naprawdę było przyczyną.
