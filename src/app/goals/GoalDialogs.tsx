@@ -548,7 +548,7 @@ export function GoalFormDialog({
               aria-controls={advancedId}
               trailingIcon={(
                 <ChevronDown
-                  size={12}
+                  size={13}
                   aria-hidden="true"
                   style={{ transform: advancedOpen ? "rotate(180deg)" : "none" }}
                 />
@@ -840,7 +840,7 @@ export function MilestoneDialog({
           <Button
             variant="primary"
             type="submit"
-            leadingIcon={current ? <Check size={12} aria-hidden="true" /> : <Plus size={12} aria-hidden="true" />}
+            leadingIcon={current ? <Check size={13} aria-hidden="true" /> : <Plus size={13} aria-hidden="true" />}
           >
             {current ? "Zapisz zmiany" : "Dodaj etap"}
           </Button>

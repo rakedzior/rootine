@@ -86,7 +86,7 @@ export const GOAL_ACCENT_OPTIONS = [
   { value: "#7FA6C9", label: "Błękit" },
   { value: "#79A8A4", label: "Morskie szkło" },
   { value: "#B9A171", label: "Piasek" },
-  { value: "#9B8CE8", label: "Fiolet" },
+  { value: "#7D7FA8", label: "Fiolet" },
   { value: "#BC8EA5", label: "Róż" },
   { value: "#8793A1", label: "Neutralny" },
 ] as const;
@@ -100,7 +100,7 @@ export function normalizeGoalAccentColor(color: string) {
   if (normalized === "#4772FA" || normalized === "#3E63DA" || normalized === "#809AF4") return "#7FA6C9";
   if (normalized === "#70B89F") return "#79A8A4";
   if (normalized === "#D4AA68") return "#B9A171";
-  if (normalized === "#C77DBB") return "#9B8CE8";
+  if (normalized === "#C77DBB" || normalized === "#9B8CE8") return "#7D7FA8";
   if (normalized === "#CF777C") return "#BC8EA5";
   if (normalized === "#A0A0A0") return "#8793A1";
   return DEFAULT_GOAL_ACCENT;
@@ -108,10 +108,10 @@ export function normalizeGoalAccentColor(color: string) {
 
 export const INITIAL_CATEGORIES: GoalCategory[] = [
   { id: "sport", label: "Sport", color: "#79A8A4", iconKey: "dumbbell" },
-  { id: "health", label: "Zdrowie", color: "#9B8CE8", iconKey: "heart" },
+  { id: "health", label: "Zdrowie", color: "#7D7FA8", iconKey: "heart" },
   { id: "work", label: "Praca", color: "#7FA6C9", iconKey: "briefcase" },
   { id: "finance", label: "Finanse", color: "#B9A171", iconKey: "wallet" },
-  { id: "growth", label: "Rozwój", color: "#9B8CE8", iconKey: "languages" },
+  { id: "growth", label: "Rozwój", color: "#7D7FA8", iconKey: "languages" },
   { id: "relationships", label: "Relacje", color: "#BC8EA5", iconKey: "users" },
   { id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle" },
 ];
@@ -160,7 +160,7 @@ const SEED_GOALS: Goal[] = [
   },
   {
     id: "spanish", title: "Nauczyć się hiszpańskiego na poziomie B2", description: "Swobodnie rozmawiać i czytać teksty na poziomie B2.",
-    categoryId: "growth", iconKey: "languages", color: "#9B8CE8", status: "active", health: "ontrack", priority: "medium",
+    categoryId: "growth", iconKey: "languages", color: "#7D7FA8", status: "active", health: "ontrack", priority: "medium",
     startDate: "2026-05-01", dueDate: "2027-06-30", progressMode: "milestones", initialValue: 0, targetValue: 10, unit: "etapów", manualProgress: 0,
     milestones: [
       milestone("m-es-1", "Poziom A1", "2026-05-31", true), milestone("m-es-2", "Poziom A2", "2026-06-30", true),

@@ -87,11 +87,14 @@ test.describe("brak przycinania zawartości", () => {
     });
   }
 
-  test("dokument nie przewija się w poziomie @shared", async ({ rootinePage: page }) => {
-    for (const route of ROUTES) {
+  // One test per route rather than one loop over all of them: as a single test this walked
+  // 18 routes sequentially, took ~19s and intermittently blew the 30s timeout under parallel
+  // load. Split, each case is a couple of seconds and the workers run them side by side.
+  for (const route of ROUTES) {
+    test(`${route} nie przewija dokumentu w poziomie @shared`, async ({ rootinePage: page }) => {
       await openRootineRoute(page, route);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow, `${route} scrolls horizontally`).toBeLessThanOrEqual(0);
-    }
-  });
+    });
+  }
 });

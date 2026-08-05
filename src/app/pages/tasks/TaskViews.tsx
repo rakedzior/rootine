@@ -131,7 +131,7 @@ export function TaskRow({
           className={`task-checkbox ${(bulkMode ? bulkSelected : task.done) || completing ? "is-checked" : ""}`}
           style={{ "--task-checkbox-color": (bulkMode ? bulkSelected : task.done) || completing ? C.iceBlue : priorityColor ?? C.borderStrong } as React.CSSProperties}
         >
-          {((bulkMode ? bulkSelected : task.done) || completing) && <Check size={8} strokeWidth={2.5} />}
+          {((bulkMode ? bulkSelected : task.done) || completing) && <Check size={9} strokeWidth={2.5} />}
         </button>
       )}
       onTitleClick={() => bulkMode
@@ -154,7 +154,7 @@ export function TaskRow({
               // Only the stripe is data-driven; the rest lives in tasks.css.
               style={{ boxShadow: `inset 2px 0 0 ${td.color}` }}>
               #{td.label}
-              <X size={7} strokeWidth={2.2} />
+              <X size={9} strokeWidth={2.2} />
             </button>
           ))}
           {/* Neither the clock time nor the overdue age is repeated here: the rail carries it. */}
@@ -479,7 +479,7 @@ export function TaskDetail({
           onClick={() => { setShowDatePicker(v => !v); closeAll(); }}
           className="task-detail__date"
         >
-          <Calendar size={12} strokeWidth={1.5} />
+          <Calendar size={13} strokeWidth={1.5} />
           <span>{occurrence ? `Harmonogram serii: ${dateStr}${timeStr}` : `${dateStr}${timeStr}`}</span>
         </button>
 
@@ -493,7 +493,7 @@ export function TaskDetail({
           className="task-detail__icon-btn"
         >
           {/* Priority colour is data, so it stays inline. */}
-          <Flag size={15} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
+          <Flag size={16} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
         </button>
 
         <button
@@ -502,7 +502,7 @@ export function TaskDetail({
           onClick={onClose}
           className="task-detail__icon-btn"
         >
-          <X size={15} strokeWidth={1.5} />
+          <X size={16} strokeWidth={1.5} />
         </button>
       </div>
 
@@ -637,7 +637,7 @@ export function TaskDetail({
                   className={`task-checkbox ${st.done ? "is-checked" : ""}`}
                   style={{ "--task-checkbox-color": st.done ? C.iceBlue : C.borderStrong } as React.CSSProperties}
                 >
-                  {st.done && <Check size={7} strokeWidth={2.5} />}
+                  {st.done && <Check size={9} strokeWidth={2.5} />}
                 </button>
                 <span>{st.text || "Nowe podzadanie"}</span>
               </div>
@@ -716,7 +716,7 @@ export function TaskDetail({
             aria-expanded={showMore}
             onClick={() => { setShowMore(v => !v); setShowListPick(false); setShowPriority(false); }}
             className="task-detail__toggle task-detail__toggle--plain">
-            <MoreHorizontal size={15} strokeWidth={1.5} />
+            <MoreHorizontal size={16} strokeWidth={1.5} />
           </button>
         </div>
       </div>

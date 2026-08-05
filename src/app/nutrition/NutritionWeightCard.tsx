@@ -42,7 +42,7 @@ export function NutritionWeightCard({
         <div className="nutrition-weight-card nutrition-weight-card--compact">
           <div className="nutrition-weight-card__primary">
             <div className="nutrition-weight-card__identity">
-              <Scale size={15} strokeWidth={1.5} />
+              <Scale size={16} strokeWidth={1.5} />
               <div><p>Ostatni pomiar</p><span>{formatCompactDate(latestWeight.date)}</span></div>
             </div>
             <strong><SensitiveValue label="Masa ciała">{formatNumber(latestWeight.weightKg)} kg</SensitiveValue></strong>

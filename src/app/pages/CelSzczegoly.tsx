@@ -49,7 +49,7 @@ const statusColor = (goal: { status: GoalStatus; health: "ontrack" | "risk" }) =
 };
 
 function EmptyGoalState({ text, action, onAction }: { text: string; action: string; onAction: () => void }) {
-  return <UiEmptyState icon={<Target size={20} strokeWidth={1.2} />} title={text} action={<Button variant="quiet" size="sm" onClick={onAction} leadingIcon={<Plus size={12} />}>{action}</Button>} />;
+  return <UiEmptyState icon={<Target size={18} strokeWidth={1.2} />} title={text} action={<Button variant="quiet" size="sm" onClick={onAction} leadingIcon={<Plus size={13} />}>{action}</Button>} />;
 }
 
 function SectionHeading({ title, action }: { title: string; action?: ReactNode }) {
@@ -135,7 +135,7 @@ export default function CelSzczegoly() {
 
   const renderNextStep = (compact = false) => (
     <section className={`goal-detail-next ${compact ? "goal-detail-next--compact" : ""}`} aria-labelledby="goal-next-step-heading">
-      <div className="goal-detail-next-icon" style={{ color: goal.color }}><CircleDot size={17} /></div>
+      <div className="goal-detail-next-icon" style={{ color: goal.color }}><CircleDot size={16} /></div>
       <div className="min-w-0 flex-1">
         <h2 id="goal-next-step-heading">Następny krok</h2>
         {goal.progressMode === "milestones" ? (
@@ -146,7 +146,7 @@ export default function CelSzczegoly() {
         if (goal.progressMode === "milestones" && nextMilestone) store.updateMilestone(goal.id, nextMilestone.id, { done: true });
         else if (goal.progressMode === "milestones") openMilestone();
         else openProgress();
-      }} leadingIcon={goal.progressMode === "milestones" && nextMilestone ? <Check size={12} /> : <Plus size={12} />}>
+      }} leadingIcon={goal.progressMode === "milestones" && nextMilestone ? <Check size={13} /> : <Plus size={13} />}>
         {goal.progressMode === "milestones" && nextMilestone ? "Ukończ etap" : goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}
       </Button>
     </section>
@@ -181,7 +181,7 @@ export default function CelSzczegoly() {
                   className="goal-detail-check"
                   style={{ color: C.seaGlass, borderColor: item.done ? C.seaGlass : C.borderStrong, background: item.done ? "var(--color-success-subtle)" : C.panel }}
                 >
-                  {item.done && <Check size={12} />}
+                  {item.done && <Check size={13} />}
                 </button>
               </div>
               <div className="goal-detail-timeline-content">
@@ -193,7 +193,7 @@ export default function CelSzczegoly() {
                 <span className={isOverdue ? "goal-stage-overdue" : ""}>Termin: {fmtDate(item.dueDate)} · {isOverdue ? "po terminie" : item.done ? "ukończony" : "do wykonania"}</span>
               </div>
               <div className="goal-detail-timeline-actions">
-                <button type="button" aria-label={`Opcje etapu ${item.title}`} aria-expanded={stageMenuId === item.id} onClick={() => setStageMenuId(stageMenuId === item.id ? null : item.id)}><Ellipsis size={14} /></button>
+                <button type="button" aria-label={`Opcje etapu ${item.title}`} aria-expanded={stageMenuId === item.id} onClick={() => setStageMenuId(stageMenuId === item.id ? null : item.id)}><Ellipsis size={13} /></button>
                 {stageMenuId === item.id && <Menu id={`stage-menu-${item.id}`} onDismiss={() => setStageMenuId(null)} className="absolute right-2 top-10 z-30 w-44">
                   <MenuItem onClick={() => { openMilestone(item.id); setStageMenuId(null); }} leadingIcon={<Pencil />}>Edytuj etap</MenuItem>
                   <MenuItem onClick={() => { store.updateMilestone(goal.id, item.id, { isNext: true }); setStageMenuId(null); }} leadingIcon={<Target />}>Oznacz jako następny</MenuItem>
@@ -217,7 +217,7 @@ export default function CelSzczegoly() {
     const visibleHistory = showAllHistory ? history : history.slice(0, 5);
     return (
       <div className="goal-detail-history-list">
-        {visibleHistory.map((item) => { const HistoryIcon = item.icon; return <article key={item.id} className="goal-detail-history-row"><span className="goal-detail-history-icon" style={{ color: goal.color, background: `${goal.color}18` }}><HistoryIcon size={14} /></span><div><strong>{item.title}</strong><p>{item.detail}</p></div><time dateTime={item.date}>{fmtDate(item.date.slice(0, 10))}</time></article>; })}
+        {visibleHistory.map((item) => { const HistoryIcon = item.icon; return <article key={item.id} className="goal-detail-history-row"><span className="goal-detail-history-icon" style={{ color: goal.color, background: `${goal.color}18` }}><HistoryIcon size={13} /></span><div><strong>{item.title}</strong><p>{item.detail}</p></div><time dateTime={item.date}>{fmtDate(item.date.slice(0, 10))}</time></article>; })}
         {history.length > 5 && <button type="button" className="goal-detail-text-action" onClick={() => setShowAllHistory((open) => !open)}>{showAllHistory ? "Pokaż mniej" : "Pokaż więcej"}</button>}
       </div>
     );
@@ -232,14 +232,14 @@ export default function CelSzczegoly() {
         <ContentHeader
           headingLevel={false}
           className="goal-detail-content-header"
-          leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={15} /></Button>}
+          leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate("/cele")}><ArrowLeft size={16} /></Button>}
           title={goal.title}
           description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
           meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot style={{ color: semanticStatusColor }}>{statusLabels[goal.status]}</Badge><Badge appearance="plain" dot style={{ color: goal.health === "risk" ? C.warning : C.seaGlass }}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
           actions={<>
             <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</span></Button>
-            <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={12} />}><span className="header-action-label">Edytuj</span></Button>
-            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={15} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-48">
+            <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={13} />}><span className="header-action-label">Edytuj</span></Button>
+            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={16} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-48">
               <MenuItem onClick={() => { openProgress(); setMenuOpen(false); }} leadingIcon={<BarChart3 />}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</MenuItem>
               <MenuItem onClick={() => { setEditOpen(true); setMenuOpen(false); }} leadingIcon={<Pencil />}>Edytuj cel</MenuItem>
               <MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem>
@@ -287,7 +287,7 @@ export default function CelSzczegoly() {
                 <section id="etapy" className="goal-detail-timeline-panel">
                   <SectionHeading
                     title={goal.progressMode === "milestones" ? "Etapy celu" : "Historia postępu"}
-                    action={<Button type="button" variant="primary" size="sm" leadingIcon={<Plus size={12} />} onClick={openProgress}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</Button>}
+                    action={<Button type="button" variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={openProgress}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</Button>}
                   />
                   <p className="goal-detail-supporting-copy">{goal.progressMode === "milestones" ? `${completedMilestones} z ${goal.milestones.length} etapów ukończonych · przeciągnij, aby zmienić kolejność.` : "Każda zmiana wpływa na aktualną wartość celu."}</p>
                   {goal.progressMode === "milestones" ? renderMilestoneTimeline() : (

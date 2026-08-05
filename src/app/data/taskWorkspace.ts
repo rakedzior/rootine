@@ -137,20 +137,24 @@ const DEFAULT_HABITS: WorkspaceHabit[] = [
   { id: 4, name: "Spacer 20 min", streak: 0, done: false, completedDates: [] },
 ];
 
+// Lists and tags are categories, so they take the `category-*` palette. They must not take
+// the semantic colours: blue is the action signal, and ochre/green mean warning/success.
+// These previously carried pre-audit hexes (#4772FA, #70B89F, #D4AA68), which is why demo
+// data painted itself in a palette the app no longer uses.
 const DEFAULT_LISTS: WorkspaceList[] = [
-  { id: "praca", label: "Praca", color: "#4772FA" },
-  { id: "dom", label: "Dom", color: "#D4AA68" },
-  { id: "hobby", label: "Hobby", color: "#A0A0A0" },
-  { id: "zdrowie", label: "Zdrowie", color: "#70B89F" },
+  { id: "praca", label: "Praca", color: "#7FA6C9" },
+  { id: "dom", label: "Dom", color: "#B9A171" },
+  { id: "hobby", label: "Hobby", color: "#8793A1" },
+  { id: "zdrowie", label: "Zdrowie", color: "#79A8A4" },
 ];
 
 const DEFAULT_TAGS: WorkspaceTag[] = [
-  { id: "praca", label: "praca", color: "#4772FA" },
-  { id: "trening", label: "trening", color: "#70B89F" },
-  { id: "dom", label: "dom", color: "#D4AA68" },
-  { id: "finanse", label: "finanse", color: "#A0A0A0" },
-  { id: "zdrowie", label: "zdrowie", color: "#70B89F" },
-  { id: "hobby", label: "hobby", color: "#9B8CE8" },
+  { id: "praca", label: "praca", color: "#7FA6C9" },
+  { id: "trening", label: "trening", color: "#79A8A4" },
+  { id: "dom", label: "dom", color: "#B9A171" },
+  { id: "finanse", label: "finanse", color: "#8793A1" },
+  { id: "zdrowie", label: "zdrowie", color: "#79A8A4" },
+  { id: "hobby", label: "hobby", color: "#7D7FA8" },
 ];
 
 export function createDefaultTaskWorkspace(): TaskWorkspace {

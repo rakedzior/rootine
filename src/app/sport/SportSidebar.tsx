@@ -91,7 +91,7 @@ export function SportSidebar({
           <span>Trening w toku</span>
           <strong>{activeSession.title}</strong>
           <small>{activeProgress}</small>
-          <Button variant="primary" size="sm" fullWidth leadingIcon={<Play size={12} />} onClick={onResume}>
+          <Button variant="primary" size="sm" fullWidth leadingIcon={<Play size={13} />} onClick={onResume}>
             Wznów trening
           </Button>
         </div>

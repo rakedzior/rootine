@@ -13,7 +13,7 @@ const validWorkspace = {
       description: "",
       categoryId: "personal",
       iconKey: "target",
-      color: "#809AF4",
+      color: "#8793A1",
       status: "active",
       health: "ontrack",
       priority: "medium",

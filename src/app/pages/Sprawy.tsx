@@ -554,7 +554,7 @@ export default function Sprawy() {
     const due = dueCopy(payment.dueDate);
     return (
       <div key={payment.id} className={`affairs-payment-row ${payment.paid ? "is-done" : ""}`}>
-        <span className="affairs-payment-row__icon"><ReceiptText size={14} /></span>
+        <span className="affairs-payment-row__icon"><ReceiptText size={13} /></span>
         <span className="affairs-payment-row__title">
           <strong>{payment.title}</strong>
           <small>{payment.note || "Jednorazowe zobowiązanie"}</small>
@@ -576,12 +576,12 @@ export default function Sprawy() {
           <Button
             variant="quiet"
             size="sm"
-            leadingIcon={payment.paid ? <RefreshCw size={12} /> : <Check size={12} />}
+            leadingIcon={payment.paid ? <RefreshCw size={13} /> : <Check size={13} />}
             onClick={() => toggleOneTimePayment(payment.id)}
           >
             {payment.paid ? "Przywróć" : "Opłacone"}
           </Button>
-          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={12} /></Button>
+          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={13} /></Button>
           <Button
             variant="ghost"
                           className="ui-button--ghost-danger"
@@ -590,7 +590,7 @@ export default function Sprawy() {
             aria-label={`Usuń ${payment.title}`}
             onClick={() => setDeleteState({ kind: "oneTime", id: payment.id, label: payment.title })}
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} />
           </Button>
         </span>
       </div>
@@ -972,7 +972,7 @@ export default function Sprawy() {
                       <h2>Najbliżej na radarze</h2>
                       <p>Jeden porządek terminów dla spraw i płatności</p>
                     </div>
-                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={12} />} onClick={() => selectView("matters")}>Wszystkie</Button>
+                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={13} />} onClick={() => selectView("matters")}>Wszystkie</Button>
                   </header>
                   {upcoming.length === 0 ? (
                     <EmptyState icon={<Archive size={18} />} title="Radar jest pusty" description="Dodaj sprawę albo płatność z terminem." />
@@ -992,7 +992,7 @@ export default function Sprawy() {
                             }}
                           >
                             <span className={`affairs-agenda-row__icon affairs-agenda-row__icon--${item.kind}`}>
-                              <UpcomingIcon size={14} />
+                              <UpcomingIcon size={13} />
                             </span>
                             <span className="affairs-agenda-row__copy">
                               <strong>{item.title}</strong>
@@ -1018,7 +1018,7 @@ export default function Sprawy() {
                       <h2>Koszty stałe</h2>
                       <p>Cykliczne rachunki i aktywne usługi</p>
                     </div>
-                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={12} />} onClick={() => selectView("subscriptions")}>Subskrypcje</Button>
+                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={13} />} onClick={() => selectView("subscriptions")}>Subskrypcje</Button>
                   </header>
                   <div className="affairs-budget-snapshot__body">
                     <div className="affairs-budget-balance">
@@ -1074,7 +1074,7 @@ export default function Sprawy() {
                       <strong>{matter.title}</strong>
                       <small>{matter.note || "Bez dodatkowej notatki"}</small>
                     </button>
-                    <span className="affairs-matter-row__category"><CategoryIcon size={12} />{CATEGORY_META[matter.category].label}</span>
+                    <span className="affairs-matter-row__category"><CategoryIcon size={13} />{CATEGORY_META[matter.category].label}</span>
                     <Badge tone={due.tone}>{due.text}</Badge>
                     <Badge tone={matter.status === "done" ? "success" : matter.status === "waiting" ? "warning" : matter.priority === "high" ? "danger" : "primary"} dot>
                       {STATUS_LABELS[matter.status]}
@@ -1130,7 +1130,7 @@ export default function Sprawy() {
                   const due = dueCopy(payment.dueDate);
                   return (
                     <div key={payment.id} className={`affairs-payment-row ${payment.paid ? "is-done" : ""}`}>
-                      <span className="affairs-payment-row__icon"><ReceiptText size={14} /></span>
+                      <span className="affairs-payment-row__icon"><ReceiptText size={13} /></span>
                       <span className="affairs-payment-row__title">
                         <strong>{payment.title}</strong>
                         <small>{payment.note || "Jednorazowe zobowiązanie"}</small>
@@ -1152,12 +1152,12 @@ export default function Sprawy() {
                         <Button
                           variant="quiet"
                           size="sm"
-                          leadingIcon={payment.paid ? <RefreshCw size={12} /> : <Check size={12} />}
+                          leadingIcon={payment.paid ? <RefreshCw size={13} /> : <Check size={13} />}
                           onClick={() => toggleOneTimePayment(payment.id)}
                         >
                           {payment.paid ? "Przywróć" : "Opłacone"}
                         </Button>
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={12} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.title}`} onClick={() => openOneTimeEditor(payment)}><Pencil size={13} /></Button>
                         <Button
                           variant="ghost"
                           className="ui-button--ghost-danger"
@@ -1166,7 +1166,7 @@ export default function Sprawy() {
                           aria-label={`Usuń ${payment.title}`}
                           onClick={() => setDeleteState({ kind: "oneTime", id: payment.id, label: payment.title })}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </Button>
                       </span>
                     </div>
@@ -1195,7 +1195,7 @@ export default function Sprawy() {
                 const due = dueCopy(payment.nextDueDate);
                 return (
                   <div key={payment.id} className={`affairs-payment-row ${payment.active ? "" : "is-paused"}`}>
-                    <span className="affairs-payment-row__icon"><ReceiptText size={14} /></span>
+                    <span className="affairs-payment-row__icon"><ReceiptText size={13} /></span>
                     <span className="affairs-payment-row__title">
                       <strong>{payment.name}</strong>
                       <small>{payment.category} · {payment.automatic ? "automatycznie" : "ręcznie"}</small>
@@ -1217,7 +1217,7 @@ export default function Sprawy() {
                         <Button
                           variant="quiet"
                           size="sm"
-                          leadingIcon={<Check size={12} />}
+                          leadingIcon={<Check size={13} />}
                           onClick={() => setWorkspace((current) => ({
                             ...current,
                             payments: current.payments.map((item) => item.id === payment.id
@@ -1228,7 +1228,7 @@ export default function Sprawy() {
                           Opłacone
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.name}`} onClick={() => openPaymentEditor(payment.id)}><Pencil size={12} /></Button>
+                      <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${payment.name}`} onClick={() => openPaymentEditor(payment.id)}><Pencil size={13} /></Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1239,7 +1239,7 @@ export default function Sprawy() {
                           payments: current.payments.map((item) => item.id === payment.id ? { ...item, active: !item.active } : item),
                         }))}
                       >
-                        {payment.active ? <Archive size={12} /> : <RefreshCw size={12} />}
+                        {payment.active ? <Archive size={13} /> : <RefreshCw size={13} />}
                       </Button>
                       <Button
                         variant="ghost"
@@ -1249,7 +1249,7 @@ export default function Sprawy() {
                         aria-label={`Usuń ${payment.name}`}
                         onClick={() => setDeleteState({ kind: "payment", id: payment.id, label: payment.name })}
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={13} />
                       </Button>
                     </span>
                   </div>
@@ -1281,7 +1281,7 @@ export default function Sprawy() {
                   const due = dueCopy(subscription.nextBillingDate);
                   return (
                     <div key={subscription.id} className={`affairs-payment-row ${subscription.active ? "" : "is-paused"}`}>
-                      <span className="affairs-payment-row__icon"><CreditCard size={14} /></span>
+                      <span className="affairs-payment-row__icon"><CreditCard size={13} /></span>
                       <span className="affairs-payment-row__title">
                         <strong>{subscription.name}</strong>
                         <small>
@@ -1306,7 +1306,7 @@ export default function Sprawy() {
                           <Button
                             variant="quiet"
                             size="sm"
-                            leadingIcon={<Check size={12} />}
+                            leadingIcon={<Check size={13} />}
                             onClick={() => setWorkspace((current) => ({
                               ...current,
                               subscriptions: current.subscriptions.map((item) => item.id === subscription.id
@@ -1317,7 +1317,7 @@ export default function Sprawy() {
                             Odnowione
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${subscription.name}`} onClick={() => openSubscriptionEditor(subscription)}><Pencil size={12} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${subscription.name}`} onClick={() => openSubscriptionEditor(subscription)}><Pencil size={13} /></Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1328,7 +1328,7 @@ export default function Sprawy() {
                             subscriptions: current.subscriptions.map((item) => item.id === subscription.id ? { ...item, active: !item.active } : item),
                           }))}
                         >
-                          {subscription.active ? <Archive size={12} /> : <RefreshCw size={12} />}
+                          {subscription.active ? <Archive size={13} /> : <RefreshCw size={13} />}
                         </Button>
                         <Button
                           variant="ghost"
@@ -1338,7 +1338,7 @@ export default function Sprawy() {
                           aria-label={`Usuń ${subscription.name}`}
                           onClick={() => setDeleteState({ kind: "subscription", id: subscription.id, label: subscription.name })}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </Button>
                       </span>
                     </div>
@@ -1374,7 +1374,7 @@ export default function Sprawy() {
                   const due = documentDueCopy(document);
                   return (
                     <div key={document.id} className="affairs-payment-row">
-                      <span className="affairs-payment-row__icon"><FileText size={14} /></span>
+                      <span className="affairs-payment-row__icon"><FileText size={13} /></span>
                       <span className="affairs-payment-row__title">
                         <strong>{document.name}</strong>
                         <small>{document.holder} · {document.note || "Bez dodatkowej notatki"}</small>
@@ -1385,7 +1385,7 @@ export default function Sprawy() {
                         {document.expiresAt ? `${document.reminderDays} dni wcześniej` : "—"}
                       </span>
                       <span className="affairs-payment-row__actions">
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={12} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={13} /></Button>
                         <Button
                           variant="ghost"
                           className="ui-button--ghost-danger"
@@ -1394,7 +1394,7 @@ export default function Sprawy() {
                           aria-label={`Usuń ${document.name}`}
                           onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </Button>
                       </span>
                     </div>
@@ -1439,7 +1439,7 @@ export default function Sprawy() {
                       </span>
                       <Badge tone={due.tone}>{due.text}</Badge>
                       <span className="affairs-vehicle-row__actions">
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={12} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={13} /></Button>
                         <Button
                           variant="ghost"
                           className="ui-button--ghost-danger"
@@ -1448,7 +1448,7 @@ export default function Sprawy() {
                           aria-label={`Usuń ${item.title}`}
                           onClick={() => setDeleteState({ kind: "vehicleItem", id: item.id, label: item.title })}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </Button>
                       </span>
                     </div>
@@ -1463,8 +1463,8 @@ export default function Sprawy() {
                         <p>{vehicle.registration || "Bez numeru rejestracyjnego"} · {formatMileage(vehicle.mileage)}</p>
                       </div>
                       <span className="affairs-vehicle__actions">
-                        <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openVehicleItemEditor(vehicle.id)}>Dodaj termin</Button>
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${vehicle.name}`} onClick={() => openVehicleEditor(vehicle)}><Pencil size={12} /></Button>
+                        <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openVehicleItemEditor(vehicle.id)}>Dodaj termin</Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${vehicle.name}`} onClick={() => openVehicleEditor(vehicle)}><Pencil size={13} /></Button>
                         <Button
                           variant="ghost"
                           className="ui-button--ghost-danger"
@@ -1473,7 +1473,7 @@ export default function Sprawy() {
                           aria-label={`Usuń ${vehicle.name}`}
                           onClick={() => setDeleteState({ kind: "vehicle", id: vehicle.id, label: vehicle.name })}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </Button>
                       </span>
                     </header>
@@ -1518,7 +1518,7 @@ export default function Sprawy() {
                               </span>
                               <Badge tone={due.tone}>{due.text}</Badge>
                               <span className="affairs-vehicle-row__actions">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={12} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={13} /></Button>
                                 <Button
                                   variant="ghost"
                           className="ui-button--ghost-danger"
@@ -1527,7 +1527,7 @@ export default function Sprawy() {
                                   aria-label={`Usuń ${item.title}`}
                                   onClick={() => setDeleteState({ kind: "vehicleItem", id: item.id, label: item.title })}
                                 >
-                                  <Trash2 size={12} />
+                                  <Trash2 size={13} />
                                 </Button>
                               </span>
                             </div>
@@ -1610,7 +1610,7 @@ export default function Sprawy() {
                         aria-label={`Usuń ${line.label}`}
                         onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={13} />
                       </Button>
                     </div>
                   );

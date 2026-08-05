@@ -25,7 +25,7 @@ function workFixture(): WorkWorkspace {
     version: 3,
     updatedAt: "2026-07-28T08:00:00.000Z",
     companies: [
-      { id: "company-a", name: "Acme", description: "", color: "#4772fa" },
+      { id: "company-a", name: "Acme", description: "", color: "#7FA6C9" },
     ],
     projects: [
       {

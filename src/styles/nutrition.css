@@ -3222,7 +3222,7 @@
 }
 
 .nutrition-analysis-v2__weight-area {
-  fill: rgba(155, 140, 232, 0.14);
+  fill: color-mix(in srgb, var(--color-accent-violet) 14%, transparent);
 }
 
 .nutrition-analysis-v2__weight-line {

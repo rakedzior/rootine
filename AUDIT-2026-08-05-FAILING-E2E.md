@@ -112,15 +112,14 @@ helper wymaga, żeby element **pozostał** wyciszony przez 200 ms, a nie był wy
 
 Wynik: matryca viewportów **245/245**, matryca zoomu **9/9**.
 
-### Nadal otwarte, drobne
+### Domknięte w tej samej sesji
 
-- `stylelint goals.css:143` — `--goal-detail-progress` zgłaszane jako nieznane. To **fałszywy
-  alarm**: zmienna jest ustawiana inline w `CelSzczegoly.tsx:271`, a plugin nie widzi custom
-  properties z `style={{}}`. Do wyciszenia w konfiguracji, nie do naprawy w kodzie.
-- `clipping.spec.ts:90` („dokument nie przewija się w poziomie") chodzi ~19 s i **sporadycznie
-  przekracza limit 30 s** przy 4 workerach. Padł raz na trzy przebiegi, przechodzi w izolacji
-  i przy powtórce. Sprawdza 5 szerokości × wszystkie trasy w jednym teście — wart rozbicia
-  na osobne testy per szerokość albo własnego `test.slow()`.
+- `stylelint goals.css:143` — okazało się, że to nie kwestia konfiguracji. Konwencją w tym
+  kodzie jest **deklarowanie domyślnej wartości zmiennej runtime na regule komponentu**
+  (`.work-detail-subtask` tak robi); `--goal-detail-progress` jako jedyna to pomijała.
+  Deklaracja dodana na `.goal-detail-progress-track`. `css:lint` czysty bez wyjątków.
+- `clipping.spec.ts:90` — rozbity na osobny test per trasa. Zamiast jednego przebiegu ~19 s
+  ocierającego się o limit 30 s jest 18 testów po ~2 s, które workery liczą równolegle.
 
 ## Pozostaje: brak `<h1>` poza stanami trasy
 

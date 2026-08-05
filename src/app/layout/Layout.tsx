@@ -316,7 +316,7 @@ function ModuleSettings({
               key={item.id}
               className={`app-module-settings__row${isEnabled ? "" : " is-disabled"}`}
             >
-              <ModuleIcon size={14} strokeWidth={1.7} aria-hidden="true" />
+              <ModuleIcon size={13} strokeWidth={1.7} aria-hidden="true" />
               <span className="app-module-settings__label">{item.label}</span>
               <label
                 className="app-module-toggle"
@@ -370,7 +370,7 @@ function ProfileSummary() {
     <>
       <div className="app-sidebar-popover__profile">
         <span className="app-sidebar-profile__avatar" aria-hidden="true">
-          <UserRound size={15} strokeWidth={1.8} />
+          <UserRound size={16} strokeWidth={1.8} />
         </span>
         <span>
           <strong>Użytkownik lokalny</strong>
@@ -384,7 +384,7 @@ function ProfileSummary() {
         aria-pressed={privacy.enabled}
         onClick={privacy.toggle}
       >
-        <EyeOff size={15} aria-hidden="true" />
+        <EyeOff size={16} aria-hidden="true" />
         <span>
           <strong>{privacy.enabled ? "Privacy Mode włączony" : "Włącz Privacy Mode"}</strong>
           <small>Ukrywa kwoty, pomiary i prywatne treści. Skrót: Ctrl ⇧ P.</small>
@@ -764,7 +764,7 @@ export default function Layout() {
               <span className="app-brand__mark" aria-hidden="true">R</span>
               <PanelLeftOpen
                 className="app-brand-collapsed-toggle__icon"
-                size={17}
+                size={16}
                 strokeWidth={1.7}
                 aria-hidden="true"
               />
@@ -914,8 +914,8 @@ export default function Layout() {
             >
               <button type="button" data-autofocus onClick={toggleSidebar}>
                 {isSidebarCollapsed
-                  ? <PanelLeftOpen size={15} strokeWidth={1.7} aria-hidden="true" />
-                  : <PanelLeftClose size={15} strokeWidth={1.7} aria-hidden="true" />}
+                  ? <PanelLeftOpen size={16} strokeWidth={1.7} aria-hidden="true" />
+                  : <PanelLeftClose size={16} strokeWidth={1.7} aria-hidden="true" />}
                 <span>
                   <strong>{isSidebarCollapsed ? "Rozwiń panel" : "Zwiń panel"}</strong>
                   <small>Wybór zostanie zapamiętany</small>
@@ -928,7 +928,7 @@ export default function Layout() {
               >
                 <RefreshCw
                   className={weather.status === "loading" ? "is-spinning" : ""}
-                  size={15}
+                  size={16}
                   strokeWidth={1.7}
                   aria-hidden="true"
                 />
@@ -997,7 +997,7 @@ export default function Layout() {
               ))}
             </ol>
             <label className="app-help-dialog__search">
-              <Search size={14} aria-hidden="true" />
+              <Search size={13} aria-hidden="true" />
               <span className="ui-sr-only">Szukaj w pomocy</span>
               <input
                 type="search"
@@ -1043,7 +1043,7 @@ export default function Layout() {
                       setHelpOpen(false);
                     }}
                   >
-                    <Icon size={15} aria-hidden="true" />
+                    <Icon size={16} aria-hidden="true" />
                     <span>{item.label}</span>
                     <kbd>Alt {index + 1}</kbd>
                   </button>
@@ -1070,7 +1070,7 @@ export default function Layout() {
 
       {saveFeedback && (
         <div className={`app-save-feedback is-${saveFeedback}`} role="status" aria-live="polite">
-          <CircleHelp size={15} aria-hidden="true" />
+          <CircleHelp size={16} aria-hidden="true" />
           <span>Zapis wymaga uwagi — otwórz Centrum odzyskiwania</span>
         </div>
       )}
@@ -1152,7 +1152,7 @@ export default function Layout() {
                   aria-label="Wróć do wszystkich obszarów"
                   onClick={() => setOpenMenu("mobileMore")}
                 >
-                  <ArrowLeft size={17} aria-hidden="true" />
+                  <ArrowLeft size={16} aria-hidden="true" />
                 </button>
               ) : (
                 <span className="app-mobile-menu__mark" aria-hidden="true">R</span>
@@ -1179,7 +1179,7 @@ export default function Layout() {
                 aria-label="Zamknij menu"
                 onClick={closeMobileMenu}
               >
-                <X size={17} aria-hidden="true" />
+                <X size={16} aria-hidden="true" />
               </button>
             </header>
 
@@ -1309,7 +1309,7 @@ export default function Layout() {
             aria-controls="mobile-more-menu"
             onClick={() => setOpenMenu((current) => current?.startsWith("mobile") ? null : "mobileMore")}
           >
-            <MoreHorizontal size={19} strokeWidth={1.7} aria-hidden="true" />
+            <MoreHorizontal size={18} strokeWidth={1.7} aria-hidden="true" />
             <span className="app-mobile-nav__label">Więcej</span>
           </button>
         </nav>

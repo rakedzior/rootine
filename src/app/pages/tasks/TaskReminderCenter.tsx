@@ -130,7 +130,7 @@ export function TaskReminderCenter({ tasks, habits = [] }: { tasks: readonly Wor
       {reminders.map((reminder) => (
         <div key={reminder.key} className="task-reminder-toast" role="status">
           <div>
-            <strong><Bell size={12} aria-hidden="true" /> {reminder.taskText || "Zadanie"}</strong>
+            <strong><Bell size={13} aria-hidden="true" /> {reminder.taskText || "Zadanie"}</strong>
             <span>{reminderTiming(reminder)}</span>
           </div>
           <Button

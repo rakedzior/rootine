@@ -131,7 +131,7 @@ export function SportExercises({
         <div>
           <p>Jedna biblioteka dla siłowni, rehabilitacji, mobilności i treningów etapowych.</p>
         </div>
-        <Button variant="primary" leadingIcon={<Plus size={14} />} onClick={() => setEditing(createBlankExercise())}>
+        <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => setEditing(createBlankExercise())}>
           Dodaj ćwiczenie
         </Button>
       </div>
@@ -166,7 +166,7 @@ export function SportExercises({
           return (
             <div key={exercise.id} className="sport-record-table__row" role="row">
               <button type="button" className="sport-record-table__main" onClick={() => onSelect(exercise.id)}>
-                <span className="sport-record-table__name"><Dumbbell size={14} aria-hidden="true" />{exercise.name}</span>
+                <span className="sport-record-table__name"><Dumbbell size={13} aria-hidden="true" />{exercise.name}</span>
                 <span className="sport-record-table__sub">{exerciseTypeLabel(exercise.exerciseType)}{exercise.favorite && <Heart size={11} fill="currentColor" aria-label="Ulubione" />}</span>
               </button>
               <span>{exercise.primaryMuscle}</span>
@@ -174,7 +174,7 @@ export function SportExercises({
               <span className="sport-data">{parametersLabel(exercise)}</span>
               <span className="sport-data">{usage}</span>
               <span className="sport-record-table__actions">
-                <MenuTrigger open={menuId === exercise.id} menuId={`exercise-menu-${exercise.id}`} className="sport-icon-button" aria-label={`Akcje: ${exercise.name}`} onClick={() => setMenuId((current) => current === exercise.id ? null : exercise.id)}><MoreHorizontal size={15} /></MenuTrigger>
+                <MenuTrigger open={menuId === exercise.id} menuId={`exercise-menu-${exercise.id}`} className="sport-icon-button" aria-label={`Akcje: ${exercise.name}`} onClick={() => setMenuId((current) => current === exercise.id ? null : exercise.id)}><MoreHorizontal size={16} /></MenuTrigger>
                 {menuId === exercise.id && (
                   <Menu id={`exercise-menu-${exercise.id}`} className="sport-row-menu" onDismiss={() => setMenuId(null)} triggerRef={undefined}>
                     <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { setEditing(exercise); setMenuId(null); }}>Edytuj</MenuItem>
@@ -223,7 +223,7 @@ function ExerciseEditor({ exercise, onClose, onSubmit }: { exercise: Exercise; o
         </div>
         <Input label="Krótki opis" value={draft.description} onChange={(event) => set("description", event.target.value)} />
         <label className="sport-field"><span>Instrukcja</span><textarea value={draft.instructions} rows={3} onChange={(event) => set("instructions", event.target.value)} /></label>
-        <button type="button" className="sport-disclosure" aria-expanded={advanced} onClick={() => setAdvanced((current) => !current)}><SlidersHorizontal size={14} />{advanced ? "Ukryj więcej ustawień" : "Więcej ustawień"}</button>
+        <button type="button" className="sport-disclosure" aria-expanded={advanced} onClick={() => setAdvanced((current) => !current)}><SlidersHorizontal size={13} />{advanced ? "Ukryj więcej ustawień" : "Więcej ustawień"}</button>
         {advanced && (
           <div className="sport-exercise-editor__advanced">
             <div className="sport-planner-form__grid">
@@ -253,7 +253,7 @@ export function ExerciseDetailPanel({ exercise, templates, onClose, onEdit, onDu
   const usage = templates.filter((template) => exerciseCountForTemplate(template, exercise.id) > 0);
   return (
     <DetailPanel label={`Szczegóły ćwiczenia: ${exercise.name}`} onDismiss={onClose} className="sport-record-detail">
-      <header className="sport-record-detail__header"><div><span className="sport-panel-kicker">Ćwiczenie</span><h2>{exercise.name}</h2><Badge tone="primary">{DISCIPLINE_META[exercise.sportCategory].label}</Badge></div><Button variant="ghost" size="sm" leadingIcon={<X size={14} />} aria-label="Zamknij szczegóły" onClick={onClose} /></header>
+      <header className="sport-record-detail__header"><div><span className="sport-panel-kicker">Ćwiczenie</span><h2>{exercise.name}</h2><Badge tone="primary">{DISCIPLINE_META[exercise.sportCategory].label}</Badge></div><Button variant="ghost" size="sm" leadingIcon={<X size={13} />} aria-label="Zamknij szczegóły" onClick={onClose} /></header>
       <div className="sport-record-detail__actions"><Button variant="primary" size="sm" leadingIcon={<Pencil size={13} />} onClick={onEdit}>Edytuj</Button><Button variant="quiet" size="sm" leadingIcon={<Copy size={13} />} onClick={onDuplicate}>Duplikuj</Button><Button variant="ghost" size="sm" leadingIcon={<Heart size={13} fill={exercise.favorite ? "currentColor" : "none"} />} onClick={() => onUpdate({ ...exercise, favorite: !exercise.favorite, updatedAt: new Date().toISOString() })}>{exercise.favorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}</Button></div>
       <p className="sport-record-detail__lead">{exercisePreview(exercise)}</p>
       <dl className="sport-detail-list"><div><dt>Partia główna</dt><dd>{exercise.primaryMuscle}</dd></div><div><dt>Partie dodatkowe</dt><dd>{exercise.secondaryMuscles.join(", ") || "—"}</dd></div><div><dt>Sprzęt</dt><dd>{exercise.equipment.join(", ") || "Bez sprzętu"}</dd></div><div><dt>Domyślne parametry</dt><dd className="sport-data">{parametersLabel(exercise)}</dd></div></dl>

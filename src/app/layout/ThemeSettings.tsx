@@ -32,7 +32,7 @@ export function ThemeSettings({ idPrefix, value, onChange }: ThemeSettingsProps)
           onClick={() => onChange("system")}
         >
           <span className="app-theme-option__system-icon" aria-hidden="true">
-            <MonitorCog size={17} strokeWidth={1.7} />
+            <MonitorCog size={16} strokeWidth={1.7} />
           </span>
           <span className="app-theme-option__copy">
             <strong>Automatycznie</strong>

@@ -279,7 +279,7 @@ export function RecoveryCenterButton() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 id="persistence-issues-title" className="flex items-center gap-2 text-[13px] font-semibold text-[var(--color-chalk-white)]">
-                      <AlertTriangle size={14} aria-hidden="true" />
+                      <AlertTriangle size={13} aria-hidden="true" />
                       Zmiany wymagające uwagi
                     </h3>
                     <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
@@ -309,7 +309,7 @@ export function RecoveryCenterButton() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            leadingIcon={<Download size={12} aria-hidden="true" />}
+                            leadingIcon={<Download size={13} aria-hidden="true" />}
                             onClick={() => {
                               const draft = exportLocalPersistenceIssueDraft(issue.id);
                               if (draft !== null) downloadText(`rootine-unsaved-${issue.id}.json`, draft);
@@ -323,7 +323,7 @@ export function RecoveryCenterButton() {
                             variant="quiet"
                             size="sm"
                             disabled={Boolean(busyAction)}
-                            leadingIcon={<RotateCcw size={12} aria-hidden="true" />}
+                            leadingIcon={<RotateCcw size={13} aria-hidden="true" />}
                             onClick={() => void retryIssue(issue)}
                           >
                             {busyAction === `issue:${issue.id}` ? "Ponawianie…" : "Ponów zapis"}
@@ -477,7 +477,7 @@ export function RecoveryCenterButton() {
                         variant="quiet"
                         size="sm"
                         disabled={Boolean(busyAction)}
-                        leadingIcon={<ShieldCheck size={12} aria-hidden="true" />}
+                        leadingIcon={<ShieldCheck size={13} aria-hidden="true" />}
                         onClick={() => void requestProtection()}
                       >
                         {busyAction === "persist" ? "Wysyłanie prośby…" : "Poproś o ochronę"}
@@ -560,7 +560,7 @@ export function RecoveryCenterButton() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          leadingIcon={<HardDriveDownload size={12} />}
+                          leadingIcon={<HardDriveDownload size={13} />}
                           onClick={() => void exportRecord(record.id)}
                         >
                           Pobierz
@@ -577,7 +577,7 @@ export function RecoveryCenterButton() {
                           variant="ghost"
                           size="sm"
                           disabled={Boolean(busyAction)}
-                          leadingIcon={<Trash2 size={12} aria-hidden="true" />}
+                          leadingIcon={<Trash2 size={13} aria-hidden="true" />}
                           onClick={() => void deleteRecord(record.id)}
                         >
                           {busyAction === `delete:${record.id}` ? "Usuwanie…" : "Usuń"}

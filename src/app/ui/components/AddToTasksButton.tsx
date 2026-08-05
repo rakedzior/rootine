@@ -16,7 +16,7 @@ export function AddToTasksButton({ input, compact = false, onAdded }: { input: E
       aria-label={label}
       title={label}
       disabled={status === "added"}
-      leadingIcon={<ListPlus size={12} />}
+      leadingIcon={<ListPlus size={13} />}
       onClick={() => {
         const result = addExternalTask(input);
         setStatus(result.status === "added" || result.status === "exists" ? "added" : "error");

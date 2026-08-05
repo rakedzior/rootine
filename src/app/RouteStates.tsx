@@ -113,11 +113,11 @@ export function RouteErrorState() {
       icon={<AlertTriangle size={22} />}
     >
       <button type="button" className="app-route-state__button is-primary" onClick={() => window.location.reload()}>
-        <RotateCcw size={14} aria-hidden="true" />
+        <RotateCcw size={13} aria-hidden="true" />
         Spróbuj ponownie
       </button>
       <Link className="app-route-state__button" to="/dzisiaj">
-        <Home size={14} aria-hidden="true" />
+        <Home size={13} aria-hidden="true" />
         Wróć do Dzisiaj
       </Link>
     </RouteStateFrame>
@@ -135,11 +135,11 @@ export function RouteNotFoundState() {
       icon={<AlertTriangle size={22} />}
     >
       <Link className="app-route-state__button is-primary" to="/dzisiaj">
-        <Home size={14} aria-hidden="true" />
+        <Home size={13} aria-hidden="true" />
         Przejdź do Dzisiaj
       </Link>
       <button type="button" className="app-route-state__button" onClick={() => window.history.back()}>
-        <ArrowLeft size={14} aria-hidden="true" />
+        <ArrowLeft size={13} aria-hidden="true" />
         Wróć
       </button>
     </RouteStateFrame>

@@ -90,7 +90,7 @@ export function CalculatorProfileFields({
             <h4>Aktywność fizyczna</h4>
             <p>Dodaj każdy typ treningu osobno. Wynik tygodnia zostanie przeliczony na średnią dzienną.</p>
           </div>
-          <Button type="button" variant="ghost" size="sm" leadingIcon={<Plus size={12} />} onClick={onAddActivity}>Dodaj aktywność</Button>
+          <Button type="button" variant="ghost" size="sm" leadingIcon={<Plus size={13} />} onClick={onAddActivity}>Dodaj aktywność</Button>
         </div>
         {draft.activities.length ? (
           <div className="nutrition-weekly-activities__list">
@@ -127,7 +127,7 @@ export function CalculatorProfileFields({
                   onChange={(event) => onChangeActivity(activity.id, "minutesPerSession", event.target.value)}
                 />
                 <Button type="button" variant="ghost" size="sm" iconOnly aria-label={`Usuń aktywność ${index + 1}`} onClick={() => onRemoveActivity(activity.id)}>
-                  <Trash2 size={12} />
+                  <Trash2 size={13} />
                 </Button>
               </div>
             ))}

@@ -130,6 +130,11 @@
 }
 
 .goal-detail-progress-track {
+  /* Runtime value, written as an inline style by CelSzczegoly. Declaring the default here
+     is how the rest of the app documents such a variable (see .work-detail-subtask), and it
+     is what tells stylelint the property exists rather than being a typo. */
+  --goal-detail-progress: 0;
+
   height: 8px;
   overflow: hidden;
   border-radius: var(--radius-pill);

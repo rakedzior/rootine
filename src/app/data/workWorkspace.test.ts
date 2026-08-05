@@ -22,7 +22,7 @@ describe("work workspace", () => {
         id: "company-a",
         name: "Acme",
         description: "",
-        color: "#4772FA",
+        color: "#7FA6C9",
       }],
       projects: [{
         id: "project-a",

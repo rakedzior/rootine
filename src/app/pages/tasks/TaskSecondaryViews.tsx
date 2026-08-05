@@ -194,7 +194,7 @@ export function HabitsWorkspace({
   return (
     <div className="task-habits-workspace task-habits-workspace--list">
       <form className="task-habits-add task-entry" aria-label="Dodaj nawyk" onSubmit={submit}>
-        <span className="task-entry__lead" aria-hidden="true"><Plus size={14} /></span>
+        <span className="task-entry__lead" aria-hidden="true"><Plus size={13} /></span>
         <input
           ref={inputRef}
           className="task-entry-input task-habits-add__name"
@@ -251,7 +251,7 @@ export function HabitsWorkspace({
                     }}
                     className={`task-checkbox ${doneToday || completingHabitId === habit.id ? "is-checked" : ""}`}
                   >
-                    {(doneToday || completingHabitId === habit.id) && <Check size={8} strokeWidth={2.5} />}
+                    {(doneToday || completingHabitId === habit.id) && <Check size={9} strokeWidth={2.5} />}
                   </button>
                 )}
                 title={habit.name}
@@ -846,7 +846,7 @@ export function HabitDetail({
             aria-expanded={actionsOpen}
             onClick={() => setActionsOpen((open) => !open)}
           >
-            <MoreHorizontal size={15} strokeWidth={1.5} />
+            <MoreHorizontal size={16} strokeWidth={1.5} />
           </Button>
           {actionsOpen && (
             <Menu
@@ -867,7 +867,7 @@ export function HabitDetail({
             </Menu>
           )}
         </div>
-        <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły nawyku" onClick={onClose}><X size={15} strokeWidth={1.5} /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły nawyku" onClick={onClose}><X size={16} strokeWidth={1.5} /></Button>
       </div>
 
       <div className="task-habit-detail__body">
@@ -904,7 +904,7 @@ export function HabitDetail({
                   onClick={() => onSetCompletion(habit.id, dateKey, state !== "completed")}
                 >
                   <span>{HABIT_WEEKDAYS[index].label}</span>
-                  <strong>{state === "completed" ? <Check size={12} strokeWidth={2.4} /> : new Date(`${dateKey}T12:00:00`).getDate()}</strong>
+                  <strong>{state === "completed" ? <Check size={13} strokeWidth={2.4} /> : new Date(`${dateKey}T12:00:00`).getDate()}</strong>
                 </button>
               );
             })}
@@ -922,7 +922,7 @@ export function HabitDetail({
               <strong id="habit-month-heading">Historia</strong>
               <small>{monthStats.completed}/{monthStats.scheduled} w tym miesiącu</small>
             </span>
-            <ChevronRight size={14} className={showHistory ? "is-expanded" : ""} aria-hidden="true" />
+            <ChevronRight size={13} className={showHistory ? "is-expanded" : ""} aria-hidden="true" />
           </button>
           {showHistory && <div className="task-habit-history">
             <div className="task-habit-month-nav">
@@ -966,7 +966,7 @@ export function HabitDetail({
               <strong id="habit-settings-heading">Ustawienia</strong>
               <small>{habitScheduleLabel(schedule)}{time ? ` · ${time}` : ""}{reminderMinutes !== undefined ? ` · przypomnienie ${reminderMinutes} min` : ""}</small>
             </span>
-            <ChevronRight size={14} className={showSettings ? "is-expanded" : ""} aria-hidden="true" />
+            <ChevronRight size={13} className={showSettings ? "is-expanded" : ""} aria-hidden="true" />
           </button>
           {showSettings && <div className="task-habit-settings-content">
           <HabitScheduleFields
@@ -997,7 +997,7 @@ export function HabitDetail({
         {activePause && (
           <div className="task-habit-detail__pause-banner">
             <span>Nawyk jest obecnie wstrzymany</span>
-            <Button variant="quiet" size="sm" leadingIcon={<Play size={12} />} onClick={resumeToday}>Wznów dziś</Button>
+            <Button variant="quiet" size="sm" leadingIcon={<Play size={13} />} onClick={resumeToday}>Wznów dziś</Button>
           </div>
         )}
 
@@ -1009,7 +1009,7 @@ export function HabitDetail({
           <div className="task-habit-pause-form">
             <div className="task-habit-pause-form__field"><span id="habit-pause-from">Od</span><DatePicker aria-labelledby="habit-pause-from" value={pauseStart} onChange={setPauseStart} /></div>
             <div className="task-habit-pause-form__field"><span id="habit-pause-to">Do</span><DatePicker aria-labelledby="habit-pause-to" min={pauseStart} value={pauseEnd} onChange={setPauseEnd} /></div>
-            <Button variant="quiet" size="sm" leadingIcon={activePause ? <Play size={12} /> : <Pause size={12} />} onClick={activePause ? resumeToday : savePause}>{activePause ? "Wznów dziś" : "Wstrzymaj"}</Button>
+            <Button variant="quiet" size="sm" leadingIcon={activePause ? <Play size={13} /> : <Pause size={13} />} onClick={activePause ? resumeToday : savePause}>{activePause ? "Wznów dziś" : "Wstrzymaj"}</Button>
           </div>
           {!activePause && (habit.pausePeriods ?? []).length > 0 && <p className="task-habit-detail__hint">Wcześniejsze przerwy: {(habit.pausePeriods ?? []).length}</p>}
         </section>}

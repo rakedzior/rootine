@@ -172,12 +172,11 @@ components:
     typography: "{typography.label}"
     rounded: "{rounded.pill}"
     padding: "4px 8px"
-  page-header:
+  content-header:
     backgroundColor: "{colors.graphite-canvas}"
     textColor: "{colors.chalk-white}"
-    typography: "{typography.title}"
-    padding: "0 28px"
-    height: "70px"
+    typography: "{typography.page-title}"
+    padding: "0 0 12px"
   section-header:
     textColor: "{colors.text-muted}"
     typography: "{typography.label}"
@@ -300,13 +299,15 @@ to dług — w audycie z 2026-08-04 było ich dwanaście wariantów dla pięciu 
 
 ## Layout
 
-Global `PageHeader` is not rendered on application routes. Each tab and subtab starts directly with its workspace; the current view, metadata, filters, and local actions belong to `ContentHeader`.
+There is no global page header on application routes, and no component for one: `PageHeader` was deleted in 2026-08. Each tab and subtab starts directly with its workspace; the current view, metadata, filters, and local actions belong to `ContentHeader`.
+
+`PageShell` and `ModuleShell` accept **no** `title`, `subtitle`, `leading`, `meta`, `actions` or `header` prop. They used to accept and silently discard them, which turned every stale call site into invisible content instead of a build error — that is how a back button, an entire route error message and nine write-failure indicators went missing at once. Do not reintroduce those props.
 
 Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Kontekstowy sidebar służy wyłącznie rosnącym kolekcjom i drzewom w Zadaniach, Pracy i Notatkach. Sport, Cele, Sprawy oraz Podróże używają zakładek i filtrów nad treścią.
 
-Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `PageHeader` pozostaje bez dużego tytułu, a `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
+Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie — jest jedynym nagłówkiem ekranu. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
-Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Każda trasa używa wspólnego `PageShell`, który renderuje titleless `PageHeader`, opcjonalny `PageToolbar` i wspólną oś treści. Ten sam komponent jest obowiązkowy dla nowych ekranów.
+Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Każda trasa używa wspólnego `PageShell`, który renderuje opcjonalny `PageToolbar` i wspólną oś treści — nic ponadto. Ten sam komponent jest obowiązkowy dla nowych ekranów.
 
 Układ jest przede wszystkim desktopowy i gęsty. Globalne warianty szerokości to `standard` 1280px, `wide` 1480px oraz `fluid` bez maksymalnej szerokości; cała kompozycja sidebar + treść jest centrowana względem faktycznego `MainContent`. Przy 1380px każdy `DetailPanel` przechodzi w warstwę nakładaną, przy 980px globalny sidebar zwęża się do ikon, a przy 760px zastępuje go dolna nawigacja z czterema priorytetowymi modułami i pozycją „Więcej”. „Więcej” udostępnia wszystkie obszary, ustawienia, profil oraz przywrócenie ukrytych modułów bez poziomego przewijania paska. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
 
@@ -320,11 +321,13 @@ System jest warstwowy i powściągliwy. Na poziomie spoczynkowym hierarchię two
 
 ### Shadow Vocabulary
 
-- **Card Rest** (`0 1px 2px rgba(0,0,0,0.12)`): minimalne odcięcie interaktywnej karty od tła.
-- **Selected Card** (`0 0 0 1px rgba(71,114,250,0.12), 0 12px 28px rgba(0,0,0,0.16)`): wybrana karta bez nadmiernego blasku.
-- **Floating Menu** (`0 8px 28px rgba(0,0,0,0.55)`): menu i select ponad treścią.
-- **Overlay Panel** (`0 12px 36px rgba(0,0,0,0.38)`): panel szczegółów lub duży popover.
-- **Primary Action** (`0 6px 18px rgba(71,114,250,0.22)`): opcjonalnie dla jednej głównej akcji na ekranie.
+Wartości są w `tokens.css` i zmieniają się razem z motywem; tutaj są tylko role.
+
+- **`--shadow-sm`**: minimalne odcięcie interaktywnej karty od tła.
+- **`--shadow-md`**: karta wybrana albo podniesiona.
+- **`--shadow-floating`**: menu, select i popover ponad treścią.
+- **`--shadow-modal`**: modal oraz panel szczegółów jako warstwa nakładana.
+- **`--shadow-control`**: opcjonalne podkreślenie jednej głównej akcji; jedyny cień barwiony akcentem.
 
 **The Lift Has a Job Rule.** Cień oznacza zmianę warstwy lub priorytetu interakcji. Zwykłe karty pozostają tonalne i obramowane.
 
@@ -335,6 +338,24 @@ Formy są miękko geometryczne, nie obłe. Drobne elementy kalendarza mogą uży
 Standardowe obramowanie ma 1px. Checkboxy mogą używać 1.5px dla czytelności przy małym rozmiarze. Dashed border jest dopuszczalny wyłącznie w pustych stanach lub kontrolkach „dodaj”.
 
 **The Radius Ladder Rule.** Promień rośnie wraz z wagą powierzchni: kontrolka → karta → modal. Nie należy losowo mieszać 6, 8, 9, 10 i 12px dla elementów tej samej klasy.
+
+### Skala ikon
+
+Sześć kroków. Wcześniej w kodzie było osiemnaście wartości od 7 do 38px, w tym pięć różniących
+się o jeden piksel w tej samej roli — to nie jest hierarchia, tylko szum.
+
+| Krok | Rola |
+|---|---|
+| **9px** | znacznik wewnątrz checkboxa; jedyny rozmiar poniżej skali i jedyny z cięższą kreską |
+| **11px** | metadana gęsta, ikona przy liczniku lub tagu |
+| **13px** | domyślna ikona inline: przyciski, pozycje `Menu`, `ContextNavItem` |
+| **16px** | globalna nawigacja, dialogi i akcje o większej wadze |
+| **18px** | nagłówek sekcji i ikona wiodąca modułu |
+| **22px** | stan pusty oraz stan błędu trasy |
+
+**The Icon Step Rule.** Nowa ikona wybiera krok ze skali. Jeśli wygląda o piksel za duża,
+problem jest w otoczeniu — w odstępie albo wadze tekstu — a nie w brakującym kroku pośrednim.
+Jedynym dopuszczonym wyjątkiem jest pojedyncza ikona-bohater w pełnoekranowym stanie pustym.
 
 ## Components
 
@@ -411,14 +432,15 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 - **State:** kolor tekstu i lekkie tło wynikają z semantyki; kropka 6–8px może wzmacniać identyfikację.
 - **Copy:** jedno lub dwa krótkie słowa, bez zdań.
 
-### PageHeader
+### ContentHeader
 
-This remains a compatibility contract only. `PageShell` intentionally ignores the legacy header slot, so the removed top bar cannot reappear on existing routes. Screen-level status and actions stay in `ContentHeader` or the content area.
+Jedyny nagłówek ekranu. Nazywa bieżący widok i skupia wszystko, co go dotyczy: metadane, status, filtry i akcje lokalne. Komponent `PageHeader` nie istnieje — został usunięty w 2026-08 razem z globalnym paskiem.
 
-- **Style:** wysokość 70px, padding poziomy 28px i dolna Linia subtelna.
-- **Content:** bez dużego tytułu; po lewej może pozostać krótki opis lub metadane, po prawej 1–3 akcje.
-- **Hierarchy:** nazwa bieżącego widoku pozostaje w kompaktowym `ContentHeader`, a `typography.headline` nie jest używana do tytułów stron.
-- **Contract:** `PageHeader` porządkuje akcje globalne i informacje pomocnicze; `ContentHeader` nazywa podwidok oraz jego filtry.
+- **Slots:** `leading` (nawigacja wsteczna na trasach szczegółu), `title`, `description`, `meta`, `actions`, `controls`, `below` oraz `mobileNavigation` na Select podwidoku.
+- **Hierarchy:** `headingLevel` przyjmuje `2 | 3 | false`; główny nagłówek trasy używa `false` i renderuje `role="presentation"`, więc struktura nagłówków zaczyna się od `<h2>` sekcji. `typography.headline` nie jest używana do tytułów stron.
+- **Meta:** miejsce na status ekranu — badge zamknięcia dnia, ostrzeżenie o nieudanym zapisie lokalnym, licznik pozycji. Wiersz meta może zawijać.
+- **Actions:** jedna akcja główna w bieżącym kontekście, reszta `quiet` lub `ghost`; nadmiar chowa się do `Menu`.
+- **Contract:** rama wewnętrzna `ContentHeader` jest identyczna z ramą treści, więc nagłówek i treść stoją na jednej osi.
 
 ### ModuleShell
 
@@ -467,10 +489,10 @@ Nowa zakładka nie definiuje własnego obiektu palety ani lokalnego odpowiednika
 
 - Zadania i Kalendarz korzystają z jednego rekordu zadania. Nadanie terminu tworzy `calendarDate`, usunięcie terminu usuwa rekord z Kalendarza bez usuwania zadania, a przesunięcie w Kalendarzu aktualizuje jego widok w Zadaniach.
 - Dane odczytywane z `localStorage` muszą przejść walidację minimalnego kształtu. Uszkodzony lub niezgodny zapis wraca do bezpiecznego stanu demonstracyjnego zamiast blokować moduł.
-- Błąd zapisu lokalnego jest komunikowany przez `Badge tone="danger"` w `PageHeader`.
+- Błąd zapisu lokalnego jest komunikowany przez `Badge tone="danger"` w slocie `meta` komponentu `ContentHeader` — w module, w którym użytkownik pracuje, a nie tylko globalnym toastem.
 - Główne moduły są ładowane jako osobne fragmenty tras; wspólny shell i tokeny pozostają w paczce bazowej.
 
-`text-muted` ma wartość `#969696`, ponieważ tekst pomocniczy 9–11px musi zachować co najmniej kontrast 4.5:1 także na powierzchni karty `#2E2E2E`. `text-disabled` pozostaje przeznaczony wyłącznie dla faktycznie nieaktywnych kontrolek.
+`text-muted` jest jaśniejszy od pozostałych szarości, ponieważ tekst pomocniczy 10–11px musi zachować co najmniej kontrast 4.5:1 także na powierzchni karty (`graphite-card`). Wartości są w normatywnym frontmatterze i nie powtarzamy ich tutaj. `text-disabled` pozostaje przeznaczony wyłącznie dla faktycznie nieaktywnych kontrolek.
 
 Precyzyjny błękit ma trzy role kontrastowe: `precision-blue` pozostaje sygnałem marki i fokusu, `precision-blue-text` służy małemu tekstowi na graficie, a `precision-blue-strong` jest powierzchnią przycisku pod jasnym tekstem. Nie należy zamieniać tych ról miejscami.
 
@@ -478,7 +500,7 @@ Precyzyjny błękit ma trzy role kontrastowe: `precision-blue` pozostaje sygnał
 
 ### Do:
 
-- **Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Select, Menu, Modal, Tabs, Badge, PageHeader, ContentHeader, SectionHeader, EmptyState, ModuleShell, ContextSidebar oraz DetailPanel.
+- **Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Select, Menu, Modal, Tabs, Badge, ContentHeader, SectionHeader, EmptyState, ModuleShell, ModuleSidebar oraz DetailPanel.
 - **Do** używaj różnic tonu grafitu i obramowań jako podstawowego mechanizmu grupowania.
 - **Do** rezerwuj Precyzyjny błękit dla aktywnego wyboru, focusu i głównej akcji.
 - **Do** używaj DM Mono dla czasu, dat, wartości, liczników i procentów.

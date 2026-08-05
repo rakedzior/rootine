@@ -143,7 +143,7 @@ export function WorkCompanyActionsMenu({ companyId, companyName, onEdit, onArchi
         title="Więcej akcji"
         onClick={() => open ? close() : setOpen(true)}
       >
-        <MoreHorizontal size={14} aria-hidden="true" />
+        <MoreHorizontal size={13} aria-hidden="true" />
       </MenuTrigger>
       {open && position && createPortal(
         <Menu id={menuId} className="work-project-actions-menu__panel" style={position} triggerRef={triggerRef} onDismiss={close} initialFocus="first">
@@ -176,7 +176,7 @@ export function WorkProjectActionsMenu({ projectId, projectName, onEdit, onOpenD
         title="Więcej akcji"
         onClick={() => open ? close() : setOpen(true)}
       >
-        <MoreHorizontal size={14} aria-hidden="true" />
+        <MoreHorizontal size={13} aria-hidden="true" />
       </MenuTrigger>
       {open && position && createPortal(
         <Menu id={menuId} className="work-project-actions-menu__panel" style={position} triggerRef={triggerRef} onDismiss={close} initialFocus="first">

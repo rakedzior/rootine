@@ -475,12 +475,22 @@ dziedziczy tę samą nazwę.
 
 ### Otwarte findings hooka impeccable
 
-- `src/styles/sport.css` L1930/L1949 — `border-radius: 2px` poza skalą. Należy do paczki 12
-  (powierzchnie, promienie, badge), nie do paczki funkcjonalnej.
-- **`.impeccable/design.json` jest starszy niż `DESIGN.md`.** Hook pracuje na nieaktualnej
-  migawce palety, więc część jego zgłoszeń może dotyczyć wartości już udokumentowanych
-  (dotyczy to również nowej sekcji Print). Przed paczkami 09–12 trzeba odświeżyć sidecar
-  (`/impeccable document`), inaczej jego wyniki nie są wiarygodne.
+- ~~`src/styles/sport.css` L1930/L1949 `border-radius: 2px`~~ — już nie występuje.
+- ~~**`.impeccable/design.json` starszy niż `DESIGN.md`**~~ — **odświeżony 2026-08-05.**
+  Podejrzenie się potwierdziło i było gorsze, niż zakładano: sidecar niósł **całą starą
+  paletę** (`#4772FA` zamiast `#657FCE`, `#2E2E2E` zamiast `#20242A`), 21 kolorów zamiast 31,
+  5 ról typografii zamiast 13, sześć wymyślonych breakpointów zamiast czterech oficjalnych
+  i komponent `PageHeader`, którego już nie ma.
+
+  Po odświeżeniu detektor od razu pokazał **19 zgłoszeń, które stara migawka maskowała**:
+  literały starej palety w danych demo (`taskWorkspace.ts`, `goalsModel.ts`) i w testach.
+  Naprawione — listy i tagi dostały kolory `category-*`, a nie semantyczne, bo błękit jest
+  sygnałem akcji, a ochra i zieleń znaczą ostrzeżenie i sukces. Do funkcji migrujących
+  zapisany stan dopisano `#9B8CE8 → #7D7FA8`, żeby istniejące dane użytkownika nie spadły
+  po cichu na kolor domyślny.
+
+  Komponenty w sidecarze odwołują się teraz do `var(--color-*)` zamiast do zapisanych na
+  sztywno hexów — dziedziczą przez shadow DOM, więc następna zmiana palety ich nie zdezaktualizuje.
 
 ---
 
@@ -849,13 +859,18 @@ Wszystkie przez `hook-admin.mjs`, każdy z uzasadnieniem, wszystkie odwracalne:
   jej do osobnej trasy to zmiana nawigacji, a nie porządkowanie ramy — wymaga decyzji.
 - **`.ui-ambient-work::before`** — hook zgłasza dekoracyjną siatkę; to motyw ambientowy modułu
   (patrz tabela rozstrzygnięć wyżej). Czeka na potwierdzenie przed zapisaniem wyjątku.
-- **Rozmiary ikon** — nadal 12 wartości (10–18 px). Grubość kreski ujednolicona, ale samo
-  zbicie rozmiarów do 3–4 kroków to setki edycji `size={n}` w TSX przy niewielkim zysku
-  wizualnym (różnice 1 px). Świadomie odłożone.
-- **Formaty liczników** — nadal kilka wariantów („8 obszarów", „19 otwartych", „2 w widoku").
-  Kosmetyka P3; nie blokuje niczego.
-- **5 padających testów e2e** — stan zastany sprzed prac, potwierdzony na `git stash`.
-  Dotyczą zachowania (double-click, focus po Escape, obsługa błędów), nie wyglądu.
-  Wymagają własnego triage'u.
+- ~~**Rozmiary ikon**~~ — **zrobione 2026-08-05.** Pomiar wykazał nie 12, a **18 wartości
+  od 7 do 38 px** (668 wystąpień). Zbite do sześciu kroków **9 / 11 / 13 / 16 / 18 / 22**
+  plus jedna ikona-bohater 38 px. Skala zachowuje 13 px, które DESIGN.md dokumentuje dla
+  `ContextNavItem` i `Menu`, oraz 9 px dla znaczników w checkboxach (mają własną, cięższą
+  kreskę). Zapisana w DESIGN.md jako **The Icon Step Rule**.
+- ~~**Formaty liczników**~~ — **zrobione 2026-08-05.** Prawdziwym problemem nie było
+  brzmienie, tylko **cztery ręcznie pisane implementacje polskiej liczby mnogiej** obok
+  kanonicznego `pluralize` z `Intl.PluralRules`. Jedna z nich (`completedTaskLabel`) była
+  błędna: dla 21 dawała „21 ukończone" zamiast „21 ukończonych". Wszystkie przepięte na
+  `pluralForm` / `pluralize` z `formatters.ts`.
+- ~~**5 padających testów e2e**~~ — **zrobione 2026-08-05**, patrz
+  `AUDIT-2026-08-05-FAILING-E2E.md`. Trzy z pięciu były jedną regresją: `PageShell`
+  przyjmował i po cichu wyrzucał propsy nagłówka.
 - **Wszystkie Q-OPEN rozstrzygnięte** — patrz tabela decyzji wyżej.
   grup w Pracy, kolorowy pasek kart Notatek. Wszystkie wymagają decyzji produktowej.

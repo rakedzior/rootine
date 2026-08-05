@@ -881,7 +881,7 @@ export default function Kalendarz() {
             <div className="px-2 mb-2">
               <div className="flex items-center justify-between px-1.5 mb-1.5">
                 <button type="button" className="task-nav__group-toggle" aria-expanded={listyOpen} onClick={() => setListyOpen((open) => { const next = !open; saveTaskSidebarState({ listyOpen: next }); return next; })}>
-                  <ChevronRight size={10} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
+                  <ChevronRight size={11} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
                   <span className="task-nav__group-label">Listy</span>
                 </button>
               </div>
@@ -911,7 +911,7 @@ export default function Kalendarz() {
             <div className="px-2 mb-2">
               <div className="flex items-center justify-between px-1.5 mb-1.5">
                 <button type="button" className="task-nav__group-toggle" aria-expanded={tagiOpen} onClick={() => setTagiOpen((open) => { const next = !open; saveTaskSidebarState({ tagiOpen: next }); return next; })}>
-                  <ChevronRight size={10} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
+                  <ChevronRight size={11} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
                   <span className="task-nav__group-label">Tagi</span>
                 </button>
               </div>
@@ -973,9 +973,9 @@ export default function Kalendarz() {
             </Button>
           )}
           <div className="calendar-period-controls flex items-center gap-1">
-            <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={15} strokeWidth={1.5} /></Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={16} strokeWidth={1.5} /></Button>
             <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
-            <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={15} strokeWidth={1.5} /></Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={16} strokeWidth={1.5} /></Button>
           </div>
           <div className="task-toolbar-actions">
             <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
@@ -996,7 +996,7 @@ export default function Kalendarz() {
                 );
               })}
             </div>
-            <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={15} strokeWidth={1.5} /></Button>
+            <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={16} strokeWidth={1.5} /></Button>
             <div className="ui-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
                 variant="ghost"
@@ -1007,7 +1007,7 @@ export default function Kalendarz() {
                 title="Lista"
                 onClick={() => switchTasksViewMode("list")}
               >
-                <List size={14} strokeWidth={1.7} />
+                <List size={13} strokeWidth={1.7} />
               </Button>
               <Button
                 variant="quiet"
@@ -1017,10 +1017,10 @@ export default function Kalendarz() {
                 aria-pressed="true"
                 title="Kalendarz"
               >
-                <CalendarDays size={14} strokeWidth={1.7} />
+                <CalendarDays size={13} strokeWidth={1.7} />
               </Button>
             </div>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={13} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>
           </div>
           </>}
         />
@@ -1300,7 +1300,7 @@ export default function Kalendarz() {
               aria-label="Zamknij szczegóły"
               onClick={() => closeTaskDetail()}
             >
-              <X size={14} />
+              <X size={13} />
             </Button>
           </header>
           <div className="calendar-source-detail__body">

@@ -264,7 +264,7 @@ function ExercisePlanPanel({
           <h2>{session.title}</h2>
         </div>
         <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij plan treningu" onClick={onClose}>
-          <X size={14} />
+          <X size={13} />
         </Button>
       </header>
       <div className="sport-active-plan__list">
@@ -297,7 +297,7 @@ function ExercisePlanPanel({
         />
         <Button
           variant="quiet"
-          leadingIcon={<Plus size={12} />}
+          leadingIcon={<Plus size={13} />}
           disabled={!exerciseId}
           onClick={() => {
             const exercise = library.find((item) => item.id === exerciseId);
@@ -456,7 +456,7 @@ function StrengthSession({
   if (!currentExercise || !currentSet) {
     return (
       <main className="sport-active-session__empty">
-        <ListChecks size={26} aria-hidden="true" />
+        <ListChecks size={22} aria-hidden="true" />
         <h2>Ta sesja nie ma jeszcze ćwiczeń</h2>
         <p>Wybierz pierwsze ćwiczenie i zacznij rejestrować serie.</p>
         <div className="sport-active-session__empty-actions">
@@ -502,7 +502,7 @@ function StrengthSession({
               <h2>{currentExercise.name}</h2>
               <p>Seria {setIndex + 1} z {currentExercise.sets.length}</p>
             </div>
-            <Button variant="quiet" size="sm" leadingIcon={<RefreshCw size={12} />} onClick={() => setSwapOpen(true)}>
+            <Button variant="quiet" size="sm" leadingIcon={<RefreshCw size={13} />} onClick={() => setSwapOpen(true)}>
               Zamień ćwiczenie
             </Button>
           </div>
@@ -538,7 +538,7 @@ function StrengthSession({
             <Button
               variant={currentSet.done ? "quiet" : "primary"}
               fullWidth
-              leadingIcon={currentSet.done ? <Check size={14} /> : undefined}
+              leadingIcon={currentSet.done ? <Check size={13} /> : undefined}
               onClick={completeSet}
             >
               {currentSet.done ? "Seria wykonana — cofnij" : "Zakończ serię"}
@@ -546,13 +546,13 @@ function StrengthSession({
           </section>
 
           <div className="sport-set-navigation">
-            <Button variant="ghost" size="sm" leadingIcon={<ChevronLeft size={12} />} disabled={exerciseIndex === 0 && setIndex === 0} onClick={goToPreviousSet}>
+            <Button variant="ghost" size="sm" leadingIcon={<ChevronLeft size={13} />} disabled={exerciseIndex === 0 && setIndex === 0} onClick={goToPreviousSet}>
               Poprzednia seria
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              trailingIcon={<ChevronRight size={12} />}
+              trailingIcon={<ChevronRight size={13} />}
               disabled={exerciseIndex === session.exercises.length - 1 && setIndex === currentExercise.sets.length - 1}
               onClick={goToNextSet}
             >

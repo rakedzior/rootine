@@ -768,7 +768,7 @@ export default function Notatki() {
               aria-controls="notes-lists-panel"
               onClick={() => setListsExpanded((current) => !current)}
             >
-              <ChevronDown size={12} aria-hidden="true" />
+              <ChevronDown size={13} aria-hidden="true" />
               <span className="notes-sidebar__label">Listy</span>
               <span className="notes-sidebar__group-count">{workspace.lists.length}</span>
             </button>
@@ -779,7 +779,7 @@ export default function Notatki() {
               title="Utwórz listę"
               onClick={() => openListEditor()}
             >
-              <Plus size={12} />
+              <Plus size={13} />
             </button>
           </div>
           {listsExpanded && (
@@ -828,7 +828,7 @@ export default function Notatki() {
                 aria-controls="notes-tags-panel"
                 onClick={() => setTagsExpanded((current) => !current)}
               >
-                <ChevronDown size={12} aria-hidden="true" />
+                <ChevronDown size={13} aria-hidden="true" />
                 <span className="notes-sidebar__label">Tagi</span>
                 <span className="notes-sidebar__group-count">{tagCounts.length}</span>
               </button>
@@ -914,7 +914,7 @@ export default function Notatki() {
               title={note.pinned ? "Odepnij" : "Przypnij"}
               onClick={() => togglePinned(note)}
             >
-              {note.pinned ? <PinOff size={12} /> : <Pin size={12} />}
+              {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
             </Button>
             <Button
               variant="ghost"
@@ -924,7 +924,7 @@ export default function Notatki() {
               title={note.archived ? "Przywróć" : "Archiwizuj"}
               onClick={() => toggleArchived(note)}
             >
-              {note.archived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+              {note.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
             </Button>
             <Button
               variant="ghost"
@@ -934,7 +934,7 @@ export default function Notatki() {
               title="Usuń"
               onClick={() => setDeleteState(note)}
             >
-              <Trash2 size={12} />
+              <Trash2 size={13} />
             </Button>
           </div>
         </header>
@@ -1048,7 +1048,7 @@ export default function Notatki() {
               </>
             )}
             <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij edytor" onClick={closeEditor}>
-              <X size={14} />
+              <X size={13} />
             </Button>
           </div>
         </header>
@@ -1107,7 +1107,7 @@ export default function Notatki() {
               variant="ghost"
               size="sm"
               className="notes-editor__bullet-action"
-              leadingIcon={<ListChecks size={12} />}
+              leadingIcon={<ListChecks size={13} />}
               onClick={() => setDraft((current) => ({
                 ...current,
                 body: `${current.body}${current.body && !current.body.endsWith("\n") ? "\n" : ""}• `,
@@ -1136,7 +1136,7 @@ export default function Notatki() {
                         items: current.items.map((candidate) => candidate.id === item.id ? { ...candidate, checked: !candidate.checked } : candidate),
                       }))}
                     >
-                      {item.checked && <Check size={10} />}
+                      {item.checked && <Check size={11} />}
                     </button>
                     <input
                       value={item.text}
@@ -1154,12 +1154,12 @@ export default function Notatki() {
                       aria-label={`Usuń punkt ${index + 1}`}
                       onClick={() => setDraft((current) => ({ ...current, items: current.items.filter((candidate) => candidate.id !== item.id) }))}
                     >
-                      <X size={12} />
+                      <X size={13} />
                     </Button>
                   </div>
                 ))}
               </div>
-              <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={addDraftItem}>Dodaj punkt</Button>
+              <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={addDraftItem}>Dodaj punkt</Button>
             </section>
           )}
 
@@ -1225,7 +1225,7 @@ export default function Notatki() {
 
         <footer className="notes-editor__footer">
           {editor.mode === "edit" && selectedNote ? (
-            <Button variant="danger" size="sm" leadingIcon={<Trash2 size={12} />} onClick={() => setDeleteState(selectedNote)}>
+            <Button variant="danger" size="sm" leadingIcon={<Trash2 size={13} />} onClick={() => setDeleteState(selectedNote)}>
               Usuń
             </Button>
           ) : <span />}
@@ -1279,7 +1279,7 @@ export default function Notatki() {
             <input value={search} placeholder="Szukaj w notatkach" onChange={(event) => setSearch(event.target.value)} />
             {search && (
               <button type="button" aria-label="Wyczyść wyszukiwanie" onClick={() => setSearch("")}>
-                <X size={12} />
+                <X size={13} />
               </button>
             )}
           </label>
@@ -1296,14 +1296,14 @@ export default function Notatki() {
           />
           <div className="ui-view-switch" aria-label="Sposób wyświetlania notatek">
             <Button variant="ghost" size="sm" iconOnly aria-label="Widok listy" aria-pressed={layout === "list"} onClick={() => setLayout("list")}>
-              <Rows3 size={14} />
+              <Rows3 size={13} />
             </Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Widok kart" aria-pressed={layout === "cards"} onClick={() => setLayout("cards")}>
-              <LayoutGrid size={14} />
+              <LayoutGrid size={13} />
             </Button>
           </div>
           {view.startsWith("list:") && (
-            <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openNewNote()}>
+            <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
               Dodaj do listy
             </Button>
           )}

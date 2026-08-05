@@ -120,14 +120,14 @@ export function TemplateLibrary({
         title="Szablony treningów"
         description={`${templates.length} zapisanych jednostek · wybierz szablon, aby go edytować albo dodać do planu.`}
         action={(
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreate}>
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={onCreate}>
             Dodaj szablon
           </Button>
         )}
       />
       <div className="sport-template-tools" aria-label="Filtry szablonów">
         <div className="sport-template-search">
-          <Search size={14} aria-hidden="true" />
+          <Search size={13} aria-hidden="true" />
           <Input
             aria-label="Szukaj szablonu"
             type="search"
@@ -501,7 +501,7 @@ function WeekBoard({
                     aria-label={`Dodaj trening: ${day.full}`}
                     onClick={() => onAdd(activeWeek, dayIndex)}
                   >
-                    <Plus size={12} aria-hidden="true" />
+                    <Plus size={13} aria-hidden="true" />
                     {!dayWorkouts.length && <span>Dodaj trening</span>}
                   </button>
                 </div>
@@ -603,7 +603,7 @@ export function CyclePlanner({
     <div className="sport-planner-section">
       <div className="sport-cycle-summary">
         <div className="sport-cycle-summary__identity">
-          <CalendarRange size={17} strokeWidth={1.5} />
+          <CalendarRange size={16} strokeWidth={1.5} />
           <div>
             <div className="sport-cycle-summary__title">
               <h2>{cycle.name}</h2>
@@ -619,7 +619,7 @@ export function CyclePlanner({
         </div>
         <div className="sport-cycle-summary__actions">
           <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia planu</Button>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => onAddWorkout(activeWeek, 0)}>
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => onAddWorkout(activeWeek, 0)}>
             Dodaj trening
           </Button>
           {isDirty && (
@@ -627,7 +627,7 @@ export function CyclePlanner({
               <Button variant="ghost" size="sm" onClick={onDiscardChanges}>
                 Odrzuć zmiany
               </Button>
-              <Button variant="primary" size="sm" leadingIcon={<Save size={12} />} onClick={onSaveCycle}>
+              <Button variant="primary" size="sm" leadingIcon={<Save size={13} />} onClick={onSaveCycle}>
                 Zapisz plan
               </Button>
             </div>
@@ -730,14 +730,14 @@ function CyclePlannerLayout({
       <aside className="sport-cycle-sidebar" aria-label="Zarządzanie planem treningowym">
         <div className="sport-cycle-sidebar__heading">
           <h2>Twoje plany</h2>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={onCreateNewCycle}>Dodaj plan</Button>
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={onCreateNewCycle}>Dodaj plan</Button>
         </div>
         <section className="sport-cycle-sidebar__section sport-cycle-sidebar__active">
           <div className="sport-cycle-sidebar__section-heading">
             <div>
               <h3>Aktywny plan</h3>
               <div className="sport-cycle-plan-card__title-row">
-                <CalendarRange size={15} strokeWidth={1.5} aria-hidden="true" />
+                <CalendarRange size={16} strokeWidth={1.5} aria-hidden="true" />
                 <h2>{cycle.name}</h2>
                 {isDirty && <Badge tone="warning">Niezapisane zmiany</Badge>}
               </div>
@@ -754,13 +754,13 @@ function CyclePlannerLayout({
           </div>
           <div className="sport-cycle-sidebar__actions">
             <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia planu</Button>
-            <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => onAddWorkout(activeWeek, 0)}>
+            <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => onAddWorkout(activeWeek, 0)}>
               Dodaj trening
             </Button>
             {isDirty && (
               <div className="sport-cycle-summary__commit">
                 <Button variant="ghost" size="sm" onClick={onDiscardChanges}>Odrzuć zmiany</Button>
-                <Button variant="primary" size="sm" leadingIcon={<Save size={12} />} onClick={onSaveCycle}>Zapisz plan</Button>
+                <Button variant="primary" size="sm" leadingIcon={<Save size={13} />} onClick={onSaveCycle}>Zapisz plan</Button>
               </div>
             )}
           </div>
@@ -822,7 +822,7 @@ function CyclePlannerLayout({
           {activeWeek === todayCycleWeek(cycle) && <Badge tone="neutral">Obecny tydzień</Badge>}
           <div className="sport-cycle-workspace__actions">
             {copySourceWeek === null ? (
-              <Button variant="ghost" size="sm" leadingIcon={<Copy size={12} />} onClick={() => setCopySourceWeek(activeWeek)}>
+              <Button variant="ghost" size="sm" leadingIcon={<Copy size={13} />} onClick={() => setCopySourceWeek(activeWeek)}>
                 Kopiuj tydzień
               </Button>
             ) : (
@@ -1289,7 +1289,7 @@ export function WorkoutDialog({
       footer={(
         <>
           {onDelete && (
-            <Button variant="danger" size="sm" style={{ marginRight: "auto" }} leadingIcon={<Trash2 size={12} />} onClick={onDelete}>
+            <Button variant="danger" size="sm" style={{ marginRight: "auto" }} leadingIcon={<Trash2 size={13} />} onClick={onDelete}>
               Usuń trening
             </Button>
           )}

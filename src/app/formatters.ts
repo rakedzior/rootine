@@ -142,9 +142,16 @@ export function formatCalories(value: number): string {
   return formatted === EMPTY_VALUE ? formatted : `${formatted}\u00a0kcal`;
 }
 
-export function pluralize(count: number, forms: PolishPluralForms): string;
-export function pluralize(count: number, one: string, few: string, many: string): string;
-export function pluralize(
+/**
+ * The correct Polish form of a word for a count, without the number itself.
+ *
+ * `Intl.PluralRules` is the single source of the one/few/many decision. Modules used to
+ * hand-roll it from `count % 10` and `count % 100`; four copies had drifted, and one of them
+ * returned the "few" form for 21 ("21 ukończone" instead of "21 ukończonych").
+ */
+export function pluralForm(count: number, forms: PolishPluralForms): string;
+export function pluralForm(count: number, one: string, few: string, many: string): string;
+export function pluralForm(
   count: number,
   formsOrOne: PolishPluralForms | string,
   few?: string,
@@ -154,6 +161,19 @@ export function pluralize(
     ? [formsOrOne, few ?? formsOrOne, many ?? few ?? formsOrOne]
     : formsOrOne;
   const category = Number.isFinite(count) ? pluralRules.select(count) : "many";
-  const form = category === "one" ? forms[0] : category === "few" ? forms[1] : forms[2];
+  return category === "one" ? forms[0] : category === "few" ? forms[1] : forms[2];
+}
+
+export function pluralize(count: number, forms: PolishPluralForms): string;
+export function pluralize(count: number, one: string, few: string, many: string): string;
+export function pluralize(
+  count: number,
+  formsOrOne: PolishPluralForms | string,
+  few?: string,
+  many?: string,
+): string {
+  const form = typeof formsOrOne === "string"
+    ? pluralForm(count, formsOrOne, few ?? formsOrOne, many ?? few ?? formsOrOne)
+    : pluralForm(count, formsOrOne);
   return `${formatDecimal(count, 0, 3)} ${form}`;
 }

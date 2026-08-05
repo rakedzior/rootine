@@ -25,6 +25,7 @@ import {
   type WorkspaceTag,
   type WorkspaceTask,
 } from "../../data/taskWorkspace";
+import { pluralize } from "../../formatters";
 import { uiColors, uiShadows } from "../../ui";
 
 export const C = {
@@ -116,12 +117,7 @@ export const PALETTE = [
 export const VISIBLE_TAG_LIMIT = 4;
 
 export function formatOpenTaskCount(count: number) {
-  const lastTwo = count % 100;
-  const last = count % 10;
-  const adjective = count === 1 || (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14))
-    ? "otwarte"
-    : "otwartych";
-  return `${count} ${adjective}`;
+  return pluralize(count, "otwarte", "otwarte", "otwartych");
 }
 
 export type TaskSidebarState = {

@@ -79,7 +79,7 @@ function TimePicker({
           aria-label={`Wyczyść: ${label.toLocaleLowerCase("pl-PL")}`}
           onClick={() => onChange("")}
         >
-          <X size={12} strokeWidth={1.75} aria-hidden="true" />
+          <X size={13} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
     </div>
@@ -347,7 +347,7 @@ export function DatePickerPopup({
                   onClick={() => setSelDate(new Date(qd))}
                   className={`task-sched__quick-btn${active ? " is-active" : ""}`}
                 >
-                  <Icon size={15} strokeWidth={1.5} />
+                  <Icon size={16} strokeWidth={1.5} />
                   <span>{label}</span>
                 </button>
               );

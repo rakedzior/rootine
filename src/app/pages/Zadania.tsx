@@ -846,7 +846,7 @@ export default function Zadania() {
           <div className="flex items-center justify-between px-1.5 mb-1.5">
             <button onClick={() => setListyOpen(v => !v)}
               className="task-nav__group-toggle">
-              <ChevronRight size={10} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
+              <ChevronRight size={11} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
               <span className="task-nav__group-label">Listy</span>
             </button>
             {listyOpen && (
@@ -960,7 +960,7 @@ export default function Zadania() {
           <div className="flex items-center justify-between px-1.5 mb-1.5">
             <button onClick={() => setTagiOpen(v => !v)}
               className="task-nav__group-toggle">
-              <ChevronRight size={10} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
+              <ChevronRight size={11} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
               <span className="task-nav__group-label">Tagi</span>
             </button>
             {tagiOpen && (
@@ -1223,7 +1223,7 @@ export default function Zadania() {
                   title="Lista"
                   onClick={() => switchTasksViewMode("list")}
                 >
-                  <List size={14} strokeWidth={1.7} />
+                  <List size={13} strokeWidth={1.7} />
                 </Button>
                 <Button
                   variant="ghost"
@@ -1234,16 +1234,16 @@ export default function Zadania() {
                   title="Kalendarz"
                   onClick={() => switchTasksViewMode("calendar")}
                 >
-                  <Calendar size={14} strokeWidth={1.7} />
+                  <Calendar size={13} strokeWidth={1.7} />
                 </Button>
               </div>
             )}
             {taskView === "kosz" && visible.length > 0 ? (
-              <Button variant="danger" leadingIcon={<Trash2 size={14} />} onClick={() => setEmptyTrashOpen(true)}>
+              <Button variant="danger" leadingIcon={<Trash2 size={13} />} onClick={() => setEmptyTrashOpen(true)}>
                 Opróżnij kosz
               </Button>
             ) : (
-              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
+              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={13} />} onClick={startNewTask}>
                 <span className="header-action-label">Dodaj zadanie</span>
               </Button>
             )}
@@ -1318,7 +1318,7 @@ export default function Zadania() {
                       aria-label={`Usuń tag #${td?.label ?? tagId} z nowego zadania`}
                       onClick={() => setNewTaskTags(p => p.filter(id => id !== tagId))}
                     >
-                      <X size={8} strokeWidth={2.5} />
+                      <X size={9} strokeWidth={2.5} />
                     </button>
                   </span>
                 );
@@ -1351,7 +1351,7 @@ export default function Zadania() {
                     color: flagColor ?? C.textMuted,
                     border: `1px solid ${flagColor ? flagColor + "40" : "transparent"}`,
                   }}>
-                  <Flag size={12} strokeWidth={1.5} fill={flagColor ?? "none"} />
+                  <Flag size={13} strokeWidth={1.5} fill={flagColor ?? "none"} />
                 </button>
 
                 {/* List */}
@@ -1368,7 +1368,7 @@ export default function Zadania() {
                     color: newTaskList ? listy.find(l => l.id === newTaskList)?.color : C.textMuted,
                     border: `1px solid ${newTaskList ? (listy.find(l => l.id === newTaskList)?.color ?? C.iceBlue) + "40" : "transparent"}`,
                   }}>
-                  <List size={12} strokeWidth={1.5} />
+                  <List size={13} strokeWidth={1.5} />
                 </button>
 
                 {/* Hash — tags */}
@@ -1385,7 +1385,7 @@ export default function Zadania() {
                     color: newTaskTags.length > 0 ? C.iceBlue : C.textMuted,
                     border: `1px solid ${newTaskTags.length > 0 ? C.blueBorder : "transparent"}`,
                   }}>
-                  <Hash size={12} strokeWidth={1.5} />
+                  <Hash size={13} strokeWidth={1.5} />
                 </button>
 
                 {/* Date */}
@@ -1401,7 +1401,7 @@ export default function Zadania() {
                     color: dateLabel ? C.iceBlue : C.textMuted,
                     border: `1px solid ${dateLabel ? C.blueBorder : "transparent"}`,
                   }}>
-                  <Calendar size={12} strokeWidth={1.5} />
+                  <Calendar size={13} strokeWidth={1.5} />
                   {dateLabel && (
                     <span style={{ fontSize: "11px", fontWeight: 500 }}>{dateLabel}</span>
                   )}
@@ -1442,7 +1442,7 @@ export default function Zadania() {
                   <Button
                     variant="quiet"
                     size="sm"
-                    leadingIcon={<RotateCcw size={12} />}
+                    leadingIcon={<RotateCcw size={13} />}
                     onClick={() => restoreTaskFromTrash(t.id)}
                   >
                     Przywróć
@@ -1454,7 +1454,7 @@ export default function Zadania() {
                     aria-label={`Usuń trwale zadanie ${t.text}`}
                     onClick={() => setPurgeTaskId(t.id)}
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={13} />
                   </Button>
                 </div>
               ))}
@@ -1511,7 +1511,7 @@ export default function Zadania() {
               title="Dodaj pierwszy konkretny krok"
               description="Zapisz zadanie, które chcesz wykonać, a potem przypisz mu termin, listę albo priorytet."
               action={(
-                <Button variant="primary" size="sm" leadingIcon={<Plus size={12} />} onClick={() => inputRef.current?.focus()}>
+                <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={() => inputRef.current?.focus()}>
                   Dodaj zadanie
                 </Button>
               )}

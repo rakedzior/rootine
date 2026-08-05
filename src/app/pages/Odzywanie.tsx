@@ -905,9 +905,9 @@ export default function Odzywanie() {
             meta={headerMeta}
             actions={<>
               <div className="nutrition-date-navigation">
-                <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}><ChevronLeft size={14} /></Button>
+                <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}><ChevronLeft size={13} /></Button>
                 <DatePicker value={selectedDate} onChange={(value) => setSelectedDate(value || today)} aria-label="Wybrany dzień" displayValue={formatDate(selectedDate)} fieldClassName="nutrition-date-input" />
-                <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}><ChevronRight size={14} /></Button>
+                <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}><ChevronRight size={13} /></Button>
                 {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => setSelectedDate(today)}>Dzisiaj</Button>}
               </div>
               <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={13} />} onClick={() => setWeightDialog("analysis")}>
@@ -918,7 +918,7 @@ export default function Odzywanie() {
                 variant="quiet"
                 size="sm"
                 className={`nutrition-day-close ${dayClosed ? "is-closed" : ""}`}
-                leadingIcon={dayClosed ? <RotateCcw size={12} /> : <CheckCircle2 size={12} />}
+                leadingIcon={dayClosed ? <RotateCcw size={13} /> : <CheckCircle2 size={13} />}
                 aria-pressed={dayClosed}
                 aria-label={dayClosed ? "Otwórz ponownie wybrany dzień" : "Zamknij wybrany dzień"}
                 disabled={selectedDate > today}
@@ -937,7 +937,7 @@ export default function Odzywanie() {
           <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {dayClosed && (
               <Card tone="input" padding="dense" className="nutrition-closed-notice" role="status">
-                <CheckCircle2 size={14} aria-hidden="true" />
+                <CheckCircle2 size={13} aria-hidden="true" />
                 <span>Dzień jest zamknięty. Posiłki i nawodnienie są tylko do odczytu.</span>
                 <Button variant="quiet" size="sm" onClick={toggleDayClosed}>Otwórz do edycji</Button>
               </Card>
@@ -968,7 +968,7 @@ export default function Odzywanie() {
                       <section key={id} className="nutrition-meal-card" aria-labelledby={`meal-${id}`}>
                         <div className="nutrition-meal-card__header">
                           <div className="nutrition-meal-card__identity">
-                            <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
+                            <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
                             <h3 id={`meal-${id}`}>{label}</h3>
                             <Badge tone="neutral">{mealEntries.length}</Badge>
                           </div>
@@ -981,7 +981,7 @@ export default function Odzywanie() {
                             </div>
                           )}
                           {mealEntries.length > 0 && (
-                            <Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
+                            <Button variant="ghost" size="sm" leadingIcon={<Plus size={13} />} disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
                               Dodaj
                             </Button>
                           )}
@@ -1005,10 +1005,10 @@ export default function Odzywanie() {
                                 </div>
                                 <div className="nutrition-entry-item__actions">
                                   <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Edytuj ${entry.name}`} onClick={() => openEditDialog(id, entry)}>
-                                    <Pencil size={12} />
+                                    <Pencil size={13} />
                                   </Button>
                                   <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Usuń ${entry.name}`} onClick={() => removeEntry(id, entry.id)}>
-                                    <Trash2 size={12} />
+                                    <Trash2 size={13} />
                                   </Button>
                                 </div>
                               </div>
@@ -1020,7 +1020,7 @@ export default function Odzywanie() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              leadingIcon={<Plus size={12} />}
+                              leadingIcon={<Plus size={13} />}
                               disabled={dayClosed}
                               onClick={() => openEntryDialog(id)}
                             >
@@ -1176,7 +1176,7 @@ export default function Odzywanie() {
                         )}
                       </div>
                       <div className="nutrition-water-card__label">
-                        <Droplets size={15} strokeWidth={1.5} />
+                        <Droplets size={16} strokeWidth={1.5} />
                         <span>Wypita woda</span>
                       </div>
                     </div>
@@ -1503,7 +1503,7 @@ export default function Odzywanie() {
                   <strong>Wylicz cele automatycznie</strong>
                   <small>Profil dnia, aktywność, wzór Mifflina–St Jeora i konfiguracja makro</small>
                 </span>
-                <ChevronDown size={14} aria-hidden="true" />
+                <ChevronDown size={13} aria-hidden="true" />
               </summary>
               <section className="nutrition-calculator-section" aria-labelledby="calorie-calculator-title">
               <div className="nutrition-calculator-heading">

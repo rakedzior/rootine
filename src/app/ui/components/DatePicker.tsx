@@ -287,7 +287,7 @@ export function DatePicker({
         }}
       >
         <span id={valueId}>{displayValue}</span>
-        <CalendarDays size={14} aria-hidden="true" />
+        <CalendarDays size={13} aria-hidden="true" />
       </button>
       {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
       {error && <p id={errorId} className="ui-field__error" role="alert">{error}</p>}
@@ -317,7 +317,7 @@ export function DatePicker({
                 disabled={previousMonthDisabled}
                 onClick={() => changeMonth(-1)}
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={13} />
               </Button>
               <Button
                 variant="ghost"
@@ -327,7 +327,7 @@ export function DatePicker({
                 disabled={nextMonthDisabled}
                 onClick={() => changeMonth(1)}
               >
-                <ChevronRight size={14} />
+                <ChevronRight size={13} />
               </Button>
             </div>
           </div>

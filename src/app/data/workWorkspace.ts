@@ -356,6 +356,7 @@ function normalizeCompanyColor(color: string): string {
   if (normalized === "#70B89F") return "#79A8A4";
   if (normalized === "#D4AA68") return "#B9A171";
   if (normalized === "#CF777C") return "#BC8EA5";
+  if (normalized === "#9B8CE8") return "#7D7FA8";
   if (normalized === "#A0A0A0") return "#8793A1";
   return color;
 }

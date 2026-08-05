@@ -320,7 +320,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         <span id={valueId} className="ui-select-trigger__value">
           {selectedOption?.label ?? (options.length ? "Wybierz" : "Brak opcji")}
         </span>
-        <ChevronDown className="ui-select-trigger__chevron" size={14} aria-hidden="true" />
+        <ChevronDown className="ui-select-trigger__chevron" size={13} aria-hidden="true" />
       </button>
       {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
       {error && <p id={errorId} className="ui-field__error" role="alert">{error}</p>}

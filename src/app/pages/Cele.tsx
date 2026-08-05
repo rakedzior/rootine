@@ -362,7 +362,7 @@ export default function Cele() {
               className="p-1"
               style={{ color: C.textMuted }}
             >
-              <X size={12} aria-hidden="true" />
+              <X size={13} aria-hidden="true" />
             </button>
           </div>
         )}
@@ -400,13 +400,13 @@ export default function Cele() {
             </div>
             <div className="ui-view-switch" aria-label="Sposób wyświetlania celów">
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("list")} aria-label="Widok listy" aria-pressed={layout === "list"}>
-                <List size={15} strokeWidth={1.8} />
+                <List size={16} strokeWidth={1.8} />
               </Button>
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("grid")} aria-label="Widok kafelków" aria-pressed={layout === "grid"}>
-                <Grid2X2 size={14} strokeWidth={1.8} />
+                <Grid2X2 size={13} strokeWidth={1.8} />
               </Button>
             </div>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={15} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={16} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
             <div className="relative">
               <Button
                 ref={headerMenuTriggerRef}
@@ -418,7 +418,7 @@ export default function Cele() {
                 aria-expanded={headerMenuOpen}
                 aria-controls={headerMenuId}
               >
-                <Ellipsis size={17} />
+                <Ellipsis size={16} />
               </Button>
               <input
                 ref={importInputRef}
@@ -446,17 +446,17 @@ export default function Cele() {
           <section className="goals-radar" aria-label="Najważniejsze sygnały celów">
             <div className="goals-radar__grid">
               <button type="button" onClick={() => handleFilter("risk")} className={`goals-radar__signal ${goalsRadar.risk.length ? "is-warning" : "is-clear"}`}>
-                <AlertTriangle size={15} aria-hidden="true" />
+                <AlertTriangle size={16} aria-hidden="true" />
                 <strong>{goalsRadar.risk.length}</strong>
                 <span>{goalsRadar.risk.length === 1 ? "cel wymaga uwagi" : "cele wymagają uwagi"}</span>
               </button>
               <button type="button" onClick={() => goalsRadar.upcoming && navigate(`/cele/${goalsRadar.upcoming.id}`)} className="goals-radar__signal">
-                <CalendarDays size={15} aria-hidden="true" />
+                <CalendarDays size={16} aria-hidden="true" />
                 <strong>{goalsRadar.upcoming?.due ?? "—"}</strong>
                 <span>{goalsRadar.upcoming ? `Najbliższy termin · ${goalsRadar.upcoming.title}` : "Brak nadchodzącego terminu"}</span>
               </button>
               <button type="button" onClick={() => handleFilter("all")} className={`goals-radar__signal ${goalsRadar.stale.length ? "is-muted" : "is-clear"}`}>
-                <Activity size={15} aria-hidden="true" />
+                <Activity size={16} aria-hidden="true" />
                 <strong>{goalsRadar.stale.length}</strong>
                 <span>{pluralize(goalsRadar.stale.length, "cel nieaktualizowany", "cele nieaktualizowane", "celów nieaktualizowanych")} od 14 dni</span>
               </button>
@@ -468,7 +468,7 @@ export default function Cele() {
                   <strong>{goalsRadar.focus.nextMilestone.title}</strong>
                   <small>{goalsRadar.focus.title} · {goalsRadar.focus.nextMilestone.daysLeft}</small>
                 </span>
-                <ArrowRight size={15} aria-hidden="true" />
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
             )}
           </section>
@@ -476,7 +476,7 @@ export default function Cele() {
 
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {visibleGoals.length === 0 ? (
-            <EmptyState className="h-full" icon={<Target size={20} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo dodaj nowy cel." action={<Button variant="primary" size="sm" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={12} />}>Dodaj cel</Button>} />
+            <EmptyState className="h-full" icon={<Target size={18} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo dodaj nowy cel." action={<Button variant="primary" size="sm" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={13} />}>Dodaj cel</Button>} />
           ) : (
             <div className="w-full">
               {priorityGoals.length > 0 && (

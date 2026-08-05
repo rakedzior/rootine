@@ -135,7 +135,7 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
             {description && <p id={descriptionId} className="ui-modal__description">{description}</p>}
           </div>
           <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij" onClick={() => onCloseRef.current()}>
-            <X size={14} />
+            <X size={13} />
           </Button>
         </header>
         <div className={`ui-modal__body ${bodyClassName}`.trim()}>{children}</div>

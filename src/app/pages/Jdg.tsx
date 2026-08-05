@@ -389,7 +389,7 @@ export function JdgWorkspace({
         </>}
         actions={<>
           <Button variant="quiet" size="sm" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>Profil i szablony</Button>
-          <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={12} />} onClick={requestMonthReset} disabled={completedCount === 0}>Wyczyść miesiąc</Button>
+          <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={13} />} onClick={requestMonthReset} disabled={completedCount === 0}>Wyczyść miesiąc</Button>
           <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={openEditor}>Dodaj punkt</Button>
         </>}
       />
@@ -470,7 +470,7 @@ export function JdgWorkspace({
                     }} />
                     {item.id.startsWith("custom-") && (
                       <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
-                        <Trash2 size={12} />
+                        <Trash2 size={13} />
                       </Button>
                     )}
                   </div>
@@ -480,7 +480,7 @@ export function JdgWorkspace({
                 <Card key={group.id} as="section" tone="panel" padding="none" className="jdg-stage">
                   <header className="jdg-stage__header">
                     <span className="jdg-stage__number">{groupIndex + 1}</span>
-                    <span className="jdg-stage__icon"><GroupIcon size={15} /></span>
+                    <span className="jdg-stage__icon"><GroupIcon size={16} /></span>
                     <div>
                       <h3>{group.title}</h3>
                       <p>{group.description}</p>
@@ -547,7 +547,7 @@ export function JdgWorkspace({
                           }} />
                           {item.id.startsWith("custom-") && (
                             <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
-                              <Trash2 size={12} />
+                              <Trash2 size={13} />
                             </Button>
                           )}
                         </div>
@@ -567,7 +567,7 @@ export function JdgWorkspace({
 
           {!readyToClose && (
             <div className="jdg-close-hint">
-              <CircleAlert size={14} aria-hidden="true" />
+              <CircleAlert size={13} aria-hidden="true" />
               <p>
                 <strong>Miesiąc można zamknąć po wymaganych punktach.</strong>
                 Zostało {requiredBeforeClose.filter((item) => !item.done).length}; punkty kontrolne są pomocnicze i nie blokują zamknięcia.
@@ -577,7 +577,7 @@ export function JdgWorkspace({
 
           <Card as="section" tone="input" padding="default" className="jdg-note">
             <div>
-              <ReceiptText size={14} aria-hidden="true" />
+              <ReceiptText size={13} aria-hidden="true" />
               <span>
                 <strong>Notatka do miesiąca</strong>
                 <small>Wyjątki, kwoty do sprawdzenia albo pytania do księgowości.</small>
@@ -810,7 +810,7 @@ export function JdgWorkspace({
             aria-label="Zamknij komunikat"
             onClick={() => setUndoableAction(null)}
           >
-            <X size={12} aria-hidden="true" />
+            <X size={13} aria-hidden="true" />
           </Button>
         </div>
       )}

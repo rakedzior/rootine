@@ -146,7 +146,7 @@ export function GoalSubSidebar({
               className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
               style={{ color: searchOpen ? C.iceBlueText : C.textDisabled }}
             >
-              <Search size={12} strokeWidth={1.8} />
+              <Search size={13} strokeWidth={1.8} />
             </button>
             <button
               type="button"
@@ -183,7 +183,7 @@ export function GoalSubSidebar({
                       onClick={() => setSearch("")}
                       style={{ color: C.textDisabled }}
                     >
-                      <X size={10} aria-hidden="true" />
+                      <X size={11} aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -219,7 +219,7 @@ export function GoalSubSidebar({
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg">
                   {editingId === category.id ? (
                     <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
-                      <Icon size={12} strokeWidth={1.7} style={{ color: C.textSecond }} />
+                      <Icon size={13} strokeWidth={1.7} style={{ color: C.textSecond }} />
                       <input
                         autoFocus
                         aria-label={`Nazwa kategorii ${category.label}`}
@@ -294,7 +294,7 @@ function StatusPill({ status }: { status: GoalStatus }) {
   return (
     <Badge tone={tone} className="h-7 rounded-lg">
       {meta.label}
-      <ChevronDown size={10} strokeWidth={1.7} />
+      <ChevronDown size={11} strokeWidth={1.7} />
     </Badge>
   );
 }
@@ -358,7 +358,7 @@ export function GoalCard({
           >
             {goal.customIcon
               ? <img src={goal.customIcon} alt="" className="h-5 w-5 object-contain" />
-              : <Icon size={17} strokeWidth={1.6} aria-hidden="true" />}
+              : <Icon size={16} strokeWidth={1.6} aria-hidden="true" />}
           </div>
           <div className="min-w-0 flex flex-1 flex-col">
             <h3 className="goal-card-title ui-record-title truncate">
@@ -376,7 +376,7 @@ export function GoalCard({
                 className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px]"
                 style={{ color: dueColor, borderColor: dueColor === C.textSecond ? C.borderStrong : `${dueColor}35`, background: C.inputBg }}
               >
-                <CalendarDays size={12} strokeWidth={1.7} aria-hidden="true" />
+                <CalendarDays size={13} strokeWidth={1.7} aria-hidden="true" />
                 <span className="font-medium" style={{ color: dueColor === C.textSecond ? C.textPrimary : dueColor }}>{goal.due}</span>
                 <span style={{ color: C.textMuted }}>· {goal.daysLeft}</span>
               </div>
@@ -437,7 +437,7 @@ export function GoalCard({
               aria-controls={actionsMenuId}
               className="flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors"
             >
-              <Ellipsis size={17} strokeWidth={1.8} aria-hidden="true" />
+              <Ellipsis size={16} strokeWidth={1.8} aria-hidden="true" />
             </button>
             {menuOpen && (
               <Menu
@@ -554,12 +554,12 @@ export function GoalDetail({
 
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: goal.color, background: `${goal.color}18`, borderColor: `${goal.color}55` }}>
-            {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={19} strokeWidth={1.55} />}
+            {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={18} strokeWidth={1.55} />}
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-[var(--text-section)] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
             <p className="mt-1.5 flex items-center gap-1 text-[11px]" style={{ color: C.textSecond }}>
-              <CategoryIcon size={10} /> {goal.category}
+              <CategoryIcon size={11} /> {goal.category}
               <span style={{ color: C.textDisabled }}>•</span>
               <span style={{ color: C.textMuted }}>{goal.rhythm}</span>
             </p>
@@ -583,7 +583,7 @@ export function GoalDetail({
             <span style={{ color: dueColor === C.textSecond ? C.textPrimary : dueColor }}>{goal.due}</span>
           </DetailRow>
           <DetailRow icon={Flag} label="Priorytet" onClick={onEdit}>
-            <Flag size={10} fill={`${priority.color}38`} style={{ color: priority.color }} />
+            <Flag size={11} fill={`${priority.color}38`} style={{ color: priority.color }} />
             <span style={{ color: priority.color }}>{priority.label}</span>
           </DetailRow>
           <DetailRow icon={Target} label="Kategoria" onClick={onEdit}>

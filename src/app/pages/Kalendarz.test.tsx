@@ -171,12 +171,12 @@ describe("Kalendarz canonical occurrences integration", () => {
       },
     ];
     fixtures.taskWorkspace.lists = [
-      { id: "prywatne", label: "Prywatne", color: "#70B89F" },
-      { id: "praca", label: "Praca", color: "#4772FA" },
+      { id: "prywatne", label: "Prywatne", color: "#79A8A4" },
+      { id: "praca", label: "Praca", color: "#7FA6C9" },
     ];
     fixtures.taskWorkspace.tags = [
-      { id: "dom", label: "dom", color: "#D4AA68" },
-      { id: "biuro", label: "biuro", color: "#9B8CE8" },
+      { id: "dom", label: "dom", color: "#B9A171" },
+      { id: "biuro", label: "biuro", color: "#7D7FA8" },
     ];
 
     render(<Kalendarz />);

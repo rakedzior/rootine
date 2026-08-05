@@ -213,7 +213,7 @@ function ActiveSessionStrip({
     <section className="sport-active-strip" aria-labelledby="sport-active-strip-title">
       <div className="sport-active-strip__header">
         <div>
-          <span><Activity size={12} aria-hidden="true" /> Trening w toku</span>
+          <span><Activity size={13} aria-hidden="true" /> Trening w toku</span>
           <strong id="sport-active-strip-title">{session.title}</strong>
           <DisciplineLabel discipline={session.discipline} compact />
         </div>
@@ -289,7 +289,7 @@ function PlannedWorkoutRow({
         disabled={active}
         onClick={statusAction}
       >
-        {completed && <Check size={8} strokeWidth={2.5} />}
+        {completed && <Check size={9} strokeWidth={2.5} />}
       </button>
       <button className="sport-overview-workout__content" type="button" aria-pressed={selected} onClick={onSelect}>
         <span className="sport-overview-workout__copy">
@@ -485,7 +485,7 @@ export function SportOverview({
             </div>
           ) : (
             <div className="sport-today-card__rest">
-              <Activity size={21} aria-hidden="true" />
+              <Activity size={22} aria-hidden="true" />
               <div>
                 <strong>{todayInCycle ? "Regeneracja albo trening spontaniczny" : "Plan nie obejmuje dzisiejszej daty"}</strong>
                 <p>{todayInCycle
@@ -706,7 +706,7 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
       />
       <div className="sport-history-tools" aria-label="Filtry historii">
         <div className="sport-history-search">
-          <Search size={14} aria-hidden="true" />
+          <Search size={13} aria-hidden="true" />
           <Input
             type="search"
             aria-label="Szukaj treningu w historii"
@@ -1058,7 +1058,7 @@ export function WorkoutDetailPanel({
           <DisciplineLabel discipline={workout.discipline} />
         </div>
         <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={onClose}>
-          <X size={14} />
+          <X size={13} />
         </Button>
       </div>
       <div className="sport-workout-detail__body">
@@ -1101,7 +1101,7 @@ export function WorkoutDetailPanel({
           <details className="sport-workout-detail__status-editor">
             <summary className="sport-workout-detail__disclosure-summary">
               <span className="sport-workout-detail__disclosure-label">
-                <ChevronRight size={14} aria-hidden="true" />
+                <ChevronRight size={13} aria-hidden="true" />
                 <span>Status</span>
               </span>
               <StatusLabel status={displayStatus} />
@@ -1111,12 +1111,12 @@ export function WorkoutDetailPanel({
                 variant="quiet"
                 size="sm"
                 disabled={!outcome}
-                leadingIcon={<RotateCcw size={12} />}
+                leadingIcon={<RotateCcw size={13} />}
                 onClick={onClearOutcome}
               >
                 Zaplanowany
               </Button>
-              <Button variant="quiet" size="sm" disabled={outcome?.status === "completed"} leadingIcon={<Check size={12} />} onClick={onComplete}>
+              <Button variant="quiet" size="sm" disabled={outcome?.status === "completed"} leadingIcon={<Check size={13} />} onClick={onComplete}>
                 Wykonany
               </Button>
               <Button variant="quiet" size="sm" disabled={outcome?.status === "incomplete"} onClick={onIncomplete}>
@@ -1134,7 +1134,7 @@ export function WorkoutDetailPanel({
         <details className="sport-workout-detail__more">
           <summary className="sport-workout-detail__disclosure-summary">
             <span className="sport-workout-detail__disclosure-label">
-              <ChevronRight size={14} aria-hidden="true" />
+              <ChevronRight size={13} aria-hidden="true" />
               <span>Więcej działań</span>
             </span>
           </summary>
@@ -1155,28 +1155,28 @@ export function WorkoutDetailPanel({
               tags: ["sport"],
               notes: workout.note,
             }} />
-            <Button variant="quiet" size="sm" leadingIcon={<MoveRight size={12} />} onClick={onMoveToPlan}>
+            <Button variant="quiet" size="sm" leadingIcon={<MoveRight size={13} />} onClick={onMoveToPlan}>
               Przenieś w planie
             </Button>
             {!outcome && (
-              <Button variant="quiet" size="sm" leadingIcon={<CalendarClock size={12} />} onClick={onMoveTomorrow}>
+              <Button variant="quiet" size="sm" leadingIcon={<CalendarClock size={13} />} onClick={onMoveTomorrow}>
                 Przełóż na jutro
               </Button>
             )}
-            <Button variant="quiet" size="sm" leadingIcon={<Pencil size={12} />} onClick={onEditSingle}>
+            <Button variant="quiet" size="sm" leadingIcon={<Pencil size={13} />} onClick={onEditSingle}>
               Edytuj trening
             </Button>
             {seriesCount > 1 && (
-              <Button variant="quiet" size="sm" leadingIcon={<Repeat2 size={12} />} onClick={onEditSeries}>
+              <Button variant="quiet" size="sm" leadingIcon={<Repeat2 size={13} />} onClick={onEditSeries}>
                 Edytuj serię ({seriesCount})
               </Button>
             )}
             {template && onEditTemplate && (
-              <Button variant="quiet" size="sm" leadingIcon={<Layers3 size={12} />} onClick={onEditTemplate}>
+              <Button variant="quiet" size="sm" leadingIcon={<Layers3 size={13} />} onClick={onEditTemplate}>
                 Edytuj szablon i powiązane treningi
               </Button>
             )}
-            <Button variant="danger" size="sm" leadingIcon={<Trash2 size={12} />} onClick={onDelete}>
+            <Button variant="danger" size="sm" leadingIcon={<Trash2 size={13} />} onClick={onDelete}>
               Usuń trening
             </Button>
           </div>
@@ -1184,7 +1184,7 @@ export function WorkoutDetailPanel({
         <details className="sport-workout-detail__exercises">
           <summary className="sport-workout-detail__disclosure-summary">
             <span className="sport-workout-detail__disclosure-label">
-              <ChevronRight size={14} aria-hidden="true" />
+              <ChevronRight size={13} aria-hidden="true" />
               <span>{previewStages.length ? "Przebieg treningu" : "Ćwiczenia"}</span>
             </span>
             <small>{previewCount ? previewLabel : "Dodaj ćwiczenia w szablonie"}</small>

@@ -677,7 +677,7 @@ export default function Podroze({
         aria-pressed={task.completed}
         onClick={() => toggleTask(task)}
       >
-        {task.completed && <Check size={10} />}
+        {task.completed && <Check size={11} />}
       </button>
       <span className="travel-task-row__copy">
         <strong>{task.title}</strong>
@@ -709,8 +709,8 @@ export default function Podroze({
             tags: ["podroze"],
           }}
         />
-        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={12} /></Button>
-        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={12} /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={13} /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={13} /></Button>
       </span>
     </article>
   );
@@ -955,7 +955,7 @@ export default function Podroze({
               <>
                 {filteredTrips[0] && !filteredTrips[0].archivedAt && filteredTrips[0].status !== "completed" && (
                   <button type="button" className="travel-next-departure" onClick={() => selectTrip(filteredTrips[0].id)}>
-                    <span className="travel-next-departure__marker"><Plane size={15} /></span>
+                    <span className="travel-next-departure__marker"><Plane size={16} /></span>
                     <span className="travel-next-departure__identity">
                       <small>Najbliższy wyjazd · {tripCountdown(filteredTrips[0])}</small>
                       <strong>{filteredTrips[0].name}</strong>
@@ -974,14 +974,14 @@ export default function Podroze({
                       <span><i style={{ width: `${readinessScore(filteredTrips[0])}%` }} /></span>
                       <strong>{formatPercent(readinessScore(filteredTrips[0]))}</strong>
                     </span>
-                    <ChevronRight size={15} />
+                    <ChevronRight size={16} />
                   </button>
                 )}
 
                 <div className="travel-board">
                   <div className="travel-board__heading">
                     <div>
-                      <MapIcon size={14} aria-hidden="true" />
+                      <MapIcon size={13} aria-hidden="true" />
                       <h2>Wszystkie podróże</h2>
                     </div>
                     <span>{filteredTrips.length} w widoku</span>
@@ -1026,7 +1026,7 @@ export default function Podroze({
                               : "Brak wydatków"}
                           </small>
                         </span>
-                        <ChevronRight size={14} aria-hidden="true" />
+                        <ChevronRight size={13} aria-hidden="true" />
                       </button>
                     );
                   })}
@@ -1070,7 +1070,7 @@ export default function Podroze({
                 <div className="travel-dashboard-grid">
                   <section className="travel-panel travel-panel--agenda">
                     <header>
-                      <div><CalendarDays size={14} /><h3>Najbliższe punkty planu</h3></div>
+                      <div><CalendarDays size={13} /><h3>Najbliższe punkty planu</h3></div>
                       <button type="button" onClick={() => setSection("itinerary")}>Pełny plan</button>
                     </header>
                     <div>
@@ -1099,7 +1099,7 @@ export default function Podroze({
 
                   <section className="travel-panel travel-panel--basics">
                     <header>
-                      <div><MapPin size={14} /><h3>Podstawy wyjazdu</h3></div>
+                      <div><MapPin size={13} /><h3>Podstawy wyjazdu</h3></div>
                       <button type="button" onClick={() => openTripEditor(selectedTrip)}>Edytuj</button>
                     </header>
                     <dl>
@@ -1113,16 +1113,16 @@ export default function Podroze({
 
                   <section className="travel-panel travel-panel--bookings">
                     <header>
-                      <div><ReceiptText size={14} /><h3>Rezerwacje</h3></div>
+                      <div><ReceiptText size={13} /><h3>Rezerwacje</h3></div>
                       <button type="button" onClick={() => setSection("reservations")}>Szczegóły</button>
                     </header>
                     <div className="travel-booking-summary">
                       <div>
-                        <BedDouble size={14} />
+                        <BedDouble size={13} />
                         <span><strong>{selectedTrip.stays.filter((item) => item.status !== "planned").length}/{selectedTrip.stays.length}</strong><small>noclegi zabezpieczone</small></span>
                       </div>
                       <div>
-                        <Plane size={14} />
+                        <Plane size={13} />
                         <span><strong>{selectedTrip.transports.filter((item) => item.status !== "planned").length}/{selectedTrip.transports.length}</strong><small>przejazdy zabezpieczone</small></span>
                       </div>
                     </div>
@@ -1130,7 +1130,7 @@ export default function Podroze({
 
                   <section className="travel-panel travel-panel--money">
                     <header>
-                      <div><WalletCards size={14} /><h3>Budżet</h3></div>
+                      <div><WalletCards size={13} /><h3>Budżet</h3></div>
                       <button type="button" onClick={() => setSection("budget")}>Szczegóły</button>
                     </header>
                     <div className="travel-money-summary">
@@ -1171,7 +1171,7 @@ export default function Podroze({
                             <h3>{formatDate(date)}</h3>
                             <p>{items.map((item) => item.location).filter(Boolean).filter((value, index, list) => list.indexOf(value) === index).slice(0, 2).join(" · ") || "Bez lokalizacji"}</p>
                           </div>
-                          <Button variant="ghost" size="sm" leadingIcon={<Plus size={12} />} onClick={() => {
+                          <Button variant="ghost" size="sm" leadingIcon={<Plus size={13} />} onClick={() => {
                             openItineraryEditor();
                             setDraft((current) => ({ ...current, date }));
                           }}>Dodaj</Button>
@@ -1187,8 +1187,8 @@ export default function Podroze({
                               </span>
                               <Badge tone={item.reserved ? "success" : "neutral"}>{item.reserved ? "Zarezerwowano" : ITINERARY_KIND_LABELS[item.kind]}</Badge>
                               <span className="travel-row-actions">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openItineraryEditor(item)}><Pencil size={12} /></Button>
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.title}`} onClick={() => setDeleteState({ kind: "itinerary", id: item.id, label: item.title })}><Trash2 size={12} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openItineraryEditor(item)}><Pencil size={13} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.title}`} onClick={() => setDeleteState({ kind: "itinerary", id: item.id, label: item.title })}><Trash2 size={13} /></Button>
                               </span>
                             </article>
                           ))}
@@ -1204,8 +1204,8 @@ export default function Podroze({
               <div className="travel-reservations">
                 <section className="travel-register">
                   <div className="travel-register__heading">
-                    <div><BedDouble size={15} /><span><h2>Noclegi</h2><p>{selectedTrip.stays.length} zapisanych miejsc</p></span></div>
-                    <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openStayEditor()}>Nocleg</Button>
+                    <div><BedDouble size={16} /><span><h2>Noclegi</h2><p>{selectedTrip.stays.length} zapisanych miejsc</p></span></div>
+                    <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openStayEditor()}>Nocleg</Button>
                   </div>
                   {selectedTrip.stays.length === 0 ? (
                     <EmptyState icon={<BedDouble size={18} />} title="Brak noclegów" description="Zapisz miejsce, terminy, adres i numer rezerwacji." />
@@ -1216,7 +1216,7 @@ export default function Podroze({
                         .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
                         .map((stay) => (
                           <article key={stay.id} className="travel-stay-row">
-                            <span className="travel-reservation-icon"><BedDouble size={15} /></span>
+                            <span className="travel-reservation-icon"><BedDouble size={16} /></span>
                             <span className="travel-reservation-copy">
                               <strong>{stay.name}</strong>
                               <small>{stay.city}{stay.address ? ` · ${stay.address}` : ""}</small>
@@ -1228,8 +1228,8 @@ export default function Podroze({
                             <span className="travel-reservation-money"><PrivateMoney value={stay.amount} currency={selectedTrip.baseCurrency} label={`Kwota noclegu: ${stay.name}`} /></span>
                             <Badge tone={stay.status === "paid" ? "success" : stay.status === "booked" ? "primary" : "warning"}>{RESERVATION_STATUS_LABELS[stay.status]}</Badge>
                             <span className="travel-row-actions">
-                              <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${stay.name}`} onClick={() => openStayEditor(stay)}><Pencil size={12} /></Button>
-                              <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${stay.name}`} onClick={() => setDeleteState({ kind: "stay", id: stay.id, label: stay.name })}><Trash2 size={12} /></Button>
+                              <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${stay.name}`} onClick={() => openStayEditor(stay)}><Pencil size={13} /></Button>
+                              <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${stay.name}`} onClick={() => setDeleteState({ kind: "stay", id: stay.id, label: stay.name })}><Trash2 size={13} /></Button>
                             </span>
                           </article>
                         ))}
@@ -1239,8 +1239,8 @@ export default function Podroze({
 
                 <section className="travel-register">
                   <div className="travel-register__heading">
-                    <div><Plane size={15} /><span><h2>Transport</h2><p>{selectedTrip.transports.length} zapisanych odcinków</p></span></div>
-                    <Button variant="quiet" size="sm" leadingIcon={<Plus size={12} />} onClick={() => openTransportEditor()}>Transport</Button>
+                    <div><Plane size={16} /><span><h2>Transport</h2><p>{selectedTrip.transports.length} zapisanych odcinków</p></span></div>
+                    <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openTransportEditor()}>Transport</Button>
                   </div>
                   {selectedTrip.transports.length === 0 ? (
                     <EmptyState icon={<Plane size={18} />} title="Brak transportu" description="Dodaj lot, pociąg, samochód, autobus lub prom." />
@@ -1253,7 +1253,7 @@ export default function Podroze({
                           const Icon = TRANSPORT_ICONS[transport.mode];
                           return (
                             <article key={transport.id} className="travel-transport-row">
-                              <span className="travel-reservation-icon"><Icon size={15} /></span>
+                              <span className="travel-reservation-icon"><Icon size={16} /></span>
                               <span className="travel-reservation-copy">
                                 <strong>{transport.title}</strong>
                                 <small>{TRANSPORT_MODE_LABELS[transport.mode]} · {transport.bookingRef || "Brak numeru rezerwacji"}</small>
@@ -1265,8 +1265,8 @@ export default function Podroze({
                               <span className="travel-reservation-money"><PrivateMoney value={transport.amount} currency={selectedTrip.baseCurrency} label={`Kwota transportu: ${transport.title}`} /></span>
                               <Badge tone={transport.status === "paid" ? "success" : transport.status === "booked" ? "primary" : "warning"}>{RESERVATION_STATUS_LABELS[transport.status]}</Badge>
                               <span className="travel-row-actions">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${transport.title}`} onClick={() => openTransportEditor(transport)}><Pencil size={12} /></Button>
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${transport.title}`} onClick={() => setDeleteState({ kind: "transport", id: transport.id, label: transport.title })}><Trash2 size={12} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${transport.title}`} onClick={() => openTransportEditor(transport)}><Pencil size={13} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${transport.title}`} onClick={() => setDeleteState({ kind: "transport", id: transport.id, label: transport.title })}><Trash2 size={13} /></Button>
                               </span>
                             </article>
                           );
@@ -1286,7 +1286,7 @@ export default function Podroze({
                   <div><span>Do dyspozycji</span><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Kwota do dyspozycji" /></strong></div>
                 </section>
                 <div className="travel-budget-link-note" role="note">
-                  <ReceiptText size={14} aria-hidden="true" />
+                  <ReceiptText size={13} aria-hidden="true" />
                   <span>
                     <strong>Rezerwacje są połączone z podsumowaniem</strong>
                     <small>
@@ -1326,8 +1326,8 @@ export default function Podroze({
                         </span>
                         <Badge tone={line.paid ? "success" : line.actual > line.planned ? "danger" : "neutral"}>{line.paid ? "Opłacono" : "Plan"}</Badge>
                         <span className="travel-row-actions">
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${line.label}`} onClick={() => openBudgetEditor(line)}><Pencil size={12} /></Button>
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${line.label}`} onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}><Trash2 size={12} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${line.label}`} onClick={() => openBudgetEditor(line)}><Pencil size={13} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${line.label}`} onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}><Trash2 size={13} /></Button>
                         </span>
                       </article>
                     );
@@ -1367,7 +1367,7 @@ export default function Podroze({
                     {selectedTrip.documents.map((document) => (
                       <article key={document.id} className="travel-document-row">
                         <span className="travel-document-row__identity">
-                          <FileText size={14} />
+                          <FileText size={13} />
                           <span><strong>{document.name}</strong><small>{document.note || "Bez dodatkowych uwag"}</small></span>
                         </span>
                         <span className="travel-document-row__owner">{document.owner}</span>
@@ -1376,8 +1376,8 @@ export default function Podroze({
                           <Badge tone={DOCUMENT_STATUS_TONES[document.status]}>{DOCUMENT_STATUS_LABELS[document.status]}</Badge>
                         </button>
                         <span className="travel-row-actions">
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={12} /></Button>
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${document.name}`} onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}><Trash2 size={12} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={13} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${document.name}`} onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}><Trash2 size={13} /></Button>
                         </span>
                       </article>
                     ))}
@@ -1424,7 +1424,7 @@ export default function Podroze({
                             aria-pressed={task.completed}
                             onClick={() => toggleTask(task)}
                           >
-                            {task.completed && <Check size={10} />}
+                            {task.completed && <Check size={11} />}
                           </button>
                           <span className="travel-task-row__copy">
                             <strong>{task.title}</strong>
@@ -1456,8 +1456,8 @@ export default function Podroze({
                                 tags: ["podroze"],
                               }}
                             />
-                            <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={12} /></Button>
-                            <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={12} /></Button>
+                            <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={13} /></Button>
+                            <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={13} /></Button>
                           </span>
                         </article>
                       );

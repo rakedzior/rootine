@@ -290,11 +290,11 @@ function ModuleSummary({
           </span>
         ) : state === "complete" ? (
           <span className="today-module-row__state is-complete">
-            <CheckCircle2 size={17} aria-hidden="true" />
+            <CheckCircle2 size={16} aria-hidden="true" />
           </span>
         ) : state === "empty" ? (
           <span className="today-module-row__state is-empty">
-            <CircleMinus size={17} aria-hidden="true" />
+            <CircleMinus size={16} aria-hidden="true" />
           </span>
         ) : null}
       </span>
@@ -554,7 +554,7 @@ export default function Dzisiaj() {
       moduleId: "tasks",
       areaId: "tasks",
       to: `${APP_MODULE_BY_ID.tasks.to}?widok=dzis`,
-      icon: <TasksIcon size={17} />,
+      icon: <TasksIcon size={16} />,
       title: APP_MODULE_BY_ID.tasks.label,
       message: todayTasks.length === 0
         ? "Brak zadań na dziś"
@@ -586,7 +586,7 @@ export default function Dzisiaj() {
       moduleId: "tasks",
       areaId: "habits",
       to: `${APP_MODULE_BY_ID.tasks.to}?widok=nawyki`,
-      icon: <Flame size={17} />,
+      icon: <Flame size={16} />,
       title: "Nawyki",
       message: habitsState === "complete"
         ? "Wszystko wykonane"
@@ -604,7 +604,7 @@ export default function Dzisiaj() {
       moduleId: "goals",
       areaId: "goals",
       to: APP_MODULE_BY_ID.goals.to,
-      icon: <GoalsIcon size={17} />,
+      icon: <GoalsIcon size={16} />,
       title: APP_MODULE_BY_ID.goals.label,
       message: goalsState === "complete"
           ? "Wszystko wykonane"
@@ -631,7 +631,7 @@ export default function Dzisiaj() {
       moduleId: "work",
       areaId: "work",
       to: APP_MODULE_BY_ID.work.to,
-      icon: <WorkIcon size={17} />,
+      icon: <WorkIcon size={16} />,
       title: APP_MODULE_BY_ID.work.label,
       message: workTasksDueToday.length === 0
         ? "Brak zadań na dziś"
@@ -663,7 +663,7 @@ export default function Dzisiaj() {
       moduleId: "sport",
       areaId: "sport",
       to: APP_MODULE_BY_ID.sport.to,
-      icon: <SportIcon size={17} />,
+      icon: <SportIcon size={16} />,
       title: APP_MODULE_BY_ID.sport.label,
       message: sportState === "complete"
         ? "Wszystko wykonane"
@@ -684,7 +684,7 @@ export default function Dzisiaj() {
       moduleId: "affairs",
       areaId: "affairs",
       to: APP_MODULE_BY_ID.affairs.to,
-      icon: <AffairsIcon size={17} />,
+      icon: <AffairsIcon size={16} />,
       title: APP_MODULE_BY_ID.affairs.label,
       message: affairsState === "empty"
         ? "Brak spraw na dziś"
@@ -710,7 +710,7 @@ export default function Dzisiaj() {
       moduleId: "nutrition",
       areaId: "nutrition",
       to: APP_MODULE_BY_ID.nutrition.to,
-      icon: <NutritionIcon size={17} />,
+      icon: <NutritionIcon size={16} />,
       title: APP_MODULE_BY_ID.nutrition.label,
       message: nutritionState === "complete"
         ? "Dzień zamknięty"
@@ -733,7 +733,7 @@ export default function Dzisiaj() {
       moduleId: "notes",
       areaId: "notes",
       to: APP_MODULE_BY_ID.notes.to,
-      icon: <NotesIcon size={17} />,
+      icon: <NotesIcon size={16} />,
       title: APP_MODULE_BY_ID.notes.label,
       message: notesUpdatedToday.length > 0
         ? counted(notesUpdatedToday.length, "notatka zmieniona dziś", "notatki zmienione dziś", "notatek zmienionych dziś")
@@ -869,7 +869,7 @@ export default function Dzisiaj() {
                   </span>
                 </div>
                 <div className="today-day-balance__footer">
-                  <LayoutGrid size={17} aria-hidden="true" />
+                  <LayoutGrid size={16} aria-hidden="true" />
                   <span>{counted(activeAreaCount, "obszar wymaga uwagi", "obszary wymagają uwagi", "obszarów wymaga uwagi")}</span>
                 </div>
               </div>
@@ -908,7 +908,7 @@ export default function Dzisiaj() {
                     variant="ghost"
                     size="sm"
                     className="today-day-balance__attention-action"
-                    trailingIcon={<ChevronRight size={14} aria-hidden="true" />}
+                    trailingIcon={<ChevronRight size={13} aria-hidden="true" />}
                     onClick={reviewOverdueAreas}
                   >
                     Przejrzyj zaległe
@@ -916,7 +916,7 @@ export default function Dzisiaj() {
                 )}
                 {overdueAreaIds.size > 0 && (
                   <div className="today-day-balance__attention-footer">
-                    <LayoutGrid size={17} aria-hidden="true" />
+                    <LayoutGrid size={16} aria-hidden="true" />
                     <span>{counted(overdueAreaIds.size, "obszar z zaległościami", "obszary z zaległościami", "obszarów z zaległościami")}</span>
                   </div>
                 )}

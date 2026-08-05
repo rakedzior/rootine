@@ -435,7 +435,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
                   ref={(node) => { actionRefs.current[index] = node; }}
                   variant={index === activeIndex ? "primary" : "quiet"}
                   fullWidth
-                  leadingIcon={<Icon size={17} aria-hidden="true" />}
+                  leadingIcon={<Icon size={16} aria-hidden="true" />}
                   aria-describedby={`command-center-action-${action.id}-description`}
                   onFocus={() => setActiveIndex(index)}
                   onKeyDown={(event) => handleActionKeyDown(event, index)}

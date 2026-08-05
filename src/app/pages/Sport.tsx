@@ -1136,7 +1136,7 @@ export default function Sport() {
       <Button
         className="ui-button--icon-mobile"
         variant="primary"
-        leadingIcon={<Play size={14} />}
+        leadingIcon={<Play size={13} />}
         onClick={() => setActiveMode(true)}
       >
         <span className="header-action-label">Wznów trening</span>
@@ -1223,7 +1223,7 @@ export default function Sport() {
             {headerAction}
             {view === "cycle" && cycleDraft && (
               <span className={`sport-planner-toolbar__status ${cycleDirty ? "is-dirty" : ""}`.trim()}>
-                {!cycleDirty && <Check size={12} aria-hidden="true" />}
+                {!cycleDirty && <Check size={13} aria-hidden="true" />}
                 {cycleDirty ? "Zmiany czekają na zapis" : "Zapisano"}
               </span>
             )}
@@ -1355,14 +1355,14 @@ export default function Sport() {
       {moveUndo && (
         <div className="sport-undo-toast" role="status">
           <span>{moveUndo.message}</span>
-          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={12} />} onClick={undoMove}>Cofnij</Button>
+          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={13} />} onClick={undoMove}>Cofnij</Button>
         </div>
       )}
 
       {workoutDeleteUndo && (
         <div className="sport-undo-toast" role="status">
           <span>Usunięto „{workoutDeleteUndo.workout.title}”.</span>
-          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={12} />} onClick={undoWorkoutDelete}>Cofnij</Button>
+          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={13} />} onClick={undoWorkoutDelete}>Cofnij</Button>
         </div>
       )}
 

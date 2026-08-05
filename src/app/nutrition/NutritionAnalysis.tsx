@@ -276,7 +276,7 @@ export function NutritionAnalysis({
         <div className="nutrition-analysis-v2__date-summary">
           <span>Zakres:</span>
           <strong>{formatDateRange(activeStartDate, activeEndDate)}</strong>
-          <CalendarDays size={15} strokeWidth={1.6} aria-hidden="true" />
+          <CalendarDays size={16} strokeWidth={1.6} aria-hidden="true" />
         </div>
         <fieldset className="nutrition-analysis-v2__range">
           <legend className="ui-sr-only">Zakres analizy</legend>
@@ -325,7 +325,7 @@ export function NutritionAnalysis({
         <div className="nutrition-analysis-v2__kpis" aria-label="Podsumowanie wybranego okresu">
           <article className="nutrition-analysis-v2__metric-card is-calories">
             <div className="nutrition-analysis-v2__metric-top">
-              <span className="nutrition-analysis-v2__metric-icon"><Flame size={20} strokeWidth={1.8} /></span>
+              <span className="nutrition-analysis-v2__metric-icon"><Flame size={18} strokeWidth={1.8} /></span>
               <span>Średnie kcal</span>
             </div>
             <div className="nutrition-analysis-v2__metric-value-row">
@@ -341,7 +341,7 @@ export function NutritionAnalysis({
 
           <article className="nutrition-analysis-v2__metric-card is-macros">
             <div className="nutrition-analysis-v2__metric-top">
-              <span className="nutrition-analysis-v2__metric-icon"><Sprout size={20} strokeWidth={1.8} /></span>
+              <span className="nutrition-analysis-v2__metric-icon"><Sprout size={18} strokeWidth={1.8} /></span>
               <span>Średnie makro</span>
             </div>
             {dietPoints.length ? (
@@ -357,7 +357,7 @@ export function NutritionAnalysis({
 
           <article className="nutrition-analysis-v2__metric-card is-weight">
             <div className="nutrition-analysis-v2__metric-top">
-              <span className="nutrition-analysis-v2__metric-icon"><Scale size={20} strokeWidth={1.8} /></span>
+              <span className="nutrition-analysis-v2__metric-icon"><Scale size={18} strokeWidth={1.8} /></span>
               <span>Średnia masa</span>
             </div>
             <div className="nutrition-analysis-v2__metric-value-row">
@@ -373,7 +373,7 @@ export function NutritionAnalysis({
 
           <article className="nutrition-analysis-v2__metric-card is-water">
             <div className="nutrition-analysis-v2__metric-top">
-              <span className="nutrition-analysis-v2__metric-icon"><Droplets size={20} strokeWidth={1.8} /></span>
+              <span className="nutrition-analysis-v2__metric-icon"><Droplets size={18} strokeWidth={1.8} /></span>
               <span>Średnie nawodnienie</span>
             </div>
             <div className="nutrition-analysis-v2__metric-value-row">

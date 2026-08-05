@@ -1,6 +1,6 @@
 import { Check, Circle, CircleAlert, CircleDot, Clock3 } from "lucide-react";
 import type { ReactNode } from "react";
-import { formatShortDate } from "../formatters";
+import { formatShortDate, pluralForm } from "../formatters";
 import type {
   WorkProjectStatus,
   WorkTask,
@@ -8,7 +8,7 @@ import type {
   WorkTaskStatus,
 } from "../data/workWorkspace";
 
-export const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#B9A171", "#9B8CE8", "#BC8EA5", "#8793A1"];
+export const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#B9A171", "#7D7FA8", "#BC8EA5", "#8793A1"];
 
 export const PROJECT_STATUS_LABELS: Record<WorkProjectStatus, string> = {
   active: "Aktywny",
@@ -144,21 +144,11 @@ export function subtaskCountLabel(count: number): string {
 }
 
 export function countWord(count: number, one: string, few: string, many: string): string {
-  const absolute = Math.abs(count);
-  const lastDigit = absolute % 10;
-  const lastTwoDigits = absolute % 100;
-  if (absolute === 1) return one;
-  if (lastDigit >= 2 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)) return few;
-  return many;
+  return pluralForm(count, one, few, many);
 }
 
 export function completedTaskLabel(count: number): string {
-  const absolute = Math.abs(count);
-  const lastDigit = absolute % 10;
-  const lastTwoDigits = absolute % 100;
-  return lastDigit >= 1 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)
-    ? "ukończone"
-    : "ukończonych";
+  return pluralForm(count, "ukończone", "ukończone", "ukończonych");
 }
 
 export function openTaskLabel(count: number): string {
