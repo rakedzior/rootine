@@ -42,7 +42,6 @@ import {
   MenuItem,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   SectionHeader,
   Select,
   uiColors,
@@ -827,7 +826,6 @@ export default function Kalendarz() {
   return (
     <ModuleShell
       pageWidth="fluid"
-      title="Kalendarz"
       className="task-module calendar-module"
       ambient={{
         scene: "calendar",
@@ -835,14 +833,6 @@ export default function Kalendarz() {
         progress: filteredEvents.length ? 1 - (openCalendarCount / filteredEvents.length) : 0,
         signal: `${openCalendarCount}:${anchorDateKey ?? "month"}`,
       }}
-      header={(
-        <PageHeader
-          title="Zadania"
-          description="Listy, terminy i codzienny rytm w jednym miejscu"
-          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={<Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>}
-        />
-      )}
     >
       <ModuleSidebar
         label="Widoki i listy zadań"
@@ -958,6 +948,7 @@ export default function Kalendarz() {
         <ContentHeader
           headingLevel={false}
           title={formatHeaderDate(viewDate)}
+          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           // The open count belongs in the description, exactly as in the task list. As a badge in
           // `meta` it sat next to a 28px button and made the calendar header 9px taller than the
           // list header, so switching views nudged the whole grid down.
@@ -1029,6 +1020,7 @@ export default function Kalendarz() {
                 <CalendarDays size={14} strokeWidth={1.7} />
               </Button>
             </div>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={14} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>
           </div>
           </>}
         />

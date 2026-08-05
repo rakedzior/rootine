@@ -875,7 +875,6 @@ export default function Odzywanie() {
     <ModuleShell
       className="nutrition-module"
       pageWidth="wide"
-      title="Dzienny rejestr"
       ambient={{ scene: "nutrition", progress: workspace.goals.calories > 0 ? totals.calories / workspace.goals.calories : 0, signal: `${allEntries.length}:${day.waterMl}` }}
     >
       <ModuleMain transitionKey={selectedDate} className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: uiColors.appBg, color: uiColors.textPrimary }}>

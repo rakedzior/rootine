@@ -80,7 +80,6 @@ import {
   ContentHeader,
   ModuleMain,
   ModuleShell,
-  PageHeader,
 } from "../ui";
 import "../../styles/today.css";
 
@@ -800,32 +799,10 @@ export default function Dzisiaj() {
         : "brak aktywności dzisiaj",
   }));
 
-  const pageHeader = (
-    <PageHeader
-      title="Dzisiaj"
-      description={formatFullDate(today)}
-      actions={(
-        <div className="today-add-menu">
-          <Button
-            variant="primary"
-            leadingIcon={<Plus size={13} aria-hidden="true" />}
-            aria-label="Dodaj do dzisiejszego planu"
-            aria-haspopup="dialog"
-            onClick={() => window.dispatchEvent(new Event("rootine:open-command-center"))}
-          >
-            <span className="header-action-label">Dodaj</span>
-          </Button>
-        </div>
-      )}
-    />
-  );
-
   return (
     <ModuleShell
       className="today-module"
       pageWidth="standard"
-      title="Dzisiaj"
-      header={pageHeader}
       ambient={{
         scene: "today",
         dayProgress,
@@ -840,8 +817,23 @@ export default function Dzisiaj() {
         <ContentHeader
           headingLevel={false}
           title="Plan dnia"
-          description="Dzisiejszy bilans wszystkich aktywnych obszarów"
+          // The date used to live in the page header; it is the only place the user reads
+          // which day the balance describes, so it moves into the description rather than out.
+          description={`${formatFullDate(today)} · Dzisiejszy bilans wszystkich aktywnych obszarów`}
           meta={<span>{remainingDailyItems} pozostało · {activeAreaCount} wymaga uwagi</span>}
+          actions={(
+            <div className="today-add-menu">
+              <Button
+                variant="primary"
+                leadingIcon={<Plus size={13} aria-hidden="true" />}
+                aria-label="Dodaj do dzisiejszego planu"
+                aria-haspopup="dialog"
+                onClick={() => window.dispatchEvent(new Event("rootine:open-command-center"))}
+              >
+                <span className="header-action-label">Dodaj</span>
+              </Button>
+            </div>
+          )}
         />
         <div className="today-scroll">
           <div className="today-content" data-active-area={activeAreaId ?? undefined}>

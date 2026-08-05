@@ -58,7 +58,6 @@ import {
   ContentHeader,
   Input,
   Modal,
-  PageHeader,
   Select,
   AddToTasksButton,
 } from "../ui";
@@ -132,7 +131,7 @@ function dueStatus(month: string, day: number | null, done: boolean): {
 export function JdgWorkspace({
   layout,
 }: {
-  layout?: (header: ReactNode, content: ReactNode) => ReactNode;
+  layout?: (content: ReactNode) => ReactNode;
 } = {}) {
   const [workspace, setWorkspace] = useState(loadJdgWorkspace);
   const [monthKey, setMonthKey] = useState(getJdgMonthKey);
@@ -364,14 +363,6 @@ export function JdgWorkspace({
     setEditorOpen(false);
   };
 
-  const header = (
-    <PageHeader
-        title="Sprawy"
-        description="Zobowiązania, finanse i ważne rejestry"
-        meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-    />
-  );
-
   const content = (
     <>
       <ContentHeader
@@ -380,6 +371,7 @@ export function JdgWorkspace({
         title="JDG"
         description="Miesięczne zamknięcie działalności"
         meta={<>
+          {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
           {/* Shared with the budget view: one month stepper for the whole module. It also names
               the month it steps through, so the description no longer has to repeat it. */}
           <div className="affairs-month-switcher">
@@ -878,5 +870,5 @@ export function JdgWorkspace({
     </>
   );
 
-  return layout ? layout(header, content) : <>{header}{content}</>;
+  return layout ? layout(content) : content;
 }

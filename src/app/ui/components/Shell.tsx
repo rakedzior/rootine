@@ -20,7 +20,6 @@ import { LivingDay, type LivingDayArea } from "../../experience/LivingDay";
 import type { RootineAreaId } from "../../experience/activeArea";
 import { PageShell } from "./PageShell";
 import type { PageWidth } from "./PageShell";
-import { PageHeader, type PageHeaderProps } from "./PageHeader";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -49,15 +48,15 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
+/**
+ * Module frame: ambient scene, optional context sidebar and detail panel around
+ * a PageShell.
+ *
+ * Like PageShell it has no title/header slot. Screen identity belongs to the
+ * ContentHeader each module renders inside its own content.
+ */
 export interface ModuleShellProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
-  title?: ReactNode;
-  subtitle?: ReactNode;
-  leading?: ReactNode;
-  meta?: ReactNode;
-  actions?: ReactNode;
   toolbar?: ReactNode;
-  /** @deprecated Use the PageShell props. Kept for embedded legacy renderers during migration. */
-  header?: ReactNode;
   contextSidebar?: ReactNode;
   detailPanel?: ReactNode;
   pageWidth?: PageWidth;
@@ -300,13 +299,7 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
 }
 
 export function ModuleShell({
-  title,
-  subtitle,
-  leading,
-  meta,
-  actions,
   toolbar,
-  header,
   contextSidebar,
   detailPanel,
   pageWidth = "standard",
@@ -320,14 +313,6 @@ export function ModuleShell({
   const ambientConfig = typeof ambient === "string" ? { scene: ambient } : ambient;
   const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
   const resolvedMemoryKey = memoryKey ?? findModuleForPath(pathname)?.id ?? pathname;
-  const legacyHeaderProps = header && isValidElement<PageHeaderProps>(header) && header.type === PageHeader
-    ? header.props
-    : undefined;
-  const resolvedTitle = title ?? legacyHeaderProps?.title;
-  const resolvedSubtitle = subtitle ?? legacyHeaderProps?.description;
-  const resolvedLeading = leading ?? legacyHeaderProps?.leading;
-  const resolvedMeta = meta ?? legacyHeaderProps?.meta;
-  const resolvedActions = actions ?? legacyHeaderProps?.actions;
   const childItems = Children.toArray(children);
   const inlineModuleSidebar = childItems.find((child) => (
     isValidElement(child) && child.type === ModuleSidebar
@@ -337,8 +322,6 @@ export function ModuleShell({
     ? childItems.filter((child) => child !== inlineModuleSidebar)
     : children;
   useModuleMemory(shellRef, resolvedMemoryKey);
-
-  const hasPageShell = resolvedTitle !== undefined || header !== undefined;
 
   return (
     <div
@@ -355,25 +338,9 @@ export function ModuleShell({
         moduleSidebar={resolvedModuleSidebar}
       >
         <MainContent>
-          {hasPageShell ? (
-            <PageShell
-              title={resolvedTitle}
-              subtitle={resolvedSubtitle}
-              leading={resolvedLeading}
-              meta={resolvedMeta}
-              actions={resolvedActions}
-              toolbar={toolbar}
-              header={legacyHeaderProps ? undefined : header}
-              width={pageWidth}
-            >
-              {contentChildren}
-            </PageShell>
-          ) : (
-            <>
-              {header && <div className="ui-module-shell__header">{header}</div>}
-              {contentChildren}
-            </>
-          )}
+          <PageShell toolbar={toolbar} width={pageWidth}>
+            {contentChildren}
+          </PageShell>
         </MainContent>
         {detailPanel}
       </WorkspaceLayout>

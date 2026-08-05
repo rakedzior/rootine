@@ -1694,12 +1694,6 @@ article:focus-within > .travel-row-actions {
 }
 
 @media ((max-width: 760px)) {
-  .travel-module .ui-page-header__actions .ui-button:not(.ui-button--icon) {
-    width: var(--control-height-md);
-    padding: 0;
-    font-size: 0;
-  }
-
   .travel-toolbar__readiness {
     display: none;
   }

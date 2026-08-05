@@ -65,36 +65,59 @@ Nie trzeba było więc żadnej decyzji produktowej ani nowego komponentu. Napraw
 
 ---
 
-## Co zostaje do zrobienia: osiem modułów z martwym wskaźnikiem zapisu
+## Zrobione w drugim commicie: pułapka zamknięta
 
-To samo `Brak zapisu lokalnego` jest podpięte pod martwy `PageHeader meta` w **ośmiu** modułach.
-Każdy z nich ma własny `ContentHeader`, więc naprawa jest taka sama jak w Odżywianiu:
+Po naprawie piątki okazało się, że martwe propsy zabrały znacznie więcej niż badge'e zapisu.
+**Sześć modułów nie miało w ogóle akcji tworzenia**, bo cała `actions` szła przez `PageHeader`:
 
-| Moduł | Martwy badge | Docelowy `ContentHeader` |
+| Moduł | Co było niedostępne | Czy istniała inna droga |
 | --- | --- | --- |
-| `Cele.tsx` | `:329` | `:422` |
-| `Zadania.tsx` | `:779` | `:1173` |
-| `Kalendarz.tsx` | `:842` | `:958` |
-| `Notatki.tsx` | `:1260` | `:1270` |
-| `Podroze.tsx` | `:870` | `:877` |
-| `Sport.tsx` | `:1163` | `:1210` |
-| `Jdg.tsx` | `:371` | `:377` |
-| `Sprawy.tsx` | `:833`, `:848` | `:869` |
+| `Cele` | „Dodaj cel", import, eksport, ustawienia | tylko empty state — z celami na liście **nie dało się dodać kolejnego**; import i eksport **całkiem** nieosiągalne |
+| `Praca` | menu „Dodaj" (firma / projekt / zadanie) | „Dodaj firmę" **nieosiągalne**; projekt i zadanie tylko z empty state |
+| `Zadania` | „Dodaj zadanie", „Opróżnij kosz" | dodawanie — inline composer; **„Opróżnij kosz" nieosiągalne** |
+| `Dzisiaj` | „Dodaj" | tak — przycisk w sidebarze (Ctrl K) |
+| `Kalendarz` | „Dodaj zadanie" | tak — klik w komórkę dnia |
+| `Notatki` | „Dodaj notatkę" | tak — empty state i widok listy |
 
-Uwaga: `Cele.tsx:329` gubi też `Oryginał danych zabezpieczony` i status importu, a `Jdg`
-i `Podroze` renderują się przez `layout(header, content)` z `Sprawy`, więc tam trzeba usunąć
-również nieużywany parametr `header`.
+Wszystko wróciło do `ContentHeader` odpowiedniego modułu. Wskaźnik `Brak zapisu lokalnego`
+działa teraz w **dziewięciu** modułach (`Cele`, `Zadania`, `Kalendarz`, `Notatki`, `Podroze`,
+`Sport`, `Jdg`, `Sprawy`, `Odzywanie`) plus `CelSzczegoly`.
 
-**To nie jest kosmetyka — użytkownik nie dowiaduje się, że jego zmiana nie została zapisana.**
-Zostaje tylko globalny toast z `Layout.tsx:1074`.
+Sama pułapka też zniknęła:
 
-## Druga sprawa: pułapka w sygnaturze
+- `PageShell` i `ModuleShell` **nie przyjmują** już `title`, `subtitle`, `leading`, `meta`,
+  `actions` ani `header`. Po usunięciu propsów kompilator wskazał 10 nieaktualnych call sites,
+  które wcześniej wyglądały poprawnie.
+- `ModuleShell` renderuje `PageShell` zawsze (wcześniej zależało to od obecności `title`).
+- Komponent `PageHeader` jest **usunięty** razem z ~140 liniami osieroconego CSS.
 
-Dopóki `PageShell` i `ModuleShell` przyjmują propsy, których nie renderują, każdy kolejny
-`title`/`meta`/`actions` zniknie tak samo cicho. Warto usunąć te propsy z sygnatur, żeby
-kompilator wskazał wszystkie call sites, zamiast pozwalać im wyglądać na poprawne.
-`h1Count === 0` na wszystkich 38 trasach (pomiar z audytu 2026-08-04) to prawdopodobnie
-ten sam mechanizm — moduły oddają tytuł do `PageShell`, który go nie renderuje.
+Weryfikacja: `desktop-1440` + `mobile-390` 112 passed / 4 skipped, 277 testów jednostkowych,
+`typecheck`, `lint` i `clip-audit` (0 przycięć) czyste.
+
+### Znane, **wcześniejsze** porażki matrycy viewportów (13)
+
+Potwierdzone `git stash`em jako niezależne od tych zmian:
+
+- `design-system.spec.ts:124` — `/zadania` ma tekst 10px (`.task-group-heading__count`,
+  `tasks.css:147`) na 7 szerokościach
+- `design-system.spec.ts:86` — oś treści na 1920 i 1366
+- `layout-consistency.spec.ts:51` — reflow Zadań, Kalendarza, Notatek i Pracy na 1024x768
+
+Oraz `stylelint`: `goals.css:143` — nieznana zmienna `--goal-detail-progress` (też wcześniejsze).
+
+## Pozostaje: brak `<h1>` poza stanami trasy
+
+Stan błędu trasy ma teraz `<h1>`, ale **pozostałe trasy nadal nie mają żadnego**.
+Pomiar `h1Count === 0` z audytu 2026-08-04 wynikał częściowo z tego samego mechanizmu —
+moduły oddawały tytuł do `PageShell`, który go nie renderował. Po tej zmianie tytuł ekranu
+jest już w `ContentHeader`, ale jako `headingLevel={false}`, czyli `<div role="presentation">`.
+
+Czyli struktura nagłówków jest teraz spójna i jawna, tylko zaczyna się od `<h2>`.
+`ContentHeader` przyjmuje `2 | 3 | false` — dodanie `1` i przestawienie głównego
+`ContentHeader` każdej trasy byłoby jedną zmianą na moduł.
+
+**To osobna decyzja o semantyce nagłówków na ~38 trasach, nie kontynuacja tej naprawy** —
+dlatego nie została podjęta tutaj. Warto ją rozstrzygnąć razem z audytem dostępności.
 
 ---
 

@@ -88,7 +88,7 @@ export default function CelSzczegoly() {
 
   if (!goal) {
     return (
-      <ModuleShell pageWidth="standard" title="Cel" subtitle="Nie znaleziono wybranego celu" ambient="quiet">
+      <ModuleShell pageWidth="standard" ambient="quiet">
         <ModuleMain>
           <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}>
             <Target size={38} strokeWidth={1.2} />
@@ -226,7 +226,6 @@ export default function CelSzczegoly() {
   return (
     <ModuleShell
       pageWidth="fluid"
-      title={goal.title}
       ambient="quiet"
     >
       <ModuleMain>

@@ -72,7 +72,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   ProgressBar,
   Select,
   AddToTasksButton,
@@ -784,12 +783,11 @@ export default function Sprawy() {
   if (view === "jdg") {
     return (
       <JdgWorkspace
-        layout={(header, content) => (
+        layout={(content) => (
           <ModuleShell
             contextSidebar={contextSidebar}
             className="affairs-module"
             pageWidth="wide"
-            title="JDG"
             ambient={{
               scene: "affairs",
               progress: workspace.matters.length
@@ -797,7 +795,6 @@ export default function Sprawy() {
                 : 0,
               signal: dueSoon,
             }}
-            header={header}
           >
             <ModuleMain transitionKey={view}>{content}</ModuleMain>
           </ModuleShell>
@@ -819,20 +816,12 @@ export default function Sprawy() {
             onChange={(event) => selectView(event.target.value as AffairsView)}
           />
         )}
-        layout={(_header, content) => (
+        layout={(content) => (
           <ModuleShell
             contextSidebar={contextSidebar}
             className="affairs-module affairs-module--travel"
             pageWidth="wide"
-            title="Podróże"
             ambient={{ scene: "travel", progress: 0, signal: dueSoon }}
-            header={(
-              <PageHeader
-                title="Sprawy"
-                description="Zobowiązania, finanse i ważne rejestry"
-                meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-              />
-            )}
           >
             {content}
           </ModuleShell>
@@ -841,21 +830,12 @@ export default function Sprawy() {
     );
   }
 
-  const pageHeader = (
-    <PageHeader
-      title="Sprawy"
-      description="Zobowiązania, finanse i ważne rejestry"
-      meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-    />
-  );
-
   return (
     <ModuleShell
       contextSidebar={contextSidebar}
       detailPanel={detailPanel}
       className="affairs-module"
       pageWidth="wide"
-      title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
       ambient={{
         scene: "affairs",
         progress: workspace.matters.length
@@ -863,7 +843,6 @@ export default function Sprawy() {
           : 0,
         signal: dueSoon,
       }}
-      header={pageHeader}
     >
       <ModuleMain transitionKey={view}>
         <ContentHeader
@@ -871,6 +850,7 @@ export default function Sprawy() {
           className={`affairs-toolbar ${view === "overview" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
           title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
           description={VIEW_COPY[view].description}
+          meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           mobileNavigation={<Select
             compact
             aria-label="Wybierz widok spraw"

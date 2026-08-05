@@ -46,7 +46,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   SectionHeader,
   Select,
 } from "../ui";
@@ -772,30 +771,9 @@ export default function Zadania() {
     />
   );
 
-  const pageHeader = (
-    <PageHeader
-      title="Zadania"
-      description="Listy, terminy i codzienny rytm w jednym miejscu"
-      meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-      actions={(
-        taskView === "kosz" && visible.length > 0 ? (
-          <Button variant="danger" leadingIcon={<Trash2 size={14} />} onClick={() => setEmptyTrashOpen(true)}>
-            Opróżnij kosz
-          </Button>
-        ) : (
-          <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
-            <span className="header-action-label">Dodaj zadanie</span>
-          </Button>
-        )
-      )}
-    />
-  );
-
   return (
     <ModuleShell
       pageWidth="fluid"
-      title={listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
-      header={pageHeader}
       className="task-module"
       ambient={{
         scene: taskView === "nawyki" ? "habits" : "tasks",
@@ -1187,8 +1165,9 @@ export default function Zadania() {
               ]}
               onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
-          meta={(listFilter || tagFilter) ? (
+          meta={(storageFailed || listFilter || tagFilter) ? (
               <div className="flex flex-wrap items-center gap-1.5">
+              {storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
               {listFilter && (
                 <Button variant="quiet" size="sm" onClick={() => setListFilter(null)}
                   style={{ background: (listy.find(l => l.id === listFilter)?.color ?? C.iceBlue)+"18", color: listy.find(l => l.id === listFilter)?.color ?? C.iceBlue }}>
@@ -1258,6 +1237,15 @@ export default function Zadania() {
                   <Calendar size={14} strokeWidth={1.7} />
                 </Button>
               </div>
+            )}
+            {taskView === "kosz" && visible.length > 0 ? (
+              <Button variant="danger" leadingIcon={<Trash2 size={14} />} onClick={() => setEmptyTrashOpen(true)}>
+                Opróżnij kosz
+              </Button>
+            ) : (
+              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={14} />} onClick={startNewTask}>
+                <span className="header-action-label">Dodaj zadanie</span>
+              </Button>
             )}
           </div>}
         />

@@ -57,7 +57,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   Select,
   AddToTasksButton,
 } from "../ui";
@@ -1245,26 +1244,11 @@ export default function Notatki() {
       detailPanel={detailPanel}
       className="notes-module"
       pageWidth="standard"
-      title={viewTitle}
       ambient={{
         scene: "notes",
         progress: activeNotes.length ? activeNotes.filter((note) => note.pinned).length / activeNotes.length : 0,
         signal: `${activeNotes.length}:${selectedNote?.id ?? "shelf"}`,
       }}
-      header={(
-        <PageHeader
-          title="Notatki"
-          // The current view is already named by the in-canvas section heading; repeating it
-          // here printed the same sentence twice, 120px apart.
-          description="Szybkie zapiski, listy i pomysły"
-          meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-          actions={(
-            <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
-              Dodaj notatkę
-            </Button>
-          )}
-        />
-      )}
     >
       <ModuleMain transitionKey={view}>
         <ContentHeader
@@ -1284,7 +1268,10 @@ export default function Notatki() {
               ]}
               onChange={(event) => selectView(event.target.value as NotesView)}
             />}
-          meta={<span className="notes-toolbar__count">{visibleNotes.length} {visibleNotes.length === 1 ? "notatka" : "notatek"}</span>}
+          meta={<>
+            {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
+            <span className="notes-toolbar__count">{visibleNotes.length} {visibleNotes.length === 1 ? "notatka" : "notatek"}</span>
+          </>}
           actions={<>
           <label className="notes-search">
             <Search size={13} aria-hidden="true" />
@@ -1320,6 +1307,9 @@ export default function Notatki() {
               Dodaj do listy
             </Button>
           )}
+          <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
+            Dodaj notatkę
+          </Button>
           </>}
         />
 

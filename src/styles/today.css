@@ -6,10 +6,6 @@
   scrollbar-width: thin;
 }
 
-.today-module .ui-page-header {
-  background: var(--color-sidebar-bg);
-}
-
 .today-module .ui-module-main {
   background: transparent;
 }

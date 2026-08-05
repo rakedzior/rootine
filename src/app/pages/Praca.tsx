@@ -63,7 +63,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   Select,
 } from "../ui";
 import { TaskInlineMenu, WorkCompanyActionsMenu, WorkProjectActionsMenu } from "./PracaMenus";
@@ -1484,6 +1483,16 @@ export default function Praca() {
             <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj projekt" title="Edytuj projekt" onClick={() => openProjectEditor(selectedProject)}><Pencil size={12} /></Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Usuń projekt" title="Usuń projekt" onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}><Trash2 size={12} /></Button>
           </>}
+          <div className="work-add-menu">
+            <MenuTrigger ref={addTriggerRef} open={addMenuOpen} menuId="work-add-menu" className="ui-button ui-button--primary" onClick={() => setAddMenuOpen((current) => !current)}><Plus size={13} /> Dodaj</MenuTrigger>
+            {addMenuOpen && (
+              <Menu id="work-add-menu" className="work-add-menu__panel" triggerRef={addTriggerRef} onDismiss={() => setAddMenuOpen(false)}>
+                 <MenuItem leadingIcon={<Building2 size={14} />} onClick={() => { setAddMenuOpen(false); openCompanyEditor(); }}>Dodaj firmę</MenuItem>
+                 <MenuItem selected={primaryAddKind === "project"} leadingIcon={<FolderKanban size={14} />} onClick={() => { setAddMenuOpen(false); openProjectEditor(); }}>Dodaj projekt</MenuItem>
+                 <MenuItem selected={primaryAddKind === "task"} leadingIcon={<ListTree size={14} />} onClick={() => { setAddMenuOpen(false); openTaskEditor(); }}>Dodaj zadanie</MenuItem>
+              </Menu>
+            )}
+          </div>
         </>}
       />
     );
@@ -1562,26 +1571,7 @@ export default function Praca() {
     <ModuleShell
       className="work-module"
       pageWidth="wide"
-      title="Praca"
       ambient={{ scene: "work", progress: workspace.tasks.length ? workspace.tasks.filter((task) => getTaskStatus(task) === "completed").length / workspace.tasks.length : 0 }}
-      header={(
-        <PageHeader
-          title="Praca"
-          description="Dzisiaj, terminy i projekty w jednym miejscu"
-          actions={(
-            <div className="work-add-menu">
-              <MenuTrigger ref={addTriggerRef} open={addMenuOpen} menuId="work-add-menu" className="ui-button ui-button--primary" onClick={() => setAddMenuOpen((current) => !current)}><Plus size={13} /> Dodaj</MenuTrigger>
-              {addMenuOpen && (
-                <Menu id="work-add-menu" className="work-add-menu__panel" triggerRef={addTriggerRef} onDismiss={() => setAddMenuOpen(false)}>
-                   <MenuItem leadingIcon={<Building2 size={14} />} onClick={() => { setAddMenuOpen(false); openCompanyEditor(); }}>Dodaj firmę</MenuItem>
-                   <MenuItem selected={primaryAddKind === "project"} leadingIcon={<FolderKanban size={14} />} onClick={() => { setAddMenuOpen(false); openProjectEditor(); }}>Dodaj projekt</MenuItem>
-                   <MenuItem selected={primaryAddKind === "task"} leadingIcon={<ListTree size={14} />} onClick={() => { setAddMenuOpen(false); openTaskEditor(); }}>Dodaj zadanie</MenuItem>
-                </Menu>
-              )}
-            </div>
-          )}
-        />
-      )}
       contextSidebar={sidebar}
       detailPanel={detailTask ? (
         <DetailPanel label="Szczegóły zadania" onDismiss={() => setDetailTaskId(null)} className="work-detail-panel">

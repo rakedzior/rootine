@@ -37,7 +37,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   SectionHeader,
   Select,
 } from "../ui";
@@ -322,60 +321,9 @@ export default function Cele() {
           ? categories.find((category) => category.id === activeFilter.slice("category:".length))?.label ?? "Kategoria"
           : FILTER_ITEMS.find((item) => item.id === activeFilter)?.label ?? "Cele";
 
-  const pageHeader = (
-    <PageHeader
-      title="Cele"
-      description="Przegląd Twoich celów i postępów"
-      meta={storageFailed
-        ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
-        : loadStatus === "corrupt"
-          ? <Badge tone="danger">Oryginał danych zabezpieczony</Badge>
-          : importNotice
-            ? <Badge tone={importNotice.tone}>{importNotice.tone === "success" ? "Import zakończony" : "Błąd importu"}</Badge>
-            : undefined}
-      actions={<>
-        <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={15} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
-        <div className="relative">
-          <Button
-            ref={headerMenuTriggerRef}
-            variant="quiet"
-            iconOnly
-            onClick={() => setHeaderMenuOpen((open) => !open)}
-            aria-label="Więcej opcji"
-            aria-haspopup="menu"
-            aria-expanded={headerMenuOpen}
-            aria-controls={headerMenuId}
-          >
-            <Ellipsis size={17} />
-          </Button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            aria-label="Wybierz plik danych celów do importu"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void inspectImportFile(file);
-              event.currentTarget.value = "";
-            }}
-          />
-          {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} className="absolute right-0 top-12 z-40 w-48">
-            <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
-            <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
-            <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
-            <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Settings2 />}>Ustawienia celów</MenuItem>
-          </Menu>}
-        </div>
-      </>}
-    />
-  );
-
   return (
     <ModuleShell
       pageWidth="standard"
-      title={filterLabel}
-      header={pageHeader}
       contextSidebar={(
         <GoalSubSidebar
           activeFilter={activeFilter}
@@ -436,6 +384,13 @@ export default function Cele() {
               ]}
               onChange={(event) => handleFilter(event.target.value as FilterId)}
             />}
+          meta={storageFailed
+            ? <Badge tone="danger">Brak zapisu lokalnego</Badge>
+            : loadStatus === "corrupt"
+              ? <Badge tone="danger">Oryginał danych zabezpieczony</Badge>
+              : importNotice
+                ? <Badge tone={importNotice.tone}>{importNotice.tone === "success" ? "Import zakończony" : "Błąd importu"}</Badge>
+                : undefined}
           actions={<div className="flex items-center gap-2">
             <div className="relative goals-sort">
               <Button ref={sortMenuTriggerRef} variant="quiet" size="sm" onClick={() => setSortMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortMenuOpen} aria-controls={sortMenuId} trailingIcon={<ChevronDown size={11} />}>
@@ -450,6 +405,39 @@ export default function Cele() {
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("grid")} aria-label="Widok kafelków" aria-pressed={layout === "grid"}>
                 <Grid2X2 size={14} strokeWidth={1.8} />
               </Button>
+            </div>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => setGoalFormId("new")} leadingIcon={<Plus size={15} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
+            <div className="relative">
+              <Button
+                ref={headerMenuTriggerRef}
+                variant="quiet"
+                iconOnly
+                onClick={() => setHeaderMenuOpen((open) => !open)}
+                aria-label="Więcej opcji"
+                aria-haspopup="menu"
+                aria-expanded={headerMenuOpen}
+                aria-controls={headerMenuId}
+              >
+                <Ellipsis size={17} />
+              </Button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                aria-label="Wybierz plik danych celów do importu"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void inspectImportFile(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} className="absolute right-0 top-12 z-40 w-48">
+                <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
+                <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
+                <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
+                <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Settings2 />}>Ustawienia celów</MenuItem>
+              </Menu>}
             </div>
           </div>}
         />

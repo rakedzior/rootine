@@ -304,21 +304,6 @@
 .ui-menu-item__label { min-width: 0; flex: 1; }
 .ui-menu-item__trailing { display: grid; flex: 0 0 auto; place-items: center; }
 
-.ui-page-header { flex: 0 0 auto; border-bottom: 1px solid var(--color-border); background: var(--color-sidebar-bg); }
-.ui-page-header__row { display: flex; width: 100%; min-height: var(--page-header-height); align-items: center; justify-content: space-between; gap: var(--space-lg); padding: 0 var(--space-3xl); }
-.ui-page-header__identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); }
-/* Navigation-only slot (e.g. a back control on detail routes). Module root pages must not
-   set `leading`, otherwise the header identity shifts horizontally between tabs. The fixed width
-   keeps the title offset identical regardless of the control rendered inside. */
-.ui-page-header__leading { display: grid; width: 28px; flex: 0 0 auto; place-items: center; color: var(--color-text-secondary); }
-.ui-page-header__copy { min-width: 0; }
-.ui-page-header__heading { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
-.ui-page-header__title { overflow: hidden; margin: 0; color: var(--color-text-primary); font-size: var(--text-title); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-tight); line-height: var(--leading-snug); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.ui-page-header__meta { min-width: 0; }
-.ui-page-header__description { overflow: hidden; margin: 2px 0 0; color: var(--color-text-secondary); font-size: var(--text-label); line-height: var(--leading-snug); text-overflow: ellipsis; white-space: nowrap; }
-.ui-page-header__actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-sm); }
-.ui-page-header__below { width: 100%; padding: 0 var(--space-3xl) var(--space-md); }
-
 .ui-content-header {
   width: 100%;
   min-width: 0;
@@ -1293,57 +1278,7 @@
 .ui-module-shell--ambient > :not(.ui-ambient-scene) {
   position: relative;
   z-index: 1;
-}
-
-.ui-module-shell--ambient .ui-page-header {
-  position: relative;
-  overflow: hidden;
-  background: var(--color-sidebar-bg);
-}
-
-.ui-module-shell--ambient .ui-page-header {
-  border-bottom-color: color-mix(in srgb, var(--ambient-brand) 4%, var(--color-border));
-}
-
-.ui-module-shell--ambient .ui-page-header::before {
-  position: absolute;
-  z-index: 2;
-  bottom: 0;
-  left: var(--space-3xl);
-  width: 44px;
-  height: 1px;
-  border-radius: var(--radius-pill);
-  background: var(--theme-signature);
-  content: "";
-  opacity: 0.58;
-  pointer-events: none;
-}
-
-.ui-module-shell--ambient .ui-page-header::after {
-  position: absolute;
-  z-index: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(28vw, 360px);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--ambient-brand) 3%, transparent) 60%,
-    color-mix(in srgb, var(--ambient-brand) 6%, transparent) 100%
-  );
-  content: "";
-  opacity: 0.32;
-  pointer-events: none;
-}
-
-.ui-module-shell--ambient .ui-page-header__row,
-.ui-module-shell--ambient .ui-page-header__below {
-  position: relative;
-  z-index: 1;
-}
-
-.ui-module-shell--ambient > .ui-module-shell__body > .ui-module-main {
+}.ui-module-shell--ambient > .ui-module-shell__body > .ui-module-main {
   background: color-mix(in srgb, var(--color-graphite-canvas) 94%, transparent) !important;
 }
 
@@ -1713,14 +1648,7 @@
   .ui-module-shell--ambient[data-ambient="cool"] > .ui-module-shell__body > .ui-module-main,
   .ui-module-shell--ambient[data-ambient="focus"] > .ui-module-shell__body > .ui-module-main {
     background: var(--color-graphite-canvas) !important;
-  }
-
-  .ui-module-shell--ambient .ui-page-header::after {
-    width: min(24vw, 280px);
-    background-size: 100% 100%, auto 220px;
-    opacity: 0.18;
-  }
-}
+  }}
 
 @media (max-width: 760px) {
   .ui-module-shell--ambient::before {
@@ -1733,35 +1661,7 @@
   .ui-module-shell--ambient[data-ambient="cool"] > .ui-module-shell__body > .ui-module-main,
   .ui-module-shell--ambient[data-ambient="focus"] > .ui-module-shell__body > .ui-module-main {
     background: var(--color-graphite-canvas) !important;
-  }
-
-  .ui-module-shell--ambient .ui-page-header::after {
-    width: 180px;
-    background-size: 100% 100%, auto 200px;
-    opacity: 0.14;
-  }
-
-  .ui-module-shell--ambient .ui-page-header::before {
-    left: var(--space-lg);
-    width: 32px;
-  }
-
-  .ui-page-header__row { padding: 0 var(--space-lg); }
-  .ui-page-header__identity { flex: 1 1 auto; }
-  .ui-page-header__copy { flex: 1 1 auto; }
-  .ui-page-header__heading { flex-wrap: wrap; row-gap: var(--space-xs); }
-  .ui-page-header__title { flex: 0 0 auto; }
-  .ui-page-header__meta {
-    order: 2;
-    width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .ui-page-header__meta::-webkit-scrollbar { display: none; }
-  .ui-page-header__below { padding-right: var(--space-lg); padding-left: var(--space-lg); }
-  .ui-page-header__description { display: none; }
-  .ui-page-header__actions { gap: var(--space-xs); }
-  .ui-content-header__inner { padding: var(--space-md) var(--space-lg); }
+  }.ui-content-header__inner { padding: var(--space-md) var(--space-lg); }
   .ui-content-header__row { min-height: 36px; flex-wrap: wrap; align-items: flex-start; row-gap: var(--space-sm); }
   .ui-content-header__identity { width: 100%; }
   .ui-content-header__mobile-nav { display: flex; min-width: 0; flex: 0 1 180px; }
@@ -1824,12 +1724,7 @@
     clip: rect(0 0 0 0);
     clip-path: inset(50%);
     white-space: nowrap;
-  }
-  .ui-page-header__actions .ui-button--primary.ui-button--icon-mobile {
-    width: var(--control-height-md);
-    padding: 0;
-  }
-}
+  }}
 
 @media (pointer: coarse) {
   .ui-button--sm,
@@ -2164,35 +2059,7 @@
   padding: var(--space-sm) 0;
   border-top: 1px solid var(--color-border-subtle);
   border-bottom: 1px solid var(--color-border-subtle);
-}
-.ui-page-header {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-}
-.ui-page-header__row { min-height: 0; padding: 0; align-items: flex-start; }
-.ui-page-header__identity,
-.ui-page-header__copy { min-width: 0; }
-.ui-page-header__identity { flex: 1 1 auto; align-items: flex-start; }
-.ui-page-header__title {
-  overflow: visible;
-  color: var(--color-text-primary);
-  font-size: var(--text-title);
-  line-height: var(--leading-tight);
-  white-space: normal;
-}
-.ui-page-header__description {
-  max-width: 68ch;
-  overflow: visible;
-  margin-top: var(--space-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--text-body);
-  line-height: var(--leading-normal);
-  white-space: normal;
-}
-.ui-page-header__actions { flex-wrap: wrap; justify-content: flex-end; padding-left: var(--space-lg); }
-.ui-context-sidebar,
+}.ui-context-sidebar,
 .ui-module-sidebar { width: var(--context-sidebar-width); min-width: var(--context-sidebar-width); }
 .ui-section-header__heading { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
 .ui-section-header__body { min-width: 0; }
@@ -2230,8 +2097,5 @@
 @media (max-width: 760px) {
   .ui-module-shell__body,
   .ui-module-shell__body.is-with-module-sidebar { grid-template-columns: minmax(0, 1fr); }
-  .ui-page-shell { padding: var(--space-xl) var(--space-lg) var(--space-2xl); }
-  .ui-page-header__row { flex-wrap: wrap; gap: var(--space-md); }
-  .ui-page-header__actions { width: 100%; justify-content: flex-start; padding-left: 0; }
-  .ui-page-toolbar { align-items: stretch; }
+  .ui-page-shell { padding: var(--space-xl) var(--space-lg) var(--space-2xl); }.ui-page-toolbar { align-items: stretch; }
 }

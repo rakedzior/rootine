@@ -79,7 +79,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   Select,
 } from "../ui";
 import "../../styles/sport.css";
@@ -1149,20 +1148,12 @@ export default function Sport() {
     <ModuleShell
       className="sport-module sport-planner-module"
       pageWidth="wide"
-      title={viewMeta.title}
       ambient={{
         scene: "sport",
         progress: activeSessionProgress,
         active: Boolean(activeSession),
         signal: activeSession ? `${activeSession.id}:${activeSessionDone}` : view,
       }}
-      header={(
-        <PageHeader
-          title="Sport"
-          description="Treningi, plan i historia aktywności"
-          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-        />
-      )}
       contextSidebar={(
         <SportSidebar
           view={view}
@@ -1212,6 +1203,7 @@ export default function Sport() {
           className={`sport-planner-toolbar ${view === "cycle" ? "has-status" : ""}`.trim()}
           title={viewMeta.title}
           description={viewMeta.description}
+          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           mobileNavigation={<Select
             compact
             fieldClassName="context-mobile-select"

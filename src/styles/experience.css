@@ -47,11 +47,6 @@
   color: var(--color-text-primary);
 }
 
-.ui-page-header__title {
-  /* Keep the module title anchored; the quieter route transition carries the context change. */
-  view-transition-name: none;
-}
-
 .app-profile-privacy {
   display: flex;
   width: 100%;

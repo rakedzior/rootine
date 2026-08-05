@@ -69,7 +69,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  PageHeader,
   Select,
   Tabs,
   AddToTasksButton,
@@ -127,7 +126,7 @@ export default function Podroze({
   layout,
   embeddedViewSelect,
 }: {
-  layout?: (header: ReactNode, content: ReactNode) => ReactNode;
+  layout?: (content: ReactNode) => ReactNode;
   embeddedViewSelect?: ReactNode;
 } = {}) {
   const [workspace, setWorkspace] = useState(loadTravelWorkspace);
@@ -863,14 +862,6 @@ export default function Podroze({
     </Button>
   );
 
-  const pageHeader = (
-    <PageHeader
-      title="Podróże"
-      description="Plany, rezerwacje i przygotowania do wyjazdów"
-      meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
-    />
-  );
-
   const pageContent = (
     <>
       <ModuleMain>
@@ -881,6 +872,7 @@ export default function Podroze({
           description={selectedTrip ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}` : "Zaplanowane i zakończone wyjazdy"}
           mobileNavigation={embeddedViewSelect}
           meta={<>
+            {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
             {/* The trip picker always shows the same text as the title next to it, and in the
                 `leading` slot it pushed that title 192px right of every other module. It is a
                 navigation control, so it sits with the other controls. */}
@@ -1714,13 +1706,12 @@ export default function Podroze({
   );
 
   return layout
-    ? layout(pageHeader, pageContent)
+    ? layout(pageContent)
     : (
       <ModuleShell
         contextSidebar={contextSidebar}
         className="travel-module"
         pageWidth="wide"
-        title={selectedTrip?.name ?? "Przegląd podróży"}
         ambient={{
           scene: "travel",
           progress: selectedTrip
@@ -1732,7 +1723,6 @@ export default function Podroze({
             ? `${selectedTrip.id}:${selectedTrip.tasks.filter((task) => task.completed).length}`
             : completedTrips.length,
         }}
-        header={pageHeader}
       >
         {pageContent}
       </ModuleShell>

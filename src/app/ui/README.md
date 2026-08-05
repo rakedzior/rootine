@@ -27,11 +27,11 @@ import {
 
 ## Reguły
 
-Globalny pasek `PageHeader` jest usunięty z każdej zakładki i podzakładki. `PageShell` zachowuje dawny slot wyłącznie dla zgodności, ale renderuje treść bez tego paska; bieżący widok i akcje są w `ContentHeader`.
+Globalny pasek `PageHeader` jest usunięty z każdej zakładki i podzakładki — razem z samym komponentem. `PageShell` i `ModuleShell` **nie mają** już slotów `title`, `subtitle`, `leading`, `meta`, `actions` ani `header`. Przyjmowały je i po cichu wyrzucały, więc każde nieaktualne call site zamieniało się w niewidoczną treść zamiast w błąd kompilacji; tak zginął przycisk powrotu w szczegółach celu, cały komunikat błędu trasy i dziewięć wskaźników nieudanego zapisu. Bieżący widok, jego metadane i akcje należą do `ContentHeader`.
 
 1. Nie twórz lokalnych kopii tych komponentów ani lokalnej palety dla nowej zakładki.
 2. Układaj ekran na rytmie 4px i korzystaj z wartości z `tokens.css`.
-3. `PageShell` jest wspólnym kontenerem strony, a jego `PageHeader` nie renderuje dużego tytułu strony.
+3. `PageShell` jest wspólnym kontenerem strony i nie renderuje żadnego tytułu. Tytuł ekranu podaje `ContentHeader`.
 4. Jedna akcja w aktualnym kontekście może używać `Button variant="primary"`; pozostałe są `quiet` lub `ghost`.
 5. `Card` nie służy do opakowywania każdej sekcji. Używaj jej tylko dla rzeczywistej powierzchni lub jednostki danych.
 6. `Badge` opisuje status, kategorię albo krótki licznik. Kolor semantyczny musi odpowiadać znaczeniu.
@@ -82,7 +82,6 @@ export function NewSection() {
 - `Modal`: title, description, eyebrow, footer, width i dostępne zarządzanie fokusem.
 - `Tabs`: semantyka tablist/tab i obsługa strzałek, Home oraz End.
 - `Badge`: neutral, primary, success, warning, danger i violet; pill albo plain z opcjonalną kropką.
-- `PageHeader`: title, description, leading, meta, actions oraz opcjonalny drugi wiersz.
 - `ContentHeader`: tytuł i opis aktualnego widoku, metadane, lokalne akcje, kontrolki, drugi wiersz oraz osobna nawigacja mobilna.
 - `SectionHeader`: hierarchia nagłówka, opis, akcja oraz wariant label.
 - `EmptyState`: icon, title, description i jedna akcja.
