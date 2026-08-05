@@ -217,7 +217,7 @@ export function TemplateLibrary({
           title={templates.length ? "Brak pasujących szablonów" : "Brak szablonów"}
           description={templates.length
             ? "Zmień wyszukiwanie lub wybraną kategorię."
-            : "Użyj przycisku „Nowy szablon” w nagłówku, aby utworzyć pierwszą jednostkę."}
+            : "Użyj przycisku „Dodaj szablon” w nagłówku, aby utworzyć pierwszą jednostkę."}
         />
       )}
     </div>
