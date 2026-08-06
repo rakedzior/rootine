@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./Button";
+import { uiLayers } from "../tokens";
 
 export interface DatePickerProps {
   value: string;
@@ -15,6 +16,8 @@ export interface DatePickerProps {
   min?: string;
   max?: string;
   displayValue?: ReactNode;
+  portalLayer?: keyof typeof uiLayers;
+  /** @deprecated Use portalLayer so layering remains semantic. */
   portalZIndex?: number;
   fieldClassName?: string;
   "aria-label"?: string;
@@ -102,6 +105,7 @@ export function DatePicker({
   min,
   max,
   displayValue: customDisplayValue,
+  portalLayer,
   portalZIndex,
   fieldClassName = "",
   "aria-label": ariaLabel,
@@ -300,7 +304,11 @@ export function DatePicker({
           aria-modal="false"
           aria-labelledby={`${dialogLabelId} ${monthHeadingId}`}
           className={`ui-date-picker ${position.above ? "ui-date-picker--above" : ""}`.trim()}
-          style={{ left: position.left, top: position.top, ...(portalZIndex ? { zIndex: portalZIndex } : {}) }}
+          style={{
+            left: position.left,
+            top: position.top,
+            ...(portalLayer ? { zIndex: uiLayers[portalLayer] } : portalZIndex ? { zIndex: portalZIndex } : {}),
+          }}
           onKeyDown={handleDialogKeyDown}
         >
           <span id={dialogLabelId} className="ui-sr-only">

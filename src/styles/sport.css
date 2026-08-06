@@ -397,7 +397,7 @@
   background: var(--color-graphite-input);
   color: var(--color-text-secondary);
   text-align: left;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 
 .sport-cycle-sidebar__plans .sport-cycle-plan-card {
@@ -711,7 +711,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-workspace .sport-cycle-workout__grip {
   opacity: 0;
-  transition: opacity 140ms ease;
+  transition: opacity var(--motion-fast) var(--ease-out);
 }
 
 .sport-cycle-workspace .sport-cycle-workout:hover .sport-cycle-workout__grip,
@@ -950,8 +950,8 @@ button.sport-cycle-plan-card:focus-visible {
   text-align: left;
   cursor: grab;
   transition:
-    background-color 140ms ease,
-    border-color 140ms ease;
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .sport-cycle-workout:hover {
@@ -1142,7 +1142,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-search > svg,
 .sport-history-search > svg {
   position: absolute;
-  z-index: 2;
+  z-index: var(--layer-local);
   top: 50%;
   left: var(--space-md);
   color: var(--color-text-muted);
@@ -1291,7 +1291,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-template-actions > div {
   position: absolute;
-  z-index: 30;
+  z-index: var(--layer-context);
   top: calc(100% + 4px);
   right: 0;
   display: grid;
@@ -1910,7 +1910,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-icon-button { display: inline-grid; width: var(--control-height-sm); height: var(--control-height-sm); place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); cursor: pointer; }
 .sport-icon-button:hover { border-color: var(--color-border-strong); background: var(--color-graphite-panel); color: var(--color-chalk-white); }
 .sport-icon-button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
-.sport-row-menu { position: absolute; z-index: 8; top: calc(100% + 4px); right: 0; min-width: 180px; box-shadow: var(--shadow-floating); }
+.sport-row-menu { position: absolute; z-index: var(--layer-menu-local); top: calc(100% + 4px); right: 0; min-width: 180px; box-shadow: var(--shadow-floating); }
 .sport-data { color: var(--color-chalk-white); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .sport-record-detail { display: grid; align-content: start; gap: var(--space-lg); padding: var(--space-xl); overflow-y: auto; }
 .sport-record-detail__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
@@ -2269,7 +2269,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-history-filter,
 .sport-analysis-range {
-  width: 210px;
+  width: var(--component-menu-wide-width);
 }
 
 .sport-history-row__date,
@@ -2517,7 +2517,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-analysis-range {
-  width: 210px;
+  width: var(--component-menu-wide-width);
 }
 
 .sport-analysis-metrics > .ui-card {
@@ -2594,7 +2594,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-analysis-chart > .sport-analysis-average {
   position: absolute;
-  z-index: 2;
+  z-index: var(--layer-local);
   right: 0;
   left: 0;
   display: block;
@@ -2842,7 +2842,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-workout-detail__disclosure-label > svg {
   flex: 0 0 auto;
   color: var(--color-text-muted);
-  transition: transform 160ms ease-out;
+  transition: transform var(--motion-disclosure) var(--ease-out);
 }
 
 .sport-workout-detail__disclosure-summary:hover,
@@ -2984,7 +2984,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-undo-toast {
   position: fixed;
-  z-index: 90;
+  z-index: var(--layer-overlay);
   right: var(--space-xl);
   bottom: var(--space-xl);
   display: flex;
@@ -3027,7 +3027,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-session > :not(.ui-ambient-scene) {
   position: relative;
-  z-index: 1;
+  z-index: var(--layer-raised);
 }
 
 .sport-active-session__header {
@@ -3240,12 +3240,12 @@ button.sport-cycle-plan-card:focus-visible {
   position: absolute;
   top: 84px;
   right: var(--space-xl);
-  z-index: 20;
+  z-index: var(--layer-sticky);
 }
 
 .sport-rest-timer {
   position: absolute;
-  z-index: 45;
+  z-index: var(--layer-assistant);
   bottom: var(--space-xl);
   left: 50%;
   display: flex;
@@ -3290,7 +3290,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-plan {
   position: absolute;
-  z-index: 40;
+  z-index: var(--layer-detail);
   inset: 71px 0 0 auto;
   display: flex;
   width: min(370px, 100%);

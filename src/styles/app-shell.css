@@ -83,7 +83,7 @@
 
 .app-skip-link {
   position: absolute;
-  z-index: 1000;
+  z-index: var(--layer-system);
   top: var(--space-sm);
   left: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
@@ -179,7 +179,8 @@
 .app-nav-item {
   position: relative;
   display: flex;
-  min-height: 40px;
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
   align-items: center;
   gap: var(--space-md);
   padding: 0 var(--space-md);
@@ -255,54 +256,100 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.app-sidebar-glance {
-  display: grid;
-  gap: 2px;
-  padding-bottom: var(--space-xs);
-}
-
+.app-sidebar-utility,
 .app-sidebar-glance__row,
-.app-sidebar-action,
 .app-sidebar-profile {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
   align-items: center;
   gap: var(--space-md);
   padding: 0 var(--space-md);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-surface-hover) 28%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
   text-align: left;
 }
 
-button.app-sidebar-glance__row,
-.app-sidebar-action,
-.app-sidebar-profile {
+.app-sidebar .assistant-entry {
+  display: grid;
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  font-size: var(--text-body);
+}
+
+.app-sidebar-utility {
   cursor: pointer;
   transition:
+    border-color var(--motion-fast) var(--ease-out),
     background-color var(--motion-fast) var(--ease-out),
-    color var(--motion-fast) var(--ease-out);
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
-button.app-sidebar-glance__row:hover,
-.app-sidebar-action:hover,
-.app-sidebar-profile:hover,
-.app-sidebar-action[aria-expanded="true"],
-.app-sidebar-profile[aria-expanded="true"] {
+.app-sidebar-utility:hover:not(:disabled),
+.app-sidebar-utility:focus-visible,
+.app-sidebar-utility[aria-expanded="true"],
+.assistant-entry.is-active {
+  border-color: transparent;
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
+  transform: translateX(1px);
 }
 
-button.app-sidebar-glance__row:disabled {
+.app-sidebar-utility.is-active,
+.assistant-entry.is-active {
+  background: color-mix(in srgb, var(--color-primary-subtle) 84%, transparent);
+  color: var(--color-primary-text);
+}
+
+.app-sidebar-utility::before {
+  position: absolute;
+  top: var(--space-sm);
+  bottom: var(--space-sm);
+  left: -1px;
+  width: 1px;
+  border-radius: var(--radius-pill);
+  background: var(--theme-signature);
+  content: "";
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition: opacity var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+
+.app-sidebar-utility.is-active::before,
+.app-sidebar-utility[aria-expanded="true"]::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.app-sidebar-utility.is-active > svg,
+.app-sidebar-utility[aria-expanded="true"] > svg {
+  color: var(--theme-signature);
+}
+
+.app-sidebar-utility:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.app-sidebar-utility:disabled {
   cursor: wait;
   opacity: var(--opacity-completed);
 }
 
-.app-sidebar-glance__row > svg,
-.app-sidebar-action > svg {
+.app-sidebar .assistant-entry:disabled {
+  background: color-mix(in srgb, var(--color-surface-hover) 20%, transparent);
+}
+
+.app-sidebar-utility > svg {
   flex: 0 0 auto;
   stroke-width: var(--icon-stroke-width);
 }
@@ -312,6 +359,13 @@ button.app-sidebar-glance__row:disabled {
   display: grid;
   min-width: 0;
   gap: 2px;
+}
+
+.app-sidebar-glance__copy--inline {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--space-sm);
 }
 
 .app-sidebar-glance__copy strong,
@@ -326,7 +380,7 @@ button.app-sidebar-glance__row:disabled {
 .app-sidebar-glance__copy strong {
   color: var(--color-text-primary);
   font-family: var(--font-data);
-  font-size: var(--text-label);
+  font-size: var(--text-body);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-medium);
 }
@@ -336,60 +390,89 @@ button.app-sidebar-glance__row:disabled {
   font-size: var(--text-micro);
 }
 
-.app-sidebar-action__label {
-  overflow: hidden;
-  color: inherit;
-  font-size: var(--text-body);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.app-sidebar-glance__time-stack,
+.app-sidebar-weather__compact-copy {
+  display: none;
 }
 
 .app-sidebar-profile {
-  min-height: 48px;
+  text-align: left;
 }
 
 .app-sidebar-profile__avatar {
   display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   place-items: center;
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
-  background: var(--color-surface-1);
-  color: var(--color-text-primary);
-  font-size: var(--text-label);
-  font-weight: var(--weight-semibold);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+}
+
+.app-sidebar-profile__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .app-sidebar-profile__copy strong {
   color: var(--color-text-primary);
-  font-size: var(--text-label);
-  font-weight: var(--weight-semibold);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
 }
 
-.app-sidebar-profile__copy small {
-  color: var(--color-sidebar-text);
-  font-size: var(--text-micro);
-}
-
-.app-sidebar.is-collapsed .app-sidebar-glance__row,
-.app-sidebar.is-collapsed .app-sidebar-action,
-.app-sidebar.is-collapsed .app-sidebar-profile {
+.app-sidebar.is-collapsed .app-sidebar-utility {
   justify-content: center;
   gap: 0;
   padding: 0;
 }
 
 .app-sidebar.is-collapsed .app-sidebar-glance__copy,
-.app-sidebar.is-collapsed .app-sidebar-action__label,
 .app-sidebar.is-collapsed .app-sidebar-profile__copy {
   display: none;
 }
 
+.app-sidebar.is-collapsed .app-sidebar-replay > svg {
+  display: none;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-glance__time-stack {
+  display: grid;
+  gap: 1px;
+  place-items: center;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-glance__time-stack strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+}
+
+.app-sidebar.is-collapsed .app-sidebar-weather {
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.app-sidebar.is-collapsed .app-sidebar-weather__compact-copy {
+  display: block;
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+
 .app-sidebar-popover {
   position: absolute;
-  z-index: 50;
+  z-index: var(--layer-app-overlay);
   right: var(--space-sm);
   bottom: 60px;
   left: var(--space-sm);
@@ -699,6 +782,40 @@ button.app-sidebar-glance__row:disabled {
   line-height: var(--leading-normal);
 }
 
+.app-profile-dialog__actions {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.app-profile-dialog__actions button {
+  display: flex;
+  min-height: var(--control-height-md);
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0 var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-profile-dialog__actions button:hover,
+.app-profile-dialog__actions button:focus-visible {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-profile-dialog__actions button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
 .app-recovery-entry {
   display: flex;
   margin-top: var(--space-xs);
@@ -936,4 +1053,3 @@ button.app-sidebar-glance__row:disabled {
 .app-mobile-menu {
   display: none;
 }
-

@@ -958,7 +958,7 @@ export default function Praca() {
               displayValue={dateLabel}
               aria-label={`Zmień termin zadania „${task.title}”`}
               fieldClassName="work-task-inline-date"
-              portalZIndex={260}
+              portalLayer="featurePopup"
               onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
             />
           </div>
@@ -1301,7 +1301,7 @@ export default function Praca() {
                     min={project.startDate || undefined}
                     aria-label={`Zmień termin projektu „${project.name}”`}
                     fieldClassName="work-project-inline-date"
-                    portalZIndex={260}
+                    portalLayer="featurePopup"
                     onChange={(value) => updateProjectValues(project.id, { endDate: value })}
                   />
                   <span className="work-project-record__open-count" title={formatTaskCount(count.open)}><strong>{count.open}</strong><small>{taskCountLabel(count.open)}</small></span>

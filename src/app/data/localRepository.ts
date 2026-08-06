@@ -692,7 +692,7 @@ function scheduleHydration(key: string, manifest?: WorkspaceManifest) {
   if (!blockedWrites.has(key)) blockedWrites.set(key, mutationSequence);
 
   const promise = payloadStore.read(key)
-    .then((record) => {
+    .then(async (record) => {
       if (!record) {
         knownMissingKeys.add(key);
         workspaceCache.delete(key);
@@ -712,6 +712,14 @@ function scheduleHydration(key: string, manifest?: WorkspaceManifest) {
 
       recordBaseline(record);
       blockedWrites.delete(key);
+      if (pendingTierWrites.has(key)) {
+        // A user can edit the workspace while IndexedDB is still hydrating.
+        // Do not notify subscribers with the older read result; flush the
+        // queued edit first, then let them load the authoritative payload.
+        await flushTierWrite(key);
+        notifyLocalHydration(key);
+        return;
+      }
       let manifestReady = true;
       if (
         !manifest

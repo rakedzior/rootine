@@ -45,6 +45,7 @@ import {
   ModuleShell,
   SectionHeader,
   Select,
+  uiLayers,
   uiColors,
 } from "../ui";
 import {
@@ -198,7 +199,7 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
         border: "none", borderRadius: 4, padding: "0 5px",
         background: task ? C.blueSoft : C.panel, color: C.text, textAlign: "left",
         fontSize: 11, lineHeight: "var(--leading-tight)", overflow: "hidden", cursor: draggable ? dragging ? "grabbing" : "grab" : "default",
-        opacity: dragging ? 0.48 : 1, transition: "background-color 140ms ease-out, opacity 140ms ease-out",
+        opacity: dragging ? 0.48 : 1, transition: "background-color var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out)",
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = C.hover; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = task ? C.blueSoft : C.panel; }}
@@ -1129,7 +1130,7 @@ export default function Kalendarz() {
               style={{
                 minWidth: 0, minHeight: 0, position: "relative", padding: "7px 5px 4px",
                 borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
-                cursor: "pointer", transition: "background-color 140ms ease-out, box-shadow 140ms ease-out",
+                cursor: "pointer", transition: "background-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out)",
               }}
             >
               <div style={{ height: 25, display: "flex", alignItems: "flex-start" }}>
@@ -1252,7 +1253,7 @@ export default function Kalendarz() {
           aria-modal="false"
           aria-label={selectedVirtualOccurrence ? "Szczegóły wystąpienia cyklicznego" : "Szczegóły zadania"}
           style={{
-            position: "fixed", zIndex: 40, left: detailPosition.left, top: detailPosition.top,
+            position: "fixed", zIndex: uiLayers.detail, left: detailPosition.left, top: detailPosition.top,
             visibility: detailPosition.ready ? "visible" : "hidden",
             width: detailPosition.width, height: detailPosition.height, overflow: "hidden",
             border: `1px solid ${C.border}`, borderRadius: 15,
@@ -1295,7 +1296,7 @@ export default function Kalendarz() {
           aria-modal="false"
           aria-label={`Szczegóły: ${selectedExternalOccurrence.title}`}
           style={{
-            position: "fixed", zIndex: 40, left: detailPosition.left, top: detailPosition.top,
+            position: "fixed", zIndex: uiLayers.detail, left: detailPosition.left, top: detailPosition.top,
             visibility: detailPosition.ready ? "visible" : "hidden",
             width: detailPosition.width, maxHeight: detailPosition.height, overflow: "auto",
             border: `1px solid ${C.border}`, borderRadius: 15,

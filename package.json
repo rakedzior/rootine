@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "lint": "eslint src api functions worker e2e scripts playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
+    "lint": "eslint src api functions worker e2e scripts playwright.config.ts playwright.global-setup.ts playwright.global-teardown.ts vite.config.ts vitest.config.ts --max-warnings=0",
     "typecheck": "npm run typecheck:app && npm run typecheck:api",
     "typecheck:app": "tsc --noEmit -p tsconfig.app.json --pretty false",
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json --pretty false",
@@ -22,10 +22,12 @@
     "css:lint:fix": "stylelint \"src/**/*.{css,scss}\" --fix",
     "css:audit": "node scripts/css-audit.mjs",
     "css:audit:json": "node scripts/css-audit.mjs --json",
+    "design-system:audit": "node scripts/design-system-audit.mjs",
     "architecture:audit": "node scripts/architecture-audit.mjs",
-    "check": "npm run lint && npm run css:lint && npm run architecture:audit && npm run test && npm run build"
+    "check": "npm run lint && npm run css:lint && npm run design-system:audit && npm run architecture:audit && npm run test && npm run build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.1",
     "impeccable": "^3.3.0",
     "lucide-react": "^0.542.0",
     "react": "19.2.7",

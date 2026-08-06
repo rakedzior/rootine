@@ -7,6 +7,47 @@ import { expect, openRootineRoute, test } from "./fixtures";
  */
 
 test.describe("integralność prezentowanych danych", () => {
+  test("kalendarz otwiera menu nadmiarowych wpisów z zachowaniem dostępnej nazwy @shared", async ({ rootinePage: page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("rootine.task-workspace.v1", JSON.stringify({
+        version: 2,
+        updatedAt: "2026-08-05T10:00:00.000Z",
+        tasks: [
+          "Pierwszy wpis",
+          "Drugi wpis",
+          "Trzeci wpis",
+          "Wpis w menu nadmiarowym",
+        ].map((text, index) => ({
+          id: 700 + index,
+          text,
+          done: false,
+          view: "dzis",
+          calendarDate: "2026-08-05",
+          schedule: { allDay: true, startTime: "", timezone: "Europe/Warsaw" },
+        })),
+        habits: [],
+        lists: [],
+        tags: [],
+      }));
+    });
+
+    await openRootineRoute(page, "/kalendarz");
+
+    const trigger = page.locator("#calendar-overflow-trigger-2026-08-05");
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toContainText("+1");
+
+    await trigger.click();
+    const menu = page.locator("#calendar-agenda-2026-08-05");
+    await expect(menu).toBeVisible();
+    await expect(menu.locator(".calendar-agenda-item__title")).toHaveText(["Wpis w menu nadmiarowym"]);
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
   test("kalendarz pokazuje nazwę zadania, nie nazwę listy źródłowej @shared", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/kalendarz");
 
@@ -108,5 +149,38 @@ test.describe("integralność prezentowanych danych", () => {
     }
 
     expect(errors.filter((entry) => entry.includes("same key"))).toEqual([]);
+  });
+
+  test("zadanie pozostaje po pełnym przeładowaniu i ponownej hydratacji IndexedDB @desktop", async ({ rootinePage: page }) => {
+    const taskTitle = "Zadanie zachowane po pełnym odświeżeniu";
+    await page.addInitScript((title) => {
+      const marker = "rootine:e2e:hard-reload-task-seeded";
+      if (window.sessionStorage.getItem(marker) === "true") return;
+      window.sessionStorage.setItem(marker, "true");
+      window.localStorage.setItem("rootine.task-workspace.v1", JSON.stringify({
+        version: 2,
+        updatedAt: "2026-08-05T10:00:00.000Z",
+        tasks: [{ id: 1_786_015_513_827, text: title, done: false, view: "bezterminu" }],
+        habits: [],
+        lists: [],
+        tags: [],
+      }));
+    }, taskTitle);
+
+    await openRootineRoute(page, "/zadania?widok=wszystkie");
+    await expect(page.getByText(taskTitle, { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      const raw = window.localStorage.getItem("rootine.task-workspace.v1");
+      if (!raw) return false;
+      try {
+        return JSON.parse(raw).__rootineWorkspaceManifest === 1;
+      } catch {
+        return false;
+      }
+    })).toBe(true);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator(".ui-page-shell:visible")).toBeVisible();
+    await expect(page.getByText(taskTitle, { exact: true })).toBeVisible();
   });
 });

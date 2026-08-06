@@ -1,7 +1,7 @@
 import { Archive, FolderOpen, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Menu, MenuItem, MenuTrigger } from "../ui";
+import { Menu, MenuItem, MenuTrigger, uiLayers } from "../ui";
 
 export type InlineMenuOption = {
   value: string;
@@ -36,7 +36,7 @@ function useFloatingMenuPosition(
       const maxHeight = Math.max(48, Math.min(preferredHeight, opensAbove ? spaceAbove : spaceBelow));
       setPosition({
         position: "fixed",
-        zIndex: 260,
+        zIndex: uiLayers.featurePopup,
         left: Math.max(viewportGap, Math.min(rect.left, window.innerWidth - menuWidth - viewportGap)),
         top: opensAbove ? Math.max(viewportGap, rect.top - maxHeight - 6) : rect.bottom + 6,
         minWidth: Math.min(menuWidth, window.innerWidth - viewportGap * 2),

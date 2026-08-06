@@ -26,7 +26,6 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   RefreshCw,
   RotateCcw,
   Settings,
@@ -83,6 +82,9 @@ import { useAssistantSettings } from "../../assistant/config/useAssistantSetting
 import { useAssistant } from "../../assistant/runtime/useAssistant";
 import { AssistantEntryButton } from "../../assistant/ui/AssistantEntryButton";
 import type { AssistantStageStatus } from "../../assistant/ui/AssistantStage";
+import { AccountPanel } from "../../infrastructure/supabase/AccountPanel";
+import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
+import { useRemoteSync } from "../../infrastructure/supabase/RemotePersistenceProvider";
 
 const SIDEBAR_STORAGE_KEY = "rootine.sidebar.collapsed";
 const LEGACY_SIDEBAR_STORAGE_KEY = "routine.sidebar.collapsed";
@@ -203,6 +205,34 @@ function getWeatherIcon(code = -1, isLoading = false): LucideIcon {
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return CloudSnow;
   if (code >= 95) return CloudLightning;
   return LocateFixed;
+}
+
+type AuthUser = ReturnType<typeof useSupabaseAuth>["user"];
+
+function getProfileIdentity(user: AuthUser) {
+  const metadata = user?.user_metadata ?? {};
+  const metadataName = [metadata.full_name, metadata.name, metadata.display_name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const name = metadataName?.trim() || user?.email || "Użytkownik lokalny";
+  const avatarUrl = [metadata.avatar_url, metadata.picture]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  return {
+    name,
+    avatarUrl,
+    initial: name.trim().slice(0, 1).toLocaleUpperCase("pl-PL") || "U",
+  };
+}
+
+function ProfileAvatar({ user }: { user: AuthUser }) {
+  const profile = getProfileIdentity(user);
+  return (
+    <span className="app-sidebar-profile__avatar" aria-hidden="true">
+      {profile.avatarUrl
+        ? <img src={profile.avatarUrl} alt="" />
+        : profile.initial}
+    </span>
+  );
 }
 
 function PrimaryNavItem({
@@ -344,20 +374,32 @@ function ModuleSettings({
   );
 }
 
-function ProfileSummary() {
+function ProfileSummary({
+  onOpenSettings,
+  onOpenHelp,
+}: {
+  onOpenSettings?: () => void;
+  onOpenHelp?: () => void;
+} = {}) {
   const privacy = usePrivacy();
+  const auth = useSupabaseAuth();
+  const remote = useRemoteSync();
+  const profile = getProfileIdentity(auth.user);
   return (
     <>
       <div className="app-sidebar-popover__profile">
-        <span className="app-sidebar-profile__avatar" aria-hidden="true">
-          <UserRound size={16} strokeWidth={1.8} />
-        </span>
+        <ProfileAvatar user={auth.user} />
         <span>
-          <strong>Użytkownik lokalny</strong>
-          <small>Profil nie jest jeszcze połączony z kontem.</small>
+          <strong>{profile.name}</strong>
+          <small>{auth.user ? "Konto połączone z Rootine" : auth.configured ? "Zaloguj się, aby synchronizować dane" : "Profil działa tylko na tym urządzeniu"}</small>
         </span>
       </div>
-      <p>Dane Rootine są obecnie zapisywane tylko na tym urządzeniu.</p>
+      <p>{auth.user
+        ? remote.status === "schema-missing"
+          ? "Konto działa, ale migracja bazy danych wymaga zastosowania."
+          : "Dane Rootine są synchronizowane z Twoim kontem."
+        : "Dane Rootine są obecnie zapisywane tylko na tym urządzeniu."}</p>
+      <AccountPanel />
       <button
         type="button"
         className={`app-profile-privacy${privacy.enabled ? " is-active" : ""}`}
@@ -373,6 +415,22 @@ function ProfileSummary() {
       <div className="app-recovery-entry">
         <RecoveryCenterButton />
       </div>
+      {(onOpenSettings || onOpenHelp) && (
+        <div className="app-profile-dialog__actions" aria-label="Skróty profilu">
+          {onOpenSettings && (
+            <button type="button" onClick={onOpenSettings}>
+              <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
+              <span>Ustawienia</span>
+            </button>
+          )}
+          {onOpenHelp && (
+            <button type="button" onClick={onOpenHelp}>
+              <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
+              <span>Pomoc i skróty</span>
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -384,6 +442,8 @@ export default function Layout() {
   const { settings: assistantSettings } = useAssistantSettings();
   const { openAssistant, updateAppContext } = assistant;
   const privacy = usePrivacy();
+  const auth = useSupabaseAuth();
+  const profileIdentity = getProfileIdentity(auth.user);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
   const [isCompactViewport, setIsCompactViewport] = useState(getInitialCompactViewport);
   const [modulePreferences, setModulePreferences] = useState(loadModulePreferences);
@@ -770,108 +830,71 @@ export default function Layout() {
           ))}
         </nav>
 
-        <AssistantEntryButton
-          enabled={assistant.canOpen}
-          active={assistant.isOpen}
-          reason={assistant.availability.message}
-          compact={isSidebarCollapsed || isCompactViewport}
-          onClick={assistant.openAssistant}
-        />
-
-        <button
-          type="button"
-          className="app-command-trigger"
-          aria-haspopup="dialog"
-          aria-expanded={commandCenterOpen}
-          onClick={() => setCommandCenterOpen(true)}
-        >
-          <Plus size={16} strokeWidth={1.8} aria-hidden="true" />
-          <span>Dodaj</span>
-          <kbd>Ctrl K</kbd>
-        </button>
-
         <div className="app-sidebar__bottom">
-          <div className="app-sidebar-glance" aria-label="Data, godzina i pogoda">
-            <button
-              type="button"
-              className="app-sidebar-glance__row app-sidebar-replay"
-              title={`${timeLabel} · ${dateLabel} · otwórz Oś dnia`}
-              aria-label={`${timeLabel}, ${dateLabel}. Otwórz Oś dnia`}
-              onClick={() => setDayReplayOpen(true)}
-            >
-              <Clock3 size={16} strokeWidth={1.7} aria-hidden="true" />
-              <span className="app-sidebar-glance__copy">
-                <strong>{timeLabel}</strong>
-                <small>{dateLabel}</small>
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className="app-sidebar-glance__row app-sidebar-weather"
-              title={`${weatherLabel}${weather.status === "ready" ? ` · ${Math.round(weather.data.temperature)}°C` : ""}`}
-              aria-label={`${weatherLabel}. Odśwież pogodę dla ${TODAY_WEATHER_LOCATION.label}`}
-              disabled={weather.status === "loading"}
-              onClick={() => requestWeather(true)}
-            >
-              <WeatherIcon
-                className={weather.status === "loading" ? "is-spinning" : ""}
-                size={16}
-                strokeWidth={1.7}
-                aria-hidden="true"
-              />
-              <span className="app-sidebar-glance__copy">
-                <strong>
-                  {weather.status === "ready" ? `${Math.round(weather.data.temperature)}°C` : "Pogoda"}
-                </strong>
-                <small>{weatherLabel}</small>
-              </span>
-            </button>
-          </div>
+          <AssistantEntryButton
+            enabled={assistant.canOpen}
+            active={assistant.isOpen}
+            reason={assistant.availability.message}
+            compact={isSidebarCollapsed || isCompactViewport}
+            onClick={assistant.openAssistant}
+          />
 
           <button
             type="button"
-            className="app-sidebar-action"
-            data-app-menu-trigger
-            aria-haspopup="dialog"
-            aria-expanded={openMenu === "settings"}
-            title="Ustawienia"
-            onClick={() => setOpenMenu((current) => current === "settings" ? null : "settings")}
+            className="app-sidebar-utility app-sidebar-glance__row app-sidebar-replay"
+            title={`${timeLabel} · ${dateLabel} · otwórz Oś dnia`}
+            aria-label={`${timeLabel}, ${dateLabel}. Otwórz Oś dnia`}
+            onClick={() => setDayReplayOpen(true)}
           >
-            <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
-            <span className="app-sidebar-action__label">Ustawienia</span>
+            <Clock3 size={16} strokeWidth={1.7} aria-hidden="true" />
+            <span className="app-sidebar-glance__copy app-sidebar-glance__copy--inline">
+              <strong>{timeLabel}</strong>
+              <small>{dateLabel}</small>
+            </span>
+            <span className="app-sidebar-glance__time-stack" aria-hidden="true">
+              <strong>{timeLabel.split(":")[0]}</strong>
+              <strong>{timeLabel.split(":")[1]}</strong>
+            </span>
           </button>
 
           <button
             type="button"
-            className="app-sidebar-action"
-            aria-haspopup="dialog"
-            aria-expanded={helpOpen}
-            title="Pomoc i skróty (?)"
-            onClick={() => {
-              setOpenMenu(null);
-              setHelpGuideId(contextualHelpId);
-              setHelpQuery("");
-              setHelpOpen(true);
-            }}
+            className="app-sidebar-utility app-sidebar-glance__row app-sidebar-weather"
+            title={`${weatherLabel}${weather.status === "ready" ? ` · ${Math.round(weather.data.temperature)}°C` : ""}`}
+            aria-label={`${weatherLabel}. Odśwież pogodę dla ${TODAY_WEATHER_LOCATION.label}`}
+            disabled={weather.status === "loading"}
+            onClick={() => requestWeather(true)}
           >
-            <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
-            <span className="app-sidebar-action__label">Pomoc i skróty</span>
+            <WeatherIcon
+              className={weather.status === "loading" ? "is-spinning" : ""}
+              size={16}
+              strokeWidth={1.7}
+              aria-hidden="true"
+            />
+            <span className="app-sidebar-glance__copy app-sidebar-glance__copy--inline">
+              <strong>
+                {weather.status === "ready" ? `${Math.round(weather.data.temperature)}°C` : "Pogoda"}
+              </strong>
+              <small>{weatherLabel}</small>
+            </span>
+            <span className="app-sidebar-weather__compact-copy" aria-hidden="true">
+              {weather.status === "ready" ? `${Math.round(weather.data.temperature)}°` : "—"}
+            </span>
           </button>
 
           <button
             type="button"
-            className="app-sidebar-profile"
+            className="app-sidebar-utility app-sidebar-profile"
             data-app-menu-trigger
             aria-haspopup="dialog"
             aria-expanded={openMenu === "profile"}
-            title="Profil użytkownika"
+            aria-label={`${profileIdentity.name}. Otwórz menu profilu`}
+            title={`${profileIdentity.name} · otwórz menu profilu`}
             onClick={() => setOpenMenu((current) => current === "profile" ? null : "profile")}
           >
-            <span className="app-sidebar-profile__avatar" aria-hidden="true">U</span>
+            <ProfileAvatar user={auth.user} />
             <span className="app-sidebar-profile__copy">
-              <strong>Użytkownik lokalny</strong>
-              <small>Profil użytkownika</small>
+              <strong>{profileIdentity.name}</strong>
             </span>
           </button>
 
@@ -940,7 +963,15 @@ export default function Layout() {
               bodyClassName="app-profile-dialog"
               onClose={() => setOpenMenu(null)}
             >
-              <ProfileSummary />
+              <ProfileSummary
+                onOpenSettings={() => setOpenMenu("settings")}
+                onOpenHelp={() => {
+                  setOpenMenu(null);
+                  setHelpGuideId(contextualHelpId);
+                  setHelpQuery("");
+                  setHelpOpen(true);
+                }}
+              />
             </Modal>
           )}
         </div>

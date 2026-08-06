@@ -196,9 +196,9 @@ function PriorityDropdown({ current, anchorEl, onSelect, onClose }: {
     return () => document.removeEventListener("mousedown", h);
   }, [anchorEl, onClose]);
   return (
-    <Menu ref={ref} style={{
+    <Menu ref={ref} layer="systemOverlay" style={{
       position: "fixed", top: rect.bottom + 4, right: window.innerWidth - rect.right,
-      width: 148, zIndex: 9999,
+      width: "var(--component-menu-min-width)",
     }}>
       {PRIORITY_FLAGS.map(({ p, label, color }) => (
         <MenuItem
@@ -240,9 +240,9 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
   const currentLabel = listy.find(l => l.id === current)?.label ?? "Bez listy";
 
   return (
-    <Menu ref={ref} style={{
+    <Menu ref={ref} layer="systemOverlay" size="wide" style={{
       position: "fixed", bottom: window.innerHeight - rect.top + 4, left: rect.left,
-      width: 210, zIndex: 9999,
+      width: "var(--component-menu-wide-width)",
     }}>
       <div className="task-menu__search">
         <div>
@@ -315,9 +315,9 @@ function MoreMenu({ anchorEl, onAction, onClose, seriesScoped = false }: {
     };
   }, [anchorEl, onClose]);
   return (
-    <Menu ref={ref} aria-label={seriesScoped ? "Akcje całej serii" : "Akcje zadania"} style={{
+    <Menu ref={ref} aria-label={seriesScoped ? "Akcje całej serii" : "Akcje zadania"} layer="systemOverlay" size="wide" style={{
       position: "fixed", bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right,
-      width: 210, zIndex: 9999,
+      width: "var(--component-menu-wide-width)",
     }}>
       {moreItems(seriesScoped).map((item, i) =>
         item === null

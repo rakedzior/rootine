@@ -22,6 +22,7 @@ import {
   DatePicker,
   Select,
   Tabs,
+  uiLayers,
 } from "../../ui";
 import { toCalendarDateKey } from "../../data/taskWorkspace";
 import {
@@ -304,7 +305,7 @@ export function DatePickerPopup({
       aria-describedby={scheduleError ? "task-schedule-error" : undefined}
       tabIndex={-1}
       style={{
-        position: "fixed", top: popupPosition.top, left: popupPosition.left, width: `${popWidth}px`, zIndex: 9999,
+        position: "fixed", top: popupPosition.top, left: popupPosition.left, width: `${popWidth}px`, zIndex: uiLayers.systemOverlay,
         background: C.elevated,
         border: `1px solid ${C.borderStrong}`,
         borderRadius: "var(--radius-lg)",
@@ -358,7 +359,7 @@ export function DatePickerPopup({
             label="Data zadania"
             value={selDate ? toCalendarDateKey(selDate) : ""}
             onChange={(dateKey) => setSelDate(dateKey ? new Date(`${dateKey}T12:00:00`) : null)}
-            portalZIndex={10001}
+            portalLayer="nestedPopover"
           />
 
           {dateOnly ? (

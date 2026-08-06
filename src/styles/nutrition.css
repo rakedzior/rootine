@@ -960,7 +960,7 @@
 
 .nutrition-suggestions {
   position: absolute;
-  z-index: 20;
+  z-index: var(--layer-sticky);
   top: calc(100% - 15px);
   right: 0;
   left: 0;
@@ -2625,7 +2625,7 @@
 
   .ui-modal:has(.nutrition-analysis-v2) .nutrition-analysis-v2__toolbar {
     position: absolute;
-    z-index: 1;
+    z-index: var(--layer-raised);
     top: 26px;
     right: 60px;
   }
@@ -2716,7 +2716,7 @@
 
 .nutrition-analysis-v2__range label:focus-within {
   position: relative;
-  z-index: 1;
+  z-index: var(--layer-raised);
 }
 
 .nutrition-analysis-v2__range label:focus-within span {

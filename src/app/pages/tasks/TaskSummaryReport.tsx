@@ -8,7 +8,7 @@ import {
   todayLocalDateKey,
 } from "../../data/localDate";
 import { pluralize } from "../../formatters";
-import { Badge, Button, DatePicker, EmptyState, Tabs } from "../../ui";
+import { Badge, Button, DatePicker, EmptyState, Tabs, uiColors } from "../../ui";
 import { SummaryEditor } from "./SummaryEditor";
 import { PL_MONTHS_SHORT, PRIORITY_COLOR, type ListItem, type Priority, type Task } from "./taskPageModel";
 import { latestTaskActivityDate, taskCompletionDates } from "./TaskSummaryModel";
@@ -170,7 +170,7 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
       const doneIds = new Set(done
         .filter((entry) => !entry.task.list || !listy.some((list) => list.id === entry.task.list))
         .map((entry) => entry.task.id));
-      byList.push({ id: "__none", label: "Bez listy", color: "#8793A1", total: unlisted.length, done: doneIds.size });
+      byList.push({ id: "__none", label: "Bez listy", color: uiColors.categoryUnlisted, total: unlisted.length, done: doneIds.size });
     }
 
     const byPriority = (["high", "medium", "low"] as const)

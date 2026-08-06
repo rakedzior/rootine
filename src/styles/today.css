@@ -16,7 +16,7 @@
 
 .today-add-menu__popup {
   position: absolute;
-  z-index: 40;
+  z-index: var(--layer-detail);
   top: calc(100% + var(--space-sm));
   right: 0;
   width: 188px;
@@ -169,7 +169,7 @@
   border-radius: inherit;
   background: var(--color-primary);
   transform-origin: left center;
-  transition: transform 500ms var(--ease-out);
+  transition: transform var(--motion-progress) var(--ease-out);
 }
 
 .today-day-balance__progress-copy {
@@ -513,7 +513,7 @@
   border-radius: inherit;
   background: color-mix(in srgb, var(--color-primary) 72%, var(--color-text-secondary));
   transform-origin: left center;
-  transition: transform 500ms var(--ease-out);
+  transition: transform var(--motion-progress) var(--ease-out);
 }
 
 .today-module-row.is-complete .today-module-row__track > i {

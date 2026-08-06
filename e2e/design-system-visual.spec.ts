@@ -1,0 +1,87 @@
+import { expect, openRootineRoute, test } from "./fixtures";
+import type { Locator, Page } from "@playwright/test";
+
+const CALENDAR_DATE = "2026-08-05";
+
+async function capture(locator: Locator, name: string) {
+  await expect(locator).toHaveScreenshot(name, {
+    animations: "disabled",
+    caret: "hide",
+  });
+}
+
+async function seedCalendarOverflow(page: Page) {
+  await page.addInitScript((calendarDate) => {
+    window.localStorage.setItem("rootine.task-workspace.v1", JSON.stringify({
+      version: 2,
+      updatedAt: "2026-08-05T10:00:00.000Z",
+      tasks: [
+        "Pierwszy wpis",
+        "Drugi wpis",
+        "Trzeci wpis",
+        "Wpis w menu nadmiarowym",
+      ].map((text, index) => ({
+        id: 700 + index,
+        text,
+        done: false,
+        view: "dzis",
+        calendarDate,
+        schedule: { allDay: true, startTime: "", timezone: "Europe/Warsaw" },
+      })),
+      habits: [],
+      lists: [],
+      tags: [],
+    }));
+  }, CALENDAR_DATE);
+}
+
+test.describe("design-system visual baselines", { tag: "@shared" }, () => {
+  test("Today balance and module states stay on the canonical visual scale", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/dzisiaj");
+    await capture(page.locator(".today-day-balance"), "today-balance-progress.png");
+  });
+
+  test("calendar overflow menu keeps its portal surface and item rhythm", async ({ rootinePage: page }) => {
+    await seedCalendarOverflow(page);
+    await openRootineRoute(page, "/kalendarz");
+
+    const trigger = page.locator(`#calendar-overflow-trigger-${CALENDAR_DATE}`);
+    await trigger.click();
+    await capture(page.locator(`#calendar-agenda-${CALENDAR_DATE}`), "calendar-overflow-menu.png");
+  });
+
+  test("task detail preserves the responsive panel and DatePicker portal", async ({ rootinePage: page, isMobile }) => {
+    await openRootineRoute(page, "/zadania?widok=dzis");
+    await page.locator(".task-item-row").first().click();
+
+    const detailPanel = page.locator(".task-detail-panel");
+    await expect(detailPanel).toBeVisible();
+    await capture(detailPanel, "task-detail-panel.png");
+
+    await page.locator(".task-detail__date").click();
+    const datePicker = page.getByRole("dialog", { name: "Ustaw termin zadania" });
+    await expect(datePicker).toBeVisible();
+    await capture(datePicker, "task-date-picker-portal.png");
+
+    if (!isMobile) {
+      await page.keyboard.press("Escape");
+      await page.locator(".task-detail__toggle--plain").click();
+      await capture(page.getByRole("menu", { name: "Akcje zadania" }), "task-actions-menu.png");
+    }
+  });
+
+  test("goal menu and edit dialog retain their context surfaces", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/cele");
+    await page.locator(".goal-card-more button").first().click();
+    await capture(page.getByRole("menu").last(), "goal-actions-menu.png");
+
+    await page.getByRole("menu").last().getByRole("menuitem", { name: "Edytuj cel" }).click();
+    await capture(page.getByRole("dialog").last(), "goal-edit-dialog.png");
+  });
+
+  test("work add menu keeps its compact action grouping", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/praca");
+    await page.locator(".work-add-menu > button").click();
+    await capture(page.locator("#work-add-menu"), "work-add-menu.png");
+  });
+});

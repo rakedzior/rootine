@@ -6,21 +6,27 @@ import { ActivityLogProvider } from "./experience/activityLog";
 import { AppExperienceProviders } from "./experience/preferences";
 import { AssistantSettingsProvider } from "../assistant/config/AssistantSettingsProvider";
 import { AssistantProvider } from "../assistant/runtime/AssistantProvider";
+import { SupabaseAuthProvider } from "../infrastructure/supabase/auth";
+import { RemotePersistenceProvider } from "../infrastructure/supabase/RemotePersistenceProvider";
 
 export default function App() {
   return (
-    <AssistantSettingsProvider>
-      <AssistantProvider navigate={(path) => { void router.navigate(path); }}>
-        <AppExperienceProviders>
-          <ActiveAreaProvider>
-            <ActivityLogProvider>
-              <GoalsProvider>
-                <RouterProvider router={router} />
-              </GoalsProvider>
-            </ActivityLogProvider>
-          </ActiveAreaProvider>
-        </AppExperienceProviders>
-      </AssistantProvider>
-    </AssistantSettingsProvider>
+    <SupabaseAuthProvider>
+      <RemotePersistenceProvider>
+        <AssistantSettingsProvider>
+          <AssistantProvider navigate={(path) => { void router.navigate(path); }}>
+            <AppExperienceProviders>
+              <ActiveAreaProvider>
+                <ActivityLogProvider>
+                  <GoalsProvider>
+                    <RouterProvider router={router} />
+                  </GoalsProvider>
+                </ActivityLogProvider>
+              </ActiveAreaProvider>
+            </AppExperienceProviders>
+          </AssistantProvider>
+        </AssistantSettingsProvider>
+      </RemotePersistenceProvider>
+    </SupabaseAuthProvider>
   );
 }

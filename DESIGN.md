@@ -305,7 +305,7 @@ There is no global page header on application routes, and no component for one: 
 
 Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Kontekstowy sidebar służy wyłącznie rosnącym kolekcjom i drzewom w Zadaniach, Pracy i Notatkach. Sport, Cele, Sprawy oraz Podróże używają zakładek i filtrów nad treścią.
 
-Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie — jest jedynym nagłówkiem ekranu. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 370px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
+Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie — jest jedynym nagłówkiem ekranu. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 408px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
 Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Każda trasa używa wspólnego `PageShell`, który renderuje opcjonalny `PageToolbar` i wspólną oś treści — nic ponadto. Ten sam komponent jest obowiązkowy dla nowych ekranów.
 
@@ -445,9 +445,9 @@ Jedyny nagłówek ekranu. Nazywa bieżący widok i skupia wszystko, co go dotycz
 ### ModuleShell
 
 - **Structure:** opcjonalny `ContextSidebar`, elastyczny `ModuleMain` oraz opcjonalny `DetailPanel`.
-- **ContextSidebar:** 250px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
+- **ContextSidebar:** 220px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
 - **ContentHeader:** wspólny nagłówek aktualnego widoku z tytułem, opisem, metadanymi, lokalnymi akcjami, filtrami i opcjonalnym drugim wierszem; jego wewnętrzna rama jest identyczna z ramą treści.
-- **DetailPanel:** 370px, Grafit panelu bocznego; dockowany na szerokim ekranie i nakładany poniżej 1380px.
+- **DetailPanel:** 408px, Grafit panelu bocznego; dockowany na szerokim ekranie i nakładany poniżej 1380px.
 - **Mobile:** sidebar kontekstowy znika, toolbar pokazuje Select podwidoku, a główna nawigacja przechodzi na dół ekranu.
 - **Calendar detail:** szczegóły wydarzenia są pływającym panelem zakotwiczonym przy wybranej komórce, nie centralnym modalem ani stałym prawym panelem. Kliknięcie poza panelem go zamyka; kliknięcie innego dnia najpierw zamyka bieżący panel, a dopiero kolejne kliknięcie tworzy zadanie. Picker daty otwiera się przy przycisku z ikoną kalendarza.
 

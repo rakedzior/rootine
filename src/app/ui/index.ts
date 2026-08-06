@@ -10,7 +10,7 @@ export { IconButton, type IconButtonProps } from "./components/IconButton";
 export { ListRow, type ListRowProps, type ListRowDensity } from "./components/ListRow";
 export { ProgressBar, type ProgressBarProps, type ProgressSize, type ProgressTone } from "./components/ProgressBar";
 export { StatCard, StatGrid, type StatCardProps, type StatGridProps, type StatTone } from "./components/StatCard";
-export { BREAKPOINTS, maxWidthQuery, type BreakpointName } from "./breakpoints";
+export { BREAKPOINTS, BREAKPOINT_EXCEPTIONS, maxWidthQuery, type BreakpointName } from "./breakpoints";
 export { DatePicker, type DatePickerProps } from "./components/DatePicker";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { Input, type InputProps } from "./components/Input";
@@ -19,9 +19,11 @@ export {
   MenuItem,
   MenuTrigger,
   type MenuInitialFocus,
+  type MenuLayer,
   type MenuItemProps,
   type MenuItemTone,
   type MenuProps,
+  type MenuSize,
   type MenuTriggerProps,
 } from "./components/Menu";
 export { Modal, type ModalProps, type ModalSize } from "./components/Modal";
@@ -52,4 +54,16 @@ export {
   type WorkspaceLayoutProps,
 } from "./components/Shell";
 export { Tabs, type TabItem, type TabsProps } from "./components/Tabs";
-export { uiColors, uiLayout, uiRadii, uiShadows, uiSpacing } from "./tokens";
+export {
+  uiChartColors,
+  uiColors,
+  uiFocus,
+  uiLayers,
+  uiLayout,
+  uiMotion,
+  uiRadii,
+  uiShadows,
+  uiSpacing,
+  uiStates,
+  uiTypography,
+} from "./tokens";

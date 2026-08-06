@@ -392,12 +392,12 @@ function HabitPriorityField({ value, compact = false, onChange }: {
           triggerRef={triggerRef}
           onDismiss={() => setOpen(false)}
           initialFocus="selected"
+          layer="drawer"
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",
             right: 0,
-            width: 148,
-            zIndex: 70,
+            width: "var(--component-menu-min-width)",
           }}
         >
           {HABIT_PRIORITY_OPTIONS.map(({ value: priority, label, color: priorityColor }) => (
@@ -1032,13 +1032,12 @@ export function InputFloatMenu({ anchorEl, onClose, children }: {
   const menuWidth = Math.min(190, Math.max(0, window.innerWidth - viewportGap * 2));
   const left = Math.max(viewportGap, Math.min(rect.left, window.innerWidth - menuWidth - viewportGap));
   return (
-    <Menu ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" style={{
+    <Menu ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" layer="systemOverlay" style={{
       position: "fixed",
       top: rect.bottom + 6,
       left,
       width: menuWidth,
       minWidth: Math.min(170, menuWidth),
-      zIndex: 9999,
     }}>
       {children}
     </Menu>

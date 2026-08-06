@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Badge, EmptyState as UiEmptyState, Modal as UiModal, SectionHeader, type ModalSize } from "../ui";
 import type { Discipline, SessionStatus } from "./model";
-import { DISCIPLINE_META, SPORT_COLORS as C, STATUS_META } from "./theme";
+import { DISCIPLINE_META, STATUS_META } from "./theme";
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return <SectionHeader title={children} level={2} variant="label" />;
@@ -23,10 +23,6 @@ export function StatusLabel({ status, compact = false }: { status: SessionStatus
       {meta.label}
     </Badge>
   );
-}
-
-export function ProgressBar({ value, color = C.blue }: { value: number; color?: string }) {
-  return <div className="h-1 overflow-hidden rounded-full" style={{ background: C.border }}><div className="h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: color }} /></div>;
 }
 
 export function Modal({ title, eyebrow, children, onClose, size = "md" }: { title: string; eyebrow?: string; children: ReactNode; onClose: () => void; size?: ModalSize }) {

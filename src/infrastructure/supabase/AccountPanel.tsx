@@ -1,0 +1,124 @@
+import { useState, type FormEvent } from "react";
+import { LogIn, LogOut, RefreshCw, UserRound } from "lucide-react";
+import { Button, Input } from "../../app/ui";
+import { useSupabaseAuth } from "./auth";
+import { useRemoteSync } from "./RemotePersistenceProvider";
+
+type AuthMode = "sign-in" | "sign-up";
+
+function syncLabel(status: ReturnType<typeof useRemoteSync>["status"]) {
+  if (status === "syncing") return "Synchronizuję dane…";
+  if (status === "synced") return "Dane są zsynchronizowane";
+  if (status === "schema-missing") return "Brakuje migracji bazy danych";
+  if (status === "error") return "Synchronizacja wymaga uwagi";
+  return "Synchronizacja jest gotowa po zalogowaniu";
+}
+
+export function AccountPanel() {
+  const auth = useSupabaseAuth();
+  const remote = useRemoteSync();
+  const [mode, setMode] = useState<AuthMode>("sign-in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!auth.configured) {
+    return <p className="app-account-panel__local-note">{auth.configurationIssue ?? "Tryb lokalny jest aktywny. Skonfiguruj Supabase, aby włączyć konto i synchronizację."}</p>;
+  }
+
+  if (auth.loading) {
+    return <p className="app-account-panel__status">Sprawdzam sesję konta…</p>;
+  }
+
+  if (auth.user) {
+    return (
+      <div className="app-account-panel">
+        <div className="app-account-panel__status-row">
+          <span className="app-account-panel__status-icon" aria-hidden="true"><UserRound size={14} /></span>
+          <span>
+            <strong>{auth.user.email}</strong>
+            <small>{syncLabel(remote.status)}</small>
+          </span>
+        </div>
+        {remote.message && <p className="app-account-panel__error">{remote.message}</p>}
+        <Button
+          variant="quiet"
+          size="sm"
+          fullWidth
+          leadingIcon={<LogOut size={14} aria-hidden="true" />}
+          onClick={() => { void auth.signOut(); }}
+        >
+          Wyloguj
+        </Button>
+      </div>
+    );
+  }
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
+    setSubmitting(true);
+    const result = mode === "sign-in"
+      ? await auth.signIn(email, password)
+      : await auth.signUp(email, password);
+    setSubmitting(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    if (result.needsEmailConfirmation) {
+      setMessage("Sprawdź pocztę i potwierdź adres, aby dokończyć rejestrację.");
+      return;
+    }
+    setMessage("Konto połączone. Dane lokalne zostaną teraz zsynchronizowane.");
+    setPassword("");
+  };
+
+  return (
+    <div className="app-account-panel">
+      <div className="app-account-panel__mode" role="tablist" aria-label="Tryb konta">
+        <button type="button" role="tab" aria-selected={mode === "sign-in"} onClick={() => setMode("sign-in")}>
+          Zaloguj
+        </button>
+        <button type="button" role="tab" aria-selected={mode === "sign-up"} onClick={() => setMode("sign-up")}>
+          Załóż konto
+        </button>
+      </div>
+      <form className="app-account-panel__form" onSubmit={submit}>
+        <Input
+          label="E-mail"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+        />
+        <Input
+          label="Hasło"
+          type="password"
+          autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+          minLength={6}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+        />
+        {error && <p className="app-account-panel__error" role="alert">{error}</p>}
+        {message && <p className="app-account-panel__message" role="status">{message}</p>}
+        <Button
+          type="submit"
+          variant="primary"
+          size="sm"
+          fullWidth
+          disabled={submitting}
+          leadingIcon={submitting ? <RefreshCw className="is-spinning" size={14} aria-hidden="true" /> : <LogIn size={14} aria-hidden="true" />}
+        >
+          {submitting ? "Przetwarzam…" : mode === "sign-in" ? "Zaloguj i synchronizuj" : "Utwórz konto"}
+        </Button>
+      </form>
+      <small className="app-account-panel__hint">Dane pozostają chronione przez polityki RLS przypisane do Twojego konta.</small>
+    </div>
+  );
+}

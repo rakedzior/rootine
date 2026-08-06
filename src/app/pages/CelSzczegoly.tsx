@@ -194,7 +194,7 @@ export default function CelSzczegoly() {
               </div>
               <div className="goal-detail-timeline-actions">
                 <button type="button" aria-label={`Opcje etapu ${item.title}`} aria-expanded={stageMenuId === item.id} onClick={() => setStageMenuId(stageMenuId === item.id ? null : item.id)}><Ellipsis size={13} /></button>
-                {stageMenuId === item.id && <Menu id={`stage-menu-${item.id}`} onDismiss={() => setStageMenuId(null)} className="absolute right-2 top-10 z-30 w-44">
+                {stageMenuId === item.id && <Menu id={`stage-menu-${item.id}`} onDismiss={() => setStageMenuId(null)} layer="context" className="absolute right-2 top-10 w-44">
                   <MenuItem onClick={() => { openMilestone(item.id); setStageMenuId(null); }} leadingIcon={<Pencil />}>Edytuj etap</MenuItem>
                   <MenuItem onClick={() => { store.updateMilestone(goal.id, item.id, { isNext: true }); setStageMenuId(null); }} leadingIcon={<Target />}>Oznacz jako następny</MenuItem>
                   <MenuItem tone="danger" onClick={() => { setDeleteMilestoneId(item.id); setStageMenuId(null); }} leadingIcon={<Trash2 />}>Usuń etap</MenuItem>
@@ -239,7 +239,7 @@ export default function CelSzczegoly() {
           actions={<>
             <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</span></Button>
             <Button variant="quiet" onClick={() => setEditOpen(true)} leadingIcon={<Pencil size={13} />}><span className="header-action-label">Edytuj</span></Button>
-            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={16} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} className="absolute right-0 top-11 z-30 w-48">
+            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={16} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} layer="context" className="absolute right-0 top-11 w-48">
               <MenuItem onClick={() => { openProgress(); setMenuOpen(false); }} leadingIcon={<BarChart3 />}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</MenuItem>
               <MenuItem onClick={() => { setEditOpen(true); setMenuOpen(false); }} leadingIcon={<Pencil />}>Edytuj cel</MenuItem>
               <MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem>

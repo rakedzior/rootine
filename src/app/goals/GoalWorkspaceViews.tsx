@@ -134,7 +134,7 @@ export function GoalSubSidebar({
             className="flex min-w-0 items-center gap-1.5"
             style={{ color: C.textMuted }}
           >
-            <ChevronRight size={11} strokeWidth={2} style={{ transform: categoriesOpen ? "rotate(90deg)" : "none", transition: "transform 150ms" }} />
+            <ChevronRight size={11} strokeWidth={2} style={{ transform: categoriesOpen ? "rotate(90deg)" : "none", transition: "transform var(--motion-toggle) var(--ease-out)" }} />
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">Kategorie</span>
           </button>
           <div className="flex items-center gap-1">
@@ -409,7 +409,8 @@ export function GoalCard({
                 id={statusMenuId}
                 triggerRef={statusTriggerRef}
                 onDismiss={() => setStatusOpen(false)}
-                className="absolute right-0 top-9 z-30 w-40"
+                layer="context"
+                className="absolute right-0 top-9 w-40"
               >
                 {(["active", "paused", "completed", "planned", "archived"] as GoalStatus[]).map((status) => (
                   <MenuItem key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_META[status].color }} />} style={{ color: STATUS_META[status].color }}>
@@ -443,7 +444,8 @@ export function GoalCard({
                 id={actionsMenuId}
                 triggerRef={menuTriggerRef}
                 onDismiss={() => setMenuOpen(false)}
-                className="absolute right-0 top-9 z-30 w-44"
+                layer="context"
+                className="absolute right-0 top-9 w-44"
               >
                 {[
                   { label: goal.rhythm === "Cel etapowy" ? "Dodaj etap" : goal.rhythm === "Wartość liczbowa" ? "Zaktualizuj wartość" : goal.rhythm === "Regularność" ? "Zapisz wykonanie" : "Zaktualizuj postęp", icon: BarChart3, action: onProgress },

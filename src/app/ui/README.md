@@ -22,6 +22,8 @@ import {
   SectionHeader,
   Select,
   Tabs,
+  Checkbox,
+  ProgressBar,
 } from "../ui";
 ```
 
@@ -45,6 +47,18 @@ Globalny pasek `PageHeader` jest usunięty z każdej zakładki i podzakładki �
 14. Każdy moduł waliduje stan odczytany z `localStorage` i pokazuje `Brak zapisu lokalnego`, jeśli zapis się nie powiedzie.
 15. Pozycje `Menu` obsługują strzałki oraz Home/End. Niestandardowy `menuitem` musi być fokusowalny i aktywowany klawiaturą.
 16. `ContentHeader` trasy renderuje jeden `<h1>`; `headingLevel={2 | 3}` służy wyłącznie nagłówkom zagnieżdżonym, a `false` usuwa element z hierarchii.
+17. `Menu` używa `layer` dla warstwy semantycznej; szeroki wariant to `size="wide"`. Pozycjonowanie pozostaje dynamiczne, ale nie dodaje surowego `z-index`.
+18. `DatePicker` używa `portalLayer` dla portalu. `portalZIndex` pozostaje wyłącznie kompatybilnością wsteczną.
+
+## Hierarchia źródeł prawdy
+
+1. Zatwierdzona konstytucja systemu i decyzje produktowe.
+2. Definicje tokenów w `src/styles/tokens.css` oraz rejestr wyjątków w `docs/design-system-exceptions.json`.
+3. Kontrakty komponentów w `src/app/ui/components/`.
+4. Bieżąca implementacja modułu, jeśli korzysta z zatwierdzonego wyjątku.
+5. Przykłady i dokumentacja pomocnicza.
+
+Jeśli dokumentacja pomocnicza różni się od aktywnego kontraktu komponentu, popraw dokumentację. Jeśli token i aktywny layout mają różne wartości, nie zmieniaj wymiaru bez decyzji produktowej — zapisz konflikt w dzienniku decyzji.
 
 ## Szkielet zakładki
 
@@ -53,9 +67,6 @@ export function NewSection() {
   return (
     <ModuleShell
       contextSidebar={<ModuleSidebar label="Widoki" />}
-      title="Bieżący widok"
-      subtitle="Opis bieżącego widoku"
-      actions={<Button variant="primary">Dodaj</Button>}
     >
       <ModuleMain>
         <ContentHeader
@@ -64,7 +75,7 @@ export function NewSection() {
           actions={<Button variant="quiet">Akcja lokalna</Button>}
           controls={<>Filtry i sortowanie</>}
         />
-        <section className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
+        <section className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <SectionHeader title="Najważniejsze" variant="label" />
           <Card>Treść</Card>
         </section>
@@ -76,16 +87,18 @@ export function NewSection() {
 
 ## Dostępne kontrakty
 
-- `Button`: `primary | quiet | ghost | danger`, rozmiary `sm | md`, tryb ikonowy i disabled.
+- `Button`: `primary | quiet | ghost | danger`, rozmiary `xs | sm | md`, tryb ikonowy i disabled.
 - `Card`: powierzchnie `card | panel | input`, cztery poziomy paddingu i stan selected.
 - `Input`, `Select`: label, hint, error, disabled i spójny focus.
-- `Menu`, `MenuItem`: wspólna powierzchnia 148px+, wiersze 28px oraz semantyczne tony akcji.
+- `Menu`, `MenuItem`: wspólna powierzchnia 148px+, wiersze 28px, wariant `wide` i semantyczna warstwa.
 - `Modal`: title, description, eyebrow, footer, width i dostępne zarządzanie fokusem.
 - `Tabs`: semantyka tablist/tab i obsługa strzałek, Home oraz End.
 - `Badge`: neutral, primary, success, warning, danger i violet; pill albo plain z opcjonalną kropką.
 - `ContentHeader`: tytuł i opis aktualnego widoku, metadane, lokalne akcje, kontrolki, drugi wiersz oraz osobna nawigacja mobilna.
 - `SectionHeader`: hierarchia nagłówka, opis, akcja oraz wariant label.
 - `EmptyState`: icon, title, description i jedna akcja.
+- `Checkbox`: natywny checkbox z rozmiarem `sm | md`, kształtem `square | round` i stanem indeterminate.
+- `ProgressBar`: wartości ograniczone przez `min`/`max`, rozmiar `sm | md`, ton, etykieta wizualna i wartość dla czytnika ekranu.
 - `ModuleShell`, `ModuleMain`: wspólna topologia modułu i chroniony główny workspace.
 - `ModuleSidebar`: opcjonalna nawigacja podwidoków modułu.
 - `ContextNavItem`: wspólna pozycja sidebara; kontroluje ikonę, etykietę, licznik oraz stan aktywny.

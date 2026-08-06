@@ -6,10 +6,12 @@ import {
   useImperativeHandle,
   useRef,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type HTMLAttributes,
   type ReactNode,
   type RefObject,
 } from "react";
+import { uiLayers } from "../tokens";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -23,6 +25,8 @@ function normalizeForSearch(value: string) {
 }
 
 export type MenuInitialFocus = "none" | "first" | "last" | "selected";
+export type MenuLayer = keyof typeof uiLayers;
+export type MenuSize = "standard" | "wide";
 
 export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   triggerRef?: RefObject<HTMLElement | null>;
@@ -30,6 +34,10 @@ export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   initialFocus?: MenuInitialFocus;
   restoreFocus?: boolean;
   dismissOnFocusOut?: boolean;
+  /** Semantic stacking layer; dynamic geometry may still use `style`. */
+  layer?: MenuLayer;
+  /** Reusable width variant for menus with longer labels. */
+  size?: MenuSize;
 }
 
 const ManagedMenuContext = createContext(false);
@@ -45,6 +53,9 @@ export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
     initialFocus: initialFocusProp,
     restoreFocus = true,
     dismissOnFocusOut = true,
+    layer,
+    size = "standard",
+    style,
     ...props
   },
   forwardedRef,
@@ -108,7 +119,11 @@ export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
         ref={menuRef}
         role="menu"
         aria-orientation="vertical"
-        className={cx("ui-menu", className)}
+        className={cx("ui-menu", `ui-menu--${size}`, className)}
+        style={{
+          ...style,
+          ...(layer ? { zIndex: uiLayers[layer] as CSSProperties["zIndex"] } : {}),
+        }}
         onBlur={(event) => {
           onBlur?.(event);
           if (

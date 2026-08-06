@@ -8,8 +8,10 @@ import {
 } from "lucide-react";
 import {
   calendarDaysBetween,
+  parseLocalDateKey,
   shiftLocalDateKey,
   todayLocalDateKey,
+  toLocalDateKey,
 } from "../../data/localDate";
 import {
   projectTaskOccurrences,
@@ -237,6 +239,35 @@ export const DEFAULT_DATE_VAL: DateVal = {
   date: null, time: "", reminder: "", repeat: "",
   startTime: "09:00", endTime: "10:00", duration: false, allDay: true,
 };
+
+export function defaultDateValueForTaskView(view: string, todayKey = todayLocalDateKey()): DateVal {
+  if (view === "bezterminu") return DEFAULT_DATE_VAL;
+
+  const today = parseLocalDateKey(todayKey);
+  if (!today) return DEFAULT_DATE_VAL;
+
+  let date: Date | null;
+  switch (view) {
+    case "dzis":
+    case "wszystkie":
+      date = today;
+      break;
+    case "jutro":
+      date = parseLocalDateKey(shiftLocalDateKey(todayKey, 1));
+      break;
+    case "7dni":
+      date = parseLocalDateKey(shiftLocalDateKey(todayKey, 7));
+      break;
+    case "30dni":
+      date = new Date(today);
+      date.setMonth(date.getMonth() + 1);
+      break;
+    default:
+      return DEFAULT_DATE_VAL;
+  }
+
+  return date ? { ...DEFAULT_DATE_VAL, date: parseLocalDateKey(toLocalDateKey(date)) } : DEFAULT_DATE_VAL;
+}
 
 export function formatDateLabel(val: DateVal): string {
   if (!val.date) return "";

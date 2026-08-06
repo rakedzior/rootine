@@ -64,6 +64,7 @@ import {
   SPECIAL_SMART_VIEWS,
   VIEW_LABELS,
   VISIBLE_TAG_LIMIT,
+  defaultDateValueForTaskView,
   formatOpenTaskCount,
   formatDateLabel,
   groupTasksForListView,
@@ -119,7 +120,9 @@ export default function Zadania() {
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
   const [newTaskList,   setNewTaskList]   = useState<string | null>(null);
   const [newPriority,   setNewPriority]   = useState<Priority | null>(null);
-  const [newDateVal,    setNewDateVal]    = useState<DateVal>(DEFAULT_DATE_VAL);
+  const [newDateVal,    setNewDateVal]    = useState<DateVal>(() => (
+    defaultDateValueForTaskView(initialTaskView())
+  ));
   const [inputDropdown, setInputDropdown] = useState<"priority" | "list" | "tags" | null>(null);
   const [collapsedTaskGroups, setCollapsedTaskGroups] = useState<Record<string, boolean>>({});
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -180,7 +183,7 @@ export default function Zadania() {
   );
 
   const openTaskView = (view: string, resetFilters = true) => {
-    setTaskView(view);
+    setTaskViewWithDefault(view);
     if (resetFilters) {
       setListFilter(null);
       setTagFilter(null);
@@ -211,7 +214,7 @@ export default function Zadania() {
       listFilter: kind === "list" ? id : null,
       tagFilter: kind === "tag" ? id : null,
     } as const;
-    setTaskView(nextState.taskView);
+    setTaskViewWithDefault(nextState.taskView);
     setListFilter(nextState.listFilter);
     setTagFilter(nextState.tagFilter);
     saveTaskSidebarState(nextState);
@@ -222,7 +225,7 @@ export default function Zadania() {
     if (mode === "calendar") {
       saveTasksViewMode("calendar");
       setTasksViewMode("calendar");
-      setTaskView("wszystkie");
+      setTaskViewWithDefault("wszystkie");
       setListFilter(null);
       setTagFilter(null);
       saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
@@ -266,16 +269,21 @@ export default function Zadania() {
   const listBtnInputRef = useRef<HTMLButtonElement>(null);
   const hashBtnInputRef = useRef<HTMLButtonElement>(null);
 
+  const setTaskViewWithDefault = useCallback((view: string) => {
+    setTaskView(view);
+    if (view !== taskView) setNewDateVal(defaultDateValueForTaskView(view));
+  }, [taskView]);
+
   useEffect(() => {
     const url = new URL(window.location.href);
     const action = url.searchParams.get("akcja");
     if (action !== "nowe-zadanie" && action !== "nowy-nawyk") return;
     const title = url.searchParams.get("tytul") ?? "";
     if (action === "nowy-nawyk") {
-      if (taskView !== "nawyki") setTaskView("nawyki");
+      if (taskView !== "nawyki") setTaskViewWithDefault("nawyki");
       setHabitQuickCapture((current) => ({ title, revision: current.revision + 1 }));
     } else {
-      if (taskView !== "dzis") setTaskView("dzis");
+      if (taskView !== "dzis") setTaskViewWithDefault("dzis");
       setNewTask(title);
       const priority = url.searchParams.get("priorytet");
       setNewPriority(["low", "medium", "high"].includes(priority ?? "") ? priority as Priority : null);
@@ -284,7 +292,7 @@ export default function Zadania() {
       const parsedDate = dateKey ? new Date(`${dateKey}T12:00:00`) : null;
       setNewDateVal(parsedDate && !Number.isNaN(parsedDate.getTime())
         ? { ...DEFAULT_DATE_VAL, date: parsedDate, time, allDay: !time }
-        : DEFAULT_DATE_VAL);
+        : defaultDateValueForTaskView("dzis"));
       window.setTimeout(() => inputRef.current?.focus(), 0);
     }
     url.searchParams.delete("akcja");
@@ -293,7 +301,7 @@ export default function Zadania() {
     url.searchParams.delete("godzina");
     url.searchParams.delete("priorytet");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [taskView]);
+  }, [setTaskViewWithDefault, taskView]);
 
   const todayKey = todayLocalDateKey();
   const smartDateTasks = useMemo(
@@ -460,9 +468,9 @@ export default function Zadania() {
       title: task.text,
       detail: task.calendarDate ? `Zaplanowano na ${task.calendarDate}` : "Dodano zadanie",
     });
-    setSelectedId(id);
+    setSelectedId(null);
     setNewTask(""); setNewPriority(null); setNewTaskTags([]); setNewTaskList(null);
-    setNewDateVal(DEFAULT_DATE_VAL); setInputDropdown(null);
+    setNewDateVal(defaultDateValueForTaskView(taskView)); setInputDropdown(null);
   };
 
   // List CRUD
@@ -723,7 +731,7 @@ export default function Zadania() {
 
   const startNewTask = () => {
     if (taskView === "podsumowanie" || taskView === "nawyki" || taskView === "ukonczone" || taskView === "kosz") {
-      setTaskView("dzis");
+      setTaskViewWithDefault("dzis");
     }
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -1090,7 +1098,7 @@ export default function Zadania() {
                 { value: "ukonczone", label: "Ukończone" },
                 { value: "kosz", label: "Kosz" },
               ]}
-              onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
+              onChange={(event) => { setTaskViewWithDefault(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
           />
           <TaskSummaryReport tasks={tasks.filter(t => !t.deleted)} listy={listy} />
@@ -1114,7 +1122,7 @@ export default function Zadania() {
                 { value: "ukonczone", label: "Ukończone" },
                 { value: "kosz", label: "Kosz" },
               ]}
-              onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
+              onChange={(event) => { setTaskViewWithDefault(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
           />
           <HabitsWorkspace
@@ -1151,7 +1159,7 @@ export default function Zadania() {
                 { value: "ukonczone", label: "Ukończone" },
                 { value: "kosz", label: "Kosz" },
               ]}
-              onChange={(event) => { setTaskView(event.target.value); setListFilter(null); setTagFilter(null); }}
+              onChange={(event) => { setTaskViewWithDefault(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
           meta={(storageFailed || listFilter || tagFilter) ? (
               <div className="flex flex-wrap items-center gap-1.5">
@@ -1522,7 +1530,7 @@ export default function Zadania() {
             : selectedHabit
               ? "Szczegóły nawyku"
               : "Podsumowanie zadań"}
-          onDismiss={() => selectedTask ? setSelectedId(null) : selectedHabit ? setSelectedHabitId(null) : setTaskView("dzis")}
+          onDismiss={() => selectedTask ? setSelectedId(null) : selectedHabit ? setSelectedHabitId(null) : setTaskViewWithDefault("dzis")}
         >
         {selectedTask ? (
           <TaskDetail

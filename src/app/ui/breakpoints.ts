@@ -16,6 +16,20 @@ export const BREAKPOINTS = {
   mobile: 760,
 } as const;
 
+/**
+ * Feature-specific thresholds that remain registered instead of silently becoming a
+ * second breakpoint system. They preserve current responsive behavior until a product
+ * decision approves consolidation.
+ */
+export const BREAKPOINT_EXCEPTIONS = {
+  settings: 560,
+  assistant: 1040,
+  densePlanner: 1100,
+  nutrition: 1120,
+  work: 1200,
+  ambient: 1280,
+} as const;
+
 export type BreakpointName = keyof typeof BREAKPOINTS;
 
 /** `matchMedia` query matching viewports at or below the given breakpoint. */

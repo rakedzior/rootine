@@ -1298,7 +1298,7 @@
 
 .jdg-undo {
   position: fixed;
-  z-index: 90;
+  z-index: var(--layer-overlay);
   right: var(--space-xl);
   bottom: var(--space-xl);
   display: flex;

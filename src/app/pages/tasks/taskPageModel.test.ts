@@ -10,8 +10,10 @@ import {
   tasksForCalendarView,
   tasksForSmartDateView,
   taskViewSupportsCalendar,
+  defaultDateValueForTaskView,
   type Task,
 } from "./taskPageModel";
+import { toCalendarDateKey } from "../../data/taskWorkspace";
 
 const today = "2026-08-04";
 const task = (overrides: Partial<Task>): Task => ({
@@ -32,6 +34,21 @@ describe("task presentation model", () => {
     expect(loadTasksViewMode()).toBe("calendar");
     saveTasksViewMode("list");
     expect(loadTasksViewMode()).toBe("list");
+  });
+
+  it("uses the active task view to choose the next task date", () => {
+    const viewedToday = "2026-08-04";
+    const dateKey = (view: string) => {
+      const value = defaultDateValueForTaskView(view, viewedToday);
+      return value.date ? toCalendarDateKey(value.date) : null;
+    };
+
+    expect(dateKey("dzis")).toBe("2026-08-04");
+    expect(dateKey("jutro")).toBe("2026-08-05");
+    expect(dateKey("7dni")).toBe("2026-08-11");
+    expect(dateKey("30dni")).toBe("2026-09-04");
+    expect(dateKey("wszystkie")).toBe("2026-08-04");
+    expect(dateKey("bezterminu")).toBeNull();
   });
 
   it("keeps the requested primary navigation order and migrates the old inbox id", () => {

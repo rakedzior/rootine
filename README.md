@@ -37,3 +37,16 @@ For Vercel:
 Before deployment, run `npm run check`, `npm run test:api`, and `npm run test:e2e`. The in-memory allowance protects a warm function instance and keeps normal UI traffic below the public search allowance; a high-traffic public deployment should also configure a durable edge/WAF rate limit because serverless instances do not share memory.
 
 On another host, deploy an equivalent same-origin proxy and set `VITE_OPEN_FOOD_FACTS_PROXY_URL` at build time. See `.env.example`. Do not put the server contact variable or any secrets in a `VITE_` variable.
+
+## Supabase persistence
+
+Supabase is optional for local development. Configure the browser-safe project URL and publishable key in `.env.local`:
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+The legacy `VITE_SUPABASE_ANON_KEY` name is also supported. Never put a secret or service-role key in a `VITE_` variable.
+
+The database migration in `supabase/migrations/20260806120000_rootine_workspace_snapshots.sql` creates the per-user JSON workspace table and its RLS policies. After signing in from the profile panel, Rootine uploads the existing local workspaces to the account and continues syncing later local changes. Without a session, the app keeps using local browser storage.

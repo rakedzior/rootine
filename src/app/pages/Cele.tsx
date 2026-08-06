@@ -385,7 +385,7 @@ export default function Cele() {
               <Button ref={sortMenuTriggerRef} variant="quiet" size="sm" onClick={() => setSortMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortMenuOpen} aria-controls={sortMenuId} trailingIcon={<ChevronDown size={11} />}>
                 Sortuj: <span className="goals-sort-label">{({ priority: "Priorytet", due: "Termin", progress: "Postęp", updated: "Ostatnia zmiana", name: "Nazwa" } as const)[sortKey]}</span>
               </Button>
-              {sortMenuOpen && <Menu id={sortMenuId} triggerRef={sortMenuTriggerRef} onDismiss={() => setSortMenuOpen(false)} initialFocus="selected" className="absolute right-0 top-11 z-40 w-44">{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <MenuItem key={option.id} selected={sortKey === option.id} onClick={() => { setGoalSort(option.id); setSortMenuOpen(false); }} trailingIcon={sortKey === option.id ? <Check size={11} /> : undefined}>{option.label}</MenuItem>)}</Menu>}
+              {sortMenuOpen && <Menu id={sortMenuId} triggerRef={sortMenuTriggerRef} onDismiss={() => setSortMenuOpen(false)} initialFocus="selected" layer="detail" className="absolute right-0 top-11 w-44">{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <MenuItem key={option.id} selected={sortKey === option.id} onClick={() => { setGoalSort(option.id); setSortMenuOpen(false); }} trailingIcon={sortKey === option.id ? <Check size={11} /> : undefined}>{option.label}</MenuItem>)}</Menu>}
             </div>
             <div className="ui-view-switch" aria-label="Sposób wyświetlania celów">
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("list")} aria-label="Widok listy" aria-pressed={layout === "list"}>
@@ -420,7 +420,7 @@ export default function Cele() {
                   event.currentTarget.value = "";
                 }}
               />
-              {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} className="absolute right-0 top-12 z-40 w-48">
+              {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} layer="detail" className="absolute right-0 top-12 w-48">
                 <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
                 <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
                 <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
@@ -608,7 +608,7 @@ export default function Cele() {
       )}
 
       {deletedGoal && (
-        <div className="fixed bottom-5 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-4 rounded-xl border px-4 py-3 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
+        <div className="fixed bottom-5 left-1/2 z-[var(--layer-goal-toast)] flex -translate-x-1/2 items-center gap-4 rounded-xl border px-4 py-3 shadow-2xl" style={{ background: C.subSidebar, borderColor: C.borderStrong }}>
           <span className="text-[11px]" style={{ color: C.textSecond }}>Cel został usunięty</span>
           <button type="button" onClick={() => { restoreGoal(deletedGoal); setDeletedGoal(null); }} className="text-[11px] font-semibold" style={{ color: C.iceBlueText }}>Cofnij</button>
           <button type="button" onClick={() => setDeletedGoal(null)} aria-label="Zamknij" style={{ color: C.textMuted }}><X size={13} /></button>

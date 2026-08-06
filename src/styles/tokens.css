@@ -81,6 +81,62 @@
   --theme-signature: color-mix(in srgb, var(--theme-ambient-brand) 72%, var(--color-primary));
   --focus-ring-width: 2px;
   --focus-ring: 0 0 0 2px var(--color-app-bg), 0 0 0 4px var(--color-focus-ring);
+}
+
+:root {
+  /*
+   * Layer vocabulary. Values intentionally preserve the existing stacking order while
+   * making ownership visible. A component may use a lower layer only when it is local to
+   * its own stacking context; global overlays must use the named application layers.
+   */
+  --layer-negative: -1;
+  --layer-base: 0;
+  --layer-raised: 1;
+  --layer-local: 2;
+  --layer-menu-local: 8;
+  --layer-sticky: 20;
+  --layer-context: 30;
+  --layer-detail-backdrop: 39;
+  --layer-detail: 40;
+  --layer-detail-drawer: 41;
+  --layer-assistant: 45;
+  --layer-app-overlay: 50;
+  --layer-popover: 60;
+  --layer-drawer: 70;
+  --layer-overlay: 90;
+  --layer-modal: 100;
+  --layer-toast: 180;
+  --layer-ambient: 250;
+  --layer-floating: var(--layer-ambient);
+  --layer-feature-popup: 260;
+  --layer-goal-toast: 110;
+  --layer-system: 1000;
+  --layer-nested-popover: 10001;
+  --layer-system-overlay: 9999;
+
+  /* Component geometry/state tokens. These do not replace semantic component APIs. */
+  --component-menu-min-width: 148px;
+  --component-menu-wide-width: 210px;
+  --component-menu-row-height: 28px;
+  --component-checkbox-size: 18px;
+  --component-checkbox-size-sm: 16px;
+  --component-progress-height: 4px;
+  --component-progress-height-sm: 3px;
+  --state-hover-surface: var(--color-surface-hover);
+  --state-selected-surface: var(--color-primary-subtle);
+  --state-focus-ring: var(--focus-ring);
+  --state-disabled-opacity: var(--opacity-disabled);
+  --state-completed-opacity: var(--opacity-completed);
+
+  /* Shared chart roles. Feature charts may add geometry, not new UI semantics. */
+  --color-chart-axis: var(--color-text-tertiary);
+  --color-chart-grid: var(--color-border-subtle);
+  --color-chart-series-1: var(--color-primary);
+  --color-chart-series-2: var(--color-category-teal);
+  --color-chart-series-3: var(--color-category-sand);
+  --color-chart-goal: var(--color-warning);
+  --color-chart-average: var(--color-text-tertiary);
+
   --motion-instant: 90ms;
   --motion-fast: 140ms;
   --motion-normal: 240ms;
@@ -88,6 +144,11 @@
   --motion-page: 420ms;
   --motion-ritual: 680ms;
   --motion-value-duration: var(--motion-normal);
+  /* Named component motion keeps existing interaction timing stable while making intent auditable. */
+  --motion-progress: 500ms;
+  --motion-progress-slow: 700ms;
+  --motion-toggle: 150ms;
+  --motion-disclosure: 160ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
@@ -97,6 +158,11 @@
   --opacity-decorative: 0.04;
   --icon-stroke-width: 1.7;
   --telemetry-segment-weight: 1;
+}
+
+:root {
+  /* Runtime data may override this property for a category-specific progress fill. */
+  --progress-color: var(--color-primary);
 }
 
 /*
@@ -473,6 +539,8 @@
   --color-danger-soft: var(--color-danger-subtle);
   --color-accent-violet: var(--theme-ambient-focus);
   --color-violet-soft: var(--color-primary-subtle);
+  /* Stable neutral for the synthetic "unlisted" category; preserve its taxonomy color across themes. */
+  --color-category-unlisted: #8793a1;
 }
 
 /*
@@ -524,4 +592,11 @@
   --bp-context: 1180px;
   --bp-columns: 980px;
   --bp-mobile: 760px;
+  /* Registered feature-specific thresholds; media queries cannot consume custom properties. */
+  --bp-settings: 560px;
+  --bp-assistant: 1040px;
+  --bp-dense-planner: 1100px;
+  --bp-nutrition: 1120px;
+  --bp-work: 1200px;
+  --bp-ambient: 1280px;
 }

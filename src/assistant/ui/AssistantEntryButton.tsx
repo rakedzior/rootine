@@ -16,15 +16,15 @@ export function AssistantEntryButton({
   return (
     <button
       type="button"
-      className={`assistant-entry${active ? " is-active" : ""}${compact ? " is-compact" : ""}`}
+      className={`assistant-entry app-sidebar-utility${active ? " is-active" : ""}${compact ? " is-compact" : ""}`}
       disabled={!enabled}
-      title={enabled ? "Asystent · Ctrl/Cmd + Space" : reason ?? "Asystent jest niedostępny"}
+      title={enabled ? "Asystent — ⌃ Space" : reason ?? "Asystent jest niedostępny"}
       aria-label={active ? "Wróć do Assistant Stage" : "Otwórz asystenta"}
       aria-expanded={active}
       aria-controls="rootine-assistant-stage"
       onClick={onClick}
     >
-      <AudioLines size={16} strokeWidth={1.8} aria-hidden="true" />
+      <AudioLines size={16} strokeWidth={1.7} aria-hidden="true" />
       {!compact && <span>Asystent</span>}
       {!compact && <kbd>⌃ Space</kbd>}
     </button>
