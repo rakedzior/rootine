@@ -879,16 +879,14 @@
   border-radius: var(--radius-lg);
 
   --goal-progress: 0%;
-  --goal-status-glow: transparent;
-
   border-color: var(--color-border);
   background: var(--color-surface-1);
   box-shadow: none;
 }
 
 .goal-card.is-selected {
-  border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
-  background: var(--color-surface-hover);
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary-subtle) 36%, var(--color-surface-1));
 }
 
 /* A 320px floor on the title plus the fixed action columns could exceed the page column and
@@ -929,8 +927,10 @@
 }
 
 .goal-card-icon {
+  width: 32px;
+  height: 32px;
   border-color: var(--color-border);
-  background: var(--color-surface-2);
+  background: transparent;
   color: var(--color-text-tertiary);
 }
 
@@ -950,10 +950,6 @@
 
 .goal-card-progress-value {
   font-family: var(--font-data);
-}
-
-.goal-card-status-glow {
-  background: linear-gradient(90deg, transparent, var(--goal-status-glow), transparent);
 }
 
 .goal-card[data-status="paused"]:not(.is-selected):not(:hover):not(:focus-within),
@@ -986,6 +982,37 @@
   opacity: 0.42;
 }
 
+.goals-card-list {
+  display: grid;
+  gap: 0;
+}
+
+.goals-card-list .goal-card {
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.goals-card-list .goal-card:last-child { border-bottom: 0; }
+
+.goals-card-list .goal-card:hover,
+.goals-card-list .goal-card:focus-within {
+  background: var(--color-graphite-hover);
+}
+
+.goals-card-list .goal-card.is-selected {
+  border-color: var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-precision-blue-soft) 48%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-precision-blue);
+}
+
+.goals-card-list .goal-card[data-status="paused"]:not(.is-selected):not(:hover):not(:focus-within),
+.goals-card-list .goal-card[data-status="completed"]:not(.is-selected):not(:hover):not(:focus-within),
+.goals-card-list .goal-card[data-status="archived"]:not(.is-selected):not(:hover):not(:focus-within) {
+  background: transparent;
+}
+
 /*
  * A flex row anchored on its right edge let every element upstream of the kebab shift whenever
  * a status label or a date changed width: the percentage and the status chip moved up to 14px
@@ -1002,7 +1029,7 @@
   align-items: center;
   gap: var(--space-md);
   padding-inline-start: var(--space-lg);
-  border-inline-start: 1px solid var(--color-border-subtle);
+  border-inline-start: 0;
   justify-self: end;
 }
 
@@ -1134,6 +1161,88 @@
 
 .goals-overview-summary {
   margin: 0 var(--space-3xl) var(--space-sm);
+}
+
+.goals-sidebar-empty {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-label);
+  line-height: var(--leading-normal);
+}
+
+.goal-agenda {
+  width: 100%;
+}
+
+.goal-step-depth .ui-button {
+  min-width: auto;
+  padding-inline: var(--space-sm);
+  font-size: var(--text-micro);
+}
+
+.goal-agenda__list {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.goal-agenda-row {
+  background: transparent;
+}
+
+.goal-agenda-row:hover,
+.goal-agenda-row:focus-within {
+  background: var(--color-graphite-hover);
+}
+
+.goal-agenda-row__marker {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
+.goal-agenda-row__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+  white-space: nowrap;
+}
+
+.goal-agenda-row__date.is-primary { color: var(--color-precision-blue-text); }
+.goal-agenda-row__date.is-warning { color: var(--color-warning-ochre); }
+.goal-agenda-row__date.is-danger { color: var(--color-danger-coral); }
+
+.goal-detail-snapshot {
+  margin: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.goal-detail-snapshot > div {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.goal-detail-snapshot dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-label);
+}
+
+.goal-detail-snapshot dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--text-label);
 }
 
 @media (max-width: 760px) {

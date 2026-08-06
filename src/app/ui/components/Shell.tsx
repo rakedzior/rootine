@@ -404,23 +404,41 @@ export const ContextSidebar = ModuleSidebar;
 
 export interface ContextNavItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
+  depth?: 0 | 1;
   icon?: ReactNode;
   label: ReactNode;
   meta?: ReactNode;
 }
 
-export function ContextNavItem({ active = false, icon, label, meta, className, type = "button", ...props }: ContextNavItemProps) {
+export function ContextNavItem({ active = false, depth = 0, icon, label, meta, className, type = "button", ...props }: ContextNavItemProps) {
   return (
     <button
       type={type}
       aria-current={active ? "page" : undefined}
-      className={cx("context-nav-item", className)}
+      className={cx("context-nav-item", depth === 1 && "context-nav-item--nested", className)}
       {...props}
     >
       {icon && <span className="context-nav-item__icon" aria-hidden="true">{icon}</span>}
       <span className="context-nav-item__label">{label}</span>
       {meta !== undefined && <span className="context-nav-item__meta">{meta}</span>}
     </button>
+  );
+}
+
+export interface ContextNavGroupProps extends HTMLAttributes<HTMLElement> {
+  label: ReactNode;
+}
+
+/**
+ * A semantic group inside a module sidebar. Modules provide their own destinations,
+ * while spacing and label hierarchy stay identical across the product.
+ */
+export function ContextNavGroup({ label, children, className, ...props }: ContextNavGroupProps) {
+  return (
+    <section className={cx("context-nav-group", className)} {...props}>
+      <h2 className="context-nav-group__label">{label}</h2>
+      <div className="context-nav-group__items">{children}</div>
+    </section>
   );
 }
 

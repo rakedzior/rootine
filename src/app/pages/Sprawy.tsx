@@ -7,7 +7,9 @@
  */
 import {
   Archive,
+  Bell,
   Building2,
+  CalendarClock,
   Car,
   Check,
   ChevronLeft,
@@ -17,6 +19,7 @@ import {
   FileText,
   LayoutDashboard,
   Map,
+  MapPin,
   Pencil,
   Plus,
   ReceiptText,
@@ -39,6 +42,7 @@ import {
   getMonthKey,
   loadAffairsWorkspace,
   saveAffairsWorkspace,
+  setAffairAttentionState,
   setMatterCompletionState,
   setOneTimePaymentPaidState,
   type DocumentRecord,
@@ -51,8 +55,11 @@ import {
   type VehicleItem,
   monthlyEquivalent,
 } from "../data/affairsWorkspace";
+import { JDG_STORAGE_KEY, loadJdgWorkspace, saveJdgWorkspace } from "../data/jdgWorkspace";
+import { TRAVEL_STORAGE_KEY, loadTravelWorkspace, saveTravelWorkspace } from "../data/travelWorkspace";
 import { AffairsEditorFields } from "../affairs/AffairsEditorFields";
 import { applyAffairsEditor } from "../affairs/affairsMutations";
+import { buildAffairAttentionItems, resolveAffairAttentionItem, type AffairAttentionItem } from "../affairs/affairsAttention";
 import { JdgWorkspace } from "./Jdg";
 import Podroze from "./Podroze";
 import {
@@ -63,6 +70,7 @@ import {
   ConfirmDialog,
   CompletedSection,
   ContentHeader,
+  ContextNavGroup,
   ContextNavItem,
   ModuleSidebar,
   DetailPanel,
@@ -71,7 +79,6 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
-  ProgressBar,
   Select,
   SummaryStrip,
   AddToTasksButton,
@@ -100,6 +107,7 @@ import {
   getEditorPresentation,
   getInitialView,
   shiftMonthKey,
+  reminderPresetFromMinutes,
   vehicleItemDueCopy,
   type AffairsView,
   type DeleteState,
@@ -111,9 +119,12 @@ export default function Sprawy() {
   const navigate = useNavigate();
   const location = useLocation();
   const [workspace, setWorkspace] = useState(loadAffairsWorkspace);
+  const [jdgWorkspace, setJdgWorkspace] = useState(loadJdgWorkspace);
+  const [travelWorkspace, setTravelWorkspace] = useState(loadTravelWorkspace);
   const [view, setView] = useState<AffairsView>(getInitialView);
   const [statusFilter, setStatusFilter] = useState<"active" | MatterStatus>("active");
   const [categoryFilter, setCategoryFilter] = useState<"all" | MatterCategory>("all");
+  const [subscriptionCategoryFilter, setSubscriptionCategoryFilter] = useState("all");
   const [selectedMatterId, setSelectedMatterId] = useState("");
   const [budgetMonthKey, setBudgetMonthKey] = useState(getMonthKey);
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -129,6 +140,14 @@ export default function Sprawy() {
 
   useEffect(() => subscribeToLocalWorkspace(AFFAIRS_STORAGE_KEY, () => {
     setWorkspace(loadAffairsWorkspace());
+  }), []);
+
+  useEffect(() => subscribeToLocalWorkspace(JDG_STORAGE_KEY, () => {
+    setJdgWorkspace(loadJdgWorkspace());
+  }), []);
+
+  useEffect(() => subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, () => {
+    setTravelWorkspace(loadTravelWorkspace());
   }), []);
 
   useEffect(() => {
@@ -174,7 +193,11 @@ export default function Sprawy() {
     return workspace.matters
       .filter((matter) => statusFilter === "active" ? matter.status !== "done" : matter.status === statusFilter)
       .filter((matter) => categoryFilter === "all" || matter.category === categoryFilter)
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+      .sort((a, b) => {
+        if (!a.dueDate) return b.dueDate ? 1 : a.title.localeCompare(b.title, "pl");
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
   }, [categoryFilter, statusFilter, workspace.matters]);
 
   const monthlyPaymentTotal = useMemo(
@@ -189,6 +212,19 @@ export default function Sprawy() {
       .filter((subscription) => subscription.active)
       .reduce((sum, subscription) => sum + monthlyEquivalent(subscription.amount, subscription.cadence), 0),
     [workspace.subscriptions],
+  );
+
+  const subscriptionCategories = useMemo(
+    () => [...new Set(workspace.subscriptions.map((subscription) => subscription.category).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "pl")),
+    [workspace.subscriptions],
+  );
+
+  const filteredSubscriptions = useMemo(
+    () => workspace.subscriptions.filter((subscription) => (
+      subscriptionCategoryFilter === "all" || subscription.category === subscriptionCategoryFilter
+    )),
+    [subscriptionCategoryFilter, workspace.subscriptions],
   );
 
   const unpaidOneTimeTotal = workspace.oneTimePayments
@@ -225,88 +261,12 @@ export default function Sprawy() {
     };
   }, [currentBudget]);
 
-  const upcoming = useMemo(() => {
-    const matters = activeMatters.map((matter) => ({
-      id: matter.id,
-      view: "matters" as AffairsView,
-      kind: "matter",
-      title: matter.title,
-      meta: CATEGORY_META[matter.category].label,
-      dueDate: matter.dueDate,
-      amount: null as number | null,
-    }));
-    const payments = workspace.payments.filter((payment) => payment.active).map((payment) => ({
-      id: payment.id,
-      view: "payments" as AffairsView,
-      kind: "payment",
-      title: payment.name,
-      meta: payment.automatic ? "Płatność automatyczna" : "Do opłacenia ręcznie",
-      dueDate: payment.nextDueDate,
-      amount: payment.amount,
-    }));
-    const oneTime = workspace.oneTimePayments.filter((payment) => !payment.paid).map((payment) => ({
-      id: payment.id,
-      view: "oneTime" as AffairsView,
-      kind: "oneTime",
-      title: payment.title,
-      meta: `Płatność jednorazowa · ${payment.category}`,
-      dueDate: payment.dueDate,
-      amount: payment.amount,
-    }));
-    const subscriptions = workspace.subscriptions.filter((subscription) => subscription.active).map((subscription) => ({
-      id: subscription.id,
-      view: "subscriptions" as AffairsView,
-      kind: "subscription",
-      title: subscription.name,
-      meta: subscription.renewal === "automatic" ? "Odnowienie automatyczne" : "Odnowienie ręczne",
-      dueDate: subscription.nextBillingDate,
-      amount: subscription.amount,
-    }));
-    const documents = workspace.documents.filter((document) => document.expiresAt).map((document) => ({
-      id: document.id,
-      view: "documents" as AffairsView,
-      kind: "document",
-      title: document.name,
-      meta: `${document.holder} · ${DOCUMENT_LABELS[document.category]}`,
-      dueDate: document.expiresAt,
-      amount: null as number | null,
-    }));
-    const vehicleItems = workspace.vehicleItems.filter((item) => !item.done && item.dueDate).map((item) => {
-      const vehicle = workspace.vehicles.find((candidate) => candidate.id === item.vehicleId);
-      return {
-        id: item.id,
-        view: "vehicles" as AffairsView,
-        kind: "vehicle",
-        title: item.title,
-        meta: `${vehicle?.name ?? "Pojazd"} · ${VEHICLE_ITEM_LABELS[item.type]}`,
-        dueDate: item.dueDate,
-        amount: null as number | null,
-      };
-    });
-    return [...matters, ...oneTime, ...payments, ...subscriptions, ...documents, ...vehicleItems]
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 10);
-  }, [
-    activeMatters,
-    workspace.documents,
-    workspace.oneTimePayments,
-    workspace.payments,
-    workspace.subscriptions,
-    workspace.vehicleItems,
-    workspace.vehicles,
-  ]);
-
-  const isWithinNext30Days = (date: string) => {
-    const days = daysUntil(date);
-    return days >= 0 && days <= 30;
-  };
-  const dueSoon = activeMatters.filter((matter) => isWithinNext30Days(matter.dueDate)).length
-    + workspace.oneTimePayments.filter((payment) => !payment.paid && isWithinNext30Days(payment.dueDate)).length
-    + workspace.payments.filter((payment) => payment.active && isWithinNext30Days(payment.nextDueDate)).length
-    + workspace.subscriptions.filter((subscription) => subscription.active && isWithinNext30Days(subscription.nextBillingDate)).length
-    + workspace.documents.filter((document) => document.expiresAt && isWithinNext30Days(document.expiresAt)).length
-    + workspace.vehicleItems.filter((item) => !item.done && item.dueDate && isWithinNext30Days(item.dueDate)).length;
-  const dueThisWeek = upcoming.filter((item) => daysUntil(item.dueDate) <= 7).length;
+  const attentionItems = useMemo(
+    () => buildAffairAttentionItems(workspace, jdgWorkspace, travelWorkspace),
+    [jdgWorkspace, travelWorkspace, workspace],
+  );
+  const upcoming = attentionItems;
+  const dueSoon = attentionItems.length;
 
   const openMatterEditor = (matter?: Matter) => {
     setDraft(matter ? {
@@ -317,6 +277,11 @@ export default function Sprawy() {
       status: matter.status,
       dueDate: matter.dueDate,
       note: matter.note,
+      matterKind: matter.kind ?? "task",
+      time: matter.time ?? "",
+      location: matter.location ?? "",
+      reminderPreset: reminderPresetFromMinutes(matter.reminderMinutes),
+      sourceAttentionKey: matter.sourceAttentionKey ?? "",
     } : EMPTY_DRAFT);
     setEditorError("");
     setEditor({ kind: "matter", mode: matter ? "edit" : "add", id: matter?.id });
@@ -420,9 +385,18 @@ export default function Sprawy() {
     const initialTitle = params.get("tytul")?.trim() ?? "";
     const initialDate = params.get("data") ?? "";
     const initialPriority = params.get("priorytet") === "high" ? "high" : "normal";
+    const initialTime = params.get("godzina") ?? "";
     if (action === "nowa-sprawa") {
       setView("matters");
-      setDraft({ ...EMPTY_DRAFT, title: initialTitle, dueDate: initialDate, priority: initialPriority });
+      setDraft({
+        ...EMPTY_DRAFT,
+        title: initialTitle,
+        dueDate: initialDate,
+        priority: initialPriority,
+        matterKind: initialTime ? "appointment" : "task",
+        time: initialTime,
+        reminderPreset: initialTime ? "day-and-two-hours" : "none",
+      });
       setEditorError("");
       setEditor({ kind: "matter", mode: "add" });
     } else if (action === "nowa-platnosc") {
@@ -464,7 +438,15 @@ export default function Sprawy() {
       return;
     }
 
-    setWorkspace(submission.nextWorkspace);
+    const nextWorkspace = editor.kind === "matter" && editor.mode === "add" && draft.sourceAttentionKey
+      ? setAffairAttentionState(submission.nextWorkspace, {
+          key: draft.sourceAttentionKey,
+          status: "resolved",
+          snoozedUntil: "",
+          updatedAt: new Date().toISOString(),
+        })
+      : submission.nextWorkspace;
+    setWorkspace(nextWorkspace);
     if (submission.selectedMatterId) setSelectedMatterId(submission.selectedMatterId);
     recordActivity({
       moduleId: "affairs",
@@ -644,6 +626,59 @@ export default function Sprawy() {
     }
   };
 
+  const openAttentionSource = (item: AffairAttentionItem) => {
+    selectView(item.view);
+    if (item.kind === "matter") setSelectedMatterId(item.sourceId);
+  };
+
+  const scheduleAttention = (item: AffairAttentionItem) => {
+    const category: MatterCategory = item.kind === "document"
+      ? "dokumenty"
+      : item.kind === "vehicle"
+        ? "auto"
+        : ["oneTime", "payment", "subscription", "jdg"].includes(item.kind)
+          ? "finanse"
+          : "dom";
+    selectView("matters");
+    setDraft({
+      ...EMPTY_DRAFT,
+      title: item.title,
+      category,
+      dueDate: item.dueDate,
+      note: `Źródło: ${item.meta}`,
+      matterKind: item.time ? "appointment" : "task",
+      time: item.time,
+      reminderPreset: item.time ? "day-and-two-hours" : "none",
+      sourceAttentionKey: item.key,
+    });
+    setEditorError("");
+    setEditor({ kind: "matter", mode: "add" });
+  };
+
+  const snoozeAttention = (item: AffairAttentionItem) => {
+    const snoozedUntil = new Date();
+    snoozedUntil.setDate(snoozedUntil.getDate() + 7);
+    setWorkspace((current) => setAffairAttentionState(current, {
+      key: item.key,
+      status: "snoozed",
+      snoozedUntil: snoozedUntil.toISOString().slice(0, 10),
+      updatedAt: new Date().toISOString(),
+    }));
+  };
+
+  const resolveAttention = (item: AffairAttentionItem) => {
+    const resolved = resolveAffairAttentionItem(workspace, jdgWorkspace, travelWorkspace, item);
+    setWorkspace(resolved.affairs);
+    if (resolved.jdg !== jdgWorkspace) {
+      setJdgWorkspace(resolved.jdg);
+      if (!saveJdgWorkspace(resolved.jdg)) setStorageError(true);
+    }
+    if (resolved.travel !== travelWorkspace) {
+      setTravelWorkspace(resolved.travel);
+      if (!saveTravelWorkspace(resolved.travel)) setStorageError(true);
+    }
+  };
+
   const renderPrimaryAction = () => {
     if (view === "oneTime") {
       return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openOneTimeEditor()}><span className="header-action-label">Dodaj płatność</span></Button>;
@@ -687,40 +722,26 @@ export default function Sprawy() {
   const contextSidebar = (
     <ModuleSidebar label="Widoki spraw" className="affairs-sidebar">
       <nav className="affairs-sidebar__nav">
-        <section>
-          <p className="affairs-sidebar__label">Główne</p>
-          <div>
-            <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label={NAV_LABELS.overview} onClick={() => selectView("overview")} />
-            <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label={NAV_LABELS.matters} meta={navMeta("matters")} onClick={() => selectView("matters")} />
-          </div>
-        </section>
-        <section>
-          <p className="affairs-sidebar__label">Finanse</p>
-          <div>
-            <ContextNavItem active={view === "oneTime"} icon={<ReceiptText />} label={NAV_LABELS.oneTime} meta={navMeta("oneTime")} onClick={() => selectView("oneTime")} />
-            <ContextNavItem active={view === "payments"} icon={<RefreshCw />} label={NAV_LABELS.payments} meta={navMeta("payments")} onClick={() => selectView("payments")} />
-            <ContextNavItem active={view === "subscriptions"} icon={<CreditCard />} label={NAV_LABELS.subscriptions} meta={navMeta("subscriptions")} onClick={() => selectView("subscriptions")} />
-            <ContextNavItem active={view === "budget"} icon={<WalletCards />} label={NAV_LABELS.budget} onClick={() => selectView("budget")} />
-          </div>
-        </section>
-        <section>
-          <p className="affairs-sidebar__label">Dokumenty i pojazdy</p>
-          <div>
-            <ContextNavItem active={view === "documents"} icon={<FileText />} label={NAV_LABELS.documents} meta={navMeta("documents")} onClick={() => selectView("documents")} />
-            <ContextNavItem active={view === "vehicles"} icon={<Car />} label={NAV_LABELS.vehicles} meta={navMeta("vehicles")} onClick={() => selectView("vehicles")} />
-          </div>
-        </section>
-        <section>
-          <p className="affairs-sidebar__label">Firma i podróże</p>
-          <div>
-            <ContextNavItem active={view === "jdg"} icon={<Building2 />} label={NAV_LABELS.jdg} onClick={() => selectView("jdg")} />
-            <ContextNavItem active={view === "travel"} icon={<Map />} label={NAV_LABELS.travel} onClick={() => selectView("travel")} />
-          </div>
-        </section>
+        <div className="affairs-sidebar__primary" aria-label="Przegląd spraw">
+          <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label={NAV_LABELS.overview} meta={dueSoon || undefined} onClick={() => selectView("overview")} />
+          <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label={NAV_LABELS.matters} meta={navMeta("matters")} onClick={() => selectView("matters")} />
+        </div>
+        <ContextNavGroup label="Finanse">
+          <ContextNavItem active={view === "oneTime"} icon={<ReceiptText />} label={NAV_LABELS.oneTime} meta={navMeta("oneTime")} onClick={() => selectView("oneTime")} />
+          <ContextNavItem active={view === "payments"} icon={<RefreshCw />} label={NAV_LABELS.payments} meta={navMeta("payments")} onClick={() => selectView("payments")} />
+          <ContextNavItem active={view === "subscriptions"} icon={<CreditCard />} label={NAV_LABELS.subscriptions} meta={navMeta("subscriptions")} onClick={() => selectView("subscriptions")} />
+          <ContextNavItem active={view === "budget"} icon={<WalletCards />} label={NAV_LABELS.budget} onClick={() => selectView("budget")} />
+        </ContextNavGroup>
+        <ContextNavGroup label="Pozostałe">
+          <ContextNavItem active={view === "jdg"} icon={<Building2 />} label={NAV_LABELS.jdg} onClick={() => selectView("jdg")} />
+          <ContextNavItem active={view === "documents"} icon={<FileText />} label={NAV_LABELS.documents} meta={navMeta("documents")} onClick={() => selectView("documents")} />
+          <ContextNavItem active={view === "vehicles"} icon={<Car />} label={NAV_LABELS.vehicles} meta={navMeta("vehicles")} onClick={() => selectView("vehicles")} />
+          <ContextNavItem active={view === "travel"} icon={<Map />} label={NAV_LABELS.travel} onClick={() => selectView("travel")} />
+        </ContextNavGroup>
       </nav>
       <div className="affairs-sidebar__footer">
         <Clock3 size={13} aria-hidden="true" />
-        <span>{dueSoon} w ciągu 30 dni</span>
+        <span>{pluralize(dueSoon, "wpis wymaga uwagi", "wpisy wymagają uwagi", "wpisów wymaga uwagi")}</span>
       </div>
     </ModuleSidebar>
   );
@@ -733,7 +754,6 @@ export default function Sprawy() {
     >
       <header className="affairs-detail__header">
         <div>
-          <span>Szczegóły sprawy</span>
           <strong>{selectedMatter.title}</strong>
         </div>
         <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setSelectedMatterId("")}>
@@ -745,15 +765,20 @@ export default function Sprawy() {
           <Badge tone={selectedMatter.status === "done" ? "success" : selectedMatter.status === "waiting" ? "warning" : "primary"} dot>
             {STATUS_LABELS[selectedMatter.status]}
           </Badge>
+          {selectedMatter.kind === "appointment" && <Badge tone="neutral"><CalendarClock size={11} /> Wizyta</Badge>}
           {selectedMatter.priority === "high" && <Badge tone="danger">Ważna</Badge>}
         </div>
         <dl className="affairs-detail__facts">
           <div><dt>Obszar</dt><dd>{CATEGORY_META[selectedMatter.category].label}</dd></div>
-          <div><dt>Termin</dt><dd>{formatDate(selectedMatter.dueDate)}</dd></div>
+          <div><dt>{selectedMatter.kind === "appointment" ? "Wizyta" : "Termin"}</dt><dd>{selectedMatter.dueDate ? formatDate(selectedMatter.dueDate) : "Bez terminu"}{selectedMatter.time ? ` · ${selectedMatter.time}` : ""}</dd></div>
+          {selectedMatter.location && <div><dt>Miejsce</dt><dd>{selectedMatter.location}</dd></div>}
+          {selectedMatter.kind === "appointment" && (
+            <div><dt>Powiadomienia</dt><dd>{selectedMatter.reminderMinutes?.length ? "Włączone" : "Wyłączone"}</dd></div>
+          )}
           <div><dt>Dodano</dt><dd>{formatPolishDate(selectedMatter.createdAt)}</dd></div>
         </dl>
         <section className="affairs-detail__note">
-          <h3>Kontekst</h3>
+          <h3>Notatka</h3>
           <p>{selectedMatter.note || "Brak dodatkowej notatki."}</p>
         </section>
       </div>
@@ -899,10 +924,22 @@ export default function Sprawy() {
             </span>
           )}
           {view === "subscriptions" && (
-            <span className="affairs-toolbar__context">
-              <CreditCard size={13} aria-hidden="true" />
-              Aktywne <SensitiveValue label="Miesięczna kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue> / mies.
-            </span>
+            <>
+              <Select
+                compact
+                aria-label="Filtr kategorii subskrypcji"
+                value={subscriptionCategoryFilter}
+                options={[
+                  { value: "all", label: "Wszystkie kategorie" },
+                  ...subscriptionCategories.map((category) => ({ value: category, label: category })),
+                ]}
+                onChange={(event) => setSubscriptionCategoryFilter(event.target.value)}
+              />
+              <span className="affairs-toolbar__context">
+                <CreditCard size={13} aria-hidden="true" />
+                Aktywne <SensitiveValue label="Miesięczna kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue> / mies.
+              </span>
+            </>
           )}
           {view === "documents" && (
             <span className="affairs-toolbar__context">
@@ -930,54 +967,26 @@ export default function Sprawy() {
         <div className="affairs-canvas">
           {view === "overview" && (
             <div className="affairs-overview">
-              <section className="affairs-radar-summary" aria-labelledby="affairs-radar-heading">
-                <header className="affairs-radar-summary__heading">
+              <Card as="section" tone="panel" padding="none" className="affairs-agenda" aria-labelledby="affairs-radar-heading">
+                <header className="affairs-section-heading">
                   <div>
-                    <h2 id="affairs-radar-heading">Radar odpowiedzialności</h2>
-                    <p>Najbliższe rzeczy, które mogą wymagać Twojej uwagi.</p>
+                    <h2 id="affairs-radar-heading">Wymaga uwagi</h2>
+                    <p>Nie znika, dopóki nie zaplanujesz, odłożysz lub zamkniesz wpisu</p>
                   </div>
-                  <span className={`affairs-radar-summary__window ${dueSoon ? "is-warning" : ""}`}>
-                    {dueSoon} w ciągu 30 dni
+                  <span className={`affairs-section-heading__meta ${dueSoon ? "is-warning" : ""}`}>
+                    {pluralize(dueSoon, "termin", "terminy", "terminów")}
                   </span>
                 </header>
-                <SummaryStrip
-                  label="Sygnały radaru odpowiedzialności"
-                  className="affairs-radar-summary__signals"
-                  items={[
-                    { label: "Najpilniejsze", value: dueThisWeek, note: "do 7 dni", tone: dueThisWeek ? "warning" : "success" },
-                    { label: "Do opłacenia", value: <SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>, note: "jednorazowe", tone: unpaidOneTimeTotal > 0 ? "warning" : "neutral" },
-                    { label: "Alerty rejestrów", value: documentAlerts + vehicleAlerts, note: `${documentAlerts} dok. · ${vehicleAlerts} poj.`, tone: documentAlerts + vehicleAlerts ? "danger" : "success" },
-                    { label: "Stałe zobowiązania", value: <SensitiveValue label="Kwota stałych zobowiązań">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue>, note: "miesięcznie" },
-                  ]}
-                />
-              </section>
-
-              <div className="affairs-overview__grid">
-                <Card as="section" tone="panel" padding="none" className="affairs-agenda">
-                  <header className="affairs-section-heading">
-                    <div>
-                      <h2>Najbliżej na radarze</h2>
-                      <p>Jeden porządek terminów dla spraw i płatności</p>
-                    </div>
-                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={13} />} onClick={() => selectView("matters")}>Wszystkie</Button>
-                  </header>
-                  {upcoming.length === 0 ? (
-                    <EmptyState icon={<Archive size={18} />} title="Radar jest pusty" description="Dodaj sprawę albo płatność z terminem." />
-                  ) : (
-                    <div className="affairs-agenda__list">
-                      {upcoming.map((item) => {
-                        const due = dueCopy(item.dueDate);
-                        const UpcomingIcon = UPCOMING_ICONS[item.kind as keyof typeof UPCOMING_ICONS];
-                        return (
-                          <button
-                            key={`${item.kind}-${item.id}`}
-                            type="button"
-                            className="affairs-agenda-row"
-                            onClick={() => {
-                              selectView(item.view);
-                              if (item.kind === "matter") setSelectedMatterId(item.id);
-                            }}
-                          >
+                {upcoming.length === 0 ? (
+                  <EmptyState icon={<Archive size={18} />} title="Wszystko dopilnowane" description="Nie ma teraz żadnych terminów wymagających reakcji." />
+                ) : (
+                  <div className="affairs-agenda__list">
+                    {upcoming.map((item) => {
+                      const due = dueCopy(item.dueDate);
+                      const UpcomingIcon = UPCOMING_ICONS[item.kind as keyof typeof UPCOMING_ICONS];
+                      return (
+                        <div key={item.key} className="affairs-agenda-row">
+                          <button type="button" className="affairs-agenda-row__main" onClick={() => openAttentionSource(item)}>
                             <span className={`affairs-agenda-row__icon affairs-agenda-row__icon--${item.kind}`}>
                               <UpcomingIcon size={13} />
                             </span>
@@ -985,48 +994,32 @@ export default function Sprawy() {
                               <strong>{item.title}</strong>
                               <small>{item.meta}</small>
                             </span>
-                            {item.amount !== null && (
-                              <span className="affairs-agenda-row__amount">
-                                <SensitiveValue label={`Kwota: ${item.title}`}>{formatMoney(item.amount)}</SensitiveValue>
-                              </span>
-                            )}
-                            <Badge tone={due.tone}>{due.text}</Badge>
-                            <ChevronRight size={13} aria-hidden="true" />
                           </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-
-                <Card as="section" tone="panel" padding="none" className="affairs-budget-snapshot">
-                  <header className="affairs-section-heading">
-                    <div>
-                      <h2>Koszty stałe</h2>
-                      <p>Cykliczne rachunki i aktywne usługi</p>
-                    </div>
-                    <Button variant="ghost" size="sm" trailingIcon={<ChevronRight size={13} />} onClick={() => selectView("subscriptions")}>Subskrypcje</Button>
-                  </header>
-                  <div className="affairs-budget-snapshot__body">
-                    <div className="affairs-budget-balance">
-                      <span>Miesięcznie zarezerwowane</span>
-                      <strong><SensitiveValue label="Miesięcznie zarezerwowana kwota">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue></strong>
-                    </div>
-                    <ProgressBar
-                      label="Udział stałych zobowiązań w planowanych wpływach"
-                      value={budgetSummary.income
-                        ? ((monthlyPaymentTotal + monthlySubscriptionTotal) / budgetSummary.income) * 100
-                        : 0}
-                    />
-                    <dl>
-                      <div><dt>Cykliczne</dt><dd><SensitiveValue label="Kwota płatności cyklicznych">{formatMoney(monthlyPaymentTotal)}</SensitiveValue></dd></div>
-                      <div><dt>Subskrypcje</dt><dd><SensitiveValue label="Kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue></dd></div>
-                      <div><dt>Jednorazowe</dt><dd><SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue></dd></div>
-                    </dl>
-                    <p>Kwoty roczne i kwartalne są przeliczone na miesięczny odpowiednik.</p>
+                          {item.amount !== null && (
+                            <span className="affairs-agenda-row__amount">
+                              <SensitiveValue label={`Kwota: ${item.title}`}>{formatMoney(item.amount)}</SensitiveValue>
+                            </span>
+                          )}
+                          <Badge tone={due.tone}>{due.text}</Badge>
+                          <span className="affairs-agenda-row__actions">
+                            {item.canSchedule && (
+                              <Button variant="ghost" size="sm" iconOnly title="Zaplanuj jako sprawę" aria-label={`Zaplanuj: ${item.title}`} onClick={() => scheduleAttention(item)}>
+                                <CalendarClock size={13} />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" iconOnly title="Przypomnij za 7 dni" aria-label={`Przypomnij za 7 dni: ${item.title}`} onClick={() => snoozeAttention(item)}>
+                              <Bell size={13} />
+                            </Button>
+                            <Button variant="ghost" size="sm" iconOnly title="Oznacz jako załatwione" aria-label={`Oznacz jako załatwione: ${item.title}`} onClick={() => resolveAttention(item)}>
+                              <Check size={13} />
+                            </Button>
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                </Card>
-              </div>
+                )}
+              </Card>
             </div>
           )}
 
@@ -1058,8 +1051,12 @@ export default function Sprawy() {
                       onChange={() => toggleMatter(matter.id)}
                     />
                     <button type="button" className="affairs-matter-row__title" onClick={() => setSelectedMatterId(matter.id)}>
-                      <strong>{matter.title}</strong>
-                      <small>{matter.note || "Bez dodatkowej notatki"}</small>
+                      <strong>{matter.kind === "appointment" && <CalendarClock size={13} aria-hidden="true" />}{matter.title}</strong>
+                      <small>
+                        {matter.kind === "appointment"
+                          ? <><span>{matter.time || "Bez godziny"}</span>{matter.location && <><span aria-hidden="true"> · </span><span><MapPin size={10} aria-hidden="true" /> {matter.location}</span></>}</>
+                          : matter.note || "Bez dodatkowej notatki"}
+                      </small>
                     </button>
                     <span className="affairs-matter-row__category"><CategoryIcon size={13} />{CATEGORY_META[matter.category].label}</span>
                     <Badge tone={due.tone}>{due.text}</Badge>
@@ -1072,6 +1069,7 @@ export default function Sprawy() {
                       done: matter.status === "done",
                       calendarDate: matter.dueDate || undefined,
                       date: matter.dueDate || undefined,
+                      time: matter.time || undefined,
                       priority: matter.priority === "normal" ? undefined : matter.priority,
                       list: "sprawy",
                       tags: ["sprawy"],
@@ -1254,14 +1252,16 @@ export default function Sprawy() {
                 <span>Kwota</span>
                 <span />
               </div>
-              {workspace.subscriptions.length === 0 ? (
+              {filteredSubscriptions.length === 0 ? (
                 <EmptyState
                   icon={<CreditCard size={18} />}
-                  title="Brak subskrypcji"
-                  description="Dodaj usługę, członkostwo lub umowę, której koszt i odnowienie chcesz kontrolować."
+                  title={subscriptionCategoryFilter === "all" ? "Brak subskrypcji" : "Brak subskrypcji w tej kategorii"}
+                  description={subscriptionCategoryFilter === "all"
+                    ? "Dodaj usługę, członkostwo lub umowę, której koszt i odnowienie chcesz kontrolować."
+                    : "Wybierz inną kategorię albo dodaj nową subskrypcję."}
                   action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openSubscriptionEditor()}>Dodaj subskrypcję</Button>}
                 />
-              ) : workspace.subscriptions
+              ) : filteredSubscriptions
                 .slice()
                 .sort((a, b) => Number(b.active) - Number(a.active) || a.nextBillingDate.localeCompare(b.nextBillingDate))
                 .map((subscription) => {
@@ -1272,7 +1272,8 @@ export default function Sprawy() {
                       <span className="affairs-payment-row__title">
                         <strong>{subscription.name}</strong>
                         <small>
-                          {subscription.category} · {subscription.renewal === "automatic" ? "odnowienie automatyczne" : "odnowienie ręczne"}
+                          <span className="affairs-inline-tag">{subscription.category}</span>
+                          <span aria-hidden="true"> · </span>{subscription.renewal === "automatic" ? "odnowienie automatyczne" : "odnowienie ręczne"}
                           {subscription.commitmentEndDate ? ` · umowa do ${formatDate(subscription.commitmentEndDate)}` : ""}
                         </small>
                       </span>
@@ -1622,7 +1623,6 @@ export default function Sprawy() {
 
       {editor && (
         <Modal
-          eyebrow={editorPresentation?.eyebrow}
           title={editorPresentation?.title ?? ""}
           description={editorPresentation?.description}
           onClose={closeEditor}

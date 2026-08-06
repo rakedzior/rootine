@@ -4,6 +4,7 @@ import {
   CADENCE_LABELS,
   CATEGORY_META,
   DOCUMENT_LABELS,
+  MATTER_REMINDER_LABELS,
   STATUS_LABELS,
   VEHICLE_ITEM_LABELS,
   type Draft,
@@ -39,13 +40,49 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
     <>
       <div className="affairs-form__grid">
         <Select
+          label="Typ wpisu"
+          value={draft.matterKind}
+          options={[
+            { value: "task", label: "Sprawa do załatwienia" },
+            { value: "appointment", label: "Wizyta" },
+          ]}
+          onChange={(event) => setDraft((current) => {
+            const matterKind = event.target.value === "appointment" ? "appointment" : "task";
+            return {
+              ...current,
+              matterKind,
+              time: matterKind === "appointment" ? current.time || "09:00" : "",
+              location: matterKind === "appointment" ? current.location : "",
+              reminderPreset: matterKind === "appointment"
+                ? current.reminderPreset === "none" ? "day-and-two-hours" : current.reminderPreset
+                : "none",
+            };
+          })}
+        />
+        <Select
           label="Obszar"
           value={draft.category}
           options={Object.entries(CATEGORY_META).map(([value, meta]) => ({ value, label: meta.label }))}
           onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
         />
-        <DatePicker label="Termin" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
       </div>
+      <div className="affairs-form__grid">
+        <DatePicker label={draft.matterKind === "appointment" ? "Data wizyty" : "Termin (opcjonalnie)"} value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
+        {draft.matterKind === "appointment" && (
+          <Input type="time" label="Godzina" value={draft.time} onChange={(event) => setDraft((current) => ({ ...current, time: event.target.value }))} />
+        )}
+      </div>
+      {draft.matterKind === "appointment" && (
+        <div className="affairs-form__grid">
+          <Input label="Miejsce" placeholder="np. Urząd Miasta, pokój 12" value={draft.location} onChange={(event) => setDraft((current) => ({ ...current, location: event.target.value }))} />
+          <Select
+            label="Powiadomienia"
+            value={draft.reminderPreset}
+            options={Object.entries(MATTER_REMINDER_LABELS).map(([value, label]) => ({ value, label }))}
+            onChange={(event) => setDraft((current) => ({ ...current, reminderPreset: event.target.value as Draft["reminderPreset"] }))}
+          />
+        </div>
+      )}
       <div className="affairs-form__grid">
         <Select
           label="Priorytet"

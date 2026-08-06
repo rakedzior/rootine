@@ -28,11 +28,16 @@ describe("goal view URL state", () => {
     );
 
     expect(state).toEqual({
-      filter: "overview",
+      filter: "next",
       layout: "list",
       sort: "priority",
       selectedId: null,
     });
+  });
+
+  it("keeps the agenda perspectives addressable in the URL", () => {
+    expect(readGoalViewState(new URLSearchParams("widok=next"), categories, defaults).filter).toBe("next");
+    expect(readGoalViewState(new URLSearchParams("widok=week"), categories, defaults).filter).toBe("week");
   });
 
   it("writes canonical state while preserving unrelated parameters", () => {
@@ -44,9 +49,17 @@ describe("goal view URL state", () => {
     });
 
     expect(next.get("from")).toBe("today");
-    expect(next.has("widok")).toBe(false);
+    expect(next.get("widok")).toBe("overview");
     expect(next.get("uklad")).toBe("grid");
     expect(next.get("sort")).toBe("updated");
     expect(next.get("cel")).toBe("goal-2");
+  });
+
+  it("uses next steps as the canonical fixed entry", () => {
+    const state = readGoalViewState(new URLSearchParams(), categories, defaults);
+    expect(state.filter).toBe("next");
+
+    const next = writeGoalViewState(new URLSearchParams("widok=week"), state);
+    expect(next.has("widok")).toBe(false);
   });
 });

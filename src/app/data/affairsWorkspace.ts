@@ -1,6 +1,7 @@
 export type MatterCategory = "urzedy" | "zdrowie" | "dom" | "auto" | "finanse" | "dokumenty";
 export type MatterPriority = "normal" | "high";
 export type MatterStatus = "open" | "waiting" | "done";
+export type MatterKind = "task" | "appointment";
 export type PaymentCadence = "monthly" | "quarterly" | "yearly";
 export type BudgetLineKind = "income" | "fixed" | "flexible" | "savings";
 export type SubscriptionRenewal = "automatic" | "manual";
@@ -16,6 +17,18 @@ export type Matter = {
   dueDate: string;
   note: string;
   createdAt: string;
+  kind?: MatterKind;
+  time?: string;
+  location?: string;
+  reminderMinutes?: number[];
+  sourceAttentionKey?: string;
+};
+
+export type AffairAttentionState = {
+  key: string;
+  status: "snoozed" | "resolved";
+  snoozedUntil: string;
+  updatedAt: string;
 };
 
 export type OneTimePayment = {
@@ -105,6 +118,7 @@ export type AffairsWorkspace = {
   vehicles: Vehicle[];
   vehicleItems: VehicleItem[];
   budgets: BudgetMonth[];
+  attentionStates?: AffairAttentionState[];
 };
 
 type LegacyAffairsWorkspace = {
@@ -307,13 +321,17 @@ export function createDefaultAffairsWorkspace(): AffairsWorkspace {
       },
       {
         id: "matter-office",
-        title: "Umówić wizytę w urzędzie",
+        title: "Wizyta w urzędzie miasta",
         category: "urzedy",
         priority: "normal",
-        status: "waiting",
+        status: "open",
         dueDate: isoDateOffset(20),
-        note: "Sprawdzić listę dokumentów przed rezerwacją terminu.",
+        note: "Zabrać dowód osobisty i potwierdzenie rezerwacji.",
         createdAt: new Date().toISOString(),
+        kind: "appointment",
+        time: "10:30",
+        location: "Urząd Miasta, sala obsługi mieszkańców",
+        reminderMinutes: [1_440, 120],
       },
       {
         id: "matter-medical",
@@ -379,6 +397,7 @@ export function createDefaultAffairsWorkspace(): AffairsWorkspace {
         ],
       },
     ],
+    attentionStates: [],
   };
 }
 
@@ -392,7 +411,22 @@ function isMatter(value: unknown): value is Matter {
     && ["open", "waiting", "done"].includes(String(item.status))
     && typeof item.dueDate === "string"
     && typeof item.note === "string"
-    && typeof item.createdAt === "string";
+    && typeof item.createdAt === "string"
+    && (item.kind === undefined || ["task", "appointment"].includes(String(item.kind)))
+    && (item.time === undefined || typeof item.time === "string")
+    && (item.location === undefined || typeof item.location === "string")
+    && (item.sourceAttentionKey === undefined || typeof item.sourceAttentionKey === "string")
+    && (item.reminderMinutes === undefined || (Array.isArray(item.reminderMinutes)
+      && item.reminderMinutes.every((minutes) => typeof minutes === "number" && Number.isInteger(minutes) && minutes >= 0)));
+}
+
+function isAttentionState(value: unknown): value is AffairAttentionState {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<AffairAttentionState>;
+  return typeof item.key === "string"
+    && ["snoozed", "resolved"].includes(String(item.status))
+    && typeof item.snoozedUntil === "string"
+    && typeof item.updatedAt === "string";
 }
 
 function isOneTimePayment(value: unknown): value is OneTimePayment {
@@ -527,7 +561,9 @@ function isWorkspace(value: unknown): value is AffairsWorkspace {
     && Array.isArray(workspace.vehicleItems)
     && workspace.vehicleItems.every(isVehicleItem)
     && Array.isArray(workspace.budgets)
-    && workspace.budgets.every(isBudgetMonth);
+    && workspace.budgets.every(isBudgetMonth)
+    && (workspace.attentionStates === undefined || (Array.isArray(workspace.attentionStates)
+      && workspace.attentionStates.every(isAttentionState)));
 }
 
 function migrateLegacyWorkspace(workspace: LegacyAffairsWorkspace): AffairsWorkspace {
@@ -546,6 +582,7 @@ function migrateLegacyWorkspace(workspace: LegacyAffairsWorkspace): AffairsWorks
     vehicles: expansion.vehicles,
     vehicleItems: expansion.vehicleItems,
     budgets: workspace.budgets,
+    attentionStates: [],
   };
 }
 
@@ -594,6 +631,19 @@ export function setOneTimePaymentPaidState(
     oneTimePayments: workspace.oneTimePayments.map((payment) => payment.id === paymentId
       ? { ...payment, paid, paidAt: paid ? paidAt : "" }
       : payment),
+  };
+}
+
+export function setAffairAttentionState(
+  workspace: AffairsWorkspace,
+  state: AffairAttentionState,
+): AffairsWorkspace {
+  return {
+    ...workspace,
+    attentionStates: [
+      ...(workspace.attentionStates ?? []).filter((item) => item.key !== state.key),
+      state,
+    ].slice(-500),
   };
 }
 

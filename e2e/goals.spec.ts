@@ -28,7 +28,7 @@ test.describe("goals navigation", { tag: "@shared" }, () => {
   });
 
   test("double-clicking a goal opens its full view", async ({ rootinePage: page }) => {
-    await openRootineRoute(page, "/cele");
+    await openRootineRoute(page, "/cele?widok=overview");
 
     await page.locator(".goal-card-primary").first().dblclick();
 

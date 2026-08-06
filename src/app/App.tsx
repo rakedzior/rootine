@@ -8,6 +8,7 @@ import { AssistantSettingsProvider } from "../assistant/config/AssistantSettings
 import { AssistantProvider } from "../assistant/runtime/AssistantProvider";
 import { SupabaseAuthProvider } from "../infrastructure/supabase/auth";
 import { RemotePersistenceProvider } from "../infrastructure/supabase/RemotePersistenceProvider";
+import { AffairsReminderCenter } from "./affairs/AffairsReminderCenter";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
                 <ActivityLogProvider>
                   <GoalsProvider>
                     <RouterProvider router={router} />
+                    <AffairsReminderCenter />
                   </GoalsProvider>
                 </ActivityLogProvider>
               </ActiveAreaProvider>

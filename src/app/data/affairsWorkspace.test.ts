@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   advancePaymentDate,
   advancePaymentDateToFuture,
+  setAffairAttentionState,
   setMatterCompletionState,
   setOneTimePaymentPaidState,
   type AffairsWorkspace,
@@ -45,5 +46,22 @@ describe("affairs shared completion mutations", () => {
     expect(paid.oneTimePayments[0]).toMatchObject({ paid: true, paidAt: "2026-08-02T10:00:00.000Z" });
     expect(setOneTimePaymentPaidState(paid, "payment-1", false).oneTimePayments[0])
       .toMatchObject({ paid: false, paidAt: "" });
+  });
+
+  it("stores one persistent state per generated attention key", () => {
+    const snoozed = setAffairAttentionState(workspace, {
+      key: "document:passport:2026-09-01",
+      status: "snoozed",
+      snoozedUntil: "2026-08-12",
+      updatedAt: "2026-08-05T10:00:00.000Z",
+    });
+    const resolved = setAffairAttentionState(snoozed, {
+      key: "document:passport:2026-09-01",
+      status: "resolved",
+      snoozedUntil: "",
+      updatedAt: "2026-08-06T10:00:00.000Z",
+    });
+
+    expect(resolved.attentionStates).toEqual([expect.objectContaining({ status: "resolved" })]);
   });
 });

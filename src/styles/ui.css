@@ -1432,6 +1432,63 @@
   transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
 
+.context-nav-group {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.context-nav-group + .context-nav-group {
+  margin-top: var(--space-2xl);
+}
+
+.context-nav-group__label {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+}
+
+.context-nav-group__items {
+  display: grid;
+  gap: 1px;
+}
+
+.context-nav-item--nested {
+  min-height: var(--control-height-sm);
+  padding-left: calc(var(--space-md) + 22px);
+  font-size: var(--text-label);
+}
+
+.context-nav-item--nested::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 19px;
+  width: 1px;
+  background: var(--color-border-subtle);
+  content: "";
+}
+
+.context-nav-item--nested[aria-current="page"]::after {
+  background: color-mix(in srgb, var(--color-primary) 32%, var(--color-border-subtle));
+}
+
+.context-nav-item--nested .context-nav-item__icon {
+  width: 12px;
+  height: 12px;
+  flex-basis: 12px;
+}
+
+.context-nav-item--nested .context-nav-item__icon > svg {
+  width: 11px;
+  height: 11px;
+}
+
 .context-nav-item:hover {
   background: var(--color-graphite-panel);
   color: var(--color-text-secondary);

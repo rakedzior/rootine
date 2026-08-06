@@ -333,8 +333,9 @@
   }
 
   .task-detail-panel {
-    width: var(--detail-panel-width);
-    min-width: var(--detail-panel-width);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .task-priority-filters::-webkit-scrollbar {

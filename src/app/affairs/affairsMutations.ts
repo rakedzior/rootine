@@ -10,7 +10,7 @@ import {
   type Vehicle,
   type VehicleItem,
 } from "../data/affairsWorkspace";
-import type { Draft, EditorState } from "./affairsPresentation";
+import { reminderMinutesFromPreset, type Draft, type EditorState } from "./affairsPresentation";
 
 export type AffairsEditorSubmission =
   | { title: string; nextWorkspace: AffairsWorkspace; selectedMatterId?: string }
@@ -32,7 +32,9 @@ export function applyAffairsEditor({ editor, draft, workspace, budgetMonthKey }:
   if (!title) return invalid(title, "Wpisz nazwę.");
 
   if (editor.kind === "matter") {
-    if (!draft.dueDate) return invalid(title, "Wybierz termin sprawy.");
+    if (draft.matterKind === "appointment" && (!draft.dueDate || !draft.time)) {
+      return invalid(title, "Wybierz datę i godzinę wizyty.");
+    }
     const matter: Matter = {
       id: editor.id ?? createAffairsId("matter"),
       title,
@@ -42,6 +44,13 @@ export function applyAffairsEditor({ editor, draft, workspace, budgetMonthKey }:
       dueDate: draft.dueDate,
       note: draft.note.trim(),
       createdAt: workspace.matters.find((item) => item.id === editor.id)?.createdAt ?? new Date().toISOString(),
+      kind: draft.matterKind,
+      time: draft.matterKind === "appointment" ? draft.time : "",
+      location: draft.matterKind === "appointment" ? draft.location.trim() : "",
+      reminderMinutes: draft.matterKind === "appointment"
+        ? reminderMinutesFromPreset(draft.reminderPreset)
+        : [],
+      sourceAttentionKey: draft.sourceAttentionKey || undefined,
     };
     return {
       title,

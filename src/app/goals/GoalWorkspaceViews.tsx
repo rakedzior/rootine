@@ -23,11 +23,11 @@ import {
 import {
   Badge,
   Button,
+  ContextNavGroup,
   ContextNavItem,
   ModuleSidebar,
   Menu,
   MenuItem,
-  SectionHeader,
 } from "../ui";
 import { AddToTasksButton } from "../ui";
 import type { ExternalTaskInput } from "../data/taskLinks";
@@ -39,6 +39,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  Clock3,
   Ellipsis,
   Flag,
   FolderCog,
@@ -51,13 +52,11 @@ import {
   X,
 } from "lucide-react";
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <SectionHeader title={children} level={2} variant="label" className="px-1.5" />;
-}
-
 export function GoalSubSidebar({
   activeFilter,
+  selectedGoalId,
   onFilter,
+  onSelectGoal,
   goals,
   categories,
   onCreateCategory,
@@ -66,7 +65,9 @@ export function GoalSubSidebar({
   onSettings,
 }: {
   activeFilter: FilterId;
+  selectedGoalId?: string | null;
   onFilter: (id: FilterId) => void;
+  onSelectGoal?: (id: string) => void;
   goals: Goal[];
   categories: GoalCategory[];
   onCreateCategory: (draft: Omit<GoalCategory, "id">) => void;
@@ -82,6 +83,10 @@ export function GoalSubSidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const categoriesPanelId = useId();
+  const activeGoals = goals
+    .filter((goal) => goal.status === "active" || goal.status === "risk")
+    .sort((a, b) => Number(b.status === "risk") - Number(a.status === "risk") || b.progress - a.progress)
+    .slice(0, 7);
 
   const filteredCategories = categories.filter((category) => category.label.toLocaleLowerCase("pl-PL").includes(search.toLocaleLowerCase("pl-PL")));
 
@@ -100,14 +105,14 @@ export function GoalSubSidebar({
     setEditingValue("");
   };
 
-  const item = (id: FilterId, label: string, Icon: LucideIcon, count?: number, color?: string) => {
+  const item = (id: FilterId, label: string, Icon: LucideIcon, count?: number) => {
     const active = activeFilter === id;
     return (
       <ContextNavItem
         key={id}
         active={active}
         onClick={() => onFilter(id)}
-        icon={<Icon style={{ color: active ? undefined : color }} />}
+        icon={<Icon />}
         label={label}
         meta={count}
       />
@@ -117,15 +122,41 @@ export function GoalSubSidebar({
   return (
     <ModuleSidebar label="Widoki i kategorie celów">
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <SectionLabel>Główne</SectionLabel>
-        <div className="mb-6">{item("overview", "Aktywne cele", BarChart3, countForFilter("overview", goals))}</div>
+        <ContextNavGroup label="Przegląd">
+          {item("next", "Następne kroki", Clock3)}
+          {item("week", "Ten tydzień", CalendarDays)}
+          {item("overview", "Aktywne cele", BarChart3, countForFilter("overview", goals))}
+          {item("risk", "Zagrożone", FILTER_ITEMS.find((filter) => filter.id === "risk")!.icon, countForFilter("risk", goals))}
+        </ContextNavGroup>
 
-        <SectionLabel>Cele</SectionLabel>
-        <div className="mb-6 space-y-px">
-          {FILTER_ITEMS.map((filter) => item(filter.id, filter.label, filter.icon, countForFilter(filter.id, goals), filter.color))}
-        </div>
+        <ContextNavGroup label="Moje cele">
+          {activeGoals.map((goal) => {
+            const GoalIcon = goal.icon;
+            return (
+              <ContextNavItem
+                key={goal.id}
+                active={selectedGoalId === String(goal.id)}
+                icon={<GoalIcon />}
+                label={goal.title}
+                meta={`${goal.progress}%`}
+                onClick={() => onSelectGoal?.(String(goal.id))}
+              />
+            );
+          })}
+          {activeGoals.length === 0 && <p className="goals-sidebar-empty">Brak aktywnych celów.</p>}
+          {goals.filter((goal) => goal.status === "active" || goal.status === "risk").length > activeGoals.length && (
+            <ContextNavItem depth={1} icon={<Target />} label="Wszystkie aktywne" onClick={() => onFilter("overview")} />
+          )}
+        </ContextNavGroup>
 
-        <div className="mb-2 flex items-center justify-between px-1.5">
+        <ContextNavGroup label="Pozostałe">
+          {item("all", "Wszystkie cele", Target, countForFilter("all", goals))}
+          {item("planned", "Zaplanowane", FILTER_ITEMS.find((filter) => filter.id === "planned")!.icon, countForFilter("planned", goals))}
+          {item("paused", "Wstrzymane", FILTER_ITEMS.find((filter) => filter.id === "paused")!.icon, countForFilter("paused", goals))}
+          {item("completed", "Zakończone", FILTER_ITEMS.find((filter) => filter.id === "completed")!.icon, countForFilter("completed", goals))}
+        </ContextNavGroup>
+
+        <div className="mb-2 mt-6 flex items-center justify-between px-1.5">
           <button
             type="button"
             onClick={() => setCategoriesOpen((open) => !open)}
@@ -277,12 +308,11 @@ export function GoalSubSidebar({
       </div>
 
       <div className="border-t px-2 pb-4 pt-4" style={{ borderColor: C.borderSubtle, background: C.subSidebar }}>
-        <SectionLabel>Zarządzanie</SectionLabel>
-        <div className="space-y-px">
+        <ContextNavGroup label="Zarządzanie">
           <ContextNavItem onClick={() => setCategoriesOpen(true)} icon={<FolderCog />} label="Kategorie" />
           <ContextNavItem active={activeFilter === "archived"} onClick={() => onFilter("archived")} icon={<Archive />} label="Archiwum" />
           <ContextNavItem onClick={onSettings} icon={<Settings2 />} label="Ustawienia celów" />
-        </div>
+        </ContextNavGroup>
       </div>
     </ModuleSidebar>
   );
@@ -330,7 +360,6 @@ export function GoalCard({
   const actionsMenuId = useId();
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
-  const statusColor = STATUS_META[goal.status].color;
   const dueColor = deadlineColor(goal);
 
   return (
@@ -339,7 +368,6 @@ export function GoalCard({
       data-status={goal.status}
       style={{
         "--goal-progress": `${goal.progress}%`,
-        "--goal-status-glow": `${statusColor}40`,
       } as React.CSSProperties}
     >
       <div className="goal-card-layout grid items-start gap-x-4 gap-y-2 px-4 py-3">
@@ -465,7 +493,6 @@ export function GoalCard({
           </div>
         </div>
       </div>
-      <div className="goal-card-status-glow pointer-events-none h-px opacity-0 transition-opacity group-hover:opacity-100" />
     </article>
   );
 }
@@ -617,20 +644,13 @@ export function GoalDetail({
           <div className="my-5 border-t" style={{ borderColor: C.borderSubtle }} />
         </>}
 
-        <PanelSection title="Ostatnia aktywność">
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { value: `${goal.current} / ${goal.total}`, label: measurementLabel, color: C.textPrimary },
-              { value: `${goal.progress}%`, label: "Ogólny postęp", color: C.iceBlueText },
-              { value: goal.status === "risk" ? "Wymaga uwagi" : "Na planie", label: "Kondycja celu", color: status.color },
-              { value: goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski", label: "Priorytet", color: priority.color },
-            ].map((stat) => (
-              <div key={stat.label} className="rounded-lg border p-2.5" style={{ background: C.panel, borderColor: C.borderSubtle }}>
-                <p className="text-[13px] font-medium" style={{ color: stat.color, fontFamily: "'DM Mono', monospace" }}>{stat.value}</p>
-                <p className="mt-1 text-[11px]" style={{ color: C.textMuted }}>{stat.label}</p>
-              </div>
-            ))}
-          </div>
+        <PanelSection title="Stan celu">
+          <dl className="goal-detail-snapshot">
+            <div><dt>{measurementLabel}</dt><dd>{goal.current} / {goal.total}</dd></div>
+            <div><dt>Ogólny postęp</dt><dd>{goal.progress}%</dd></div>
+            <div><dt>Kondycja celu</dt><dd style={{ color: status.color }}>{goal.status === "risk" ? "Wymaga uwagi" : "Na planie"}</dd></div>
+            <div><dt>Priorytet</dt><dd>{goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski"}</dd></div>
+          </dl>
         </PanelSection>
 
         <div className="mt-5">

@@ -26,6 +26,7 @@ import {
   Pencil,
   Plus,
   Search,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -49,6 +50,7 @@ import {
   Badge,
   Button,
   ContentHeader,
+  ContextNavGroup,
   ContextNavItem,
   ModuleSidebar,
   DatePicker,
@@ -65,6 +67,8 @@ import {
   Select,
 } from "../ui";
 import { TaskInlineMenu, WorkCompanyActionsMenu, WorkProjectActionsMenu } from "./PracaMenus";
+import { WorkMobileNavigation } from "../work/WorkMobileNavigation";
+import { WorkQuickEntry } from "../work/WorkQuickEntry";
 import "../../styles/work.css";
 import {
   COMPANY_COLORS,
@@ -140,6 +144,7 @@ export default function Praca() {
   const [completionUndo, setCompletionUndo] = useState<CompletionUndo | null>(null);
   const [storageError, setStorageError] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -354,6 +359,7 @@ export default function Praca() {
     setCompanySearch("");
     setCompanyStatusFilter("all");
     setCompanySort("name");
+    setAdvancedFiltersOpen(false);
     setExpandedCompanyProjectIds(new Set());
     setDetailTaskId(null);
     const url = new URL(window.location.href);
@@ -424,6 +430,28 @@ export default function Praca() {
     setEditorInitialDraft(nextDraft);
     setEditorError("");
     setEditor({ kind: "task", mode: task ? "edit" : "add", id: task?.id, parentId });
+  };
+
+  const createQuickTask = (title: string) => {
+    const now = new Date().toISOString();
+    setWorkspace((current) => ({
+      ...current,
+      tasks: [...current.tasks, {
+        id: createWorkId("task"),
+        projectId: "",
+        parentId: null,
+        title,
+        completed: false,
+        status: "todo",
+        priority: "none",
+        dueDate: today,
+        note: "",
+        createdAt: now,
+        updatedAt: now,
+      }],
+    }));
+    recordActivity({ moduleId: "work", kind: "create", title, detail: "Dodano zadanie pracy na dziś" });
+    showSaveNotice();
   };
 
   useEffect(() => {
@@ -1120,6 +1148,7 @@ export default function Praca() {
     const completed = tasks.filter((task) => getTaskStatus(task) === "completed");
     return (
       <div className="work-screen work-screen--focus">
+        <WorkQuickEntry onCreate={createQuickTask} />
         <div className="work-view-summary" role="status">{todayTasks.length} na dziś · {overdue.length} po terminie</div>
         <div className="work-task-board">
           {renderTaskSection("Po terminie", overdue, <CircleAlert size={13} aria-hidden="true" />)}
@@ -1386,9 +1415,9 @@ export default function Praca() {
             <p>{formatProjectProgress(count)}{projectSubtaskCount ? ` · w tym ${projectSubtaskCount} ${subtaskCountLabel(projectSubtaskCount)}` : ""}</p>
           </div>
           <div className="work-project-summary__context-shell">
-            <div className="work-project-summary__context" aria-label="Kontekst projektu">
+            <div className="work-project-summary__context" aria-label="Informacje o projekcie">
               <section className="work-project-summary__context-section">
-                <header className="work-project-summary__context-header"><h3>Kontekst projektu</h3><Button variant="ghost" size="sm" onClick={() => openProjectEditor(selectedProject)}>Edytuj</Button></header>
+                <header className="work-project-summary__context-header"><h3>O projekcie</h3><Button variant="ghost" size="sm" onClick={() => openProjectEditor(selectedProject)}>Edytuj</Button></header>
                 <p className="work-project-summary__context-copy">{selectedProject.description || "Dodaj opis projektu, aby przy kolejnym wejściu od razu wiedzieć, czego dotyczy."}</p>
               </section>
               <section className="work-project-summary__context-section">
@@ -1439,11 +1468,24 @@ export default function Praca() {
       ? `${formatProjectCount(companyProjects.filter((project) => project.status !== "completed").length)} · ${formatOpenTaskCount(workspace.tasks.filter((task) => companyProjects.some((project) => project.id === task.projectId) && isTaskOpen(task)).length)} · ${workspace.tasks.filter((task) => companyProjects.some((project) => project.id === task.projectId) && isTaskOpen(task) && Boolean(taskAnchorDate(task)) && taskAnchorDate(task) < today).length} po terminie`
       : undefined;
     const searchPlaceholder = view === "company" ? "Szukaj projektów" : view === "project" ? "Szukaj w projekcie" : "Szukaj zadań";
+    const hiddenFilterCount = [
+      priorityFilter !== "all",
+      view === "active" && companyFilter !== "all",
+      view === "active" && projectFilter !== "all",
+      view === "active" && activeSort !== "dueDate",
+    ].filter(Boolean).length;
+    const resetAdvancedTaskFilters = () => {
+      setPriorityFilter("all");
+      setCompanyFilter("all");
+      setProjectFilter("all");
+      setActiveSort("dueDate");
+    };
     return (
       <ContentHeader
         headingLevel={1}
         className={view === "company" || view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
         title={labels[view]}
+        mobileNavigation={<WorkMobileNavigation workspace={workspace} view={view} companyId={selectedCompanyId} projectId={selectedProjectId} onNavigate={navigate} />}
         description={view === "today"
           ? "Najważniejsze rzeczy na teraz"
           : view === "project"
@@ -1456,17 +1498,31 @@ export default function Praca() {
           : view === "company" && selectedCompany
             ? <span className="work-company-marker" style={{ background: selectedCompany.color }} />
             : undefined}
-        actions={<>
-          {showTaskFilters && (
-          <div className="work-toolbar__controls">
-            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">{searchPlaceholder}</span><input value={search} placeholder={searchPlaceholder} onChange={(event) => setSearch(event.target.value)} /></label>
-            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...TASK_STATUS_ORDER.filter((status) => view !== "active" || status !== "completed").map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
+        controls={showTaskFilters && advancedFiltersOpen ? (
+          <div className="work-toolbar__advanced-filters">
             <Select compact aria-label="Filtruj po priorytecie" value={priorityFilter} options={[{ value: "all", label: "Wszystkie priorytety" }, ...PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))]} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} />
             {view === "active" && <>
               <Select compact aria-label="Filtruj po firmie" value={companyFilter} options={[{ value: "all", label: "Wszystkie firmy" }, ...workspace.companies.filter((company) => !company.archived).map((company) => ({ value: company.id, label: company.name }))]} onChange={(event) => { setCompanyFilter(event.target.value); if (projectFilter !== "all" && projectById.get(projectFilter)?.companyId !== event.target.value) setProjectFilter("all"); }} />
               <Select compact aria-label="Filtruj po projekcie" value={projectFilter} options={[{ value: "all", label: "Wszystkie projekty" }, ...projectFilterOptions]} onChange={(event) => setProjectFilter(event.target.value)} />
               <Select compact aria-label="Sortuj aktywne zadania" value={activeSort} options={[{ value: "dueDate", label: "Sortuj: termin" }, { value: "priority", label: "Sortuj: priorytet" }, { value: "company", label: "Sortuj: firma" }, { value: "project", label: "Sortuj: projekt" }, { value: "updated", label: "Sortuj: ostatnio zmienione" }]} onChange={(event) => setActiveSort(event.target.value as ActiveTaskSort)} />
             </>}
+            {hiddenFilterCount > 0 && <Button variant="quiet" size="sm" onClick={resetAdvancedTaskFilters}>Wyczyść</Button>}
+          </div>
+        ) : undefined}
+        actions={<>
+          {showTaskFilters && (
+          <div className="work-toolbar__controls">
+            <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">{searchPlaceholder}</span><input value={search} placeholder={searchPlaceholder} onChange={(event) => setSearch(event.target.value)} /></label>
+            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...TASK_STATUS_ORDER.filter((status) => view !== "active" || status !== "completed").map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
+            <Button
+              variant="ghost"
+              size="sm"
+              leadingIcon={<SlidersHorizontal size={13} />}
+              aria-expanded={advancedFiltersOpen}
+              onClick={() => setAdvancedFiltersOpen((current) => !current)}
+            >
+              {hiddenFilterCount ? `Filtry (${hiddenFilterCount})` : "Filtry"}
+            </Button>
           </div>
           )}
           {showProjectFilters && (
@@ -1512,59 +1568,49 @@ export default function Praca() {
   const sidebar = (
     <ModuleSidebar label="Widoki pracy" className="work-context-sidebar">
       <nav className="work-sidebar-nav" aria-label="Widoki pracy">
-        <p className="work-sidebar-section-label">Widoki</p>
-        <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
-        <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
-        <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie aktywne" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
+        <ContextNavGroup label="Przegląd">
+          <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
+          <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
+          <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie aktywne" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
+        </ContextNavGroup>
 
-        <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Firmy</p>
-        {workspace.companies.filter((company) => !company.archived).map((company) => {
-          const projectCount = workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length;
-          return <ContextNavItem key={company.id} active={view === "company" && selectedCompanyId === company.id} icon={<span className="work-company-dot" style={{ background: normalizeCompanyColor(company.color) }} />} label={company.name} meta={projectCount || undefined} onClick={() => navigate("company", company.id)} />;
-        })}
-        {!workspace.companies.length && <p className="work-sidebar-empty">Dodaj firmę, aby uporządkować projekty.</p>}
+        <ContextNavGroup label="Firmy i projekty">
+          {workspace.companies.filter((company) => !company.archived).map((company) => {
+            const projects = workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed");
+            return (
+              <Fragment key={company.id}>
+                <ContextNavItem
+                  active={view === "company" && selectedCompanyId === company.id}
+                  icon={<span className="work-company-dot" style={{ background: normalizeCompanyColor(company.color) }} />}
+                  label={company.name}
+                  meta={projects.length || undefined}
+                  onClick={() => navigate("company", company.id)}
+                />
+                {projects.map((project) => (
+                  <ContextNavItem
+                    key={project.id}
+                    depth={1}
+                    active={view === "project" && selectedProjectId === project.id}
+                    icon={<FolderKanban />}
+                    label={project.name}
+                    meta={workspace.tasks.filter((task) => task.projectId === project.id && isTaskOpen(task)).length || undefined}
+                    onClick={() => navigate("project", company.id, project.id)}
+                  />
+                ))}
+              </Fragment>
+            );
+          })}
+          {!workspace.companies.some((company) => !company.archived) && <p className="work-sidebar-empty">Dodaj firmę, aby uporządkować projekty.</p>}
+        </ContextNavGroup>
 
-        <p className="work-sidebar-section-label work-sidebar-section-label--spaced">Pozostałe</p>
-        <ContextNavItem active={view === "unassigned"} icon={<Inbox />} label="Nieprzypisane" meta={workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length || undefined} onClick={() => navigate("unassigned")} />
-        <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length + workspace.companies.filter((company) => company.archived).length || undefined} onClick={() => navigate("archive")} />
+        <ContextNavGroup label="Pozostałe">
+          <ContextNavItem active={view === "unassigned"} icon={<Inbox />} label="Nieprzypisane" meta={workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length || undefined} onClick={() => navigate("unassigned")} />
+          <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length + workspace.companies.filter((company) => company.archived).length || undefined} onClick={() => navigate("archive")} />
+        </ContextNavGroup>
       </nav>
       <div className="work-sidebar-footer"><CircleDot size={13} aria-hidden="true" /><span>Dane zapisują się lokalnie</span></div>
     </ModuleSidebar>
   );
-
-  const renderMobileContextNav = () => {
-    const items = [
-      { key: "today", label: "Dzisiaj", icon: <Clock3 />, meta: filterTaskList(relevantOpenTasks).filter((task) => taskAnchorDate(task) === today).length, onClick: () => navigate("today") },
-      { key: "week", label: "Ten tydzień", icon: <CalendarDays />, meta: filterTaskList(relevantOpenTasks).filter((task) => weekDates.includes(taskAnchorDate(task))).length, onClick: () => navigate("week") },
-      { key: "active", label: "Aktywne", icon: <LayoutDashboard />, meta: relevantOpenTasks.length, onClick: () => navigate("active") },
-      ...(selectedProject ? [{ key: `project-${selectedProject.id}`, label: selectedProject.name, icon: <FolderKanban />, meta: undefined, onClick: () => navigate("project", selectedProject.companyId, selectedProject.id) }] : []),
-      ...workspace.companies.map((company) => ({
-        key: `company-${company.id}`,
-        label: company.name,
-        icon: <span className="work-company-dot" style={{ background: normalizeCompanyColor(company.color) }} />,
-        meta: workspace.projects.filter((project) => project.companyId === company.id && project.status !== "completed").length,
-        onClick: () => navigate("company", company.id),
-      })),
-      { key: "unassigned", label: "Nieprzypisane", icon: <Inbox />, meta: workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length, onClick: () => navigate("unassigned") },
-      { key: "archive", label: "Archiwum", icon: <Archive />, meta: workspace.projects.filter((project) => project.status === "completed").length, onClick: () => navigate("archive") },
-    ];
-    return (
-      <nav className="work-mobile-nav" aria-label="Skróty widoków pracy">
-        <div className="work-mobile-nav__scroll">
-          {items.map((item) => {
-            const active = item.key === view || (item.key === `company-${selectedCompanyId}` && view === "company") || (item.key === `project-${selectedProjectId}` && view === "project");
-            return (
-              <button key={item.key} type="button" className={`work-mobile-nav__item ${active ? "is-active" : ""}`} aria-current={active ? "page" : undefined} onClick={item.onClick}>
-                <span className="work-mobile-nav__icon">{item.icon}</span>
-                <span className="work-mobile-nav__label">{item.label}</span>
-                {item.meta !== undefined && <span className="work-mobile-nav__meta">{item.meta}</span>}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-    );
-  };
 
   return (
     <ModuleShell
@@ -1574,7 +1620,7 @@ export default function Praca() {
       contextSidebar={sidebar}
       detailPanel={detailTask ? (
         <DetailPanel label="Szczegóły zadania" onDismiss={() => setDetailTaskId(null)} className="work-detail-panel">
-          <header className="work-detail-header"><div><span className="work-detail-kicker">Zadanie</span><h2>{detailTask.title}</h2></div><Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setDetailTaskId(null)}><X size={13} /></Button></header>
+          <header className="work-detail-header"><div><h2>{detailTask.title}</h2></div><Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setDetailTaskId(null)}><X size={13} /></Button></header>
           <div className="work-detail-body">
             <div className="work-detail-context">
               <span>{detailTaskCompany?.name ?? "Nieprzypisane"}</span>
@@ -1668,12 +1714,11 @@ export default function Praca() {
       <ModuleMain>
         {storageError && <div className="work-storage-error" role="alert">Nie udało się zapisać zmian lokalnie. Sprawdź ustawienia pamięci przeglądarki.</div>}
         {renderToolbar()}
-        {renderMobileContextNav()}
         <div className="work-main-scroll">{renderMainView()}</div>
       </ModuleMain>
 
       {editor && (
-        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} eyebrow={editor.kind === "company" ? "Firma" : editor.kind === "project" ? "Projekt" : "Zadanie"} onClose={closeEditor} footer={<><Button variant="ghost" onClick={() => closeEditor()}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && editorInitialDraft && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
+        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} onClose={closeEditor} footer={<><Button variant="ghost" onClick={() => closeEditor()}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && editorInitialDraft && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
           <form id="work-editor-form" className="work-editor-form" onSubmit={submitEditor}>
             <Input label={editor.kind === "task" ? "Nazwa zadania" : "Nazwa"} value={draft.name} error={editorError} autoFocus placeholder={editor.kind === "company" ? "np. Studio North" : editor.kind === "project" ? "np. Nowa strona" : "Co trzeba zrobić?"} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); if (editorError) setEditorError(""); }} />
 
@@ -1706,7 +1751,7 @@ export default function Praca() {
                   <DatePicker  label="Termin końcowy" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
                 </div>
                 </div>
-                <div className="work-editor-section"><h3>Kontekst</h3>
+                <div className="work-editor-section"><h3>Szczegóły</h3>
                 <label className="ui-field">
                   <span className="ui-field__label">Notatka wewnętrzna <span className="work-optional">opcjonalnie</span></span>
                   <textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Informacje niewidoczne w skróconym widoku" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} />
@@ -1721,9 +1766,9 @@ export default function Praca() {
         </Modal>
       )}
 
-      {discardEditorOpen && <Modal title="Odrzucić niezapisane zmiany?" description="Wprowadzone zmiany zostaną utracone." eyebrow="Formularz" onClose={() => setDiscardEditorOpen(false)} footer={<><Button variant="ghost" onClick={() => setDiscardEditorOpen(false)}>Wróć do formularza</Button><Button variant="danger" onClick={() => closeEditor(true)}>Odrzuć zmiany</Button></>}><p className="work-delete-note">Możesz wrócić do formularza i zapisać zmiany.</p></Modal>}
+      {discardEditorOpen && <Modal title="Odrzucić niezapisane zmiany?" description="Wprowadzone zmiany zostaną utracone." onClose={() => setDiscardEditorOpen(false)} footer={<><Button variant="ghost" onClick={() => setDiscardEditorOpen(false)}>Wróć do formularza</Button><Button variant="danger" onClick={() => closeEditor(true)}>Odrzuć zmiany</Button></>}><p className="work-delete-note">Możesz wrócić do formularza i zapisać zmiany.</p></Modal>}
 
-      {deleteState && <Modal title={`Usuń ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"}?`} description={deleteState.kind === "company" ? `Firma „${deleteState.name}” ma ${workspace.projects.filter((project) => project.companyId === deleteState.id).length} projektów i ${workspace.tasks.filter((task) => workspace.projects.some((project) => project.id === task.projectId && project.companyId === deleteState.id)).length} zadań. Wszystkie zostaną usunięte.` : deleteState.kind === "project" ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.` : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`} eyebrow="Potwierdzenie" onClose={() => setDeleteState(null)} footer={<><Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button><Button variant="danger" onClick={confirmDelete}>Usuń</Button></>}><p className="work-delete-note">Archiwizacja jest bezpieczniejsza, jeśli chcesz zachować historię.</p></Modal>}
+      {deleteState && <Modal title={`Usuń ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"}?`} description={deleteState.kind === "company" ? `Firma „${deleteState.name}” ma ${workspace.projects.filter((project) => project.companyId === deleteState.id).length} projektów i ${workspace.tasks.filter((task) => workspace.projects.some((project) => project.id === task.projectId && project.companyId === deleteState.id)).length} zadań. Wszystkie zostaną usunięte.` : deleteState.kind === "project" ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.` : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`} onClose={() => setDeleteState(null)} footer={<><Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button><Button variant="danger" onClick={confirmDelete}>Usuń</Button></>}><p className="work-delete-note">Archiwizacja jest bezpieczniejsza, jeśli chcesz zachować historię.</p></Modal>}
 
       {toast && <div className="work-toast" role="status" aria-live="polite"><span>{toast.message}</span>{toast.undo && <Button variant="quiet" size="sm" onClick={toast.undo}>Cofnij</Button>}<button type="button" aria-label="Zamknij komunikat" onClick={() => { setToast(null); setDeleteUndo(null); }}><X size={13} /></button></div>}
     </ModuleShell>

@@ -1,5 +1,7 @@
 export type GoalFilterId =
   | "overview"
+  | "next"
+  | "week"
   | "all"
   | "active"
   | "ontrack"
@@ -22,6 +24,8 @@ export type GoalViewState = {
 
 const STATIC_FILTERS = new Set<GoalFilterId>([
   "overview",
+  "next",
+  "week",
   "all",
   "active",
   "ontrack",
@@ -35,11 +39,11 @@ const STATIC_FILTERS = new Set<GoalFilterId>([
 const SORT_KEYS = new Set<GoalSortKey>(["priority", "due", "progress", "updated", "name"]);
 
 function readFilter(value: string | null, categoryIds: ReadonlySet<string>): GoalFilterId {
-  if (!value) return "overview";
+  if (!value) return "next";
   if (STATIC_FILTERS.has(value as GoalFilterId)) return value as GoalFilterId;
-  if (!value.startsWith("category:")) return "overview";
+  if (!value.startsWith("category:")) return "next";
   const categoryId = value.slice("category:".length);
-  return categoryId && categoryIds.has(categoryId) ? `category:${categoryId}` : "overview";
+  return categoryId && categoryIds.has(categoryId) ? `category:${categoryId}` : "next";
 }
 
 export function readGoalViewState(
@@ -65,7 +69,7 @@ export function writeGoalViewState(
 ): URLSearchParams {
   const next = new URLSearchParams(current);
 
-  if (state.filter === "overview") next.delete("widok");
+  if (state.filter === "next") next.delete("widok");
   else next.set("widok", state.filter);
 
   next.set("uklad", state.layout);

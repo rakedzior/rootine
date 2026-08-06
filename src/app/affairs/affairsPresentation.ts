@@ -8,6 +8,7 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
+  Map,
   ReceiptText,
   RefreshCw,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
   type DocumentCategory,
   type DocumentRecord,
   type MatterCategory,
+  type MatterKind,
   type MatterPriority,
   type MatterStatus,
   type PaymentCadence,
@@ -64,6 +66,11 @@ export type Draft = {
   priority: MatterPriority;
   status: MatterStatus;
   dueDate: string;
+  matterKind: MatterKind;
+  time: string;
+  location: string;
+  reminderPreset: MatterReminderPreset;
+  sourceAttentionKey: string;
   note: string;
   amount: string;
   cadence: PaymentCadence;
@@ -82,12 +89,41 @@ export type Draft = {
   actual: string;
 };
 
+export type MatterReminderPreset = "none" | "at-time" | "two-hours" | "day-and-two-hours";
+
+export const MATTER_REMINDER_LABELS: Record<MatterReminderPreset, string> = {
+  none: "Bez powiadomień",
+  "at-time": "O godzinie wizyty",
+  "two-hours": "2 godziny wcześniej",
+  "day-and-two-hours": "24 godziny i 2 godziny wcześniej",
+};
+
+export function reminderMinutesFromPreset(preset: MatterReminderPreset): number[] {
+  if (preset === "at-time") return [0];
+  if (preset === "two-hours") return [120];
+  if (preset === "day-and-two-hours") return [1_440, 120];
+  return [];
+}
+
+export function reminderPresetFromMinutes(minutes: readonly number[] | undefined): MatterReminderPreset {
+  if (!minutes?.length) return "none";
+  if (minutes.includes(1_440) && minutes.includes(120)) return "day-and-two-hours";
+  if (minutes.includes(120)) return "two-hours";
+  if (minutes.includes(0)) return "at-time";
+  return "none";
+}
+
 export const EMPTY_DRAFT: Draft = {
   title: "",
   category: "urzedy",
   priority: "normal",
   status: "open",
   dueDate: "",
+  matterKind: "task",
+  time: "",
+  location: "",
+  reminderPreset: "none",
+  sourceAttentionKey: "",
   note: "",
   amount: "",
   cadence: "monthly",
@@ -171,7 +207,7 @@ export const NAV_GROUPS: Array<{
   items: Array<{ view: AffairsView; label: string; icon: typeof LayoutDashboard }>;
 }> = [
   {
-    label: "Główne",
+    label: "Przegląd",
     items: [
       { view: "overview", label: "Przegląd", icon: LayoutDashboard },
       // "Sprawy" is the name of the whole module, so it could not also name one of its views:
@@ -189,15 +225,10 @@ export const NAV_GROUPS: Array<{
     ],
   },
   {
-    label: "Rejestry",
+    label: "Pozostałe",
     items: [
       { view: "documents", label: "Dokumenty", icon: FileText },
       { view: "vehicles", label: "Pojazdy", icon: Car },
-    ],
-  },
-  {
-    label: "Firma i podróże",
-    items: [
       { view: "jdg", label: "JDG", icon: Building2 },
       { view: "travel", label: "Podróże", icon: LayoutDashboard },
     ],
@@ -222,6 +253,8 @@ export const UPCOMING_ICONS = {
   subscription: CreditCard,
   document: FileText,
   vehicle: Car,
+  jdg: Building2,
+  travel: Map,
 };
 
 export function getInitialView(): AffairsView {
@@ -243,7 +276,6 @@ export function formatMonth(value: string): string {
 }
 
 export type EditorPresentation = {
-  eyebrow: string;
   title: string;
   description: string;
   label: string;
@@ -253,57 +285,49 @@ export type EditorPresentation = {
 export function getEditorPresentation(editor: EditorState | null, budgetMonthKey: string): EditorPresentation | null {
   if (!editor) return null;
   if (editor.kind === "matter") return {
-    eyebrow: "Sprawa prywatna",
     title: editor.mode === "edit" ? "Edytuj sprawę" : "Nowa sprawa",
     description: "Zapisz termin i kontekst, którego nie chcesz później odtwarzać z pamięci.",
     label: "Nazwa sprawy",
     placeholder: "np. Przedłużyć polisę mieszkania",
   };
   if (editor.kind === "payment") return {
-    eyebrow: "Płatność cykliczna",
     title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
     description: "Pilnuj kolejnego terminu, kwoty i sposobu opłacania stałego rachunku.",
     label: "Nazwa płatności",
     placeholder: "np. Czynsz za mieszkanie",
   };
   if (editor.kind === "oneTime") return {
-    eyebrow: "Finanse jednorazowe",
     title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
     description: "Zapisz kwotę i termin zobowiązania, które pojawia się tylko raz.",
     label: "Nazwa płatności",
     placeholder: "np. Opłata za wydanie paszportu",
   };
   if (editor.kind === "subscription") return {
-    eyebrow: "Subskrypcje",
     title: editor.mode === "edit" ? "Edytuj subskrypcję" : "Nowa subskrypcja",
     description: "Kontroluj koszt, cykl odnowienia oraz ewentualny koniec zobowiązania.",
     label: "Nazwa subskrypcji",
     placeholder: "np. Dysk w chmurze",
   };
   if (editor.kind === "document") return {
-    eyebrow: "Rejestr dokumentów",
     title: editor.mode === "edit" ? "Edytuj dokument" : "Nowy dokument",
     description: "Zapisuj tylko informacje potrzebne do pilnowania ważności — bez pełnych numerów dokumentów.",
     label: "Nazwa dokumentu",
     placeholder: "np. Dowód osobisty",
   };
   if (editor.kind === "vehicle") return {
-    eyebrow: "Rejestr pojazdów",
     title: editor.mode === "edit" ? "Edytuj pojazd" : "Nowy pojazd",
     description: "Aktualny przebieg pozwala poprawnie ostrzegać o serwisach i wymianach.",
     label: "Nazwa pojazdu",
     placeholder: "np. Samochód rodzinny",
   };
   if (editor.kind === "vehicleItem") return {
-    eyebrow: "Termin pojazdu",
     title: editor.mode === "edit" ? "Edytuj termin" : "Nowy termin",
     description: "Ustaw datę, przebieg graniczny albo oba warunki jednocześnie.",
     label: "Nazwa terminu",
     placeholder: "np. Wymiana oleju i filtrów",
   };
   return {
-    eyebrow: formatMonth(budgetMonthKey),
-    title: "Nowa pozycja budżetu",
+    title: `Nowa pozycja budżetu · ${formatMonth(budgetMonthKey)}`,
     description: "Przydziel pieniądze zanim zaczniesz je wydawać.",
     label: "Nazwa kategorii",
     placeholder: "np. Jedzenie",
@@ -324,6 +348,7 @@ export function daysUntil(value: string): number {
 }
 
 export function dueCopy(value: string): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
+  if (!value) return { text: "Bez terminu", tone: "neutral" };
   const days = daysUntil(value);
   if (days < 0) return { text: `${Math.abs(days)} dni po terminie`, tone: "warning" };
   if (days === 0) return { text: "Dzisiaj", tone: "warning" };

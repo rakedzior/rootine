@@ -30,7 +30,7 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
   test("overview uses a compact responsibility radar", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/sprawy");
 
-    await expect(page.getByRole("heading", { name: "Radar odpowiedzialności" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Wymaga uwagi" })).toBeVisible();
     await expect(page.locator(".affairs-overview__summary")).toHaveCount(0);
   });
 
