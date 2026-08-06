@@ -1673,7 +1673,7 @@ export default function Praca() {
       </ModuleMain>
 
       {editor && (
-        <Modal bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} eyebrow={editor.kind === "company" ? "Firma" : editor.kind === "project" ? "Projekt" : "Zadanie"} onClose={closeEditor} footer={<><Button variant="ghost" onClick={() => closeEditor()}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && editorInitialDraft && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
+        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} eyebrow={editor.kind === "company" ? "Firma" : editor.kind === "project" ? "Projekt" : "Zadanie"} onClose={closeEditor} footer={<><Button variant="ghost" onClick={() => closeEditor()}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && editorInitialDraft && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
           <form id="work-editor-form" className="work-editor-form" onSubmit={submitEditor}>
             <Input label={editor.kind === "task" ? "Nazwa zadania" : "Nazwa"} value={draft.name} error={editorError} autoFocus placeholder={editor.kind === "company" ? "np. Studio North" : editor.kind === "project" ? "np. Nowa strona" : "Co trzeba zrobić?"} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); if (editorError) setEditorError(""); }} />
 

@@ -73,6 +73,7 @@ import {
   ModuleShell,
   ProgressBar,
   Select,
+  SummaryStrip,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
@@ -939,28 +940,16 @@ export default function Sprawy() {
                     {dueSoon} w ciągu 30 dni
                   </span>
                 </header>
-                <dl className="affairs-radar-summary__signals">
-                  <div>
-                    <dt>Najpilniejsze</dt>
-                    <dd>{dueThisWeek}</dd>
-                    <dd className="affairs-radar-summary__signal-note">do 7 dni</dd>
-                  </div>
-                  <div>
-                    <dt>Do opłacenia</dt>
-                    <dd><SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue></dd>
-                    <dd className="affairs-radar-summary__signal-note">jednorazowe</dd>
-                  </div>
-                  <div>
-                    <dt>Alerty rejestrów</dt>
-                    <dd>{documentAlerts + vehicleAlerts}</dd>
-                    <dd className="affairs-radar-summary__signal-note">{documentAlerts} dok. · {vehicleAlerts} poj.</dd>
-                  </div>
-                  <div>
-                    <dt>Stałe zobowiązania</dt>
-                    <dd><SensitiveValue label="Kwota stałych zobowiązań">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue></dd>
-                    <dd className="affairs-radar-summary__signal-note">miesięcznie</dd>
-                  </div>
-                </dl>
+                <SummaryStrip
+                  label="Sygnały radaru odpowiedzialności"
+                  className="affairs-radar-summary__signals"
+                  items={[
+                    { label: "Najpilniejsze", value: dueThisWeek, note: "do 7 dni", tone: dueThisWeek ? "warning" : "success" },
+                    { label: "Do opłacenia", value: <SensitiveValue label="Kwota płatności jednorazowych">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>, note: "jednorazowe", tone: unpaidOneTimeTotal > 0 ? "warning" : "neutral" },
+                    { label: "Alerty rejestrów", value: documentAlerts + vehicleAlerts, note: `${documentAlerts} dok. · ${vehicleAlerts} poj.`, tone: documentAlerts + vehicleAlerts ? "danger" : "success" },
+                    { label: "Stałe zobowiązania", value: <SensitiveValue label="Kwota stałych zobowiązań">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue>, note: "miesięcznie" },
+                  ]}
+                />
               </section>
 
               <div className="affairs-overview__grid">
@@ -1541,12 +1530,16 @@ export default function Sprawy() {
 
           {view === "budget" && (
             <div className="affairs-budget">
-              <section className="affairs-budget__summary" aria-label="Podsumowanie budżetu">
-                <div><span>Planowane wpływy</span><strong><SensitiveValue label="Planowane wpływy">{formatMoney(budgetSummary.income)}</SensitiveValue></strong></div>
-                <div><span>Przydzielone</span><strong><SensitiveValue label="Przydzielona kwota">{formatMoney(budgetSummary.plannedOut)}</SensitiveValue></strong></div>
-                <div><span>Rzeczywiste wydatki</span><strong><SensitiveValue label="Rzeczywiste wydatki">{formatMoney(budgetSummary.actualOut)}</SensitiveValue></strong></div>
-                <div><span>Rzeczywiście zostaje</span><strong className={budgetSummary.actualAvailable < 0 ? "is-negative" : ""}><SensitiveValue label="Pozostała kwota">{formatMoney(budgetSummary.actualAvailable)}</SensitiveValue></strong></div>
-              </section>
+              <SummaryStrip
+                label="Podsumowanie budżetu"
+                className="affairs-budget__summary"
+                items={[
+                  { label: "Planowane wpływy", value: <SensitiveValue label="Planowane wpływy">{formatMoney(budgetSummary.income)}</SensitiveValue>, note: "miesiąc" },
+                  { label: "Przydzielone", value: <SensitiveValue label="Przydzielona kwota">{formatMoney(budgetSummary.plannedOut)}</SensitiveValue>, note: "plan" },
+                  { label: "Rzeczywiste wydatki", value: <SensitiveValue label="Rzeczywiste wydatki">{formatMoney(budgetSummary.actualOut)}</SensitiveValue>, note: "wykonanie" },
+                  { label: "Rzeczywiście zostaje", value: <SensitiveValue label="Pozostała kwota">{formatMoney(budgetSummary.actualAvailable)}</SensitiveValue>, note: "po wydatkach", tone: budgetSummary.actualAvailable < 0 ? "danger" : "success" },
+                ]}
+              />
               <section className="affairs-budget-table">
                 <div className="affairs-budget-table__head">
                   <span>Kategoria</span>

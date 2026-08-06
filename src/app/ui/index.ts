@@ -30,6 +30,7 @@ export { Modal, type ModalProps, type ModalSize } from "./components/Modal";
 export { PageShell, type PageShellProps, type PageWidth } from "./components/PageShell";
 export { PageToolbar, type PageToolbarProps } from "./components/PageToolbar";
 export { SectionHeader, type SectionHeaderProps } from "./components/SectionHeader";
+export { SummaryStrip, type SummaryStripItem, type SummaryStripProps, type SummaryStripTone } from "./components/SummaryStrip";
 export { Select, type SelectOption, type SelectProps } from "./components/Select";
 export {
   AmbientScene,

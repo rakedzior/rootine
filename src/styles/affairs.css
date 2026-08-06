@@ -1902,44 +1902,7 @@
 }
 
 .affairs-radar-summary__signals {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
-}
-
-.affairs-radar-summary__signals > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  padding: var(--space-md) var(--space-lg);
-  border-right: 1px solid var(--color-border-subtle);
-}
-
-.affairs-radar-summary__signals > div:last-child {
-  border-right: 0;
-}
-
-.affairs-radar-summary__signals dt,
-.affairs-radar-summary__signals .affairs-radar-summary__signal-note {
-  color: var(--color-text-muted);
-  font-size: var(--text-micro);
-}
-
-.affairs-radar-summary__signals dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--color-chalk-white);
-  font-family: var(--font-data);
-  font-size: var(--text-body-emphasis);
-  font-weight: var(--weight-medium);
-}
-
-.affairs-radar-summary__signals .affairs-radar-summary__signal-note {
-  margin: 0;
-  font-family: inherit;
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-tight);
 }
 
 .affairs-budget__summary {

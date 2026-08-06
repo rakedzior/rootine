@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useGoalsStore } from "../goals/goalsContext";
 import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import { recordActivity } from "../experience/activityLog";
-import { pluralize } from "../formatters";
 import type {
   Goal as StoredGoal,
   GoalDraft,
@@ -39,6 +38,7 @@ import {
   ModuleShell,
   SectionHeader,
   Select,
+  SummaryStrip,
 } from "../ui";
 import {
   Archive,
@@ -432,13 +432,15 @@ export default function Cele() {
         />
 
         {activeFilter === "overview" && (
-          <div className="goals-overview-summary" aria-label="Podsumowanie aktywnych celów">
-            <span>{goalsRadar.risk.length === 0 ? "Brak zagrożeń" : `${goalsRadar.risk.length} ${pluralize(goalsRadar.risk.length, "zagrożony", "zagrożone", "zagrożonych")}`}</span>
-            <span aria-hidden="true">·</span>
-            <span>{goalsRadar.upcoming ? `Najbliższy termin ${goalsRadar.upcoming.due}` : "Brak nadchodzących terminów"}</span>
-            <span aria-hidden="true">·</span>
-            <span>{visibleGoals.length} aktywnych celów</span>
-          </div>
+          <SummaryStrip
+            label="Podsumowanie aktywnych celów"
+            className="goals-overview-summary ui-summary-strip--compact"
+            items={[
+              { label: "Aktywne cele", value: visibleGoals.length, note: "w tym widoku", tone: "primary" },
+              { label: "Wymagają uwagi", value: goalsRadar.risk.length, note: goalsRadar.risk.length ? "zagrożone" : "brak zagrożeń", tone: goalsRadar.risk.length ? "warning" : "success" },
+              { label: "Najbliższy termin", value: goalsRadar.upcoming?.due ?? "—", note: goalsRadar.upcoming ? "nadchodzący cel" : "brak terminu" },
+            ]}
+          />
         )}
 
         <div className="goals-content flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

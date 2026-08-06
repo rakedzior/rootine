@@ -369,6 +369,7 @@ export function GoalCard({
               </span>
               <span>•</span>
               <span>{goal.progressLabel}</span>
+              {goal.nextMilestone.title && <><span>•</span><span className="goal-card-next" title={goal.nextMilestone.title}>Następny: {goal.nextMilestone.title}</span></>}
             </div>
             <div className="order-1 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
               <div

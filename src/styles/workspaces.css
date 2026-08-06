@@ -1,0 +1,86 @@
+/* Shared geometry for dense operational workspaces. Modules keep their own vocabulary,
+   while this strip keeps summary signals and surface rhythm on the same system. */
+.ui-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface-1) 82%, transparent);
+}
+
+.ui-summary-strip__item {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+  min-height: 68px;
+  padding: var(--space-md) var(--space-lg);
+}
+
+.ui-summary-strip__item + .ui-summary-strip__item {
+  border-inline-start: 1px solid var(--color-border-subtle);
+}
+
+.ui-summary-strip dt,
+.ui-summary-strip dd {
+  margin: 0;
+}
+
+.ui-summary-strip dt {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-summary-strip dd:not(.ui-summary-strip__note) {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-body-emphasis);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-summary-strip__note {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-nano);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-summary-strip__item--primary dd:not(.ui-summary-strip__note) { color: var(--color-primary-text); }
+.ui-summary-strip__item--success dd:not(.ui-summary-strip__note) { color: var(--color-success-text); }
+.ui-summary-strip__item--warning dd:not(.ui-summary-strip__note) { color: var(--color-warning-text); }
+.ui-summary-strip__item--danger dd:not(.ui-summary-strip__note) { color: var(--color-danger-text); }
+
+.ui-summary-strip--compact .ui-summary-strip__item {
+  min-height: 58px;
+  padding-block: var(--space-sm);
+}
+
+.ui-summary-strip--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .ui-summary-strip,
+  .ui-summary-strip--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ui-summary-strip__item:nth-child(3) {
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--color-border-subtle);
+  }
+
+  .ui-summary-strip__item:nth-child(4) {
+    border-block-start: 1px solid var(--color-border-subtle);
+  }
+}
