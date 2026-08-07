@@ -49,7 +49,7 @@ export const PRIORITY_LABELS: Record<WorkTaskPriority, string> = {
 
 export const PRIORITY_ORDER: WorkTaskPriority[] = ["none", "low", "medium", "high"];
 
-export type WorkView = "today" | "week" | "active" | "unassigned" | "archive" | "company" | "project";
+export type WorkView = "today" | "week" | "active" | "untimed" | "unassigned" | "archive" | "company" | "project";
 export type TaskStatusFilter = WorkTaskStatus | "all";
 export type PriorityFilter = WorkTaskPriority | "all";
 export type CompanyProjectStatusFilter = WorkProjectStatus | "all";
@@ -264,9 +264,11 @@ export function getInitialWorkLocation(): { view: WorkView; companyId: string; p
     ? "project"
     : hasCompany
       ? "company"
-      : requested === "week" || requested === "active" || requested === "unassigned" || requested === "archive"
-        ? requested
-        : "today";
+      : requested === "bezterminu"
+        ? "untimed"
+        : requested === "week" || requested === "active" || requested === "unassigned" || requested === "archive"
+          ? requested
+          : "today";
   return {
     view,
     companyId: params.get("firma") ?? "",

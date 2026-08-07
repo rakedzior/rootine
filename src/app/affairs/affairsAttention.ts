@@ -80,7 +80,7 @@ export function buildAffairAttentionItems(
       key: `matter:${matter.id}:${matter.dueDate}:${matter.time ?? ""}`,
       sourceId: matter.id,
       kind: "matter",
-      view: "matters",
+      view: "all",
       title: matter.title,
       meta: matter.kind === "appointment"
         ? [matter.time, matter.location].filter(Boolean).join(" · ") || "Wizyta"

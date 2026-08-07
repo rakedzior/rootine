@@ -19,6 +19,7 @@ export type GoalViewState = {
   filter: GoalFilterId;
   layout: GoalLayout;
   sort: GoalSortKey;
+  scopeId: string | null;
   selectedId: string | null;
 };
 
@@ -53,12 +54,14 @@ export function readGoalViewState(
 ): GoalViewState {
   const layoutParam = params.get("uklad");
   const sortParam = params.get("sort");
+  const scopeParam = params.get("zakres")?.trim() ?? "";
   const selectedParam = params.get("cel")?.trim() ?? "";
 
   return {
     filter: readFilter(params.get("widok"), categoryIds),
     layout: layoutParam === "list" || layoutParam === "grid" ? layoutParam : defaults.layout,
     sort: sortParam && SORT_KEYS.has(sortParam as GoalSortKey) ? sortParam as GoalSortKey : defaults.sort,
+    scopeId: scopeParam || null,
     selectedId: selectedParam || null,
   };
 }
@@ -74,6 +77,9 @@ export function writeGoalViewState(
 
   next.set("uklad", state.layout);
   next.set("sort", state.sort);
+
+  if (state.scopeId) next.set("zakres", state.scopeId);
+  else next.delete("zakres");
 
   if (state.selectedId) next.set("cel", state.selectedId);
   else next.delete("cel");

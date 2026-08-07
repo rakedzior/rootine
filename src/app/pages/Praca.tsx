@@ -64,6 +64,7 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
+  SectionSurface,
   Select,
 } from "../ui";
 import { TaskInlineMenu, WorkCompanyActionsMenu, WorkProjectActionsMenu } from "./PracaMenus";
@@ -149,14 +150,14 @@ export default function Praca() {
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set(["today:untimed", "today:completed", "week:untimed", "week:completed"]);
+    if (typeof window === "undefined") return new Set(["today:completed", "week:completed", "untimed:completed"]);
     try {
       const raw = window.localStorage.getItem("rootine.work-sections.v1");
-      if (raw === null) return new Set(["today:untimed", "today:completed", "week:untimed", "week:completed"]);
+      if (raw === null) return new Set(["today:completed", "week:completed", "untimed:completed"]);
       const saved = JSON.parse(raw);
       return Array.isArray(saved) ? new Set(saved.filter((value): value is string => typeof value === "string")) : new Set();
     } catch {
-      return new Set(["today:untimed", "today:completed", "week:untimed", "week:completed"]);
+      return new Set(["today:completed", "week:completed", "untimed:completed"]);
     }
   });
   const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
@@ -236,7 +237,7 @@ export default function Praca() {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (view === "today") url.searchParams.delete("widok");
-    else url.searchParams.set("widok", view);
+    else url.searchParams.set("widok", view === "untimed" ? "bezterminu" : view);
     if (selectedCompanyId) url.searchParams.set("firma", selectedCompanyId);
     else url.searchParams.delete("firma");
     if (selectedProjectId) url.searchParams.set("projekt", selectedProjectId);
@@ -364,7 +365,7 @@ export default function Praca() {
     setDetailTaskId(null);
     const url = new URL(window.location.href);
     if (nextView === "today") url.searchParams.delete("widok");
-    else url.searchParams.set("widok", nextView);
+    else url.searchParams.set("widok", nextView === "untimed" ? "bezterminu" : nextView);
     if (companyId) url.searchParams.set("firma", companyId);
     else url.searchParams.delete("firma");
     if (projectId) url.searchParams.set("projekt", projectId);
@@ -874,7 +875,7 @@ export default function Praca() {
 
   const taskMatches = (task: WorkTask, includeCompleted = true) => currentTaskMatches(task, includeCompleted);
 
-  const renderTaskRow = (task: WorkTask, depth = 0, showContext = true) => {
+  const renderTaskRow = (task: WorkTask, depth = 0, showContext = true, compact = false) => {
     const status = getTaskStatus(task);
     const context = taskContext(task);
     const companyName = context.company?.name ?? "Nieprzypisane";
@@ -889,7 +890,7 @@ export default function Praca() {
     return (
       <ListRow
         key={task.id}
-         className={`work-task-row ${depth ? "work-task-row--nested" : ""} ${showContext ? "work-task-row--with-context" : ""}`}
+         className={`work-task-row ${depth ? "work-task-row--nested" : ""} ${showContext ? "work-task-row--with-context" : ""} ${compact ? "work-task-row--compact" : ""}`}
          style={rowStyle}
          draggable={isProjectTreeTask}
          onDragStart={(event) => handleTaskDragStart(event, task)}
@@ -917,7 +918,7 @@ export default function Praca() {
         titleLabel={detailTaskId === task.id ? `Zamknij szczegóły zadania „${task.title}”` : `Otwórz szczegóły zadania „${task.title}”`}
         onTitleClick={() => toggleTaskDetails(task.id)}
         selected={detailTaskId === task.id}
-        subtitle={task.note ? <span className="work-task-row__subtitle-copy"><span className="work-task-row__note">{task.note}</span></span> : undefined}
+        subtitle={task.note && !compact ? <span className="work-task-row__subtitle-copy"><span className="work-task-row__note">{task.note}</span></span> : undefined}
         trailing={(
           <div className={`work-task-row__controls ${showContext ? "work-task-row__controls--with-context" : ""}`}>
             {showContext && (
@@ -992,7 +993,7 @@ export default function Praca() {
           </div>
         )}
         completed={status === "completed"}
-        density="comfortable"
+        density="compact"
         divided
       />
     );
@@ -1019,12 +1020,12 @@ export default function Praca() {
       });
     };
     return (
-      <section className={`work-task-section ${isCollapsed ? "is-collapsed" : ""} ${options.today ? "is-today" : ""} ${sectionTone ? `is-${sectionTone}` : ""}`} aria-label={title}>
+      <SectionSurface className={`work-task-section ${isCollapsed ? "is-collapsed" : ""} ${options.today ? "is-today" : ""} ${sectionTone ? `is-${sectionTone}` : ""}`} aria-label={title}>
         <header className="work-task-section__header">
           <div>
-            {icon}
+            <span className="work-task-section__marker" aria-hidden="true">{icon}</span>
             <h3>{title}</h3>
-            <span>{tasks.length}</span>
+            <span className="work-task-section__count">{tasks.length}</span>
           </div>
           {options.collapsible && (
             <button type="button" className="work-task-section__toggle" aria-expanded={!isCollapsed} onClick={toggleSection}>
@@ -1042,7 +1043,7 @@ export default function Praca() {
             {emptyAction}
           </div>
         ) : null)}
-      </section>
+      </SectionSurface>
     );
   };
 
@@ -1070,7 +1071,6 @@ export default function Praca() {
             </Fragment>
           );
         })}
-        {renderTaskSection("Bez terminu", openTasks.filter((task) => !taskAnchorDate(task)), <Circle size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "week:untimed", collapsible: true })}
         {renderTaskSection("Ukończone", completed, <Check size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "week:completed", collapsible: true })}
       </>
     );
@@ -1144,7 +1144,6 @@ export default function Praca() {
       const anchor = taskAnchorDate(task);
       return anchor > today;
     }).sort((a, b) => taskAnchorDate(a).localeCompare(taskAnchorDate(b)) || a.createdAt.localeCompare(b.createdAt)).slice(0, 3);
-    const withoutDate = openTasks.filter((task) => !taskAnchorDate(task));
     const completed = tasks.filter((task) => getTaskStatus(task) === "completed");
     return (
       <div className="work-screen work-screen--focus">
@@ -1163,7 +1162,6 @@ export default function Praca() {
           {upcoming.length > 0 && (
             renderTaskSection("Następne", upcoming, <CalendarDays size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "today:next", collapsible: true })
           )}
-          {renderTaskSection("Bez terminu", withoutDate, <Circle size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "today:untimed", collapsible: true })}
           {renderTaskSection("Ukończone", completed, <Check size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "today:completed", collapsible: true })}
         </div>
       </div>
@@ -1195,6 +1193,27 @@ export default function Praca() {
         <section className="work-task-section" aria-label="Wszystkie aktywne zadania">
           {sorted.length ? <><div className="work-task-columns" aria-hidden="true"><span>Zadanie</span><span>Firma</span><span>Projekt</span><span>Status</span><span>Priorytet</span><span>Termin</span></div><div className="work-task-list">{sorted.map((task) => renderTaskRow(task))}</div></> : <EmptyState icon={<Check size={18} />} title="Brak aktywnych zadań" description="Wszystko jest zamknięte albo nie ma jeszcze zadań." />}
         </section>
+      </div>
+    );
+  };
+
+  const renderUntimedView = () => {
+    const tasks = filterTaskList(relevantTasks, true)
+      .filter((task) => !taskAnchorDate(task))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.title.localeCompare(b.title, "pl"));
+    const openTasks = tasks.filter(isTaskOpen);
+    const completed = tasks.filter((task) => getTaskStatus(task) === "completed");
+    return (
+      <div className="work-screen work-screen--focus">
+        <div className="work-view-summary" role="status">{formatOpenTaskCount(openTasks.length)} bez terminu</div>
+        <div className="work-task-board">
+          {tasks.length ? <>
+            {renderTaskSection("Bez terminu", openTasks, <Circle size={13} aria-hidden="true" />)}
+            {renderTaskSection("Ukończone", completed, <Check size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "untimed:completed", collapsible: true })}
+          </> : (
+            <EmptyState icon={<Circle size={18} />} title="Brak zadań bez terminu" description="Zadania bez daty pojawią się tutaj, gdy utworzysz je bez terminu." />
+          )}
+        </div>
       </div>
     );
   };
@@ -1293,16 +1312,9 @@ export default function Praca() {
                   <button
                     type="button"
                     className="work-project-record__identity work-project-record__identity-trigger"
-                    aria-expanded={isExpanded}
-                    aria-controls={`work-project-preview-${project.id}`}
-                    title="Kliknij, aby rozwinąć; dwuklik otwiera szczegóły projektu"
-                    onClick={() => setExpandedCompanyProjectIds((current) => {
-                      const next = new Set(current);
-                      if (next.has(project.id)) next.delete(project.id);
-                      else next.add(project.id);
-                      return next;
-                    })}
-                    onDoubleClick={() => navigate("project", project.companyId, project.id)}
+                    aria-label={`Otwórz projekt „${project.name}”`}
+                    title="Otwórz projekt"
+                    onClick={() => navigate("project", project.companyId, project.id)}
                   >
                     <FolderKanban size={16} aria-hidden="true" />
                     <span><strong>{project.name}</strong><small>{project.description || "Bez opisu projektu"}</small></span>
@@ -1341,7 +1353,7 @@ export default function Praca() {
                     className="work-project-record__expand-icon"
                     aria-expanded={isExpanded}
                     aria-controls={`work-project-preview-${project.id}`}
-                    aria-label={`${isExpanded ? "Zwiń" : "Rozwiń"} projekt`}
+                    aria-label={`${isExpanded ? "Zwiń" : "Rozwiń"} podgląd zadań projektu „${project.name}”`}
                     onClick={() => setExpandedCompanyProjectIds((current) => {
                       const next = new Set(current);
                       if (next.has(project.id)) next.delete(project.id);
@@ -1369,18 +1381,8 @@ export default function Praca() {
                       <span>{projectOpenTasks.length ? formatOpenTaskCount(projectOpenTasks.length) : "Brak otwartych zadań"}</span>
                     </div>
                     {projectOpenTasks.length ? (
-                      <div className="work-project-record__preview-list">
-                        {projectOpenTasks.map((task) => {
-                          const taskStatus = getTaskStatus(task);
-                          return (
-                            <button key={task.id} type="button" className="work-project-record__preview-task" onClick={() => toggleTaskDetails(task.id)}>
-                              <span className={`work-project-record__preview-status ${taskStatusTone(taskStatus)}`}>{taskStatusIcon(taskStatus)}</span>
-                              <span className="work-project-record__preview-title">{task.title}</span>
-                              <span className="work-project-record__preview-date">{formatDate(task.dueDate)}</span>
-                              <ChevronRight size={13} aria-hidden="true" />
-                            </button>
-                          );
-                        })}
+                      <div className="work-task-list work-project-record__preview-list">
+                        {projectOpenTasks.map((task) => renderTaskRow(task, taskDepth(task, workspace.tasks), false, true))}
                       </div>
                     ) : <p className="work-project-record__preview-empty">Projekt nie ma jeszcze otwartych zadań.</p>}
                   </div>
@@ -1453,6 +1455,7 @@ export default function Praca() {
       today: "Dzisiaj w pracy",
       week: "Ten tydzień",
       active: "Wszystkie aktywne",
+      untimed: "Bez terminu",
       unassigned: "Nieprzypisane",
       archive: "Archiwum",
       company: selectedCompany?.name ?? "Firma",
@@ -1557,6 +1560,7 @@ export default function Praca() {
     if (view === "today") return renderTodayView();
     if (view === "week") return renderWeekView();
     if (view === "active") return renderActiveView();
+    if (view === "untimed") return renderUntimedView();
     if (view === "unassigned") return renderUnassignedView();
     if (view === "archive") return renderArchiveView();
     if (view === "company") return renderCompanyView();
@@ -1571,6 +1575,7 @@ export default function Praca() {
         <ContextNavGroup label="Przegląd">
           <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
           <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
+          <ContextNavItem active={view === "untimed"} icon={<Circle />} label="Bez terminu" meta={relevantOpenTasks.filter((task) => !taskAnchorDate(task)).length || undefined} onClick={() => navigate("untimed")} />
           <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie aktywne" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
         </ContextNavGroup>
 

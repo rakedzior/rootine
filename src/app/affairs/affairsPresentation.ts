@@ -1,7 +1,9 @@
 import {
+  CalendarDays,
   Building2,
   Car,
   CircleDollarSign,
+  Clock3,
   CreditCard,
   FileText,
   HeartPulse,
@@ -35,8 +37,9 @@ import {
 } from "../formatters";
 
 export type AffairsView =
-  | "overview"
-  | "matters"
+  | "today"
+  | "week"
+  | "all"
   | "oneTime"
   | "payments"
   | "subscriptions"
@@ -45,6 +48,27 @@ export type AffairsView =
   | "budget"
   | "jdg"
   | "travel";
+
+export type AffairsViewArchetype = "agenda" | "register" | "workspace";
+
+/**
+ * Every affairs destination is intentionally expressed through one of three stable
+ * interaction archetypes. The mapping keeps routing/domain semantics independent
+ * from the shell that presents them.
+ */
+export const AFFAIRS_VIEW_ARCHETYPE: Record<AffairsView, AffairsViewArchetype> = {
+  today: "agenda",
+  week: "agenda",
+  all: "register",
+  oneTime: "register",
+  payments: "register",
+  subscriptions: "register",
+  documents: "register",
+  vehicles: "register",
+  budget: "workspace",
+  jdg: "workspace",
+  travel: "workspace",
+};
 export type EditorState =
   | { kind: "matter"; mode: "add" | "edit"; id?: string }
   | { kind: "payment"; mode: "add" | "edit"; id?: string }
@@ -144,8 +168,9 @@ export const EMPTY_DRAFT: Draft = {
 
 export const VIEW_COPY: Record<AffairsView, { title: string; description: string }> = {
   travel: { title: "Sprawy", description: "Podróże · Plan, rezerwacje, budżet i przygotowania" },
-  overview: { title: "Sprawy", description: "Najbliższe zobowiązania i plan miesiąca" },
-  matters: { title: "Sprawy", description: "Prywatne formalności, decyzje i ważne terminy" },
+  today: { title: "Dzisiaj", description: "Sprawy wymagające uwagi dzisiaj" },
+  week: { title: "Ten tydzień", description: "Terminy i zobowiązania na najbliższe dni" },
+  all: { title: "Wszystkie", description: "Wszystkie aktywne sprawy i najbliższe zobowiązania" },
   oneTime: { title: "Sprawy", description: "Jednorazowe rachunki, opłaty i zobowiązania" },
   payments: { title: "Sprawy", description: "Stałe rachunki i płatności cykliczne" },
   subscriptions: { title: "Sprawy", description: "Subskrypcje, członkostwa i kończące się umowy" },
@@ -207,12 +232,11 @@ export const NAV_GROUPS: Array<{
   items: Array<{ view: AffairsView; label: string; icon: typeof LayoutDashboard }>;
 }> = [
   {
-    label: "Przegląd",
+    label: "Plan",
     items: [
-      { view: "overview", label: "Przegląd", icon: LayoutDashboard },
-      // "Sprawy" is the name of the whole module, so it could not also name one of its views:
-      // the sidebar said "Do załatwienia" while the page title said "Sprawy" on the same screen.
-      { view: "matters", label: "Do załatwienia", icon: ShieldCheck },
+      { view: "today", label: "Dzisiaj", icon: Clock3 },
+      { view: "week", label: "Ten tydzień", icon: CalendarDays },
+      { view: "all", label: "Wszystkie", icon: LayoutDashboard },
     ],
   },
   {
@@ -225,12 +249,17 @@ export const NAV_GROUPS: Array<{
     ],
   },
   {
-    label: "Pozostałe",
+    label: "Rejestry",
     items: [
       { view: "documents", label: "Dokumenty", icon: FileText },
       { view: "vehicles", label: "Pojazdy", icon: Car },
+    ],
+  },
+  {
+    label: "Obszary",
+    items: [
       { view: "jdg", label: "JDG", icon: Building2 },
-      { view: "travel", label: "Podróże", icon: LayoutDashboard },
+      { view: "travel", label: "Podróże", icon: Map },
     ],
   },
 ];
@@ -257,11 +286,17 @@ export const UPCOMING_ICONS = {
   travel: Map,
 };
 
+const LEGACY_VIEW_ALIASES: Record<string, AffairsView> = {
+  overview: "today",
+  matters: "all",
+};
+
 export function getInitialView(): AffairsView {
-  if (typeof window === "undefined") return "overview";
-  const requested = new URLSearchParams(window.location.search).get("widok") as AffairsView | null;
-  if (requested && AFFAIRS_VIEWS.has(requested)) return requested;
-  return "overview";
+  if (typeof window === "undefined") return "today";
+  const requested = new URLSearchParams(window.location.search).get("widok");
+  if (requested && LEGACY_VIEW_ALIASES[requested]) return LEGACY_VIEW_ALIASES[requested];
+  if (requested && AFFAIRS_VIEWS.has(requested as AffairsView)) return requested as AffairsView;
+  return "today";
 }
 
 export function formatDate(value: string): string {

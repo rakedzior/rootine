@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Check, Play, Undo2 } from "lucide-react";
+import { Check, Play, Plus, Undo2 } from "lucide-react";
 import { calendarDaysBetween } from "../data/localDate";
 import {
   listLocalPersistenceIssues,
@@ -43,16 +43,21 @@ import {
   historyEntryFromSession,
   isIndefiniteCycle,
   loadSportPlannerState,
+  prepareWorkoutReplan,
+  restoreWorkoutReplanArtifacts,
   saveSportPlannerState,
   SPORT_PLANNER_STORAGE_KEY,
   todayCycleWeek,
   cycleWorkoutDate,
   withActiveCycle,
+  workoutOutcomeForDate,
   type CycleWorkout,
   type PlannerView,
   type SportPlannerState,
   type TrainingCycle,
   type WorkoutHistoryEntry,
+  type WorkoutReplanBlockReason,
+  type WorkoutReplanSnapshot,
 } from "../sport/plannerModel";
 import {
   EXERCISE_LIBRARY,
@@ -100,6 +105,7 @@ interface MoveUndo {
   previousDay: number;
   message: string;
   persisted: boolean;
+  removedArtifacts?: WorkoutReplanSnapshot;
 }
 
 interface WorkoutDeleteState {
@@ -113,6 +119,12 @@ interface WorkoutDeleteUndo {
 }
 
 const SPORT_CYCLE_DRAFT_KEY = "rootine.sport-cycle-draft.v1";
+
+function replanBlockedMessage(reason: WorkoutReplanBlockReason) {
+  if (reason === "active") return "Najpierw zakończ aktywny trening.";
+  if (reason === "completed") return "Wykonany trening jest częścią historii i nie można zmienić jego terminu.";
+  return "Niedokończony trening ma zapisane wykonanie i nie można zmienić jego terminu.";
+}
 
 function loadStoredCycleDraft(fallback: TrainingCycle | null): TrainingCycle | null {
   if (typeof window === "undefined") return fallback;
@@ -135,17 +147,6 @@ function loadStoredCycleDraft(fallback: TrainingCycle | null): TrainingCycle | n
     window.sessionStorage.removeItem(SPORT_CYCLE_DRAFT_KEY);
     return fallback;
   }
-}
-
-function outcomeForDate(
-  cycle: TrainingCycle | null | undefined,
-  outcome: SportPlannerState["workoutOutcomes"][string] | undefined,
-  dateKey: string,
-) {
-  if (!outcome || (cycle && isIndefiniteCycle(cycle) && outcome.updatedAt.slice(0, 10) !== dateKey)) {
-    return undefined;
-  }
-  return outcome;
 }
 
 function getInitialSportUrlState() {
@@ -307,7 +308,13 @@ export default function Sport() {
     ? plannerState.templates.find((template) => template.id === selectedWorkout.templateId)
     : undefined;
   const selectedOutcome = selectedWorkout
-    ? outcomeForDate(cycleDraft, plannerState.workoutOutcomes[selectedWorkout.id], toDateKey(new Date()))
+    ? workoutOutcomeForDate(
+        cycleDraft,
+        plannerState.workoutOutcomes[selectedWorkout.id],
+        plannerState.sessions,
+        selectedWorkout.id,
+        toDateKey(new Date()),
+      )
     : undefined;
   const selectedSession = selectedOutcome?.sessionId
     ? plannerState.sessions.find((session) => session.id === selectedOutcome.sessionId)
@@ -511,9 +518,37 @@ export default function Sport() {
   };
 
   const moveWorkout = (id: string, week: number, day?: number) => {
-    const previous = cycleDraft?.workouts.find((workout) => workout.id === id);
+    if (!cycleDraft) return;
+    const previous = cycleDraft.workouts.find((workout) => workout.id === id);
     if (!previous || (previous.week === week && (day === undefined || previous.day === day))) return;
     const nextDay = day ?? previous.day;
+    const linkedOutcome = plannerState.workoutOutcomes[id];
+    const linkedSession = linkedOutcome?.sessionId
+      ? plannerState.sessions.find((session) => session.id === linkedOutcome.sessionId)
+      : undefined;
+    const occurrenceDate = isIndefiniteCycle(cycleDraft)
+      ? linkedSession?.date ?? toDateKey(new Date())
+      : cycleWorkoutDate(cycleDraft, previous);
+    const occurrenceOutcome = workoutOutcomeForDate(
+      cycleDraft,
+      linkedOutcome,
+      plannerState.sessions,
+      id,
+      occurrenceDate,
+    ) ?? null;
+    const prepared = prepareWorkoutReplan(plannerState, id, occurrenceOutcome);
+    if (!prepared.allowed) {
+      setAutosaveNotice(replanBlockedMessage(prepared.reason));
+      return;
+    }
+    const persisted = Boolean(prepared.removedArtifacts);
+    const updatedCycle = {
+      ...cycleDraft,
+      workouts: cycleDraft.workouts.map((workout) => workout.id === id
+        ? { ...workout, week, day: nextDay }
+        : workout),
+      updatedAt: new Date().toISOString(),
+    };
     setMoveUndo({
       workoutId: previous.id,
       title: previous.title,
@@ -522,18 +557,30 @@ export default function Sport() {
       message: previous.week === week
         ? `„${previous.title}” przeniesiono: ${DAY_LABELS[previous.day].short} → ${DAY_LABELS[nextDay].short}.`
         : `„${previous.title}” przeniesiono do tygodnia ${week}.`,
-      persisted: false,
+      persisted,
+      removedArtifacts: prepared.removedArtifacts,
     });
-    setCycleDraft((current) => current ? {
-      ...current,
-      workouts: current.workouts.map((workout) => workout.id === id
-        ? { ...workout, week, day: nextDay }
-        : workout),
-    } : current);
+    setCycleDraft(updatedCycle);
+    if (persisted) setPlannerState(withActiveCycle(prepared.state, updatedCycle));
   };
 
   const moveWorkoutTomorrow = (workout: CycleWorkout) => {
     if (!cycleDraft) return;
+    const occurrenceDate = isIndefiniteCycle(cycleDraft)
+      ? toDateKey(new Date())
+      : cycleWorkoutDate(cycleDraft, workout);
+    const occurrenceOutcome = workoutOutcomeForDate(
+      cycleDraft,
+      plannerState.workoutOutcomes[workout.id],
+      plannerState.sessions,
+      workout.id,
+      occurrenceDate,
+    ) ?? null;
+    const prepared = prepareWorkoutReplan(plannerState, workout.id, occurrenceOutcome);
+    if (!prepared.allowed) {
+      setMoveNotice(replanBlockedMessage(prepared.reason));
+      return;
+    }
     const tomorrow = addDays(cycleWorkoutDate(cycleDraft, workout), 1);
     if (isIndefiniteCycle(cycleDraft)) {
       const nextDay = cycleDayIndex(cycleDraft, tomorrow);
@@ -551,10 +598,11 @@ export default function Sport() {
         previousDay: workout.day,
         message: `„${workout.title}” przeniesiono na jutro w tygodniu bazowym.`,
         persisted: true,
+        removedArtifacts: prepared.removedArtifacts,
       });
       setMoveNotice("");
       setCycleDraft(updatedCycle);
-      setPlannerState((current) => withActiveCycle(current, updatedCycle));
+      setPlannerState(withActiveCycle(prepared.state, updatedCycle));
       setSelectedWorkoutId(null);
       return;
     }
@@ -579,22 +627,35 @@ export default function Sport() {
       previousDay: workout.day,
       message: `„${workout.title}” przeniesiono na jutro.`,
       persisted: true,
+      removedArtifacts: prepared.removedArtifacts,
     });
     setMoveNotice("");
     setCycleDraft(updatedCycle);
-    setPlannerState((current) => withActiveCycle(current, updatedCycle));
+    setPlannerState(withActiveCycle(prepared.state, updatedCycle));
     setSelectedWorkoutId(null);
   };
 
-  const moveWorkoutFromOverview = (workout: CycleWorkout, day: number) => {
+  const moveWorkoutFromOverview = (workout: CycleWorkout, day: number, sourceDate?: string) => {
     if (
       !cycleDraft
       || workout.day === day
       || day < 0
       || day > 6
-      || activeSession?.cycleWorkoutId === workout.id
-      || outcomeForDate(cycleDraft, plannerState.workoutOutcomes[workout.id], toDateKey(new Date()))
     ) return;
+    const occurrenceDate = sourceDate
+      ?? (isIndefiniteCycle(cycleDraft) ? toDateKey(new Date()) : cycleWorkoutDate(cycleDraft, workout));
+    const occurrenceOutcome = workoutOutcomeForDate(
+      cycleDraft,
+      plannerState.workoutOutcomes[workout.id],
+      plannerState.sessions,
+      workout.id,
+      occurrenceDate,
+    ) ?? null;
+    const prepared = prepareWorkoutReplan(plannerState, workout.id, occurrenceOutcome);
+    if (!prepared.allowed) {
+      setAutosaveNotice(replanBlockedMessage(prepared.reason));
+      return;
+    }
     const updatedCycle = {
       ...cycleDraft,
       workouts: cycleDraft.workouts.map((item) => item.id === workout.id
@@ -609,10 +670,11 @@ export default function Sport() {
       previousDay: workout.day,
       message: `„${workout.title}” przeniesiono: ${DAY_LABELS[workout.day].short} → ${DAY_LABELS[day].short}.`,
       persisted: true,
+      removedArtifacts: prepared.removedArtifacts,
     });
     setMoveNotice("");
     setCycleDraft(updatedCycle);
-    setPlannerState((current) => withActiveCycle(current, updatedCycle));
+    setPlannerState(withActiveCycle(prepared.state, updatedCycle));
   };
 
   const copyWeek = (fromWeek: number, toWeek: number) => {
@@ -658,9 +720,10 @@ export default function Sport() {
       updatedAt: new Date().toISOString(),
     };
     setCycleDraft(updatedCycle);
-    if (moveUndo.persisted) {
-      setPlannerState((current) => withActiveCycle(current, updatedCycle));
-    }
+    setPlannerState((current) => {
+      const restored = restoreWorkoutReplanArtifacts(current, moveUndo.removedArtifacts);
+      return moveUndo.persisted ? withActiveCycle(restored, updatedCycle) : restored;
+    });
     setMoveUndo(null);
   };
 
@@ -778,11 +841,11 @@ export default function Sport() {
     changeView("cycle");
   };
 
-  const openTodayWorkoutDialog = () => {
+  const openTodayWorkoutDialog = (week?: number, day?: number) => {
     if (!cycleDraft) return;
     setWorkoutDialog({
-      week: todayCycleWeek(cycleDraft),
-      day: (new Date().getDay() + 6) % 7,
+      week: week ?? todayCycleWeek(cycleDraft),
+      day: day ?? (new Date().getDay() + 6) % 7,
     });
   };
 
@@ -840,11 +903,14 @@ export default function Sport() {
   };
 
   const markRecoveryDay = (date: string) => {
+    const isMarked = plannerState.recoveryDays?.includes(date) ?? false;
     setPlannerState((current) => ({
       ...current,
-      recoveryDays: [...new Set([...(current.recoveryDays ?? []), date])],
+      recoveryDays: isMarked
+        ? (current.recoveryDays ?? []).filter((item) => item !== date)
+        : [...new Set([...(current.recoveryDays ?? []), date])],
     }));
-    setAutosaveNotice("Oznaczono dzień regeneracyjny.");
+    setAutosaveNotice(isMarked ? "Usunięto oznaczenie regeneracji." : "Oznaczono dzień regeneracyjny.");
   };
 
   const duplicateExerciseRecord = (exercise: Exercise) => {
@@ -1014,7 +1080,13 @@ export default function Sport() {
   };
 
   const clearWorkoutOutcome = (workout: CycleWorkout) => {
-    const outcome = outcomeForDate(cycleDraft, plannerState.workoutOutcomes[workout.id], toDateKey(new Date()));
+    const outcome = workoutOutcomeForDate(
+      cycleDraft,
+      plannerState.workoutOutcomes[workout.id],
+      plannerState.sessions,
+      workout.id,
+      toDateKey(new Date()),
+    );
     setPlannerState((current) => {
       const outcomes = { ...current.workoutOutcomes };
       delete outcomes[workout.id];
@@ -1115,15 +1187,30 @@ export default function Sport() {
     );
   }
 
-  const headerAction = view === "today" && activeSession
+  const openTodayHeaderAction = () => {
+    if (cycleDraft) openTodayWorkoutDialog();
+    else setDialog("cycle");
+  };
+
+  const openCycleHeaderAction = () => {
+    if (!cycleDraft) {
+      setDialog("cycle");
+      return;
+    }
+    setWorkoutDialog({ week: activeWeek, day: 0 });
+  };
+
+  const headerAction = view === "today" || view === "cycle"
     ? (
       <Button
         className="ui-button--icon-mobile"
         variant="primary"
-        leadingIcon={<Play size={13} />}
-        onClick={() => setActiveMode(true)}
+        leadingIcon={view === "today" && activeSession ? <Play size={13} /> : <Plus size={13} />}
+        onClick={view === "today"
+          ? activeSession ? () => setActiveMode(true) : openTodayHeaderAction
+          : openCycleHeaderAction}
       >
-        <span className="header-action-label">Wznów trening</span>
+        <span className="header-action-label">{view === "today" && activeSession ? "Wznów trening" : "Dodaj trening"}</span>
       </Button>
     )
     : undefined;
@@ -1229,6 +1316,8 @@ export default function Sport() {
                 templates={plannerState.templates}
                 activeSession={activeSession}
                 outcomes={plannerState.workoutOutcomes}
+                sessions={plannerState.sessions}
+                recoveryDays={plannerState.recoveryDays}
                 selectedWorkoutId={selectedWorkoutId}
                 onCreateCycle={() => setDialog("cycle")}
                 onAddWorkout={openTodayWorkoutDialog}
@@ -1239,7 +1328,7 @@ export default function Sport() {
                 onResetWorkout={clearWorkoutOutcome}
                 onMoveWorkout={moveWorkoutFromOverview}
                 onOpenCycle={openCycleView}
-                onMarkRecovery={markRecoveryDay}
+                onToggleRecovery={markRecoveryDay}
               />
             )}
             {view === "cycle" && (
@@ -1247,6 +1336,10 @@ export default function Sport() {
                 cycle={cycleDraft!}
                 templates={plannerState.templates}
                 cycles={plannerState.cycles}
+                outcomes={plannerState.workoutOutcomes}
+                sessions={plannerState.sessions}
+                recoveryDays={plannerState.recoveryDays}
+                activeWorkoutId={activeSession?.cycleWorkoutId}
                 activeWeek={activeWeek}
                 selectedWorkoutId={selectedWorkoutId}
                 isDirty={cycleDirty}
@@ -1279,10 +1372,6 @@ export default function Sport() {
                 }}
                 selectedId={selectedTemplateId}
                 onSelect={(id) => setSelectedTemplateId((current) => current === id ? null : id)}
-                onDoubleSelect={(id) => {
-                  setSelectedTemplateId(id);
-                  setTemplateEditRequest({ id, token: Date.now() });
-                }}
                 editRequest={templateEditRequest}
                 onEditorClose={() => setTemplateEditRequest(null)}
                 onCreateExercise={() => {

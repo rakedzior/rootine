@@ -140,7 +140,7 @@
 }
 
 .affairs-agenda {
-  overflow: hidden;
+  overflow: visible;
 }
 
 @media (min-width: 761px) {
@@ -213,6 +213,8 @@
 }
 
 .affairs-agenda-row {
+  --affairs-row-accent: var(--color-precision-blue-text);
+
   display: grid;
   min-height: 58px;
   grid-template-columns: minmax(160px, 1fr) auto auto auto;
@@ -221,7 +223,7 @@
   padding: var(--space-sm) var(--space-lg);
   border: 0;
   border-bottom: 1px solid var(--color-border-subtle);
-  background: transparent;
+  background: color-mix(in srgb, var(--affairs-row-accent) 2.5%, transparent);
   color: var(--color-text-muted);
   text-align: left;
 }
@@ -250,7 +252,30 @@
 }
 
 .affairs-agenda-row:hover {
-  background: var(--color-graphite-hover);
+  background: color-mix(in srgb, var(--affairs-row-accent) 6%, var(--color-graphite-hover));
+}
+
+.affairs-agenda-row--matter,
+.affairs-agenda-row--jdg {
+  --affairs-row-accent: var(--color-precision-blue-text);
+}
+
+.affairs-agenda-row--oneTime,
+.affairs-agenda-row--vehicle {
+  --affairs-row-accent: var(--color-warning-ochre);
+}
+
+.affairs-agenda-row--payment,
+.affairs-agenda-row--travel {
+  --affairs-row-accent: var(--color-success-seaglass);
+}
+
+.affairs-agenda-row--subscription {
+  --affairs-row-accent: var(--color-precision-blue-text);
+}
+
+.affairs-agenda-row--document {
+  --affairs-row-accent: var(--color-text-secondary);
 }
 
 .affairs-agenda-row__icon,
@@ -260,8 +285,8 @@
   height: 30px;
   place-items: center;
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--affairs-row-accent, var(--color-text-muted)) 10%, var(--color-graphite-input));
+  color: var(--affairs-row-accent, var(--color-text-muted));
 }
 
 .affairs-agenda-row__icon--matter,
@@ -272,7 +297,7 @@
 .affairs-agenda-row__icon--vehicle,
 .affairs-agenda-row__icon--jdg,
 .affairs-agenda-row__icon--travel {
-  color: var(--color-text-secondary);
+  color: var(--affairs-row-accent);
 }
 
 .affairs-agenda-row__copy,
@@ -555,7 +580,7 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-graphite-input);
-  color: var(--color-precision-blue-text);
+  color: var(--color-text-secondary);
 }
 
 .affairs-vehicle__header h2,
@@ -945,6 +970,24 @@
   background: var(--color-border-subtle);
 }
 
+.jdg-toolbar__actions-wrap,
+.jdg-toolbar__period,
+.jdg-toolbar__actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.jdg-toolbar__actions-wrap {
+  justify-content: flex-end;
+}
+
+.jdg-toolbar__period {
+  gap: var(--space-xs);
+}
+
 .jdg-canvas {
   min-height: 0;
   flex: 1;
@@ -972,7 +1015,7 @@
   padding: var(--space-lg);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-graphite-card);
 }
 
 .jdg-month-state.is-closed {
@@ -993,8 +1036,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-md);
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  background: var(--color-graphite-input);
+  color: var(--color-text-secondary);
 }
 
 .jdg-month-state.is-closed .jdg-month-state__icon {
@@ -1015,7 +1058,7 @@
 
 .jdg-month-state p {
   margin-top: 4px;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -1058,12 +1101,17 @@
 
 .jdg-checklist {
   display: grid;
-  gap: var(--space-md);
+  gap: 0;
   margin-top: var(--space-xl);
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .jdg-stage {
-  overflow: hidden;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .jdg-stage__header {
@@ -1487,9 +1535,7 @@
   .affairs-vehicle-row__target {
     display: none;
   }
-}
 
-@media ((max-width: 980px)) {
   .affairs-payment-row {
     grid-template-columns: 30px minmax(0, 1fr) 104px auto;
   }
@@ -1665,9 +1711,7 @@
   .jdg-note {
     grid-template-columns: 1fr;
   }
-}
 
-@media ((max-width: 760px)) {
   .jdg-settings__grid,
   .jdg-template-create {
     grid-template-columns: 1fr;
@@ -1943,9 +1987,17 @@
   .jdg-stage {
     min-height: 0;
   }
+
+  .jdg-stage + .jdg-stage {
+    border-left: 1px solid var(--color-border-subtle);
+  }
 }
 
 @media (max-width: 760px) {
+  .jdg-stage + .jdg-stage {
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
   .affairs-toolbar--embedded-nav {
     display: flex;
   }
@@ -1976,5 +2028,287 @@
 
   .affairs-budget__summary strong {
     font-size: var(--text-body);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Affairs · Variant A / Calm Layered Workspace
+   Agenda, register and workspace views share one shell. Category colour is a
+   quiet 2.5% surface tint; rows remain neutral and carry interaction state.
+   -------------------------------------------------------------------------- */
+
+.affairs-sidebar__nav {
+  gap: var(--space-2xl);
+}
+
+.affairs-sidebar__nav > .context-nav-group {
+  gap: var(--space-sm);
+}
+
+.affairs-sidebar__nav > .context-nav-group + .context-nav-group {
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.affairs-sidebar__nav .context-nav-group__label {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--color-text-muted);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.affairs-main {
+  min-width: 0;
+  min-height: 0;
+}
+
+.affairs-canvas--agenda,
+.affairs-canvas--register,
+.affairs-canvas--workspace {
+  display: grid;
+  align-content: start;
+}
+
+.affairs-section-surface {
+  --affairs-accent: var(--color-category-sky);
+
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--affairs-accent) 10%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--affairs-accent) 13%, var(--color-border-strong));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-section-surface));
+}
+
+.affairs-section-surface--agenda,
+.affairs-section-surface--plan {
+  --affairs-accent: var(--color-category-sky);
+}
+
+.affairs-section-surface--one-time,
+.affairs-section-surface--budget {
+  --affairs-accent: var(--color-category-sand);
+}
+
+.affairs-section-surface--payments {
+  --affairs-accent: var(--color-category-teal);
+}
+
+.affairs-section-surface--subscriptions {
+  --affairs-accent: var(--color-category-rose);
+}
+
+.affairs-section-surface--documents {
+  --affairs-accent: var(--color-category-slate);
+}
+
+.affairs-section-surface--vehicles {
+  --affairs-accent: var(--color-category-sky);
+}
+
+.affairs-section-surface.affairs-agenda,
+.affairs-section-surface.affairs-ledger,
+.affairs-section-surface.affairs-budget-table,
+.affairs-section-surface.affairs-vehicle {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--affairs-accent) 10%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--affairs-accent) 13%, var(--color-border-strong));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-section-surface));
+}
+
+.affairs-section-surface :is(
+  .affairs-matter-row,
+  .affairs-payment-row,
+  .affairs-budget-row,
+  .affairs-vehicle-row
+) {
+  background: transparent;
+}
+
+.affairs-section-surface :is(
+  .affairs-matter-row,
+  .affairs-payment-row,
+  .affairs-budget-row,
+  .affairs-vehicle-row
+):hover,
+.affairs-section-surface .affairs-matter-row.is-selected {
+  background: color-mix(in srgb, var(--affairs-accent) 4%, var(--color-surface-hover));
+}
+
+.affairs-section-surface .affairs-payment-row__icon,
+.affairs-section-surface .affairs-vehicle__mark {
+  border-color: color-mix(in srgb, var(--affairs-accent) 14%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-graphite-input));
+  color: var(--affairs-accent);
+}
+
+.affairs-section-surface .affairs-ledger__head,
+.affairs-section-surface .affairs-budget-table__head,
+.affairs-section-surface .affairs-section-heading,
+.affairs-section-surface .affairs-vehicle__header {
+  background: color-mix(in srgb, var(--affairs-accent) 2%, transparent);
+}
+
+.affairs-vehicle-list__empty > .ui-empty-state {
+  min-height: 320px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.affairs-budget__summary {
+  border-color: color-mix(in srgb, var(--color-category-sand) 10%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--color-category-sand) 13%, var(--color-border-strong));
+  background: color-mix(in srgb, var(--color-category-sand) 3%, var(--color-object-surface));
+}
+
+/* JDG uses WorkspaceView: one summary object followed by meaningful sections. */
+.affairs-module--view-jdg {
+  --affairs-accent: var(--color-category-teal);
+}
+
+.affairs-module--view-jdg .jdg-canvas {
+  gap: var(--space-xl);
+}
+
+.affairs-module--view-jdg .jdg-month-state,
+.affairs-module--view-jdg .jdg-stage,
+.affairs-module--view-jdg .jdg-note {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--affairs-accent) 10%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--affairs-accent) 13%, var(--color-border-strong));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-section-surface));
+}
+
+.affairs-module--view-jdg .jdg-month-state {
+  background: color-mix(in srgb, var(--affairs-accent) 3%, var(--color-object-surface));
+}
+
+.affairs-module--view-jdg .jdg-month-state__icon,
+.affairs-module--view-jdg .jdg-stage__icon {
+  background: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-graphite-input));
+  color: var(--affairs-accent);
+}
+
+.affairs-module--view-jdg .jdg-checklist {
+  gap: var(--space-lg);
+  border: 0;
+}
+
+.affairs-module--view-jdg .jdg-stage + .jdg-stage {
+  border: 1px solid color-mix(in srgb, var(--affairs-accent) 10%, var(--color-section-border));
+}
+
+.affairs-module--view-jdg .jdg-stage__header {
+  background: color-mix(in srgb, var(--affairs-accent) 2%, transparent);
+}
+
+.affairs-module--view-jdg .jdg-check-row:hover {
+  background: color-mix(in srgb, var(--affairs-accent) 4%, var(--color-surface-hover));
+}
+
+.affairs-module--view-jdg .jdg-check-row.is-final,
+.affairs-module--view-jdg .jdg-check-row.is-final:hover {
+  background: color-mix(in srgb, var(--affairs-accent) 3.5%, var(--color-surface-hover));
+}
+
+@media (max-width: 980px) {
+  .affairs-section-surface.affairs-budget-table {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .affairs-canvas--agenda,
+  .affairs-canvas--register,
+  .affairs-canvas--workspace,
+  .affairs-module--view-jdg .jdg-canvas {
+    gap: var(--space-lg);
+    padding: var(--space-md);
+  }
+
+  .affairs-section-surface,
+  .affairs-section-surface.affairs-agenda,
+  .affairs-section-surface.affairs-ledger,
+  .affairs-section-surface.affairs-budget-table,
+  .affairs-section-surface.affairs-vehicle,
+  .affairs-module--view-jdg .jdg-month-state,
+  .affairs-module--view-jdg .jdg-stage,
+  .affairs-module--view-jdg .jdg-note {
+    border-radius: var(--radius-md);
+  }
+
+  .affairs-section-heading {
+    min-height: 60px;
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .affairs-section-heading p {
+    white-space: normal;
+  }
+
+  /* Budget rows become small two-column forms instead of a clipped desktop table. */
+  .affairs-section-surface.affairs-budget-table {
+    overflow-x: hidden;
+  }
+
+  .affairs-budget-row {
+    position: relative;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm);
+    padding: var(--space-md);
+  }
+
+  .affairs-budget-row__identity {
+    grid-column: 1 / -1;
+  }
+
+  .affairs-budget-row > .ui-badge {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .affairs-budget-row > label {
+    height: 48px;
+  }
+
+  .affairs-budget-row > label::before {
+    position: absolute;
+    top: 5px;
+    left: 9px;
+    color: var(--color-text-muted);
+    content: attr(data-label);
+    font-size: var(--text-micro);
+    pointer-events: none;
+  }
+
+  .affairs-budget-row > label input {
+    padding-top: 15px;
+  }
+
+  .affairs-budget-row > .ui-button {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  .jdg-toolbar__actions-wrap {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .jdg-toolbar__period,
+  .jdg-toolbar__actions {
+    width: 100%;
+  }
+
+  .jdg-toolbar__period .affairs-month-switcher {
+    flex: 1 1 100%;
+    justify-content: flex-start;
   }
 }

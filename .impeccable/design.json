@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-06T14:54:50.2752891Z",
+  "generatedAt": "2026-08-07T00:00:00.0000000Z",
   "title": "Design System: Rootine",
   "extensions": {
     "colorMeta": {
@@ -733,6 +733,11 @@
       "Komunikacja jest krótka, rzeczowa i po polsku."
     ],
     "rules": [
+      {
+        "name": "Calm Layered Workspace / Variant A",
+        "body": "Status: APPROVED AND IMPLEMENTED. Date: 2026-08-06. Variant A selected. Surface model: Surface 0 = Canvas; Surface 1 = shared SectionSurface grouping related rows; Surface 2 = object/widget cards; overlays are reserved for floating surfaces. Category tint stays local and restrained (typically 2–4%); semantic tint communicates real status only and never floods a whole section. At <=760px, page, section, object, and widget titles wrap naturally. Shared primitives: SectionSurface, FilterBar, Pagination. Interaction contracts: Work identity opens its scope and its chevron only toggles preview; the Goals sidebar scopes without opening detail and next-step depth is 1/2/3; Affairs uses agenda/register/workspace IA, including JDG and travel; Notes use fixed equal-height cards with local body scroll and a flat list; Sport safely replans eligible past-day sessions without rewriting completed or active history, and History shows 10 items per page. Verification: npm run check PASS (68 files/314 tests); relevant Playwright matrix PASS (114); pagination package PASS (6/6); post-review mobile PASS (20/20); detector []; independent reviewer PASS.",
+        "section": "layout"
+      },
       {
         "name": "The Signal, Not Paint Rule",
         "body": "Precyzyjny błękit jest sygnałem działania, nie dekoracyjną farbą; na jednym ekranie powinien wskazywać tylko najważniejsze aktywne miejsca.",

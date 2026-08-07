@@ -6,6 +6,7 @@ import {
   type MacroConfiguration,
   type NutritionCalculatorProfile,
 } from "./nutritionCalculator";
+import { isCustomMealList, normalizeCustomMeals, type CustomMeal } from "./nutritionMeals";
 import { readLocalWorkspace, writeLocalWorkspace } from "./localRepository";
 
 export type MealSlot = "breakfast" | "lunch" | "snack" | "dinner";
@@ -74,6 +75,8 @@ export interface NutritionWorkspace {
   macroConfiguration: MacroConfiguration;
   weightMeasurements: Record<string, WeightMeasurement>;
   bodyMeasurements?: Record<string, BodyMeasurement[]>;
+  /** Saved dishes the user re-adds to a day. Optional so journals written before them stay valid. */
+  customMeals?: CustomMeal[];
   days: Record<string, NutritionDay>;
 }
 
@@ -124,6 +127,7 @@ export function createEmptyNutritionWorkspace(): NutritionWorkspace {
     macroConfiguration: { ...DEFAULT_MACRO_CONFIGURATION },
     weightMeasurements: {},
     bodyMeasurements: {},
+    customMeals: [],
     days: {},
   };
 }
@@ -428,6 +432,7 @@ function isNutritionWorkspace(value: unknown): value is NutritionWorkspace {
     && isRecord(value.weightMeasurements)
     && Object.entries(value.weightMeasurements).every(([date, measurement]) => normalizeWeightMeasurement(date, measurement) !== null)
     && (value.bodyMeasurements === undefined || isRecord(value.bodyMeasurements))
+    && (value.customMeals === undefined || isCustomMealList(value.customMeals))
     && isRecord(value.days)
     && Object.entries(value.days).every(([date, day]) => isNutritionDay(date, day));
 }
@@ -469,6 +474,7 @@ function migrateNutritionWorkspace(value: unknown): NutritionWorkspace | null {
     macroConfiguration: normalizeMacroConfiguration(value.macroConfiguration),
     weightMeasurements,
     bodyMeasurements: normalizeBodyMeasurements(value.bodyMeasurements),
+    customMeals: normalizeCustomMeals(value.customMeals),
     days,
   };
 }

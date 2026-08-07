@@ -63,7 +63,7 @@
 
 .today-day-balance.is-complete {
   border-color: color-mix(in srgb, var(--color-success) 22%, var(--color-border));
-  background: color-mix(in srgb, var(--color-success-subtle) 34%, var(--color-surface-2));
+  background: var(--color-surface-2);
 }
 
 .today-day-balance__main {
@@ -307,12 +307,13 @@
 
 .today-module-list {
   display: grid;
-  gap: var(--space-xs);
+  gap: 0;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .today-module-row {
   display: grid;
-  min-height: 48px;
+  min-height: 58px;
   grid-template-areas: "identity summary overdue visual arrow";
   grid-template-columns:
     minmax(170px, 1.04fr)
@@ -323,23 +324,21 @@
   align-items: center;
   column-gap: var(--space-lg);
   row-gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-md);
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  padding: var(--space-sm) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
   outline: 0;
-  background: var(--color-surface-1);
+  background: transparent;
   color: inherit;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-edge-highlight) 48%, transparent);
   text-decoration: none;
   transition:
-    border-color var(--motion-fast) var(--ease-out),
     background-color var(--motion-fast) var(--ease-out),
-    opacity var(--motion-fast) var(--ease-out),
-    transform var(--motion-fast) var(--ease-out);
+    color var(--motion-fast) var(--ease-out);
 }
 
 .today-module-list[data-active-area] .today-module-row {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .today-module-list[data-active-area="tasks"] .today-module-row[data-area-id="tasks"],
@@ -350,15 +349,11 @@
 .today-module-list[data-active-area="goals"] .today-module-row[data-area-id="goals"],
 .today-module-list[data-active-area="affairs"] .today-module-row[data-area-id="affairs"],
 .today-module-list[data-active-area="notes"] .today-module-row[data-area-id="notes"] {
-  border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
-  background: var(--color-surface-hover);
-  opacity: 1;
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
 }
 
 .today-module-row:hover {
-  border-color: var(--color-border);
-  background: var(--color-surface-hover);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--color-surface-hover) 62%, transparent);
 }
 
 .today-module-row:focus-visible {
@@ -367,22 +362,19 @@
 }
 
 .today-module-row:active {
-  transform: translateY(0);
+  background: color-mix(in srgb, var(--color-surface-hover) 82%, transparent);
 }
 
 .today-module-row:is(.is-empty, .is-complete) {
-  border-color: transparent;
-  background: var(--color-surface-1);
+  background: transparent;
 }
 
 .today-module-row.is-empty:hover {
-  border-color: var(--color-border);
-  background: var(--color-surface-hover);
+  background: color-mix(in srgb, var(--color-surface-hover) 62%, transparent);
 }
 
 .today-module-row.is-complete:hover {
-  border-color: color-mix(in srgb, var(--color-success) 20%, var(--color-border));
-  background: var(--color-surface-hover);
+  background: color-mix(in srgb, var(--color-surface-hover) 62%, transparent);
 }
 
 .today-module-row__identity {
@@ -610,7 +602,7 @@
 
   .today-module-list {
     grid-template-rows: none;
-    gap: var(--space-sm);
+    gap: 0;
   }
 
   .today-module-row {
@@ -622,7 +614,7 @@
       "visual visual";
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-sm) var(--space-lg);
-    padding: var(--space-md) var(--space-lg);
+    padding: var(--space-md) 0;
   }
 
   .today-module-row__summary {

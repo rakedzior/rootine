@@ -130,8 +130,10 @@ function dueStatus(month: string, day: number | null, done: boolean): {
 
 export function JdgWorkspace({
   layout,
+  mobileNavigation,
 }: {
   layout?: (content: ReactNode) => ReactNode;
+  mobileNavigation?: ReactNode;
 } = {}) {
   const [workspace, setWorkspace] = useState(loadJdgWorkspace);
   const [monthKey, setMonthKey] = useState(getJdgMonthKey);
@@ -370,28 +372,32 @@ export function JdgWorkspace({
         className="jdg-toolbar"
         title="JDG"
         description="Miesięczne zamknięcie działalności"
-        meta={<>
-          {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
-          {/* Shared with the budget view: one month stepper for the whole module. It also names
-              the month it steps through, so the description no longer has to repeat it. */}
-          <div className="affairs-month-switcher">
-            <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
-            <strong>{formatMonth(monthKey)}</strong>
-            <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
+        mobileNavigation={mobileNavigation}
+        meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+        actions={(
+          <div className="jdg-toolbar__actions-wrap">
+            <div className="jdg-toolbar__period">
+              {/* Shared with the budget view: one month stepper for the whole module. */}
+              <div className="affairs-month-switcher">
+                <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
+                <strong>{formatMonth(monthKey)}</strong>
+                <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
+              </div>
+              {closed ? <Badge tone="success" dot>Miesiąc zamknięty</Badge> : <Badge tone="warning" dot>W toku</Badge>}
+              <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>{profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}</Badge>
+              <div className="jdg-toolbar__status">
+                <span>{requiredCompleted}/{requiredItems.length} wymaganych</span>
+                <span className="jdg-toolbar__divider" />
+                <span>{completedCount}/{items.length} wszystkich</span>
+              </div>
+            </div>
+            <div className="jdg-toolbar__actions">
+              <Button variant="quiet" size="sm" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>Profil i szablony</Button>
+              <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={13} />} onClick={requestMonthReset} disabled={completedCount === 0}>Wyczyść miesiąc</Button>
+              <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={openEditor}>Dodaj punkt</Button>
+            </div>
           </div>
-          {closed ? <Badge tone="success" dot>Miesiąc zamknięty</Badge> : <Badge tone="warning" dot>W toku</Badge>}
-          <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>{profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}</Badge>
-          <div className="jdg-toolbar__status">
-            <span>{requiredCompleted}/{requiredItems.length} wymaganych</span>
-            <span className="jdg-toolbar__divider" />
-            <span>{completedCount}/{items.length} wszystkich</span>
-          </div>
-        </>}
-        actions={<>
-          <Button variant="quiet" size="sm" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>Profil i szablony</Button>
-          <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={13} />} onClick={requestMonthReset} disabled={completedCount === 0}>Wyczyść miesiąc</Button>
-          <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={openEditor}>Dodaj punkt</Button>
-        </>}
+        )}
       />
 
       <div className="jdg-canvas">

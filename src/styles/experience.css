@@ -27,6 +27,199 @@
   color: var(--color-text-primary);
 }
 
+/* Add command centre: quick capture first, then a calm two-column action register. */
+.ui-modal:has(.command-center) {
+  max-height: min(84vh, 820px);
+}
+
+.ui-modal:has(.command-center) .ui-modal__title {
+  font-size: var(--text-title);
+}
+
+.ui-modal:has(.command-center) .ui-modal__description {
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+}
+
+.command-center__stack {
+  display: grid;
+  gap: var(--space-2xl);
+}
+
+.command-center__quick {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.command-center__quick-label {
+  color: var(--color-text-primary);
+  font-size: var(--text-section);
+  font-weight: var(--weight-semibold);
+}
+
+.command-center__input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--space-lg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+  color: var(--color-chalk-white);
+  font: inherit;
+  font-size: var(--text-body-emphasis);
+}
+
+.command-center__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.command-center__input:focus {
+  border-color: var(--color-primary);
+  outline: var(--focus-ring-width) solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.command-center__preview {
+  display: flex;
+  min-height: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-normal);
+}
+
+.command-center__preview strong {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.command-center__keyboard-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  line-height: var(--leading-normal);
+}
+
+.command-center__actions-section {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.command-center__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.command-center__section-header h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-section);
+  font-weight: var(--weight-semibold);
+}
+
+.command-center__section-header span {
+  color: var(--color-text-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-micro);
+}
+
+.command-center__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px var(--space-sm);
+}
+
+.command-center__action {
+  min-height: 64px;
+  justify-content: flex-start;
+  padding: var(--space-sm) var(--space-md);
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.command-center__action:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--color-graphite-hover);
+  color: var(--color-text-primary);
+  transform: none;
+}
+
+.command-center__action.is-active,
+.command-center__action.is-active:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-text-primary);
+}
+
+.command-center__action > svg:first-child {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.command-center__action:hover:not(:disabled) > svg:first-child,
+.command-center__action.is-active > svg:first-child {
+  color: var(--color-primary-text);
+}
+
+.command-center__action > svg:last-child {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  opacity: 0.72;
+}
+
+.command-center__action-content {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.command-center__action-content strong,
+.command-center__action-content small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-center__action-content strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.command-center__action-content small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+}
+
+.command-center__toggle {
+  justify-self: start;
+  padding-inline: 0;
+  color: var(--color-primary-text);
+}
+
+.command-center__toggle:hover:not(:disabled) {
+  background: transparent;
+  color: var(--color-primary-hover);
+}
+
+@media (max-width: 600px) {
+  .command-center__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .command-center__action {
+    min-height: 58px;
+  }
+}
+
 .app-profile-privacy {
   display: flex;
   width: 100%;

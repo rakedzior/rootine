@@ -228,9 +228,9 @@ export function readLayoutPreference(): GoalLayout {
   try {
     const saved = localStorage.getItem("rootine.goals.layout")
       ?? localStorage.getItem("routine.goals.layout");
-    return saved === "grid" ? "grid" : "list";
+    return saved === "list" ? "list" : "grid";
   } catch {
-    return "list";
+    return "grid";
   }
 }
 

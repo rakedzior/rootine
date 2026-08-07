@@ -97,6 +97,143 @@ export interface SportPlannerState {
   recoveryDays?: string[];
 }
 
+export type WorkoutReplanBlockReason = "active" | "completed" | "incomplete";
+
+export interface WorkoutReplanSnapshot {
+  workoutId: string;
+  outcome: WorkoutOutcome;
+  session?: WorkoutSession;
+  historyEntry?: WorkoutHistoryEntry;
+}
+
+export type WorkoutReplanPreparation = {
+  allowed: true;
+  state: SportPlannerState;
+  removedArtifacts?: WorkoutReplanSnapshot;
+} | {
+  allowed: false;
+  state: SportPlannerState;
+  reason: WorkoutReplanBlockReason;
+};
+
+/**
+ * A recorded workout is immutable from the planner. A missed occurrence is the
+ * sole recorded state that may be rescheduled because it contains no execution.
+ */
+export function workoutReplanBlockReason(
+  outcome: WorkoutOutcome | null | undefined,
+  active = false,
+): WorkoutReplanBlockReason | null {
+  if (active) return "active";
+  if (outcome?.status === "completed") return "completed";
+  if (outcome?.status === "incomplete") return "incomplete";
+  return null;
+}
+
+/**
+ * Indefinite plans reuse one workout id across weeks. The linked session date,
+ * not `updatedAt`, identifies which occurrence owns the latest outcome — a
+ * missed occurrence may be reconciled a day later.
+ */
+export function workoutOutcomeForDate(
+  cycle: TrainingCycle | null | undefined,
+  outcome: WorkoutOutcome | null | undefined,
+  sessions: readonly WorkoutSession[],
+  workoutId: string,
+  dateKey: string,
+): WorkoutOutcome | undefined {
+  if (!outcome) return undefined;
+  if (!cycle || !isIndefiniteCycle(cycle)) return outcome;
+
+  const linkedSession = outcome.sessionId
+    ? sessions.find((session) => session.id === outcome.sessionId)
+    : sessions.find((session) => (
+        session.cycleWorkoutId === workoutId
+        && session.status === outcome.status
+        && session.date === dateKey
+      ));
+  const occurrenceDate = linkedSession?.date ?? outcome.updatedAt.slice(0, 10);
+  return occurrenceDate === dateKey ? outcome : undefined;
+}
+
+/**
+ * Prepares a move as one immutable state transaction. When the occurrence was
+ * missed, every linked placeholder record is removed together so history can
+ * never disagree with the plan after a reschedule.
+ */
+export function prepareWorkoutReplan(
+  state: SportPlannerState,
+  workoutId: string,
+  occurrenceOutcome: WorkoutOutcome | null = state.workoutOutcomes[workoutId] ?? null,
+): WorkoutReplanPreparation {
+  const active = state.sessions.some((session) => (
+    session.cycleWorkoutId === workoutId && session.status === "in_progress"
+  ));
+  const reason = workoutReplanBlockReason(occurrenceOutcome, active);
+  if (reason) return { allowed: false, state, reason };
+  if (occurrenceOutcome?.status !== "missed") return { allowed: true, state };
+
+  const storedOutcome = state.workoutOutcomes[workoutId];
+  if (!storedOutcome || storedOutcome.status !== "missed") return { allowed: true, state };
+
+  const linkedSession = storedOutcome.sessionId
+    ? state.sessions.find((session) => session.id === storedOutcome.sessionId)
+    : state.sessions.find((session) => (
+        session.cycleWorkoutId === workoutId && session.status === "missed"
+      ));
+  const linkedHistory = linkedSession
+    ? state.history.find((entry) => entry.id === linkedSession.id)
+    : undefined;
+  const outcomes = { ...state.workoutOutcomes };
+  delete outcomes[workoutId];
+
+  return {
+    allowed: true,
+    state: {
+      ...state,
+      workoutOutcomes: outcomes,
+      sessions: linkedSession
+        ? state.sessions.filter((session) => session.id !== linkedSession.id)
+        : state.sessions,
+      history: linkedHistory
+        ? state.history.filter((entry) => entry.id !== linkedHistory.id)
+        : state.history,
+    },
+    removedArtifacts: {
+      workoutId,
+      outcome: storedOutcome,
+      session: linkedSession,
+      historyEntry: linkedHistory,
+    },
+  };
+}
+
+export function restoreWorkoutReplanArtifacts(
+  state: SportPlannerState,
+  snapshot: WorkoutReplanSnapshot | undefined,
+): SportPlannerState {
+  if (!snapshot) return state;
+  const sessions = snapshot.session
+    ? state.sessions.some((session) => session.id === snapshot.session!.id)
+      ? state.sessions.map((session) => session.id === snapshot.session!.id ? snapshot.session! : session)
+      : [...state.sessions, snapshot.session]
+    : state.sessions;
+  const history = snapshot.historyEntry
+    ? [snapshot.historyEntry, ...state.history.filter((entry) => entry.id !== snapshot.historyEntry!.id)]
+        .sort((left, right) => right.date.localeCompare(left.date))
+    : state.history;
+
+  return {
+    ...state,
+    sessions,
+    history,
+    workoutOutcomes: {
+      ...state.workoutOutcomes,
+      [snapshot.workoutId]: snapshot.outcome,
+    },
+  };
+}
+
 interface SportPlannerStateV3 {
   version: 3;
   templates: WorkoutTemplate[];

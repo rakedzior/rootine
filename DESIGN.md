@@ -317,6 +317,42 @@ Układ jest przede wszystkim desktopowy i gęsty. Globalne warianty szerokości 
 
 **The Four-Pixel Rhythm Rule.** Nowe odległości muszą wynikać z czteropikselowego rytmu, chyba że korekta optyczna wymaga pojedynczego piksela.
 
+### Calm Layered Workspace / Variant A
+
+**Status:** APPROVED AND IMPLEMENTED
+
+**Date:** 2026-08-06
+
+**Selected direction:** Variant A
+
+This is the binding, implemented contract for complex workspaces.
+
+#### Surface model
+
+- **Surface 0 — Canvas:** the workspace background and spacing between independent sections.
+- **Surface 1 — `SectionSurface`:** one quiet bounded surface grouping related transparent rows; no cards inside cards.
+- **Surface 2 — object/widget cards:** standalone records, summaries, and widgets only.
+- **Floating surfaces:** overlays are reserved for floating detail panels, menus, popovers, modals, and toasts; Surfaces 0–2 stay in document flow.
+
+#### Tint, responsive, and shared-component rules
+
+- Category tint is restrained and local (typically 2–4%); it may mark an edge, icon, or badge but never flood a section.
+- Semantic tint communicates a real status only, stays restrained, and never becomes decorative module color.
+- At `<=760px`, page, section, object, and widget titles wrap naturally; they must not be clipped or forced onto one line.
+- `SectionSurface`, `FilterBar`, and `Pagination` are shared primitives; modules do not create local equivalents.
+
+#### Interaction contracts
+
+- **Work:** clicking an identity opens its scope; its chevron only toggles the inline preview.
+- **Goals:** the sidebar scopes the workspace without opening detail; next-step depth is explicitly 1, 2, or 3.
+- **Affairs:** information architecture uses agenda, register, and workspace views, including JDG and travel.
+- **Notes:** grid cards have equal fixed height with local body scroll; list view stays flat and has no nested scroll.
+- **Sport:** eligible past-day sessions replan safely without rewriting completed or active history; History shows 10 items per page.
+
+#### Verification
+
+- `npm run check` **PASS** (68 files / 314 tests); relevant Playwright matrix **PASS** (114); pagination package **PASS** (6/6); post-review mobile **PASS** (20/20); detector `[]`; independent reviewer **PASS**.
+
 ## Elevation & Depth
 
 System jest warstwowy i powściągliwy. Na poziomie spoczynkowym hierarchię tworzą tony grafitu i cienkie obramowania. Cienie pojawiają się dopiero, gdy element realnie unosi się nad treścią: menu, modal, panel szczegółów, zaznaczona karta lub komunikat typu toast.

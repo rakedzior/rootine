@@ -3,16 +3,16 @@
   color-scheme: dark;
 
   /* Rootine Midnight Instrument is the product default. */
-  --color-app-bg: #101214;
-  --color-sidebar-bg: #0b0d0f;
-  --color-surface-1: #1a1d21;
-  --color-surface-2: #20242a;
-  --color-surface-hover: #282d35;
+  --color-app-bg: #15181b;
+  --color-sidebar-bg: #101316;
+  --color-surface-1: #1d2125;
+  --color-surface-2: #24292f;
+  --color-surface-hover: #2b3138;
   --color-border: rgba(222, 229, 244, 0.08);
   --color-border-strong: rgba(222, 229, 244, 0.16);
-  --color-text-primary: #f2f3f5;
-  --color-text-secondary: #aeb3bb;
-  --color-text-tertiary: #818791;
+  --color-text-primary: #f1f0ec;
+  --color-text-secondary: #b6b8bb;
+  --color-text-tertiary: #92979e;
   --color-sidebar-text: var(--color-text-secondary);
   --color-primary: #657fce;
   --color-primary-hover: #7891da;
@@ -21,7 +21,7 @@
   --color-on-primary: #0b1020;
   --color-warning: #d2a04d;
   --color-warning-subtle: rgba(210, 160, 77, 0.12);
-  --color-warning-text: #d2a04d;
+  --color-warning-text: #d8aa58;
   --color-success: #69a77a;
   --color-success-subtle: rgba(105, 167, 122, 0.12);
   --color-success-text: #78b789;
@@ -30,11 +30,14 @@
   --color-danger-text: #df7c7c;
   --color-focus-ring: var(--color-primary);
   --color-progress-track: rgba(242, 243, 245, 0.1);
-  --color-disabled-bg: #1a1d21;
-  --color-disabled-text: #818791;
+  --color-disabled-bg: #1d2125;
+  --color-disabled-text: #92979e;
   --color-neutral-subtle: rgba(174, 179, 187, 0.07);
   --color-backdrop: rgba(2, 3, 6, 0.72);
   --color-on-accent: var(--color-on-primary);
+  --color-section-surface: var(--color-surface-1);
+  --color-object-surface: var(--color-surface-2);
+  --color-section-border: var(--color-border);
 }
 
 :root {
@@ -331,16 +334,16 @@
 :root[data-theme="rootine-cobalt"] {
   color-scheme: dark;
 
-  --color-app-bg: #101214;
-  --color-sidebar-bg: #0b0d0f;
-  --color-surface-1: #1a1d21;
-  --color-surface-2: #20242a;
-  --color-surface-hover: #282d35;
+  --color-app-bg: #15181b;
+  --color-sidebar-bg: #101316;
+  --color-surface-1: #1d2125;
+  --color-surface-2: #24292f;
+  --color-surface-hover: #2b3138;
   --color-border: rgba(222, 229, 244, 0.08);
   --color-border-strong: rgba(222, 229, 244, 0.16);
-  --color-text-primary: #f2f3f5;
-  --color-text-secondary: #aeb3bb;
-  --color-text-tertiary: #818791;
+  --color-text-primary: #f1f0ec;
+  --color-text-secondary: #b6b8bb;
+  --color-text-tertiary: #92979e;
   --color-primary: #657fce;
   --color-primary-hover: #7891da;
   --color-primary-subtle: rgba(101, 127, 206, 0.12);
@@ -348,7 +351,7 @@
   --color-on-primary: #0b1020;
   --color-warning: #d2a04d;
   --color-warning-subtle: rgba(210, 160, 77, 0.12);
-  --color-warning-text: #d2a04d;
+  --color-warning-text: #d8aa58;
   --color-success: #69a77a;
   --color-success-subtle: rgba(105, 167, 122, 0.12);
   --color-success-text: #78b789;
@@ -356,8 +359,8 @@
   --color-danger-subtle: rgba(211, 106, 106, 0.12);
   --color-danger-text: #df7c7c;
   --color-progress-track: rgba(242, 243, 245, 0.1);
-  --color-disabled-bg: #1a1d21;
-  --color-disabled-text: #818791;
+  --color-disabled-bg: #1d2125;
+  --color-disabled-text: #92979e;
   --color-neutral-subtle: rgba(174, 179, 187, 0.07);
   --color-backdrop: rgba(2, 3, 6, 0.72);
   --theme-ambient-brand: #657fce;

@@ -3,19 +3,20 @@ import { readGoalViewState, writeGoalViewState } from "./goalViewState";
 
 describe("goal view URL state", () => {
   const categories = new Set(["sport", "work"]);
-  const defaults = { layout: "list" as const, sort: "priority" as const };
+  const defaults = { layout: "grid" as const, sort: "priority" as const };
 
-  it("reads valid filter, layout, sort, and selection state", () => {
+  it("reads valid filter, layout, sort, scope, and detail selection state", () => {
     const state = readGoalViewState(
-      new URLSearchParams("widok=category%3Asport&uklad=grid&sort=due&cel=goal-7"),
+      new URLSearchParams("widok=category%3Asport&uklad=list&sort=due&zakres=goal-3&cel=goal-7"),
       categories,
       defaults,
     );
 
     expect(state).toEqual({
       filter: "category:sport",
-      layout: "grid",
+      layout: "list",
       sort: "due",
+      scopeId: "goal-3",
       selectedId: "goal-7",
     });
   });
@@ -29,8 +30,9 @@ describe("goal view URL state", () => {
 
     expect(state).toEqual({
       filter: "next",
-      layout: "list",
+      layout: "grid",
       sort: "priority",
+      scopeId: null,
       selectedId: null,
     });
   });
@@ -45,6 +47,7 @@ describe("goal view URL state", () => {
       filter: "overview",
       layout: "grid",
       sort: "updated",
+      scopeId: "goal-3",
       selectedId: "goal-2",
     });
 
@@ -52,7 +55,17 @@ describe("goal view URL state", () => {
     expect(next.get("widok")).toBe("overview");
     expect(next.get("uklad")).toBe("grid");
     expect(next.get("sort")).toBe("updated");
+    expect(next.get("zakres")).toBe("goal-3");
     expect(next.get("cel")).toBe("goal-2");
+  });
+
+  it("keeps workspace scope and quick details independently removable", () => {
+    const current = new URLSearchParams("zakres=goal-3&cel=goal-7");
+    const state = readGoalViewState(current, categories, defaults);
+    const next = writeGoalViewState(current, { ...state, selectedId: null });
+
+    expect(next.get("zakres")).toBe("goal-3");
+    expect(next.has("cel")).toBe(false);
   });
 
   it("uses next steps as the canonical fixed entry", () => {

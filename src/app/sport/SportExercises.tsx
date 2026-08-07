@@ -24,6 +24,7 @@ import {
   MenuTrigger,
   Modal,
   Select,
+  SectionHeader,
 } from "../ui";
 import { createPlannerId } from "./plannerModel";
 import { exerciseCountForTemplate, exercisePreview } from "./sportRecordHelpers";
@@ -127,40 +128,37 @@ export function SportExercises({
 
   return (
     <section className="sport-record-view sport-exercises-view" aria-label="Biblioteka ćwiczeń">
-      <div className="sport-record-view__intro">
-        <div>
-          <p>Jedna biblioteka dla siłowni, rehabilitacji, mobilności i treningów etapowych.</p>
-        </div>
-        <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => setEditing(createBlankExercise())}>
-          Dodaj ćwiczenie
-        </Button>
-      </div>
-
-      <div className="sport-record-toolbar" role="toolbar" aria-label="Filtry ćwiczeń">
-        <Input
-          aria-label="Szukaj ćwiczeń"
-          className="sport-record-toolbar__search"
-          placeholder="Szukaj po nazwie, partii lub sprzęcie…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
+      <Card padding="none" className="sport-record-table sport-record-module">
+        <SectionHeader
+          variant="label"
+          className="sport-record-module__header"
+          title="Biblioteka ćwiczeń"
+          description="Jedna biblioteka dla siłowni, rehabilitacji, mobilności i treningów etapowych."
+          action={<Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={() => setEditing(createBlankExercise())}>Dodaj ćwiczenie</Button>}
         />
-        <Select compact aria-label="Kategoria sportu" value={discipline} options={[{ value: "all", label: "Każdy sport" }, ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} />
-        <Select compact aria-label="Partia główna" value={muscle} options={MUSCLES.map((value) => ({ value, label: value }))} onChange={(event) => setMuscle(event.target.value)} />
-        <Select compact aria-label="Sprzęt" value={equipment} options={EQUIPMENT.map((value) => ({ value, label: value }))} onChange={(event) => setEquipment(event.target.value)} />
-        <Select compact aria-label="Typ ćwiczenia" value={type} options={TYPES.map((item) => ({ value: item.value, label: item.label }))} onChange={(event) => setType(event.target.value as ExerciseType | "all")} />
-        <Button variant={favoriteOnly ? "quiet" : "ghost"} size="sm" leadingIcon={<Heart size={13} fill={favoriteOnly ? "currentColor" : "none"} />} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((current) => !current)}>
-          Ulubione
-        </Button>
-        <Select compact aria-label="Status biblioteki" value={status} options={[{ value: "active", label: "Aktywne" }, { value: "archived", label: "Zarchiwizowane" }]} onChange={(event) => setStatus(event.target.value as "active" | "archived")} />
-        <Select compact aria-label="Sortowanie" value={sort} options={[{ value: "name", label: "Nazwa A–Z" }, { value: "updated", label: "Ostatnio zmienione" }]} onChange={(event) => setSort(event.target.value as "name" | "updated")} />
-      </div>
-
-      <Card padding="none" className="sport-record-table">
+        <div className="sport-record-toolbar" role="toolbar" aria-label="Filtry ćwiczeń">
+          <Input
+            aria-label="Szukaj ćwiczeń"
+            className="sport-record-toolbar__search"
+            placeholder="Szukaj po nazwie, partii lub sprzęcie…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <Select compact aria-label="Kategoria sportu" value={discipline} options={[{ value: "all", label: "Każdy sport" }, ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} />
+          <Select compact aria-label="Partia główna" value={muscle} options={MUSCLES.map((value) => ({ value, label: value }))} onChange={(event) => setMuscle(event.target.value)} />
+          <Select compact aria-label="Sprzęt" value={equipment} options={EQUIPMENT.map((value) => ({ value, label: value }))} onChange={(event) => setEquipment(event.target.value)} />
+          <Select compact aria-label="Typ ćwiczenia" value={type} options={TYPES.map((item) => ({ value: item.value, label: item.label }))} onChange={(event) => setType(event.target.value as ExerciseType | "all")} />
+          <Button variant={favoriteOnly ? "quiet" : "ghost"} size="sm" leadingIcon={<Heart size={13} fill={favoriteOnly ? "currentColor" : "none"} />} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((current) => !current)}>
+            Ulubione
+          </Button>
+          <Select compact aria-label="Status biblioteki" value={status} options={[{ value: "active", label: "Aktywne" }, { value: "archived", label: "Zarchiwizowane" }]} onChange={(event) => setStatus(event.target.value as "active" | "archived")} />
+          <Select compact aria-label="Sortowanie" value={sort} options={[{ value: "name", label: "Nazwa A–Z" }, { value: "updated", label: "Ostatnio zmienione" }]} onChange={(event) => setSort(event.target.value as "name" | "updated")} />
+        </div>
         <div className="sport-record-table__head" role="row">
           <span>Nazwa</span><span>Partia główna</span><span>Sprzęt</span><span>Domyślne parametry</span><span>W szablonach</span><span aria-hidden="true" />
         </div>
         {filtered.length === 0 ? (
-          <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo dodaj pierwsze ćwiczenie do biblioteki." action={<Button variant="quiet" onClick={() => setEditing(createBlankExercise())}>Dodaj ćwiczenie</Button>} />
+          <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo użyj przycisku Dodaj ćwiczenie w nagłówku modułu." />
         ) : filtered.map((exercise) => {
           const usage = templates.reduce((count, template) => count + (exerciseCountForTemplate(template, exercise.id) > 0 ? 1 : 0), 0);
           return (

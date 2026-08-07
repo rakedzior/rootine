@@ -6,6 +6,10 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
     await openRootineRoute(page, "/sprawy");
 
     const sidebar = page.getByRole("complementary", { name: "Widoki spraw" });
+    await expect(sidebar.getByRole("heading", { name: "Plan" })).toBeVisible();
+    await expect(sidebar.getByRole("heading", { name: "Finanse" })).toBeVisible();
+    await expect(sidebar.getByRole("heading", { name: "Rejestry" })).toBeVisible();
+    await expect(sidebar.getByRole("heading", { name: "Obszary" })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Cykliczne" })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Dokumenty" })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Pojazdy" })).toBeVisible();
@@ -27,11 +31,42 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
     await expect(page).toHaveURL(/widok=vehicles/);
   });
 
-  test("overview uses a compact responsibility radar", async ({ rootinePage: page }) => {
+  test("today view uses a compact responsibility radar", async ({ rootinePage: page, isMobile }) => {
     await openRootineRoute(page, "/sprawy");
 
-    await expect(page.getByRole("heading", { name: "Wymaga uwagi" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dzisiaj", level: 1 })).toBeVisible();
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "agenda");
+    await expect(page.locator(".affairs-section-surface--agenda")).toBeVisible();
+    if (isMobile) {
+      await expect(page.getByRole("combobox", { name: "Wybierz widok spraw" })).toContainText("Dzisiaj");
+    } else {
+      await expect(page.getByRole("button", { name: "Ten tydzień" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Wszystkie" })).toBeVisible();
+    }
     await expect(page.locator(".affairs-overview__summary")).toHaveCount(0);
+  });
+
+  test("register and workspace destinations use the shared affairs surface contract", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/sprawy?widok=documents");
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "register");
+    await expect(page.locator(".affairs-section-surface--documents")).toBeVisible();
+
+    await openRootineRoute(page, "/sprawy?widok=budget");
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "workspace");
+    await expect(page.locator(".affairs-section-surface--budget")).toBeVisible();
+
+    await openRootineRoute(page, "/sprawy?widok=jdg");
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "workspace");
+    await expect(page.locator(".jdg-stage").first()).toBeVisible();
+  });
+
+  test("legacy affairs view ids remain compatible", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/sprawy?widok=overview");
+    await expect(page.getByRole("heading", { name: "Dzisiaj", level: 1 })).toBeVisible();
+
+    await openRootineRoute(page, "/sprawy?widok=matters");
+    await expect(page.getByRole("heading", { name: "Wszystkie", level: 1 })).toBeVisible();
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "register");
   });
 
   test("travel stays inside the affairs module", async ({ rootinePage: page, isMobile }) => {

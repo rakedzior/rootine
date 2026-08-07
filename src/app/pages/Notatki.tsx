@@ -2,8 +2,8 @@
  * THESIS: Notatki is a capture desk, not a wall of decorative sticky notes; it refuses a card gallery with no filing or editing depth.
  * OWN-WORLD: Rootine's graphite workshop, a compact filing rail, restrained color markers, dense note sheets, and a docked writing panel.
  * STORY: Capture quickly, find by list or tag, pin what matters, and turn loose thoughts into text or actionable checklists.
- * FIRST VIEWPORT: The filing rail frames pinned and recent sheets while the selected note opens as a focused editor on the right.
- * FORM: The fifth grounded structure — a pinned desk with a live detail editor — selected with seed de49c24a.
+ * FIRST VIEWPORT: The filing rail frames equal-height note sheets while the selected note opens as a focused editor on the right.
+ * FORM: Object cards with a fixed header and footer, a locally scrollable body, and one flat register in list mode.
  */
 import {
   Archive,
@@ -193,7 +193,6 @@ function textPreviewLines(body: string): Array<{ text: string; bullet: boolean }
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .slice(0, 5)
     .map((line) => ({
       text: line.replace(/^(?:•|-)\s*/, ""),
       bullet: /^(?:•|-)\s+/.test(line),
@@ -874,6 +873,7 @@ export default function Notatki() {
     const list = workspace.lists.find((candidate) => candidate.id === note.listId);
     const checkedCount = note.items.filter((item) => item.checked).length;
     const previewLines = textPreviewLines(note.body);
+    const visibleChecklistItems = layout === "cards" ? note.items : note.items.slice(0, 2);
 
     return (
       <article key={note.id} className={`notes-card notes-card--${note.color}`}>
@@ -937,35 +937,44 @@ export default function Notatki() {
           </div>
         </header>
 
-        {note.body && (
-          <button type="button" className="notes-card__body" onClick={() => openNote(note)}>
-            {note.kind === "text" && previewLines.some((line) => line.bullet) ? (
-              <ul>
-                {previewLines.map((line, index) => <li key={`${line.text}-${index}`}>{line.text}</li>)}
-              </ul>
-            ) : (
-              <p>{note.body}</p>
-            )}
-          </button>
-        )}
+        <div
+          className="notes-card__content-scroll"
+          tabIndex={layout === "cards" ? 0 : undefined}
+          role={layout === "cards" ? "group" : undefined}
+          aria-label={layout === "cards" ? `Treść notatki ${note.title}` : undefined}
+        >
+          {note.body && (
+            <button type="button" className="notes-card__body" onClick={() => openNote(note)}>
+              {note.kind === "text" && previewLines.some((line) => line.bullet) ? (
+                <ul>
+                  {previewLines.map((line, index) => <li key={`${line.text}-${index}`}>{line.text}</li>)}
+                </ul>
+              ) : (
+                <p>{note.body}</p>
+              )}
+            </button>
+          )}
 
-        {note.kind === "checklist" && note.items.length > 0 && (
-          <div className="notes-card__checklist" aria-label={`Lista w notatce ${note.title}`}>
-            {note.items.slice(0, 4).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={item.checked ? "is-checked" : ""}
-                aria-pressed={item.checked}
-                onClick={() => toggleChecklistItem(note, item.id)}
-              >
-                <span>{item.checked && <Check size={9} />}</span>
-                <strong>{item.text}</strong>
-              </button>
-            ))}
-            {note.items.length > 4 && <small>+{note.items.length - 4} kolejne</small>}
-          </div>
-        )}
+          {note.kind === "checklist" && note.items.length > 0 && (
+            <div className="notes-card__checklist" aria-label={`Lista w notatce ${note.title}`}>
+              {visibleChecklistItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={item.checked ? "is-checked" : ""}
+                  aria-pressed={item.checked}
+                  onClick={() => toggleChecklistItem(note, item.id)}
+                >
+                  <span>{item.checked && <Check size={9} />}</span>
+                  <strong>{item.text}</strong>
+                </button>
+              ))}
+              {note.items.length > visibleChecklistItems.length && (
+                <small>+{note.items.length - visibleChecklistItems.length} kolejne</small>
+              )}
+            </div>
+          )}
+        </div>
 
         <footer className="notes-card__footer">
           <div className="notes-card__tags">

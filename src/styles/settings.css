@@ -115,7 +115,7 @@
 .app-theme-option[data-theme-option="rootine-graphite-sea-glass"] { --preview-canvas: #121515; --preview-surface: #222727; --preview-primary: #709a9c; }
 .app-theme-option[data-theme-option="rootine-warm-linen"] { --preview-canvas: #f2eee6; --preview-surface: #faf8f3; --preview-primary: #76583e; }
 .app-theme-option[data-theme-option="rootine-burgundy"] { --preview-canvas: #141313; --preview-surface: #2a2624; --preview-primary: #a84f64; }
-.app-theme-option[data-theme-option="rootine-cobalt"] { --preview-canvas: #101214; --preview-surface: #20242a; --preview-primary: #657fce; }
+.app-theme-option[data-theme-option="rootine-cobalt"] { --preview-canvas: #15181b; --preview-surface: #24292f; --preview-primary: #657fce; }
 .app-theme-option[data-theme-option="rootine-mineral-noir"] { --preview-canvas: #101112; --preview-surface: #222326; --preview-primary: #5f79c7; }
 .app-theme-option[data-theme-option="rootine-olive"] { --preview-canvas: #131412; --preview-surface: #262825; --preview-primary: #8d986b; }
 /* stylelint-enable projectwallace/max-unique-colors */

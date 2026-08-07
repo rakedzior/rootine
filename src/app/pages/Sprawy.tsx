@@ -8,7 +8,6 @@
 import {
   Archive,
   Bell,
-  Building2,
   CalendarClock,
   Car,
   Check,
@@ -17,8 +16,6 @@ import {
   Clock3,
   CreditCard,
   FileText,
-  LayoutDashboard,
-  Map,
   MapPin,
   Pencil,
   Plus,
@@ -65,7 +62,6 @@ import Podroze from "./Podroze";
 import {
   Badge,
   Button,
-  Card,
   Checkbox,
   ConfirmDialog,
   CompletedSection,
@@ -80,19 +76,21 @@ import {
   ModuleMain,
   ModuleShell,
   Select,
+  SectionSurface,
   SummaryStrip,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
 
 import {
+  AFFAIRS_VIEW_ARCHETYPE,
   BUDGET_KIND_LABELS,
   CADENCE_LABELS,
   CATEGORY_META,
   DOCUMENT_LABELS,
   EMPTY_DRAFT,
   NAV_ITEMS,
-  NAV_LABELS,
+  NAV_GROUPS,
   STATUS_LABELS,
   UPCOMING_ICONS,
   VEHICLE_ITEM_LABELS,
@@ -265,7 +263,24 @@ export default function Sprawy() {
     () => buildAffairAttentionItems(workspace, jdgWorkspace, travelWorkspace),
     [jdgWorkspace, travelWorkspace, workspace],
   );
-  const upcoming = attentionItems;
+  const agendaItems = useMemo(() => {
+    if (view === "all") return attentionItems;
+    return attentionItems.filter((item) => {
+      const days = daysUntil(item.dueDate);
+      return view === "today" ? days <= 0 : days >= 0 && days <= 7;
+    });
+  }, [attentionItems, view]);
+  const todayAttentionCount = useMemo(
+    () => attentionItems.filter((item) => daysUntil(item.dueDate) <= 0).length,
+    [attentionItems],
+  );
+  const weekAttentionCount = useMemo(
+    () => attentionItems.filter((item) => {
+      const days = daysUntil(item.dueDate);
+      return days >= 0 && days <= 7;
+    }).length,
+    [attentionItems],
+  );
   const dueSoon = attentionItems.length;
 
   const openMatterEditor = (matter?: Matter) => {
@@ -387,7 +402,7 @@ export default function Sprawy() {
     const initialPriority = params.get("priorytet") === "high" ? "high" : "normal";
     const initialTime = params.get("godzina") ?? "";
     if (action === "nowa-sprawa") {
-      setView("matters");
+      setView("all");
       setDraft({
         ...EMPTY_DRAFT,
         title: initialTitle,
@@ -614,9 +629,9 @@ export default function Sprawy() {
 
   const selectView = (nextView: AffairsView) => {
     setView(nextView);
-    if (nextView !== "matters") setSelectedMatterId("");
+    if (nextView !== "all") setSelectedMatterId("");
     const url = new URL(window.location.href);
-    if (nextView === "overview") {
+    if (nextView === "today") {
       url.searchParams.delete("widok");
     } else {
       url.searchParams.set("widok", nextView);
@@ -639,7 +654,7 @@ export default function Sprawy() {
         : ["oneTime", "payment", "subscription", "jdg"].includes(item.kind)
           ? "finanse"
           : "dom";
-    selectView("matters");
+    selectView("all");
     setDraft({
       ...EMPTY_DRAFT,
       title: item.title,
@@ -702,7 +717,9 @@ export default function Sprawy() {
   };
 
   const navMeta = (itemView: AffairsView) => {
-    if (itemView === "matters") return activeMatters.length;
+    if (itemView === "today") return todayAttentionCount || undefined;
+    if (itemView === "week") return weekAttentionCount || undefined;
+    if (itemView === "all") return activeMatters.length;
     if (itemView === "oneTime") return workspace.oneTimePayments.filter((item) => !item.paid).length;
     if (itemView === "payments") return workspace.payments.filter((item) => item.active).length;
     if (itemView === "subscriptions") return workspace.subscriptions.filter((item) => item.active).length;
@@ -711,33 +728,33 @@ export default function Sprawy() {
     return undefined;
   };
 
-  // NAV_ITEMS already starts with "overview"; prepending it again produced two options sharing
-  // the same React key, which React warns about and which can duplicate or drop options.
   const mobileViewOptions = NAV_ITEMS.map((item) => (
-    item.view === "overview"
-      ? { value: item.view, label: item.label, description: "Radar zobowiązań i plan miesiąca" }
+    item.view === "today"
+      ? { value: item.view, label: item.label, description: "Terminy wymagające uwagi dzisiaj" }
       : { value: item.view, label: item.label }
   ));
+  const viewArchetype = AFFAIRS_VIEW_ARCHETYPE[view];
 
   const contextSidebar = (
     <ModuleSidebar label="Widoki spraw" className="affairs-sidebar">
       <nav className="affairs-sidebar__nav">
-        <div className="affairs-sidebar__primary" aria-label="Przegląd spraw">
-          <ContextNavItem active={view === "overview"} icon={<LayoutDashboard />} label={NAV_LABELS.overview} meta={dueSoon || undefined} onClick={() => selectView("overview")} />
-          <ContextNavItem active={view === "matters"} icon={<ShieldCheck />} label={NAV_LABELS.matters} meta={navMeta("matters")} onClick={() => selectView("matters")} />
-        </div>
-        <ContextNavGroup label="Finanse">
-          <ContextNavItem active={view === "oneTime"} icon={<ReceiptText />} label={NAV_LABELS.oneTime} meta={navMeta("oneTime")} onClick={() => selectView("oneTime")} />
-          <ContextNavItem active={view === "payments"} icon={<RefreshCw />} label={NAV_LABELS.payments} meta={navMeta("payments")} onClick={() => selectView("payments")} />
-          <ContextNavItem active={view === "subscriptions"} icon={<CreditCard />} label={NAV_LABELS.subscriptions} meta={navMeta("subscriptions")} onClick={() => selectView("subscriptions")} />
-          <ContextNavItem active={view === "budget"} icon={<WalletCards />} label={NAV_LABELS.budget} onClick={() => selectView("budget")} />
-        </ContextNavGroup>
-        <ContextNavGroup label="Pozostałe">
-          <ContextNavItem active={view === "jdg"} icon={<Building2 />} label={NAV_LABELS.jdg} onClick={() => selectView("jdg")} />
-          <ContextNavItem active={view === "documents"} icon={<FileText />} label={NAV_LABELS.documents} meta={navMeta("documents")} onClick={() => selectView("documents")} />
-          <ContextNavItem active={view === "vehicles"} icon={<Car />} label={NAV_LABELS.vehicles} meta={navMeta("vehicles")} onClick={() => selectView("vehicles")} />
-          <ContextNavItem active={view === "travel"} icon={<Map />} label={NAV_LABELS.travel} onClick={() => selectView("travel")} />
-        </ContextNavGroup>
+        {NAV_GROUPS.map((group) => (
+          <ContextNavGroup key={group.label} label={group.label}>
+            {group.items.map((item) => {
+              const ItemIcon = item.icon;
+              return (
+                <ContextNavItem
+                  key={item.view}
+                  active={view === item.view}
+                  icon={<ItemIcon />}
+                  label={item.label}
+                  meta={navMeta(item.view)}
+                  onClick={() => selectView(item.view)}
+                />
+              );
+            })}
+          </ContextNavGroup>
+        ))}
       </nav>
       <div className="affairs-sidebar__footer">
         <Clock3 size={13} aria-hidden="true" />
@@ -746,7 +763,7 @@ export default function Sprawy() {
     </ModuleSidebar>
   );
 
-  const detailPanel = selectedMatter && view === "matters" ? (
+  const detailPanel = selectedMatter && view === "all" ? (
     <DetailPanel
       label={`Szczegóły: ${selectedMatter.title}`}
       className="affairs-detail"
@@ -807,10 +824,21 @@ export default function Sprawy() {
   if (view === "jdg") {
     return (
       <JdgWorkspace
+        mobileNavigation={(
+          <Select
+            compact
+            aria-label="Wybierz widok spraw"
+            fieldClassName="context-mobile-select affairs-mobile-view-select"
+            value={view}
+            options={mobileViewOptions}
+            onChange={(event) => selectView(event.target.value as AffairsView)}
+          />
+        )}
         layout={(content) => (
           <ModuleShell
             contextSidebar={contextSidebar}
-            className="affairs-module"
+            className="affairs-module affairs-module--workspace affairs-module--view-jdg"
+            data-affairs-archetype="workspace"
             pageWidth="wide"
             ambient={{
               scene: "affairs",
@@ -820,7 +848,7 @@ export default function Sprawy() {
               signal: dueSoon,
             }}
           >
-            <ModuleMain transitionKey={view}>{content}</ModuleMain>
+            <ModuleMain className="affairs-main affairs-main--workspace affairs-main--jdg" transitionKey={view}>{content}</ModuleMain>
           </ModuleShell>
         )}
       />
@@ -843,7 +871,8 @@ export default function Sprawy() {
         layout={(content) => (
           <ModuleShell
             contextSidebar={contextSidebar}
-            className="affairs-module affairs-module--travel"
+            className="affairs-module affairs-module--workspace affairs-module--view-travel affairs-module--travel"
+            data-affairs-archetype="workspace"
             pageWidth="wide"
             ambient={{ scene: "travel", progress: 0, signal: dueSoon }}
           >
@@ -858,7 +887,8 @@ export default function Sprawy() {
     <ModuleShell
       contextSidebar={contextSidebar}
       detailPanel={detailPanel}
-      className="affairs-module"
+      className={`affairs-module affairs-module--${viewArchetype} affairs-module--view-${view}`}
+      data-affairs-archetype={viewArchetype}
       pageWidth="wide"
       ambient={{
         scene: "affairs",
@@ -868,10 +898,10 @@ export default function Sprawy() {
         signal: dueSoon,
       }}
     >
-      <ModuleMain transitionKey={view}>
+      <ModuleMain className={`affairs-main affairs-main--${viewArchetype}`} transitionKey={view}>
         <ContentHeader
           headingLevel={1}
-          className={`affairs-toolbar ${view === "overview" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
+          className={`affairs-toolbar affairs-toolbar--${viewArchetype} ${view === "today" || view === "week" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
           title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
           description={VIEW_COPY[view].description}
           meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
@@ -884,7 +914,7 @@ export default function Sprawy() {
             onChange={(event) => selectView(event.target.value as AffairsView)}
           />}
           actions={<>
-          {view === "matters" && (
+          {view === "all" && (
             <>
               <Select
                 compact
@@ -964,28 +994,28 @@ export default function Sprawy() {
           </>}
         />
 
-        <div className="affairs-canvas">
-          {view === "overview" && (
+        <div className={`affairs-canvas affairs-canvas--${viewArchetype} affairs-canvas--${view}`}>
+          {(view === "today" || view === "week") && (
             <div className="affairs-overview">
-              <Card as="section" tone="panel" padding="none" className="affairs-agenda" aria-labelledby="affairs-radar-heading">
+              <SectionSurface className="affairs-agenda affairs-section-surface affairs-section-surface--agenda" aria-labelledby="affairs-radar-heading">
                 <header className="affairs-section-heading">
                   <div>
-                    <h2 id="affairs-radar-heading">Wymaga uwagi</h2>
-                    <p>Nie znika, dopóki nie zaplanujesz, odłożysz lub zamkniesz wpisu</p>
+                    <h2 id="affairs-radar-heading">{view === "today" ? "Dzisiejsze terminy" : "Terminy w tym tygodniu"}</h2>
+                    <p>{view === "today" ? "Zaległe i dzisiejsze terminy wymagające reakcji" : "Najbliższe terminy, żeby tydzień był pod kontrolą"}</p>
                   </div>
-                  <span className={`affairs-section-heading__meta ${dueSoon ? "is-warning" : ""}`}>
-                    {pluralize(dueSoon, "termin", "terminy", "terminów")}
+                  <span className={`affairs-section-heading__meta ${agendaItems.length ? "is-warning" : ""}`}>
+                    {pluralize(agendaItems.length, "termin", "terminy", "terminów")}
                   </span>
                 </header>
-                {upcoming.length === 0 ? (
+                {agendaItems.length === 0 ? (
                   <EmptyState icon={<Archive size={18} />} title="Wszystko dopilnowane" description="Nie ma teraz żadnych terminów wymagających reakcji." />
                 ) : (
                   <div className="affairs-agenda__list">
-                    {upcoming.map((item) => {
+                    {agendaItems.map((item) => {
                       const due = dueCopy(item.dueDate);
                       const UpcomingIcon = UPCOMING_ICONS[item.kind as keyof typeof UPCOMING_ICONS];
                       return (
-                        <div key={item.key} className="affairs-agenda-row">
+                        <div key={item.key} className={`affairs-agenda-row affairs-agenda-row--${item.kind}`}>
                           <button type="button" className="affairs-agenda-row__main" onClick={() => openAttentionSource(item)}>
                             <span className={`affairs-agenda-row__icon affairs-agenda-row__icon--${item.kind}`}>
                               <UpcomingIcon size={13} />
@@ -1019,12 +1049,12 @@ export default function Sprawy() {
                     })}
                   </div>
                 )}
-              </Card>
+              </SectionSurface>
             </div>
           )}
 
-          {view === "matters" && (
-            <section className="affairs-ledger" aria-label="Lista spraw">
+          {view === "all" && (
+            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--plan" aria-label="Lista spraw">
               <div className="affairs-ledger__head affairs-ledger__head--matters">
                 <span>Sprawa</span>
                 <span>Obszar</span>
@@ -1064,7 +1094,7 @@ export default function Sprawy() {
                       {STATUS_LABELS[matter.status]}
                     </Badge>
                     <AddToTasksButton compact input={{
-                      source: { kind: "affairs", entity: `${encodeURIComponent(matter.id)}/matter`, context: "Sprawy", href: "/sprawy?widok=matters" },
+                      source: { kind: "affairs", entity: `${encodeURIComponent(matter.id)}/matter`, context: "Sprawy", href: "/sprawy?widok=all" },
                       text: matter.title,
                       done: matter.status === "done",
                       calendarDate: matter.dueDate || undefined,
@@ -1078,11 +1108,11 @@ export default function Sprawy() {
                   </div>
                 );
               })}
-            </section>
+            </SectionSurface>
           )}
 
           {view === "oneTime" && (
-            <section className="affairs-ledger" aria-label="Płatności jednorazowe">
+            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--one-time" aria-label="Płatności jednorazowe">
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Zobowiązanie</span>
                 <span>Kategoria</span>
@@ -1157,11 +1187,11 @@ export default function Sprawy() {
                     </div>
                   );
                 })}
-            </section>
+            </SectionSurface>
           )}
 
           {view === "payments" && (
-            <section className="affairs-ledger" aria-label="Płatności cykliczne">
+            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--payments" aria-label="Płatności cykliczne">
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Płatność</span>
                 <span>Cykl</span>
@@ -1240,11 +1270,11 @@ export default function Sprawy() {
                   </div>
                 );
               })}
-            </section>
+            </SectionSurface>
           )}
 
           {view === "subscriptions" && (
-            <section className="affairs-ledger" aria-label="Subskrypcje i członkostwa">
+            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--subscriptions" aria-label="Subskrypcje i członkostwa">
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Subskrypcja</span>
                 <span>Cykl</span>
@@ -1332,11 +1362,11 @@ export default function Sprawy() {
                     </div>
                   );
                 })}
-            </section>
+            </SectionSurface>
           )}
 
           {view === "documents" && (
-            <section className="affairs-ledger" aria-label="Ważność dokumentów">
+            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--documents" aria-label="Ważność dokumentów">
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Dokument</span>
                 <span>Typ</span>
@@ -1388,18 +1418,20 @@ export default function Sprawy() {
                     </div>
                   );
                 })}
-            </section>
+            </SectionSurface>
           )}
 
           {view === "vehicles" && (
             <div className="affairs-vehicle-list">
               {workspace.vehicles.length === 0 ? (
-                <EmptyState
-                  icon={<Car size={18} />}
-                  title="Brak pojazdów"
-                  description="Dodaj samochód, motocykl lub inny pojazd, aby pilnować OC, przeglądów i serwisu."
-                  action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openVehicleEditor()}>Dodaj pojazd</Button>}
-                />
+                <SectionSurface className="affairs-section-surface affairs-section-surface--vehicles affairs-vehicle-list__empty">
+                  <EmptyState
+                    icon={<Car size={18} />}
+                    title="Brak pojazdów"
+                    description="Dodaj samochód, motocykl lub inny pojazd, aby pilnować OC, przeglądów i serwisu."
+                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openVehicleEditor()}>Dodaj pojazd</Button>}
+                  />
+                </SectionSurface>
               ) : workspace.vehicles.map((vehicle) => {
                 const items = workspace.vehicleItems
                   .filter((item) => item.vehicleId === vehicle.id)
@@ -1443,7 +1475,7 @@ export default function Sprawy() {
                   );
                 };
                 return (
-                  <Card key={vehicle.id} as="section" tone="panel" padding="none" className="affairs-vehicle">
+                  <SectionSurface key={vehicle.id} className="affairs-vehicle affairs-section-surface affairs-section-surface--vehicles">
                     <header className="affairs-vehicle__header">
                       <span className="affairs-vehicle__mark"><Car size={18} /></span>
                       <div>
@@ -1523,7 +1555,7 @@ export default function Sprawy() {
                         })}
                       </div>
                     )}
-                  </Card>
+                  </SectionSurface>
                 );
               })}
             </div>
@@ -1541,7 +1573,7 @@ export default function Sprawy() {
                   { label: "Rzeczywiście zostaje", value: <SensitiveValue label="Pozostała kwota">{formatMoney(budgetSummary.actualAvailable)}</SensitiveValue>, note: "po wydatkach", tone: budgetSummary.actualAvailable < 0 ? "danger" : "success" },
                 ]}
               />
-              <section className="affairs-budget-table">
+              <SectionSurface className="affairs-budget-table affairs-section-surface affairs-section-surface--budget">
                 <div className="affairs-budget-table__head">
                   <span>Kategoria</span>
                   <span>Typ</span>
@@ -1562,7 +1594,7 @@ export default function Sprawy() {
                       <Badge tone={line.kind === "income" ? "success" : line.kind === "savings" ? "primary" : "neutral"}>
                         {BUDGET_KIND_LABELS[line.kind]}
                       </Badge>
-                      <label>
+                      <label data-label="Plan">
                         <span className="ui-sr-only">Plan dla {line.label}</span>
                         <input
                           type="number"
@@ -1578,7 +1610,7 @@ export default function Sprawy() {
                         />
                         <span>zł</span>
                       </label>
-                      <label>
+                      <label data-label="Rzeczywiście">
                         <span className="ui-sr-only">Kwota rzeczywista dla {line.label}</span>
                         <input
                           type="number"
@@ -1615,7 +1647,7 @@ export default function Sprawy() {
                     action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openBudgetEditor()}>Dodaj pozycję</Button>}
                   />
                 )}
-              </section>
+              </SectionSurface>
             </div>
           )}
         </div>

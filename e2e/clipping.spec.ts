@@ -76,7 +76,9 @@ test.describe("brak przycinania zawartości", () => {
   // a detail panel must reflow the toolbar instead of letting the panel edge cut it.
   for (const [route, trigger] of [
     ["/zadania?widok=wszystkie", ".ui-list-row__copy--action"],
-    ["/cele", ".goal-card-primary"],
+    // The default Goals route is now "Następne kroki". Open the overview explicitly so this
+    // still verifies the card-triggered detail panel without restoring sidebar auto-open.
+    ["/cele?widok=overview", ".goal-card-primary"],
     ["/praca", ".ui-list-row__copy--action"],
   ] as const) {
     test(`${route} nie ucina paska narzędzi po otwarciu panelu @desktop`, async ({ rootinePage: page }) => {

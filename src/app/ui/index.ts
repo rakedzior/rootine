@@ -13,6 +13,7 @@ export { StatCard, StatGrid, type StatCardProps, type StatGridProps, type StatTo
 export { BREAKPOINTS, BREAKPOINT_EXCEPTIONS, maxWidthQuery, type BreakpointName } from "./breakpoints";
 export { DatePicker, type DatePickerProps } from "./components/DatePicker";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
+export { FilterBar, type FilterBarProps } from "./components/FilterBar";
 export { Input, type InputProps } from "./components/Input";
 export {
   Menu,
@@ -29,6 +30,8 @@ export {
 export { Modal, type ModalProps, type ModalSize } from "./components/Modal";
 export { PageShell, type PageShellProps, type PageWidth } from "./components/PageShell";
 export { PageToolbar, type PageToolbarProps } from "./components/PageToolbar";
+export { Pagination, type PaginationProps } from "./components/Pagination";
+export { SectionSurface, type SectionSurfaceProps } from "./components/SectionSurface";
 export { SectionHeader, type SectionHeaderProps } from "./components/SectionHeader";
 export { SummaryStrip, type SummaryStripItem, type SummaryStripProps, type SummaryStripTone } from "./components/SummaryStrip";
 export { Select, type SelectOption, type SelectProps } from "./components/Select";

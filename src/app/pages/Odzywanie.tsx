@@ -1,22 +1,23 @@
 /**
- * THESIS: Odżywianie jest dziennym arkuszem budżetu, nie galerią kafli KPI ani katalogiem raportów.
- * OWN-WORLD: Grafitowy rejestr czterech stałych posiłków, dane w DM Mono i jedna precyzyjna niebieska akcja.
+ * THESIS: Odżywianie jest spokojnym dziennym bilansem, a każdy posiłek ma czytelną granicę bez zamiany produktów w kafle.
+ * OWN-WORLD: Cztery miękkie grafitowe sekcje, dane w DM Mono i oszczędne akcenty kategorii.
  * STORY: Użytkownik wybiera dzień, wyszukuje polski produkt, ustala ilość i od razu widzi bilans posiłku oraz dnia.
- * FIRST VIEWPORT: Szeroki, zawsze widoczny szkielet posiłków stoi obok zwartego budżetu i panelu nawodnienia.
- * FORM: Arkusz składników pogrupowany według posiłków, z ustawieniami osadzonymi przy danych, których dotyczą.
+ * FIRST VIEWPORT: Cztery posiłki stoją obok trzech równych kart: bilansu, nawodnienia i masy ciała.
+ * FORM: Wariant A — SectionSurface dla posiłku, płaskie wiersze produktów i ObjectCard dla samodzielnych podsumowań.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useLocation, useNavigate } from "react-router";
 import {
-  ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Droplets,
+  ChartNoAxesCombined, CheckCircle2, ChevronLeft, ChevronRight, Droplets,
   LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, Save, Settings, Trash2, X,
 } from "lucide-react";
 import {
   Badge, Button, Card, ContentHeader, DatePicker, Input, Modal, ModuleMain, ModuleShell,
-  SectionHeader, Select, uiColors,
+  SectionHeader, SectionSurface, Select, uiColors,
 } from "../ui";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
-import { calculateNutritionTargets, MACRO_MODE_OPTIONS, MACRO_PRESET_OPTIONS } from "../data/nutritionCalculator";
+import { calculateNutritionTargets } from "../data/nutritionCalculator";
 import {
   OpenFoodFactsSearchError,
   scaleNutrition,
@@ -37,11 +38,15 @@ import {
   type NutritionEntry,
   type NutritionWorkspace,
 } from "../data/nutritionWorkspace";
+import { upsertCustomMeal, type CustomMeal } from "../data/nutritionMeals";
 import { NutritionAnalysis, type NutritionAnalysisRange } from "../nutrition/NutritionAnalysis";
 import { recordActivity } from "../experience/activityLog";
 import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
 import { readInitialNutritionCommand, useNutritionCommandAction } from "../nutrition/useNutritionCommandAction";
 import { NutritionWeightCard } from "../nutrition/NutritionWeightCard";
+import { NutritionCustomMeals } from "../nutrition/NutritionCustomMeals";
+import { NutritionGoalsDialog, NutritionWaterGoalDialog } from "../nutrition/NutritionGoalDialogs";
+import { NutritionSidebar, type NutritionSidebarItem } from "../nutrition/NutritionSidebar";
 import "../../styles/nutrition.css";
 
 import {
@@ -72,7 +77,9 @@ import {
   type MacroDraft,
   type WeightDialog,
 } from "../nutrition/nutritionPresentationModel";
-import { CalculatorProfileFields } from "../nutrition/NutritionCalculatorFields";
+
+/** The library lives on its own URL; every other Odżywianie view stays on /odzywianie. */
+const MEALS_PATH = "/odzywianie/posilki";
 
 export default function Odzywanie() {
   const [initialCommand] = useState(readInitialNutritionCommand);
@@ -146,6 +153,11 @@ export default function Odzywanie() {
     weightMeasurements: workspace.weightMeasurements,
     setWeightDraft, setWeightError, setWeightDialog,
   });
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const view: NutritionSidebarItem = location.pathname === MEALS_PATH ? "meals" : "today";
+  const customMeals = workspace.customMeals ?? [];
 
   const today = nutritionDateKey();
   const day = workspace.days[selectedDate] ?? createEmptyNutritionDay(selectedDate);
@@ -339,6 +351,53 @@ export default function Odzywanie() {
           [selectedDate]: updatedDay,
         },
       };
+    });
+  };
+
+  const selectSidebarItem = (item: NutritionSidebarItem) => {
+    if (item === "analysis") {
+      setWeightDialog("analysis");
+      return;
+    }
+    navigate(item === "meals" ? MEALS_PATH : "/odzywianie");
+  };
+
+  const saveCustomMeal = (meal: CustomMeal) => {
+    commitWorkspace((current) => ({
+      ...current,
+      customMeals: upsertCustomMeal(current.customMeals ?? [], meal),
+    }));
+    recordActivity({ moduleId: "nutrition", kind: "save", title: meal.name, detail: "Własny posiłek" });
+  };
+
+  const deleteCustomMeal = (id: string) => {
+    commitWorkspace((current) => ({
+      ...current,
+      customMeals: (current.customMeals ?? []).filter((meal) => meal.id !== id),
+    }));
+  };
+
+  /** Writes into any day, not just the selected one, and leaves every other entry untouched. */
+  const addCustomMealEntry = (date: string, slot: MealSlot, entry: NutritionEntry) => {
+    commitWorkspace((current) => {
+      const targetDay = current.days[date] ?? createEmptyNutritionDay(date);
+      if (targetDay.closedAt) return current;
+      return {
+        ...current,
+        days: {
+          ...current.days,
+          [date]: {
+            ...targetDay,
+            entries: { ...targetDay.entries, [slot]: [...targetDay.entries[slot], entry] },
+          },
+        },
+      };
+    });
+    recordActivity({
+      moduleId: "nutrition",
+      kind: "create",
+      title: entry.name,
+      detail: `${MEAL_META.find((meal) => meal.id === slot)?.label ?? "Posiłek"} · ${date}`,
     });
   };
 
@@ -871,13 +930,35 @@ export default function Odzywanie() {
     );
   };
 
+  const mobileNavigation = (
+    <Select
+      compact
+      fieldClassName="context-mobile-select"
+      aria-label="Widok Odżywiania"
+      value={view}
+      options={[
+        { value: "today", label: "Dzisiaj" },
+        { value: "meals", label: "Własne posiłki" },
+        { value: "analysis", label: "Analiza" },
+      ]}
+      onChange={(event) => selectSidebarItem(event.target.value as NutritionSidebarItem)}
+    />
+  );
+
   return (
     <ModuleShell
       className="nutrition-module"
       pageWidth="wide"
       ambient={{ scene: "nutrition", progress: workspace.goals.calories > 0 ? totals.calories / workspace.goals.calories : 0, signal: `${allEntries.length}:${day.waterMl}` }}
+      contextSidebar={(
+        <NutritionSidebar
+          active={view}
+          mealCount={customMeals.length}
+          onSelect={selectSidebarItem}
+        />
+      )}
     >
-      <ModuleMain transitionKey={selectedDate} className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: uiColors.appBg, color: uiColors.textPrimary }}>
+      <ModuleMain transitionKey={`${view}:${selectedDate}`} className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: uiColors.appBg, color: uiColors.textPrimary }}>
       {loadStatus === "corrupt" ? (
         <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5">
           <Card as="section" tone="panel" padding="spacious" className="mx-auto max-w-[680px]" role="alert">
@@ -895,6 +976,16 @@ export default function Odzywanie() {
             </div>
           </Card>
         </div>
+      ) : view === "meals" ? (
+        <NutritionCustomMeals
+          meals={customMeals}
+          selectedDate={selectedDate}
+          isDayClosed={(date) => Boolean(workspace.days[date]?.closedAt)}
+          mobileNavigation={mobileNavigation}
+          onSave={saveCustomMeal}
+          onDelete={deleteCustomMeal}
+          onAddToDay={addCustomMealEntry}
+        />
       ) : (
         <>
           <ContentHeader
@@ -903,6 +994,7 @@ export default function Odzywanie() {
             title="Dzienny rejestr"
             description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} / ${formatNumber(workspace.goals.calories)} kcal`}
             meta={headerMeta}
+            mobileNavigation={mobileNavigation}
             actions={<>
               <div className="nutrition-date-navigation">
                 <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => setSelectedDate((current) => shiftDate(current, -1))}><ChevronLeft size={13} /></Button>
@@ -931,6 +1023,9 @@ export default function Odzywanie() {
               >
                 {dayClosed ? "Otwórz dzień" : "Zamknij dzień"}
               </Button>
+              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={13} />} disabled={dayClosed} onClick={() => openEntryDialog()}>
+                <span className="header-action-label">Dodaj posiłek</span>
+              </Button>
             </>}
           />
 
@@ -943,11 +1038,7 @@ export default function Odzywanie() {
               </Card>
             )}
             <div className="nutrition-layout w-full">
-              <section className="nutrition-meals-panel min-w-0">
-                <SectionHeader
-                  title="Posiłki"
-                />
-
+              <section className="nutrition-meals-panel min-w-0" aria-label="Posiłki">
                 {allEntries.length > 0 && (
                   <div className="nutrition-entry-table-header" aria-hidden="true">
                     <span>Produkt</span>
@@ -965,7 +1056,7 @@ export default function Odzywanie() {
                     const mealEntries = day.entries[id];
                     const mealTotals = sumEntries(mealEntries);
                     return (
-                      <section key={id} className="nutrition-meal-card" aria-labelledby={`meal-${id}`}>
+                      <SectionSurface key={id} className="nutrition-meal-card" data-meal={id} aria-labelledby={`meal-${id}`}>
                         <div className="nutrition-meal-card__header">
                           <div className="nutrition-meal-card__identity">
                             <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
@@ -1028,7 +1119,7 @@ export default function Odzywanie() {
                             </Button>
                           </div>
                         )}
-                      </section>
+                      </SectionSurface>
                     );
                   })}
                 </div>
@@ -1042,7 +1133,7 @@ export default function Odzywanie() {
               </section>
 
               <aside className="nutrition-summary min-w-0">
-                <section>
+                <SectionSurface elevated padding="default" className="nutrition-summary-card">
                   <SectionHeader
                     title="Bilans dnia"
                     variant="label"
@@ -1107,9 +1198,9 @@ export default function Odzywanie() {
                       );
                     })()}
                   </Card>
-                </section>
+                </SectionSurface>
 
-                <section>
+                <SectionSurface elevated padding="default" className="nutrition-summary-card">
                   <SectionHeader
                     title="Nawodnienie"
                     variant="label"
@@ -1128,6 +1219,10 @@ export default function Odzywanie() {
                   />
                   <Card tone="panel" padding="default">
                     <div className="nutrition-water-card__summary">
+                      <div className="nutrition-water-card__label">
+                        <Droplets size={16} strokeWidth={1.5} />
+                        <span>Wypita woda</span>
+                      </div>
                       <div className="nutrition-water-card__value">
                         {waterEditOpen ? (
                           <div className="nutrition-water-card__editor">
@@ -1175,10 +1270,6 @@ export default function Odzywanie() {
                           </span>
                         )}
                       </div>
-                      <div className="nutrition-water-card__label">
-                        <Droplets size={16} strokeWidth={1.5} />
-                        <span>Wypita woda</span>
-                      </div>
                     </div>
                     {waterEditError && <p className="nutrition-inline-error" role="alert">{waterEditError}</p>}
                     <div
@@ -1205,9 +1296,9 @@ export default function Odzywanie() {
                       </div>
                     </div>
                   </Card>
-                </section>
+                </SectionSurface>
 
-                <section>
+                <SectionSurface elevated padding="default" className="nutrition-summary-card">
                   <SectionHeader
                     title="Masa ciała"
                     variant="label"
@@ -1238,7 +1329,7 @@ export default function Odzywanie() {
                     onCancel={() => { setWeightInlineOpen(false); setWeightError(""); }}
                     onClearError={() => setWeightError("")}
                   />
-                </section>
+                </SectionSurface>
 
               </aside>
             </div>
@@ -1483,303 +1574,49 @@ export default function Odzywanie() {
       )}
 
       {goalDialog === "nutrition" && (
-        <Modal
-          title="Cele kalorii i makroskładników"
-          eyebrow="Budżet dnia"
-          description="Wylicz orientacyjne zapotrzebowanie albo wpisz własne wartości."
-          size="xl"
+        <NutritionGoalsDialog
+          goalDraft={goalDraft}
+          goalError={goalError}
+          calculatorDraft={calculatorDraft}
+          calculatorErrors={calculatorErrors}
+          calculatorResult={calculatorResult}
+          calculationSync={calculationSync}
+          macroDraft={macroDraft}
+          macroPreview={macroPreview}
+          onChangeGoalField={changeGoalDraftField}
+          onChangeCalculatorField={changeCalculatorField}
+          onAddActivity={addCalculatorActivity}
+          onChangeActivity={changeCalculatorActivity}
+          onRemoveActivity={removeCalculatorActivity}
+          onChangeMacroField={changeMacroField}
+          onUseCalculatedCalories={useCalculatedCalories}
+          onUseCalculatedMacros={useCalculatedMacros}
           onClose={closeGoalDialog}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={closeGoalDialog}>Anuluj</Button>
-              <Button type="submit" form="nutrition-goals-form" variant="primary" leadingIcon={<Save size={13} />}>Zapisz cele</Button>
-            </>
-          )}
-        >
-          <form id="nutrition-goals-form" onSubmit={saveNutritionGoals} className="nutrition-goal-form">
-            <details className="nutrition-goal-advanced">
-              <summary>
-                <span>
-                  <strong>Wylicz cele automatycznie</strong>
-                  <small>Profil dnia, aktywność, wzór Mifflina–St Jeora i konfiguracja makro</small>
-                </span>
-                <ChevronDown size={13} aria-hidden="true" />
-              </summary>
-              <section className="nutrition-calculator-section" aria-labelledby="calorie-calculator-title">
-              <div className="nutrition-calculator-heading">
-                <div>
-                  <h3 id="calorie-calculator-title">Autowyliczenie kalorii</h3>
-                  <p>Praca opisuje zwykły dzień; sport dodajemy osobno, żeby go nie liczyć podwójnie.</p>
-                </div>
-                <span className="nutrition-calculator-method">Mifflin–St Jeor + MET</span>
-              </div>
-              <CalculatorProfileFields
-                draft={calculatorDraft}
-                errors={calculatorErrors}
-                includeDietGoal
-                onChange={changeCalculatorField}
-                onAddActivity={addCalculatorActivity}
-                onChangeActivity={changeCalculatorActivity}
-                onRemoveActivity={removeCalculatorActivity}
-              />
-              {calculatorResult ? (
-                <div className="nutrition-calculation-result" aria-live="polite">
-                  <div className="nutrition-calculation-ledger">
-                    <div><span>Podstawowa przemiana materii</span><strong>{formatNumber(calculatorResult.bmr)} kcal</strong></div>
-                    <div><span>Zwykły dzień i praca</span><strong>{formatNumber(calculatorResult.workDayCalories)} kcal</strong></div>
-                    <div><span>Aktywność fizyczna · średnio / dzień</span><strong>+{formatNumber(calculatorResult.sportCalories)} kcal</strong></div>
-                    <div><span>Aktywność fizyczna · cały tydzień</span><strong>{formatNumber(calculatorResult.weeklySportCalories)} kcal</strong></div>
-                    <div><span>Utrzymanie masy</span><strong>{formatNumber(calculatorResult.maintenanceCalories)} kcal</strong></div>
-                    <div><span>Korekta celu diety</span><strong>{calculatorResult.calorieAdjustment >= 0 ? "+" : ""}{formatNumber(calculatorResult.calorieAdjustment)} kcal</strong></div>
-                    <div className="is-total"><span>Docelowa kaloryczność</span><strong>{formatNumber(calculatorResult.calorieTarget)} kcal</strong></div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    aria-pressed={calculationSync.calories}
-                    onClick={useCalculatedCalories}
-                  >
-                    {calculationSync.calories ? "Cel synchronizowany" : "Ustaw i synchronizuj"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="nutrition-calculation-empty">
-                  Uzupełnij płeć, wiek, wagę i wzrost, aby zobaczyć wynik.
-                </div>
-              )}
-              <p className="nutrition-calculator-note">
-                Estymacja dla osób dorosłych, nie diagnoza. Wzór może różnić się od rzeczywistego wydatku energii; obserwuj trend masy i koryguj cel.
-                {" "}<a href="https://pubmed.ncbi.nlm.nih.gov/2305711/" target="_blank" rel="noreferrer">Równanie Mifflina–St Jeora</a>
-                {" · "}<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10818145/" target="_blank" rel="noreferrer">Compendium MET 2024</a>
-              </p>
-              </section>
-
-              <section className="nutrition-goal-manual" aria-labelledby="macro-calculator-title">
-              <div className="nutrition-calculator-heading">
-                <div>
-                  <h3 id="macro-calculator-title">Konfiguracja makroskładników</h3>
-                  <p>Wybierz autowyliczenie pod rodzaj treningu, udziały procentowe albo własne wartości w gramach.</p>
-                </div>
-              </div>
-              <div className="nutrition-macro-config-grid">
-                <Select
-                  label="Sposób ustawienia"
-                  value={macroDraft.mode}
-                  options={MACRO_MODE_OPTIONS}
-                  onChange={(event) => changeMacroField("mode", event.target.value)}
-                />
-                {macroDraft.mode === "auto" && (
-                  <Select
-                    label="Profil"
-                    value={macroDraft.preset}
-                    options={MACRO_PRESET_OPTIONS}
-                    onChange={(event) => changeMacroField("preset", event.target.value)}
-                  />
-                )}
-              </div>
-              {macroDraft.mode === "percent" && (
-                <div className="nutrition-macro-percent-grid">
-                  <Input label="Białko (%)" type="number" min="0" max="100" step="1" value={macroDraft.proteinPercent} onChange={(event) => changeMacroField("proteinPercent", event.target.value)} />
-                  <Input label="Węglowodany (%)" type="number" min="0" max="100" step="1" value={macroDraft.carbsPercent} onChange={(event) => changeMacroField("carbsPercent", event.target.value)} />
-                  <Input label="Tłuszcze (%)" type="number" min="0" max="100" step="1" value={macroDraft.fatPercent} onChange={(event) => changeMacroField("fatPercent", event.target.value)} />
-                </div>
-              )}
-              {macroDraft.mode === "grams" ? (
-                <div className="nutrition-calculation-empty">
-                  Wpisz docelowe gramy bezpośrednio w polach „Cele do zapisania” poniżej.
-                </div>
-              ) : macroPreview ? (
-                <div className="nutrition-calculation-result" aria-live="polite">
-                  <div className="nutrition-calculation-ledger">
-                    <div><span>Białko</span><strong>{formatNumber(macroPreview.protein)} g</strong></div>
-                    <div><span>Węglowodany</span><strong>{formatNumber(macroPreview.carbs)} g</strong></div>
-                    <div><span>Tłuszcze</span><strong>{formatNumber(macroPreview.fat)} g</strong></div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    aria-pressed={calculationSync.macros}
-                    onClick={useCalculatedMacros}
-                  >
-                    {calculationSync.macros ? "Makro synchronizowane" : "Ustaw i synchronizuj makro"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="nutrition-calculation-empty">
-                  {macroDraft.mode === "auto"
-                    ? "Uzupełnij profil, wagę i cel kalorii, aby wyliczyć makroskładniki."
-                    : "Udziały białka, węglowodanów i tłuszczów muszą razem dawać 100%."}
-                </div>
-              )}
-              {macroDraft.mode === "auto" && (
-                <p className="nutrition-calculator-note">
-                  Profile sportowe są punktami startowymi. Dla osób aktywnych literatura zwykle wskazuje około 1,4–2,0 g białka/kg/dzień; pozostała energia jest dzielona między tłuszcze i węglowodany.
-                  {" "}<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5477153/" target="_blank" rel="noreferrer">ISSN: białko i wysiłek</a>
-                </p>
-              )}
-              </section>
-            </details>
-
-            <section className="nutrition-goal-manual" aria-labelledby="saved-goals-title">
-              <div className="nutrition-calculator-heading">
-                <div>
-                  <h3 id="saved-goals-title">Cele do zapisania</h3>
-                  <p>Aktywne autowyliczenia aktualizują te pola na bieżąco. Ręczna zmiana wyłącza synchronizację odpowiedniej grupy.</p>
-                </div>
-              </div>
-              <div className="nutrition-goals-grid">
-                <Input
-                  label="Kalorie"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={goalDraft.calories}
-                  hint={calculationSync.calories ? "Synchronizacja z kalkulatorem jest aktywna." : undefined}
-                  onChange={(event) => changeGoalDraftField("calories", event.target.value)}
-                />
-                <Input
-                  label="Białko (g)"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={goalDraft.protein}
-                  hint={calculationSync.macros ? "Synchronizacja makro jest aktywna." : undefined}
-                  onChange={(event) => changeGoalDraftField("protein", event.target.value)}
-                />
-                <Input
-                  label="Węglowodany (g)"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={goalDraft.carbs}
-                  hint={calculationSync.macros ? "Synchronizacja makro jest aktywna." : undefined}
-                  onChange={(event) => changeGoalDraftField("carbs", event.target.value)}
-                />
-                <Input
-                  label="Tłuszcze (g)"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={goalDraft.fat}
-                  hint={calculationSync.macros ? "Synchronizacja makro jest aktywna." : undefined}
-                  onChange={(event) => changeGoalDraftField("fat", event.target.value)}
-                />
-              </div>
-            </section>
-            {goalError && <p className="mt-3 text-[11px]" role="alert" style={{ color: uiColors.danger }}>{goalError}</p>}
-          </form>
-        </Modal>
+          onSubmit={saveNutritionGoals}
+        />
       )}
 
       {goalDialog === "water" && (
-        <Modal
-          title="Cel nawodnienia"
-          eyebrow="Nawodnienie"
-          description="Wylicz orientacyjny cel z profilu dnia albo wpisz własną ilość."
-          size="xl"
+        <NutritionWaterGoalDialog
+          goalDraft={goalDraft}
+          goalError={goalError}
+          calculatorDraft={calculatorDraft}
+          calculatorErrors={calculatorErrors}
+          calculatorResult={calculatorResult}
+          waterCalculatorMode={waterCalculatorMode}
+          waterSimpleWeight={waterSimpleWeight}
+          simpleWaterMin={simpleWaterMin}
+          simpleWaterMax={simpleWaterMax}
+          onChangeWaterCalculatorMode={setWaterCalculatorMode}
+          onChangeWaterSimpleWeight={setWaterSimpleWeight}
+          onChangeGoalField={changeGoalDraftField}
+          onChangeCalculatorField={changeCalculatorField}
+          onAddActivity={addCalculatorActivity}
+          onChangeActivity={changeCalculatorActivity}
+          onRemoveActivity={removeCalculatorActivity}
           onClose={closeGoalDialog}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={closeGoalDialog}>Anuluj</Button>
-              <Button type="submit" form="water-goal-form" variant="primary" leadingIcon={<Save size={13} />}>Zapisz cel</Button>
-            </>
-          )}
-        >
-          <form id="water-goal-form" onSubmit={saveWaterGoal} className="nutrition-goal-form">
-            <div className="nutrition-water-calculator-switch" role="group" aria-label="Sposób wyliczenia celu wody">
-              <Button type="button" variant={waterCalculatorMode === "simple" ? "primary" : "quiet"} size="sm" aria-pressed={waterCalculatorMode === "simple"} onClick={() => setWaterCalculatorMode("simple")}>Prosty kalkulator</Button>
-              <Button type="button" variant={waterCalculatorMode === "advanced" ? "primary" : "quiet"} size="sm" aria-pressed={waterCalculatorMode === "advanced"} onClick={() => setWaterCalculatorMode("advanced")}>Zaawansowany</Button>
-            </div>
-            {waterCalculatorMode === "simple" ? (
-              <section className="nutrition-water-simple-calculator" aria-labelledby="water-simple-calculator-title">
-                <div className="nutrition-calculator-heading">
-                  <div>
-                    <h3 id="water-simple-calculator-title">Rekomendacja dzienna</h3>
-                    <p>Orientacyjnie 30–35 ml wody na kilogram masy ciała.</p>
-                  </div>
-                  <span className="nutrition-calculator-method">30–35 ml / kg</span>
-                </div>
-                <Input
-                  label="Masa ciała (kg)"
-                  type="text"
-                  inputMode="decimal"
-                  value={waterSimpleWeight}
-                  placeholder="np. 81,9"
-                  onChange={(event) => setWaterSimpleWeight(event.target.value.replace(/\./g, ","))}
-                />
-                {simpleWaterMin && simpleWaterMax ? (
-                  <div className="nutrition-water-simple-result" aria-live="polite">
-                    <div>
-                      <span>Rekomendowany zakres</span>
-                      <strong>{formatWater(simpleWaterMin)} – {formatWater(simpleWaterMax)}</strong>
-                    </div>
-                    <small>Wybierz własny cel poniżej.</small>
-                  </div>
-                ) : (
-                  <div className="nutrition-calculation-empty">Podaj masę ciała, aby zobaczyć wynik.</div>
-                )}
-              </section>
-            ) : (
-            <section className="nutrition-calculator-section" aria-labelledby="water-calculator-title">
-              <div className="nutrition-calculator-heading">
-                <div>
-                  <h3 id="water-calculator-title">Autowyliczenie wody</h3>
-                  <p>Waga, metabolizm, charakter pracy i średnia tygodniowa aktywność wpływają na wynik.</p>
-                </div>
-                <span className="nutrition-calculator-method">1 ml / kcal utrzymania</span>
-              </div>
-              <CalculatorProfileFields
-                draft={calculatorDraft}
-                errors={calculatorErrors}
-                includeDietGoal={false}
-                onChange={changeCalculatorField}
-                onAddActivity={addCalculatorActivity}
-                onChangeActivity={changeCalculatorActivity}
-                onRemoveActivity={removeCalculatorActivity}
-              />
-              {calculatorResult ? (
-                <div className="nutrition-calculation-result" aria-live="polite">
-                  <div className="nutrition-calculation-ledger">
-                    <div><span>Szacunkowe utrzymanie</span><strong>{formatNumber(calculatorResult.maintenanceCalories)} kcal</strong></div>
-                    <div><span>Przelicznik nawodnienia</span><strong>1 ml / kcal</strong></div>
-                    <div className="is-total"><span>Orientacyjny cel płynów</span><strong>{formatWater(calculatorResult.waterTargetMl)}</strong></div>
-                  </div>
-                </div>
-              ) : (
-                <div className="nutrition-calculation-empty">
-                  Uzupełnij płeć, wiek, wagę i wzrost, aby zobaczyć wynik.
-                </div>
-              )}
-              <p className="nutrition-calculator-note">
-                To punkt startowy, nie zalecenie medyczne. Estymacja nie zna temperatury, potliwości, ciąży, chorób ani leków; podczas wysiłku potrzeby są indywidualne.
-                {" "}<a href="https://efsa.onlinelibrary.wiley.com/doi/abs/10.2903/j.efsa.2010.1459" target="_blank" rel="noreferrer">EFSA: woda</a>
-                {" · "}<a href="https://pubmed.ncbi.nlm.nih.gov/22275331/" target="_blank" rel="noreferrer">ograniczenia wzorów</a>
-                {" · "}<a href="https://pubmed.ncbi.nlm.nih.gov/17277604/" target="_blank" rel="noreferrer">ACSM: wysiłek i płyny</a>
-              </p>
-            </section>
-            )}
-
-            <section className="nutrition-goal-manual" aria-labelledby="saved-water-title">
-              <div className="nutrition-calculator-heading">
-                <div>
-                  <h3 id="saved-water-title">Cel do zapisania</h3>
-                  <p>Szybkie przyciski 150–500 ml pozostaną dostępne przy podsumowaniu dnia.</p>
-                </div>
-              </div>
-              <Input
-                label="Cel dzienny (ml)"
-                type="number"
-                min="250"
-                max="20000"
-                step="50"
-                value={goalDraft.waterMl}
-                error={goalError}
-                hint={`Obecna wartość: ${formatWater(parseDraftNumber(goalDraft.waterMl))}`}
-                onChange={(event) => changeGoalDraftField("waterMl", event.target.value)}
-              />
-            </section>
-          </form>
-        </Modal>
+          onSubmit={saveWaterGoal}
+        />
       )}
       </ModuleMain>
     </ModuleShell>

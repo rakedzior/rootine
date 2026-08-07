@@ -4,8 +4,12 @@ import {
   createSessionFromCycleWorkout,
   createWorkoutFromTemplate,
   loadSportPlannerState,
+  prepareWorkoutReplan,
   reconcilePastWorkoutOutcomes,
+  restoreWorkoutReplanArtifacts,
   SPORT_PLANNER_STORAGE_KEY,
+  workoutOutcomeForDate,
+  workoutReplanBlockReason,
   type SportPlannerState,
 } from "./plannerModel";
 import { INITIAL_TEMPLATES, createInitialExercises, templateSections } from "./model";
@@ -66,6 +70,92 @@ describe("reconcilePastWorkoutOutcomes", () => {
 
     expect(next).toBe(withIncomplete);
     expect(next.workoutOutcomes[workout.id].status).toBe("incomplete");
+  });
+});
+
+describe("safe workout replanning", () => {
+  it("allows unresolved and missed workouts but blocks active and recorded executions", () => {
+    const { workout } = makeState();
+
+    expect(workoutReplanBlockReason(undefined)).toBeNull();
+    expect(workoutReplanBlockReason({ status: "missed", updatedAt: "2026-07-27T20:00:00.000Z" })).toBeNull();
+    expect(workoutReplanBlockReason(undefined, true)).toBe("active");
+    expect(workoutReplanBlockReason({ status: "completed", updatedAt: "2026-07-27T20:00:00.000Z" })).toBe("completed");
+    expect(workoutReplanBlockReason({ status: "incomplete", updatedAt: "2026-07-27T20:00:00.000Z" })).toBe("incomplete");
+    expect(workout.id).toBeTruthy();
+  });
+
+  it("removes a linked missed outcome, session and history entry as one transaction", () => {
+    const { state, cycle, workout, template } = makeState();
+    const session = createSessionFromCycleWorkout(cycle, workout, template, "missed");
+    const missedState: SportPlannerState = {
+      ...state,
+      sessions: [session],
+      history: [{
+        id: session.id,
+        title: session.title,
+        discipline: session.discipline,
+        date: session.date,
+        durationMinutes: session.durationMinutes,
+        status: "missed",
+      }],
+      workoutOutcomes: {
+        [workout.id]: {
+          status: "missed",
+          sessionId: session.id,
+          updatedAt: "2026-07-27T20:00:00.000Z",
+        },
+      },
+    };
+
+    const prepared = prepareWorkoutReplan(missedState, workout.id);
+
+    expect(prepared.allowed).toBe(true);
+    if (!prepared.allowed) throw new Error("Expected a movable missed workout");
+    expect(prepared.state.workoutOutcomes[workout.id]).toBeUndefined();
+    expect(prepared.state.sessions).toHaveLength(0);
+    expect(prepared.state.history).toHaveLength(0);
+    expect(prepared.removedArtifacts).toMatchObject({ workoutId: workout.id, outcome: { status: "missed" } });
+
+    const restored = restoreWorkoutReplanArtifacts(prepared.state, prepared.removedArtifacts);
+    expect(restored.workoutOutcomes[workout.id]).toEqual(missedState.workoutOutcomes[workout.id]);
+    expect(restored.sessions).toEqual([session]);
+    expect(restored.history).toEqual(missedState.history);
+  });
+
+  it("matches a delayed missed outcome to the linked occurrence date", () => {
+    const { state, cycle, workout, template } = makeState();
+    cycle.endDate = null;
+    const session = {
+      ...createSessionFromCycleWorkout(cycle, workout, template, "missed"),
+      date: "2026-07-27",
+    };
+    const outcome = {
+      status: "missed" as const,
+      sessionId: session.id,
+      updatedAt: "2026-07-28T08:00:00.000Z",
+    };
+    const sessions = [session];
+
+    expect(workoutOutcomeForDate(cycle, outcome, sessions, workout.id, "2026-07-27")).toEqual(outcome);
+    expect(workoutOutcomeForDate(cycle, outcome, sessions, workout.id, "2026-07-28")).toBeUndefined();
+    expect(state.version).toBe(4);
+  });
+
+  it("does not mutate state when an active or completed workout is moved", () => {
+    const { state, cycle, workout, template } = makeState();
+    const activeSession = createSessionFromCycleWorkout(cycle, workout, template, "in_progress");
+    const activeState = { ...state, sessions: [activeSession] };
+    const activeResult = prepareWorkoutReplan(activeState, workout.id, null);
+    expect(activeResult).toEqual({ allowed: false, state: activeState, reason: "active" });
+
+    const completedOutcome = {
+      status: "completed" as const,
+      updatedAt: "2026-07-27T20:00:00.000Z",
+    };
+    const completedState = { ...state, workoutOutcomes: { [workout.id]: completedOutcome } };
+    const completedResult = prepareWorkoutReplan(completedState, workout.id);
+    expect(completedResult).toEqual({ allowed: false, state: completedState, reason: "completed" });
   });
 });
 

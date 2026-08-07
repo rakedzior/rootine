@@ -106,6 +106,48 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     expect(runtimeErrors).toEqual([]);
   });
 
+  test("hydration value sits below its actions and matches macro typography", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/odzywianie");
+
+    const heading = page.locator(".nutrition-water-card__heading");
+    const actions = heading.locator(".nutrition-section-actions");
+    const hydrationValue = heading.locator(".nutrition-water-card__value > strong");
+    const hydrationStatus = heading.locator(".nutrition-water-card__value > span");
+    const macroValue = page.locator(".nutrition-budget-card__macro strong").first();
+
+    const [actionsBox, hydrationBox, macroTypography, hydrationTypography] = await Promise.all([
+      actions.boundingBox(),
+      hydrationValue.boundingBox(),
+      macroValue.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          fontVariantNumeric: style.fontVariantNumeric,
+          fontWeight: style.fontWeight,
+          textAlign: style.textAlign,
+        };
+      }),
+      hydrationValue.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          fontVariantNumeric: style.fontVariantNumeric,
+          fontWeight: style.fontWeight,
+          textAlign: style.textAlign,
+        };
+      }),
+    ]);
+
+    expect(actionsBox).not.toBeNull();
+    expect(hydrationBox).not.toBeNull();
+    expect(hydrationBox!.y).toBeGreaterThanOrEqual(actionsBox!.y + actionsBox!.height - 1);
+    expect(hydrationBox!.x + hydrationBox!.width).toBeLessThanOrEqual(actionsBox!.x + actionsBox!.width + 1);
+    expect(hydrationTypography).toEqual(macroTypography);
+    await expect(hydrationStatus).toContainText(/Pozostało|Cel osiągnięty|Przekroczono/);
+  });
+
   test("online nutrition search waits for an explicit action and explains Retry-After", async ({ rootinePage: page }) => {
     let requestCount = 0;
     await page.route("**/api/openfoodfacts/search**", async (route) => {

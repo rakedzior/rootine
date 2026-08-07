@@ -1,6 +1,8 @@
 import {
   BriefcaseBusiness,
   CheckSquare2,
+  ChevronDown,
+  ChevronRight,
   Dumbbell,
   Footprints,
   GlassWater,
@@ -19,7 +21,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
 } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -129,7 +130,7 @@ const ACTIONS: readonly CommandCenterAction[] = [
     label: "Sprawa",
     description: "Dodaj sprawę do dopilnowania.",
     icon: ShieldCheck,
-    target: "/sprawy?widok=matters&akcja=nowa-sprawa",
+    target: "/sprawy?widok=all&akcja=nowa-sprawa",
   },
   {
     id: "work",
@@ -157,7 +158,7 @@ const ACTIONS: readonly CommandCenterAction[] = [
 const ACTION_BY_ID = new Map(ACTIONS.map((action) => [action.id, action]));
 
 const MODULE_PRIORITY: Record<AppModuleId, readonly CommandCenterActionId[]> = {
-  today: ["task", "meal", "workout", "note", "affair"],
+  today: ["task", "note", "affair", "workout", "meal", "expense"],
   tasks: ["task", "habit"],
   nutrition: ["meal", "water", "weight"],
   sport: ["workout", "activity"],
@@ -171,10 +172,14 @@ const KIND_TO_ACTION: Record<QuickCaptureKind, CommandCenterActionId> = {
   task: "task",
   habit: "habit",
   meal: "meal",
+  water: "water",
+  weight: "weight",
   workout: "workout",
+  activity: "activity",
   note: "note",
   goal: "goal",
   affair: "affair",
+  work: "work",
   expense: "expense",
   payment: "payment",
 };
@@ -183,10 +188,14 @@ const KIND_LABEL: Record<QuickCaptureKind, string> = {
   task: "zadanie",
   habit: "nawyk",
   meal: "posiłek",
+  water: "woda",
+  weight: "waga",
   workout: "trening",
+  activity: "aktywność",
   note: "notatka",
   goal: "cel",
   affair: "sprawa",
+  work: "element pracy",
   expense: "wydatek",
   payment: "płatność",
 };
@@ -196,55 +205,6 @@ const PRIORITY_LABEL = {
   medium: "średni priorytet",
   high: "wysoki priorytet",
 } as const;
-
-const modalStackStyle: CSSProperties = {
-  display: "grid",
-  gap: "var(--space-4, 16px)",
-};
-
-const quickCaptureStyle: CSSProperties = {
-  display: "grid",
-  gap: "var(--space-2, 8px)",
-  padding: "var(--space-3, 12px)",
-  border: "1px solid var(--color-border, currentColor)",
-  borderRadius: "var(--radius-lg, 12px)",
-  background: "var(--color-surface-elevated, transparent)",
-};
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  minHeight: 44,
-  padding: "0 var(--space-3, 12px)",
-  border: "1px solid var(--color-border-strong, var(--color-border, currentColor))",
-  borderRadius: "var(--radius-md, 8px)",
-  background: "var(--color-surface, transparent)",
-  color: "var(--color-text, inherit)",
-  font: "inherit",
-};
-
-const previewStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "center",
-  gap: "var(--space-2, 8px)",
-  minHeight: 24,
-  color: "var(--color-text-muted, inherit)",
-  fontSize: "var(--font-size-sm, 0.875rem)",
-};
-
-const actionsStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
-  gap: "var(--space-2, 8px)",
-};
-
-const actionContentStyle: CSSProperties = {
-  display: "grid",
-  justifyItems: "start",
-  gap: 2,
-  minWidth: 0,
-  textAlign: "left",
-};
 
 function contextualPriority(moduleId: AppModuleId | null | undefined, search: string) {
   if (!moduleId) return MODULE_PRIORITY.today;
@@ -289,6 +249,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
   const location = useLocation();
   const [source, setSource] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showAllActions, setShowAllActions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const actionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const priority = useMemo(
@@ -296,6 +257,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
     [currentModuleId, location.search],
   );
   const actions = useMemo(() => orderActions(priority), [priority]);
+  const visibleActions = showAllActions ? actions : actions.slice(0, 6);
   const capture = useMemo(
     () => source.trim() ? deterministicQuickCaptureParser.parse(source) : null,
     [source],
@@ -306,6 +268,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
     if (!open) return;
     setSource("");
     setActiveIndex(0);
+    setShowAllActions(false);
   }, [open, currentModuleId]);
 
   useEffect(() => {
@@ -315,7 +278,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
   if (!open) return null;
 
   const moveActionFocus = (index: number) => {
-    const nextIndex = (index + actions.length) % actions.length;
+    const nextIndex = (index + visibleActions.length) % visibleActions.length;
     setActiveIndex(nextIndex);
     actionRefs.current[nextIndex]?.focus();
   };
@@ -338,7 +301,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      const action = inferredAction ?? actions[activeIndex];
+      const action = inferredAction ?? visibleActions[activeIndex];
       if (action) openAction(action);
     }
   };
@@ -355,7 +318,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
       moveActionFocus(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      moveActionFocus(actions.length - 1);
+      moveActionFocus(visibleActions.length - 1);
     } else if (event.key === "/") {
       event.preventDefault();
       inputRef.current?.focus();
@@ -374,15 +337,16 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
   return (
     <Modal
       title="Dodaj"
-      description="Wybierz formularz albo opisz element jednym zdaniem. Rootine tylko rozpoznaje proste reguły i niczego nie zapisze bez Twojego potwierdzenia."
+      description="Wpisz, co chcesz dodać, albo wybierz typ poniżej."
       size="lg"
+      width="860px"
       bodyClassName="command-center"
       onClose={onClose}
     >
-      <div style={modalStackStyle}>
-        <section style={quickCaptureStyle} aria-labelledby="command-center-quick-label">
-          <label id="command-center-quick-label" htmlFor="command-center-quick-input">
-            Szybki tekst
+      <div className="command-center__stack">
+        <section className="command-center__quick" aria-labelledby="command-center-quick-label">
+          <label className="command-center__quick-label" id="command-center-quick-label" htmlFor="command-center-quick-input">
+            Szybkie dodawanie
           </label>
           <input
             ref={inputRef}
@@ -395,10 +359,10 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
             aria-describedby="command-center-preview command-center-keyboard-hint"
             onChange={(event) => setSource(event.currentTarget.value)}
             onKeyDown={handleInputKeyDown}
-            style={inputStyle}
+            className="command-center__input"
             data-autofocus
           />
-          <output id="command-center-preview" style={previewStyle}>
+          <output id="command-center-preview" className="command-center__preview">
             {capture ? (
               <>
                 <span>Rozpoznano: {previewParts.join(" · ")}.</span>
@@ -414,35 +378,39 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
                 )}
               </>
             ) : (
-              <span>Rozpoznajemy datę, godzinę, typ i priorytet — deterministycznie, bez AI.</span>
+              <span>Rozpoznajemy np. termin, godzinę i priorytet.</span>
             )}
           </output>
-          <small id="command-center-keyboard-hint" style={{ color: "var(--color-text-muted, inherit)" }}>
-            Enter otwiera sugerowany formularz. Strzałka w dół przechodzi do listy; „/” wraca do pola.
+          <small id="command-center-keyboard-hint" className="command-center__keyboard-hint">
+            Enter otwiera sugerowany formularz · ↓ przechodzi do typów · „/” wraca do pola.
           </small>
         </section>
 
-        <section aria-labelledby="command-center-actions-label">
-          <h3 id="command-center-actions-label" style={{ margin: "0 0 var(--space-2, 8px)" }}>
-            Formularze w tym kontekście
-          </h3>
-          <div id="command-center-actions" style={actionsStyle}>
-            {actions.map((action, index) => {
+        <section className="command-center__actions-section" aria-labelledby="command-center-actions-label">
+          <div className="command-center__section-header">
+            <h3 id="command-center-actions-label">
+              {showAllActions ? "Wszystkie typy" : "Najczęściej używane"}
+            </h3>
+            <span>{visibleActions.length} z {actions.length}</span>
+          </div>
+          <div id="command-center-actions" className="command-center__actions">
+            {visibleActions.map((action, index) => {
               const Icon = action.icon;
               return (
                 <Button
                   key={action.id}
                   ref={(node) => { actionRefs.current[index] = node; }}
-                  variant={index === activeIndex ? "primary" : "quiet"}
+                  variant="quiet"
+                  className={`command-center__action${index === activeIndex ? " is-active" : ""}`}
                   fullWidth
                   leadingIcon={<Icon size={16} aria-hidden="true" />}
+                  trailingIcon={<ChevronRight size={15} aria-hidden="true" />}
                   aria-describedby={`command-center-action-${action.id}-description`}
                   onFocus={() => setActiveIndex(index)}
                   onKeyDown={(event) => handleActionKeyDown(event, index)}
                   onClick={() => openAction(action)}
-                  style={{ justifyContent: "flex-start", minHeight: 56 }}
                 >
-                  <span style={actionContentStyle}>
+                  <span className="command-center__action-content">
                     <strong>{action.label}</strong>
                     <small id={`command-center-action-${action.id}-description`}>
                       {action.description}
@@ -452,6 +420,20 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
               );
             })}
           </div>
+          <Button
+            className="command-center__toggle"
+            variant="ghost"
+            size="sm"
+            trailingIcon={<ChevronDown size={14} aria-hidden="true" />}
+            aria-expanded={showAllActions}
+            aria-controls="command-center-actions"
+            onClick={() => {
+              setShowAllActions((expanded) => !expanded);
+              setActiveIndex(0);
+            }}
+          >
+            {showAllActions ? "Pokaż mniej" : "Pokaż wszystkie typy"}
+          </Button>
         </section>
       </div>
     </Modal>

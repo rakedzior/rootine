@@ -130,7 +130,7 @@
 
 .travel-toolbar__readiness > strong {
   width: 34px;
-  color: var(--color-precision-blue-text);
+  color: var(--color-text-secondary);
   font-family: var(--font-data);
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
@@ -165,7 +165,7 @@
   padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: var(--color-precision-blue-soft);
+  background: var(--color-graphite-input);
   color: var(--color-text-secondary);
 }
 
@@ -201,7 +201,7 @@
 }
 
 .travel-next-departure:hover {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 38%, var(--color-border-strong));
+  border-color: var(--color-border-strong);
   background: var(--color-graphite-hover);
 }
 
@@ -211,8 +211,8 @@
   height: 34px;
   place-items: center;
   border-radius: var(--radius-md);
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  background: var(--color-graphite-input);
+  color: var(--color-text-secondary);
 }
 
 .travel-next-departure__identity,
@@ -293,10 +293,10 @@
 .travel-board {
   width: 100%;
   margin: 0;
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 @media (min-width: 761px) {
@@ -484,7 +484,7 @@
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-graphite-card);
 }
 
 .travel-readiness > header {
@@ -513,7 +513,7 @@
 }
 
 .travel-readiness > header > strong {
-  color: var(--color-precision-blue-text);
+  color: var(--color-text-secondary);
   font-family: var(--font-data);
   font-size: var(--text-headline);
   font-weight: var(--weight-medium);
@@ -613,10 +613,10 @@
 
 .travel-panel {
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .travel-panel > header {
@@ -838,14 +838,19 @@
 
 .travel-day-list {
   display: grid;
-  gap: var(--space-lg);
+  gap: 0;
 }
 
 .travel-day {
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  overflow: visible;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.travel-day:first-child {
+  border-top: 0;
 }
 
 .travel-day > header {
@@ -986,10 +991,10 @@ article:focus-within > .travel-row-actions {
 .travel-budget-register,
 .travel-document-register,
 .travel-task-register {
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .travel-register__heading {
@@ -1113,7 +1118,7 @@ article:focus-within > .travel-row-actions {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-graphite-card);
 }
 
 .travel-budget-summary > div {
@@ -1691,9 +1696,7 @@ article:focus-within > .travel-row-actions {
   .travel-budget-summary > div:nth-child(n + 3) {
     border-top: 1px solid var(--color-border-subtle);
   }
-}
 
-@media ((max-width: 760px)) {
   .travel-toolbar__readiness {
     display: none;
   }
@@ -1803,4 +1806,134 @@ article:focus-within > .travel-row-actions {
 
 .travel-toolbar__trip-select {
   min-width: 180px;
+}
+
+/* Embedded in Sprawy, Travel follows the same WorkspaceView contract as Budget
+   and JDG. The standalone travel module keeps its existing presentation. */
+.affairs-module--view-travel {
+  --affairs-accent: var(--color-category-sky);
+}
+
+.affairs-module--view-travel .travel-overview,
+.affairs-module--view-travel .travel-canvas {
+  gap: var(--space-xl);
+}
+
+.affairs-module--view-travel :is(
+  .travel-board,
+  .travel-panel,
+  .travel-readiness,
+  .travel-day-list,
+  .travel-register,
+  .travel-budget-register,
+  .travel-document-register,
+  .travel-task-register
+) {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--affairs-accent) 10%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--affairs-accent) 13%, var(--color-border-strong));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-section-surface));
+}
+
+.affairs-module--view-travel .travel-next-departure,
+.affairs-module--view-travel .travel-budget-summary {
+  border-color: color-mix(in srgb, var(--affairs-accent) 11%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--affairs-accent) 14%, var(--color-border-strong));
+  background: color-mix(in srgb, var(--affairs-accent) 3%, var(--color-object-surface));
+}
+
+.affairs-module--view-travel :is(
+  .travel-board__heading,
+  .travel-panel > header,
+  .travel-register__heading
+) {
+  min-height: 60px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--affairs-accent) 2%, transparent);
+}
+
+.affairs-module--view-travel .travel-day-list {
+  display: grid;
+  gap: 0;
+}
+
+.affairs-module--view-travel .travel-day {
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.affairs-module--view-travel .travel-day:first-child {
+  border-top: 0;
+}
+
+.affairs-module--view-travel :is(
+  .travel-agenda-row,
+  .travel-board__row,
+  .travel-plan-row,
+  .travel-stay-row,
+  .travel-transport-row,
+  .travel-budget-row,
+  .travel-document-row,
+  .travel-task-row
+) {
+  background: transparent;
+}
+
+.affairs-module--view-travel :is(
+  .travel-agenda-row,
+  .travel-board__row,
+  .travel-plan-row,
+  .travel-stay-row,
+  .travel-transport-row,
+  .travel-budget-row,
+  .travel-document-row,
+  .travel-task-row
+):hover {
+  background: color-mix(in srgb, var(--affairs-accent) 4%, var(--color-surface-hover));
+}
+
+.affairs-module--view-travel :is(
+  .travel-next-departure__marker,
+  .travel-reservation-icon
+) {
+  background: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-graphite-input));
+  color: var(--affairs-accent);
+}
+
+.affairs-module--view-travel .travel-budget-link-note {
+  border-color: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-graphite-panel));
+}
+
+@media (max-width: 760px) {
+  .affairs-module--view-travel .travel-overview,
+  .affairs-module--view-travel .travel-canvas {
+    gap: var(--space-lg);
+    padding: var(--space-md);
+  }
+
+  .affairs-module--view-travel :is(
+    .travel-board,
+    .travel-panel,
+    .travel-readiness,
+    .travel-day-list,
+    .travel-register,
+    .travel-budget-register,
+    .travel-document-register
+  ),
+  .affairs-module--view-travel :is(
+    .travel-task-register,
+    .travel-next-departure,
+    .travel-budget-summary
+  ) {
+    border-radius: var(--radius-md);
+  }
+
+  .affairs-module--view-travel .travel-toolbar__trip-select {
+    width: min(220px, 100%);
+    min-width: 0;
+  }
 }

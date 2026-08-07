@@ -41,15 +41,30 @@ describe("deterministicQuickCaptureParser", () => {
 
   it.each([
     ["Codziennie poranna rutyna", "habit"],
+    ["Wypić 500 ml wody", "water"],
+    ["Zważyć się rano", "weight"],
     ["Trening na siłowni", "workout"],
+    ["Spacer po pracy", "activity"],
     ["Obiad z rodziną", "meal"],
     ["Opłacić rachunek", "payment"],
     ["Wydatek — zakup butów", "expense"],
     ["Notatka: pomysł na prezent", "note"],
     ["Cel: kamień milowy projektu", "goal"],
     ["Sprawa w urzędzie", "affair"],
+    ["Zadanie dla klienta", "work"],
     ["Oddzwonić do Ani", "task"],
   ] as const)("classifies %s as %s", (source, kind) => {
+    expect(deterministicQuickCaptureParser.parse(source, SUNDAY_MORNING).kind).toBe(kind);
+  });
+
+  it.each([
+    ["Zapisz trening na dziś", "workout"],
+    ["Lista zakupów do domu", "expense"],
+    ["Mail do klienta o raporcie", "work"],
+    ["Odbiór dokumentów z urzędu", "affair"],
+    ["Pamiętaj o telefonie do Ani", "task"],
+    ["Co rano szklanka wody", "water"],
+  ] as const)("uses contextual signals for %s", (source, kind) => {
     expect(deterministicQuickCaptureParser.parse(source, SUNDAY_MORNING).kind).toBe(kind);
   });
 

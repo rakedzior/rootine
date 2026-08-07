@@ -5,13 +5,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Dumbbell,
   Ellipsis,
   GripVertical,
+  Moon,
   MoveRight,
   Pencil,
   Plus,
   Save,
   Search,
+  Settings,
   Trash2,
 } from "lucide-react";
 import {
@@ -35,8 +38,11 @@ import {
   cycleWorkoutDate,
   isIndefiniteCycle,
   todayCycleWeek,
+  workoutReplanBlockReason,
   type CycleWorkout,
   type TrainingCycle,
+  type WorkoutOutcome,
+  type WorkoutReplanBlockReason,
 } from "./plannerModel";
 import {
   addDays,
@@ -47,9 +53,10 @@ import {
   templateSections,
   toDateKey,
   type Discipline,
+  type WorkoutSession,
   type WorkoutTemplate,
 } from "./model";
-import { DisciplineLabel } from "./Shared";
+import { DisciplineLabel, StatusLabel } from "./Shared";
 import { DISCIPLINE_META } from "./theme";
 
 const DISCIPLINE_OPTIONS = Object.entries(DISCIPLINE_META).map(([value, meta]) => ({
@@ -70,6 +77,13 @@ function workoutContentCount(template: WorkoutTemplate) {
   if (!count) return "Bez rozpiski";
   if (template.stages?.length) return `${count} ${count === 1 ? "etap" : "etapów"}`;
   return `${count} ${count === 1 ? "ćwiczenie" : "ćwiczeń"}`;
+}
+
+function workoutMoveTitle(reason: WorkoutReplanBlockReason | null) {
+  if (reason === "active") return "Trening w toku — najpierw zakończ sesję";
+  if (reason === "completed") return "Wykonany trening jest zapisany w historii";
+  if (reason === "incomplete") return "Niedokończony trening ma zapisane wykonanie";
+  return "Przeciągnij na inny dzień lub tydzień";
 }
 
 export function TemplateLibrary({
@@ -264,53 +278,31 @@ function WeekSelector({
 
   return (
     <section className="sport-cycle-week-carousel" aria-label="Wybór tygodnia planu">
-      <div className="sport-cycle-week-header">
-        <div className="sport-cycle-week-header__identity">
-          <div>
-            <h2>{indefinite ? "Tydzień bazowy" : `Tydzień ${activeWeek} z ${totalWeeks}`}</h2>
-            <p>{formatLongDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatLongDate(cycleWeekDate(cycle, activeWeek, 6))}</p>
+      <SectionHeader
+        variant="label"
+        className="sport-cycle-week-header"
+        title={indefinite ? "Tydzień bazowy" : `Tydzień ${activeWeek} z ${totalWeeks}`}
+        action={(
+          <div className="sport-week-navigation__arrows">
+            <Button variant="ghost" size="sm" iconOnly aria-label="Przewiń tygodnie w lewo" onClick={() => scrollCarousel(-1)}>
+              <ChevronLeft size={13} />
+            </Button>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Przewiń tygodnie w prawo" onClick={() => scrollCarousel(1)}>
+              <ChevronRight size={13} />
+            </Button>
           </div>
-          <div className="sport-cycle-week-header__facts">
-            <span>{weekWorkouts.length} {weekWorkouts.length === 1 ? "trening" : weekWorkouts.length >= 2 && weekWorkouts.length <= 4 ? "treningi" : "treningów"}</span>
-            <span>·</span>
-            <span>{weekMinutes} min</span>
-            {activeWeek === currentWeek && <Badge tone="neutral">Obecny tydzień</Badge>}
-          </div>
-        </div>
-        <div className="sport-week-navigation__arrows">
-          <Button variant="ghost" size="sm" iconOnly aria-label="Przewiń tygodnie w lewo" onClick={() => scrollCarousel(-1)}>
-            <ChevronLeft size={13} />
-          </Button>
-          <Button variant="ghost" size="sm" iconOnly aria-label="Przewiń tygodnie w prawo" onClick={() => scrollCarousel(1)}>
-            <ChevronRight size={13} />
-          </Button>
-        </div>
+        )}
+      />
+      <div className="sport-cycle-week-summary">
+        <span>{formatShortDate(cycleWeekDate(cycle, activeWeek, 0))} — {formatShortDate(cycleWeekDate(cycle, activeWeek, 6))}</span>
+        <span>
+          {weekWorkouts.length} {weekWorkouts.length === 1 ? "trening" : weekWorkouts.length >= 2 && weekWorkouts.length <= 4 ? "treningi" : "treningów"} · {weekMinutes} min
+          {activeWeek === currentWeek && <Badge tone="neutral">Obecny tydzień</Badge>}
+        </span>
       </div>
-      <div className="sport-cycle-sidebar__section-heading">
-        <div>
-          <h3 id="sport-cycle-week-selector-heading">Tygodnie planu</h3>
-          <p>{indefinite ? "Powtarzany tydzień bazowy" : `${totalWeeks} tygodni w cyklu`}</p>
-        </div>
-        <div className="sport-week-navigation__arrows">
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            aria-label="Poprzedni tydzień"
-            onClick={() => scrollCarousel(-1)}
-          >
-            <ChevronLeft size={13} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            aria-label="Następny tydzień"
-            onClick={() => scrollCarousel(1)}
-          >
-            <ChevronRight size={13} />
-          </Button>
-        </div>
+      <div className="sport-cycle-week-tabs-heading">
+        <span id="sport-cycle-week-selector-heading">Tygodnie planu</span>
+        <small>{indefinite ? "Powtarzany tydzień bazowy" : `${totalWeeks} tygodni w cyklu`}</small>
       </div>
       <div ref={stripRef} className="sport-week-strip" role="tablist" aria-label="Tygodnie planu" aria-orientation="horizontal">
         {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((week) => {
@@ -375,6 +367,10 @@ function workoutContentPreview(template?: WorkoutTemplate) {
 function WeekBoard({
   cycle,
   templates = [],
+  outcomes = {},
+  sessions = [],
+  recoveryDays = [],
+  activeWorkoutId,
   activeWeek,
   selectedWorkoutId,
   onWeekChange,
@@ -384,6 +380,10 @@ function WeekBoard({
 }: {
   cycle: TrainingCycle;
   templates?: WorkoutTemplate[];
+  outcomes?: Record<string, WorkoutOutcome>;
+  sessions?: WorkoutSession[];
+  recoveryDays?: string[];
+  activeWorkoutId?: string;
   activeWeek: number;
   selectedWorkoutId?: string | null;
   onWeekChange: (week: number) => void;
@@ -414,10 +414,11 @@ function WeekBoard({
             const dayWorkouts = workouts
               .filter((workout) => workout.day === dayIndex)
               .sort((left, right) => (left.time ?? "").localeCompare(right.time ?? ""));
+            const isRecoveryDay = recoveryDays.includes(dateKey);
             return (
               <div
                 key={day.short}
-                className={`sport-cycle-day ${dateKey === todayKey ? "is-today" : ""} ${dropTarget === `day-${dayIndex}` ? "is-drop-target" : ""}`.trim()}
+                className={`sport-cycle-day ${dateKey === todayKey ? "is-today" : ""} ${isRecoveryDay ? "is-recovery" : ""} ${dropTarget === `day-${dayIndex}` ? "is-drop-target" : ""}`.trim()}
                 onDragOver={(event) => {
                   event.preventDefault();
                   setDropTarget(`day-${dayIndex}`);
@@ -434,22 +435,49 @@ function WeekBoard({
                   <div>
                     <strong>{day.full}</strong>
                     <span>{formatShortDate(dateKey)}</span>
+                    {isRecoveryDay && (
+                      <small className="sport-cycle-day__recovery"><Moon size={11} aria-hidden="true" />Regeneracja</small>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    className="sport-cycle-day__add-button"
+                    aria-label={`Dodaj trening: ${day.full}`}
+                    onClick={() => onAdd(activeWeek, dayIndex)}
+                  >
+                    <Plus size={13} aria-hidden="true" />
+                  </button>
                 </div>
                 <div className="sport-cycle-day__workouts">
-                  {dayWorkouts.map((workout) => (
+                  {dayWorkouts.map((workout) => {
+                    const storedOutcome = outcomes[workout.id];
+                    const linkedSession = storedOutcome?.sessionId
+                      ? sessions.find((session) => session.id === storedOutcome.sessionId)
+                      : undefined;
+                    const occurrenceOutcome = !isIndefiniteCycle(cycle)
+                      || !linkedSession
+                      || linkedSession.date === dateKey
+                      ? storedOutcome
+                      : undefined;
+                    const blockReason = workoutReplanBlockReason(
+                      occurrenceOutcome,
+                      activeWorkoutId === workout.id,
+                    );
+                    const canMove = blockReason === null;
+                    return (
                     <button
                       key={workout.id}
                       type="button"
-                      draggable
+                      draggable={canMove}
                       aria-pressed={selectedWorkoutId === workout.id}
-                      aria-describedby="sport-cycle-drag-hint"
-                      aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"
-                      className={`sport-cycle-workout ${selectedWorkoutId === workout.id ? "is-selected" : ""}`.trim()}
+                      aria-describedby={canMove ? "sport-cycle-drag-hint" : undefined}
+                      aria-keyshortcuts={canMove ? "Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown" : undefined}
+                      className={`sport-cycle-workout ${selectedWorkoutId === workout.id ? "is-selected" : ""} ${canMove ? "is-movable" : "is-move-blocked"}`.trim()}
+                      title={workoutMoveTitle(blockReason)}
                       style={{ opacity: draggedId === workout.id ? 0.45 : 1 }}
                       onClick={() => onSelect(workout)}
                       onKeyDown={(event) => {
-                        if (!event.altKey) return;
+                        if (!canMove || !event.altKey) return;
                         let nextWeek = workout.week;
                         let nextDay = workout.day;
                         if (event.key === "ArrowLeft") {
@@ -476,6 +504,10 @@ function WeekBoard({
                         if (nextWeek !== activeWeek) onWeekChange(nextWeek);
                       }}
                       onDragStart={(event) => {
+                        if (!canMove) {
+                          event.preventDefault();
+                          return;
+                        }
                         setDraggedId(workout.id);
                         event.dataTransfer.setData("text/sport-cycle-workout", workout.id);
                         event.dataTransfer.effectAllowed = "move";
@@ -485,7 +517,7 @@ function WeekBoard({
                         setDropTarget(null);
                       }}
                     >
-                      <span className="sport-cycle-workout__grip"><GripVertical size={11} /></span>
+                      {canMove && <span className="sport-cycle-workout__grip"><GripVertical size={11} /></span>}
                       <strong>{workout.title}</strong>
                       <span className="sport-cycle-workout__meta">
                         {workout.time && <time>{workout.time}</time>}
@@ -493,17 +525,10 @@ function WeekBoard({
                         <DisciplineLabel discipline={workout.discipline} compact />
                       </span>
                       {workoutContentPreview(templates.find((template) => template.id === workout.templateId)) && <span className="sport-cycle-workout__preview">{workoutContentPreview(templates.find((template) => template.id === workout.templateId))}</span>}
+                      {occurrenceOutcome && <StatusLabel status={occurrenceOutcome.status} compact />}
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={`sport-cycle-day__add ${dayWorkouts.length ? "is-icon" : "sport-cycle-day__empty"}`.trim()}
-                    aria-label={`Dodaj trening: ${day.full}`}
-                    onClick={() => onAdd(activeWeek, dayIndex)}
-                  >
-                    <Plus size={13} aria-hidden="true" />
-                    {!dayWorkouts.length && <span>Dodaj trening</span>}
-                  </button>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -521,6 +546,10 @@ export function CyclePlanner({
   cycle,
   templates = [],
   cycles,
+  outcomes = {},
+  sessions = [],
+  recoveryDays = [],
+  activeWorkoutId,
   activeWeek,
   selectedWorkoutId,
   isDirty,
@@ -539,6 +568,10 @@ export function CyclePlanner({
   cycle: TrainingCycle;
   templates?: WorkoutTemplate[];
   cycles: TrainingCycle[];
+  outcomes?: Record<string, WorkoutOutcome>;
+  sessions?: WorkoutSession[];
+  recoveryDays?: string[];
+  activeWorkoutId?: string;
   activeWeek: number;
   selectedWorkoutId?: string | null;
   isDirty: boolean;
@@ -569,6 +602,10 @@ export function CyclePlanner({
       cycle={cycle}
       templates={templates}
       cycles={cycles}
+      outcomes={outcomes}
+      sessions={sessions}
+      recoveryDays={recoveryDays}
+      activeWorkoutId={activeWorkoutId}
       activeWeek={activeWeek}
       selectedWorkoutId={selectedWorkoutId}
       isDirty={isDirty}
@@ -675,6 +712,10 @@ function CyclePlannerLayout({
   cycle,
   templates = [],
   cycles,
+  outcomes = {},
+  sessions = [],
+  recoveryDays = [],
+  activeWorkoutId,
   activeWeek,
   selectedWorkoutId,
   isDirty,
@@ -692,6 +733,10 @@ function CyclePlannerLayout({
   cycle: TrainingCycle;
   templates?: WorkoutTemplate[];
   cycles: TrainingCycle[];
+  outcomes?: Record<string, WorkoutOutcome>;
+  sessions?: WorkoutSession[];
+  recoveryDays?: string[];
+  activeWorkoutId?: string;
   activeWeek: number;
   selectedWorkoutId?: string | null;
   isDirty: boolean;
@@ -728,49 +773,60 @@ function CyclePlannerLayout({
   return (
     <div className="sport-cycle-layout">
       <aside className="sport-cycle-sidebar" aria-label="Zarządzanie planem treningowym">
-        <div className="sport-cycle-sidebar__heading">
-          <h2>Twoje plany</h2>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={onCreateNewCycle}>Dodaj plan</Button>
-        </div>
-        <section className="sport-cycle-sidebar__section sport-cycle-sidebar__active">
-          <div className="sport-cycle-sidebar__section-heading">
-            <div>
-              <h3>Aktywny plan</h3>
-              <div className="sport-cycle-plan-card__title-row">
-                <CalendarRange size={16} strokeWidth={1.5} aria-hidden="true" />
-                <h2>{cycle.name}</h2>
-                {isDirty && <Badge tone="warning">Niezapisane zmiany</Badge>}
-              </div>
+        <section className="sport-cycle-plans-module" aria-labelledby="sport-cycle-plans-module-heading">
+          <div className="sport-cycle-sidebar__heading">
+            <h2 id="sport-cycle-plans-module-heading">Twoje plany</h2>
+            <div className="sport-cycle-plans-module__header-actions">
+              <Button className="sport-cycle-plans-module__add" variant="primary" leadingIcon={<Plus size={18} />} onClick={onCreateNewCycle}>
+                Dodaj
+              </Button>
+              <Button
+                className="sport-cycle-plans-module__settings"
+                variant="ghost"
+                iconOnly
+                aria-label="Ustawienia aktywnego planu"
+                onClick={onEditCycle}
+              >
+                <Settings size={18} />
+              </Button>
             </div>
           </div>
-          <p className="sport-cycle-plan-card__week">Tydzień {activeWeek} z {totalWeeks}</p>
-          <p className="sport-cycle-plan-card__date">
-            {formatLongDate(range.start)} {indefinite ? "· bez daty końcowej" : `— ${formatLongDate(range.end!)}`}
-          </p>
-          <div className="sport-cycle-plan-card__stats">
-            <span><strong>{indefinite ? "∞" : totalWeeks}</strong>{indefinite ? "bezterminowo" : "tygodni"}</span>
-            <span><strong>{cycle.workouts.length}</strong>treningów</span>
-            <span><strong>{weekWorkouts.length}</strong>w tym tygodniu</span>
-          </div>
-          <div className="sport-cycle-sidebar__actions">
-            <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia planu</Button>
-            <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => onAddWorkout(activeWeek, 0)}>
-              Dodaj trening
-            </Button>
+          <section className="sport-cycle-sidebar__section sport-cycle-sidebar__active">
+            <div className="sport-cycle-sidebar__section-heading">
+              <h3>Aktywny plan</h3>
+            </div>
+            <div className="sport-cycle-plan-card__title-row">
+              <CalendarRange size={16} strokeWidth={1.5} aria-hidden="true" />
+              <h2>{cycle.name}</h2>
+              {isDirty && <Badge tone="warning">Niezapisane zmiany</Badge>}
+            </div>
+            <div className="sport-cycle-plan-card__context">
+              <p className="sport-cycle-plan-card__week">Tydzień {activeWeek} z {totalWeeks}</p>
+              <p className="sport-cycle-plan-card__date">
+                {formatLongDate(range.start)} {indefinite ? "· bez daty końcowej" : `— ${formatLongDate(range.end!)}`}
+              </p>
+            </div>
+            <div className="sport-cycle-plan-card__stats">
+              <span><strong>{indefinite ? "∞" : totalWeeks}</strong>{indefinite ? "bezterminowo" : "tygodni"}</span>
+              <span><strong>{cycle.workouts.length}</strong>treningów</span>
+              <span><strong>{weekWorkouts.length}</strong>w tym tygodniu</span>
+            </div>
             {isDirty && (
-              <div className="sport-cycle-summary__commit">
-                <Button variant="ghost" size="sm" onClick={onDiscardChanges}>Odrzuć zmiany</Button>
-                <Button variant="primary" size="sm" leadingIcon={<Save size={13} />} onClick={onSaveCycle}>Zapisz plan</Button>
+              <div className="sport-cycle-sidebar__actions">
+                <div className="sport-cycle-summary__commit">
+                  <Button variant="ghost" size="sm" onClick={onDiscardChanges}>Odrzuć zmiany</Button>
+                  <Button variant="primary" size="sm" leadingIcon={<Save size={13} />} onClick={onSaveCycle}>Zapisz plan</Button>
+                </div>
               </div>
             )}
-          </div>
+          </section>
         </section>
 
-        <section className="sport-cycle-sidebar__section sport-cycle-sidebar__plans" aria-labelledby="sport-cycle-plans-heading">
+        <section className="sport-cycle-plans-module sport-cycle-plans-module--other" aria-labelledby="sport-cycle-plans-heading">
           <div className="sport-cycle-sidebar__section-heading">
             <div>
-              <h3 id="sport-cycle-plans-heading">Pozostałe plany</h3>
-              <p>{otherCycles.length ? `${otherCycles.length} zapisanych planów` : "Dodaj alternatywny plan"}</p>
+              <h2 id="sport-cycle-plans-heading">Pozostałe plany</h2>
+              <p>{otherCycles.length ? `${otherCycles.length} zapisanych planów` : "Brak zapisanych planów"}</p>
             </div>
           </div>
           <div className="sport-cycle-plan-list">
@@ -780,13 +836,18 @@ function CyclePlannerLayout({
               return (
                 <button key={item.id} type="button" className="sport-cycle-plan-card" onClick={() => onSelectCycle(item)}>
                   <span className="sport-cycle-plan-card__title-row">
-                    <CalendarRange size={13} strokeWidth={1.5} aria-hidden="true" />
+                    <CalendarRange size={18} strokeWidth={1.5} aria-hidden="true" />
                     <strong>{item.name}</strong>
+                    <ChevronRight className="sport-cycle-plan-card__chevron" size={22} aria-hidden="true" />
                   </span>
-                  <span className="sport-cycle-plan-card__date">
-                    {formatLongDate(itemRange.start)} {itemIndefinite ? "· bez daty końcowej" : `— ${formatLongDate(itemRange.end!)}`}
+                  <span className="sport-cycle-plan-card__detail">
+                    <CalendarClock size={18} aria-hidden="true" />
+                    <span>{formatLongDate(itemRange.start)} {itemIndefinite ? "· bez daty końcowej" : `· ${formatLongDate(itemRange.end!)}`}</span>
                   </span>
-                  <span className="sport-cycle-plan-card__meta">{item.workouts.length} treningów · {itemIndefinite ? "bezterminowy" : `${item.weeks} tyg.`}</span>
+                  <span className="sport-cycle-plan-card__detail">
+                    <Dumbbell size={18} aria-hidden="true" />
+                    <span>{item.workouts.length} treningów · {itemIndefinite ? "bezterminowy" : `${item.weeks} tyg.`}</span>
+                  </span>
                 </button>
               );
             }) : <p className="sport-cycle-sidebar__empty">Nowe plany pojawią się tutaj po zapisaniu.</p>}
@@ -838,17 +899,23 @@ function CyclePlannerLayout({
             )}
           </div>
         </div>
-        <WeekSelector cycle={cycle} activeWeek={activeWeek} onWeekChange={onWeekChange} onMove={onMoveWorkout} />
-        <WeekBoard
-          cycle={cycle}
-          templates={templates}
-          activeWeek={activeWeek}
-          selectedWorkoutId={selectedWorkoutId}
-          onWeekChange={onWeekChange}
-          onMove={onMoveWorkout}
-          onSelect={onSelectWorkout}
-          onAdd={onAddWorkout}
-        />
+        <section className="sport-cycle-planner-module" aria-label="Plan tygodnia">
+          <WeekSelector cycle={cycle} activeWeek={activeWeek} onWeekChange={onWeekChange} onMove={onMoveWorkout} />
+          <WeekBoard
+            cycle={cycle}
+            templates={templates}
+            outcomes={outcomes}
+            sessions={sessions}
+            recoveryDays={recoveryDays}
+            activeWorkoutId={activeWorkoutId}
+            activeWeek={activeWeek}
+            selectedWorkoutId={selectedWorkoutId}
+            onWeekChange={onWeekChange}
+            onMove={onMoveWorkout}
+            onSelect={onSelectWorkout}
+            onAdd={onAddWorkout}
+          />
+        </section>
       </main>
     </div>
   );

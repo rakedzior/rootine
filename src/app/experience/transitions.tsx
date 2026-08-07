@@ -12,7 +12,7 @@ import { APP_MODULES, findModuleForPath } from "../moduleRegistry";
 import { useEffectiveReducedMotion } from "./useReducedMotion";
 
 const VIEW_ORDER = [
-  "overview", "dzis", "today", "all", "wszystkie", "bezterminu", "jutro", "7dni", "30dni",
+  "overview", "dzis", "today", "week", "all", "wszystkie", "bezterminu", "jutro", "7dni", "30dni",
   "nawyki", "cycle", "templates", "history", "analysis", "list", "board", "calendar",
   "matters", "oneTime", "payments", "subscriptions", "documents", "vehicles", "budget", "jdg",
 ] as const;

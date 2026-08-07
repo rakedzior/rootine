@@ -108,7 +108,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     await expect(livingDay.locator(".living-day__context")).toHaveText("Zadania");
   });
 
-  test("renders a completed module on a subdued surface without hiding its state", async ({
+  test("keeps completed modules flat without hiding their state", async ({
     rootinePage: page,
   }) => {
     await openRootineRoute(page, "/dzisiaj");
@@ -117,7 +117,6 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       row.style.transition = "none";
       row.classList.add("is-complete");
       const tokenProbe = document.createElement("span");
-      tokenProbe.style.backgroundColor = "var(--color-surface-1)";
       tokenProbe.style.color = "var(--color-text-tertiary)";
       document.body.append(tokenProbe);
       const rowStyle = getComputedStyle(row);
@@ -127,7 +126,6 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       const tokenStyle = getComputedStyle(tokenProbe);
       const result = {
         background: rowStyle.backgroundColor,
-        surface: tokenStyle.backgroundColor,
         title: titleStyle.color,
         tertiary: tokenStyle.color,
       };
@@ -135,11 +133,11 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       return result;
     });
 
-    expect(colors.background).toBe(colors.surface);
+    expect(colors.background).toBe("rgba(0, 0, 0, 0)");
     expect(colors.title).toBe(colors.tertiary);
   });
 
-  test("dims modules with nothing planned for today", async ({
+  test("keeps empty modules flat while preserving their hierarchy", async ({
     rootinePage: page,
   }) => {
     await openRootineRoute(page, "/dzisiaj");
@@ -154,7 +152,6 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     for (const row of await emptyRows.all()) {
       const colors = await row.evaluate((element) => {
         const tokenProbe = document.createElement("span");
-        tokenProbe.style.backgroundColor = "var(--color-surface-1)";
         tokenProbe.style.color = "var(--color-text-primary)";
         document.body.append(tokenProbe);
         const rowStyle = getComputedStyle(element);
@@ -164,7 +161,6 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
         const tokenStyle = getComputedStyle(tokenProbe);
         const result = {
           background: rowStyle.backgroundColor,
-          surface: tokenStyle.backgroundColor,
           title: titleStyle.color,
           primary: tokenStyle.color,
         };
@@ -172,7 +168,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
         return result;
       });
 
-      expect(colors.background).toBe(colors.surface);
+      expect(colors.background).toBe("rgba(0, 0, 0, 0)");
       expect(colors.title).toBe(colors.primary);
     }
   });

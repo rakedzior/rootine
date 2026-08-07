@@ -54,7 +54,7 @@ import {
 
 export function GoalSubSidebar({
   activeFilter,
-  selectedGoalId,
+  scopedGoalId,
   onFilter,
   onSelectGoal,
   goals,
@@ -65,7 +65,7 @@ export function GoalSubSidebar({
   onSettings,
 }: {
   activeFilter: FilterId;
-  selectedGoalId?: string | null;
+  scopedGoalId?: string | null;
   onFilter: (id: FilterId) => void;
   onSelectGoal?: (id: string) => void;
   goals: Goal[];
@@ -106,7 +106,7 @@ export function GoalSubSidebar({
   };
 
   const item = (id: FilterId, label: string, Icon: LucideIcon, count?: number) => {
-    const active = activeFilter === id;
+    const active = !scopedGoalId && activeFilter === id;
     return (
       <ContextNavItem
         key={id}
@@ -135,7 +135,7 @@ export function GoalSubSidebar({
             return (
               <ContextNavItem
                 key={goal.id}
-                active={selectedGoalId === String(goal.id)}
+                active={scopedGoalId === String(goal.id)}
                 icon={<GoalIcon />}
                 label={goal.title}
                 meta={`${goal.progress}%`}
@@ -245,7 +245,7 @@ export function GoalSubSidebar({
 
             {filteredCategories.map((category) => {
               const Icon = CATEGORY_ICON_KEYS[category.iconKey] ?? Circle;
-              const active = activeFilter === `category:${category.id}`;
+              const active = !scopedGoalId && activeFilter === `category:${category.id}`;
               return (
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg">
                   {editingId === category.id ? (
@@ -374,8 +374,6 @@ export function GoalCard({
         <button
           type="button"
           onClick={onSelect}
-          onDoubleClick={onOpen}
-          title="Kliknij dwa razy, aby otworzyć pełny widok celu"
           aria-pressed={selected}
           aria-label={`${selected ? "Ukryj" : "Pokaż"} szczegóły celu ${goal.title}`}
           className="goal-card-primary flex min-w-0 items-center gap-3 border-0 bg-transparent p-0 text-left"

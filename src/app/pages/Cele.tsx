@@ -38,6 +38,7 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
+  SectionSurface,
   SectionHeader,
   Select,
   SummaryStrip,
@@ -47,6 +48,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronRight,
   CircleDot,
   Ellipsis,
   Grid2X2,
@@ -66,6 +68,7 @@ import {
 import {
   C,
   FILTER_ITEMS,
+  STATUS_META,
   readLayoutPreference,
   readSortPreference,
   toViewGoal,
@@ -87,14 +90,15 @@ type GoalActionItem = {
   stepNumber: number;
 };
 
-type GoalStepDepth = 1 | 2;
+type GoalStepDepth = 1 | 2 | 3;
 
 const GOAL_STEP_DEPTH_KEY = "rootine.goals.next-step-depth";
 
 function readGoalStepDepth(): GoalStepDepth {
   if (typeof window === "undefined") return 1;
   try {
-    return window.localStorage.getItem(GOAL_STEP_DEPTH_KEY) === "2" ? 2 : 1;
+    const saved = window.localStorage.getItem(GOAL_STEP_DEPTH_KEY);
+    return saved === "2" ? 2 : saved === "3" ? 3 : 1;
   } catch {
     return 1;
   }
@@ -140,6 +144,9 @@ export default function Cele() {
   const activeFilter = viewState.filter;
   const layout = viewState.layout;
   const sortKey = viewState.sort;
+  const scopedGoalId = viewState.scopeId && storedGoals.some((goal) => goal.id === viewState.scopeId)
+    ? viewState.scopeId
+    : null;
   const selectedId = viewState.selectedId && storedGoals.some((goal) => goal.id === viewState.selectedId)
     ? viewState.selectedId
     : null;
@@ -162,16 +169,17 @@ export default function Cele() {
     setSearchParams(writeGoalViewState(searchParams, { ...viewState, ...patch }));
   };
   const setSelectedGoalId = (goalId: string | null) => updateGoalViewState({ selectedId: goalId });
+  const setScopedGoalId = (goalId: string | null) => updateGoalViewState({ scopeId: goalId, selectedId: null });
   const setGoalLayout = (nextLayout: GoalLayout) => updateGoalViewState({ layout: nextLayout });
   const setGoalSort = (nextSort: GoalSortKey) => updateGoalViewState({ sort: nextSort });
 
   useEffect(() => {
     if (searchParams.get("akcja") === "nowy-cel") return;
-    const canonical = writeGoalViewState(searchParams, { ...viewState, selectedId });
+    const canonical = writeGoalViewState(searchParams, { ...viewState, scopeId: scopedGoalId, selectedId });
     if (canonical.toString() !== searchParams.toString()) {
       setSearchParams(canonical, { replace: true });
     }
-  }, [searchParams, selectedId, setSearchParams, viewState]);
+  }, [scopedGoalId, searchParams, selectedId, setSearchParams, viewState]);
 
   useEffect(() => {
     if (searchParams.get("akcja") !== "nowy-cel") return;
@@ -200,7 +208,11 @@ export default function Cele() {
     else result = goals.filter((goal) => goal.status === activeFilter);
 
     const priorityOrder: Record<GoalPriority, number> = { high: 0, medium: 1, low: 2 };
-    return [...result].sort((a, b) => {
+    const scopedResult = scopedGoalId
+      ? result.filter((goal) => String(goal.id) === scopedGoalId)
+      : result;
+
+    return [...scopedResult].sort((a, b) => {
       const rawA = storedGoals.find((goal) => goal.id === String(a.id));
       const rawB = storedGoals.find((goal) => goal.id === String(b.id));
       if (sortKey === "name") return a.title.localeCompare(b.title, "pl");
@@ -209,7 +221,7 @@ export default function Cele() {
       if (sortKey === "updated") return (rawB?.updatedAt ?? "").localeCompare(rawA?.updatedAt ?? "");
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
-  }, [activeFilter, goals, sortKey, storedGoals]);
+  }, [activeFilter, goals, scopedGoalId, sortKey, storedGoals]);
 
   const goalsRadar = useMemo(() => {
     const actionable = goals.filter((goal) => goal.status === "active" || goal.status === "risk");
@@ -229,7 +241,7 @@ export default function Cele() {
     };
 
     return storedGoals
-      .filter((goal) => goal.status === "active")
+      .filter((goal) => goal.status === "active" && (!scopedGoalId || goal.id === scopedGoalId))
       .flatMap<GoalActionItem>((goal) => {
         const viewGoal = goals.find((item) => String(item.id) === goal.id);
         const common = {
@@ -260,7 +272,7 @@ export default function Cele() {
         }];
       })
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.goalTitle.localeCompare(b.goalTitle, "pl"));
-  }, [goals, storedGoals]);
+  }, [goals, scopedGoalId, storedGoals]);
 
   const agendaItems = useMemo(() => {
     if (activeFilter === "week") {
@@ -285,6 +297,22 @@ export default function Cele() {
   const isAgendaView = activeFilter === "next" || activeFilter === "week";
 
   const selectedGoal = goals.find((goal) => goal.id === selectedId) ?? null;
+  const scopedGoal = goals.find((goal) => String(goal.id) === scopedGoalId) ?? null;
+  const nextStepGroups = useMemo(() => {
+    if (activeFilter !== "next") return [];
+    const grouped = new Map<string, GoalActionItem[]>();
+    agendaItems.forEach((item) => {
+      const items = grouped.get(item.goalId) ?? [];
+      items.push(item);
+      grouped.set(item.goalId, items);
+    });
+    return [...grouped.entries()]
+      .map(([goalId, items]) => ({
+        goal: goals.find((goal) => String(goal.id) === goalId),
+        items,
+      }))
+      .filter((group): group is { goal: Goal; items: GoalActionItem[] } => Boolean(group.goal));
+  }, [activeFilter, agendaItems, goals]);
   const shouldGroupPriority = activeFilter === "overview"
     || activeFilter === "active"
     || activeFilter === "all"
@@ -300,12 +328,20 @@ export default function Cele() {
     ? openVisibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk")
     : [];
   const remainingGoals = openVisibleGoals.filter((goal) => !priorityGoals.includes(goal));
-  const ambientGoalProgress = selectedGoal?.progress ?? (visibleGoals.length
+  const ambientGoalProgress = selectedGoal?.progress ?? scopedGoal?.progress ?? (visibleGoals.length
     ? visibleGoals.reduce((sum, goal) => sum + goal.progress, 0) / visibleGoals.length
     : 0);
 
   const handleFilter = (filter: FilterId) => {
-    updateGoalViewState({ filter, selectedId: null });
+    updateGoalViewState({ filter, scopeId: null, selectedId: null });
+  };
+
+  const handleGoalScope = (goalId: string) => {
+    if (scopedGoalId === goalId) {
+      setScopedGoalId(null);
+      return;
+    }
+    updateGoalViewState({ filter: "overview", scopeId: goalId, selectedId: null });
   };
 
   const openProgressFor = (goalId: string) => {
@@ -384,7 +420,7 @@ export default function Cele() {
       return;
     }
     setImportCandidate(null);
-    setSelectedGoalId(null);
+    updateGoalViewState({ scopeId: null, selectedId: null });
     setImportNotice({
       tone: "success",
       message: `Zaimportowano ${importCandidate.preview.goalCount} celów. Poprzedni stan został pobrany jako kopia zapasowa.`,
@@ -408,6 +444,10 @@ export default function Cele() {
         : activeFilter.startsWith("category:")
           ? categories.find((category) => category.id === activeFilter.slice("category:".length))?.label ?? "Kategoria"
           : FILTER_ITEMS.find((item) => item.id === activeFilter)?.label ?? "Cele";
+  const workspaceTitle = scopedGoal?.title ?? filterLabel;
+  const workspaceDescription = isAgendaView
+    ? `${scopedGoal ? `${filterLabel} · ` : ""}${agendaItems.length} ${agendaItems.length === 1 ? "krok do wykonania" : "kroków do wykonania"}`
+    : `${scopedGoal ? `${filterLabel} · ` : ""}${visibleGoals.length} ${visibleGoals.length === 1 ? "cel" : "celów"}`;
 
   return (
     <ModuleShell
@@ -415,9 +455,9 @@ export default function Cele() {
       contextSidebar={(
         <GoalSubSidebar
           activeFilter={activeFilter}
-          selectedGoalId={selectedId}
+          scopedGoalId={scopedGoalId}
           onFilter={handleFilter}
-          onSelectGoal={(goalId) => setSelectedGoalId(goalId)}
+          onSelectGoal={handleGoalScope}
           goals={goals}
           categories={categories}
           onCreateCategory={createCategory}
@@ -429,7 +469,7 @@ export default function Cele() {
       ambient={{
         scene: "goals",
         progress: ambientGoalProgress / 100,
-        signal: `${selectedId ?? activeFilter}:${Math.round(ambientGoalProgress)}`,
+        signal: `${selectedId ?? scopedGoalId ?? activeFilter}:${Math.round(ambientGoalProgress)}`,
       }}
     >
       <ModuleMain>
@@ -459,10 +499,8 @@ export default function Cele() {
 
         <ContentHeader
           headingLevel={1}
-          title={filterLabel}
-          description={isAgendaView
-            ? `${agendaItems.length} ${agendaItems.length === 1 ? "krok do wykonania" : "kroków do wykonania"}`
-            : `${visibleGoals.length} ${visibleGoals.length === 1 ? "cel" : "celów"}`}
+          title={workspaceTitle}
+          description={workspaceDescription}
           mobileNavigation={<Select
               aria-label="Widok celów"
               compact
@@ -490,6 +528,7 @@ export default function Cele() {
               <div className="ui-view-switch goal-step-depth" aria-label="Liczba kroków pokazywanych dla każdego celu">
                 <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 1} onClick={() => setGoalStepDepth(1)}>1 krok</Button>
                 <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 2} onClick={() => setGoalStepDepth(2)}>2 kroki</Button>
+                <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 3} onClick={() => setGoalStepDepth(3)}>3 kroki</Button>
               </div>
             )}
             {!isAgendaView && <>
@@ -572,45 +611,132 @@ export default function Cele() {
                   title={activeFilter === "week"
                     ? "Do końca najbliższych 7 dni"
                     : goalStepDepth === 1
-                      ? "Po jednym kroku z każdego aktywnego celu"
-                      : "Po dwa kolejne kroki z każdego aktywnego celu"}
+                      ? "Najbliższy krok z każdego aktywnego celu"
+                      : `Do ${goalStepDepth} kolejnych kroków z każdego aktywnego celu`}
                   level={2}
                   variant="label"
                 />
-                <div className="goal-agenda__list">
-                  {agendaItems.map((item) => {
-                    const days = calendarDaysBetween(todayLocalDateKey(), item.dueDate);
-                    const dueTone = days !== null && days < 0 ? "danger" : days === 0 ? "primary" : days !== null && days <= 7 ? "warning" : "neutral";
-                    const dueLabel = days !== null && days < 0
-                      ? `${Math.abs(days)} dni po terminie`
-                      : days === 0
-                        ? "Dzisiaj"
-                        : days === 1
-                          ? "Jutro"
-                          : formatLocalDate(item.dueDate);
-                    return (
-                      <ListRow
-                        key={item.id}
-                        className="goal-agenda-row"
-                        leading={item.milestoneId
-                          ? <Checkbox
-                              size="sm"
-                              aria-label={`Ukończ etap ${item.title}`}
-                              checked={false}
-                              onChange={() => updateMilestone(item.goalId, item.milestoneId!, { done: true })}
-                            />
-                          : <span className="goal-agenda-row__marker" aria-hidden="true"><CircleDot size={13} /></span>}
-                        title={item.title}
-                        titleLabel={`Pokaż cel ${item.goalTitle}`}
-                        onTitleClick={() => setSelectedGoalId(item.goalId)}
-                        subtitle={<><span>{item.goalTitle}</span><span aria-hidden="true"> · </span><span>Krok {item.stepNumber}</span><span aria-hidden="true"> · </span><span>{item.category}</span></>}
-                        meta={<span className={`goal-agenda-row__date is-${dueTone}`}><CalendarDays size={11} aria-hidden="true" />{dueLabel}</span>}
-                        metaAlign="end"
-                        density="comfortable"
-                      />
-                    );
-                  })}
-                </div>
+                {activeFilter === "next" ? (
+                  <div className="goal-next-groups">
+                    {nextStepGroups.map(({ goal, items }) => {
+                      const GoalIcon = goal.icon;
+                      return (
+                        <SectionSurface
+                          key={goal.id}
+                          className="goal-next-group"
+                          data-goal-id={String(goal.id)}
+                          aria-label={`Następne kroki celu ${goal.title}`}
+                        >
+                          <header className="goal-next-group__header">
+                            <button
+                              type="button"
+                              className="goal-next-group__identity"
+                              onClick={() => setSelectedGoalId(String(goal.id))}
+                              aria-label={`Pokaż szybkie szczegóły celu ${goal.title}`}
+                            >
+                              <span className="goal-next-group__icon" aria-hidden="true">
+                                {goal.customIcon
+                                  ? <img src={goal.customIcon} alt="" />
+                                  : <GoalIcon size={16} strokeWidth={1.7} />}
+                              </span>
+                              <span className="goal-next-group__copy">
+                                <strong>{goal.title}</strong>
+                                <span>{goal.category}</span>
+                              </span>
+                            </button>
+                            <div className="goal-next-group__summary">
+                              <Badge tone={goal.status === "completed" ? "success" : goal.status === "risk" ? "warning" : goal.status === "active" ? "primary" : "neutral"}>
+                                {STATUS_META[goal.status].label}
+                              </Badge>
+                              <span className="goal-next-group__progress">{goal.progress}%</span>
+                              <span className="goal-next-group__due"><CalendarDays size={12} aria-hidden="true" />{goal.due}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="goal-next-group__open"
+                                onClick={() => navigate(`/cele/${goal.id}`)}
+                                trailingIcon={<ChevronRight size={13} aria-hidden="true" />}
+                              >
+                                Pełny widok
+                              </Button>
+                            </div>
+                          </header>
+                          <div className="goal-next-group__rows">
+                            {items.map((item) => {
+                              const days = calendarDaysBetween(todayLocalDateKey(), item.dueDate);
+                              const dueTone = days !== null && days < 0 ? "danger" : days === 0 ? "primary" : days !== null && days <= 7 ? "warning" : "neutral";
+                              const dueLabel = days !== null && days < 0
+                                ? `${Math.abs(days)} dni po terminie`
+                                : days === 0
+                                  ? "Dzisiaj"
+                                  : days === 1
+                                    ? "Jutro"
+                                    : formatLocalDate(item.dueDate);
+                              return (
+                                <ListRow
+                                  key={item.id}
+                                  className="goal-agenda-row"
+                                  leading={item.milestoneId
+                                    ? <Checkbox
+                                        size="sm"
+                                        aria-label={`Ukończ etap ${item.title}`}
+                                        checked={false}
+                                        onChange={() => updateMilestone(item.goalId, item.milestoneId!, { done: true })}
+                                      />
+                                    : <span className="goal-agenda-row__marker" aria-hidden="true"><CircleDot size={13} /></span>}
+                                  title={item.title}
+                                  titleLabel={`Pokaż szybkie szczegóły celu ${item.goalTitle}`}
+                                  onTitleClick={() => setSelectedGoalId(item.goalId)}
+                                  subtitle={<span>Krok {item.stepNumber}</span>}
+                                  meta={<span className={`goal-agenda-row__date is-${dueTone}`}><CalendarDays size={11} aria-hidden="true" />{dueLabel}</span>}
+                                  metaAlign="end"
+                                  density="comfortable"
+                                  selected={selectedId === item.goalId}
+                                />
+                              );
+                            })}
+                          </div>
+                        </SectionSurface>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="goal-agenda__list">
+                    {agendaItems.map((item) => {
+                      const days = calendarDaysBetween(todayLocalDateKey(), item.dueDate);
+                      const dueTone = days !== null && days < 0 ? "danger" : days === 0 ? "primary" : days !== null && days <= 7 ? "warning" : "neutral";
+                      const dueLabel = days !== null && days < 0
+                        ? `${Math.abs(days)} dni po terminie`
+                        : days === 0
+                          ? "Dzisiaj"
+                          : days === 1
+                            ? "Jutro"
+                            : formatLocalDate(item.dueDate);
+                      return (
+                        <ListRow
+                          key={item.id}
+                          className="goal-agenda-row"
+                          leading={item.milestoneId
+                            ? <Checkbox
+                                size="sm"
+                                aria-label={`Ukończ etap ${item.title}`}
+                                checked={false}
+                                onChange={() => updateMilestone(item.goalId, item.milestoneId!, { done: true })}
+                              />
+                            : <span className="goal-agenda-row__marker" aria-hidden="true"><CircleDot size={13} /></span>}
+                          title={item.title}
+                          titleLabel={`Pokaż szybkie szczegóły celu ${item.goalTitle}`}
+                          onTitleClick={() => setSelectedGoalId(item.goalId)}
+                          subtitle={<><span>{item.goalTitle}</span><span aria-hidden="true"> · </span><span>Krok {item.stepNumber}</span><span aria-hidden="true"> · </span><span>{item.category}</span></>}
+                          meta={<span className={`goal-agenda-row__date is-${dueTone}`}><CalendarDays size={11} aria-hidden="true" />{dueLabel}</span>}
+                          metaAlign="end"
+                          density="comfortable"
+                          selected={selectedId === item.goalId}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             )
           ) : visibleGoals.length === 0 ? (
@@ -763,7 +889,12 @@ export default function Cele() {
           onConfirm={() => {
             const deleted = deleteGoal(deleteGoalId);
             setDeletedGoal(deleted);
-            if (selectedId === deleteGoalId) setSelectedGoalId(null);
+            if (selectedId === deleteGoalId || scopedGoalId === deleteGoalId) {
+              updateGoalViewState({
+                scopeId: scopedGoalId === deleteGoalId ? null : scopedGoalId,
+                selectedId: selectedId === deleteGoalId ? null : selectedId,
+              });
+            }
             setDeleteGoalId(null);
           }}
         />

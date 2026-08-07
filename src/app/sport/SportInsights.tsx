@@ -15,7 +15,9 @@ import {
   Layers3,
   ListChecks,
   MoveRight,
+  Moon,
   Pencil,
+  Plus,
   PersonStanding,
   Play,
   Repeat2,
@@ -33,7 +35,9 @@ import {
   DetailPanel,
   EmptyState,
   Input,
-  ProgressBar,
+  FilterBar,
+  Pagination,
+  SectionSurface,
   SectionHeader,
   Select,
   AddToTasksButton,
@@ -47,6 +51,8 @@ import {
   isIndefiniteCycle,
   isWorkoutScheduledOnDate,
   todayCycleWeek,
+  workoutOutcomeForDate,
+  workoutReplanBlockReason,
   type CycleWorkout,
   type TrainingCycle,
   type WorkoutHistoryEntry,
@@ -106,15 +112,6 @@ function contentPreview(template?: WorkoutTemplate) {
   return labels.length > 4
     ? `${labels.slice(0, 3).join(" · ")} · +${labels.length - 3}`
     : labels.join(" · ");
-}
-
-function formatDayHeading(dateKey: string) {
-  const date = fromDateKey(dateKey);
-  const weekday = new Intl.DateTimeFormat("pl-PL", { weekday: "long" }).format(date);
-  return {
-    weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1),
-    date: new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "long" }).format(date),
-  };
 }
 
 function formatDateWithYear(dateKey: string) {
@@ -333,6 +330,8 @@ export function SportOverview({
   activeSession,
   selectedWorkoutId,
   outcomes,
+  sessions = [],
+  recoveryDays = [],
   onCreateCycle,
   onAddWorkout,
   onResumeActive,
@@ -342,23 +341,25 @@ export function SportOverview({
   onResetWorkout,
   onMoveWorkout,
   onOpenCycle,
-  onMarkRecovery,
+  onToggleRecovery,
 }: {
   cycle: TrainingCycle | null;
   templates?: WorkoutTemplate[];
   activeSession?: WorkoutSession;
   selectedWorkoutId?: string | null;
   outcomes: Record<string, WorkoutOutcome>;
+  sessions?: WorkoutSession[];
+  recoveryDays?: string[];
   onCreateCycle: () => void;
-  onAddWorkout: () => void;
+  onAddWorkout: (week?: number, day?: number) => void;
   onResumeActive: () => void;
   onSelectWorkout: (workout: CycleWorkout) => void;
   onStartWorkout: (workout: CycleWorkout) => void;
   onCompleteWorkout: (workout: CycleWorkout) => void;
   onResetWorkout: (workout: CycleWorkout) => void;
-  onMoveWorkout: (workout: CycleWorkout, day: number) => void;
+  onMoveWorkout: (workout: CycleWorkout, day: number, sourceDate?: string) => void;
   onOpenCycle: (week: number) => void;
-  onMarkRecovery: (date: string) => void;
+  onToggleRecovery: (date: string) => void;
 }) {
   const [draggedWorkoutId, setDraggedWorkoutId] = useState<string | null>(null);
   const [dropTargetDay, setDropTargetDay] = useState<number | null>(null);
@@ -379,11 +380,15 @@ export function SportOverview({
 
   const today = toDateKey(new Date());
   const week = todayCycleWeek(cycle);
+  const todayDay = cycleDayIndex(cycle, today);
   const outcomeFor = (workout: CycleWorkout, dateKey: string) => {
-    const outcome = outcomes[workout.id];
-    return isIndefiniteCycle(cycle) && outcome?.updatedAt.slice(0, 10) !== dateKey
-      ? undefined
-      : outcome;
+    return workoutOutcomeForDate(
+      cycle,
+      outcomes[workout.id],
+      sessions,
+      workout.id,
+      dateKey,
+    );
   };
   const todayInCycle = isDateInsideCycle(cycle, today);
   const todayWorkouts = todayInCycle
@@ -391,13 +396,11 @@ export function SportOverview({
       .filter((workout) => isWorkoutScheduledOnDate(cycle, workout, today))
       .sort((left, right) => (left.time ?? "").localeCompare(right.time ?? ""))
     : [];
-  const todayHeading = formatDayHeading(today);
   const todayMinutes = todayWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
+  const todayIsRecovery = recoveryDays.includes(today);
   const remainingWorkouts = todayWorkouts.filter((workout) => (
     !outcomeFor(workout, today) && workout.id !== activeWorkoutId
   )).length;
-  const completedToday = todayWorkouts.filter((workout) => outcomeFor(workout, today)?.status === "completed").length;
-  const todayProgress = todayWorkouts.length ? Math.round((completedToday / todayWorkouts.length) * 100) : 0;
   const weekWorkouts = cycle.workouts.filter((workout) => workout.week === week);
   const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
   const upcomingWorkouts = cycle.workouts
@@ -429,98 +432,89 @@ export function SportOverview({
     <div className="sport-insights sport-overview">
       <div className="sport-overview-layout">
         <div className="sport-overview-layout__today">
-          <SectionHeader
-            title="Dzisiejsze treningi"
-            description={`${todayHeading.weekday}, ${todayHeading.date}`}
-            action={(
-              <div className="sport-section-header-actions">
-                <Button variant="quiet" size="sm" onClick={onAddWorkout}>
-                  Dodaj trening
-                </Button>
+          <SectionSurface as="section" className="sport-today-card sport-overview-panel" aria-label="Dzisiejsze treningi">
+            <SectionHeader
+              variant="label"
+              title="Dzisiejsze treningi"
+              action={(
                 <Button variant="ghost" size="sm" onClick={() => onOpenCycle(week)}>
                   Otwórz plan
                 </Button>
+              )}
+            />
+            {todayWorkouts.length > 0 && (
+              <div className="sport-overview-panel__summary">
+                <span>{todayWorkouts.length} {workoutCountLabel(todayWorkouts.length)}</span>
+                <span>{todayMinutes} min</span>
               </div>
             )}
-          />
-          <section className="sport-today-card" aria-label="Dzisiejsze treningi">
-            <div className="sport-today-card__progress">
-              <p>
-                <span>{todayWorkouts.length} {workoutCountLabel(todayWorkouts.length)}</span>
-                <i aria-hidden="true">·</i>
-                <span>{todayMinutes} min</span>
-              </p>
-              {todayWorkouts.length > 0 && (
-                <ProgressBar
-                  value={todayProgress}
-                  size="sm"
-                  label="Postęp dzisiejszego planu treningowego"
-                  valueLabel={`${todayProgress}%`}
-                />
-              )}
-            </div>
             <div className="sport-today-card__agenda">
-              <div className="sport-today-card__agenda-summary">
-            <div>
-              <strong>
-                {activeSession
-                  ? "Trening w toku — wróć do bieżącego ćwiczenia"
-                  : todayWorkouts.length
-                  ? remainingWorkouts
-                    ? `${remainingWorkouts} ${workoutCountLabel(remainingWorkouts)} do wykonania`
-                    : "Wszystkie treningi wykonane"
-                  : "Bez zaplanowanych treningów"}
-              </strong>
-            </div>
-              </div>
-          {activeSession && <ActiveSessionStrip session={activeSession} onResume={onResumeActive} />}
-          {todayWorkouts.length ? (
-            <div className="sport-today-card__workouts">
-              {openTodayWorkouts.map(renderTodayWorkout)}
-              {completedTodayWorkouts.length > 0 && (
-                <CompletedSection label="Wykonane" count={completedTodayWorkouts.length} className="sport-completed-section">
-                  {completedTodayWorkouts.map(renderTodayWorkout)}
-                </CompletedSection>
+              {(activeSession || todayWorkouts.length > 0) && (
+                <div className="sport-today-card__agenda-summary">
+                  <div>
+                    <strong>
+                      {activeSession
+                        ? "Trening w toku — wróć do bieżącego ćwiczenia"
+                        : remainingWorkouts
+                          ? `${remainingWorkouts} ${workoutCountLabel(remainingWorkouts)} do wykonania`
+                          : "Wszystkie treningi wykonane"}
+                    </strong>
+                  </div>
+                </div>
+              )}
+              {activeSession && <ActiveSessionStrip session={activeSession} onResume={onResumeActive} />}
+              {todayWorkouts.length ? (
+                <div className="sport-today-card__workouts">
+                  {openTodayWorkouts.map(renderTodayWorkout)}
+                  {completedTodayWorkouts.length > 0 && (
+                    <CompletedSection label="Wykonane" count={completedTodayWorkouts.length} className="sport-completed-section">
+                      {completedTodayWorkouts.map(renderTodayWorkout)}
+                    </CompletedSection>
+                  )}
+                </div>
+              ) : (
+                <div className={`sport-today-card__rest ${todayIsRecovery ? "is-recovery" : ""}`.trim()}>
+                  <Moon size={22} aria-hidden="true" />
+                  <div className="sport-today-card__rest-copy">
+                    <strong>{todayInCycle && todayIsRecovery ? "Dzień regeneracji" : "Regeneracja albo trening spontaniczny"}</strong>
+                    <p className="sport-today-card__rest-lead">{todayInCycle
+                      ? "W planie nie ma dziś żadnej jednostki treningowej."
+                      : "Dzisiejsza data wypada poza aktywnym planem treningowym."}</p>
+                    {todayIsRecovery && (
+                      <p className="sport-today-card__rest-note">Oznaczenie jest widoczne w tygodniu i w całym planie treningowym.</p>
+                    )}
+                  </div>
+                  <div className="sport-today-card__rest-actions">
+                    <Button variant="primary" size="sm" onClick={() => onAddWorkout(week, todayDay)}>Dodaj trening spontaniczny</Button>
+                    <Button variant="ghost" size="sm" onClick={() => onToggleRecovery(today)}>{todayIsRecovery ? "Usuń oznaczenie regeneracji" : "Oznacz jako dzień regeneracyjny"}</Button>
+                  </div>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="sport-today-card__rest">
-              <Activity size={22} aria-hidden="true" />
-              <div>
-                <strong>{todayInCycle ? "Regeneracja albo trening spontaniczny" : "Plan nie obejmuje dzisiejszej daty"}</strong>
-                <p>{todayInCycle
-                  ? "W planie nie ma dziś żadnej jednostki."
-                  : `Pokazujemy najbliższy tydzień planu: T${week}.`}</p>
-              </div>
-              <div className="sport-today-card__rest-actions">
-                <Button variant="quiet" size="sm" onClick={onAddWorkout}>Dodaj trening spontaniczny</Button>
-                <Button variant="ghost" size="sm" onClick={() => onMarkRecovery(today)}>Oznacz dzień regeneracyjny</Button>
-              </div>
-            </div>
-          )}
-            </div>
-          </section>
+          </SectionSurface>
         </div>
         <div className="sport-overview-layout__week">
           <section className="sport-current-week" aria-label={`Tydzień ${week}`}>
-        <SectionHeader
-          title="Obecny tydzień"
-          description={`${formatShortDate(cycleWeekDate(cycle, week, 0))} — ${formatShortDate(cycleWeekDate(cycle, week, 6))}`}
-          action={<span className="sport-current-week__summary">{weekWorkouts.length} {workoutCountLabel(weekWorkouts.length)} · {weekMinutes} min</span>}
-        />
-        <Card padding="none">
-          <div className="sport-overview-week-grid">
+            <SectionSurface className="sport-current-week__surface sport-overview-panel">
+              <SectionHeader variant="label" title="Obecny tydzień" />
+              <div className="sport-overview-panel__summary">
+                <span>{formatShortDate(cycleWeekDate(cycle, week, 0))} — {formatShortDate(cycleWeekDate(cycle, week, 6))}</span>
+                <span>{weekWorkouts.length} {workoutCountLabel(weekWorkouts.length)} · {weekMinutes} min</span>
+              </div>
+              <div className="sport-overview-week-grid">
             {DAY_LABELS.map((day, dayIndex) => {
               const workouts = weekWorkouts
                 .filter((workout) => workout.day === dayIndex)
                 .sort((left, right) => (left.time ?? "").localeCompare(right.time ?? ""));
               const dateKey = cycleWeekDate(cycle, week, dayIndex);
+              const isRecoveryDay = recoveryDays.includes(dateKey);
               return (
                 <div
                   key={day.short}
                   className={[
                     "sport-overview-day",
                     dateKey === today ? "is-today" : "",
+                    isRecoveryDay ? "is-recovery" : "",
                     dropTargetDay === dayIndex ? "is-drop-target" : "",
                   ].filter(Boolean).join(" ")}
                   onDragOver={(event) => {
@@ -533,20 +527,37 @@ export function SportOverview({
                     event.preventDefault();
                     const id = event.dataTransfer.getData("text/sport-overview-workout") || draggedWorkoutId;
                     const workout = weekWorkouts.find((item) => item.id === id);
-                    if (workout && workout.day !== dayIndex) onMoveWorkout(workout, dayIndex);
+                    if (workout && workout.day !== dayIndex) onMoveWorkout(workout, dayIndex, dateKey);
                     setDraggedWorkoutId(null);
                     setDropTargetDay(null);
                   }}
                 >
                   <div className="sport-overview-day__heading">
-                    <strong>{day.full}</strong>
+                    <div>
+                      <strong>{day.full}</strong>
+                      {isRecoveryDay && (
+                        <small className="sport-overview-day__recovery"><Moon size={11} aria-hidden="true" />Regeneracja</small>
+                      )}
+                    </div>
                     <span>{formatShortDate(dateKey)}</span>
+                    <button
+                      type="button"
+                      className="sport-overview-day__add"
+                      aria-label={`Dodaj trening: ${day.full}`}
+                      onClick={() => onAddWorkout(week, dayIndex)}
+                    >
+                      <Plus size={13} aria-hidden="true" />
+                    </button>
                   </div>
                   <div className="sport-overview-day__workouts" data-count={Math.min(workouts.length, 3)}>
                     {workouts.map((workout) => {
                       const workoutOutcome = outcomeFor(workout, dateKey);
                       const workoutCompleted = workoutOutcome?.status === "completed";
-                      const canMove = !workoutOutcome && workout.id !== activeWorkoutId;
+                      const moveBlockReason = workoutReplanBlockReason(
+                        workoutOutcome,
+                        workout.id === activeWorkoutId,
+                      );
+                      const canMove = moveBlockReason === null;
                       return (
                         <button
                           key={workout.id}
@@ -562,9 +573,11 @@ export function SportOverview({
                           aria-describedby={canMove ? "sport-overview-drag-hint" : undefined}
                           title={canMove
                             ? "Przeciągnij na inny dzień"
-                            : workout.id === activeWorkoutId
+                            : moveBlockReason === "active"
                               ? "Trening w toku — najpierw zakończ sesję"
-                              : "Zapisany wynik treningu blokuje zmianę dnia"}
+                              : moveBlockReason === "completed"
+                                ? "Wykonany trening jest zapisany w historii"
+                                : "Niedokończony trening ma zapisane wykonanie"}
                           onClick={() => onSelectWorkout(workout)}
                           onKeyDown={(event) => {
                             if (!canMove || !event.altKey) return;
@@ -573,7 +586,7 @@ export function SportOverview({
                             const nextDay = workout.day + direction;
                             if (nextDay < 0 || nextDay > 6) return;
                             event.preventDefault();
-                            onMoveWorkout(workout, nextDay);
+                            onMoveWorkout(workout, nextDay, dateKey);
                           }}
                           onDragStart={(event) => {
                             if (!canMove) {
@@ -605,11 +618,11 @@ export function SportOverview({
                 </div>
               );
             })}
-          </div>
-        </Card>
-        <p id="sport-overview-drag-hint" className="ui-sr-only">
-          Przeciągnij trening na inny dzień. Klawiatura: Alt + ←/→.
-        </p>
+              </div>
+            </SectionSurface>
+            <p id="sport-overview-drag-hint" className="ui-sr-only">
+              Przeciągnij trening na inny dzień. Klawiatura: Alt + ←/→.
+            </p>
           </section>
         </div>
       </div>
@@ -673,6 +686,8 @@ function historyResultLabel(entry: WorkoutHistoryEntry) {
   return "Tylko czas i status";
 }
 
+const SPORT_HISTORY_PAGE_SIZE = 10;
+
 export function SportHistory({ history, sessions = [], templates = [], exercises = [] }: { history: WorkoutHistoryEntry[]; sessions?: WorkoutSession[]; templates?: WorkoutTemplate[]; exercises?: Exercise[] }) {
   const [discipline, setDiscipline] = useState<"all" | Discipline>("all");
   const [status, setStatus] = useState<"all" | WorkoutHistoryEntry["status"]>("all");
@@ -680,6 +695,7 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
   const [templateId, setTemplateId] = useState("all");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const query = normalizeSearch(search);
   const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const today = toDateKey(new Date());
@@ -694,56 +710,72 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
       const exerciseNames = session?.exercises.map((exercise) => exercises.find((candidate) => candidate.id === exercise.exerciseId)?.name ?? exercise.name).join(" ") ?? "";
       return normalizeSearch(`${entry.title} ${entry.discipline} ${session?.note ?? ""} ${exerciseNames}`).includes(query);
     });
+  const pageCount = Math.max(1, Math.ceil(visible.length / SPORT_HISTORY_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageEntries = visible.slice(
+    (safePage - 1) * SPORT_HISTORY_PAGE_SIZE,
+    safePage * SPORT_HISTORY_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setPage(1);
+    setExpandedId(null);
+  }, [discipline, period, search, status, templateId]);
 
   return (
     <div className="sport-insights">
-      {/* ContentHeader already names this view "Historia"; repeating it as a section title
-          gave the screen two page headings. Only the helper line carries new information. */}
-      <SectionHeader
-        variant="label"
-        title={`${visible.length} z ${history.length} wpisów`}
-        description="Kliknij wiersz, aby zobaczyć plan i wynik."
-      />
-      <div className="sport-history-tools" aria-label="Filtry historii">
-        <div className="sport-history-search">
-          <Search size={13} aria-hidden="true" />
-          <Input
-            type="search"
-            aria-label="Szukaj treningu w historii"
-            placeholder="Szukaj po nazwie"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+      <SectionSurface className="sport-history-surface sport-history-module">
+        <SectionHeader
+          variant="label"
+          className="sport-record-module__header"
+          title={`${visible.length} z ${history.length} wpisów`}
+          description="Kliknij wiersz, aby zobaczyć plan i wynik."
+        />
+        <FilterBar
+          columns={templates.length > 0 ? 5 : 4}
+          className="sport-history-tools"
+          role="search"
+          aria-label="Filtry historii treningów"
+        >
+          <div className="sport-history-search">
+            <Search size={13} aria-hidden="true" />
+            <Input
+              type="search"
+              aria-label="Szukaj treningu w historii"
+              placeholder="Szukaj po nazwie"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <Select
+            compact
+            fieldClassName="sport-history-filter"
+            aria-label="Filtruj historię po kategorii"
+            value={discipline}
+            options={[
+              { value: "all", label: "Wszystkie kategorie" },
+              ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
+            ]}
+            onChange={(event) => setDiscipline(event.target.value as "all" | Discipline)}
           />
-        </div>
-        <Select
-          compact
-          fieldClassName="sport-history-filter"
-          aria-label="Filtruj historię po kategorii"
-          value={discipline}
-          options={[
-            { value: "all", label: "Wszystkie kategorie" },
-            ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
-          ]}
-          onChange={(event) => setDiscipline(event.target.value as "all" | Discipline)}
-        />
-        <Select
-          compact
-          fieldClassName="sport-history-status-filter"
-          aria-label="Filtruj historię po statusie"
-          value={status}
-          options={[
-            { value: "all", label: "Wszystkie statusy" },
-            { value: "completed", label: "Wykonane" },
-            { value: "incomplete", label: "Niedokończone" },
-            { value: "missed", label: "Pominięte" },
-          ]}
-          onChange={(event) => setStatus(event.target.value as "all" | WorkoutHistoryEntry["status"])}
-        />
-        <Select compact fieldClassName="sport-history-period-filter" aria-label="Filtruj historię po okresie" value={period} options={[{ value: "all", label: "Cały okres" }, { value: "30", label: "Ostatnie 30 dni" }, { value: "90", label: "Ostatnie 90 dni" }]} onChange={(event) => setPeriod(event.target.value as "all" | "30" | "90")} />
-        {templates.length > 0 && <Select compact fieldClassName="sport-history-template-filter" aria-label="Filtruj historię po szablonie" value={templateId} options={[{ value: "all", label: "Wszystkie szablony" }, ...templates.map((template) => ({ value: template.id, label: template.name }))]} onChange={(event) => setTemplateId(event.target.value)} />}
-      </div>
+          <Select
+            compact
+            fieldClassName="sport-history-status-filter"
+            aria-label="Filtruj historię po statusie"
+            value={status}
+            options={[
+              { value: "all", label: "Wszystkie statusy" },
+              { value: "completed", label: "Wykonane" },
+              { value: "incomplete", label: "Niedokończone" },
+              { value: "missed", label: "Pominięte" },
+            ]}
+            onChange={(event) => setStatus(event.target.value as "all" | WorkoutHistoryEntry["status"])}
+          />
+          <Select compact fieldClassName="sport-history-period-filter" aria-label="Filtruj historię po okresie" value={period} options={[{ value: "all", label: "Cały okres" }, { value: "30", label: "Ostatnie 30 dni" }, { value: "90", label: "Ostatnie 90 dni" }]} onChange={(event) => setPeriod(event.target.value as "all" | "30" | "90")} />
+          {templates.length > 0 && <Select compact fieldClassName="sport-history-template-filter" aria-label="Filtruj historię po szablonie" value={templateId} options={[{ value: "all", label: "Wszystkie szablony" }, ...templates.map((template) => ({ value: template.id, label: template.name }))]} onChange={(event) => setTemplateId(event.target.value)} />}
+        </FilterBar>
       {visible.length ? (
-        <Card padding="none">
+        <>
           <div className="sport-history-list" aria-label="Historia treningów">
             <div className="sport-history-head">
               <span>Data</span>
@@ -753,7 +785,7 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
               <span>Wynik</span>
               <span>Status</span>
             </div>
-            {visible.map((entry) => (
+            {pageEntries.map((entry) => (
               <div key={entry.id} className={`sport-history-entry ${expandedId === entry.id ? "is-expanded" : ""}`.trim()}>
                 <button
                   type="button"
@@ -789,10 +821,20 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
               </div>
             ))}
           </div>
-        </Card>
+          <Pagination
+            page={safePage}
+            pageCount={pageCount}
+            itemLabel="Strona"
+            onPageChange={(nextPage) => {
+              setPage(nextPage);
+              setExpandedId(null);
+            }}
+          />
+        </>
       ) : (
-        <EmptyState title="Brak treningów w tym filtrze" description="Zmień kategorię, aby zobaczyć pozostałe wpisy." />
+        <EmptyState title="Brak treningów w tym filtrze" description="Zmień wyszukiwanie lub filtry, aby zobaczyć pozostałe wpisy." />
       )}
+      </SectionSurface>
     </div>
   );
 }
@@ -888,36 +930,40 @@ export function SportAnalysis({ history }: { history: WorkoutHistoryEntry[] }) {
           ];
 
   return (
-    <div className="sport-insights">
-      <SectionHeader
-        title="Postępy treningowe"
-        description={`${scopeLabel} · porównanie z poprzednim okresem o tej samej długości.`}
-        action={<div className="sport-analysis-controls">
-          <Select
-            compact
-            fieldClassName="sport-analysis-discipline"
-            aria-label="Kategoria analizy"
-            value={discipline}
-            options={[
-              { value: "all", label: "Wszystkie sporty" },
-              ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
-            ]}
-            onChange={(event) => setDiscipline(event.target.value as "all" | Discipline)}
-          />
-          <Select
-            compact
-            fieldClassName="sport-analysis-range"
-            aria-label="Zakres analizy"
-            value={range}
-            options={[
-              { value: "4", label: "Ostatnie 4 tygodnie" },
-              { value: "8", label: "Ostatnie 8 tygodni" },
-              { value: "12", label: "Ostatnie 12 tygodni" },
-            ]}
-            onChange={(event) => setRange(event.target.value)}
-          />
-        </div>}
-      />
+    <div className="sport-insights sport-analysis-view">
+      <SectionSurface className="sport-analysis-header-module">
+        <SectionHeader
+          variant="label"
+          className="sport-record-module__header"
+          title="Postępy treningowe"
+          description={`${scopeLabel} · porównanie z poprzednim okresem o tej samej długości.`}
+          action={<div className="sport-analysis-controls">
+            <Select
+              compact
+              fieldClassName="sport-analysis-discipline"
+              aria-label="Kategoria analizy"
+              value={discipline}
+              options={[
+                { value: "all", label: "Wszystkie sporty" },
+                ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label })),
+              ]}
+              onChange={(event) => setDiscipline(event.target.value as "all" | Discipline)}
+            />
+            <Select
+              compact
+              fieldClassName="sport-analysis-range"
+              aria-label="Zakres analizy"
+              value={range}
+              options={[
+                { value: "4", label: "Ostatnie 4 tygodnie" },
+                { value: "8", label: "Ostatnie 8 tygodni" },
+                { value: "12", label: "Ostatnie 12 tygodni" },
+              ]}
+              onChange={(event) => setRange(event.target.value)}
+            />
+          </div>}
+        />
+      </SectionSurface>
 
       <div className="sport-analysis-metrics">
         {metrics.map((metric) => (

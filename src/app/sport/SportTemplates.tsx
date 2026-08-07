@@ -23,6 +23,7 @@ import {
   MenuTrigger,
   Modal,
   Select,
+  SectionHeader,
 } from "../ui";
 import { createPlannerId } from "./plannerModel";
 import { DISCIPLINE_META } from "./theme";
@@ -130,7 +131,6 @@ export function SportTemplates({
   onTrainToday,
   selectedId,
   onSelect,
-  onDoubleSelect,
   onCreateExercise,
   editRequest,
   onEditorClose,
@@ -144,7 +144,6 @@ export function SportTemplates({
   onTrainToday: (template: WorkoutTemplate) => void;
   selectedId?: string | null;
   onSelect: (id: string) => void;
-  onDoubleSelect?: (id: string) => void;
   onCreateExercise?: () => void;
   editRequest?: { id: string; token: number } | null;
   onEditorClose?: () => void;
@@ -164,22 +163,61 @@ export function SportTemplates({
   const groups = Object.keys(DISCIPLINE_META) as Discipline[];
   return (
     <section className="sport-record-view sport-templates-view" aria-label="Szablony treningów">
-      {/* The view is already named by ContentHeader; a second "Szablony" heading right under it
-          was pure repetition. The helper sentence and the primary action stay. */}
-      <div className="sport-record-view__intro"><div><p>Powtarzalne definicje treningów. Zawartość jest widoczna od razu, bez otwierania edycji.</p></div><Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => setCreating(true)}>Dodaj szablon</Button></div>
-      <div className="sport-record-toolbar"><Input aria-label="Szukaj szablonów" placeholder="Szukaj po nazwie, ćwiczeniu, kategorii…" value={query} onChange={(event) => setQuery(event.target.value)} /><Select compact aria-label="Kategoria szablonu" value={discipline} options={[{ value: "all", label: "Wszystkie kategorie" }, ...groups.map((value) => ({ value, label: DISCIPLINE_META[value].label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} /></div>
-      {filtered.length === 0 ? <EmptyState title="Brak pasujących szablonów" description="Zmień wyszukiwanie albo dodaj nowy szablon." action={<Button variant="quiet" onClick={() => setCreating(true)}>Dodaj szablon</Button>} /> : groups.filter((group) => filtered.some((template) => template.discipline === group)).map((group) => (
-        <section key={group} className="sport-template-group"><div className="sport-template-group__heading"><h3>{DISCIPLINE_META[group].label}</h3><span className="sport-data">{filtered.filter((template) => template.discipline === group).length}</span></div><Card padding="none" className="sport-record-table">
-          {filtered.filter((template) => template.discipline === group).map((template) => {
+      <Card padding="none" className="sport-record-table sport-template-table sport-record-module">
+        <SectionHeader
+          variant="label"
+          className="sport-record-module__header"
+          title="Zapisane szablony"
+          description="Powtarzalne definicje treningów. Zawartość jest widoczna od razu, bez otwierania edycji."
+          action={<Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={() => setCreating(true)}>Dodaj szablon</Button>}
+        />
+        <div className="sport-record-toolbar" role="search" aria-label="Filtry szablonów">
+          <Input className="sport-record-toolbar__search" aria-label="Szukaj szablonów" placeholder="Szukaj po nazwie, ćwiczeniu, kategorii…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Select compact aria-label="Kategoria szablonu" value={discipline} options={[{ value: "all", label: "Wszystkie kategorie" }, ...groups.map((value) => ({ value, label: DISCIPLINE_META[value].label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} />
+        </div>
+        {filtered.length === 0 ? (
+          <EmptyState title="Brak pasujących szablonów" description="Zmień wyszukiwanie albo dodaj nowy szablon." />
+        ) : (
+          <div className="sport-record-table__body">
+          <div className="sport-record-table__head sport-template-table__head" role="row">
+            <span>Nazwa</span>
+            <span>Kategoria</span>
+            <span>Zawartość</span>
+            <span>Elementy</span>
+            <span>Czas</span>
+            <span aria-hidden="true" />
+          </div>
+          {filtered.map((template) => {
             const count = templateItems(template).length;
             const sets = seriesCount(template);
-            return <div key={template.id} className={`sport-template-row ${selectedId === template.id ? "is-selected" : ""}`}>
-              <button type="button" className="sport-template-row__main" onClick={() => onSelect(template.id)} onDoubleClick={() => onDoubleSelect?.(template.id)}><span className="sport-template-row__title">{template.name}<small>{template.description || "Bez opisu"}</small></span><span className="sport-template-row__content">{preview(template, exercises) || "Pusty szablon"}</span><span className="sport-data">{count} {count === 1 ? "element" : "elementów"} · {sets} ser.</span><span className="sport-data">{template.durationMinutes} min</span></button>
-              <span className="sport-record-table__actions"><MenuTrigger open={menuId === template.id} menuId={`template-menu-${template.id}`} className="sport-icon-button" aria-label={`Akcje: ${template.name}`} onClick={() => setMenuId((current) => current === template.id ? null : template.id)}><MoreHorizontal size={16} /></MenuTrigger>{menuId === template.id && <Menu id={`template-menu-${template.id}`} className="sport-row-menu" onDismiss={() => setMenuId(null)}><MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { setEditingId(template.id); setMenuId(null); }}>Edytuj</MenuItem><MenuItem leadingIcon={<Copy size={13} />} onClick={() => { onDuplicate(template); setMenuId(null); }}>Duplikuj</MenuItem><MenuItem onClick={() => { onAddToPlan(template); setMenuId(null); }}>Dodaj do planu</MenuItem><MenuItem onClick={() => { onTrainToday(template); setMenuId(null); }}>Trening na dziś</MenuItem><MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { onDelete(template); setMenuId(null); }}>Usuń</MenuItem></Menu>}</span>
-            </div>;
+            return (
+              <div key={template.id} className={`sport-record-table__row sport-template-table__row ${selectedId === template.id ? "is-selected" : ""}`} role="row">
+                <button type="button" className="sport-record-table__main" onClick={() => onSelect(template.id)}>
+                  <span className="sport-record-table__name">{template.name}</span>
+                  <span className="sport-record-table__sub">{template.description || "Bez opisu"}</span>
+                </button>
+                <span>{DISCIPLINE_META[template.discipline].label}</span>
+                <span className="sport-template-table__content">{preview(template, exercises) || "Pusty szablon"}</span>
+                <span className="sport-data">{count} {count === 1 ? "element" : "elementów"} · {sets} ser.</span>
+                <span className="sport-data">{template.durationMinutes} min</span>
+                <span className="sport-record-table__actions">
+                  <MenuTrigger open={menuId === template.id} menuId={`template-menu-${template.id}`} className="sport-icon-button" aria-label={`Akcje: ${template.name}`} onClick={() => setMenuId((current) => current === template.id ? null : template.id)}><MoreHorizontal size={16} /></MenuTrigger>
+                  {menuId === template.id && (
+                    <Menu id={`template-menu-${template.id}`} className="sport-row-menu" onDismiss={() => setMenuId(null)}>
+                      <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { setEditingId(template.id); setMenuId(null); }}>Edytuj</MenuItem>
+                      <MenuItem leadingIcon={<Copy size={13} />} onClick={() => { onDuplicate(template); setMenuId(null); }}>Duplikuj</MenuItem>
+                      <MenuItem onClick={() => { onAddToPlan(template); setMenuId(null); }}>Dodaj do planu</MenuItem>
+                      <MenuItem onClick={() => { onTrainToday(template); setMenuId(null); }}>Trening na dziś</MenuItem>
+                      <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { onDelete(template); setMenuId(null); }}>Usuń</MenuItem>
+                    </Menu>
+                  )}
+                </span>
+              </div>
+            );
           })}
-        </Card></section>
-      ))}
+          </div>
+        )}
+      </Card>
       {(editingId || creating) && <TemplateEditor key={editingId ?? "new"} template={editingId ? templates.find((template) => template.id === editingId) : undefined} exercises={exercises} onClose={() => { setEditingId(null); setCreating(false); onEditorClose?.(); }} onSave={(template) => { onSave(template); setEditingId(null); setCreating(false); onEditorClose?.(); }} onCreateExercise={onCreateExercise} />}
     </section>
   );

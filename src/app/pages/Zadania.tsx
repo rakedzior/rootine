@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight,
   Calendar, X, Circle,
   Flag, Search,
-  PenLine, Hash, List,
+  PenLine, Hash, List, Printer,
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
 import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
@@ -373,10 +373,7 @@ export default function Zadania() {
         : t.view === taskView;
     return !t.done && viewMatch && matchesTaskFilters(t);
   }), [hasSmartDateRange, matchesTaskFilters, taskPool, taskView]);
-  const undatedHelper = useMemo(() => hasSmartDateRange
-    ? tasks.filter((task) => !task.deleted && !task.done && isTaskUndated(task) && matchesTaskFilters(task))
-    : [], [hasSmartDateRange, matchesTaskFilters, tasks]);
-  const visible = useMemo(() => [...scopedVisible, ...undatedHelper], [scopedVisible, undatedHelper]);
+  const visible = scopedVisible;
   const pending   = visible.filter(t => !t.done);
   const completed = visible.filter(t => t.done);
   const overdue = pending.filter(t => Boolean(t.calendarDate) && t.calendarDate! < todayKey);
@@ -1178,72 +1175,88 @@ export default function Zadania() {
               )}
             </div>
           ) : undefined}
-          actions={<div className="task-toolbar-actions">
-            <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
-              {([
-                { id: "high" as Priority, label: "Wysoki", color: C.danger },
-                { id: "medium" as Priority, label: "Średni", color: C.warning },
-                { id: "low" as Priority, label: "Niski", color: C.iceBlue },
-              ]).map((item) => (
-                <Button
-                  key={item.id}
-                  variant="ghost"
-                  size="sm"
-                  aria-pressed={priorityFilter === item.id}
-                  onClick={() => setPriorityFilter(priorityFilter === item.id ? null : item.id)}
-                  style={{ color: priorityFilter === item.id ? item.color : C.textMuted, background: priorityFilter === item.id ? `${item.color}14` : undefined }}
-                >
-                  {item.label}
-                </Button>
-              ))}
-              {pending.length > 0 && <Badge tone="neutral">{formatOpenTaskCount(pending.length)}</Badge>}
-            </div>
-            {taskView !== "kosz" && (
-              <Button
-                variant={bulkMode ? "quiet" : "ghost"}
-                size="sm"
-                aria-pressed={bulkMode}
-                onClick={toggleBulkMode}
-              >
-                {bulkMode ? "Anuluj wybór" : "Wybierz"}
-              </Button>
-            )}
+          actions={<>
             {taskViewSupportsCalendar(taskView) && (
-              <div className="ui-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  aria-label="Widok listy"
-                  aria-pressed={tasksViewMode === "list"}
-                  title="Lista"
-                  onClick={() => switchTasksViewMode("list")}
-                >
-                  <List size={13} strokeWidth={1.7} />
+              <div className="task-list-navigation flex items-center gap-1" aria-label="Szybka nawigacja zadań">
+                <Button variant={taskView === "dzis" ? "quiet" : "ghost"} size="sm" onClick={() => openTaskView("dzis")}>
+                  Dziś
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  aria-label="Widok kalendarza"
-                  aria-pressed={tasksViewMode === "calendar"}
-                  title="Kalendarz"
-                  onClick={() => switchTasksViewMode("calendar")}
-                >
-                  <Calendar size={13} strokeWidth={1.7} />
-                </Button>
+                {viewCounts.bezterminu > 0 && (
+                  <Button variant={taskView === "bezterminu" ? "quiet" : "ghost"} size="sm" onClick={() => openTaskView("bezterminu")}>
+                    Bez terminu · {viewCounts.bezterminu}
+                  </Button>
+                )}
               </div>
             )}
-            {taskView === "kosz" && visible.length > 0 ? (
-              <Button variant="danger" leadingIcon={<Trash2 size={13} />} onClick={() => setEmptyTrashOpen(true)}>
-                Opróżnij kosz
+            <div className="task-toolbar-actions">
+              <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
+                {([
+                  { id: "high" as Priority, label: "Wysoki", color: C.danger },
+                  { id: "medium" as Priority, label: "Średni", color: C.warning },
+                  { id: "low" as Priority, label: "Niski", color: C.iceBlue },
+                ]).map((item) => (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={priorityFilter === item.id}
+                    onClick={() => setPriorityFilter(priorityFilter === item.id ? null : item.id)}
+                    style={{ color: priorityFilter === item.id ? item.color : C.textMuted, background: priorityFilter === item.id ? `${item.color}14` : undefined }}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+              <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj zadania" onClick={() => window.print()}>
+                <Printer size={16} strokeWidth={1.5} />
               </Button>
-            ) : (
-              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={13} />} onClick={startNewTask}>
-                <span className="header-action-label">Dodaj zadanie</span>
-              </Button>
-            )}
-          </div>}
+              {taskView !== "kosz" && (
+                <Button
+                  variant={bulkMode ? "quiet" : "ghost"}
+                  size="sm"
+                  aria-pressed={bulkMode}
+                  onClick={toggleBulkMode}
+                >
+                  {bulkMode ? "Anuluj wybór" : "Wybierz"}
+                </Button>
+              )}
+              {taskViewSupportsCalendar(taskView) && (
+                <div className="ui-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
+                  <Button
+                    variant={tasksViewMode === "list" ? "quiet" : "ghost"}
+                    size="sm"
+                    iconOnly
+                    aria-label="Widok listy"
+                    aria-pressed={tasksViewMode === "list"}
+                    title="Lista"
+                    onClick={() => switchTasksViewMode("list")}
+                  >
+                    <List size={13} strokeWidth={1.7} />
+                  </Button>
+                  <Button
+                    variant={tasksViewMode === "calendar" ? "quiet" : "ghost"}
+                    size="sm"
+                    iconOnly
+                    aria-label="Widok kalendarza"
+                    aria-pressed={tasksViewMode === "calendar"}
+                    title="Kalendarz"
+                    onClick={() => switchTasksViewMode("calendar")}
+                  >
+                    <Calendar size={13} strokeWidth={1.7} />
+                  </Button>
+                </div>
+              )}
+              {taskView === "kosz" && visible.length > 0 ? (
+                <Button variant="danger" leadingIcon={<Trash2 size={13} />} onClick={() => setEmptyTrashOpen(true)}>
+                  Opróżnij kosz
+                </Button>
+              ) : (
+                <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={13} />} onClick={startNewTask}>
+                  <span className="header-action-label">Dodaj zadanie</span>
+                </Button>
+              )}
+            </div>
+          </>}
         />
 
         {bulkMode && (
