@@ -21,6 +21,8 @@ const ROUTES = [
   "/sport?widok=history",
   "/sport?widok=analysis",
   "/odzywianie",
+  "/odzywianie/posilki",
+  "/odzywianie/analiza",
   "/praca",
   "/sprawy",
   "/sprawy?widok=documents",

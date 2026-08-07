@@ -9,6 +9,8 @@ const ROUTES = [
   { name: "Cele", path: "/cele" },
   { name: "Sport", path: "/sport" },
   { name: "Odżywianie", path: "/odzywianie" },
+  { name: "Własne posiłki", path: "/odzywianie/posilki" },
+  { name: "Analiza odżywiania", path: "/odzywianie/analiza" },
   { name: "Praca", path: "/praca" },
   { name: "Sprawy", path: "/sprawy" },
   { name: "Podróże", path: "/podroze" },

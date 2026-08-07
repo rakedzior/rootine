@@ -48,7 +48,8 @@ export const WATER_AMOUNTS = [150, 250, 330, 500];
 
 export type EntryField = "calories" | "protein" | "carbs" | "fat";
 export type GoalDialog = "nutrition" | "water" | null;
-export type WeightDialog = "measurement" | "analysis" | null;
+/** Analysis is a route of its own; the only weight surface left as a dialog is the measurement. */
+export type WeightDialog = "measurement" | null;
 
 export interface EntryDraft {
   meal: MealSlot;

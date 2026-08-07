@@ -1291,6 +1291,12 @@ export default function Sport() {
             onChange={(event) => changeView(event.target.value as PlannerView)}
           />}
           actions={<div className="sport-planner-toolbar__right">
+            {view === "cycle" && cycleDraft && cycleDirty && (
+              <>
+                <Button variant="ghost" size="sm" onClick={discardCycleChanges}>Odrzuć zmiany</Button>
+                <Button variant="quiet" size="sm" onClick={saveCycle}>Zapisz zmiany</Button>
+              </>
+            )}
             {headerAction}
             {view === "cycle" && cycleDraft && (
               <span className={`sport-planner-toolbar__status ${cycleDirty ? "is-dirty" : ""}`.trim()}>

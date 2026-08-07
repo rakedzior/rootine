@@ -4575,3 +4575,306 @@ button.sport-cycle-plan-card:focus-visible {
     grid-template-columns: repeat(4, minmax(42px, 1fr));
   }
 }
+
+/* Compact training-plan composition. */
+.sport-planner-toolbar.has-status .sport-planner-toolbar__status {
+  display: none;
+}
+
+.sport-planner-content--cycle {
+  padding: var(--space-md) var(--space-lg) var(--space-2xl);
+}
+
+.sport-cycle-layout {
+  grid-template-columns: 348px minmax(0, 1fr);
+  gap: var(--space-md);
+}
+
+.sport-cycle-sidebar {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0;
+  overflow: hidden;
+  padding-right: 0;
+  border: 1px solid var(--color-section-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-section-surface);
+}
+
+.sport-cycle-plans-module {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sport-cycle-plans-module > .sport-cycle-sidebar__heading {
+  padding: var(--space-md) var(--space-lg);
+}
+
+.sport-cycle-plans-module__add {
+  padding-inline: var(--space-md);
+  font-size: var(--text-label);
+}
+
+.sport-cycle-plans-module__add svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sport-cycle-plans-module .sport-cycle-sidebar__active {
+  gap: var(--space-sm);
+  padding: var(--space-xl) var(--space-lg);
+}
+
+.sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__title-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__title-row .ui-badge {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__title-row > svg {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__title-row h2 {
+  font-size: var(--text-body-emphasis);
+  line-height: var(--leading-snug);
+}
+
+.sport-cycle-plan-card__context {
+  padding-left: calc(22px + var(--space-sm));
+}
+
+.sport-cycle-plans-module--other {
+  gap: var(--space-sm);
+  padding: var(--space-lg) 0 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.sport-cycle-plans-module--other > .sport-cycle-sidebar__section-heading {
+  padding-inline: var(--space-lg);
+}
+
+.sport-cycle-plans-module--other .sport-cycle-plan-list {
+  gap: 0;
+}
+
+.sport-cycle-plans-module--other .sport-cycle-plan-card {
+  min-height: 60px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md) var(--space-sm) var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+}
+
+.sport-cycle-plan-card__name {
+  overflow: hidden;
+  color: var(--color-chalk-white);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sport-cycle-plan-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.sport-cycle-plan-card__actions .ui-button {
+  width: var(--control-height-sm);
+  min-width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+}
+
+.sport-cycle-plan-card__actions .ui-button:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.sport-cycle-plans-module--other .sport-cycle-plan-card__title-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+}
+
+.sport-cycle-plans-module--other .sport-cycle-plan-card__title-row > svg:first-child {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sport-cycle-plan-card__chevron {
+  width: 16px;
+  height: 16px;
+}
+
+.sport-cycle-plans-module--other .sport-cycle-plan-card__detail {
+  gap: var(--space-xs);
+  margin-left: calc(22px + var(--space-sm));
+}
+
+.sport-cycle-planner-module > .sport-cycle-week-carousel {
+  padding: var(--space-md) var(--space-md) 0;
+}
+
+.sport-cycle-planner-module .sport-cycle-week-header {
+  display: grid;
+  min-height: var(--control-height-md);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  padding: 0 0 var(--space-sm);
+}
+
+.sport-cycle-planner-module .sport-cycle-week-header .sport-week-navigation__arrows {
+  grid-column: 2;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.sport-cycle-planner-module .sport-cycle-week-header > .ui-badge {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.sport-cycle-planner-module .sport-week-strip {
+  padding-bottom: var(--space-md);
+}
+
+.sport-cycle-week-carousel .sport-week-tab {
+  flex-basis: clamp(112px, calc((100% - (4 * var(--space-xs))) / 5), 148px);
+}
+
+.sport-cycle-workspace .sport-cycle-day {
+  grid-template-columns: 124px minmax(0, 1fr);
+}
+
+.sport-cycle-workspace .sport-cycle-day.is-today {
+  border-left: 1px solid var(--color-precision-blue);
+}
+
+.sport-cycle-workspace .sport-cycle-day__heading {
+  min-height: 56px;
+  padding: var(--space-xs) var(--space-md);
+}
+
+.sport-cycle-workspace .sport-cycle-day__workouts {
+  display: flex;
+  align-content: center;
+  flex-wrap: wrap;
+}
+
+.sport-cycle-workspace .sport-cycle-workout {
+  min-width: min(208px, 100%);
+  max-width: 232px;
+  min-height: 84px;
+  flex: 1 1 208px;
+  align-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.sport-cycle-workspace .sport-cycle-workout > strong {
+  padding-right: var(--space-lg);
+  color: var(--color-chalk-white);
+  font-size: var(--text-body);
+}
+
+.sport-cycle-workout__discipline {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sport-cycle-workspace .sport-cycle-workout > .ui-badge {
+  justify-self: start;
+}
+
+.sport-cycle-workspace .sport-cycle-workout__preview {
+  display: none;
+}
+
+.sport-cycle-plan-preview {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.sport-cycle-plan-preview > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.sport-cycle-plan-preview dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.sport-cycle-plan-preview dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--text-meta);
+}
+
+@media (max-width: 1180px) {
+  .sport-cycle-layout {
+    grid-template-columns: 312px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .sport-cycle-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .sport-cycle-planner-module .sport-cycle-week-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .sport-cycle-planner-module .sport-cycle-week-header .sport-week-navigation__arrows {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .sport-cycle-planner-module .sport-cycle-week-header > .ui-badge {
+    grid-column: 2;
+  }
+
+  .sport-cycle-workspace .sport-cycle-day {
+    grid-template-columns: 108px minmax(0, 1fr);
+  }
+
+  .sport-cycle-workspace .sport-cycle-workout {
+    max-width: none;
+    flex-basis: 100%;
+  }
+}

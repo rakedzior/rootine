@@ -78,8 +78,12 @@ import {
   type WeightDialog,
 } from "../nutrition/nutritionPresentationModel";
 
-/** The library lives on its own URL; every other Odżywianie view stays on /odzywianie. */
-const MEALS_PATH = "/odzywianie/posilki";
+/** Every Odżywianie subtab is a real URL, so it can be linked, reloaded and shared. */
+const VIEW_PATHS: Record<NutritionSidebarItem, string> = {
+  today: "/odzywianie",
+  meals: "/odzywianie/posilki",
+  analysis: "/odzywianie/analiza",
+};
 
 export default function Odzywanie() {
   const [initialCommand] = useState(readInitialNutritionCommand);
@@ -156,7 +160,11 @@ export default function Odzywanie() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const view: NutritionSidebarItem = location.pathname === MEALS_PATH ? "meals" : "today";
+  const view: NutritionSidebarItem = location.pathname === VIEW_PATHS.meals
+    ? "meals"
+    : location.pathname === VIEW_PATHS.analysis
+      ? "analysis"
+      : "today";
   const customMeals = workspace.customMeals ?? [];
 
   const today = nutritionDateKey();
@@ -355,11 +363,7 @@ export default function Odzywanie() {
   };
 
   const selectSidebarItem = (item: NutritionSidebarItem) => {
-    if (item === "analysis") {
-      setWeightDialog("analysis");
-      return;
-    }
-    navigate(item === "meals" ? MEALS_PATH : "/odzywianie");
+    navigate(VIEW_PATHS[item]);
   };
 
   const saveCustomMeal = (meal: CustomMeal) => {
@@ -976,6 +980,26 @@ export default function Odzywanie() {
             </div>
           </Card>
         </div>
+      ) : view === "analysis" ? (
+        <>
+          <ContentHeader
+            headingLevel={1}
+            className="nutrition-content-header"
+            title="Analiza"
+            description="Porównaj zapisane posiłki, nawodnienie i pomiary masy w wybranym okresie"
+            mobileNavigation={mobileNavigation}
+          />
+          <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <NutritionAnalysis
+              endDate={analysisEndDate}
+              days={workspace.days}
+              goals={workspace.goals}
+              weightMeasurements={workspace.weightMeasurements}
+              range={analysisRange}
+              onRangeChange={setAnalysisRange}
+            />
+          </div>
+        </>
       ) : view === "meals" ? (
         <NutritionCustomMeals
           meals={customMeals}
@@ -1002,7 +1026,7 @@ export default function Odzywanie() {
                 <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => setSelectedDate((current) => shiftDate(current, 1))}><ChevronRight size={13} /></Button>
                 {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => setSelectedDate(today)}>Dzisiaj</Button>}
               </div>
-              <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={13} />} onClick={() => setWeightDialog("analysis")}>
+              <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={13} />} onClick={() => selectSidebarItem("analysis")}>
                 Analiza
               </Button>
               {day.source === "demo" && <Button variant="quiet" size="sm" disabled={dayClosed} onClick={clearDemoDay}>Wyczyść przykład</Button>}
@@ -1550,26 +1574,6 @@ export default function Odzywanie() {
               />
             </label>
           </form>
-        </Modal>
-      )}
-
-      {weightDialog === "analysis" && (
-        <Modal
-      title="Analiza odżywiania"
-      eyebrow="Trendy"
-      description="Porównaj zapisane posiłki, nawodnienie i pomiary masy w wybranym okresie."
-      width="min(1360px, calc(100vw - 32px))"
-          bodyClassName="nutrition-analysis-modal"
-          onClose={closeWeightDialog}
-        >
-          <NutritionAnalysis
-            endDate={analysisEndDate}
-            days={workspace.days}
-            goals={workspace.goals}
-            weightMeasurements={workspace.weightMeasurements}
-            range={analysisRange}
-            onRangeChange={setAnalysisRange}
-          />
         </Modal>
       )}
 

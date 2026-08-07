@@ -12,6 +12,8 @@ const ROUTES = [
   "/zadania",
   "/kalendarz",
   "/odzywianie",
+  "/odzywianie/posilki",
+  "/odzywianie/analiza",
   "/sport",
   "/cele",
   "/sprawy",
