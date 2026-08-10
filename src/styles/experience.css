@@ -366,18 +366,6 @@
   pointer-events: none;
 }
 
-.ui-ambient-today__living {
-  position: absolute;
-  top: 50%;
-  right: clamp(16px, 4vw, 76px);
-  width: clamp(320px, 38vw, 590px);
-  transform: translate3d(0, -50%, 0);
-}
-
-.ui-ambient-today__living .living-day--ambient {
-  width: 100%;
-}
-
 .living-day__svg {
   display: block;
   width: 100%;

@@ -323,13 +323,6 @@ export default function Sport() {
     ? cycleDraft?.workouts.filter((workout) => workout.seriesId === selectedWorkout.seriesId).length ?? 1
     : 1;
   const activeSession = plannerState.sessions.find((session) => session.status === "in_progress");
-  const activeSessionItems = activeSession?.stages?.length
-    ? activeSession.stages
-    : activeSession?.exercises.flatMap((exercise) => exercise.sets) ?? [];
-  const activeSessionDone = activeSessionItems.filter((item) => item.done).length;
-  const activeSessionProgress = activeSessionItems.length
-    ? activeSessionDone / activeSessionItems.length
-    : 0;
   const requestedWorkout = requestedWorkoutId
     ? cycleDraft?.workouts.find((workout) => workout.id === requestedWorkoutId)
     : undefined;
@@ -1219,12 +1212,6 @@ export default function Sport() {
     <ModuleShell
       className="sport-module sport-planner-module"
       pageWidth="wide"
-      ambient={{
-        scene: "sport",
-        progress: activeSessionProgress,
-        active: Boolean(activeSession),
-        signal: activeSession ? `${activeSession.id}:${activeSessionDone}` : view,
-      }}
       contextSidebar={(
         <SportSidebar
           view={view}

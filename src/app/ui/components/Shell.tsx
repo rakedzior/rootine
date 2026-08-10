@@ -16,8 +16,6 @@ import { maxWidthQuery } from "../breakpoints";
 import { findModuleForPath } from "../../moduleRegistry";
 import { useModuleMemory } from "../../experience/moduleMemory";
 import { useSubtabTransition } from "../../experience/transitions";
-import { LivingDay, type LivingDayArea } from "../../experience/LivingDay";
-import type { RootineAreaId } from "../../experience/activeArea";
 import { PageShell } from "./PageShell";
 import type { PageWidth } from "./PageShell";
 
@@ -60,36 +58,16 @@ export interface ModuleShellProps extends Omit<HTMLAttributes<HTMLDivElement>, "
   contextSidebar?: ReactNode;
   detailPanel?: ReactNode;
   pageWidth?: PageWidth;
-  ambient?: AmbientVariant | AmbientConfig;
   memoryKey?: string;
 }
 
-export type AmbientVariant =
-  | "quiet"
-  | "warm"
-  | "cool"
-  | "focus"
-  | "today"
-  | "sport"
-  | "goals"
-  | "tasks"
-  | "habits"
-  | "calendar"
-  | "nutrition"
-  | "work"
-  | "affairs"
-  | "travel"
-  | "notes";
+export type AmbientVariant = "sport";
 
 export interface AmbientConfig {
   scene: AmbientVariant;
   progress?: number;
-  dayProgress?: number;
   active?: boolean;
   signal?: string | number;
-  areas?: readonly LivingDayArea[];
-  activeAreaId?: RootineAreaId | null;
-  remaining?: number;
 }
 
 export interface AmbientSceneProps {
@@ -101,13 +79,17 @@ function clampUnit(value: number | undefined) {
   return Math.min(1, Math.max(0, value ?? 0));
 }
 
-function ambientDayPhase(dayProgress: number) {
-  if (dayProgress < 0.22 || dayProgress >= 0.84) return "night";
-  if (dayProgress < 0.36) return "morning";
-  if (dayProgress < 0.68) return "day";
-  return "evening";
-}
-
+/**
+ * The one ambient scene that reaches the screen: the active training session
+ * draws it on its own opaque surface.
+ *
+ * Module shells used to render a scene too, behind ten different motifs. None
+ * was ever visible: `.ui-main-content` paints the canvas colour across the
+ * whole column, and the rule meant to punch through it targets a child two
+ * levels further down than the one the DOM actually has. Hiding the scene
+ * changed zero pixels on eight of ten routes, so the motifs, their stylesheet
+ * and the per-page `ambient` configuration were deleted rather than repaired.
+ */
 export function AmbientScene({ config, className }: AmbientSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(() => (
@@ -116,12 +98,8 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
   const previousSignal = useRef(config.signal);
   const [visibleSignal, setVisibleSignal] = useState<string | number | null>(null);
   const progress = clampUnit(config.progress);
-  const dayProgress = clampUnit(config.dayProgress);
   const style = {
     "--ambient-progress": progress,
-    "--ambient-goal-offset": 100 - (progress * 100),
-    "--ambient-day-angle": `${-118 + (dayProgress * 236)}deg`,
-    "--ambient-day-y": `${8 + (dayProgress * 84)}%`,
     "--ambient-progress-angle": `${progress * 236}deg`,
   } as CSSProperties;
 
@@ -155,141 +133,15 @@ export function AmbientScene({ config, className }: AmbientSceneProps) {
       className={cx("ui-ambient-scene", className)}
       data-scene={config.scene}
       data-active={config.active || undefined}
-      data-day-phase={config.scene === "today" ? ambientDayPhase(dayProgress) : undefined}
       data-paused={paused || undefined}
       style={style}
       aria-hidden="true"
     >
-      <span className="ui-ambient-scene__wash" />
-
-      {config.scene === "today" && (
-        <span className="ui-ambient-today ui-ambient-scene__motif">
-          <span className="ui-ambient-today__light">
-            <i />
-            <b />
-          </span>
-          <span className="ui-ambient-today__living">
-            <LivingDay
-              areas={config.areas ?? []}
-              dayProgress={dayProgress * 100}
-              planProgress={progress * 100}
-              remaining={config.remaining}
-              activeAreaId={config.activeAreaId}
-              variant="ambient"
-            />
-          </span>
-        </span>
-      )}
-
-      {config.scene === "sport" && (
-        <span className="ui-ambient-sport ui-ambient-scene__motif">
-          {Array.from({ length: 7 }, (_, index) => (
-            <i key={index} style={{ "--ambient-stream-index": index } as CSSProperties} />
-          ))}
-          <b />
-        </span>
-      )}
-
-      {config.scene === "goals" && (
-        <span className="ui-ambient-goals ui-ambient-scene__motif">
-          <svg viewBox="0 0 320 320" role="presentation">
-            <circle className="ui-ambient-goals__orbit" cx="160" cy="160" r="132" pathLength="100" />
-            <circle className="ui-ambient-goals__track" cx="160" cy="160" r="108" pathLength="100" />
-            <circle className="ui-ambient-goals__progress" cx="160" cy="160" r="108" pathLength="100" />
-            <circle className="ui-ambient-goals__inner" cx="160" cy="160" r="66" pathLength="100" />
-            <path className="ui-ambient-goals__crosshair" d="M160 38v52M160 230v52M38 160h52M230 160h52" />
-            <circle className="ui-ambient-goals__core" cx="160" cy="160" r="8" />
-          </svg>
-          <i />
-        </span>
-      )}
-
-      {config.scene === "tasks" && (
-        <span className="ui-ambient-tasks ui-ambient-scene__motif">
-          <svg viewBox="0 0 720 420" preserveAspectRatio="xMidYMid slice" role="presentation">
-            <path className="ui-ambient-tasks__guide" d="M44 334C146 334 132 222 244 222S348 94 458 94s104 114 218 114" pathLength="100" />
-            <path className="ui-ambient-tasks__progress" d="M44 334C146 334 132 222 244 222S348 94 458 94s104 114 218 114" pathLength="100" />
-            {[{ x: 44, y: 334 }, { x: 244, y: 222 }, { x: 458, y: 94 }, { x: 676, y: 208 }].map((node, index) => (
-              <circle key={index} cx={node.x} cy={node.y} r={index === 3 ? 7 : 5} />
-            ))}
-          </svg>
-          {Array.from({ length: 4 }, (_, index) => <i key={index} style={{ "--ambient-lane-index": index } as CSSProperties} />)}
-        </span>
-      )}
-
-      {config.scene === "habits" && (
-        <span className="ui-ambient-habits ui-ambient-scene__motif">
-          <svg viewBox="0 0 720 460" preserveAspectRatio="xMidYMid slice" role="presentation">
-            <path className="ui-ambient-habits__guide" d="M58 316C150 316 162 176 264 176S386 286 476 286s112-136 190-136" pathLength="100" />
-            <path className="ui-ambient-habits__progress" d="M58 316C150 316 162 176 264 176S386 286 476 286s112-136 190-136" pathLength="100" />
-            {[
-              { x: 58, y: 316 },
-              { x: 154, y: 246 },
-              { x: 264, y: 176 },
-              { x: 370, y: 230 },
-              { x: 476, y: 286 },
-              { x: 570, y: 222 },
-              { x: 666, y: 150 },
-            ].map((node, index) => (
-              <g key={index} className="ui-ambient-habits__day" style={{ "--ambient-habit-index": index } as CSSProperties}>
-                <circle className="ui-ambient-habits__halo" cx={node.x} cy={node.y} r="17" />
-                <circle className="ui-ambient-habits__node" cx={node.x} cy={node.y} r={index === 6 ? 7 : 5} />
-              </g>
-            ))}
-          </svg>
-          <i />
-        </span>
-      )}
-
-      {config.scene === "calendar" && (
-        <span className="ui-ambient-calendar ui-ambient-scene__motif">
-          <span className="ui-ambient-calendar__grid" />
-          <i className="ui-ambient-calendar__now" />
-          <b className="ui-ambient-calendar__marker" />
-        </span>
-      )}
-
-      {config.scene === "nutrition" && (
-        <span className="ui-ambient-nutrition ui-ambient-scene__motif">
-          {Array.from({ length: 5 }, (_, index) => <i key={index} style={{ "--ambient-contour-index": index } as CSSProperties} />)}
-          <b />
-        </span>
-      )}
-
-      {config.scene === "work" && (
-        <span className="ui-ambient-work ui-ambient-scene__motif">
-          {Array.from({ length: 7 }, (_, index) => <i key={index} style={{ "--ambient-work-index": index } as CSSProperties} />)}
-          <b />
-        </span>
-      )}
-
-      {config.scene === "affairs" && (
-        <span className="ui-ambient-affairs ui-ambient-scene__motif">
-          {Array.from({ length: 5 }, (_, index) => <i key={index} style={{ "--ambient-sheet-index": index } as CSSProperties} />)}
-          <b />
-        </span>
-      )}
-
-      {config.scene === "travel" && (
-        <span className="ui-ambient-travel ui-ambient-scene__motif">
-          <svg viewBox="0 0 720 520" preserveAspectRatio="xMidYMid slice" role="presentation">
-            <path className="ui-ambient-travel__contour" d="M40 384c96-92 196-98 276-48s172 58 350-32" />
-            <path className="ui-ambient-travel__contour" d="M14 438c116-102 218-122 314-72s190 66 378-38" />
-            <path className="ui-ambient-travel__contour" d="M80 312c78-74 154-72 226-30s154 38 316-40" />
-            <path className="ui-ambient-travel__contour" d="M176 238c52-48 104-44 154-16s112 24 226-32" />
-            <path className="ui-ambient-travel__route" d="M54 402C172 366 186 242 306 268s162-96 346-156" pathLength="100" />
-            <circle className="ui-ambient-travel__origin" cx="54" cy="402" r="6" />
-            <circle className="ui-ambient-travel__destination" cx="652" cy="112" r="9" />
-          </svg>
-        </span>
-      )}
-
-      {config.scene === "notes" && (
-        <span className="ui-ambient-notes ui-ambient-scene__motif">
-          {Array.from({ length: 6 }, (_, index) => <i key={index} style={{ "--ambient-stroke-index": index } as CSSProperties} />)}
-          <b />
-        </span>
-      )}
+      <span className="ui-ambient-sport ui-ambient-scene__motif">
+        {Array.from({ length: 7 }, (_, index) => (
+          <i key={index} style={{ "--ambient-stream-index": index } as CSSProperties} />
+        ))}
+      </span>
 
       {visibleSignal !== null && (
         <span key={String(visibleSignal)} className="ui-ambient-scene__signal" />
@@ -303,14 +155,12 @@ export function ModuleShell({
   contextSidebar,
   detailPanel,
   pageWidth = "standard",
-  ambient,
   memoryKey,
   children,
   className,
   ...props
 }: ModuleShellProps) {
   const shellRef = useRef<HTMLDivElement>(null);
-  const ambientConfig = typeof ambient === "string" ? { scene: ambient } : ambient;
   const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
   const resolvedMemoryKey = memoryKey ?? findModuleForPath(pathname)?.id ?? pathname;
   const childItems = Children.toArray(children);
@@ -326,13 +176,11 @@ export function ModuleShell({
   return (
     <div
       ref={shellRef}
-      className={cx("ui-module-shell", Boolean(ambientConfig) && "ui-module-shell--ambient", className)}
+      className={cx("ui-module-shell", className)}
       data-page-width={pageWidth}
-      data-ambient={ambientConfig?.scene}
       data-module-memory={resolvedMemoryKey}
       {...props}
     >
-      {ambientConfig && <AmbientScene config={ambientConfig} />}
       <WorkspaceLayout
         className="ui-module-shell__body"
         moduleSidebar={resolvedModuleSidebar}

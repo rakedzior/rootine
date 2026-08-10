@@ -2,17 +2,24 @@ import { lazy } from "react";
 import { createBrowserRouter, redirect } from "react-router";
 import Layout from "./layout/Layout";
 import { RouteErrorState, RouteLoadingState, RouteNotFoundState } from "./RouteStates";
-const DzisiajPage = lazy(() => import("./pages/Dzisiaj"));
-const ZadaniaPage = lazy(() => import("./pages/Zadania"));
-const KalendarzPage = lazy(() => import("./pages/Kalendarz"));
-const NotatkiPage = lazy(() => import("./pages/Notatki"));
-const CelePage = lazy(() => import("./pages/Cele"));
-const CelSzczegolyPage = lazy(() => import("./pages/CelSzczegoly"));
-const SportPage = lazy(() => import("./pages/Sport"));
-const OdzywianiePage = lazy(() => import("./pages/Odzywanie"));
-const PracaPage = lazy(() => import("./pages/Praca"));
-const SprawyPage = lazy(() => import("./pages/Sprawy"));
-const PodrozePage = lazy(() => import("./pages/Podroze"));
+import { ROUTE_LOADERS } from "./routePrefetch";
+
+/*
+ * The loaders come from routePrefetch.ts so that a route and its hover-prefetch
+ * cannot drift apart: there is one dynamic import per page, used both to render
+ * it and to warm it.
+ */
+const DzisiajPage = lazy(ROUTE_LOADERS["/dzisiaj"]);
+const ZadaniaPage = lazy(ROUTE_LOADERS["/zadania"]);
+const KalendarzPage = lazy(ROUTE_LOADERS["/kalendarz"]);
+const NotatkiPage = lazy(ROUTE_LOADERS["/notatki"]);
+const CelePage = lazy(ROUTE_LOADERS["/cele"]);
+const CelSzczegolyPage = lazy(ROUTE_LOADERS["/cele/:goalId"]);
+const SportPage = lazy(ROUTE_LOADERS["/sport"]);
+const OdzywianiePage = lazy(ROUTE_LOADERS["/odzywianie"]);
+const PracaPage = lazy(ROUTE_LOADERS["/praca"]);
+const SprawyPage = lazy(ROUTE_LOADERS["/sprawy"]);
+const PodrozePage = lazy(ROUTE_LOADERS["/podroze"]);
 
 /**
  * Reviewable inventory of every URL declared by the router. Runtime layout behavior

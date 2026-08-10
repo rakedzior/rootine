@@ -60,6 +60,7 @@ import {
   isModulePath,
   type AppModule,
 } from "../moduleRegistry";
+import { prefetchModuleRoutesWhenIdle, prefetchRoute } from "../routePrefetch";
 import { RecoveryCenterButton } from "../recovery/RecoveryCenter";
 import { RouteLoadingState } from "../RouteStates";
 import { Modal } from "../ui";
@@ -71,7 +72,7 @@ import {
   type AppThemePreference,
 } from "../theme/appTheme";
 import { ThemeSettings } from "./ThemeSettings";
-import { useActiveArea } from "../experience/activeArea";
+import { setActiveAreaId, useIsActiveArea } from "../experience/activeArea";
 import {
   ExperienceSettings,
   usePrivacy,
@@ -233,7 +234,7 @@ function PrimaryNavItem({
 }) {
   const Icon = item.icon;
   const location = useLocation();
-  const { activeAreaId, setActiveAreaId } = useActiveArea();
+  const areaActive = useIsActiveArea(item.id);
   const active = isModulePath(item, location.pathname);
   const destination = active ? `${location.pathname}${location.search}` : item.to;
   return (
@@ -243,11 +244,11 @@ function PrimaryNavItem({
       title={item.label}
       aria-current={active ? "page" : undefined}
       data-module-id={item.id}
-      data-area-active={activeAreaId === item.id || undefined}
+      data-area-active={areaActive || undefined}
       className={[
         mobile ? "app-mobile-nav__item" : "app-nav-item",
         active ? "is-active" : "",
-        activeAreaId === item.id ? "is-area-active" : "",
+        areaActive ? "is-area-active" : "",
       ].filter(Boolean).join(" ")}
       onClick={(event) => {
         if (active) {
@@ -257,12 +258,14 @@ function PrimaryNavItem({
       }}
       onPointerEnter={() => {
         setActiveAreaId(item.id);
+        prefetchRoute(item.to);
       }}
       onPointerLeave={() => {
         setActiveAreaId(null);
       }}
       onFocus={() => {
         setActiveAreaId(item.id);
+        prefetchRoute(item.to);
       }}
       onBlur={() => {
         setActiveAreaId(null);
@@ -462,6 +465,9 @@ export default function Layout() {
     const intervalId = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  // Hover covers the deliberate switch; this covers the first one of the session.
+  useEffect(() => prefetchModuleRoutesWhenIdle(), []);
 
   useEffect(() => {
     try {
@@ -1105,6 +1111,7 @@ export default function Layout() {
                           isModulePath(item, location.pathname) ? "is-active" : "",
                           hiddenByPreference ? "is-preference-hidden" : "",
                         ].filter(Boolean).join(" ")}
+                        onPointerEnter={() => prefetchRoute(item.to)}
                       >
                         <Icon size={16} strokeWidth={1.7} aria-hidden="true" />
                         <span>

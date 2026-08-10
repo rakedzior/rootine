@@ -1,27 +1,109 @@
 {
   "mediaQueries": [
-    { "value": 560, "paths": ["src/styles/settings.css"], "reason": "Settings preview remains readable at compact widths." },
-    { "value": 1040, "paths": ["src/styles/assistant.css"], "reason": "Assistant panel has a feature-specific compact composition." },
-    { "value": 1100, "paths": ["src/styles/sport.css", "src/styles/ui.css"], "reason": "Dense planner and ambient layout need a pre-columns adjustment." },
-    { "value": 1120, "paths": ["src/styles/nutrition.css"], "reason": "Nutrition analysis preserves chart readability before the shared columns breakpoint." },
-    { "value": 1200, "paths": ["src/styles/work.css"], "reason": "Work detail actions need a feature-specific intermediate collapse." },
-    { "value": 1280, "paths": ["src/styles/ui.css"], "reason": "Ambient surfaces are disabled before the standard content width." }
+    {
+      "value": 560,
+      "paths": [
+        "src/styles/settings.css"
+      ],
+      "reason": "Settings preview remains readable at compact widths."
+    },
+    {
+      "value": 1040,
+      "paths": [
+        "src/styles/assistant.css"
+      ],
+      "reason": "Assistant panel has a feature-specific compact composition."
+    },
+    {
+      "value": 1100,
+      "paths": [
+        "src/styles/sport.css",
+        "src/styles/ui.css"
+      ],
+      "reason": "Dense planner and ambient layout need a pre-columns adjustment."
+    },
+    {
+      "value": 1120,
+      "paths": [
+        "src/styles/nutrition.css"
+      ],
+      "reason": "Nutrition analysis preserves chart readability before the shared columns breakpoint."
+    },
+    {
+      "value": 1200,
+      "paths": [
+        "src/styles/work.css"
+      ],
+      "reason": "Work detail actions need a feature-specific intermediate collapse."
+    }
   ],
   "rawColors": [
-    { "paths": ["src/app/goals/goalsModel.ts", "src/app/data/workWorkspace.ts", "src/app/data/taskWorkspace.ts", "src/app/work/workPresentation.tsx"], "reason": "Persisted or data-taxonomy colors require a separate semantic mapping decision." },
-    { "paths": ["src/styles/settings.css"], "reason": "Theme preview swatches are a temporary duplicated presentation surface." },
-    { "paths": ["src/assistant/ui/AudioVisualizer.tsx", "src/styles/assistant.css"], "reason": "Assistant visualization and ambient shadows are decorative or visualization-specific." }
+    {
+      "paths": [
+        "src/app/goals/goalsModel.ts",
+        "src/app/data/workWorkspace.ts",
+        "src/app/data/taskWorkspace.ts",
+        "src/app/work/workPresentation.tsx"
+      ],
+      "reason": "Persisted or data-taxonomy colors require a separate semantic mapping decision."
+    },
+    {
+      "paths": [
+        "src/styles/settings.css"
+      ],
+      "reason": "Theme preview swatches are a temporary duplicated presentation surface."
+    },
+    {
+      "paths": [
+        "src/assistant/ui/AudioVisualizer.tsx",
+        "src/styles/assistant.css"
+      ],
+      "reason": "Assistant visualization and ambient shadows are decorative or visualization-specific."
+    }
   ],
   "inlineStyles": [
-    { "paths": ["src/app/pages/Kalendarz.tsx", "src/app/pages/tasks/TaskSchedulePicker.tsx", "src/app/pages/tasks/TaskSecondaryViews.tsx", "src/app/pages/tasks/TaskViews.tsx"], "reason": "Dynamic calendar and popup geometry is preserved until shared positioning is consolidated." },
-    { "paths": ["src/app/goals/GoalWorkspaceViews.tsx", "src/app/goals/GoalDialogs.tsx", "src/app/pages/tasks/TaskSummaryReport.tsx"], "reason": "High-density feature migration is staged; dynamic metrics and local composition remain during the first governance pass." }
+    {
+      "paths": [
+        "src/app/pages/Kalendarz.tsx",
+        "src/app/pages/tasks/TaskSchedulePicker.tsx",
+        "src/app/pages/tasks/TaskSecondaryViews.tsx",
+        "src/app/pages/tasks/TaskViews.tsx"
+      ],
+      "reason": "Dynamic calendar and popup geometry is preserved until shared positioning is consolidated."
+    },
+    {
+      "paths": [
+        "src/app/goals/GoalWorkspaceViews.tsx",
+        "src/app/goals/GoalDialogs.tsx",
+        "src/app/pages/tasks/TaskSummaryReport.tsx"
+      ],
+      "reason": "High-density feature migration is staged; dynamic metrics and local composition remain during the first governance pass."
+    }
   ],
   "checkboxes": [
-    { "paths": ["src/app/affairs/AffairsEditorFields.tsx", "src/app/experience/preferences.tsx", "src/app/layout/Layout.tsx", "src/app/pages/Jdg.tsx", "src/app/pages/Podroze.tsx"], "reason": "These are custom form-card or switch presentations; the shared Checkbox contract does not preserve their current visual behavior yet." },
-    { "paths": ["src/assistant/settings/AssistantSettingsPanel.tsx"], "reason": "Assistant settings use grouped preference toggles with domain-specific persistence and layout." }
+    {
+      "paths": [
+        "src/app/affairs/AffairsEditorFields.tsx",
+        "src/app/experience/preferences.tsx",
+        "src/app/layout/Layout.tsx",
+        "src/app/pages/Jdg.tsx",
+        "src/app/pages/Podroze.tsx"
+      ],
+      "reason": "These are custom form-card or switch presentations; the shared Checkbox contract does not preserve their current visual behavior yet."
+    },
+    {
+      "paths": [
+        "src/assistant/settings/AssistantSettingsPanel.tsx"
+      ],
+      "reason": "Assistant settings use grouped preference toggles with domain-specific persistence and layout."
+    }
   ],
   "motion": [
-    { "paths": ["src/styles/ui.css"], "reason": "Ambient scenes and chart-like progress animations use deliberately longer decorative timings." },
-    { "paths": ["src/app/experience/MotionValues.tsx"], "reason": "ProgressMorph accepts a dynamic duration prop; the value is part of the shared animation contract rather than a raw feature transition." }
+    {
+      "paths": [
+        "src/app/experience/MotionValues.tsx"
+      ],
+      "reason": "ProgressMorph accepts a dynamic duration prop; the value is part of the shared animation contract rather than a raw feature transition."
+    }
   ]
 }

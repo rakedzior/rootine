@@ -79,7 +79,7 @@ export async function openRootineRoute(page: Page, path: string) {
 }
 
 /**
- * The module entry animation translates `.ui-module-main` by 8px for 240ms
+ * The module entry animation translates `.ui-module-main` by 8px for 90ms
  * (`useSubtabTransition`). Measuring geometry before it lands reports the module as
  * 8px out of alignment with the page content — which is exactly what /cele looked like.
  *

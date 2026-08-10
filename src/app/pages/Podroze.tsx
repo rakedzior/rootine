@@ -1712,17 +1712,6 @@ export default function Podroze({
         contextSidebar={contextSidebar}
         className="travel-module"
         pageWidth="wide"
-        ambient={{
-          scene: "travel",
-          progress: selectedTrip
-            ? (selectedTrip.tasks.length
-                ? selectedTrip.tasks.filter((task) => task.completed).length / selectedTrip.tasks.length
-                : selectedTrip.status === "completed" ? 1 : 0)
-            : workspace.trips.length ? completedTrips.length / workspace.trips.length : 0,
-          signal: selectedTrip
-            ? `${selectedTrip.id}:${selectedTrip.tasks.filter((task) => task.completed).length}`
-            : completedTrips.length,
-        }}
       >
         {pageContent}
       </ModuleShell>

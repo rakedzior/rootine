@@ -1,7 +1,6 @@
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
 import { GoalsProvider } from "./goals/goalsStore";
-import { ActiveAreaProvider } from "./experience/activeArea";
 import { ActivityLogProvider } from "./experience/activityLog";
 import { AppExperienceProviders } from "./experience/preferences";
 import { SupabaseAuthProvider } from "../infrastructure/supabase/auth";
@@ -13,14 +12,12 @@ export default function App() {
     <SupabaseAuthProvider>
       <RemotePersistenceProvider>
         <AppExperienceProviders>
-          <ActiveAreaProvider>
-            <ActivityLogProvider>
-              <GoalsProvider>
-                <RouterProvider router={router} />
-                <AffairsReminderCenter />
-              </GoalsProvider>
-            </ActivityLogProvider>
-          </ActiveAreaProvider>
+          <ActivityLogProvider>
+            <GoalsProvider>
+              <RouterProvider router={router} />
+              <AffairsReminderCenter />
+            </GoalsProvider>
+          </ActivityLogProvider>
         </AppExperienceProviders>
       </RemotePersistenceProvider>
     </SupabaseAuthProvider>

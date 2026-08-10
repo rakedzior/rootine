@@ -1,10 +1,18 @@
 import {
   exportAllLocalWorkspaces,
+  getLocalMutationSequence,
   importAllLocalWorkspaces,
 } from "../../app/data/localRepository";
 import { supabase } from "./client";
 
 export const ROOTINE_WORKSPACE_TABLE = "rootine_workspace_snapshots";
+
+/**
+ * How long user interaction must be quiet before the safety-net scan runs.
+ * Kept at the old poll interval so the worst-case latency for an unannounced
+ * change is unchanged; what changed is that idle and mid-typing ticks are free.
+ */
+const SCAN_SETTLE_INTERVAL_MS = 2_000;
 
 export type RemoteWorkspaceSyncStatus =
   | "disabled"
@@ -333,11 +341,35 @@ export async function startRemoteWorkspaceSync(
   const flushOnPageHide = () => { void flush(); };
   const scanWhenHidden = () => {
     if (document.visibilityState !== "hidden") return;
+    lastScannedMutation = getLocalMutationSequence();
+    lastTickMutation = lastScannedMutation;
     void scanForUnannouncedChanges().then(() => flush());
   };
+
+  /*
+   * The scan is a safety net for writes that never announced themselves; the
+   * `rootine:workspace-change` listener above is the primary path. It used to
+   * run unconditionally every 2s, and each run reads *every* workspace out of
+   * IndexedDB and hashes it — a cost that grows with the user's data and that
+   * an idle app paid forever.
+   *
+   * Two gates make it proportional to what it can actually find. Nothing can
+   * have changed unless the user interacted, so an unchanged mutation counter
+   * means there is nothing to scan for. And scanning mid-interaction is the
+   * worst possible moment, so the scan waits for the counter to hold still for
+   * a tick — it runs shortly after activity settles, not during it.
+   */
+  let lastTickMutation = getLocalMutationSequence();
+  let lastScannedMutation = lastTickMutation;
   const scanTimer = window.setInterval(() => {
+    if (document.visibilityState === "hidden") return;
+    const current = getLocalMutationSequence();
+    const settled = current === lastTickMutation;
+    lastTickMutation = current;
+    if (!settled || current === lastScannedMutation) return;
+    lastScannedMutation = current;
     void scanForUnannouncedChanges();
-  }, 2_000);
+  }, SCAN_SETTLE_INTERVAL_MS);
   window.addEventListener("rootine:workspace-change", onWorkspaceChange);
   window.addEventListener("pagehide", flushOnPageHide);
   document.addEventListener("visibilitychange", scanWhenHidden);

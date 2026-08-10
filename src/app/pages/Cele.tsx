@@ -328,9 +328,6 @@ export default function Cele() {
     ? openVisibleGoals.filter((goal) => goal.priority === "high" || goal.status === "risk")
     : [];
   const remainingGoals = openVisibleGoals.filter((goal) => !priorityGoals.includes(goal));
-  const ambientGoalProgress = selectedGoal?.progress ?? scopedGoal?.progress ?? (visibleGoals.length
-    ? visibleGoals.reduce((sum, goal) => sum + goal.progress, 0) / visibleGoals.length
-    : 0);
 
   const handleFilter = (filter: FilterId) => {
     updateGoalViewState({ filter, scopeId: null, selectedId: null });
@@ -466,11 +463,6 @@ export default function Cele() {
           onSettings={() => setSettingsOpen(true)}
         />
       )}
-      ambient={{
-        scene: "goals",
-        progress: ambientGoalProgress / 100,
-        signal: `${selectedId ?? scopedGoalId ?? activeFilter}:${Math.round(ambientGoalProgress)}`,
-      }}
     >
       <ModuleMain>
         {importNotice && (

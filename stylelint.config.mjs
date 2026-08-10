@@ -14,4 +14,30 @@ export default {
     "projectwallace/max-unique-z-indexes": 10,
     "projectwallace/max-unique-media-queries": 14,
   },
+  overrides: [
+    {
+      /*
+       * ui.css owns the shared shell primitives and ambient.css owns a
+       * viewport-sized backdrop. A looping animation in either keeps the
+       * compositor busy for as long as the screen is open, which reads as a
+       * permanently janky app rather than as a slow decoration: fourteen such
+       * loops used to cost 440-2400ms of compositor work per 3s of an idle
+       * page. Loading spinners loop legitimately, but they belong to the
+       * stylesheets that own the pending state — not to these two.
+       */
+      files: ["src/styles/ui.css", "src/styles/ambient.css"],
+      rules: {
+        "declaration-property-value-disallowed-list": [
+          {
+            animation: [/infinite/],
+            "animation-iteration-count": [/infinite/],
+          },
+          {
+            message:
+              "Looping animations are not allowed in ui.css: the ambient scene is a static identity layer that animates only on arrival and on discrete state changes.",
+          },
+        ],
+      },
+    },
+  ],
 };

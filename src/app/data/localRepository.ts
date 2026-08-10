@@ -257,6 +257,19 @@ function shouldUseIndexedDb(key: string) {
   return payloadStore.available && isRootineWorkspaceKey(key) && !INLINE_STORAGE_KEYS.has(key);
 }
 
+/**
+ * Monotonic count of interactions that could have mutated a workspace.
+ *
+ * The repository already tracks this to decide whether a stale write may still
+ * be trusted. Exposing it lets pollers ask "could anything have changed since I
+ * last looked?" instead of re-reading and re-hashing every workspace on a timer
+ * — which is the difference between a safety net and a permanent tax.
+ */
+export function getLocalMutationSequence() {
+  installMutationListeners();
+  return mutationSequence;
+}
+
 function installMutationListeners() {
   if (typeof window === "undefined") return;
   if (!mutationListenersInstalled) {

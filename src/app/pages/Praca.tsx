@@ -1621,7 +1621,6 @@ export default function Praca() {
     <ModuleShell
       className="work-module"
       pageWidth="wide"
-      ambient={{ scene: "work", progress: workspace.tasks.length ? workspace.tasks.filter((task) => getTaskStatus(task) === "completed").length / workspace.tasks.length : 0 }}
       contextSidebar={sidebar}
       detailPanel={detailTask ? (
         <DetailPanel label="Szczegóły zadania" onDismiss={() => setDetailTaskId(null)} className="work-detail-panel">

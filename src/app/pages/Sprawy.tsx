@@ -840,13 +840,6 @@ export default function Sprawy() {
             className="affairs-module affairs-module--workspace affairs-module--view-jdg"
             data-affairs-archetype="workspace"
             pageWidth="wide"
-            ambient={{
-              scene: "affairs",
-              progress: workspace.matters.length
-                ? workspace.matters.filter((matter) => matter.status === "done").length / workspace.matters.length
-                : 0,
-              signal: dueSoon,
-            }}
           >
             <ModuleMain className="affairs-main affairs-main--workspace affairs-main--jdg" transitionKey={view}>{content}</ModuleMain>
           </ModuleShell>
@@ -874,7 +867,6 @@ export default function Sprawy() {
             className="affairs-module affairs-module--workspace affairs-module--view-travel affairs-module--travel"
             data-affairs-archetype="workspace"
             pageWidth="wide"
-            ambient={{ scene: "travel", progress: 0, signal: dueSoon }}
           >
             {content}
           </ModuleShell>
@@ -890,13 +882,6 @@ export default function Sprawy() {
       className={`affairs-module affairs-module--${viewArchetype} affairs-module--view-${view}`}
       data-affairs-archetype={viewArchetype}
       pageWidth="wide"
-      ambient={{
-        scene: "affairs",
-        progress: workspace.matters.length
-          ? workspace.matters.filter((matter) => matter.status === "done").length / workspace.matters.length
-          : 0,
-        signal: dueSoon,
-      }}
     >
       <ModuleMain className={`affairs-main affairs-main--${viewArchetype}`} transitionKey={view}>
         <ContentHeader

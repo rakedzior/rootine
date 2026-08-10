@@ -768,20 +768,6 @@ export default function Zadania() {
     <ModuleShell
       pageWidth="fluid"
       className="task-module"
-      ambient={{
-        scene: taskView === "nawyki" ? "habits" : "tasks",
-        progress: taskView === "nawyki"
-          ? (() => {
-            const scheduledHabits = habits.filter((habit) => isHabitScheduledOnDate(habit, todayKey));
-            return scheduledHabits.length
-              ? scheduledHabits.filter((habit) => isHabitDoneOnDate(habit, todayKey)).length / scheduledHabits.length
-              : 0;
-          })()
-          : visible.length ? completed.length / visible.length : 0,
-        signal: taskView === "nawyki"
-          ? habits.filter((habit) => isHabitDoneOnDate(habit, todayKey)).length
-          : completed.length,
-      }}
     >
 
       {/* ── Sub-sidebar ── */}

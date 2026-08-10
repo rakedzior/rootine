@@ -88,7 +88,7 @@ export default function CelSzczegoly() {
 
   if (!goal) {
     return (
-      <ModuleShell pageWidth="standard" ambient="quiet">
+      <ModuleShell pageWidth="standard">
         <ModuleMain>
           <div className="flex flex-1 flex-col items-center justify-center gap-4" style={{ background: C.bg, color: C.textSecond }}>
             <Target size={38} strokeWidth={1.2} />
@@ -226,7 +226,6 @@ export default function CelSzczegoly() {
   return (
     <ModuleShell
       pageWidth="fluid"
-      ambient="quiet"
     >
       <ModuleMain>
         <ContentHeader

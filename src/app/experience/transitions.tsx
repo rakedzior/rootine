@@ -17,6 +17,18 @@ const VIEW_ORDER = [
   "matters", "oneTime", "payments", "subscriptions", "documents", "vehicles", "budget", "jdg",
 ] as const;
 
+/*
+ * Route and subtab motion is an *entrance*, not a wait. The view is mounted and
+ * painted before these run, so every millisecond here is a millisecond the user
+ * spends looking at content they can already read but that is still sliding.
+ *
+ * Measured: click -> settled averaged 308ms per tab switch, of which ~50ms was
+ * real work and ~250ms was this animation. The durations below track the
+ * `--motion-*` scale in tokens.css (instant 90ms, fast 140ms); keep them there.
+ */
+const MOTION_INSTANT_MS = 90;
+const MOTION_FAST_MS = 140;
+
 function viewRank(value: string | null) {
   const index = VIEW_ORDER.indexOf(value as typeof VIEW_ORDER[number]);
   return index < 0 ? 0 : index;
@@ -71,7 +83,7 @@ export function RouteTransition({ children, inactive = false }: { children: Reac
               { opacity: 1, transform: "translate3d(0, 0, 0)" },
             ],
         {
-          duration: reduced ? 90 : moduleChanged ? 300 : 220,
+          duration: reduced ? MOTION_INSTANT_MS : moduleChanged ? MOTION_FAST_MS : MOTION_INSTANT_MS,
           easing: "cubic-bezier(0.16, 1, 0.3, 1)",
         },
       );
@@ -128,7 +140,7 @@ export function useSubtabTransition(elementRef: React.RefObject<HTMLElement | nu
           { opacity: 0.78, transform: `translate3d(${direction * 8}px, 0, 0)` },
           { opacity: 1, transform: "translate3d(0, 0, 0)" },
         ],
-      { duration: reduced ? 90 : 240, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+      { duration: MOTION_INSTANT_MS, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
     );
   }, [elementRef, key, rank, reduced]);
 }

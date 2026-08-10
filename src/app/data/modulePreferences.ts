@@ -117,7 +117,7 @@ export function saveModulePreferences(preferences: ModulePreferences): boolean {
 
 export function getOrderedModules(preferences: ModulePreferences): AppModule[] {
   return preferences.order
-    .map((moduleId) => APP_MODULES.find((module) => module.id === moduleId))
+    .map((moduleId): AppModule | undefined => APP_MODULES.find((module) => module.id === moduleId))
     .filter((module): module is AppModule => Boolean(module));
 }
 

@@ -1,0 +1,171 @@
+/*
+ * Ambient scene — the training-session backdrop.
+ *
+ * This used to be a ten-motif decorative layer rendered behind every module.
+ * It was never visible there: `.ui-main-content` paints the canvas colour over
+ * the whole column, and the rule meant to punch through it targeted a child two
+ * levels further down than the DOM has. Hiding the layer changed zero pixels on
+ * eight of ten routes, so it was deleted rather than repaired.
+ *
+ * The active training session is the exception: it draws the scene on its own
+ * opaque surface (see `.sport-active-session`), where it does render. Only the
+ * shell and the sport motif survive, and only for that screen.
+ *
+ * Motion policy: the scene animates on arrival and on discrete state changes.
+ * It does not loop. Fourteen `infinite` animations used to keep the compositor
+ * re-blending a viewport-sized layer for as long as a module stayed open, which
+ * cost 440-2400ms of compositor work per 3s of an idle page.
+ */
+
+.ui-ambient-scene {
+  /*
+   * The scene only ever rendered two things on this screen: the fibre and vein
+   * pseudo-elements below, and the sport streams at full strength. The wash and
+   * the ring were styled from ambient variables that never reached the training
+   * session, so they resolved to nothing and are gone rather than revived — the
+   * screen looks exactly as it did, with less to maintain.
+   */
+  --ambient-accent: var(--color-category-sky);
+  --ambient-progress: 0;
+  --ambient-progress-angle: 0deg;
+
+  position: absolute;
+  z-index: var(--layer-base);
+  inset: 0;
+  contain: paint;
+  isolation: isolate;
+  opacity: 1;
+  overflow: hidden;
+  pointer-events: none;
+  animation: ui-ambient-arrive 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ui-ambient-scene::before,
+.ui-ambient-scene::after {
+  position: absolute;
+  z-index: var(--layer-base);
+  inset: 0;
+  content: "";
+}
+
+/* Finite fibres keep Warm Linen tactile without turning the canvas into a pattern. */
+.ui-ambient-scene::before {
+  background:
+    linear-gradient(93deg, transparent 0 34%, var(--theme-material-fiber) 34.15%, transparent 34.55%),
+    linear-gradient(14deg, transparent 0 62%, var(--theme-material-fiber) 62.12%, transparent 62.42%),
+    linear-gradient(168deg, transparent 0 78%, var(--theme-material-fiber) 78.08%, transparent 78.38%),
+    radial-gradient(ellipse 42% 30% at 88% 18%, var(--theme-material-fiber), transparent 72%);
+  mask-image: linear-gradient(90deg, transparent 8%, var(--color-chalk-white) 34%, var(--color-chalk-white) 100%);
+  opacity: var(--theme-paper-opacity);
+}
+
+/* Mineral clouding and a single restrained vein provide material depth. */
+.ui-ambient-scene::after {
+  background:
+    radial-gradient(ellipse 34% 52% at 94% 16%, var(--theme-material-vein), transparent 72%),
+    radial-gradient(ellipse 28% 44% at 78% 82%, var(--theme-material-fiber), transparent 76%),
+    linear-gradient(128deg, transparent 0 67%, var(--theme-material-vein) 67.12%, transparent 67.48%);
+  mask-image: linear-gradient(90deg, transparent 26%, var(--color-chalk-white) 56%, var(--color-chalk-white) 100%);
+  opacity: var(--theme-stone-opacity);
+}
+
+.ui-ambient-scene > * {
+  z-index: var(--layer-raised);
+}
+
+/*
+ * `position: absolute` used to come from a shared rule that listed all ten
+ * motifs. It belongs on the one that survived.
+ */
+.ui-ambient-sport {
+  position: absolute;
+  top: 3%;
+  right: -7%;
+  bottom: 3%;
+  left: 28%;
+  mask-image: linear-gradient(90deg, transparent 0%, var(--color-chalk-white) 24%, var(--color-chalk-white) 86%, transparent 100%);
+  transform: rotate(-7deg);
+  --ambient-sport-duration: 24s;
+}
+
+.ui-ambient-scene[data-active="true"] .ui-ambient-sport {
+  --ambient-sport-duration: 9s;
+}
+
+.ui-ambient-sport > i {
+  --ambient-stream-index: 0;
+
+  position: absolute;
+  top: calc(9% + (var(--ambient-stream-index) * 12%));
+  left: calc(4% + (var(--ambient-stream-index) * 2%));
+  width: calc(82% - (var(--ambient-stream-index) * 3%));
+  height: 2px;
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ambient-accent) 30%, transparent) 22%,
+    color-mix(in srgb, var(--ambient-accent) 84%, transparent) 72%,
+    transparent
+  );
+  opacity: calc(0.42 + (var(--ambient-stream-index) * 0.055));
+  transform: translate3d(-12%, 0, 0) scaleX(0.82);
+  transform-origin: right center;
+}
+
+.ui-ambient-scene__signal {
+  position: absolute;
+  top: 50%;
+  right: clamp(22px, 7vw, 118px);
+  width: clamp(220px, 30vw, 440px);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--ambient-accent) 66%, transparent);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.72);
+  animation: ui-ambient-signal 680ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ui-ambient-scene[data-scene="sport"] .ui-ambient-scene__signal {
+  width: clamp(300px, 46vw, 720px);
+  aspect-ratio: 2.2;
+}
+
+.ui-ambient-scene[data-paused="true"],
+.ui-ambient-scene[data-paused="true"] * {
+  animation-play-state: paused !important;
+}
+
+@keyframes ui-ambient-arrive {
+  from { clip-path: inset(0 0 0 18%); }
+  to { clip-path: inset(0); }
+}
+
+@keyframes ui-ambient-signal {
+  0% { opacity: 0; transform: translateY(-50%) scale(0.72); }
+  32% { opacity: 0.42; }
+  100% { opacity: 0; transform: translateY(-50%) scale(1.08); }
+}
+
+@media (max-width: 760px) {
+  .ui-ambient-scene::before,
+  .ui-ambient-scene::after {
+    display: none;
+  }
+
+  .ui-ambient-sport > i:nth-child(even) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-ambient-scene,
+  .ui-ambient-scene * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .ui-ambient-scene__signal {
+    display: none;
+  }
+}

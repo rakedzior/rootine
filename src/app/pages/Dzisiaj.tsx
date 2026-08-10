@@ -60,7 +60,7 @@ import { createDefaultWorkWorkspace, loadWorkWorkspace, WORK_STORAGE_KEY } from 
 import { useGoalsStore } from "../goals/goalsContext";
 import type { Goal } from "../goals/goalsModel";
 import { APP_MODULE_BY_ID, type AppModuleId } from "../moduleRegistry";
-import { useActiveArea, type RootineAreaId } from "../experience/activeArea";
+import { setActiveAreaId, useActiveAreaId, type RootineAreaId } from "../experience/activeArea";
 import {
   LivingDay,
   type LivingDayArea,
@@ -243,7 +243,6 @@ function ModuleSummary({
   progress,
   telemetry,
 }: ModuleSummaryProps) {
-  const { setActiveAreaId } = useActiveArea();
   return (
     <Link
       className={`today-module-row is-${state} tone-${accent}`}
@@ -305,7 +304,7 @@ function ModuleSummary({
 
 export default function Dzisiaj() {
   const goalsStore = useGoalsStore();
-  const { activeAreaId, setActiveAreaId } = useActiveArea();
+  const activeAreaId = useActiveAreaId();
   const [today, setToday] = useState(() => new Date());
   const todayKey = useMemo(() => toCalendarDateKey(today), [today]);
   const [taskWorkspace, setTaskWorkspace] = useState(createDefaultTaskWorkspace);
@@ -803,15 +802,6 @@ export default function Dzisiaj() {
     <ModuleShell
       className="today-module"
       pageWidth="standard"
-      ambient={{
-        scene: "today",
-        dayProgress,
-        progress: dailyProgress / 100,
-        areas: livingDayAreas,
-        activeAreaId,
-        remaining: remainingDailyItems,
-        signal: `${todayKey}:${completedDailyItems}`,
-      }}
     >
       <ModuleMain>
         <ContentHeader

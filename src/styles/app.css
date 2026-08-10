@@ -4,6 +4,7 @@
 @import "./workspaces.css";
 @import "./settings.css";
 @import "./experience.css";
+@import "./ambient.css";
 @import "tailwindcss" source(none);
 @source "../**/*.{js,ts,jsx,tsx}";
 

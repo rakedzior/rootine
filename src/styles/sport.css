@@ -3468,8 +3468,6 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-active-session {
-  --ambient-accent: var(--color-category-sky);
-  --ambient-opacity: 0.46;
 
   position: relative;
   display: flex;
