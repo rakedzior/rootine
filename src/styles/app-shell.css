@@ -196,24 +196,9 @@
   stroke-width: var(--icon-stroke-width);
 }
 
-.app-nav-item::before {
-  position: absolute;
-  top: var(--space-sm);
-  bottom: var(--space-sm);
-  left: 0;
-  width: 1px;
-  border-radius: var(--radius-pill);
-  background: var(--theme-signature);
-  content: "";
-  opacity: 0;
-  transform: scaleY(0.4);
-  transition: opacity var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
-}
-
 .app-nav-item:hover {
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
-  transform: translateX(1px);
 }
 
 .app-nav-item:focus-visible,
@@ -226,11 +211,6 @@
   background: color-mix(in srgb, var(--color-primary-subtle) 84%, transparent);
   color: var(--color-primary-text);
   font-weight: var(--weight-semibold);
-}
-
-.app-nav-item.is-active::before {
-  opacity: 1;
-  transform: scaleY(1);
 }
 
 .app-nav-item.is-active > svg {

@@ -9,7 +9,6 @@ import {
 } from "../../data/localDate";
 import { pluralize } from "../../formatters";
 import { Badge, Button, DatePicker, EmptyState, Tabs, uiColors } from "../../ui";
-import { SummaryEditor } from "./SummaryEditor";
 import { PL_MONTHS_SHORT, PRIORITY_COLOR, type ListItem, type Priority, type Task } from "./taskPageModel";
 import { latestTaskActivityDate, taskCompletionDates } from "./TaskSummaryModel";
 
@@ -419,13 +418,6 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
         </>
       )}
 
-      <section className="task-report__panel">
-        <header className="task-report__panel-head">
-          <h2>Notatka tygodnia</h2>
-          <span className="task-report__note-hint">zapisywana dla bieżącego tygodnia, niezależnie od wybranego zakresu</span>
-        </header>
-        <SummaryEditor />
-      </section>
     </div>
   );
 }

@@ -95,7 +95,6 @@ import {
   HabitsWorkspace,
   HabitDetail,
   InputFloatMenu,
-  SummaryPanel,
 } from "./tasks/TaskSecondaryViews";
 import type { HabitMetaDraft } from "./tasks/TaskSecondaryViews";
 
@@ -1603,17 +1602,15 @@ export default function Zadania() {
       <TaskReminderCenter tasks={tasks} habits={habits} />
 
       {/* ── Right panel ── */}
-      {(selectedTask || selectedHabit || taskView === "podsumowanie") && (
+      {(selectedTask || selectedHabit) && (
         <DetailPanel
-          className={selectedTask ? "task-detail-panel" : selectedHabit ? "task-habit-detail-panel" : "task-summary-detail"}
+          className={selectedTask ? "task-detail-panel" : "task-habit-detail-panel"}
           label={selectedTask
             ? selectedVirtualOccurrence
               ? "Szczegóły wystąpienia"
               : "Szczegóły zadania"
-            : selectedHabit
-              ? "Szczegóły nawyku"
-              : "Podsumowanie zadań"}
-          onDismiss={() => selectedTask ? dismissTaskSelection() : selectedHabit ? setSelectedHabitId(null) : setTaskViewWithDefault("dzis")}
+            : "Szczegóły nawyku"}
+          onDismiss={() => selectedTask ? dismissTaskSelection() : setSelectedHabitId(null)}
         >
         {selectedTask ? (
           <TaskDetail
@@ -1642,9 +1639,7 @@ export default function Zadania() {
             onSetCompletion={setHabitCompletion}
             onDelete={deleteHabit}
           />
-        ) : (
-          <SummaryPanel tasks={visible} habits={habits} onToggleHabit={toggleHabit} />
-        )}
+        ) : null}
         </DetailPanel>
       )}
 

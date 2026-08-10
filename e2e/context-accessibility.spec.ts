@@ -96,7 +96,7 @@ test.describe("context and accessibility regressions", { tag: "@desktop" }, () =
       }));
     });
 
-    await openRootineRoute(page, "/zadania");
+    await openRootineRoute(page, "/zadania?widok=wszystkie");
     await expect(page.getByRole("heading", { level: 1, name: "Praca" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { level: 1, name: "Praca" })).toBeVisible();

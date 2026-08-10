@@ -251,12 +251,21 @@
   background: transparent;
 }
 
+.calendar-module .ui-page-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-module .ui-page-shell__content {
+  min-height: 0;
+}
+
 .calendar-module-main {
   --task-workspace-inline-padding: var(--space-3xl);
 }
 
 .calendar-module-main .calendar-page {
-  margin: var(--space-xl) var(--space-sm) var(--space-2xl);
+  margin: var(--space-xl) var(--space-sm) var(--space-sm);
   border-inline-start: 1px solid var(--color-border-subtle);
 }
 
@@ -287,7 +296,7 @@
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-rows: repeat(var(--calendar-row-count), minmax(112px, 1fr));
+  grid-template-rows: repeat(var(--calendar-row-count), minmax(0, 1fr));
   overflow: auto;
 }
 
@@ -457,11 +466,11 @@
   }
 
   .calendar-module-main .calendar-page {
-    margin: var(--space-lg) var(--task-workspace-inline-padding) var(--space-lg);
+    margin: var(--space-lg) var(--task-workspace-inline-padding) var(--space-sm);
   }
 
   .calendar-grid-rows {
-    grid-template-rows: repeat(var(--calendar-row-count), minmax(88px, 1fr));
+    grid-template-rows: repeat(var(--calendar-row-count), minmax(72px, 1fr));
   }
 
   .calendar-weekdays,

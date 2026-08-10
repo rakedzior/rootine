@@ -1,3 +1,5 @@
+import { CURATED_FOODS } from "./nutritionCatalogCurated";
+
 export interface NutritionValues {
   calories: number;
   protein: number;
@@ -55,7 +57,7 @@ export const GENERIC_FOODS: FoodSuggestion[] = [
   { id: "usda-2346409", name: "Truskawki", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 36.4, protein: 0.64, carbs: 7.96, fat: 0.22 } },
   { id: "usda-746771", name: "Pomarańcza", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 47, protein: 0.91, carbs: 11.8, fat: 0.15 }, keywords: ["pomarancza"] },
   { id: "usda-2710824", name: "Awokado Hass", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 223, protein: 1.81, carbs: 8.32, fat: 20.3 } },
-  { id: "usda-2646170", name: "Pierś z kurczaka, surowa", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 106, protein: 22.5, carbs: 0, fat: 1.93 }, keywords: ["kurczak", "piers"] },
+  { id: "usda-2646170", name: "Pierś z kurczaka, surowa", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 106, protein: 22.5, carbs: 0, fat: 1.93 }, keywords: ["kurczak", "piers", "filet", "filety", "drób", "drobiowy"] },
   { id: "usda-748967", name: "Jajko kurze, całe", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 148, protein: 12.4, carbs: 0.96, fat: 9.96 }, keywords: ["jajka"] },
   { id: "usda-2684441", name: "Łosoś atlantycki, surowy", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 197, protein: 20.3, carbs: 0, fat: 13.1 }, keywords: ["losos"] },
   { id: "usda-2684444", name: "Dorsz atlantycki, surowy", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 66, protein: 16.1, carbs: 0, fat: 0.67 } },
@@ -73,6 +75,7 @@ export const GENERIC_FOODS: FoodSuggestion[] = [
   { id: "usda-2346393", name: "Migdały surowe", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 626, protein: 21.5, carbs: 20, fat: 51.1 }, keywords: ["migdaly"] },
   { id: "usda-2346394", name: "Orzechy włoskie", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 730, protein: 14.6, carbs: 10.9, fat: 69.7 }, keywords: ["orzechy wloskie"] },
   { id: "usda-746784", name: "Cukier biały", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 385, protein: 0, carbs: 99.6, fat: 0.32 } },
+  ...CURATED_FOODS,
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +102,13 @@ function normalizedText(value: string) {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLocaleLowerCase("pl-PL");
+}
+
+export function foodMatchesQuery(food: Pick<FoodSuggestion, "name" | "brand" | "keywords">, query: string) {
+  const queryTerms = normalizedText(query.trim()).split(/\s+/).filter(Boolean);
+  if (!queryTerms.length) return false;
+  const searchable = normalizedText([food.name, food.brand ?? "", ...(food.keywords ?? [])].join(" "));
+  return queryTerms.every((term) => searchable.includes(term));
 }
 
 function escapeLuceneText(value: string) {
@@ -161,14 +171,18 @@ function mapOpenFoodFactsHit(value: unknown): FoodSuggestion | null {
 
 export function searchGenericFoods(query: string, limit = 8) {
   const normalizedQuery = normalizedText(query.trim());
-  if (normalizedQuery.length < 2) return [];
+  if (!normalizedQuery.length) return [];
   return GENERIC_FOODS
     .map((food) => {
-      const searchable = normalizedText([food.name, ...(food.keywords ?? [])].join(" "));
-      const startsWith = searchable.startsWith(normalizedQuery) || searchable.split(/\s+/).some((part) => part.startsWith(normalizedQuery));
-      return { food, score: startsWith ? 0 : searchable.includes(normalizedQuery) ? 1 : 2 };
+      const name = normalizedText(food.name);
+      const keywords = normalizedText((food.keywords ?? []).join(" "));
+      const nameStartsWith = name.startsWith(normalizedQuery) || name.split(/\s+/).some((part) => part.startsWith(normalizedQuery));
+      const keywordStartsWith = keywords.split(/\s+/).some((part) => part.startsWith(normalizedQuery));
+      const includes = name.includes(normalizedQuery) || keywords.includes(normalizedQuery);
+      const score = nameStartsWith ? 0 : keywordStartsWith ? 1 : includes ? 2 : 3;
+      return { food, score };
     })
-    .filter((candidate) => candidate.score < 2)
+    .filter((candidate) => candidate.score < (normalizedQuery.length === 1 ? 2 : 3))
     .sort((a, b) => a.score - b.score || a.food.name.localeCompare(b.food.name, "pl"))
     .slice(0, limit)
     .map((candidate) => candidate.food);
@@ -181,7 +195,7 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal) {
   const cached = onlineSearchCache.get(cacheKey);
   if (cached) return cached;
   const params = new URLSearchParams({
-    q: `countries_tags:"en:poland" lang:pl ${escapeLuceneText(normalizedQuery)}`,
+    q: `countries_tags:"en:poland" ${escapeLuceneText(normalizedQuery)}`,
     langs: "pl,en",
     page: "1",
     page_size: "18",
@@ -215,10 +229,7 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal) {
   const mapped = (payload.hits ?? [])
     .map(mapOpenFoodFactsHit)
     .filter((item): item is FoodSuggestion => Boolean(item))
-    .filter((item) => {
-      const normalizedName = normalizedText(item.name);
-      return queryTerms.every((term) => normalizedName.includes(term));
-    });
+    .filter((item) => queryTerms.every((term) => normalizedText([item.name, item.brand ?? ""].join(" ")).includes(term)));
   const unique = new Map<string, FoodSuggestion>();
   mapped.forEach((item) => {
     const key = `${normalizedText(item.name)}|${normalizedText(item.brand ?? "")}`;

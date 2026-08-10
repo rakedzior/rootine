@@ -75,7 +75,7 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await expect(taskSidebar.getByRole("button", { name: /^Dziś/ })).toHaveAttribute("aria-current", "page");
   });
 
-  test("restores the preferred task workspace after switching back from another module", async ({ rootinePage: page }) => {
+  test("opens the first task subview after switching back from another module", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/zadania?widok=nawyki");
 
     const primaryNavigation = page.getByRole("navigation", { name: "Obszary aplikacji" });
@@ -83,7 +83,7 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await primaryNavigation.getByRole("link", { name: "Zadania" }).click();
 
     await expect(page).toHaveURL(/\/zadania$/);
-    await expect(page.getByRole("heading", { name: "Nawyki", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dziś", level: 1 })).toBeVisible();
   });
 
   test("does not add a selected priority label to the list header", async ({ rootinePage: page }) => {

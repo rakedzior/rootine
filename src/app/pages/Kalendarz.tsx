@@ -658,7 +658,10 @@ export default function Kalendarz() {
     detailInitialFocusIdRef.current = selectedDetailId;
     const frame = shouldMoveFocus
       ? requestAnimationFrame(() => {
-        detailRef.current?.querySelector<HTMLElement>("input, textarea, button:not([disabled])")?.focus();
+        const initialFocus = draftId !== null && selectedId === draftId
+          ? detailRef.current?.querySelector<HTMLElement>(".task-detail__title")
+          : detailRef.current?.querySelector<HTMLElement>("input, textarea, button:not([disabled])");
+        initialFocus?.focus();
       })
       : null;
     return () => {
@@ -666,7 +669,7 @@ export default function Kalendarz() {
       document.removeEventListener("mousedown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [closeTaskDetail, selectedDetailId]);
+  }, [closeTaskDetail, draftId, selectedDetailId, selectedId]);
 
   const moveMonth = (amount: number) => {
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
@@ -1235,6 +1238,7 @@ export default function Kalendarz() {
         >
           <TaskDetail
             task={selectedTask}
+            isDraft={draftId === selectedTask.id}
             occurrence={selectedVirtualOccurrence
               ? {
                   date: selectedVirtualOccurrence.occurrence.date,

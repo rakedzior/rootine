@@ -60,18 +60,6 @@
   transition: transform var(--motion-normal) var(--ease-out);
 }
 
-.nutrition-catalog-hint {
-  display: flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  margin-top: var(--space-xs);
-  color: var(--color-text-tertiary);
-  font-size: var(--text-micro);
-  line-height: var(--leading-snug);
-}
-
 .nutrition-date-input .ui-date-trigger {
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
@@ -1022,14 +1010,18 @@
   position: relative;
 }
 
+.nutrition-entry-modal__body {
+  min-height: min(66vh, 620px);
+}
+
 .nutrition-suggestions {
   position: absolute;
   z-index: var(--layer-sticky);
-  top: calc(100% - 15px);
+  top: 100%;
   right: 0;
   left: 0;
-  max-height: 320px;
-  padding: var(--space-xs);
+  max-height: min(58vh, 520px);
+  padding: var(--space-sm);
   overflow-y: auto;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -1056,7 +1048,7 @@
 .nutrition-suggestion {
   display: grid;
   width: 100%;
-  min-height: 48px;
+  min-height: 60px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-md);
@@ -1083,11 +1075,13 @@
 }
 
 .nutrition-suggestion__name {
+  display: -webkit-box;
   overflow: hidden;
   font-size: var(--text-body);
   font-weight: var(--weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .nutrition-suggestion__meta,
@@ -1122,24 +1116,29 @@
   animation: nutrition-search-spin 800ms linear infinite;
 }
 
+@media (max-width: 760px) {
+  .nutrition-entry-modal__body {
+    min-height: min(58vh, 480px);
+  }
+
+  .nutrition-suggestions {
+    max-height: min(50vh, 420px);
+  }
+
+  .nutrition-suggestion {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xs);
+  }
+
+  .nutrition-suggestion__macro {
+    justify-self: start;
+  }
+}
+
 @keyframes nutrition-search-spin {
   to {
     transform: rotate(360deg);
   }
-}
-
-.nutrition-data-attribution {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-micro);
-  line-height: var(--leading-normal);
-}
-
-.nutrition-data-attribution a {
-  color: var(--color-precision-blue-text);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
 }
 
 .nutrition-water-controls {

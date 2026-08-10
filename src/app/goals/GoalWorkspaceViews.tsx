@@ -12,7 +12,6 @@ import type { GoalFilterId as FilterId } from "./goalViewState";
 import {
   C,
   CATEGORY_ICONS,
-  CATEGORY_ICON_KEYS,
   FILTER_ITEMS,
   STATUS_META,
   countForFilter,
@@ -43,7 +42,6 @@ import {
   Clock3,
   Ellipsis,
   Flag,
-  FolderCog,
   Pencil,
   Plus,
   Search,
@@ -57,7 +55,6 @@ export function GoalSubSidebar({
   activeFilter,
   scopedGoalId,
   onFilter,
-  onSelectGoal,
   goals,
   categories,
   onCreateCategory,
@@ -68,7 +65,6 @@ export function GoalSubSidebar({
   activeFilter: FilterId;
   scopedGoalId?: string | null;
   onFilter: (id: FilterId) => void;
-  onSelectGoal?: (id: string) => void;
   goals: Goal[];
   categories: GoalCategory[];
   onCreateCategory: (draft: Omit<GoalCategory, "id">) => void;
@@ -84,11 +80,6 @@ export function GoalSubSidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const categoriesPanelId = useId();
-  const activeGoals = goals
-    .filter((goal) => goal.status === "active" || goal.status === "risk")
-    .sort((a, b) => Number(b.status === "risk") - Number(a.status === "risk") || b.progress - a.progress)
-    .slice(0, 7);
-
   const filteredCategories = categories.filter((category) => category.label.toLocaleLowerCase("pl-PL").includes(search.toLocaleLowerCase("pl-PL")));
 
   const addCategory = () => {
@@ -106,7 +97,7 @@ export function GoalSubSidebar({
     setEditingValue("");
   };
 
-  const item = (id: FilterId, label: string, Icon: LucideIcon, count?: number) => {
+  const item = (id: FilterId, label: string, Icon: LucideIcon, meta?: React.ReactNode, accessibleLabel?: string) => {
     const active = !scopedGoalId && activeFilter === id;
     return (
       <ContextNavItem
@@ -115,64 +106,45 @@ export function GoalSubSidebar({
         onClick={() => onFilter(id)}
         icon={<Icon />}
         label={label}
-        meta={count}
+        meta={meta}
+        aria-label={accessibleLabel}
       />
     );
   };
 
   return (
-    <ModuleSidebar label="Widoki i kategorie celów">
+    <ModuleSidebar label="Widoki i kategorie celów" className="goal-context-sidebar">
       <div className="goal-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-4">
-        <ContextNavGroup label="Przegląd">
+        <ContextNavGroup label="Na bieżąco">
           {item("next", "Następne kroki", Clock3)}
           {item("week", "Ten tydzień", CalendarDays)}
-          {item("overview", "Aktywne cele", BarChart3, countForFilter("overview", goals))}
-          {item("risk", "Zagrożone", FILTER_ITEMS.find((filter) => filter.id === "risk")!.icon, countForFilter("risk", goals))}
+          {item("risk", "Wymagają uwagi", FILTER_ITEMS.find((filter) => filter.id === "risk")!.icon, <span className="goal-sidebar-attention-count">{countForFilter("risk", goals)}</span>, "Zagrożone cele")}
         </ContextNavGroup>
 
-        <ContextNavGroup label="Moje cele">
-          {activeGoals.map((goal) => {
-            const GoalIcon = goal.icon;
-            return (
-              <ContextNavItem
-                key={goal.id}
-                active={scopedGoalId === String(goal.id)}
-                icon={<GoalIcon />}
-                label={goal.title}
-                meta={`${goal.progress}%`}
-                onClick={() => onSelectGoal?.(String(goal.id))}
-              />
-            );
-          })}
-          {activeGoals.length === 0 && <p className="goals-sidebar-empty">Brak aktywnych celów.</p>}
-          {goals.filter((goal) => goal.status === "active" || goal.status === "risk").length > activeGoals.length && (
-            <ContextNavItem depth={1} icon={<Target />} label="Wszystkie aktywne" onClick={() => onFilter("overview")} />
-          )}
-        </ContextNavGroup>
-
-        <ContextNavGroup label="Pozostałe">
-          {item("all", "Wszystkie cele", Target, countForFilter("all", goals))}
+        <ContextNavGroup label="Cele">
+          {item("overview", "Aktywne", BarChart3, countForFilter("overview", goals), "Aktywne cele")}
+          {item("all", "Wszystkie", Target, countForFilter("all", goals), "Wszystkie cele")}
           {item("planned", "Zaplanowane", FILTER_ITEMS.find((filter) => filter.id === "planned")!.icon, countForFilter("planned", goals))}
           {item("paused", "Wstrzymane", FILTER_ITEMS.find((filter) => filter.id === "paused")!.icon, countForFilter("paused", goals))}
           {item("completed", "Zakończone", FILTER_ITEMS.find((filter) => filter.id === "completed")!.icon, countForFilter("completed", goals))}
         </ContextNavGroup>
 
-        <div className="mb-2 mt-6 flex items-center justify-between px-1.5">
+        <div className={`goal-sidebar-section-heading${categoriesOpen || searchOpen || adding ? " is-open" : ""}`}>
           <button
             type="button"
             onClick={() => setCategoriesOpen((open) => !open)}
             aria-expanded={categoriesOpen}
             aria-controls={categoriesPanelId}
-            className="goal-sidebar-section-toggle flex min-w-0 items-center gap-1.5"
+            className="goal-sidebar-section-toggle flex min-w-0 flex-1 items-center justify-between gap-1.5"
           >
-            <ChevronRight className="goal-sidebar-section-chevron" size={11} strokeWidth={2} />
             <span>Kategorie</span>
+            <ChevronRight className="goal-sidebar-section-chevron" size={11} strokeWidth={2} />
           </button>
-          <div className="flex items-center gap-1">
+          <div className="goal-sidebar-section-actions flex items-center gap-1">
             <button
               type="button"
-              aria-label="Szukaj kategorii"
-              title="Szukaj kategorii"
+              aria-label="Szukaj w kategoriach"
+              title="Szukaj w kategoriach"
               onClick={() => { setCategoriesOpen(true); setSearchOpen((open) => !open); }}
               className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${searchOpen ? "is-active" : ""}`}
             >
@@ -239,13 +211,12 @@ export function GoalSubSidebar({
             )}
 
             {filteredCategories.map((category) => {
-              const Icon = CATEGORY_ICON_KEYS[category.iconKey] ?? Circle;
               const active = !scopedGoalId && activeFilter === `category:${category.id}`;
               return (
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg">
                   {editingId === category.id ? (
                     <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="goal-category-edit flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
-                      <Icon className="goal-category-symbol" size={13} strokeWidth={1.7} />
+                      <span className="goal-category-dot" style={{ backgroundColor: category.color }} aria-hidden="true" />
                       <input
                         autoFocus
                         aria-label={`Nazwa kategorii ${category.label}`}
@@ -261,7 +232,7 @@ export function GoalSubSidebar({
                       onClick={() => onFilter(`category:${category.id}`)}
                       className="min-w-0 flex-1"
                       active={active}
-                      icon={<Icon className={active ? undefined : "goal-category-nav-icon"} />}
+                      icon={<span className="goal-category-dot" style={{ backgroundColor: category.color }} />}
                       label={category.label}
                     />
                   )}
@@ -301,7 +272,6 @@ export function GoalSubSidebar({
 
       <div className="goal-sidebar-footer border-t px-2 pb-4 pt-4">
         <ContextNavGroup label="Zarządzanie">
-          <ContextNavItem onClick={() => setCategoriesOpen(true)} icon={<FolderCog />} label="Kategorie" />
           <ContextNavItem active={activeFilter === "archived"} onClick={() => onFilter("archived")} icon={<Archive />} label="Archiwum" />
           <ContextNavItem onClick={onSettings} icon={<Settings2 />} label="Ustawienia celów" />
         </ContextNavGroup>

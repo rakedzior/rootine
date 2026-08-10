@@ -27,7 +27,7 @@ import {
   type SaveStatus,
 } from "./workPresentation";
 
-type TaskPatch = Partial<Pick<WorkTask, "priority" | "dueDate" | "projectId" | "parentId">>;
+type TaskPatch = Partial<Pick<WorkTask, "companyId" | "priority" | "dueDate" | "projectId" | "parentId">>;
 
 interface WorkDetailPanelProps {
   expanded: boolean;
@@ -63,7 +63,8 @@ export function WorkDetailPanel({
   workspace,
 }: WorkDetailPanelProps) {
   const project = workspace.projects.find((candidate) => candidate.id === task.projectId);
-  const company = project ? workspace.companies.find((candidate) => candidate.id === project.companyId) : undefined;
+  const company = (task.companyId ? workspace.companies.find((candidate) => candidate.id === task.companyId) : undefined)
+    ?? (project ? workspace.companies.find((candidate) => candidate.id === project.companyId) : undefined);
   const parent = task.parentId ? workspace.tasks.find((candidate) => candidate.id === task.parentId) : undefined;
   const taskById = new Map(workspace.tasks.map((candidate) => [candidate.id, candidate]));
   const parentChain: string[] = [];
@@ -81,7 +82,10 @@ export function WorkDetailPanel({
     { value: "", label: "Nieprzypisane" },
     ...workspace.projects
       .filter((candidate) => candidate.status !== "completed")
-      .filter((candidate) => !project || candidate.companyId === project.companyId)
+      .filter((candidate) => {
+        const companyScope = task.companyId ?? project?.companyId;
+        return !companyScope || candidate.companyId === companyScope;
+      })
       .map((candidate) => ({ value: candidate.id, label: candidate.name })),
   ];
   const unavailableParentIds = collectTaskBranch(workspace.tasks, task.id);
@@ -114,12 +118,16 @@ export function WorkDetailPanel({
           <div><span>Utworzono</span><strong>{formatDate(task.createdAt.slice(0, 10))}</strong></div>
         </div>
         <div className="work-detail-fields">
-          <Select label="Firma" value={project?.companyId ?? ""} options={[{ value: "", label: "Nieprzypisana" }, ...workspace.companies.filter((candidate) => !candidate.archived).map((candidate) => ({ value: candidate.id, label: candidate.name }))]} onChange={(event) => {
+          <Select label="Firma" value={task.companyId ?? project?.companyId ?? ""} options={[{ value: "", label: "Nieprzypisana" }, ...workspace.companies.filter((candidate) => !candidate.archived).map((candidate) => ({ value: candidate.id, label: candidate.name }))]} onChange={(event) => {
             const companyId = event.target.value;
             const nextProject = workspace.projects.find((candidate) => candidate.companyId === companyId && candidate.status !== "completed");
-            onUpdateTask(task.id, { projectId: nextProject?.id ?? "", parentId: null });
+            onUpdateTask(task.id, { companyId: companyId || undefined, projectId: nextProject?.id ?? "", parentId: null });
           }} />
-          <Select label="Projekt" value={task.projectId} options={projectOptions} onChange={(event) => onUpdateTask(task.id, { projectId: event.target.value, parentId: null })} />
+          <Select label="Projekt" value={task.projectId} options={projectOptions} onChange={(event) => {
+            const projectId = event.target.value;
+            const nextProject = workspace.projects.find((candidate) => candidate.id === projectId);
+            onUpdateTask(task.id, { companyId: nextProject?.companyId ?? task.companyId, projectId, parentId: null });
+          }} />
           <Select label="Zadanie nadrzędne" value={task.parentId ?? ""} options={parentOptions} disabled={!task.projectId} onChange={(event) => onUpdateTask(task.id, { parentId: event.target.value || null })} />
           <Select label="Status" value={getTaskStatus(task)} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => onApplyStatus([task.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
           <Select label="Priorytet" value={task.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => onUpdateTask(task.id, { priority: event.target.value as WorkTaskPriority })} />

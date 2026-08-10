@@ -11,6 +11,7 @@ import {
   tasksForSmartDateView,
   taskViewSupportsCalendar,
   defaultDateValueForTaskView,
+  loadInitialTaskPagePreferences,
   type Task,
 } from "./taskPageModel";
 import { toCalendarDateKey } from "../../data/taskWorkspace";
@@ -34,6 +35,24 @@ describe("task presentation model", () => {
     expect(loadTasksViewMode()).toBe("calendar");
     saveTasksViewMode("list");
     expect(loadTasksViewMode()).toBe("list");
+  });
+
+  it("opens the bare task route on the first subview", () => {
+    saveTasksViewMode("calendar");
+    window.localStorage.setItem("rootine.tasks.sidebar.v2", JSON.stringify({
+      taskView: "nawyki",
+      listFilter: "praca",
+      tagFilter: "pilne",
+      listyOpen: true,
+      tagiOpen: true,
+    }));
+
+    expect(loadInitialTaskPagePreferences([], "")).toMatchObject({
+      taskView: "dzis",
+      listFilter: null,
+      tagFilter: null,
+      viewMode: "list",
+    });
   });
 
   it("uses the active task view to choose the next task date", () => {

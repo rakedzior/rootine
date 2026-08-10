@@ -52,6 +52,7 @@ export type WorkLinkedTaskDetails = {
 
 export type WorkTask = {
   id: string;
+  companyId?: string;
   projectId: string;
   parentId: string | null;
   title: string;
@@ -298,6 +299,7 @@ function isLinkedTaskDetails(value: unknown): value is WorkLinkedTaskDetails {
 function isTask(value: unknown): value is WorkTask {
   return isRecord(value)
     && typeof value.id === "string"
+    && (value.companyId === undefined || typeof value.companyId === "string")
     && typeof value.projectId === "string"
     && (value.parentId === null || typeof value.parentId === "string")
     && typeof value.title === "string"

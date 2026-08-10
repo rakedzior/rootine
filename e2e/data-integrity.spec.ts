@@ -67,6 +67,34 @@ test.describe("integralność prezentowanych danych", () => {
     expect(width).toBeGreaterThan(20);
   });
 
+  test("calendar focuses the new title and saves it after an outside click @shared", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/kalendarz");
+
+    const title = page.getByRole("textbox", { name: "Tytuł zadania" });
+    await page.locator('[data-calendar-cell="2026-08-06"]').click();
+    await expect(title).toBeFocused();
+
+    const taskTitle = "Zadanie zapisane kliknięciem poza panelem";
+    await title.fill(taskTitle);
+    await page.locator(".calendar-weekdays").click({ position: { x: 2, y: 2 } });
+    await expect(page.locator(".calendar-task-detail")).toHaveCount(0);
+    await expect(page.getByText(taskTitle, { exact: true })).toBeVisible();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator(".ui-page-shell:visible")).toBeVisible();
+    await expect(page.getByText(taskTitle, { exact: true })).toBeVisible();
+
+    await page.locator('[data-calendar-cell="2026-08-07"]').click();
+    await expect(page.getByRole("textbox", { name: "Tytuł zadania" })).toBeFocused();
+    await page.locator(".calendar-weekdays").click({ position: { x: 2, y: 2 } });
+    await expect(page.locator(".calendar-task-detail")).toHaveCount(0);
+    const calendarTitles = await page.locator(".calendar-event__title").allInnerTexts();
+    expect(calendarTitles.every((value) => value.trim().length > 0)).toBe(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator(".ui-page-shell:visible")).toBeVisible();
+    const persistedCalendarTitles = await page.locator(".calendar-event__title").allInnerTexts();
+    expect(persistedCalendarTitles.every((value) => value.trim().length > 0)).toBe(true);
+  });
+
   test("wykres minut treningu rysuje słupki proporcjonalne do wartości @shared", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/sport?widok=analysis");
 

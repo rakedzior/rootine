@@ -1,17 +1,18 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, openRootineRoute, test } from "./fixtures";
 
-test("@shared statusy Pracy są osobnymi spokojnymi sekcjami, a ukończone startują zwinięte", async ({ rootinePage: page }) => {
+test("@shared Praca używa spokojnych sekcji zadań i nie pokazuje ukończonych", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/praca");
 
     const board = page.locator(".work-task-board");
     await expect(board).toBeVisible();
 
-    for (const label of ["Po terminie", "Dzisiaj", "Ukończone"]) {
+    for (const label of ["Po terminie"]) {
       const section = page.getByRole("region", { name: label });
       await expect(section).toBeVisible();
       await expect(section).toHaveClass(/ui-section-surface/);
-      await expect(section.locator(".work-task-section__marker")).toBeVisible();
+      await expect(section.locator(".work-task-section__marker")).toHaveCount(0);
+      await expect(section.getByRole("button", { name: new RegExp(`sekcję ${label}`, "i") })).toBeVisible();
       await expect(section.locator(".work-task-section__count")).toBeVisible();
     }
 
@@ -27,14 +28,17 @@ test("@shared statusy Pracy są osobnymi spokojnymi sekcjami, a ukończone start
     expect(surfaceStyle.borderTopWidth).toBe("0px");
     expect(Number.parseFloat(surfaceStyle.radius)).toBe(0);
 
-    const completed = page.getByRole("region", { name: "Ukończone" });
-    const completedToggle = completed.getByRole("button", { name: /Rozwiń/ });
-    await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
-    await expect(completed.locator(".work-task-list")).toHaveCount(0);
+    const todaySection = page.getByRole("region", { name: "Dzisiaj" });
+    await expect(todaySection).toBeVisible();
+    const untimedTodayTask = todaySection.getByRole("button", { name: /Otwórz szczegóły zadania „Doprecyzować sekcję otwierającą”/ });
+    await expect(untimedTodayTask).toBeVisible();
+    await expect(page.getByRole("region", { name: "Po terminie" }).getByRole("button", { name: /Otwórz szczegóły zadania „Doprecyzować sekcję otwierającą”/ })).toHaveCount(0);
 
-    await completedToggle.click();
-    await expect(completed.getByRole("button", { name: /Zwiń/ })).toHaveAttribute("aria-expanded", "true");
-    await expect(completed.locator(".work-task-list")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Ukończone" })).toHaveCount(0);
+    await expect(page.locator(".work-task-row.is-completed")).toHaveCount(0);
+    await expect(page.getByText("Nie masz zadań z terminem na dziś", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Zaplanuj zadanie", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/na dziś ·/)).toHaveCount(0);
 
     const mobileNavigation = page.getByRole("combobox", { name: "Wybierz widok pracy" });
     if (await mobileNavigation.isVisible()) {
@@ -47,6 +51,46 @@ test("@shared statusy Pracy są osobnymi spokojnymi sekcjami, a ukończone start
     const untimed = page.getByRole("region", { name: "Bez terminu" });
     await expect(untimed).toBeVisible();
     await expect(untimed.locator(".work-task-section__count")).toBeVisible();
+});
+
+test("@shared Praca ma podzakładki i właściwości szybkiego dodawania", async ({ rootinePage: page }) => {
+  await openRootineRoute(page, "/praca");
+
+  const quickEntry = page.getByRole("form", { name: "Szybkie dodawanie zadania do pracy" });
+  await expect(quickEntry).toBeVisible();
+  await expect(quickEntry.getByPlaceholder("Dodaj zadanie do „Dzisiaj”")).toBeVisible();
+  for (const name of ["Firma: Bez firmy", "Projekt: Bez projektu", "Status: Do zrobienia", "Priorytet: Bez priorytetu"]) {
+    await expect(quickEntry.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  await quickEntry.getByRole("button", { name: "Status: Do zrobienia", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "W trakcie", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "W trakcie", exact: true }).click();
+  await expect(quickEntry.getByRole("button", { name: "Status: W trakcie", exact: true })).toBeVisible();
+  await quickEntry.getByRole("button", { name: /Termin zadania/ }).click();
+  await expect(page.getByRole("dialog", { name: /Termin zadania/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const mobileNavigation = page.getByRole("combobox", { name: "Wybierz widok pracy" });
+  if (await mobileNavigation.isVisible()) {
+    await mobileNavigation.click();
+    await expect(page.getByRole("option", { name: "Jutro", exact: true })).toBeVisible();
+    await page.getByRole("option", { name: "Ten tydzień", exact: true }).click();
+  } else {
+    await expect(page.locator(".work-context-sidebar").getByRole("button", { name: /^Jutro/ })).toBeVisible();
+    await page.locator(".work-context-sidebar").getByRole("button", { name: /^Ten tydzień/ }).click();
+  }
+  await expect(page).toHaveURL(/\/praca\?widok=week$/);
+  await expect(page.getByPlaceholder("Dodaj zadanie do „Ten tydzień”")).toBeVisible();
+  if (!(await mobileNavigation.isVisible())) await expect(page.getByText("+7 dni", { exact: true })).toBeVisible();
+
+  if (await mobileNavigation.isVisible()) {
+    await mobileNavigation.click();
+    await page.getByRole("option", { name: "Bez terminu", exact: true }).click();
+  } else {
+    await page.locator(".work-context-sidebar").getByRole("button", { name: /^Bez terminu/ }).click();
+  }
+  await expect(page).toHaveURL(/\/praca\?widok=bezterminu$/);
+  await expect(page.getByPlaceholder("Dodaj zadanie do „Bez terminu”")).toBeVisible();
 });
 
 test("@shared Praca nie wprowadza naruszeń WCAG A/AA", async ({ rootinePage: page }) => {
@@ -76,13 +120,19 @@ test("@desktop nazwa projektu otwiera zakres, a chevron rozwija kompaktowy podgl
     await search.fill("");
 
     const projectRecord = projectList.locator(".work-project-record").filter({ hasText: "Nowa strona" });
-    const expand = projectRecord.getByRole("button", { name: "Rozwiń podgląd zadań projektu „Nowa strona”" });
+    const collapse = projectRecord.getByRole("button", { name: "Zwiń podgląd zadań projektu „Nowa strona”" });
     const companyUrl = page.url();
-    await expand.focus();
+    await collapse.focus();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(companyUrl);
 
     const preview = projectRecord.locator(".work-project-record__preview");
+    await expect(preview).toBeHidden();
+
+    const expand = projectRecord.getByRole("button", { name: "Rozwiń podgląd zadań projektu „Nowa strona”" });
+    await expand.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(companyUrl);
     await expect(preview).toBeVisible();
     await expect(preview.locator(".work-project-record__preview-task")).toHaveCount(0);
 

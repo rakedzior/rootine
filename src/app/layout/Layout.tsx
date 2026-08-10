@@ -271,7 +271,7 @@ function PrimaryNavItem({
         setActiveAreaId(null);
       }}
     >
-      <Icon size={mobile ? 18 : 15} strokeWidth={1.7} aria-hidden="true" />
+      <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
       <span className={mobile ? "app-mobile-nav__label" : "app-nav-label"}>{item.label}</span>
     </Link>
   );

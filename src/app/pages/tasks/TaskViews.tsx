@@ -348,6 +348,7 @@ function formatVirtualOccurrenceDate(dateKey: string) {
 export function TaskDetail({
   task,
   occurrence,
+  isDraft = false,
   onClose,
   onToggleCompletion,
   onUpdate,
@@ -357,6 +358,7 @@ export function TaskDetail({
 }: {
   task: Task; onClose: () => void;
   occurrence?: VirtualTaskOccurrenceContext;
+  isDraft?: boolean;
   onToggleCompletion: (done: boolean) => void;
   onUpdate: (id: number, patch: Partial<Task>) => void;
   onDelete: (id: number) => void;
@@ -407,6 +409,13 @@ export function TaskDetail({
   const listBtnRef = useRef<HTMLButtonElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
   const dateBtnRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isDraft) return;
+    const frame = requestAnimationFrame(() => titleRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [isDraft, task.id]);
 
   // Sync title/notes when task changes
   useEffect(() => { setEditTitle(task.text); }, [task.text]);
@@ -464,6 +473,19 @@ export function TaskDetail({
           {completionDone && <Check size={9} strokeWidth={2.5} />}
         </button>
 
+        {/* Priority belongs with the task status controls, away from the anchored close action. */}
+        <button
+          ref={flagBtnRef}
+          type="button"
+          aria-label={task.source?.kind === "travel" ? "Priorytet jest zarządzany w module źródłowym" : "Zmień priorytet zadania"}
+          disabled={task.source?.kind === "travel"}
+          onClick={() => { setShowPriority(v => !v); setShowListPick(false); setShowMore(false); }}
+          className="task-detail__icon-btn"
+        >
+          {/* Priority colour is data, so it stays inline. */}
+          <Flag size={16} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
+        </button>
+
         {/* Divider */}
         <div className="task-detail__divider" />
 
@@ -479,24 +501,11 @@ export function TaskDetail({
           <span>{occurrence ? `Harmonogram serii: ${dateStr}${timeStr}` : `${dateStr}${timeStr}`}</span>
         </button>
 
-        {/* Priority flag */}
-        <button
-          ref={flagBtnRef}
-          type="button"
-          aria-label={task.source?.kind === "travel" ? "Priorytet jest zarządzany w module źródłowym" : "Zmień priorytet zadania"}
-          disabled={task.source?.kind === "travel"}
-          onClick={() => { setShowPriority(v => !v); setShowListPick(false); setShowMore(false); }}
-          className="task-detail__icon-btn"
-        >
-          {/* Priority colour is data, so it stays inline. */}
-          <Flag size={16} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
-        </button>
-
         <button
           type="button"
           aria-label="Zamknij szczegóły zadania"
           onClick={onClose}
-          className="task-detail__icon-btn"
+          className="task-detail__icon-btn task-detail__close-btn"
         >
           <X size={16} strokeWidth={1.5} />
         </button>
@@ -536,13 +545,20 @@ export function TaskDetail({
             value={editTitle}
             placeholder="Co chciałbyś zrobić?"
             onChange={e => {
-              setEditTitle(e.target.value);
+              const nextTitle = e.target.value;
+              setEditTitle(nextTitle);
+              // Calendar drafts must be current before the document-level outside-click
+              // handler can close the panel. Untouched empty drafts are still removed.
+              if (isDraft) onUpdate(task.id, { text: nextTitle });
               const t = e.target;
               t.style.height = "auto";
               t.style.height = t.scrollHeight + "px";
             }}
             onBlur={() => onUpdate(task.id, { text: editTitle })}
-            ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+            ref={el => {
+              titleRef.current = el;
+              if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+            }}
             rows={1}
             className="task-detail__title"
           />

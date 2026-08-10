@@ -21,6 +21,7 @@ import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { calculateNutritionTargets } from "../data/nutritionCalculator";
 import {
   OpenFoodFactsSearchError,
+  foodMatchesQuery,
   scaleNutrition,
   searchGenericFoods,
   searchOpenFoodFacts,
@@ -209,12 +210,20 @@ export default function Odzywanie() {
   const allEntries = useMemo(() => Object.values(day.entries).flat(), [day.entries]);
   const totals = useMemo(() => sumEntries(allEntries), [allEntries]);
   const genericResults = useMemo(() => searchGenericFoods(entryDraft.name), [entryDraft.name]);
+  const remoteCatalogResults = useMemo(
+    () => catalogResults.filter((item) => foodMatchesQuery(item, entryDraft.name)),
+    [catalogResults, entryDraft.name],
+  );
+  const remoteUnbranded = useMemo(() => remoteCatalogResults.filter((item) => !item.brand), [remoteCatalogResults]);
+  const remoteBranded = useMemo(() => remoteCatalogResults.filter((item) => item.brand), [remoteCatalogResults]);
   const allSuggestions = useMemo(() => {
-    const ids = new Set(genericResults.map((item) => item.id));
-    return [...genericResults, ...catalogResults.filter((item) => !ids.has(item.id))];
-  }, [catalogResults, genericResults]);
-  const remoteUnbranded = useMemo(() => catalogResults.filter((item) => !item.brand), [catalogResults]);
-  const remoteBranded = useMemo(() => catalogResults.filter((item) => item.brand), [catalogResults]);
+    const seen = new Set<string>();
+    return [...genericResults, ...remoteBranded, ...remoteUnbranded].filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [genericResults, remoteBranded, remoteUnbranded]);
   const calculatorProfile = useMemo(() => parseCalculatorDraft(calculatorDraft).profile, [calculatorDraft]);
   const calculatorResult = useMemo(
     () => calculatorProfile ? calculateNutritionTargets(calculatorProfile) : null,
@@ -545,6 +554,7 @@ export default function Odzywanie() {
   const chooseFood = (food: FoodSuggestion) => {
     catalogRequestRef.current?.abort();
     catalogRequestRef.current = null;
+    setCatalogPending(false);
     const values = scaleNutrition(food.per100g, food.defaultAmount);
     setSelectedFood(food);
     setEntryDraft((current) => ({
@@ -575,43 +585,46 @@ export default function Odzywanie() {
     catalogRequestRef.current = null;
     setEntryDraft((current) => ({ ...current, name: value }));
     if (selectedFood?.name !== value) setSelectedFood(null);
-    setCatalogOpen(value.trim().length >= 2);
-    setCatalogResults([]);
+    setCatalogOpen(value.trim().length >= 1);
     setCatalogPending(false);
     setCatalogError("");
-    setCatalogSearchedQuery("");
     setEntryErrors((current) => ({ ...current, name: undefined }));
   };
 
-  const searchCatalogOnline = () => {
-    const query = entryDraft.name.trim();
-    if (query.length < 2 || catalogPending || catalogSearchedQuery === query) return;
+  const searchCatalog = useCallback((query: string) => {
+    if (query.length < 2) return;
 
     catalogRequestRef.current?.abort();
     const controller = new AbortController();
     catalogRequestRef.current = controller;
     setCatalogOpen(true);
     setCatalogPending(true);
-    setCatalogResults([]);
     setCatalogError("");
 
     searchOpenFoodFacts(query, controller.signal)
       .then((results) => {
         if (catalogRequestRef.current !== controller) return;
-        setCatalogResults(results);
+        setCatalogResults((current) => {
+          const merged = [...results, ...current.filter((item) => foodMatchesQuery(item, query))];
+          const seen = new Set<string>();
+          return merged.filter((item) => {
+            if (seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+          });
+        });
         setCatalogSearchedQuery(query);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || catalogRequestRef.current !== controller) return;
-        setCatalogResults([]);
         if (error instanceof OpenFoodFactsSearchError && error.status === 429) {
           const retry = error.retryAfterSeconds
             ? ` Spróbuj ponownie za ${error.retryAfterSeconds} s.`
             : " Spróbuj ponownie za chwilę.";
-          setCatalogError(`Limit wyszukiwania online został osiągnięty.${retry}`);
+          setCatalogError(`Limit wyszukiwania został osiągnięty.${retry}`);
           return;
         }
-        setCatalogError("Baza online jest chwilowo niedostępna. Możesz wybrać produkt podstawowy albo uzupełnić dane ręcznie.");
+        setCatalogError("Nie udało się pobrać dodatkowych podpowiedzi. Możesz wybrać produkt podstawowy albo uzupełnić dane ręcznie.");
       })
       .finally(() => {
         if (catalogRequestRef.current === controller) {
@@ -619,7 +632,20 @@ export default function Odzywanie() {
           setCatalogPending(false);
         }
       });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!entryDialogOpen) return;
+    const query = entryDraft.name.trim();
+    if (query.length < 2 || selectedFood?.name === entryDraft.name) return;
+
+    const timeout = window.setTimeout(() => searchCatalog(query), 300);
+    return () => {
+      window.clearTimeout(timeout);
+      catalogRequestRef.current?.abort();
+      catalogRequestRef.current = null;
+    };
+  }, [entryDialogOpen, entryDraft.name, searchCatalog, selectedFood]);
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!catalogOpen || !allSuggestions.length) {
@@ -1519,7 +1545,8 @@ export default function Odzywanie() {
           description={editingEntry
             ? `Zmieniasz wpis z dnia: ${formatDate(selectedDate)}.`
             : `Wpis zostanie dodany do dnia: ${formatDate(selectedDate)}.`}
-          size="md"
+          width="720px"
+          bodyClassName="nutrition-entry-modal__body"
           onClose={draftProtection.requestClose}
           footer={(
             <>
@@ -1548,9 +1575,7 @@ export default function Odzywanie() {
                 placeholder="Zacznij wpisywać, np. ziemniaki albo skyr"
                 value={entryDraft.name}
                 error={entryErrors.name}
-                hint={selectedFood
-                  ? `Wybrano z ${selectedFood.source === "usda" ? "katalogu produktów podstawowych" : "Open Food Facts"}. Wartości przeliczają się wraz z ilością.`
-                  : "Najpierw pokazujemy produkty podstawowe, potem produkty marek."}
+                hint={selectedFood ? "Wartości przeliczają się wraz z ilością." : undefined}
                 role="combobox"
                 aria-autocomplete="list"
                 aria-controls="nutrition-food-suggestions"
@@ -1558,43 +1583,20 @@ export default function Odzywanie() {
                 aria-activedescendant={catalogOpen && allSuggestions[activeSuggestion] ? `nutrition-suggestion-${allSuggestions[activeSuggestion].id}` : undefined}
                 autoComplete="off"
                 data-autofocus
-                onFocus={() => setCatalogOpen(entryDraft.name.trim().length >= 2)}
+                onFocus={() => setCatalogOpen(entryDraft.name.trim().length >= 1)}
                 onBlur={() => setCatalogOpen(false)}
                 onKeyDown={handleSearchKeyDown}
                 onChange={(event) => changeProductName(event.target.value)}
               />
-              {entryDraft.name.trim().length >= 2 && !selectedFood && (
-                <div
-                  className="nutrition-catalog-hint"
-                >
-                  <span>Produkty marek pobieramy dopiero na Twoje żądanie.</span>
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    size="sm"
-                    className="shrink-0"
-                    disabled={catalogPending || catalogSearchedQuery === entryDraft.name.trim()}
-                    leadingIcon={catalogPending ? <LoaderCircle size={13} className="nutrition-search-spinner" /> : undefined}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={searchCatalogOnline}
-                  >
-                    {catalogPending
-                      ? "Szukamy…"
-                      : catalogSearchedQuery === entryDraft.name.trim()
-                        ? "Wyniki pobrane"
-                        : "Szukaj online"}
-                  </Button>
-                </div>
-              )}
-              {catalogOpen && entryDraft.name.trim().length >= 2 && (
+              {catalogOpen && entryDraft.name.trim().length >= 1 && (
                 <div id="nutrition-food-suggestions" className="nutrition-suggestions" role="listbox" aria-label="Podpowiedzi produktów">
-                  {renderSuggestionGroup("Produkty podstawowe · USDA", genericResults)}
-                  {renderSuggestionGroup("Produkty bez marki · Open Food Facts", remoteUnbranded)}
-                  {renderSuggestionGroup("Produkty marek · Open Food Facts", remoteBranded)}
+                  {renderSuggestionGroup("Produkty podstawowe", genericResults)}
+                  {renderSuggestionGroup("Produkty firmowe", remoteBranded)}
+                  {renderSuggestionGroup("Pozostałe produkty", remoteUnbranded)}
                   {catalogPending && (
                     <div className="nutrition-suggestions__status">
                       <LoaderCircle size={13} className="nutrition-search-spinner" />
-                      Szukamy w Open Food Facts…
+                      Szukamy dodatkowych podpowiedzi…
                     </div>
                   )}
                   {!catalogPending && catalogError && (
@@ -1602,11 +1604,14 @@ export default function Odzywanie() {
                       {catalogError}
                     </div>
                   )}
-                  {!catalogPending && !catalogError && !allSuggestions.length && (
+                  {!catalogPending && !catalogError && !allSuggestions.length && entryDraft.name.trim().length === 1 && (
                     <div className="nutrition-suggestions__status">
-                      {catalogSearchedQuery === entryDraft.name.trim()
-                        ? "Nie znaleźliśmy produktu. Wpisz pełną nazwę i uzupełnij wartości ręcznie."
-                        : "Brak produktu podstawowego. Wybierz „Szukaj online” albo uzupełnij wartości ręcznie."}
+                      Wpisz jeszcze jedną literę, aby poszukać produktów firmowych.
+                    </div>
+                  )}
+                  {!catalogPending && !catalogError && !allSuggestions.length && entryDraft.name.trim().length >= 2 && catalogSearchedQuery === entryDraft.name.trim() && (
+                    <div className="nutrition-suggestions__status">
+                      Nie znaleźliśmy produktu. Wpisz pełną nazwę i uzupełnij wartości ręcznie.
                     </div>
                   )}
                 </div>
@@ -1655,13 +1660,6 @@ export default function Odzywanie() {
                 />
               ))}
             </div>
-            <p className="nutrition-data-attribution">
-              Produkty sklepowe:{" "}
-              <a href="https://world.openfoodfacts.org/" target="_blank" rel="noreferrer">Open Food Facts (ODbL)</a>.
-              {" "}Produkty podstawowe:{" "}
-              <a href="https://fdc.nal.usda.gov/" target="_blank" rel="noreferrer">USDA FoodData Central (CC0)</a>.
-              Wartości mogą wymagać weryfikacji z etykietą.
-            </p>
           </form>
         </Modal>
       )}

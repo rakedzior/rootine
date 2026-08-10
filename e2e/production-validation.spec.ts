@@ -187,7 +187,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     expect(hydrationTypography).toEqual(macroTypography);
   });
 
-  test("online nutrition search waits for an explicit action and explains Retry-After", async ({ rootinePage: page }) => {
+  test("nutrition search automatically combines catalogs and explains Retry-After", async ({ rootinePage: page }) => {
     let requestCount = 0;
     await page.route("**/api/openfoodfacts/search**", async (route) => {
       requestCount += 1;
@@ -203,13 +203,112 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     const dialog = await openFirstNutritionProductDialog(page);
     const productInput = dialog.getByRole("combobox", { name: "Produkt lub danie" });
     await productInput.fill("Czekolada testowa E2E");
-    await page.waitForTimeout(650);
-    expect(requestCount).toBe(0);
-
-    await dialog.getByRole("button", { name: "Szukaj online" }).click();
     await expect(dialog.getByRole("alert")).toContainText("Spróbuj ponownie za 17 s.");
     expect(requestCount).toBe(1);
+    await expect(dialog.getByRole("button", { name: "Szukaj online" })).toHaveCount(0);
+    await expect(dialog.getByText(/USDA|online/i)).toHaveCount(0);
     await expect(dialog.getByRole("spinbutton", { name: "Kalorie" })).toBeEnabled();
+  });
+
+  test("nutrition suggestions put basic products before company products", async ({ rootinePage: page }) => {
+    await page.route("**/api/openfoodfacts/search**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hits: [{
+            code: "5900000000001",
+            product_name_pl: "Ziemniaki chips testowe",
+            brands: "Firma testowa",
+            quantity: "100 g",
+            product_quantity: 100,
+            product_quantity_unit: "g",
+            nutriments: {
+              "energy-kcal_100g": 200,
+              proteins_100g: 5,
+              carbohydrates_100g: 30,
+              fat_100g: 10,
+            },
+          }],
+        }),
+      });
+    });
+
+    await openRootineRoute(page, "/odzywianie");
+    const dialog = await openFirstNutritionProductDialog(page);
+    await dialog.getByRole("combobox", { name: "Produkt lub danie" }).fill("ziemniaki");
+
+    const groups = dialog.locator(".nutrition-suggestion-group__label");
+    await expect(groups).toHaveText(["Produkty podstawowe", "Produkty firmowe"]);
+    await expect(dialog.getByText(/USDA|Open Food Facts|online/i)).toHaveCount(0);
+  });
+
+  test("nutrition typeahead starts with local matches after one character", async ({ rootinePage: page }) => {
+    await page.route("**/api/openfoodfacts/search**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hits: [{
+            code: "5900331607549",
+            product_name: "Filet pieczony Duda",
+            brands: "Duda",
+            quantity: "100 g",
+            product_quantity: 100,
+            product_quantity_unit: "g",
+            nutriments: {
+              "energy-kcal_100g": 109,
+              proteins_100g: 19,
+              carbohydrates_100g: 2,
+              fat_100g: 2.8,
+            },
+          }, {
+            code: "5900331607550",
+            product_name: "Filet gotowany",
+            brands: "Olewnik",
+            quantity: "100 g",
+            product_quantity: 100,
+            product_quantity_unit: "g",
+            nutriments: {
+              "energy-kcal_100g": 120,
+              proteins_100g: 19,
+              carbohydrates_100g: 2,
+              fat_100g: 3,
+            },
+          }],
+        }),
+      });
+    });
+
+    await openRootineRoute(page, "/odzywianie");
+    const dialog = await openFirstNutritionProductDialog(page);
+    const productInput = dialog.getByRole("combobox", { name: "Produkt lub danie" });
+    const dialogBox = await dialog.boundingBox();
+
+    expect(dialogBox?.width).toBeGreaterThanOrEqual(700);
+    expect(dialogBox?.width).toBeLessThan(780);
+    expect(dialogBox?.height).toBeGreaterThan(600);
+
+    await productInput.fill("s");
+
+    await expect(dialog.locator(".nutrition-suggestions")).toBeVisible();
+    await expect(dialog.locator(".nutrition-suggestion-group__label").first()).toHaveText("Produkty podstawowe");
+    await expect(dialog.locator(".nutrition-suggestion")).not.toHaveCount(0);
+
+    await productInput.fill("filet");
+    await expect(
+      dialog.locator(".nutrition-suggestion__name").filter({ hasText: /Filet z kurczaka/ }),
+    ).toBeVisible();
+    await expect(dialog.locator(".nutrition-suggestion-group__label")).toHaveText([
+      "Produkty podstawowe",
+      "Produkty firmowe",
+    ]);
+    await expect(
+      dialog.locator(".nutrition-suggestion__name").filter({ hasText: /Filet pieczony Duda/ }),
+    ).toBeVisible();
+    await expect(
+      dialog.locator(".nutrition-suggestion__name").filter({ hasText: /Filet gotowany/ }),
+    ).toBeVisible();
   });
 
   test("offline catalog failure leaves manual nutrition entry available", async ({ rootinePage: page, context }) => {
@@ -220,8 +319,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
 
     await context.setOffline(true);
     try {
-      await dialog.getByRole("button", { name: "Szukaj online" }).click();
-      await expect(dialog.getByRole("alert")).toContainText("Baza online jest chwilowo niedostępna");
+      await expect(dialog.getByRole("alert")).toContainText("Nie udało się pobrać dodatkowych podpowiedzi");
       await expect(dialog.getByRole("spinbutton", { name: "Kalorie" })).toBeEnabled();
     } finally {
       await context.setOffline(false);

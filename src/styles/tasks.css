@@ -310,12 +310,6 @@
   }
 }
 
-@media (max-width: 1380px) {
-  .task-summary-detail {
-    display: none;
-  }
-}
-
 @media (max-width: 760px) {
 
   .task-entry__row {
@@ -912,7 +906,7 @@ input.task-entry-input:focus-visible {
 .task-progress-fill.is-complete { background: var(--color-success-seaglass); }
 
 /* ---------------------------------------------------------------------------
- * Podsumowanie (task report + weekly note).
+ * Podsumowanie (task report).
  * ------------------------------------------------------------------------- */
 
 .task-report {
@@ -925,19 +919,6 @@ input.task-entry-input:focus-visible {
 }
 
 .task-report::-webkit-scrollbar { display: none; }
-
-/*
- * The summary detail panel is absolutely positioned over the workspace rather than taking a
- * grid track, and on this view it is always open — so the report has to reserve its width or
- * the metrics and chart run underneath it. Below the context breakpoint the panel is hidden
- * (see the 1180px block), so the reservation lifts with it.
- */
-@media (min-width: 1181px) {
-  .task-summary-main .ui-content-header,
-  .task-summary-main .task-report {
-    padding-right: calc(var(--detail-panel-width) + var(--task-workspace-inline-padding));
-  }
-}
 
 /* Same capped, centred measure as the task list, so switching subtabs never moves the axis. */
 .task-report > * {
@@ -1666,6 +1647,15 @@ input.task-entry-input:focus-visible {
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
+/* The shared detail-panel frame anchors close actions to the panel. This toolbar owns its
+ * vertical rhythm, so keep the close control in the same flex line as the task controls. */
+.ui-detail-panel .task-detail__close-btn {
+  position: static;
+  z-index: auto;
+  top: auto;
+  right: auto;
+}
+
 .task-detail__divider { width: 1px; height: 14px; flex: 0 0 auto; background: var(--color-border-subtle); }
 
 .task-detail__date {
@@ -1738,6 +1728,7 @@ input.task-entry-input:focus-visible {
 
 .task-detail__title-row {
   display: flex;
+  min-height: var(--control-height-md);
   flex: 0 0 auto;
   align-items: flex-start;
   gap: 6px;
@@ -1745,10 +1736,13 @@ input.task-entry-input:focus-visible {
 }
 
 .task-detail__title {
+  min-height: var(--control-height-sm);
   flex: 1;
-  padding: 0;
+  padding: 5px 6px;
   border: 0;
-  outline: 0;
+  border-radius: var(--radius-sm);
+  outline: 0 !important;
+  outline-offset: 0 !important;
   overflow: hidden;
   background: transparent;
   color: var(--color-chalk-white);
@@ -1759,15 +1753,24 @@ input.task-entry-input:focus-visible {
   resize: none;
 }
 
+.task-detail__title:focus {
+  background: color-mix(in srgb, var(--color-primary-subtle) 42%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent) !important;
+  outline-offset: -1px !important;
+}
+
 .task-detail.is-completed .task-detail__title { text-decoration: line-through; }
 
 .task-detail__notes {
   width: 100%;
-  min-height: 80px;
-  flex: 1;
-  padding: 0;
+  min-height: 56px;
+  max-height: 144px;
+  flex: 0 1 120px;
+  padding: 5px 6px;
   border: 0;
-  outline: 0;
+  border-radius: var(--radius-sm);
+  outline: 0 !important;
+  outline-offset: 0 !important;
   background: transparent;
   color: var(--color-text-secondary);
   font-family: var(--font-sans);
@@ -1776,12 +1779,18 @@ input.task-entry-input:focus-visible {
   resize: none;
 }
 
+.task-detail__notes:focus {
+  background: color-mix(in srgb, var(--color-primary-subtle) 30%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+  outline-offset: -1px !important;
+}
+
 .task-detail__tags {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-top: var(--space-md);
+  margin-top: auto;
 }
 
 .task-detail__tag {
@@ -1838,7 +1847,7 @@ input.task-entry-input:focus-visible {
   gap: var(--space-xs);
   padding: 0;
   border: 0;
-  margin-top: var(--space-sm);
+  margin-top: auto;
   background: transparent;
   color: var(--color-text-muted);
   font-size: var(--text-label);
@@ -2225,12 +2234,16 @@ input.task-entry-input:focus-visible {
 }
 
 .task-entry-control--date {
+  flex: 0 0 auto;
   width: auto;
-  padding-inline: var(--space-xs);
+  min-width: var(--control-height-sm);
+  padding-inline: var(--space-sm);
   gap: var(--space-xs);
+  white-space: nowrap;
 }
 
 .task-entry-control__label {
+  white-space: nowrap;
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
 }

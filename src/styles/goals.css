@@ -1132,6 +1132,13 @@
   opacity: 0.42;
 }
 
+.goals-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
 .goals-card-list {
   display: grid;
   gap: 0;
@@ -1213,10 +1220,29 @@
 
 .goal-card-grid .goal-card-layout {
   grid-template-columns: minmax(0, 1fr);
+  min-height: 208px;
+  align-content: space-between;
+  padding: var(--space-lg);
 }
 
 .goal-card-grid .goal-card-primary {
   grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+}
+
+.goal-card-grid .goal-card-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.goal-card-grid .goal-card-progress {
+  min-width: 0;
+}
+
+.goal-card-grid .goal-card-next {
+  max-width: 100%;
 }
 
 .goal-card-grid .goal-card-actions {
@@ -1226,10 +1252,22 @@
   padding-inline-start: 0;
   border-inline-start: 0;
   justify-self: stretch;
+  grid-template-columns: minmax(0, 1fr) auto 30px;
+  gap: var(--space-sm);
+  min-height: var(--control-height-md);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .goal-card-grid .goal-card-more {
   margin-inline-start: auto;
+}
+
+.goal-card-grid.goal-card:hover,
+.goal-card-grid.goal-card:focus-within {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
 }
 
 @media (max-width: 980px) {
@@ -1315,14 +1353,6 @@
 
 .goals-overview-summary {
   margin: 0 var(--space-3xl) var(--space-sm);
-}
-
-.goals-sidebar-empty {
-  margin: 0;
-  padding: var(--space-sm) var(--space-md);
-  color: var(--color-text-muted);
-  font-size: var(--text-label);
-  line-height: var(--leading-normal);
 }
 
 .goal-agenda {
@@ -1533,6 +1563,66 @@
   display: none;
 }
 
+.goal-context-sidebar {
+  background: var(--color-surface-1);
+}
+
+.goal-context-sidebar .context-nav-group + .context-nav-group {
+  margin-top: var(--space-2xl);
+  padding-top: 0;
+  border-top: 0;
+}
+
+.goal-context-sidebar .context-nav-item:hover {
+  background: var(--color-neutral-subtle);
+}
+
+.goal-context-sidebar .context-nav-item[aria-current="page"] {
+  background: var(--color-neutral-subtle);
+  color: var(--color-text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.goal-context-sidebar .context-nav-item[aria-current="page"]::before {
+  top: var(--space-sm);
+  bottom: var(--space-sm);
+  width: 2px;
+  background: var(--color-primary-text);
+}
+
+.goal-context-sidebar .context-nav-item[aria-current="page"] .context-nav-item__icon {
+  color: var(--color-primary-text);
+}
+
+.goal-context-sidebar .context-nav-item[aria-current="page"] .context-nav-item__meta {
+  color: var(--color-text-muted);
+}
+
+.goal-sidebar-footer {
+  background: var(--color-surface-1);
+}
+
+.goal-sidebar-section-heading {
+  display: flex;
+  min-height: var(--control-height-sm);
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-2xl) var(--space-xs) var(--space-sm);
+}
+
+.goal-sidebar-section-actions {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.goal-sidebar-section-heading:hover .goal-sidebar-section-actions,
+.goal-sidebar-section-heading:focus-within .goal-sidebar-section-actions,
+.goal-sidebar-section-heading.is-open .goal-sidebar-section-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .goal-sidebar-section-toggle {
   color: var(--color-text-tertiary);
 }
@@ -1565,6 +1655,10 @@
   color: var(--color-primary-text);
 }
 
+.goal-sidebar-attention-count {
+  color: var(--color-warning-text);
+}
+
 .goal-category-search,
 .goal-category-add {
   background: var(--color-surface-1);
@@ -1581,6 +1675,15 @@
 .goal-category-symbol,
 .goal-category-nav-icon {
   color: var(--color-text-secondary);
+}
+
+.goal-category-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-tertiary);
 }
 
 .goal-category-input,
@@ -1620,7 +1723,11 @@
   color: var(--color-danger);
 }
 
-.goal-sidebar-footer,
+.goal-sidebar-footer {
+  border-color: var(--color-border);
+  background: var(--color-surface-1);
+}
+
 .goal-detail-panel-footer {
   border-color: var(--color-border);
   background: var(--color-graphite-sidebar);

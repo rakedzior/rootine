@@ -2048,7 +2048,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-overview-workout {
   display: grid;
   width: 100%;
-  min-height: 68px;
+  min-height: 88px;
   grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-md);
@@ -2155,14 +2155,21 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-workout__meta {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 4px;
+  color: var(--color-text-muted);
+  font-size: var(--text-label);
+  line-height: 1.35;
+}
+
+.sport-overview-workout__meta-details {
   display: flex;
   min-width: 0;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  color: var(--color-text-muted);
-  font-size: var(--text-label);
-  line-height: 1.35;
 }
 
 .sport-overview-workout.is-completed .sport-overview-workout__copy strong {
@@ -2472,7 +2479,6 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-exercise-picker button span { display: grid; gap: 3px; }
 .sport-exercise-picker button strong { color: var(--color-chalk-white); font-size: var(--text-body); font-weight: var(--weight-medium); }
 .sport-exercise-picker button small { color: var(--color-text-muted); font-size: var(--text-micro); }
-.sport-overview-workout__content-preview { display: block; max-width: 58ch; margin-top: 4px; overflow: hidden; color: var(--color-text-secondary); font-size: var(--text-micro); text-overflow: ellipsis; white-space: nowrap; }
 .sport-cycle-workout__preview { display: block; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-micro); text-overflow: ellipsis; white-space: nowrap; }
 .sport-history-detail__items { grid-column: 1 / -1; }
 .sport-history-detail__items ul { margin: 4px 0 0; padding-left: 16px; color: var(--color-text-secondary); font-size: var(--text-micro); }
@@ -2584,7 +2590,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-overview-day__heading {
   display: grid;
   min-height: 78px;
-  grid-template-columns: minmax(0, 1fr) 72px 38px;
+  grid-template-columns: minmax(0, 1fr) 38px;
   align-items: center;
   border-right: 1px solid var(--color-border-subtle);
   background: var(--color-graphite-panel);
@@ -2602,12 +2608,11 @@ button.sport-cycle-plan-card:focus-visible {
   font-size: var(--text-label);
 }
 
-.sport-overview-day__heading span {
-  display: grid;
-  min-height: 100%;
-  place-items: center;
-  padding: var(--space-sm);
-  border-left: 1px solid var(--color-border-subtle);
+.sport-overview-day__heading > div > span:not(.sport-overview-day__recovery) {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border-left: 0;
   color: var(--color-text-muted);
   font-family: var(--font-data);
   font-size: var(--text-micro);
@@ -2672,13 +2677,14 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 70px;
+  min-height: 84px;
   grid-template-columns: minmax(0, 1fr);
-  gap: 3px;
-  padding: var(--space-sm);
+  align-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-md);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--color-graphite-input);
+  background: var(--color-graphite-panel);
   color: var(--color-text-secondary);
   text-align: left;
 }
@@ -2722,13 +2728,33 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-overview-day__workouts > button strong {
   overflow: hidden;
-  font-size: var(--text-micro);
+  padding-right: var(--space-lg);
+  color: var(--color-chalk-white);
+  font-size: var(--text-body);
   font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sport-overview-day__workouts > button span,
+.sport-overview-day__discipline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.sport-overview-day__discipline .ui-badge,
+.sport-overview-day__workouts > button > .ui-badge {
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  text-overflow: ellipsis;
+}
+
+.sport-overview-day__workouts > button span:not(.ui-badge),
 .sport-overview-day__empty {
   color: var(--color-text-muted);
   font-family: var(--font-data);

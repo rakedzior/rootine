@@ -52,6 +52,7 @@ import {
   ContentHeader,
   ContextNavGroup,
   ContextNavItem,
+  CompletedSection,
   ModuleSidebar,
   DatePicker,
   EmptyState,
@@ -72,7 +73,7 @@ import {
 import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { TaskInlineMenu, WorkCompanyActionsMenu, WorkProjectActionsMenu } from "./PracaMenus";
 import { WorkMobileNavigation } from "../work/WorkMobileNavigation";
-import { WorkQuickEntry } from "../work/WorkQuickEntry";
+import { WorkQuickEntry, type WorkQuickEntryValues } from "../work/WorkQuickEntry";
 import { WorkDetailPanel } from "../work/WorkDetailPanel";
 import "../../styles/work.css";
 import {
@@ -86,14 +87,12 @@ import {
   TASK_STATUS_ORDER,
   addDays,
   collectTaskBranch,
-  formatDate,
   formatDateRange,
   formatLongDate,
   formatProjectCount,
   formatOpenTaskCount,
   formatProjectProgress,
   subtaskCountLabel,
-  formatTaskCount,
   getInitialWorkLocation,
   getTaskStatus,
   isTaskOpen,
@@ -103,7 +102,6 @@ import {
   projectStatusTone,
   relativeDateLabel,
   taskAnchorDate,
-  taskCountLabel,
   taskDepth,
   taskStatusIcon,
   taskStatusTone,
@@ -136,7 +134,9 @@ export default function Praca() {
   const [companySearch, setCompanySearch] = useState("");
   const [companyStatusFilter, setCompanyStatusFilter] = useState<CompanyProjectStatusFilter>("all");
   const [companySort, setCompanySort] = useState<CompanyProjectSort>("name");
-  const [expandedCompanyProjectIds, setExpandedCompanyProjectIds] = useState<Set<string>>(() => new Set());
+  const [expandedCompanyProjectIds, setExpandedCompanyProjectIds] = useState<Set<string>>(() => new Set(
+    loadWorkWorkspace().projects.filter((project) => project.status !== "completed").map((project) => project.id),
+  ));
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [detailSubtasksExpanded, setDetailSubtasksExpanded] = useState(false);
@@ -296,7 +296,7 @@ export default function Praca() {
     pendingUrlLocationRef.current = null;
     const next = new URLSearchParams(commandParams);
     if (view === "today") next.delete("widok");
-    else next.set("widok", view === "untimed" ? "bezterminu" : view);
+    else next.set("widok", view === "untimed" ? "bezterminu" : view === "tomorrow" ? "jutro" : view);
     if (selectedCompanyId) next.set("firma", selectedCompanyId);
     else next.delete("firma");
     if (selectedProjectId) next.set("projekt", selectedProjectId);
@@ -400,12 +400,13 @@ export default function Praca() {
   const currentTaskMatches = (task: WorkTask, includeCompleted = true): boolean => {
     const taskStatus = getTaskStatus(task);
     const project = projectById.get(task.projectId);
-    const company = project ? companyById.get(project.companyId) : undefined;
+    const company = (task.companyId ? companyById.get(task.companyId) : undefined)
+      ?? (project ? companyById.get(project.companyId) : undefined);
     const haystack = normalize([task.title, task.note ?? "", project?.name ?? "", company?.name ?? ""].join(" "));
     if (search.trim() && !haystack.includes(normalize(search.trim()))) return false;
     if (statusFilter !== "all" && taskStatus !== statusFilter) return false;
     if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
-    if (companyFilter !== "all" && project?.companyId !== companyFilter) return false;
+    if (companyFilter !== "all" && (task.companyId ?? project?.companyId) !== companyFilter) return false;
     if (projectFilter !== "all" && task.projectId !== projectFilter) return false;
     if (!includeCompleted && taskStatus === "completed") return false;
     return true;
@@ -446,11 +447,13 @@ export default function Praca() {
     setCompanyStatusFilter("all");
     setCompanySort("name");
     setAdvancedFiltersOpen(false);
-    setExpandedCompanyProjectIds(new Set());
+    setExpandedCompanyProjectIds(nextView === "company" && companyId
+      ? new Set(workspace.projects.filter((project) => project.companyId === companyId && project.status !== "completed").map((project) => project.id))
+      : new Set());
     setDetailTaskId(null);
     const next = new URLSearchParams(commandParams);
     if (nextView === "today") next.delete("widok");
-    else next.set("widok", nextView === "untimed" ? "bezterminu" : nextView);
+    else next.set("widok", nextView === "untimed" ? "bezterminu" : nextView === "tomorrow" ? "jutro" : nextView);
     if (companyId) next.set("firma", companyId);
     else next.delete("firma");
     if (projectId) next.set("projekt", projectId);
@@ -518,25 +521,26 @@ export default function Praca() {
     setEditor({ kind: "task", mode: task ? "edit" : "add", id: task?.id, parentId });
   };
 
-  const createQuickTask = (title: string) => {
+  const createQuickTask = (title: string, values: WorkQuickEntryValues) => {
     const now = new Date().toISOString();
     setWorkspace((current) => ({
       ...current,
       tasks: [...current.tasks, {
         id: createWorkId("task"),
-        projectId: "",
+        companyId: values.companyId || undefined,
+        projectId: values.projectId,
         parentId: null,
         title,
         completed: false,
-        status: "todo",
-        priority: "none",
-        dueDate: today,
+        status: values.status,
+        priority: values.priority,
+        dueDate: values.dueDate,
         note: "",
         createdAt: now,
         updatedAt: now,
       }],
     }));
-    recordActivity({ moduleId: "work", kind: "create", title, detail: "Dodano zadanie pracy na dziś" });
+    recordActivity({ moduleId: "work", kind: "create", title, detail: values.dueDate ? `Dodano zadanie pracy: ${relativeDateLabel(values.dueDate, today)}` : "Dodano zadanie pracy bez terminu" });
     showSaveNotice();
   };
 
@@ -766,7 +770,7 @@ export default function Praca() {
     });
   };
 
-  const updateTaskValues = (taskId: string, patch: Partial<Pick<WorkTask, "priority" | "dueDate" | "projectId" | "parentId">>) => {
+  const updateTaskValues = (taskId: string, patch: Partial<Pick<WorkTask, "companyId" | "priority" | "dueDate" | "projectId" | "parentId">>) => {
     setWorkspace((current) => ({
       ...current,
       tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task),
@@ -924,7 +928,8 @@ export default function Praca() {
 
   const taskContext = (task: WorkTask) => {
     const project = projectById.get(task.projectId);
-    const company = project ? companyById.get(project.companyId) : undefined;
+    const company = (task.companyId ? companyById.get(task.companyId) : undefined)
+      ?? (project ? companyById.get(project.companyId) : undefined);
     const parentChain: string[] = [];
     const visited = new Set<string>();
     let parentId = task.parentId;
@@ -944,7 +949,18 @@ export default function Praca() {
 
   const taskMatches = (task: WorkTask, includeCompleted = true) => currentTaskMatches(task, includeCompleted);
 
-  const renderTaskRow = (task: WorkTask, depth = 0, showContext = true, compact = false) => {
+  const renderQuickEntry = (dueDate: string, dateLabel: string, destinationLabel: string) => (
+    <WorkQuickEntry
+      companies={workspace.companies}
+      projects={workspace.projects}
+      dueDate={dueDate}
+      dateLabel={dateLabel}
+      destinationLabel={destinationLabel}
+      onCreate={createQuickTask}
+    />
+  );
+
+  const renderTaskRow = (task: WorkTask, depth = 0, showContext = true, compact = false, hideDate = false) => {
     const status = getTaskStatus(task);
     const context = taskContext(task);
     const companyName = context.company?.name ?? "Nieprzypisane";
@@ -955,11 +971,42 @@ export default function Praca() {
       "--work-company-accent": normalizeCompanyColor(context.company?.color ?? ""),
     } as CSSProperties;
     const isProjectTreeTask = view === "project" && task.projectId === selectedProject?.id;
-    const dateLabel = task.dueDate ? (task.dueDate < today ? relativeDateLabel(task.dueDate, today) : formatDate(task.dueDate)) : "Bez terminu";
+    const scheduledTime = task.linkedTask?.schedule?.startTime ?? task.linkedTask?.time;
+    const dateLabel = task.dueDate
+      ? task.dueDate < today
+        ? relativeDateLabel(task.dueDate, today)
+        : task.dueDate === today
+          ? scheduledTime || "Dziś"
+          : relativeDateLabel(task.dueDate, today)
+      : "Bez terminu";
+    const taskCheck = (
+      <button
+        type="button"
+        className={`work-task-check ${status === "completed" ? "is-completed" : ""}`}
+        aria-label={status === "completed" ? `Przywróć „${task.title}”` : `Ukończ „${task.title}”`}
+        aria-pressed={status === "completed"}
+        onClick={() => toggleTask(task)}
+      >
+        {status === "completed" && <Check size={11} strokeWidth={2.4} />}
+      </button>
+    );
+    const compactDate = compact && task.dueDate && !hideDate ? (
+      <>
+        <DatePicker
+          value={task.dueDate}
+          displayValue={dateLabel}
+          aria-label={`Zmień termin zadania „${task.title}”`}
+          fieldClassName="work-task-inline-date work-task-inline-date--compact"
+          portalLayer="featurePopup"
+          onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
+        />
+        <span className="work-task-row__compact-separator" aria-hidden="true">|</span>
+      </>
+    ) : null;
     return (
       <ListRow
         key={task.id}
-         className={`work-task-row ${depth ? "work-task-row--nested" : ""} ${showContext ? "work-task-row--with-context" : ""} ${compact ? "work-task-row--compact" : ""}`}
+         className={`work-task-row ${depth ? "work-task-row--nested" : ""} ${showContext ? "work-task-row--with-context" : ""} ${compact ? "work-task-row--compact" : ""} ${task.dueDate && task.dueDate < today ? "work-task-row--overdue" : ""}`}
          style={rowStyle}
          draggable={isProjectTreeTask}
          onDragStart={(event) => handleTaskDragStart(event, task)}
@@ -972,24 +1019,25 @@ export default function Praca() {
            toggleTaskDetails(task.id);
          }}
          data-drag-over={dragOverTaskId === task.id ? "true" : undefined}
-        leading={(
-          <button
-            type="button"
-            className={`work-task-check ${status === "completed" ? "is-completed" : ""}`}
-            aria-label={status === "completed" ? `Przywróć „${task.title}”` : `Ukończ „${task.title}”`}
-            aria-pressed={status === "completed"}
-            onClick={() => toggleTask(task)}
-          >
-            {status === "completed" && <Check size={11} strokeWidth={2.4} />}
-          </button>
-        )}
+        rail={!compact ? (
+          <DatePicker
+            value={task.dueDate}
+            displayValue={dateLabel}
+            aria-label={`Zmień termin zadania „${task.title}”`}
+            fieldClassName="work-task-inline-date"
+            portalLayer="featurePopup"
+            onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
+          />
+        ) : undefined}
+        leading={compact ? <span className="work-task-row__compact-leading">{taskCheck}{compactDate}</span> : taskCheck}
         title={<span>{task.title}</span>}
         titleLabel={detailTaskId === task.id ? `Zamknij szczegóły zadania „${task.title}”` : `Otwórz szczegóły zadania „${task.title}”`}
         onTitleClick={() => toggleTaskDetails(task.id)}
         selected={detailTaskId === task.id}
         subtitle={task.note && !compact ? <span className="work-task-row__subtitle-copy"><span className="work-task-row__note">{task.note}</span></span> : undefined}
-        trailing={(
-          <div className={`work-task-row__controls ${showContext ? "work-task-row__controls--with-context" : ""}`}>
+        metaAlign="end"
+        meta={(
+          <>
             {showContext && (
               <>
                 <span className="work-task-row__context-column work-task-row__company-column" title={companyName}>
@@ -999,71 +1047,66 @@ export default function Praca() {
                 <span className="work-task-row__context-column work-task-row__project-column" title={projectName}>{projectName}</span>
               </>
             )}
-            <span className="work-task-row__disclosure-slot">
-              {isProjectTreeTask && hasChildren && (
-                <button
-                  type="button"
-                  className="work-task-row__disclosure"
-                  aria-label={collapsedTaskIds.has(task.id) ? "Rozwiń podzadania" : "Zwiń podzadania"}
-                  aria-expanded={!collapsedTaskIds.has(task.id)}
-                  onClick={() => toggleCollapsed(task.id)}
-                >
-                  {collapsedTaskIds.has(task.id) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-                </button>
-              )}
-            </span>
-            <TaskInlineMenu
-              value={status}
-              ariaLabel={`Zmień status zadania „${task.title}”`}
-              triggerClassName={`work-task-status ${taskStatusTone(status)}`}
-              options={TASK_STATUS_ORDER.map((candidate) => ({
-                value: candidate,
-                label: TASK_STATUS_LABELS[candidate],
-                leadingIcon: taskStatusIcon(candidate),
-                selected: candidate === status,
-                className: `work-inline-menu__item--${candidate}`,
-              }))}
-              onChange={(value) => {
-                const nextStatus = value as WorkTaskStatus;
-                if (nextStatus === "completed" && status !== "completed") {
-                  toggleTask(task);
-                  return;
-                }
-                applyTaskStatuses([task.id], nextStatus, `Status: ${TASK_STATUS_LABELS[nextStatus]}`);
-              }}
-            >
-              {taskStatusIcon(status)}
-              {TASK_STATUS_LABELS[status]}
-            </TaskInlineMenu>
-            <TaskInlineMenu
-              value={task.priority}
-              ariaLabel={`Zmień priorytet zadania „${task.title}”`}
-              triggerClassName={`work-task-priority work-task-priority--${task.priority}`}
-              options={PRIORITY_ORDER.map((priority) => ({
-                value: priority,
-                label: PRIORITY_LABELS[priority],
-                leadingIcon: <Flag size={11} aria-hidden="true" />,
-                selected: priority === task.priority,
-                className: `work-inline-menu__item--${priority}`,
-              }))}
-              onChange={(value) => updateTaskValues(task.id, { priority: value as WorkTaskPriority })}
-            >
-              <Flag size={11} aria-hidden="true" />
-              {PRIORITY_LABELS[task.priority]}
-            </TaskInlineMenu>
-            <DatePicker
-              value={task.dueDate}
-              displayValue={dateLabel}
-              aria-label={`Zmień termin zadania „${task.title}”`}
-              fieldClassName="work-task-inline-date"
-              portalLayer="featurePopup"
-              onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
-            />
-          </div>
+            {(!compact || task.priority !== "none") && (
+              <TaskInlineMenu
+                value={task.priority}
+                ariaLabel={`Zmień priorytet zadania „${task.title}”`}
+                triggerClassName={`work-task-priority work-task-priority--${task.priority}`}
+                options={PRIORITY_ORDER.map((priority) => ({
+                  value: priority,
+                  label: PRIORITY_LABELS[priority],
+                  leadingIcon: <Flag size={11} aria-hidden="true" />,
+                  selected: priority === task.priority,
+                  className: `work-inline-menu__item--${priority}`,
+                }))}
+                onChange={(value) => updateTaskValues(task.id, { priority: value as WorkTaskPriority })}
+              >
+                <Flag size={11} aria-hidden="true" />
+              </TaskInlineMenu>
+            )}
+            {(!compact || status !== "todo") && (
+              <TaskInlineMenu
+                value={status}
+                ariaLabel={`Zmień status zadania „${task.title}”`}
+                triggerClassName={`work-task-status ${taskStatusTone(status)}`}
+                options={TASK_STATUS_ORDER.map((candidate) => ({
+                  value: candidate,
+                  label: TASK_STATUS_LABELS[candidate],
+                  leadingIcon: taskStatusIcon(candidate),
+                  selected: candidate === status,
+                  className: `work-inline-menu__item--${candidate}`,
+                }))}
+                onChange={(value) => {
+                  const nextStatus = value as WorkTaskStatus;
+                  if (nextStatus === "completed" && status !== "completed") {
+                    toggleTask(task);
+                    return;
+                  }
+                  applyTaskStatuses([task.id], nextStatus, `Status: ${TASK_STATUS_LABELS[nextStatus]}`);
+                }}
+              >
+                {taskStatusIcon(status)}
+                {TASK_STATUS_LABELS[status]}
+              </TaskInlineMenu>
+            )}
+          </>
         )}
+        trailing={isProjectTreeTask && hasChildren ? (
+          <span className="work-task-row__disclosure-slot">
+            <button
+              type="button"
+              className="work-task-row__disclosure"
+              aria-label={collapsedTaskIds.has(task.id) ? "Rozwiń podzadania" : "Zwiń podzadania"}
+              aria-expanded={!collapsedTaskIds.has(task.id)}
+              onClick={() => toggleCollapsed(task.id)}
+            >
+              {collapsedTaskIds.has(task.id) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            </button>
+          </span>
+        ) : undefined}
         completed={status === "completed"}
         density="compact"
-        divided
+        divided={false}
       />
     );
   };
@@ -1071,7 +1114,6 @@ export default function Praca() {
   const renderTaskSection = (
     title: string,
     tasks: WorkTask[],
-    icon: ReactNode,
     emptyText?: string,
     emptyAction?: ReactNode,
     options: { collapseKey?: string; defaultCollapsed?: boolean; collapsible?: boolean; today?: boolean; tone?: "danger" | "today" | "neutral" | "success" } = {},
@@ -1092,22 +1134,25 @@ export default function Praca() {
       <SectionSurface className={`work-task-section ${isCollapsed ? "is-collapsed" : ""} ${options.today ? "is-today" : ""} ${sectionTone ? `is-${sectionTone}` : ""}`} aria-label={title}>
         <header className="work-task-section__header">
           <div>
-            <span className="work-task-section__marker" aria-hidden="true">{icon}</span>
+            {options.collapsible && (
+              <button
+                type="button"
+                className="work-task-section__toggle"
+                aria-label={`${isCollapsed ? "Rozwiń" : "Zwiń"} sekcję ${title}`}
+                aria-expanded={!isCollapsed}
+                onClick={toggleSection}
+              >
+                {isCollapsed ? <ChevronRight size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
+              </button>
+            )}
             <h3>{title}</h3>
             <span className="work-task-section__count">{tasks.length}</span>
           </div>
-          {options.collapsible && (
-            <button type="button" className="work-task-section__toggle" aria-expanded={!isCollapsed} onClick={toggleSection}>
-              {isCollapsed ? "Rozwiń" : "Zwiń"}
-              {isCollapsed ? <ChevronRight size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
-            </button>
-          )}
         </header>
         {!isCollapsed && (tasks.length ? (
           <div className="work-task-list">{tasks.map((task) => renderTaskRow(task))}</div>
         ) : emptyText ? (
           <div className={`work-task-section__empty ${emptyAction ? "work-task-section__empty--compact" : ""}`}>
-            {emptyAction ? <span className="work-task-section__empty-icon" aria-hidden="true">{icon}</span> : null}
             <span>{emptyText}</span>
             {emptyAction}
           </div>
@@ -1118,35 +1163,35 @@ export default function Praca() {
 
   const renderWeekGroups = (tasks: WorkTask[]) => {
     const openTasks = tasks.filter(isTaskOpen);
-    const completed = tasks.filter((task) => getTaskStatus(task) === "completed");
     const overdue = openTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today);
     const remaining = openTasks.filter((task) => !overdue.includes(task));
     return (
       <>
-        {renderTaskSection("Po terminie", overdue, <CircleAlert size={13} aria-hidden="true" />)}
+        {renderTaskSection("Po terminie", overdue, undefined, undefined, { collapseKey: "week:overdue", collapsible: true })}
         {weekDates.map((date, index) => {
-          const dayTasks = remaining.filter((task) => taskAnchorDate(task) === date);
+          const dayTasks = remaining.filter((task) => {
+            const anchor = taskAnchorDate(task);
+            return anchor === date || (index === 0 && !anchor);
+          });
           if (!dayTasks.length) return null;
           return (
             <Fragment key={date}>
               {renderTaskSection(
                 index === 0 ? "Dzisiaj" : formatLongDate(date),
                 dayTasks,
-                <CalendarDays size={13} aria-hidden="true" />,
                 undefined,
                 undefined,
-                { today: index === 0 },
+                { collapseKey: `week:${date}`, collapsible: true, today: index === 0 },
               )}
             </Fragment>
           );
         })}
-        {renderTaskSection("Ukończone", completed, <Check size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "week:completed", collapsible: true })}
       </>
     );
   };
 
   const renderTaskTree = () => {
-    const tasks = projectTasks.filter((task) => taskMatches(task));
+    const tasks = projectTasks.filter((task) => taskMatches(task, false));
     const byParent = new Map<string | null, WorkTask[]>();
     projectTasks.forEach((task) => {
       const parentId = projectTasks.some((candidate) => candidate.id === task.parentId) ? task.parentId : null;
@@ -1165,11 +1210,12 @@ export default function Praca() {
     const renderBranch = (task: WorkTask, depth: number): ReactNode => {
       if (!visibleIds.has(task.id)) return null;
       const children = byParent.get(task.id) ?? [];
+      const showTask = isTaskOpen(task);
       return (
-        <div key={task.id} className="work-task-branch">
-          {renderTaskRow(task, depth, false)}
-          {!collapsedTaskIds.has(task.id) && children.map((child) => renderBranch(child, depth + 1))}
-        </div>
+        <Fragment key={task.id}>
+          {showTask && renderTaskRow(task, depth, false)}
+          {(!showTask || !collapsedTaskIds.has(task.id)) && children.map((child) => renderBranch(child, showTask ? depth + 1 : depth))}
+        </Fragment>
       );
     };
     if (!visibleIds.size) {
@@ -1205,43 +1251,54 @@ export default function Praca() {
   };
 
   const renderTodayView = () => {
-    const tasks = filterTaskList(relevantTasks, true);
+    const tasks = filterTaskList(relevantTasks, false);
     const openTasks = tasks.filter(isTaskOpen);
     const overdue = openTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today);
-    const todayTasks = openTasks.filter((task) => taskAnchorDate(task) === today);
+    const todayTasks = openTasks.filter((task) => {
+      const anchor = taskAnchorDate(task);
+      return anchor === today || !anchor;
+    });
     const upcoming = openTasks.filter((task) => {
       const anchor = taskAnchorDate(task);
       return anchor > today;
     }).sort((a, b) => taskAnchorDate(a).localeCompare(taskAnchorDate(b)) || a.createdAt.localeCompare(b.createdAt)).slice(0, 3);
-    const completed = tasks.filter((task) => getTaskStatus(task) === "completed");
     return (
       <div className="work-screen work-screen--focus">
-        <WorkQuickEntry onCreate={createQuickTask} />
-        <div className="work-view-summary" role="status">{todayTasks.length} na dziś · {overdue.length} po terminie</div>
+        {renderQuickEntry(today, "Dzisiaj", "Dzisiaj")}
         <div className="work-task-board">
-          {renderTaskSection("Po terminie", overdue, <CircleAlert size={13} aria-hidden="true" />)}
-          {renderTaskSection(
-            "Dzisiaj",
-            todayTasks,
-            <Clock3 size={13} aria-hidden="true" />,
-            "Nie masz zadań z terminem na dziś",
-            <Button variant="quiet" size="sm" onClick={() => openTaskEditor(undefined, null, today)}>Zaplanuj zadanie</Button>,
-            { today: true },
-          )}
+          {renderTaskSection("Po terminie", overdue, undefined, undefined, { collapseKey: "today:overdue", collapsible: true })}
+          {renderTaskSection("Dzisiaj", todayTasks, undefined, undefined, { collapseKey: "today:today", collapsible: true, today: true })}
           {upcoming.length > 0 && (
-            renderTaskSection("Następne", upcoming, <CalendarDays size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "today:next", collapsible: true })
+            renderTaskSection("Następne", upcoming, undefined, undefined, { collapseKey: "today:next", collapsible: true })
           )}
-          {renderTaskSection("Ukończone", completed, <Check size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "today:completed", collapsible: true })}
         </div>
       </div>
     );
   };
 
   const renderWeekView = () => {
-    const tasks = filterTaskList(relevantTasks, true);
+    const tasks = filterTaskList(relevantTasks, false);
     return (
       <div className="work-screen work-screen--focus">
+        {renderQuickEntry(addDays(today, 7), "+7 dni", "Ten tydzień")}
         <div className="work-task-board">{renderWeekGroups(tasks)}</div>
+      </div>
+    );
+  };
+
+  const renderTomorrowView = () => {
+    const tomorrow = addDays(today, 1);
+    const tasks = filterTaskList(relevantTasks, false);
+    const openTasks = tasks.filter(isTaskOpen);
+    const overdue = openTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < tomorrow);
+    const tomorrowTasks = openTasks.filter((task) => taskAnchorDate(task) === tomorrow);
+    return (
+      <div className="work-screen work-screen--focus">
+        {renderQuickEntry(tomorrow, "Jutro", "Jutro")}
+        <div className="work-task-board">
+          {renderTaskSection("Po terminie", overdue, undefined, undefined, { collapseKey: "tomorrow:overdue", collapsible: true })}
+          {renderTaskSection("Jutro", tomorrowTasks, undefined, undefined, { collapseKey: "tomorrow:tomorrow", collapsible: true })}
+        </div>
       </div>
     );
   };
@@ -1252,33 +1309,33 @@ export default function Praca() {
       const projectA = projectById.get(a.projectId);
       const projectB = projectById.get(b.projectId);
       if (activeSort === "priority") return PRIORITY_ORDER.indexOf(b.priority) - PRIORITY_ORDER.indexOf(a.priority) || a.title.localeCompare(b.title, "pl");
-      if (activeSort === "company") return (companyById.get(projectA?.companyId ?? "")?.name ?? "").localeCompare(companyById.get(projectB?.companyId ?? "")?.name ?? "", "pl") || a.title.localeCompare(b.title, "pl");
+      if (activeSort === "company") return (companyById.get(a.companyId ?? projectA?.companyId ?? "")?.name ?? "").localeCompare(companyById.get(b.companyId ?? projectB?.companyId ?? "")?.name ?? "", "pl") || a.title.localeCompare(b.title, "pl");
       if (activeSort === "project") return (projectA?.name ?? "").localeCompare(projectB?.name ?? "", "pl") || a.title.localeCompare(b.title, "pl");
       if (activeSort === "updated") return (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt);
       return (taskAnchorDate(a) || "9999-12-31").localeCompare(taskAnchorDate(b) || "9999-12-31") || a.title.localeCompare(b.title, "pl");
     });
     return (
       <div className="work-screen work-screen--table">
+        {renderQuickEntry(today, "Dzisiaj", "Wszystkie")}
         <section className="work-task-section" aria-label="Wszystkie aktywne zadania">
-          {sorted.length ? <><div className="work-task-columns" aria-hidden="true"><span>Zadanie</span><span>Firma</span><span>Projekt</span><span>Status</span><span>Priorytet</span><span>Termin</span></div><div className="work-task-list">{sorted.map((task) => renderTaskRow(task))}</div></> : <EmptyState icon={<Check size={18} />} title="Brak aktywnych zadań" description="Wszystko jest zamknięte albo nie ma jeszcze zadań." />}
+          {sorted.length ? <><div className="work-task-columns" aria-hidden="true"><span>Termin</span><span>Zadanie</span><span>Firma</span><span>Projekt</span><span>Priorytet</span><span>Status</span></div><div className="work-task-list">{sorted.map((task) => renderTaskRow(task))}</div></> : <EmptyState icon={<Check size={18} />} title="Brak aktywnych zadań" description="Wszystko jest zamknięte albo nie ma jeszcze zadań." />}
         </section>
       </div>
     );
   };
 
   const renderUntimedView = () => {
-    const tasks = filterTaskList(relevantTasks, true)
+    const tasks = filterTaskList(relevantTasks, false)
       .filter((task) => !taskAnchorDate(task))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.title.localeCompare(b.title, "pl"));
     const openTasks = tasks.filter(isTaskOpen);
-    const completed = tasks.filter((task) => getTaskStatus(task) === "completed");
     return (
       <div className="work-screen work-screen--focus">
+        {renderQuickEntry("", "Bez terminu", "Bez terminu")}
         <div className="work-view-summary" role="status">{formatOpenTaskCount(openTasks.length)} bez terminu</div>
         <div className="work-task-board">
           {tasks.length ? <>
-            {renderTaskSection("Bez terminu", openTasks, <Circle size={13} aria-hidden="true" />)}
-            {renderTaskSection("Ukończone", completed, <Check size={13} aria-hidden="true" />, undefined, undefined, { collapseKey: "untimed:completed", collapsible: true })}
+            {renderTaskSection("Bez terminu", openTasks, undefined, undefined, { collapseKey: "untimed:open", collapsible: true })}
           </> : (
             <EmptyState icon={<Circle size={18} />} title="Brak zadań bez terminu" description="Zadania bez daty pojawią się tutaj, gdy utworzysz je bez terminu." />
           )}
@@ -1288,7 +1345,7 @@ export default function Praca() {
   };
 
   const renderUnassignedView = () => {
-    const tasks = filterTaskList(workspace.tasks.filter((task) => !task.projectId));
+    const tasks = filterTaskList(workspace.tasks.filter((task) => !task.projectId), false);
     return (
       <div className="work-screen">
         <section className="work-task-section" aria-label="Nieprzypisane zadania">
@@ -1339,7 +1396,7 @@ export default function Praca() {
       <div className="work-screen work-screen--table">
         <section className="work-project-list work-project-list--company" aria-labelledby="work-company-projects-title">
           <header className="work-section-heading">
-            <div><h3 id="work-company-projects-title">Projekty</h3><span>{projects.length}</span></div>
+            <div><h3 id="work-company-projects-title">Projekty</h3></div>
             <div className="work-section-heading__actions">
               <div className="work-project-list__bulk-actions" aria-label="Sterowanie rozwinięciem projektów">
                 <Button
@@ -1360,23 +1417,33 @@ export default function Praca() {
           <div className="work-project-columns" aria-hidden="true">
             <span>Projekt</span>
             <span>Status</span>
-            <span>Termin</span>
-            <span>Otwarte</span>
             <span>Postęp</span>
-            <span>Akcje</span>
+            <span>Najbliższy termin</span>
+            <span />
             <span />
           </div>
           {projects.length ? projects.map((project) => {
             const count = projectCounts.get(project.id) ?? { total: 0, completed: 0, open: 0 };
             const progress = count.total ? Math.round((count.completed / count.total) * 100) : 0;
-            const projectOpenTasks = workspace.tasks
-              .filter((task) => task.projectId === project.id && isTaskOpen(task))
+            const projectTasks = workspace.tasks.filter((task) => task.projectId === project.id);
+            const projectOpenTasks = projectTasks
+              .filter(isTaskOpen)
               .sort((a, b) => (taskAnchorDate(a) || "9999-12-31").localeCompare(taskAnchorDate(b) || "9999-12-31") || a.createdAt.localeCompare(b.createdAt));
+            const projectCompletedTasks = projectTasks.filter((task) => !isTaskOpen(task));
+            const nearestTaskDeadline = projectOpenTasks.find((task) => Boolean(taskAnchorDate(task)))?.dueDate ?? "";
+            const nearestDeadline = nearestTaskDeadline || project.endDate || "";
+            const nearestDeadlineLabel = nearestDeadline ? relativeDateLabel(nearestDeadline, today) : "";
+            const nearestDeadlineOverdue = Boolean(nearestDeadline && nearestDeadline < today);
             const isExpanded = expandedCompanyProjectIds.has(project.id);
             return (
               <article key={project.id} className={`work-project-record ${isExpanded ? "is-expanded" : ""}`}>
                 <div
                   className="work-project-record__main"
+                  onClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("button, input, select, textarea, [role=\"button\"]")) return;
+                    navigate("project", project.companyId, project.id);
+                  }}
                 >
                   <button
                     type="button"
@@ -1385,7 +1452,7 @@ export default function Praca() {
                     title="Otwórz projekt"
                     onClick={() => navigate("project", project.companyId, project.id)}
                   >
-                    <FolderKanban size={16} aria-hidden="true" />
+                    <span className="work-project-record__identity-dot" style={{ background: normalizeCompanyColor(selectedCompany.color) }} aria-hidden="true" />
                     <span><strong>{project.name}</strong><small>{project.description || "Bez opisu projektu"}</small></span>
                   </button>
                   <div className="work-project-record__status">
@@ -1405,17 +1472,20 @@ export default function Praca() {
                       <ChevronDown size={11} aria-hidden="true" />
                     </TaskInlineMenu>
                   </div>
-                  <DatePicker
-                    value={project.endDate ?? ""}
-                    displayValue={formatDateRange(project.startDate, project.endDate)}
-                    min={project.startDate || undefined}
-                    aria-label={`Zmień termin projektu „${project.name}”`}
-                    fieldClassName="work-project-inline-date"
-                    portalLayer="featurePopup"
-                    onChange={(value) => updateProjectValues(project.id, { endDate: value })}
-                  />
-                  <span className="work-project-record__open-count" title={formatTaskCount(count.open)}><strong>{count.open}</strong><small>{taskCountLabel(count.open)}</small></span>
-                  <span className="work-project-record__progress"><span className="work-progress"><i style={{ width: `${progress}%` }} /></span><strong>{progress}%</strong></span>
+                  <span className="work-project-record__progress" aria-label={`Postęp: ${count.completed} z ${count.total} zadań`}><span className="work-progress"><i style={{ width: `${progress}%` }} /></span><strong>{count.completed}/{count.total}</strong></span>
+                  <div className={`work-project-record__next ${nearestDeadlineOverdue ? "is-overdue" : ""}`}>
+                    {project.endDate ? (
+                      <DatePicker
+                        value={project.endDate}
+                        displayValue={nearestDeadlineLabel}
+                        min={project.startDate || undefined}
+                        aria-label={`Zmień termin projektu „${project.name}”`}
+                        fieldClassName="work-project-inline-date"
+                        portalLayer="featurePopup"
+                        onChange={(value) => updateProjectValues(project.id, { endDate: value })}
+                      />
+                    ) : nearestDeadlineLabel ? <span title="Najbliższy termin otwartego zadania">{nearestDeadlineLabel}</span> : null}
+                  </div>
                   <span className="work-project-record__action-space" aria-hidden="true" />
                   <button
                     type="button"
@@ -1445,15 +1515,18 @@ export default function Praca() {
                 {project.note && <p className="work-project-record__note">{project.note}</p>}
                 {isExpanded && (
                   <div id={`work-project-preview-${project.id}`} className="work-project-record__preview">
-                    <div className="work-project-record__preview-heading">
-                      <span>Zadania</span>
-                      <span>{projectOpenTasks.length ? formatOpenTaskCount(projectOpenTasks.length) : "Brak otwartych zadań"}</span>
-                    </div>
                     {projectOpenTasks.length ? (
                       <div className="work-task-list work-project-record__preview-list">
                         {projectOpenTasks.map((task) => renderTaskRow(task, taskDepth(task, workspace.tasks), false, true))}
                       </div>
                     ) : <p className="work-project-record__preview-empty">Projekt nie ma jeszcze otwartych zadań.</p>}
+                    {projectCompletedTasks.length > 0 && (
+                      <CompletedSection label="Ukończone" count={projectCompletedTasks.length} className="work-project-record__completed">
+                        <div className="work-task-list work-project-record__preview-list">
+                          {projectCompletedTasks.map((task) => renderTaskRow(task, taskDepth(task, workspace.tasks), false, true))}
+                        </div>
+                      </CompletedSection>
+                    )}
                   </div>
                 )}
               </article>
@@ -1522,8 +1595,9 @@ export default function Praca() {
   const renderToolbar = () => {
     const labels: Record<WorkView, string> = {
       today: "Dzisiaj w pracy",
+      tomorrow: "Jutro w pracy",
       week: "Ten tydzień",
-      active: "Wszystkie aktywne",
+      active: "Wszystkie",
       untimed: "Bez terminu",
       unassigned: "Nieprzypisane",
       archive: "Archiwum",
@@ -1555,8 +1629,9 @@ export default function Praca() {
     return (
       <ContentHeader
         headingLevel={1}
-        className={view === "company" || view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
+        className={view === "company" ? "work-content-header work-content-header--table work-content-header--company" : view === "active" ? "work-content-header work-content-header--table" : "work-content-header"}
         title={labels[view]}
+        leading={view === "company" ? <span className="work-content-header__breadcrumb"><span>Praca</span><ChevronRight size={11} aria-hidden="true" /><strong>Projekty</strong></span> : undefined}
         mobileNavigation={<WorkMobileNavigation workspace={workspace} view={view} companyId={selectedCompanyId} projectId={selectedProjectId} onNavigate={navigate} />}
         description={view === "today"
           ? "Najważniejsze rzeczy na teraz"
@@ -1585,7 +1660,7 @@ export default function Praca() {
           {showTaskFilters && (
           <div className="work-toolbar__controls">
             <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">{searchPlaceholder}</span><input value={search} placeholder={searchPlaceholder} onChange={(event) => setSearch(event.target.value)} /></label>
-            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...TASK_STATUS_ORDER.filter((status) => view !== "active" || status !== "completed").map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
+            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...TASK_STATUS_ORDER.filter((status) => status !== "completed").map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
             <Button
               variant="ghost"
               size="sm"
@@ -1600,8 +1675,9 @@ export default function Praca() {
           {showProjectFilters && (
           <div className="work-toolbar__controls">
             <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">Szukaj projektów</span><input value={companySearch} placeholder="Szukaj projektów" onChange={(event) => setCompanySearch(event.target.value)} /></label>
-            <Select compact aria-label="Filtruj projekty po statusie" value={companyStatusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...Object.entries(PROJECT_STATUS_LABELS).filter(([value]) => value !== "completed").map(([value, label]) => ({ value, label }))]} onChange={(event) => setCompanyStatusFilter(event.target.value as CompanyProjectStatusFilter)} />
-            <Select compact aria-label="Sortuj projekty" value={companySort} options={[{ value: "name", label: "Sortuj: nazwa" }, { value: "progress", label: "Sortuj: postęp" }, { value: "endDate", label: "Sortuj: termin" }]} onChange={(event) => setCompanySort(event.target.value as CompanyProjectSort)} />
+            <Select compact aria-label="Filtruj projekty po statusie" value={companyStatusFilter} options={[{ value: "all", label: "Status projektu" }, ...Object.entries(PROJECT_STATUS_LABELS).filter(([value]) => value !== "completed").map(([value, label]) => ({ value, label }))]} onChange={(event) => setCompanyStatusFilter(event.target.value as CompanyProjectStatusFilter)} />
+            <Select compact aria-label="Sortuj projekty" value={companySort} options={[{ value: "name", label: "Sortuj" }, { value: "progress", label: "Sortuj: postęp" }, { value: "endDate", label: "Sortuj: termin" }]} onChange={(event) => setCompanySort(event.target.value as CompanyProjectSort)} />
+            <Button variant="ghost" size="sm" iconOnly aria-label="Ustawienia widoku" title="Ustawienia widoku"><SlidersHorizontal size={13} /></Button>
           </div>
           )}
           {view === "company" && selectedCompany && <WorkCompanyActionsMenu companyId={selectedCompany.id} companyName={selectedCompany.name} onEdit={() => openCompanyEditor(selectedCompany)} onArchive={() => archiveCompany(selectedCompany)} onDelete={() => setDeleteState({ kind: "company", id: selectedCompany.id, name: selectedCompany.name })} />}
@@ -1627,6 +1703,7 @@ export default function Praca() {
 
   const renderMainView = () => {
     if (view === "today") return renderTodayView();
+    if (view === "tomorrow") return renderTomorrowView();
     if (view === "week") return renderWeekView();
     if (view === "active") return renderActiveView();
     if (view === "untimed") return renderUntimedView();
@@ -1642,10 +1719,11 @@ export default function Praca() {
     <ModuleSidebar label="Widoki pracy" className="work-context-sidebar">
       <nav className="work-sidebar-nav" aria-label="Widoki pracy">
         <ContextNavGroup label="Przegląd">
-          <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
+          <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today || !taskAnchorDate(task)).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
+          <ContextNavItem active={view === "tomorrow"} icon={<CalendarDays />} label="Jutro" meta={relevantOpenTasks.filter((task) => taskAnchorDate(task) === addDays(today, 1)).length || undefined} onClick={() => navigate("tomorrow")} />
           <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
           <ContextNavItem active={view === "untimed"} icon={<Circle />} label="Bez terminu" meta={relevantOpenTasks.filter((task) => !taskAnchorDate(task)).length || undefined} onClick={() => navigate("untimed")} />
-          <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie aktywne" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
+          <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
         </ContextNavGroup>
 
         <ContextNavGroup label="Firmy i projekty">
@@ -1677,7 +1755,7 @@ export default function Praca() {
           {!workspace.companies.some((company) => !company.archived) && <p className="work-sidebar-empty">Dodaj firmę, aby uporządkować projekty.</p>}
         </ContextNavGroup>
 
-        <ContextNavGroup label="Pozostałe">
+        <ContextNavGroup label="Pozostałe" className="work-sidebar-nav__other">
           <ContextNavItem active={view === "unassigned"} icon={<Inbox />} label="Nieprzypisane" meta={workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length || undefined} onClick={() => navigate("unassigned")} />
           <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length + workspace.companies.filter((company) => company.archived).length || undefined} onClick={() => navigate("archive")} />
         </ContextNavGroup>

@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  Badge,
   Button,
   Card,
   CompletedSection,
@@ -100,18 +101,6 @@ function stageCountLabel(count: number) {
   if (count === 1) return "etap";
   if (count >= 2 && count <= 4) return "etapy";
   return "etapów";
-}
-
-function contentPreview(template?: WorkoutTemplate) {
-  if (!template) return null;
-  const labels = [
-    ...template.exercises.map((exercise) => exercise.name),
-    ...(template.stages ?? []).map((stage) => stage.label),
-  ];
-  if (!labels.length) return null;
-  return labels.length > 4
-    ? `${labels.slice(0, 3).join(" · ")} · +${labels.length - 3}`
-    : labels.join(" · ");
 }
 
 function formatDateWithYear(dateKey: string) {
@@ -249,7 +238,6 @@ function ActiveSessionStrip({
 
 function PlannedWorkoutRow({
   workout,
-  template,
   selected,
   outcome,
   active,
@@ -259,7 +247,6 @@ function PlannedWorkoutRow({
   onResetStatus,
 }: {
   workout: CycleWorkout;
-  template?: WorkoutTemplate;
   selected: boolean;
   outcome?: WorkoutOutcome;
   active: boolean;
@@ -293,18 +280,18 @@ function PlannedWorkoutRow({
           <strong>{workout.title}</strong>
           <span className="sport-overview-workout__meta">
             <DisciplineLabel discipline={workout.discipline} compact />
-            <span aria-hidden="true">·</span>
-            <span>{workout.durationMinutes} min</span>
-            <span aria-hidden="true">·</span>
-            <span>{workout.time || "Dowolna pora"}</span>
-            {outcome && !completed && (
-              <>
-                <span aria-hidden="true">·</span>
-                <StatusLabel status={outcome.status} compact />
-              </>
-            )}
+            <span className="sport-overview-workout__meta-details">
+              <span>{workout.durationMinutes} min</span>
+              <span aria-hidden="true">·</span>
+              <span>{workout.time || "Dowolna pora"}</span>
+              {outcome && !completed && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <StatusLabel status={outcome.status} compact />
+                </>
+              )}
+            </span>
           </span>
-          {contentPreview(template) && <span className="sport-overview-workout__content-preview">{contentPreview(template)}</span>}
         </span>
       </button>
       {active ? (
@@ -326,7 +313,6 @@ function PlannedWorkoutRow({
 
 export function SportOverview({
   cycle,
-  templates = [],
   activeSession,
   selectedWorkoutId,
   outcomes,
@@ -344,7 +330,6 @@ export function SportOverview({
   onToggleRecovery,
 }: {
   cycle: TrainingCycle | null;
-  templates?: WorkoutTemplate[];
   activeSession?: WorkoutSession;
   selectedWorkoutId?: string | null;
   outcomes: Record<string, WorkoutOutcome>;
@@ -417,7 +402,6 @@ export function SportOverview({
     <PlannedWorkoutRow
       key={workout.id}
       workout={workout}
-      template={templates.find((template) => template.id === workout.templateId)}
       selected={selectedWorkoutId === workout.id}
       outcome={outcomeFor(workout, today)}
       active={workout.id === activeWorkoutId}
@@ -449,15 +433,13 @@ export function SportOverview({
               </div>
             )}
             <div className="sport-today-card__agenda">
-              {(activeSession || todayWorkouts.length > 0) && (
+              {(activeSession || (todayWorkouts.length > 0 && remainingWorkouts === 0)) && (
                 <div className="sport-today-card__agenda-summary">
                   <div>
                     <strong>
                       {activeSession
                         ? "Trening w toku — wróć do bieżącego ćwiczenia"
-                        : remainingWorkouts
-                          ? `${remainingWorkouts} ${workoutCountLabel(remainingWorkouts)} do wykonania`
-                          : "Wszystkie treningi wykonane"}
+                        : "Wszystkie treningi wykonane"}
                     </strong>
                   </div>
                 </div>
@@ -535,11 +517,11 @@ export function SportOverview({
                   <div className="sport-overview-day__heading">
                     <div>
                       <strong>{day.full}</strong>
+                      <span>{formatShortDate(dateKey)}</span>
                       {isRecoveryDay && (
                         <small className="sport-overview-day__recovery"><Moon size={11} aria-hidden="true" />Regeneracja</small>
                       )}
                     </div>
-                    <span>{formatShortDate(dateKey)}</span>
                     <button
                       type="button"
                       className="sport-overview-day__add"
@@ -608,8 +590,12 @@ export function SportOverview({
                             </span>
                           )}
                           <strong>{workout.title}</strong>
+                          <span className="sport-overview-day__discipline">
+                            <DisciplineLabel discipline={workout.discipline} />
+                          </span>
+                          {!workoutOutcome && <Badge appearance="plain" dot tone="neutral">Zaplanowany</Badge>}
                           <span>{workout.durationMinutes} min{workout.time ? ` · ${workout.time}` : ""}</span>
-                          {workoutOutcome && !workoutCompleted && <StatusLabel status={workoutOutcome.status} compact />}
+                          {workoutOutcome && <StatusLabel status={workoutOutcome.status} />}
                         </button>
                       );
                     })}

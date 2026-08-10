@@ -223,6 +223,8 @@ export function loadInitialTaskPagePreferences(
   const requestedView = params.has("widok")
     ? requested && VIEW_LABELS[requested] ? requested : "dzis"
     : null;
+  // The bare module route is the first subview. A saved sidebar choice must not
+  // leak back in when the user switches to Zadania from another main module.
   const persistedView = VIEW_LABELS[sidebar.taskView] ? sidebar.taskView : "dzis";
   const requestedTaskId = params.get("zadanie");
   const parsedTaskId = requestedTaskId && /^\d+$/.test(requestedTaskId)
@@ -234,8 +236,8 @@ export function loadInitialTaskPagePreferences(
   const hasTaskDeepLink = params.has("zadanie");
   const hasValidTaskDeepLink = hasTaskDeepLink && linkedTaskId !== null;
   const persistedViewMode = loadTasksViewMode();
-  const taskView = hasValidTaskDeepLink ? "wszystkie" : requestedView ?? persistedView;
-  const restoreFilters = !hasValidTaskDeepLink && (!requestedView || requestedView === persistedView);
+  const taskView = hasValidTaskDeepLink ? "wszystkie" : requestedView ?? "dzis";
+  const restoreFilters = !hasValidTaskDeepLink && requestedView !== null && requestedView === persistedView;
   const deepLinkPreferences: TaskDeepLinkPreferences | null = hasValidTaskDeepLink ? {
     taskView: persistedView,
     listFilter: sidebar.listFilter,
@@ -248,7 +250,7 @@ export function loadInitialTaskPagePreferences(
     taskView,
     listFilter: restoreFilters ? sidebar.listFilter : null,
     tagFilter: restoreFilters ? sidebar.tagFilter : null,
-    viewMode: hasValidTaskDeepLink ? "list" as const : persistedViewMode,
+    viewMode: hasValidTaskDeepLink || requestedView === null ? "list" as const : persistedViewMode,
     linkedTaskId,
     invalidTaskDeepLink: hasTaskDeepLink && linkedTaskId === null,
     deepLinkPreferences,

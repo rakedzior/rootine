@@ -14,9 +14,10 @@ export function WorkMobileNavigation({ workspace, view, companyId, projectId, on
   const value = view === "company" ? `company:${companyId}` : view === "project" ? `project:${companyId}:${projectId}` : view;
   const options = [
     { value: "today", label: "Dzisiaj" },
+    { value: "tomorrow", label: "Jutro" },
     { value: "week", label: "Ten tydzień" },
     { value: "untimed", label: "Bez terminu" },
-    { value: "active", label: "Wszystkie aktywne" },
+    { value: "active", label: "Wszystkie" },
     ...workspace.companies.filter((company) => !company.archived).flatMap((company) => [
       { value: `company:${company.id}`, label: `Firma · ${company.name}` },
       ...workspace.projects

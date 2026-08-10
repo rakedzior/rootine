@@ -1382,7 +1382,6 @@ export default function Sport() {
             {view === "today" && (
               <SportOverview
                 cycle={cycleDraft}
-                templates={plannerState.templates}
                 activeSession={activeSession}
                 outcomes={plannerState.workoutOutcomes}
                 sessions={plannerState.sessions}

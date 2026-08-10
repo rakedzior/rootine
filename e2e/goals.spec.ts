@@ -9,6 +9,7 @@ test.describe("goals navigation", { tag: "@shared" }, () => {
     await expect(sidebar.getByRole("button", { name: /Aktywne cele/ })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: /Wszystkie cele/ })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: /Zagrożone/ })).toBeVisible();
+    await expect(sidebar).not.toContainText("Moje cele");
 
     await sidebar.getByRole("button", { name: "Wszystkie cele" }).click();
     await expect(page).toHaveURL(/widok=all/);
@@ -39,28 +40,6 @@ test.describe("goals navigation", { tag: "@shared" }, () => {
     await expect(page.getByRole("button", { name: "Widok kafelków" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: "Widok listy" })).toHaveAttribute("aria-pressed", "false");
     await expect.poll(() => page.evaluate(() => window.localStorage.getItem("rootine.goals.layout"))).toBe("grid");
-  });
-
-  test("desktop goal selection scopes the workspace without opening quick details", async ({ rootinePage: page, isMobile }) => {
-    test.skip(isMobile, "The second sidebar is replaced by the mobile view selector");
-    await openRootineRoute(page, "/cele?widok=next");
-
-    const sidebar = page.getByRole("complementary", { name: "Widoki i kategorie celów" });
-    const scopedGoal = sidebar.getByRole("button", { name: /Stworzyć aplikację do rehabilitacji/ });
-    await scopedGoal.focus();
-    await page.keyboard.press("Enter");
-
-    await expect(page).toHaveURL(/zakres=rehab-app/);
-    await expect(page).toHaveURL(/widok=overview/);
-    expect(page.url()).not.toMatch(/[?&]cel=/);
-    await expect(page.getByRole("heading", { level: 1, name: "Stworzyć aplikację do rehabilitacji" })).toBeVisible();
-    await expect(page.locator(".ui-detail-panel")).toHaveCount(0);
-    await expect(scopedGoal).toHaveAttribute("aria-current", "page");
-
-    await page.locator(".goal-card-primary").click();
-    await expect(page).toHaveURL(/zakres=rehab-app/);
-    await expect(page).toHaveURL(/cel=rehab-app/);
-    await expect(page.locator(".ui-detail-panel")).toBeVisible();
   });
 
   test("next steps are grouped by goal and respect the 1/2/3 depth switch", async ({ rootinePage: page }) => {

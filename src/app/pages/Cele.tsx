@@ -180,7 +180,6 @@ export default function Cele() {
     setSearchParams(writeGoalViewState(searchParams, { ...viewState, ...patch }));
   };
   const setSelectedGoalId = (goalId: string | null) => updateGoalViewState({ selectedId: goalId });
-  const setScopedGoalId = (goalId: string | null) => updateGoalViewState({ scopeId: goalId, selectedId: null });
   const setGoalLayout = (nextLayout: GoalLayout) => updateGoalViewState({ layout: nextLayout });
   const setGoalSort = (nextSort: GoalSortKey) => updateGoalViewState({ sort: nextSort });
 
@@ -345,14 +344,6 @@ export default function Cele() {
     updateGoalViewState({ filter, scopeId: null, selectedId: null });
   };
 
-  const handleGoalScope = (goalId: string) => {
-    if (scopedGoalId === goalId) {
-      setScopedGoalId(null);
-      return;
-    }
-    updateGoalViewState({ filter: "overview", scopeId: goalId, selectedId: null });
-  };
-
   const openProgressFor = (goalId: string) => {
     const goal = storedGoals.find((item) => item.id === goalId);
     if (goal?.progressMode === "milestones") setMilestoneGoalId(goalId);
@@ -466,7 +457,6 @@ export default function Cele() {
           activeFilter={activeFilter}
           scopedGoalId={scopedGoalId}
           onFilter={handleFilter}
-          onSelectGoal={handleGoalScope}
           goals={goals}
           categories={categories}
           onCreateCategory={createCategory}
@@ -744,7 +734,7 @@ export default function Cele() {
               {priorityGoals.length > 0 && (
                 <section className="mb-5">
                   <SectionHeader title="Priorytetowe" level={2} variant="label" />
-                  <div className={layout === "grid" ? "goals-card-grid grid grid-cols-2 gap-3" : "goals-card-list"}>
+                  <div className={layout === "grid" ? "goals-card-grid" : "goals-card-list"}>
                     {priorityGoals.map((goal) => (
                       <GoalCard
                         key={goal.id}
@@ -767,7 +757,7 @@ export default function Cele() {
               {remainingGoals.length > 0 && (
                 <section>
                   <SectionHeader title={priorityGoals.length > 0 ? "Pozostałe cele" : filterLabel} level={2} variant="label" />
-                  <div className={layout === "grid" ? "goals-card-grid grid grid-cols-2 gap-3" : "goals-card-list"}>
+                  <div className={layout === "grid" ? "goals-card-grid" : "goals-card-list"}>
                     {remainingGoals.map((goal) => (
                       <GoalCard
                         key={goal.id}
@@ -789,7 +779,7 @@ export default function Cele() {
 
               {completedGoals.length > 0 && (
                 <CompletedSection label="Ukończone cele" count={completedGoals.length} className="goals-completed-section">
-                  <div className={layout === "grid" ? "goals-card-grid grid grid-cols-2 gap-3" : "goals-card-list"}>
+                  <div className={layout === "grid" ? "goals-card-grid" : "goals-card-list"}>
                     {completedGoals.map((goal) => (
                       <GoalCard
                         key={goal.id}
