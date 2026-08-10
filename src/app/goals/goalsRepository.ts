@@ -1,10 +1,10 @@
-import { readLocalWorkspace, writeLocalWorkspace } from "../../app/data/localRepository";
+import { readLocalWorkspace, writeLocalWorkspace } from "../data/localRepository";
 import {
   createSeedGoalsWorkspace,
   isGoalsWorkspace,
   normalizeGoalsWorkspace,
   type GoalsWorkspace,
-} from "../../app/goals/goalsModel";
+} from "./goalsModel";
 
 export const GOALS_STORAGE_KEY = "rootine.goals.v1";
 

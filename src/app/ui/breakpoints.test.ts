@@ -14,7 +14,6 @@ describe("responsive design-system registry", () => {
   it("registers feature-specific thresholds without making them official", () => {
     expect(BREAKPOINT_EXCEPTIONS).toEqual({
       settings: 560,
-      assistant: 1040,
       densePlanner: 1100,
       nutrition: 1120,
       work: 1200,

@@ -129,7 +129,7 @@ export const uiLayers = {
   detailBackdrop: "var(--layer-detail-backdrop)",
   detail: "var(--layer-detail)",
   detailDrawer: "var(--layer-detail-drawer)",
-  assistant: "var(--layer-assistant)",
+  pinnedPanel: "var(--layer-pinned-panel)",
   appOverlay: "var(--layer-app-overlay)",
   popover: "var(--layer-popover)",
   drawer: "var(--layer-drawer)",

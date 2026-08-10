@@ -102,7 +102,7 @@
   --layer-detail-backdrop: 39;
   --layer-detail: 40;
   --layer-detail-drawer: 41;
-  --layer-assistant: 45;
+  --layer-pinned-panel: 45;
   --layer-app-overlay: 50;
   --layer-popover: 60;
   --layer-drawer: 70;
@@ -597,7 +597,6 @@
   --bp-mobile: 760px;
   /* Registered feature-specific thresholds; media queries cannot consume custom properties. */
   --bp-settings: 560px;
-  --bp-assistant: 1040px;
   --bp-dense-planner: 1100px;
   --bp-nutrition: 1120px;
   --bp-work: 1200px;

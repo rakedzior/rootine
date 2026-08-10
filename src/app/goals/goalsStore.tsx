@@ -8,11 +8,11 @@ import {
   GOALS_STORAGE_KEY,
   loadGoalsWorkspaceResult,
   saveGoalsWorkspace,
-} from "../../domain/goals/goalsRepository";
+} from "./goalsRepository";
 import {
   appendGoalProgress,
   patchGoalMilestone,
-} from "../../domain/goals/goalMutations";
+} from "./goalMutations";
 import {
   GOALS_STORE_VERSION,
   inspectGoalsImport,

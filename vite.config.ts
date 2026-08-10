@@ -21,7 +21,6 @@ export default defineConfig({
           const normalizedId = id.replaceAll("\\", "/");
           if (normalizedId.includes("/node_modules/zod/")) return "vendor-zod";
           if (normalizedId.includes("/node_modules/")) return "vendor";
-          if (normalizedId.includes("/src/domain/")) return "rootine-domain";
           if (normalizedId.includes("/src/infrastructure/")) return "rootine-infrastructure";
           return undefined;
         },

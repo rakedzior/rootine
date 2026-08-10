@@ -3704,7 +3704,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-rest-timer {
   position: absolute;
-  z-index: var(--layer-assistant);
+  z-index: var(--layer-pinned-panel);
   bottom: var(--space-xl);
   left: 50%;
   display: flex;

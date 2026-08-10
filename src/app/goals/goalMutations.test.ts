@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSeedGoalsWorkspace } from "../../app/goals/goalsModel";
+import { createSeedGoalsWorkspace } from "./goalsModel";
 import { appendGoalProgress, patchGoalMilestone } from "./goalMutations";
 
 describe("shared goal mutations", () => {

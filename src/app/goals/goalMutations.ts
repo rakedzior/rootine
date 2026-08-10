@@ -2,7 +2,7 @@ import type {
   GoalMilestone,
   GoalProgressEntry,
   GoalsWorkspace,
-} from "../../app/goals/goalsModel";
+} from "./goalsModel";
 
 export function appendGoalProgress(
   workspace: GoalsWorkspace,
