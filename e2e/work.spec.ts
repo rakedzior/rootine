@@ -98,3 +98,25 @@ test("@desktop nazwa projektu otwiera zakres, a chevron rozwija kompaktowy podgl
     await page.keyboard.press("Enter");
     await expect(page.locator(".work-screen--project")).toBeVisible();
 });
+
+test("@desktop Back między widokami Pracy chroni i zamyka odrzucony szkic", async ({ rootinePage: page }) => {
+  await openRootineRoute(page, "/praca");
+
+  await page.locator(".work-context-sidebar").getByRole("button", { name: /^Ten tydzień/ }).click();
+  await expect(page).toHaveURL(/\/praca\?widok=week$/);
+
+  await page.locator(".work-add-menu > button").click();
+  await page.getByRole("menuitem", { name: "Dodaj firmę" }).click();
+  const editor = page.getByRole("dialog", { name: "Nowa firma" });
+  await editor.getByLabel("Nazwa").fill("Szkic przed Back");
+
+  await page.evaluate(() => window.history.back());
+  const discard = page.getByRole("dialog", { name: "Odrzucić niezapisane zmiany?" });
+  await expect(discard).toBeVisible();
+  await expect(page).toHaveURL(/\/praca\?widok=week$/);
+
+  await discard.getByRole("button", { name: "Odrzuć zmiany" }).click();
+  await expect(page).toHaveURL(/\/praca$/);
+  await expect(editor).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("rootine.work-editor-draft.company.add.new"))).toBeNull();
+});

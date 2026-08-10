@@ -26,7 +26,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { SensitiveValue } from "../experience/preferences";
 import { recordActivity } from "../experience/activityLog";
@@ -57,6 +57,7 @@ import { TRAVEL_STORAGE_KEY, loadTravelWorkspace, saveTravelWorkspace } from "..
 import { AffairsEditorFields } from "../affairs/AffairsEditorFields";
 import { applyAffairsEditor } from "../affairs/affairsMutations";
 import { buildAffairAttentionItems, resolveAffairAttentionItem, type AffairAttentionItem } from "../affairs/affairsAttention";
+import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { JdgWorkspace } from "./Jdg";
 import Podroze from "./Podroze";
 import {
@@ -102,6 +103,7 @@ import {
   formatMileage,
   formatMoney,
   formatMonth,
+  getAffairsEditorDraftKey,
   getEditorPresentation,
   getInitialView,
   shiftMonthKey,
@@ -127,10 +129,22 @@ export default function Sprawy() {
   const [budgetMonthKey, setBudgetMonthKey] = useState(getMonthKey);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [editorBaseline, setEditorBaseline] = useState<Draft>(EMPTY_DRAFT);
+  const draftSnapshotRef = useRef(draft);
+  draftSnapshotRef.current = draft;
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [storageError, setStorageError] = useState(false);
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
+  const editorDraftKey = getAffairsEditorDraftKey(editor, budgetMonthKey);
+
+  useEffect(() => {
+    if (!editorDraftKey) return;
+    const baseline = draftSnapshotRef.current;
+    setEditorBaseline(baseline);
+    const recovered = readSessionDraft<Partial<Draft>>(editorDraftKey);
+    if (recovered && typeof recovered === "object") setDraft({ ...baseline, ...recovered });
+  }, [editorDraftKey]);
 
   useEffect(() => {
     setStorageError(!saveAffairsWorkspace(workspace));
@@ -149,10 +163,17 @@ export default function Sprawy() {
   }), []);
 
   useEffect(() => {
-    const onPopState = () => setView(getInitialView());
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+    const canonicalView = getInitialView();
+    setView(canonicalView);
+    const params = new URLSearchParams(location.search);
+    const requestedView = params.get("widok");
+    const canonicalParam = canonicalView === "today" ? null : canonicalView;
+    if (requestedView === canonicalParam) return;
+    if (canonicalParam) params.set("widok", canonicalParam);
+    else params.delete("widok");
+    const query = params.toString();
+    navigate(`${location.pathname}${query ? `?${query}` : ""}`, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
     setWorkspace((current) => {
@@ -395,14 +416,21 @@ export default function Sprawy() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const action = params.get("akcja");
-    if (!action || !["nowa-sprawa", "nowa-platnosc", "nowy-wydatek"].includes(action)) return;
+    const targetView: AffairsView | null = action === "nowa-sprawa"
+      ? "all"
+      : action === "nowa-platnosc"
+        ? "payments"
+        : action === "nowy-wydatek"
+          ? "budget"
+          : null;
+    if (!targetView) return;
 
     const initialTitle = params.get("tytul")?.trim() ?? "";
     const initialDate = params.get("data") ?? "";
     const initialPriority = params.get("priorytet") === "high" ? "high" : "normal";
     const initialTime = params.get("godzina") ?? "";
+    setView(targetView);
     if (action === "nowa-sprawa") {
-      setView("all");
       setDraft({
         ...EMPTY_DRAFT,
         title: initialTitle,
@@ -415,18 +443,17 @@ export default function Sprawy() {
       setEditorError("");
       setEditor({ kind: "matter", mode: "add" });
     } else if (action === "nowa-platnosc") {
-      setView("payments");
       setDraft({ ...EMPTY_DRAFT, title: initialTitle, dueDate: initialDate, category: "Rachunki" });
       setEditorError("");
       setEditor({ kind: "payment", mode: "add" });
     } else {
-      setView("budget");
       setDraft({ ...EMPTY_DRAFT, title: initialTitle, category: "", budgetKind: "fixed" });
       setEditorError("");
       setEditor({ kind: "budget", mode: "add" });
     }
 
     ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => params.delete(key));
+    params.set("widok", targetView);
     navigate({
       pathname: location.pathname,
       search: params.toString() ? `?${params.toString()}` : "",
@@ -437,6 +464,13 @@ export default function Sprawy() {
     setEditor(null);
     setEditorError("");
   };
+  const editorDraftProtection = useDraftProtection({
+    active: Boolean(editor),
+    isDirty: Boolean(editor) && JSON.stringify(draft) !== JSON.stringify(editorBaseline),
+    draft,
+    storageKey: editorDraftKey,
+    onDiscard: closeEditor,
+  });
 
   const submitEditor = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -469,6 +503,7 @@ export default function Sprawy() {
       title: submission.title,
       detail: editor.mode === "edit" ? "Zaktualizowano wpis" : "Dodano wpis",
     });
+    editorDraftProtection.clearDraft();
     closeEditor();
   };
 
@@ -630,15 +665,14 @@ export default function Sprawy() {
   const selectView = (nextView: AffairsView) => {
     setView(nextView);
     if (nextView !== "all") setSelectedMatterId("");
-    const url = new URL(window.location.href);
+    const params = new URLSearchParams(location.search);
     if (nextView === "today") {
-      url.searchParams.delete("widok");
+      params.delete("widok");
     } else {
-      url.searchParams.set("widok", nextView);
+      params.set("widok", nextView);
     }
-    if (url.href !== window.location.href) {
-      window.history.pushState({}, "", url);
-    }
+    const query = params.toString();
+    navigate(`${location.pathname}${query ? `?${query}` : ""}`);
   };
 
   const openAttentionSource = (item: AffairAttentionItem) => {
@@ -1642,10 +1676,10 @@ export default function Sprawy() {
         <Modal
           title={editorPresentation?.title ?? ""}
           description={editorPresentation?.description}
-          onClose={closeEditor}
+          onClose={editorDraftProtection.requestClose}
           footer={(
             <>
-              <Button variant="ghost" onClick={closeEditor}>Anuluj</Button>
+              <Button variant="ghost" onClick={editorDraftProtection.requestClose}>Anuluj</Button>
               <Button variant="primary" type="submit" form="affairs-editor-form">
                 {editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}
               </Button>
@@ -1668,6 +1702,18 @@ export default function Sprawy() {
             <AffairsEditorFields editor={editor} draft={draft} setDraft={setDraft} workspace={workspace} />
           </form>
         </Modal>
+      )}
+
+      {editorDraftProtection.promptOpen && (
+        <ConfirmDialog
+          title="Odrzucić niezapisane zmiany?"
+          confirmLabel="Odrzuć zmiany"
+          cancelLabel="Kontynuuj edycję"
+          onCancel={editorDraftProtection.keepEditing}
+          onConfirm={editorDraftProtection.confirmDiscard}
+        >
+          <p className="ui-confirm-dialog__note">Szkic wpisu pozostaje w tej karcie, dopóki go nie zapiszesz albo świadomie odrzucisz.</p>
+        </ConfirmDialog>
       )}
 
       {deleteState && (

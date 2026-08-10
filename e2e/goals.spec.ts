@@ -28,10 +28,17 @@ test.describe("goals navigation", { tag: "@shared" }, () => {
   });
 
   test("uses the grid when no layout preference has been saved", async ({ rootinePage: page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.removeItem("rootine.goals.layout");
+      window.localStorage.removeItem("routine.goals.layout");
+    });
     await openRootineRoute(page, "/cele?widok=overview");
 
     await expect(page.locator(".goals-card-grid").first()).toBeVisible();
     await expect(page).toHaveURL(/uklad=grid/);
+    await expect(page.getByRole("button", { name: "Widok kafelków" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Widok listy" })).toHaveAttribute("aria-pressed", "false");
+    await expect.poll(() => page.evaluate(() => window.localStorage.getItem("rootine.goals.layout"))).toBe("grid");
   });
 
   test("desktop goal selection scopes the workspace without opening quick details", async ({ rootinePage: page, isMobile }) => {
@@ -70,13 +77,40 @@ test.describe("goals navigation", { tag: "@shared" }, () => {
     await expect(group).toContainText("Integracja z zegarkami");
   });
 
-  test("the explicit card action opens the full goal view", async ({ rootinePage: page }) => {
-    await openRootineRoute(page, "/cele?widok=overview");
+  test("the full goal view returns to the complete workspace context", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/cele?widok=overview&uklad=list&sort=due&zakres=rehab-app");
 
-    await page.locator(".goal-card-more > button").first().click();
+    await page.getByRole("button", { name: /opcji dla celu/ }).first().click();
     await page.getByRole("menuitem", { name: "Otwórz pełny widok" }).click();
 
     await expect(page).toHaveURL(/\/cele\/[^/?]+/);
-    await expect(page.getByRole("button", { name: "Wróć do celów" })).toBeVisible();
+    const returnButton = page.getByRole("button", { name: "Wróć do celów" });
+    await expect(returnButton).toBeVisible();
+    await returnButton.click();
+
+    await expect(page).toHaveURL(/\/cele\?/);
+    const returnedUrl = new URL(page.url());
+    expect(returnedUrl.pathname).toBe("/cele");
+    expect(returnedUrl.searchParams.get("widok")).toBe("overview");
+    expect(returnedUrl.searchParams.get("uklad")).toBe("list");
+    expect(returnedUrl.searchParams.get("sort")).toBe("due");
+    expect(returnedUrl.searchParams.get("zakres")).toBe("rehab-app");
+    expect(returnedUrl.searchParams.has("cel")).toBe(false);
+  });
+
+  test("next-step CTA preserves its complete workspace context on return", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/cele?widok=next&sort=due&zakres=rehab-app");
+
+    const group = page.locator('.goal-next-group[data-goal-id="rehab-app"]');
+    await group.getByRole("button", { name: "Pełny widok" }).click();
+    await expect(page).toHaveURL(/\/cele\/rehab-app/);
+
+    await page.getByRole("button", { name: "Wróć do celów" }).click();
+    const returnedUrl = new URL(page.url());
+    expect(returnedUrl.pathname).toBe("/cele");
+    expect(returnedUrl.searchParams.has("widok")).toBe(false);
+    expect(returnedUrl.searchParams.get("sort")).toBe("due");
+    expect(returnedUrl.searchParams.get("zakres")).toBe("rehab-app");
+    await expect(page.getByRole("region", { name: "Następne kroki", exact: true })).toBeVisible();
   });
 });

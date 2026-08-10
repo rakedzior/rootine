@@ -4,8 +4,9 @@ This matrix records the states the current shared contracts can represent. It di
 
 | Contract/surface | Default | Hover | Focus | Selected/active | Disabled | Loading | Error | Empty | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| Button | yes | yes | yes | n/a | yes | not a shared prop | danger variant | n/a | Add loading only if a reusable async contract is defined. |
+| Button | yes | yes | yes | n/a | yes | not a shared prop | danger variant | n/a | `iconOnly` requires an accessible `aria-label` in the public type. |
 | Input | yes | yes | yes | n/a | yes | no | yes | n/a | Error uses `aria-invalid`, hint/error descriptions, and alert messaging. |
+| Textarea | yes | yes | yes | n/a | yes | no | yes | caller-owned | Shares label, hint, error, disabled and focus behavior with Input. |
 | Select | yes | yes | yes | yes | yes | no | yes | option-level | Native mirror and custom listbox must remain synchronized. |
 | Checkbox | yes | yes | yes | checked/indeterminate | yes | no | no | n/a | Custom switch/form-card variants are registered exceptions. |
 | Menu | yes | item hover | managed focus | selected item | item disabled | no | danger item | no-items caller state | Escape, arrows, Home/End, typeahead, and focus restoration are shared. |
@@ -13,8 +14,9 @@ This matrix records the states the current shared contracts can represent. It di
 | Tabs | active/inactive | yes | roving focus | yes | yes | no | no | no-tabs caller state | Orientation and activation mode are explicit props. |
 | Badge | neutral | n/a | n/a | semantic tone | no | no | danger tone | n/a | Status meaning must come from the caller. |
 | ProgressBar | value | n/a | n/a | n/a | caller-owned | animated value | caller-owned tone | caller-owned | Dynamic geometry and chart bars remain separate exceptions. |
+| Toast | mounted/unmounted | pause timer | pause timer | semantic tone | n/a | transient feedback | danger alert | caller-owned | One optional action, explicit dismiss, and timer pause on hover/focus are shared. |
 | EmptyState | n/a | action | action focus | n/a | action disabled | no | caller-owned | yes | Caller provides recovery or next action when one exists. |
-| DetailPanel | docked | contained controls | drawer trap | selected record | caller-owned | caller-owned | caller-owned | caller-owned | Responsive drawer behavior is shared. |
+| DetailPanel | docked >1380px | contained controls | drawer trap ≤1380px | selected record | caller-owned | caller-owned | caller-owned | caller-owned | Docked mode reserves 408px; drawer mode owns backdrop, dialog semantics, Escape and focus restoration. |
 | Route surface | loaded | contained controls | route controls | active subview | unavailable route | `RouteLoadingState` | `RouteErrorState` | `RouteNotFoundState` | Each route must expose one `ContentHeader` heading. |
 
 ## Rules

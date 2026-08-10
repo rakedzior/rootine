@@ -3,14 +3,18 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 export type ButtonVariant = "primary" | "quiet" | "ghost" | "danger";
 export type ButtonSize = "xs" | "sm" | "md";
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonBaseProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  iconOnly?: boolean;
   fullWidth?: boolean;
   leadingIcon?: ReactNode;
   trailingIcon?: ReactNode;
 }
+
+export type ButtonProps = ButtonBaseProps & (
+  | { iconOnly: boolean; "aria-label": string }
+  | { iconOnly?: false; "aria-label"?: string }
+);
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {

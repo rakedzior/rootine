@@ -61,6 +61,8 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
             text: `Wolumen ${String(index + 1).padStart(3, "0")} · ${"bardzo-długi-tytuł-zadania-".repeat(index === recordCount - 1 ? 5 : 1)}`,
             done: false,
             view: "dzis",
+            calendarDate: "2026-08-05",
+            schedule: { allDay: true, startTime: "", timezone: "Europe/Warsaw" },
             priority: index % 3 === 0 ? "high" : index % 3 === 1 ? "medium" : "low",
             tags: index % 2 === 0 ? ["wolumen-testowy-z-bardzo-długą-nazwą"] : [],
             notes: index === recordCount - 1 ? "Długi opis ".repeat(20) : "",
@@ -84,8 +86,10 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
           await lastTask.scrollIntoViewIfNeeded();
           await expect(lastTask).toBeVisible();
           await lastTask.click();
-          await expect(page.getByRole("complementary", { name: "Szczegóły zadania" })).toBeVisible();
-          await page.keyboard.press("Escape");
+          const taskDetails = page.getByRole("complementary", { name: "Szczegóły zadania" });
+          await expect(taskDetails).toBeVisible();
+          await taskDetails.getByRole("button", { name: "Zamknij szczegóły zadania" }).click();
+          await expect(taskDetails).toHaveCount(0);
         }
       });
     }
@@ -106,17 +110,53 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     expect(runtimeErrors).toEqual([]);
   });
 
+  test("JDG consumes a valid month and removes an invalid month from the canonical URL", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/sprawy?widok=jdg&month=2026-07");
+
+    await expect(page.getByRole("heading", { level: 1, name: "JDG" })).toBeVisible();
+    await expect(page.locator(".affairs-month-switcher").getByText(/lipiec 2026/i)).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get("month")).toBe("2026-07");
+
+    await openRootineRoute(page, "/sprawy?widok=jdg&month=2026-13");
+
+    await expect(page.locator(".affairs-month-switcher").getByText(/sierpień 2026/i)).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get("month")).toBeNull();
+    expect(new URL(page.url()).searchParams.get("widok")).toBe("jdg");
+  });
+
+  test("an invalid affairs view is canonically replaced without adding a history entry", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/dzisiaj");
+    await openRootineRoute(page, "/sprawy?widok=nieistniejacy&source=e2e");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Dzisiaj" })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get("widok")).toBeNull();
+    expect(new URL(page.url()).searchParams.get("source")).toBe("e2e");
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dzisiaj$/);
+  });
+
   test("hydration value sits below its actions and matches macro typography", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/odzywianie");
 
-    const heading = page.locator(".nutrition-water-card__heading");
-    const actions = heading.locator(".nutrition-section-actions");
-    const hydrationValue = heading.locator(".nutrition-water-card__value > strong");
-    const hydrationStatus = heading.locator(".nutrition-water-card__value > span");
-    const macroValue = page.locator(".nutrition-budget-card__macro strong").first();
+    const hydrationSection = page
+      .getByRole("heading", { level: 2, name: "Nawodnienie", exact: true })
+      .locator("xpath=ancestor::section[1]");
+    const balanceSection = page
+      .getByRole("heading", { level: 2, name: "Bilans dnia", exact: true })
+      .locator("xpath=ancestor::section[1]");
+    const hydrationAction = hydrationSection.getByRole("button", { name: "Ustaw cel nawodnienia" });
+    const hydrationValue = hydrationSection.getByText(/^\d[\d\s,.]* ml \/ \d[\d\s,.]* ml$/);
+    const hydrationStatus = hydrationSection.getByText(/^(?:Pozosta\u0142o|Cel osi\u0105gni\u0119ty|Przekroczono)/);
+    const macroValue = balanceSection.getByText(/^\d[\d\s,.]* \/ \d[\d\s,.]* g$/).first();
+
+    await expect(hydrationAction).toBeVisible();
+    await expect(hydrationValue).toBeVisible();
+    await expect(hydrationStatus).toBeVisible();
+    await expect(macroValue).toBeVisible();
 
     const [actionsBox, hydrationBox, macroTypography, hydrationTypography] = await Promise.all([
-      actions.boundingBox(),
+      hydrationAction.boundingBox(),
       hydrationValue.boundingBox(),
       macroValue.evaluate((element) => {
         const style = getComputedStyle(element);
@@ -145,7 +185,6 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     expect(hydrationBox!.y).toBeGreaterThanOrEqual(actionsBox!.y + actionsBox!.height - 1);
     expect(hydrationBox!.x + hydrationBox!.width).toBeLessThanOrEqual(actionsBox!.x + actionsBox!.width + 1);
     expect(hydrationTypography).toEqual(macroTypography);
-    await expect(hydrationStatus).toContainText(/Pozostało|Cel osiągnięty|Przekroczono/);
   });
 
   test("online nutrition search waits for an explicit action and explains Retry-After", async ({ rootinePage: page }) => {
@@ -190,23 +229,20 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
   });
 
   test("a failed lazy route module is contained by the route error state", async ({ rootinePage: page }) => {
-    let failedRequests = 0;
     await openRootineRoute(page, "/dzisiaj");
-    await page.route(/\/src\/app\/pages\/Praca\.tsx(?:\?.*)?$/, async (route) => {
-      failedRequests += 1;
-      await route.abort("failed");
-    });
 
-    await page
+    const workLink = page
       .getByRole("navigation", { name: "Obszary aplikacji" })
-      .getByRole("link", { name: "Praca" })
-      .click();
+      .getByRole("link", { name: "Praca" });
+    await workLink.hover();
+    await page.evaluate(() => window.sessionStorage.setItem("rootine.dev.fail-route", "/praca"));
+
+    await workLink.click();
 
     await expect(page.getByRole("heading", {
       level: 1,
       name: "Nie możemy wyświetlić tego widoku",
     })).toBeVisible();
-    expect(failedRequests).toBeGreaterThan(0);
     await expect(page.getByRole("link", { name: "Wróć do Dzisiaj" })).toBeVisible();
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "./Button";
@@ -24,6 +24,8 @@ export interface ModalProps {
   width?: number | string;
   bodyClassName?: string;
   labelledBy?: string;
+  /** Stable invoker used when the element that opened the modal (for example a menu item) unmounts. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 export type ModalSize = "sm" | "md" | "lg" | "xl";
@@ -44,7 +46,7 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-export function Modal({ title, description, eyebrow, onClose, children, footer, size = "md", width, bodyClassName = "", labelledBy }: ModalProps) {
+export function Modal({ title, description, eyebrow, onClose, children, footer, size = "md", width, bodyClassName = "", labelledBy, returnFocusRef }: ModalProps) {
   const generatedId = useId();
   const titleId = labelledBy ?? `${generatedId}-title`;
   const descriptionId = description ? `${generatedId}-description` : undefined;
@@ -57,6 +59,7 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
+    const explicitReturnFocus = returnFocusRef?.current;
     const dialog = dialogRef.current;
     const isTopmostDialog = () => {
       const dialogs = Array.from(document.querySelectorAll<HTMLElement>(".ui-modal[role='dialog']"));
@@ -112,15 +115,16 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("focusin", onFocusIn);
-      if (previousFocus?.isConnected && !previousFocus.matches(":disabled")) previousFocus.focus();
+      const focusTarget = explicitReturnFocus ?? previousFocus;
+      if (focusTarget?.isConnected && !focusTarget.matches(":disabled")) focusTarget.focus();
     };
-  }, []);
+  }, [returnFocusRef]);
 
   return createPortal(
     <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onCloseRef.current(); }}>
       <section
         ref={dialogRef}
-        className="ui-modal [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="ui-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

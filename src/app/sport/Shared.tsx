@@ -10,7 +10,11 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 export function DisciplineLabel({ discipline, compact = false }: { discipline: Discipline; compact?: boolean }) {
   const meta = DISCIPLINE_META[discipline];
   return (
-    <Badge appearance="plain" dot style={{ color: meta.color, fontSize: compact ? 9 : 10 }}>
+    <Badge
+      appearance="plain"
+      dot
+      className={`sport-meta-label sport-meta-label--${discipline}${compact ? " is-compact" : ""}`}
+    >
       {meta.label}
     </Badge>
   );
@@ -19,7 +23,11 @@ export function DisciplineLabel({ discipline, compact = false }: { discipline: D
 export function StatusLabel({ status, compact = false }: { status: SessionStatus; compact?: boolean }) {
   const meta = STATUS_META[status];
   return (
-    <Badge appearance="plain" dot style={{ color: meta.color, fontSize: compact ? 9 : 10 }}>
+    <Badge
+      appearance="plain"
+      dot
+      className={`sport-meta-label sport-meta-label--status-${status}${compact ? " is-compact" : ""}`}
+    >
       {meta.label}
     </Badge>
   );

@@ -240,7 +240,6 @@ export function ProgressMorph({
           className="progress-morph__fill"
           style={{
             transform: `scaleX(${progress})`,
-            transformOrigin: "left center",
             transition: reduced
               ? "none"
               : `transform ${Math.max(0, duration)}ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1))`,

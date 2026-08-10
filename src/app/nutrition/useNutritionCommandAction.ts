@@ -28,8 +28,12 @@ function isNutritionCommandAction(value: string | null): value is NutritionComma
   return COMMAND_ACTIONS.some((action) => action === value);
 }
 
-function validDate(value: string | null) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+export function parseNutritionDateParam(value: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    ? value
+    : undefined;
 }
 
 export function readInitialNutritionCommand() {
@@ -37,7 +41,7 @@ export function readInitialNutritionCommand() {
   const action = params.get("akcja");
   return {
     action: isNutritionCommandAction(action) ? action : null,
-    date: validDate(params.get("data")),
+    date: parseNutritionDateParam(params.get("data")),
     title: params.get("tytul")?.trim() ?? "",
   };
 }
@@ -46,7 +50,7 @@ export function useNutritionCommandAction(bindings: NutritionCommandBindings) {
   const [params, setParams] = useSearchParams();
   const action = params.get("akcja");
   const title = params.get("tytul")?.trim() ?? "";
-  const requestedDate = validDate(params.get("data"));
+  const requestedDate = parseNutritionDateParam(params.get("data"));
   const {
     setSelectedDate, setEntryDraft, setEditingEntry, setSelectedFood, setEntryErrors,
     setCatalogOpen, setEntryDialogOpen, setWaterCustomAmount, waterCustomInputRef,

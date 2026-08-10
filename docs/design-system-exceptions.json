@@ -5,36 +5,62 @@
       "paths": [
         "src/styles/settings.css"
       ],
-      "reason": "Settings preview remains readable at compact widths."
+      "owner": "appearance",
+      "reason": "Settings theme previews remain readable at compact widths.",
+      "migration": "Re-evaluate against the shared mobile or command-center threshold when settings is restructured.",
+      "review": "Review when the settings preview layout changes."
     },
     {
-      "value": 1040,
+      "value": 600,
       "paths": [
-        "src/styles/assistant.css"
+        "src/styles/experience.css"
       ],
-      "reason": "Assistant panel has a feature-specific compact composition."
+      "owner": "experience",
+      "reason": "The command-center action register becomes a single column before its labels truncate.",
+      "migration": "Keep local unless another shared compact surface adopts the same content-driven threshold.",
+      "review": "Review when the command-center composition changes."
     },
     {
       "value": 1100,
       "paths": [
+        "src/styles/calendar.css",
         "src/styles/sport.css",
         "src/styles/ui.css"
       ],
-      "reason": "Dense planner and ambient layout need a pre-columns adjustment."
+      "owner": "design-system",
+      "reason": "Dense planner, Calendar header controls, and the ContentHeader fallback share an intermediate adjustment.",
+      "migration": "Replace the viewport fallback with container-query coverage when supported by the full browser matrix.",
+      "review": "Review when planner, Calendar controls, or header density changes."
     },
     {
       "value": 1120,
       "paths": [
         "src/styles/nutrition.css"
       ],
-      "reason": "Nutrition analysis preserves chart readability before the shared columns breakpoint."
+      "owner": "nutrition",
+      "reason": "Nutrition analysis preserves chart and label readability before the shared columns breakpoint.",
+      "migration": "Retain until nutrition charts adopt a tested container-driven layout.",
+      "review": "Review with the chart-contract migration."
     },
     {
       "value": 1200,
       "paths": [
         "src/styles/work.css"
       ],
-      "reason": "Work detail actions need a feature-specific intermediate collapse."
+      "owner": "work",
+      "reason": "Work detail actions need a feature-specific intermediate collapse.",
+      "migration": "Consolidate with a shared toolbar container rule when the Work action layout is migrated.",
+      "review": "Review when Work detail actions change."
+    },
+    {
+      "value": 1280,
+      "paths": [
+        "src/styles/nutrition.css"
+      ],
+      "owner": "nutrition",
+      "reason": "The upper bound of the intermediate nutrition chart layout is content-driven.",
+      "migration": "Remove together with the 1120px nutrition interval after container-query adoption.",
+      "review": "Review with the chart-contract migration."
     }
   ],
   "rawColors": [
@@ -45,20 +71,19 @@
         "src/app/data/taskWorkspace.ts",
         "src/app/work/workPresentation.tsx"
       ],
-      "reason": "Persisted or data-taxonomy colors require a separate semantic mapping decision."
+      "owner": "domain-model",
+      "reason": "Persisted or data-taxonomy colors require a schema-safe semantic mapping decision.",
+      "migration": "Persist semantic taxonomy IDs and resolve display colors through a versioned mapping.",
+      "review": "Review at the next persisted workspace schema migration."
     },
     {
       "paths": [
         "src/styles/settings.css"
       ],
-      "reason": "Theme preview swatches are a temporary duplicated presentation surface."
-    },
-    {
-      "paths": [
-        "src/assistant/ui/AudioVisualizer.tsx",
-        "src/styles/assistant.css"
-      ],
-      "reason": "Assistant visualization and ambient shadows are decorative or visualization-specific."
+      "owner": "appearance",
+      "reason": "Theme preview swatches duplicate theme presentation values for a bounded preview surface.",
+      "migration": "Derive preview swatches from the application theme registry and semantic CSS roles.",
+      "review": "Review when appearance previews are refactored."
     }
   ],
   "inlineStyles": [
@@ -69,15 +94,251 @@
         "src/app/pages/tasks/TaskSecondaryViews.tsx",
         "src/app/pages/tasks/TaskViews.tsx"
       ],
-      "reason": "Dynamic calendar and popup geometry is preserved until shared positioning is consolidated."
+      "allowedProperties": [
+        "--*",
+        "background",
+        "border",
+        "borderBottom",
+        "borderRight",
+        "bottom",
+        "boxShadow",
+        "color",
+        "cursor",
+        "height",
+        "left",
+        "maxHeight",
+        "minWidth",
+        "opacity",
+        "right",
+        "textDecoration",
+        "top",
+        "transform",
+        "visibility",
+        "width",
+        "zIndex"
+      ],
+      "owner": "tasks-calendar",
+      "reason": "Only dynamic calendar data colors, state transforms, and portal/popup geometry may remain inline.",
+      "migration": "Move repeated positioning contracts behind shared popover/calendar primitives and convert static presentation to classes; preserve data-driven CSS variables.",
+      "review": "Review when calendar or task popup positioning changes."
     },
     {
       "paths": [
         "src/app/goals/GoalWorkspaceViews.tsx",
         "src/app/goals/GoalDialogs.tsx",
+        "src/app/pages/CelSzczegoly.tsx"
+      ],
+      "allowedProperties": [
+        "--goal-*"
+      ],
+      "owner": "goals-tasks",
+      "reason": "Goal progress and user-selected accent colors are dynamic data passed through bounded CSS custom properties.",
+      "migration": "Keep only data-driven --goal-* properties; add no static presentation to these style objects.",
+      "review": "Review if the goal progress, detail, or accent-color data contract changes."
+    },
+    {
+      "paths": [
         "src/app/pages/tasks/TaskSummaryReport.tsx"
       ],
-      "reason": "High-density feature migration is staged; dynamic metrics and local composition remain during the first governance pass."
+      "allowedProperties": [
+        "--task-report-*",
+        "background",
+        "height"
+      ],
+      "owner": "tasks-reporting",
+      "reason": "Report bars and taxonomy swatches use data-derived height and color values.",
+      "migration": "Prefer bounded CSS custom properties for report geometry and color while keeping all static presentation in classes.",
+      "review": "Review when the task-summary visualization contract changes."
+    },
+    {
+      "paths": [
+        "src/app/experience/TelemetryBar.tsx",
+        "src/app/nutrition/NutritionAnalysis.tsx",
+        "src/app/pages/Dzisiaj.tsx",
+        "src/app/pages/Jdg.tsx",
+        "src/app/sport/SportActiveSession.tsx"
+      ],
+      "allowedProperties": [
+        "transform"
+      ],
+      "owner": "bounded-metrics",
+      "reason": "These progress fills receive a data-derived scale transform; all track presentation remains in CSS.",
+      "migration": "Adopt ProgressBar where the metric is a simple bounded value; keep domain-specific geometry local where semantics differ.",
+      "review": "Review whenever one of these progress indicators changes markup or scale semantics."
+    },
+    {
+      "paths": [
+        "src/app/experience/MotionValues.tsx"
+      ],
+      "allowedProperties": [
+        "transform",
+        "transition"
+      ],
+      "owner": "experience-motion",
+      "reason": "ProgressMorph calculates transform and its caller-owned bounded duration at runtime.",
+      "migration": "Keep the dynamic duration clamped to the documented motion contract and avoid additional inline presentation.",
+      "review": "Review if ProgressMorph gains another dynamic style property."
+    },
+    {
+      "paths": [
+        "src/app/experience/transitions.tsx"
+      ],
+      "allowedProperties": [
+        "viewTransitionName"
+      ],
+      "owner": "experience-motion",
+      "reason": "The browser view-transition name must be unique to runtime record identity.",
+      "migration": "Keep the sanitized runtime name as the only inline property.",
+      "review": "Review if the view-transition identity model changes."
+    },
+    {
+      "paths": [
+        "src/app/pages/Podroze.tsx"
+      ],
+      "allowedProperties": [
+        "transform",
+        "width"
+      ],
+      "owner": "travel-metrics",
+      "reason": "Travel readiness and composition bars expose data-derived percentages.",
+      "migration": "Adopt ProgressBar for simple bounded values while retaining domain composition geometry where needed.",
+      "review": "Review when Travel metric visualizations change."
+    },
+    {
+      "paths": [
+        "src/app/pages/Odzywanie.tsx"
+      ],
+      "allowedProperties": [
+        "background",
+        "transform"
+      ],
+      "owner": "nutrition-metrics",
+      "reason": "Nutrition progress fills use bounded runtime scale transforms and a data-driven over-target color.",
+      "migration": "Adopt ProgressBar when the domain metric can preserve its over-target semantics through the shared tone contract.",
+      "review": "Review when Nutrition metric bars change."
+    },
+    {
+      "paths": [
+        "src/app/pages/Praca.tsx",
+        "src/app/work/WorkDetailPanel.tsx"
+      ],
+      "allowedProperties": [
+        "--work-*",
+        "background",
+        "width"
+      ],
+      "owner": "work-metrics",
+      "reason": "Work progress, hierarchy depth, and persisted company colors are data-derived.",
+      "migration": "Prefer bounded custom properties and versioned taxonomy color mapping; keep static visuals in work.css.",
+      "review": "Review when Work progress or company-color contracts change."
+    },
+    {
+      "paths": [
+        "src/app/pages/Sprawy.tsx",
+        "src/app/recovery/RecoveryCenter.tsx"
+      ],
+      "allowedProperties": [
+        "width"
+      ],
+      "owner": "bounded-metrics",
+      "reason": "The remaining inline width is a runtime bounded percentage.",
+      "migration": "Adopt ProgressBar or a bounded CSS custom property when these surfaces are next migrated.",
+      "review": "Review when either metric implementation changes."
+    },
+    {
+      "paths": [
+        "src/app/pages/Zadania.tsx"
+      ],
+      "allowedProperties": [
+        "background",
+        "border",
+        "color"
+      ],
+      "owner": "tasks-taxonomy",
+      "reason": "Task list, tag, and priority controls render persisted or selected taxonomy colors at runtime.",
+      "migration": "Persist semantic taxonomy IDs and route runtime colors through bounded custom properties when the task schema next changes.",
+      "review": "Review when task taxonomy or quick-entry color controls change."
+    },
+    {
+      "paths": [
+        "src/app/sport/SportInsights.tsx"
+      ],
+      "allowedProperties": [
+        "background",
+        "bottom",
+        "color",
+        "transform",
+        "width"
+      ],
+      "owner": "sport-visualization",
+      "reason": "Sport chart marks use runtime series colors and data-derived geometry.",
+      "migration": "Route series colors through the chart migration vocabulary when the shared chart contract is adopted.",
+      "review": "Review with the chart-contract migration."
+    },
+    {
+      "paths": [
+        "src/app/sport/SportPlanner.tsx"
+      ],
+      "allowedProperties": [
+        "opacity"
+      ],
+      "owner": "sport-dragdrop",
+      "reason": "Dragged workout opacity reflects transient drag state.",
+      "migration": "Move drag state to a data attribute when the planner interaction layer is revised.",
+      "review": "Review when planner drag-and-drop changes."
+    },
+    {
+      "paths": [
+        "src/app/ui/components/DatePicker.tsx",
+        "src/app/ui/components/Select.tsx"
+      ],
+      "allowedProperties": [
+        "*spread*",
+        "left",
+        "maxHeight",
+        "top",
+        "width"
+      ],
+      "owner": "shared-floating-ui",
+      "reason": "Portal positioners calculate collision-aware viewport geometry and an optional semantic layer at runtime.",
+      "migration": "Retain only measured geometry; component presentation remains in ui.css.",
+      "review": "Review when the shared floating-positioning primitive changes."
+    },
+    {
+      "paths": [
+        "src/app/ui/components/Menu.tsx"
+      ],
+      "allowedProperties": [
+        "*spread*"
+      ],
+      "owner": "shared-floating-ui",
+      "reason": "Menu merges the documented caller style escape hatch with its optional semantic layer.",
+      "migration": "Narrow or remove the caller style escape hatch when all dynamic menu geometry uses a shared positioner.",
+      "review": "Review when Menu style or layer props change."
+    },
+    {
+      "paths": [
+        "src/app/ui/components/Modal.tsx"
+      ],
+      "allowedProperties": [
+        "maxWidth"
+      ],
+      "owner": "shared-modal",
+      "reason": "The documented modal width escape hatch accepts runtime numeric or CSS width values.",
+      "migration": "Prefer named modal sizes and retain maxWidth only for the documented full-page dialog exception.",
+      "review": "Review when Modal width props change."
+    },
+    {
+      "paths": [
+        "src/app/ui/components/Shell.tsx"
+      ],
+      "allowedProperties": [
+        "--ambient-*"
+      ],
+      "owner": "shared-shell",
+      "reason": "Ambient stream items receive a runtime sequence index through a bounded custom property.",
+      "migration": "Keep the index as the only inline shell presentation value.",
+      "review": "Review if AmbientStream markup changes."
     }
   ],
   "checkboxes": [
@@ -89,13 +350,10 @@
         "src/app/pages/Jdg.tsx",
         "src/app/pages/Podroze.tsx"
       ],
-      "reason": "These are custom form-card or switch presentations; the shared Checkbox contract does not preserve their current visual behavior yet."
-    },
-    {
-      "paths": [
-        "src/assistant/settings/AssistantSettingsPanel.tsx"
-      ],
-      "reason": "Assistant settings use grouped preference toggles with domain-specific persistence and layout."
+      "owner": "forms",
+      "reason": "These controls are custom form-card or switch presentations not covered by the shared Checkbox contract.",
+      "migration": "Define shared switch and form-card selection contracts before replacing the native controls.",
+      "review": "Review when shared form-control variants expand."
     }
   ],
   "motion": [
@@ -103,7 +361,10 @@
       "paths": [
         "src/app/experience/MotionValues.tsx"
       ],
-      "reason": "ProgressMorph accepts a dynamic duration prop; the value is part of the shared animation contract rather than a raw feature transition."
+      "owner": "experience",
+      "reason": "ProgressMorph accepts a dynamic duration prop as an explicit shared animation contract.",
+      "migration": "Keep the value data-driven; clamp it to the documented motion range if the public API expands.",
+      "review": "Review when MotionValues gains another consumer or duration role."
     }
   ]
 }

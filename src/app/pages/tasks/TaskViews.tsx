@@ -22,7 +22,7 @@ import {
   type TaskComment,
 } from "../../data/taskWorkspace";
 import { commitmentSourceLabel } from "../../data/commitmentRepository";
-import { Button, ListRow, Menu, MenuItem, Modal } from "../../ui";
+import { Button, ListRow, Menu, MenuItem, Modal, Textarea } from "../../ui";
 import { DatePickerPopup } from "./TaskSchedulePicker";
 import {
   C,
@@ -162,8 +162,7 @@ export function TaskRow({
             <Link
               to={task.source.href}
               aria-label={`Otwórz zadanie w module ${sourceLabel}: ${task.source.context}`}
-              className="task-source-link rounded-md px-1.5 text-[11px] no-underline"
-              style={{ color: C.iceBlue, background: C.iceBlueBg }}
+              className="task-source-link rounded-md px-1.5 text-[var(--text-label)] no-underline"
             >
               {sourceLabel}
             </Link>
@@ -196,9 +195,8 @@ function PriorityDropdown({ current, anchorEl, onSelect, onClose }: {
     return () => document.removeEventListener("mousedown", h);
   }, [anchorEl, onClose]);
   return (
-    <Menu ref={ref} layer="systemOverlay" style={{
-      position: "fixed", top: rect.bottom + 4, right: window.innerWidth - rect.right,
-      width: "var(--component-menu-min-width)",
+    <Menu ref={ref} layer="systemOverlay" className="task-menu--fixed" style={{
+      top: rect.bottom + 4, right: window.innerWidth - rect.right,
     }}>
       {PRIORITY_FLAGS.map(({ p, label, color }) => (
         <MenuItem
@@ -240,9 +238,8 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
   const currentLabel = listy.find(l => l.id === current)?.label ?? "Bez listy";
 
   return (
-    <Menu ref={ref} layer="systemOverlay" size="wide" style={{
-      position: "fixed", bottom: window.innerHeight - rect.top + 4, left: rect.left,
-      width: "var(--component-menu-wide-width)",
+    <Menu ref={ref} layer="systemOverlay" size="wide" className="task-menu--fixed" style={{
+      bottom: window.innerHeight - rect.top + 4, left: rect.left,
     }}>
       <div className="task-menu__search">
         <div>
@@ -315,9 +312,8 @@ function MoreMenu({ anchorEl, onAction, onClose, seriesScoped = false }: {
     };
   }, [anchorEl, onClose]);
   return (
-    <Menu ref={ref} aria-label={seriesScoped ? "Akcje całej serii" : "Akcje zadania"} layer="systemOverlay" size="wide" style={{
-      position: "fixed", bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right,
-      width: "var(--component-menu-wide-width)",
+    <Menu ref={ref} aria-label={seriesScoped ? "Akcje całej serii" : "Akcje zadania"} layer="systemOverlay" size="wide" className="task-menu--fixed" style={{
+      bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right,
     }}>
       {moreItems(seriesScoped).map((item, i) =>
         item === null
@@ -533,7 +529,8 @@ export function TaskDetail({
 
         {/* Title row — auto-height */}
         <div className="task-detail__title-row">
-          <textarea
+          <Textarea
+            embedded
             aria-label={occurrence ? "Tytuł całej serii" : "Tytuł zadania"}
             aria-describedby={occurrence ? "task-occurrence-scope" : undefined}
             value={editTitle}
@@ -552,7 +549,8 @@ export function TaskDetail({
         </div>
 
         {/* Notes — fills remaining space */}
-        <textarea
+        <Textarea
+          embedded
           aria-label={occurrence ? "Notatki całej serii" : "Notatki zadania"}
           aria-describedby={occurrence ? "task-occurrence-scope" : undefined}
           value={editNotes}

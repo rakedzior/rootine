@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -25,6 +25,7 @@ import {
   Modal,
   Select,
   SectionHeader,
+  Textarea,
 } from "../ui";
 import { createPlannerId } from "./plannerModel";
 import { exerciseCountForTemplate, exercisePreview } from "./sportRecordHelpers";
@@ -90,7 +91,7 @@ export function SportExercises({
   onCreate: (exercise: Exercise) => void;
   onUpdate: (exercise: Exercise) => void;
   onDuplicate: (exercise: Exercise) => void;
-  onDelete: (exercise: Exercise) => void;
+  onDelete: (exercise: Exercise, returnFocusTarget: HTMLButtonElement) => void;
   onSelect: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -103,6 +104,7 @@ export function SportExercises({
   const [sort, setSort] = useState<"name" | "updated">("name");
   const [editing, setEditing] = useState<Exercise | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const actionTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
 
   const filtered = useMemo(() => {
     const normalized = query.toLocaleLowerCase("pl-PL").trim();
@@ -140,7 +142,7 @@ export function SportExercises({
           <Input
             aria-label="Szukaj ćwiczeń"
             className="sport-record-toolbar__search"
-            placeholder="Szukaj po nazwie, partii lub sprzęcie…"
+            placeholder="Szukaj ćwiczeń…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -154,38 +156,58 @@ export function SportExercises({
           <Select compact aria-label="Status biblioteki" value={status} options={[{ value: "active", label: "Aktywne" }, { value: "archived", label: "Zarchiwizowane" }]} onChange={(event) => setStatus(event.target.value as "active" | "archived")} />
           <Select compact aria-label="Sortowanie" value={sort} options={[{ value: "name", label: "Nazwa A–Z" }, { value: "updated", label: "Ostatnio zmienione" }]} onChange={(event) => setSort(event.target.value as "name" | "updated")} />
         </div>
-        <div className="sport-record-table__head" role="row">
-          <span>Nazwa</span><span>Partia główna</span><span>Sprzęt</span><span>Domyślne parametry</span><span>W szablonach</span><span aria-hidden="true" />
-        </div>
         {filtered.length === 0 ? (
           <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo użyj przycisku Dodaj ćwiczenie w nagłówku modułu." />
-        ) : filtered.map((exercise) => {
+        ) : (
+          <div className="sport-record-table__body" role="table" aria-label="Biblioteka ćwiczeń">
+          <div className="sport-record-table__head" role="row">
+            <span role="columnheader">Nazwa</span><span role="columnheader">Partia główna</span><span role="columnheader">Sprzęt</span><span role="columnheader">Domyślne parametry</span><span role="columnheader">W szablonach</span><span role="columnheader" aria-label="Akcje" />
+          </div>
+          {filtered.map((exercise) => {
           const usage = templates.reduce((count, template) => count + (exerciseCountForTemplate(template, exercise.id) > 0 ? 1 : 0), 0);
           return (
             <div key={exercise.id} className="sport-record-table__row" role="row">
-              <button type="button" className="sport-record-table__main" onClick={() => onSelect(exercise.id)}>
-                <span className="sport-record-table__name"><Dumbbell size={13} aria-hidden="true" />{exercise.name}</span>
-                <span className="sport-record-table__sub">{exerciseTypeLabel(exercise.exerciseType)}{exercise.favorite && <Heart size={11} fill="currentColor" aria-label="Ulubione" />}</span>
-              </button>
-              <span>{exercise.primaryMuscle}</span>
-              <span>{exercise.equipment.length ? exercise.equipment.join(", ") : "Bez sprzętu"}</span>
-              <span className="sport-data">{parametersLabel(exercise)}</span>
-              <span className="sport-data">{usage}</span>
-              <span className="sport-record-table__actions">
-                <MenuTrigger open={menuId === exercise.id} menuId={`exercise-menu-${exercise.id}`} className="sport-icon-button" aria-label={`Akcje: ${exercise.name}`} onClick={() => setMenuId((current) => current === exercise.id ? null : exercise.id)}><MoreHorizontal size={16} /></MenuTrigger>
+              <div className="sport-record-table__main-cell" role="cell">
+                <button type="button" className="sport-record-table__main" onClick={() => onSelect(exercise.id)}>
+                  <span className="sport-record-table__name"><Dumbbell size={13} aria-hidden="true" />{exercise.name}</span>
+                  <span className="sport-record-table__sub">{exerciseTypeLabel(exercise.exerciseType)}{exercise.favorite && <Heart size={11} fill="currentColor" aria-label="Ulubione" />}</span>
+                </button>
+              </div>
+              <span role="cell">{exercise.primaryMuscle}</span>
+              <span role="cell">{exercise.equipment.length ? exercise.equipment.join(", ") : "Bez sprzętu"}</span>
+              <span role="cell" className="sport-data">{parametersLabel(exercise)}</span>
+              <span role="cell" className="sport-data">{usage}</span>
+              <span role="cell" className="sport-record-table__actions">
+                <MenuTrigger
+                  ref={(element) => {
+                    if (element) actionTriggerRefs.current.set(exercise.id, element);
+                    else actionTriggerRefs.current.delete(exercise.id);
+                  }}
+                  open={menuId === exercise.id}
+                  menuId={`exercise-menu-${exercise.id}`}
+                  className="sport-icon-button"
+                  aria-label={`Akcje: ${exercise.name}`}
+                  onClick={() => setMenuId((current) => current === exercise.id ? null : exercise.id)}
+                ><MoreHorizontal size={16} /></MenuTrigger>
                 {menuId === exercise.id && (
                   <Menu id={`exercise-menu-${exercise.id}`} className="sport-row-menu" onDismiss={() => setMenuId(null)} triggerRef={undefined}>
                     <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { setEditing(exercise); setMenuId(null); }}>Edytuj</MenuItem>
                     <MenuItem leadingIcon={<Copy size={13} />} onClick={() => { onDuplicate(exercise); setMenuId(null); }}>Duplikuj</MenuItem>
                     <MenuItem leadingIcon={<Heart size={13} />} onClick={() => { onUpdate({ ...exercise, favorite: !exercise.favorite, updatedAt: new Date().toISOString() }); setMenuId(null); }}>{exercise.favorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}</MenuItem>
                     <MenuItem leadingIcon={exercise.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />} onClick={() => { onUpdate({ ...exercise, archived: !exercise.archived, updatedAt: new Date().toISOString() }); setMenuId(null); }}>{exercise.archived ? "Przywróć" : "Archiwizuj"}</MenuItem>
-                    <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { onDelete(exercise); setMenuId(null); }}>Usuń</MenuItem>
+                    <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => {
+                      const returnFocusTarget = actionTriggerRefs.current.get(exercise.id);
+                      if (returnFocusTarget) onDelete(exercise, returnFocusTarget);
+                      setMenuId(null);
+                    }}>Usuń</MenuItem>
                   </Menu>
                 )}
               </span>
             </div>
           );
-        })}
+          })}
+          </div>
+        )}
       </Card>
 
       {editing && <ExerciseEditor exercise={editing} onClose={() => setEditing(null)} onSubmit={submitEditor} />}
@@ -220,7 +242,7 @@ function ExerciseEditor({ exercise, onClose, onSubmit }: { exercise: Exercise; o
           <Input label="Partie dodatkowe" placeholder="np. Triceps, barki" value={draft.secondaryMuscles.join(", ")} onChange={(event) => set("secondaryMuscles", event.target.value.split(",").map((value) => value.trim()).filter(Boolean))} />
         </div>
         <Input label="Krótki opis" value={draft.description} onChange={(event) => set("description", event.target.value)} />
-        <label className="sport-field"><span>Instrukcja</span><textarea value={draft.instructions} rows={3} onChange={(event) => set("instructions", event.target.value)} /></label>
+        <Textarea fieldClassName="sport-field" label="Instrukcja" value={draft.instructions} rows={3} onChange={(event) => set("instructions", event.target.value)} />
         <button type="button" className="sport-disclosure" aria-expanded={advanced} onClick={() => setAdvanced((current) => !current)}><SlidersHorizontal size={13} />{advanced ? "Ukryj więcej ustawień" : "Więcej ustawień"}</button>
         {advanced && (
           <div className="sport-exercise-editor__advanced">

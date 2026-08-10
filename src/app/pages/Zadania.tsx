@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import {
   Plus, Check, Trash2, RotateCcw,
   ChevronDown, ChevronRight,
@@ -48,13 +48,14 @@ import {
   ModuleShell,
   SectionHeader,
   Select,
+  Toast,
+  ToastViewport,
 } from "../ui";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
 import { recordActivity } from "../experience/activityLog";
 import { TaskSummaryReport } from "./tasks/TaskSummaryReport";
 import "../../styles/tasks.css";
 import "../../styles/task-habits.css";
-
 import {
   C,
   DEFAULT_DATE_VAL,
@@ -64,12 +65,13 @@ import {
   SPECIAL_SMART_VIEWS,
   VIEW_LABELS,
   VISIBLE_TAG_LIMIT,
+  buildTaskPreferenceRestoreRoute,
   defaultDateValueForTaskView,
   formatOpenTaskCount,
   formatDateLabel,
   groupTasksForListView,
   initialTaskView,
-  loadTaskSidebarState,
+  loadInitialTaskPagePreferences,
   isTaskUndated,
   saveTasksViewMode,
   saveTaskSidebarState,
@@ -99,22 +101,22 @@ import type { HabitMetaDraft } from "./tasks/TaskSecondaryViews";
 
 export default function Zadania() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [initialWorkspace] = useState(loadTaskWorkspace);
-  const initialSidebarState = loadTaskSidebarState();
-  const [tasksViewMode, setTasksViewMode] = useState<TasksViewMode>("list");
+  const [initialTaskPreferences] = useState(() => loadInitialTaskPagePreferences(initialWorkspace.tasks));
+  const [tasksViewMode, setTasksViewMode] = useState<TasksViewMode>(initialTaskPreferences.viewMode);
   const workspaceRef = useRef(initialWorkspace);
-  const [taskView,      setTaskView]      = useState(() => {
-    return initialTaskView();
-  });
-  const [listFilter,    setListFilter]    = useState<string | null>(null);
-  const [tagFilter,     setTagFilter]     = useState<string | null>(null);
+  const [taskView,      setTaskView]      = useState(initialTaskPreferences.taskView);
+  const [listFilter,    setListFilter]    = useState<string | null>(initialTaskPreferences.listFilter);
+  const [tagFilter,     setTagFilter]     = useState<string | null>(initialTaskPreferences.tagFilter);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
   const [tasks,         setTasks]         = useState<Task[]>(initialWorkspace.tasks);
   const [habits,        setHabits]        = useState<Habit[]>(initialWorkspace.habits);
   const [listy,         setListy]         = useState<ListItem[]>(initialWorkspace.lists);
   const [tagi,          setTagi]          = useState<TagItem[]>(initialWorkspace.tags);
-  const [selectedId,    setSelectedId]    = useState<number | null>(null);
+  const [selectedId,    setSelectedId]    = useState<number | null>(initialTaskPreferences.linkedTaskId);
   const [selectedHabitId, setSelectedHabitId] = useState<number | null>(null);
+  const [taskLinkNotice, setTaskLinkNotice] = useState<string | null>(initialTaskPreferences.invalidTaskDeepLink ? "Nie znaleziono wskazanego zadania. Pokazujemy bieżącą listę zadań." : null);
   const [newTask,       setNewTask]       = useState("");
   const [habitQuickCapture, setHabitQuickCapture] = useState({ title: "", revision: 0 });
   const [newTaskTags,   setNewTaskTags]   = useState<string[]>([]);
@@ -143,6 +145,38 @@ export default function Zadania() {
     message: string;
     completionIds?: number[];
   } | null>(null);
+  const selectionContextRef = useRef({ taskView, listFilter, tagFilter });
+  const deepLinkSelectionRef = useRef(initialTaskPreferences.linkedTaskId !== null);
+  const taskDeepLinkPreferencesRef = useRef(initialTaskPreferences.deepLinkPreferences);
+  const setTaskSelection = useCallback((selectionId: number | null, queryTaskId: number | null = selectionId) => {
+    taskDeepLinkPreferencesRef.current = null;
+    deepLinkSelectionRef.current = false;
+    setSelectedId(selectionId);
+    if (selectionId !== null) setSelectedHabitId(null);
+    setTaskLinkNotice(null);
+    const url = new URL(window.location.href);
+    if (queryTaskId !== null && Number.isSafeInteger(queryTaskId)) url.searchParams.set("zadanie", String(queryTaskId));
+    else url.searchParams.delete("zadanie");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  const dismissTaskSelection = useCallback(() => {
+    const preferences = taskDeepLinkPreferencesRef.current;
+    if (!preferences) {
+      setTaskSelection(null);
+      return;
+    }
+
+    taskDeepLinkPreferencesRef.current = null;
+    deepLinkSelectionRef.current = false;
+    setSelectedId(null);
+    setTaskLinkNotice(null);
+    setTaskView(preferences.taskView);
+    setListFilter(preferences.listFilter);
+    setTagFilter(preferences.tagFilter);
+    setTasksViewMode(preferences.viewMode);
+    navigate(buildTaskPreferenceRestoreRoute(window.location.href, preferences), { replace: true });
+  }, [navigate, setTaskSelection]);
 
   useEffect(() => {
     const nextWorkspace = { ...workspaceRef.current, tasks, habits, lists: listy, tags: tagi };
@@ -181,6 +215,14 @@ export default function Zadania() {
   const taskRoute = (view: string, base = "/zadania") => (
     view === "dzis" ? base : `${base}?widok=${encodeURIComponent(view)}`
   );
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const explicitListContext = url.searchParams.has("widok") || url.searchParams.has("zadanie");
+    if (tasksViewMode === "calendar" && url.pathname === "/zadania" && !explicitListContext) {
+      navigate(taskView === "dzis" ? "/kalendarz" : `/kalendarz?widok=${encodeURIComponent(taskView)}`, { replace: true });
+    }
+  }, [navigate, taskView, tasksViewMode]);
 
   const openTaskView = (view: string, resetFilters = true) => {
     setTaskViewWithDefault(view);
@@ -240,8 +282,8 @@ export default function Zadania() {
   };
 
   // Sidebar collapse state
-  const [listyOpen,     setListyOpen]     = useState(initialSidebarState.listyOpen);
-  const [tagiOpen,      setTagiOpen]      = useState(initialSidebarState.tagiOpen);
+  const [listyOpen,     setListyOpen]     = useState(initialTaskPreferences.sidebar.listyOpen);
+  const [tagiOpen,      setTagiOpen]      = useState(initialTaskPreferences.sidebar.tagiOpen);
   const [showAllLists,  setShowAllLists]  = useState(false);
   const [showAllTags,   setShowAllTags]   = useState(false);
 
@@ -260,6 +302,7 @@ export default function Zadania() {
   const [tagSearch,     setTagSearch]     = useState("");
 
   useEffect(() => {
+    if (taskDeepLinkPreferencesRef.current) return;
     saveTaskSidebarState({ taskView, listFilter, tagFilter, listyOpen, tagiOpen });
   }, [listFilter, listyOpen, tagFilter, tagiOpen, taskView]);
 
@@ -304,6 +347,17 @@ export default function Zadania() {
   }, [setTaskViewWithDefault, taskView]);
 
   const todayKey = todayLocalDateKey();
+  const todayLongLabel = todayStr();
+  const todayShortLabel = new Intl.DateTimeFormat("pl-PL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(`${todayKey}T12:00:00`));
+  const taskHeaderDescription = (prefix: string) => (
+    <>{prefix}<span aria-hidden="true"> · </span>
+      <time dateTime={todayKey} title={todayLongLabel} aria-label={todayLongLabel}>{todayShortLabel}</time>
+    </>
+  );
   const smartDateTasks = useMemo(
     () => tasksForSmartDateView(tasks, taskView, todayKey),
     [taskView, tasks, todayKey],
@@ -328,6 +382,36 @@ export default function Zadania() {
   const selectedHabit = selectedHabitId === null
     ? null
     : habits.find((habit) => habit.id === selectedHabitId) ?? null;
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get("zadanie");
+    if (requested === null) {
+      if (deepLinkSelectionRef.current) {
+        deepLinkSelectionRef.current = false;
+        setSelectedId(null);
+      }
+      return;
+    }
+    const parsed = /^\d+$/.test(requested) ? Number(requested) : Number.NaN;
+    const linkedTask = Number.isSafeInteger(parsed) ? tasks.find((task) => task.id === parsed) : undefined;
+    if (!linkedTask) {
+      deepLinkSelectionRef.current = false;
+      setSelectedId(null);
+      setTaskLinkNotice("Nie znaleziono wskazanego zadania. Pokazujemy bieżącą listę zadań.");
+      url.searchParams.delete("zadanie");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      return;
+    }
+    deepLinkSelectionRef.current = true;
+    setSelectedId(linkedTask.id);
+    setSelectedHabitId(null);
+    setTaskLinkNotice(null);
+    if (requested !== String(linkedTask.id)) {
+      url.searchParams.set("zadanie", String(linkedTask.id));
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [location.search, tasks]);
   const tagUsage = tasks.reduce<Record<string, number>>((counts, task) => {
     if (task.deleted) return counts;
     for (const tag of task.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
@@ -465,7 +549,7 @@ export default function Zadania() {
       title: task.text,
       detail: task.calendarDate ? `Zaplanowano na ${task.calendarDate}` : "Dodano zadanie",
     });
-    setSelectedId(null);
+    setTaskSelection(null);
     setNewTask(""); setNewPriority(null); setNewTaskTags([]); setNewTaskList(null);
     setNewDateVal(defaultDateValueForTaskView(taskView)); setInputDropdown(null);
   };
@@ -568,21 +652,21 @@ export default function Zadania() {
       });
     }
     setTasks((current) => trashTask(workspaceWithTasks(current), id).tasks);
-    setSelectedId(null);
+    setTaskSelection(null);
   };
   const restoreTaskFromTrash = (id: number) => {
     setTasks((current) => restoreTask(workspaceWithTasks(current), id).tasks);
-    setSelectedId(null);
+    setTaskSelection(null);
   };
   const permanentlyDeleteTask = (id: number) => {
     setTasks((current) => purgeTask(workspaceWithTasks(current), id).tasks);
     setPurgeTaskId(null);
-    setSelectedId(null);
+    setTaskSelection(null);
   };
   const emptyTrash = () => {
     setTasks((current) => emptyTaskTrash(workspaceWithTasks(current)).tasks);
     setEmptyTrashOpen(false);
-    setSelectedId(null);
+    setTaskSelection(null);
   };
   const setHabitCompletion = (id: number, dateKey: string, done: boolean) => setHabits((current) => current.map((habit) => (
     habit.id === id ? setHabitCompletionOnDate(habit, dateKey, done) : habit
@@ -606,7 +690,7 @@ export default function Zadania() {
   const toggleBulkMode = () => {
     setBulkMode((current) => !current);
     setBulkSelectedIds(new Set());
-    setSelectedId(null);
+    setTaskSelection(null);
   };
   const toggleBulkTask = (id: number) => setBulkSelectedIds((current) => {
     const next = new Set(current);
@@ -670,6 +754,7 @@ export default function Zadania() {
     setTasks(bulkUndo.tasks);
     setBulkUndo(null);
   };
+  const dismissBulkUndo = useCallback(() => setBulkUndo(null), []);
   const updateHabit = (id: number, patch: Partial<Habit>) => setHabits((current) => current.map((habit) => (
     habit.id === id ? normalizeHabitState({ ...habit, ...patch }) : habit
   )));
@@ -711,7 +796,13 @@ export default function Zadania() {
 
   const closeDatePicker = useCallback(() => setDatePickerOpen(false), []);
 
-  useEffect(() => { setSelectedId(null); setSelectedHabitId(null); }, [taskView, listFilter, tagFilter]);
+  useEffect(() => {
+    const previous = selectionContextRef.current;
+    selectionContextRef.current = { taskView, listFilter, tagFilter };
+    if (previous.taskView === taskView && previous.listFilter === listFilter && previous.tagFilter === tagFilter) return;
+    setTaskSelection(null);
+    setSelectedHabitId(null);
+  }, [listFilter, setTaskSelection, tagFilter, taskView]);
 
   const getPlaceholder = () => {
     if (listFilter) return `Dodaj zadanie do "${listy.find(l => l.id === listFilter)?.label}"`;
@@ -760,7 +851,10 @@ export default function Zadania() {
       onBulkToggle={toggleBulkTask}
       onToggle={id => updateTask(id, { done: !task.done })}
       onUpdate={updateTask}
-      onSelect={id => setSelectedId(selectedId === id ? null : id)}
+      onSelect={(id) => {
+        const nextId = selectedId === id ? null : id;
+        setTaskSelection(nextId, nextId !== null && Number.isInteger(nextId) ? nextId : null);
+      }}
     />
   );
 
@@ -890,7 +984,7 @@ export default function Zadania() {
                       onClick={() => {
                         openTaskFilter("list", active ? null : l.id);
                       }}
-                      icon={<span className="h-2 w-2 rounded-full" style={{ background: l.color, opacity: active ? 1 : 0.7 }} />}
+                      icon={<span className={`task-nav__color-dot${active ? " is-active" : ""}`} style={{ background: l.color }} />}
                       label={l.label}
                       meta={count > 0 ? count : undefined}
                     />
@@ -1003,7 +1097,7 @@ export default function Zadania() {
                       onClick={() => {
                         openTaskFilter("tag", active ? null : t.id);
                       }}
-                      icon={<span className="h-2 w-2 rounded-full" style={{ background: t.color, opacity: active ? 1 : 0.7 }} />}
+                      icon={<span className={`task-nav__color-dot${active ? " is-active" : ""}`} style={{ background: t.color }} />}
                       label={`#${t.label}`}
                       meta={tagUsage[t.id] > 0 ? tagUsage[t.id] : undefined}
                     />
@@ -1070,7 +1164,7 @@ export default function Zadania() {
           <ContentHeader
             headingLevel={1}
             title="Podsumowanie"
-            description={`Przegląd realizacji zadań · ${todayStr()}`}
+            description={taskHeaderDescription("Przegląd realizacji zadań")}
             mobileNavigation={<Select
               aria-label="Widok zadań"
               fieldClassName="context-mobile-select"
@@ -1093,7 +1187,7 @@ export default function Zadania() {
           <ContentHeader
             headingLevel={1}
             title="Nawyki"
-            description={`Codzienny rytm · ${todayStr()}`}
+            description={taskHeaderDescription("Codzienny rytm")}
             meta={<span>{remainingHabitsToday} do zrobienia</span>}
             mobileNavigation={<Select
               aria-label="Widok zadań"
@@ -1112,7 +1206,7 @@ export default function Zadania() {
             habits={habits}
             onToggleHabit={toggleHabit}
             selectedHabitId={selectedHabitId}
-            onSelectHabit={(id) => { setSelectedHabitId((current) => current === id ? null : id); setSelectedId(null); }}
+            onSelectHabit={(id) => { setSelectedHabitId((current) => current === id ? null : id); setTaskSelection(null); }}
             onAddHabit={addHabit}
             quickCaptureTitle={habitQuickCapture.title}
             quickCaptureRevision={habitQuickCapture.revision}
@@ -1122,16 +1216,12 @@ export default function Zadania() {
 
       {/* ── Task list ── */}
       <ModuleMain
-        className="task-module-main"
-        style={{
-          background: C.bg,
-          display: taskView === "podsumowanie" || taskView === "nawyki" ? "none" : undefined,
-        }}>
+        className={`task-module-main${taskView === "podsumowanie" || taskView === "nawyki" ? " is-task-view-hidden" : ""}`}>
         <ContentHeader
           headingLevel={1}
           className="task-workspace-toolbar"
           title={listFilter ? listy.find(l => l.id === listFilter)?.label : tagFilter ? `#${tagFilter}` : VIEW_LABELS[taskView]}
-          description={`${formatOpenTaskCount(pending.length)} · ${todayStr()}`}
+          description={taskHeaderDescription(formatOpenTaskCount(pending.length))}
           mobileNavigation={<Select
               aria-label="Widok zadań"
               fieldClassName="context-mobile-select"
@@ -1245,6 +1335,10 @@ export default function Zadania() {
           </>}
         />
 
+        {taskLinkNotice && (
+          <p className="task-deep-link-notice" role="status">{taskLinkNotice}</p>
+        )}
+
         {bulkMode && (
           <div className="task-bulk-bar" role="toolbar" aria-label="Operacje zbiorcze na zadaniach">
             <strong aria-live="polite">Zaznaczono: {bulkSelectedIds.size}</strong>
@@ -1265,10 +1359,16 @@ export default function Zadania() {
         )}
 
         {bulkUndo && (
-          <div className="task-bulk-undo" role="status" aria-live="polite">
-            <span>{bulkUndo.message}</span>
-            <Button variant="quiet" size="sm" onClick={undoBulkAction}>Cofnij</Button>
-          </div>
+          <ToastViewport>
+            <Toast
+              tone="neutral"
+              actionLabel="Cofnij"
+              onAction={undoBulkAction}
+              onDismiss={dismissBulkUndo}
+            >
+              {bulkUndo.message}
+            </Toast>
+          </ToastViewport>
         )}
 
         <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1281,11 +1381,6 @@ export default function Zadania() {
             onSubmit={(event) => {
               event.preventDefault();
               addTask();
-            }}
-            style={{
-              background: C.inputBg,
-              border: `1px solid ${C.borderSubtle}`,
-              boxShadow: "none",
             }}>
             <div className="task-entry__row">
               <button
@@ -1302,11 +1397,7 @@ export default function Zadania() {
                 const td = tagi.find(t => t.id === tagId);
                 const color = td?.color ?? C.iceBlue;
                 return (
-                  <span key={tagId} style={{
-                    display: "inline-flex", alignItems: "center", gap: 3,
-                    fontSize: 11, fontWeight: 500, padding: "2px 7px", borderRadius: 20,
-                    color, background: color + "1A", flexShrink: 0,
-                  }}>
+                  <span key={tagId} className="task-entry__tag" style={{ color, background: color + "1A" }}>
                     #{td?.label ?? tagId}
                     <button
                       type="button"
@@ -1325,7 +1416,7 @@ export default function Zadania() {
                 value={newTask}
                 onChange={handleTaskInput}
                 onKeyDown={handleTaskKeyDown}
-                className="task-entry-input task-entry__input flex-1 bg-transparent outline-none text-[13px] min-w-0"
+                className="task-entry-input task-entry__input flex-1 bg-transparent outline-none min-w-0"
               />
 
               </div>
@@ -1339,7 +1430,7 @@ export default function Zadania() {
                   aria-label="Ustaw priorytet nowego zadania"
                   aria-expanded={inputDropdown === "priority"}
                   onClick={() => setInputDropdown(d => d === "priority" ? null : "priority")}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
+                  className="task-entry-control"
                   title="Priorytet"
                   style={{
                     background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? C.elevated : "transparent",
@@ -1356,7 +1447,7 @@ export default function Zadania() {
                   aria-label="Wybierz listę nowego zadania"
                   aria-expanded={inputDropdown === "list"}
                   onClick={() => setInputDropdown(d => d === "list" ? null : "list")}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
+                  className="task-entry-control"
                   title="Lista"
                   style={{
                     background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? C.elevated : "transparent",
@@ -1373,13 +1464,9 @@ export default function Zadania() {
                   aria-label="Dodaj tagi do nowego zadania"
                   aria-expanded={inputDropdown === "tags"}
                   onClick={() => setInputDropdown(d => d === "tags" ? null : "tags")}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0"
+                  className={`task-entry-control${newTaskTags.length > 0 ? " is-active" : ""}${inputDropdown === "tags" ? " is-open" : ""}`}
                   title="Tagi"
-                  style={{
-                    background: newTaskTags.length > 0 ? C.iceBlueBg : inputDropdown === "tags" ? C.elevated : "transparent",
-                    color: newTaskTags.length > 0 ? C.iceBlue : C.textMuted,
-                    border: `1px solid ${newTaskTags.length > 0 ? C.blueBorder : "transparent"}`,
-                  }}>
+                >
                   <Hash size={13} strokeWidth={1.5} />
                 </button>
 
@@ -1390,15 +1477,10 @@ export default function Zadania() {
                   aria-label="Ustaw termin nowego zadania"
                   aria-expanded={datePickerOpen}
                   onClick={() => { setDatePickerOpen(o => !o); setInputDropdown(null); }}
-                  className="flex items-center gap-1 px-1.5 h-7 rounded-lg transition-all flex-shrink-0"
-                  style={{
-                    background: dateLabel ? C.iceBlueBg : "transparent",
-                    color: dateLabel ? C.iceBlue : C.textMuted,
-                    border: `1px solid ${dateLabel ? C.blueBorder : "transparent"}`,
-                  }}>
+                  className={`task-entry-control task-entry-control--date${dateLabel ? " is-active" : ""}`}>
                   <Calendar size={13} strokeWidth={1.5} />
                   {dateLabel && (
-                    <span style={{ fontSize: "11px", fontWeight: 500 }}>{dateLabel}</span>
+                    <span className="task-entry-control__label">{dateLabel}</span>
                   )}
                 </button>
 
@@ -1406,8 +1488,7 @@ export default function Zadania() {
                   <button
                     type="submit"
                     aria-label="Dodaj zadanie"
-                    className="text-[11px] font-semibold px-2 h-7 rounded-md flex-shrink-0"
-                    style={{ background: C.iceBlueSolid, color: C.textPrimary }}>
+                    className="task-entry__submit">
                     ↵
                   </button>
                 )}
@@ -1432,7 +1513,10 @@ export default function Zadania() {
                       selected={selectedId === t.id}
                       onToggle={() => restoreTaskFromTrash(t.id)}
                       onUpdate={updateTask}
-                      onSelect={id => setSelectedId(selectedId === id ? null : id)} />
+                      onSelect={(id) => {
+                        const nextId = selectedId === id ? null : id;
+                        setTaskSelection(nextId, nextId !== null && Number.isInteger(nextId) ? nextId : null);
+                      }} />
                   </div>
                   <Button
                     variant="quiet"
@@ -1462,7 +1546,7 @@ export default function Zadania() {
               description="Zadania oznaczone jako wykonane pojawią się tutaj w jednym spokojnym archiwum."
             />
           ) : (
-            <div className="task-groups" aria-label="Grupy zadań">
+            <section className="task-groups" aria-label="Grupy zadań">
               {taskGroups.map((group) => {
                 const collapsed = isTaskGroupCollapsed(group.id, group.defaultCollapsed);
                 const headingId = `task-group-heading-${group.id.replace(/[^a-z0-9-]/gi, "-")}`;
@@ -1496,7 +1580,7 @@ export default function Zadania() {
                   </section>
                 );
               })}
-            </div>
+            </section>
           )}
 
           {taskView !== "kosz" && taskView !== "ukonczone" && pending.length === 0 && completed.length === 0 && (
@@ -1529,7 +1613,7 @@ export default function Zadania() {
             : selectedHabit
               ? "Szczegóły nawyku"
               : "Podsumowanie zadań"}
-          onDismiss={() => selectedTask ? setSelectedId(null) : selectedHabit ? setSelectedHabitId(null) : setTaskViewWithDefault("dzis")}
+          onDismiss={() => selectedTask ? dismissTaskSelection() : selectedHabit ? setSelectedHabitId(null) : setTaskViewWithDefault("dzis")}
         >
         {selectedTask ? (
           <TaskDetail
@@ -1540,7 +1624,7 @@ export default function Zadania() {
                   done: selectedVirtualOccurrence.done,
                 }
               : undefined}
-            onClose={() => setSelectedId(null)}
+            onClose={dismissTaskSelection}
             onToggleCompletion={(done) => updateTask(
               selectedVirtualOccurrence?.id ?? selectedTask.id,
               { done },
@@ -1607,7 +1691,7 @@ export default function Zadania() {
             </>
           )}
         >
-          <p className="text-[12px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+          <p className="task-confirm-copy">
             Tej operacji nie można cofnąć, dlatego zależności zostaną zaktualizowane w tym samym zapisie.
           </p>
         </Modal>
@@ -1625,7 +1709,7 @@ export default function Zadania() {
             </>
           )}
         >
-          <p className="text-[12px] text-[var(--color-text-secondary)]">
+          <p className="task-confirm-copy">
             {tasks.find((task) => task.id === purgeTaskId)?.text}
           </p>
         </Modal>
@@ -1643,7 +1727,7 @@ export default function Zadania() {
             </>
           )}
         >
-          <p className="text-[12px] text-[var(--color-text-secondary)]">
+          <p className="task-confirm-copy">
             Jeśli chcesz zachować wybrane pozycje, przywróć je przed opróżnieniem.
           </p>
         </Modal>

@@ -56,66 +56,12 @@ export const uiColors = {
   categoryUnlisted: "var(--color-category-unlisted)",
 } as const;
 
-export const uiRadii = {
-  xs: "var(--radius-xs)",
-  sm: "var(--radius-sm)",
-  md: "var(--radius-md)",
-  lg: "var(--radius-lg)",
-  xl: "var(--radius-xl)",
-  pill: "var(--radius-pill)",
-} as const;
-
-export const uiSpacing = {
-  xs: "var(--space-xs)",
-  sm: "var(--space-sm)",
-  md: "var(--space-md)",
-  lg: "var(--space-lg)",
-  xl: "var(--space-xl)",
-  xxl: "var(--space-2xl)",
-  xxxl: "var(--space-3xl)",
-} as const;
-
 export const uiShadows = {
   floating: "var(--shadow-floating)",
   modal: "var(--shadow-modal)",
   sm: "var(--shadow-sm)",
   md: "var(--shadow-md)",
   control: "var(--shadow-control)",
-} as const;
-
-export const uiMotion = {
-  instant: "var(--motion-instant)",
-  fast: "var(--motion-fast)",
-  normal: "var(--motion-normal)",
-  slow: "var(--motion-slow)",
-  page: "var(--motion-page)",
-  ritual: "var(--motion-ritual)",
-  progress: "var(--motion-progress)",
-  progressSlow: "var(--motion-progress-slow)",
-  toggle: "var(--motion-toggle)",
-  disclosure: "var(--motion-disclosure)",
-  standard: "var(--ease-standard)",
-  enter: "var(--ease-enter)",
-  exit: "var(--ease-exit)",
-  out: "var(--ease-out)",
-} as const;
-
-export const uiTypography = {
-  nano: "var(--text-nano)",
-  micro: "var(--text-micro)",
-  label: "var(--text-label)",
-  meta: "var(--text-meta)",
-  body: "var(--text-body)",
-  bodyEmphasis: "var(--text-body-emphasis)",
-  pageTitle: "var(--text-page-title)",
-  title: "var(--text-title)",
-  headline: "var(--text-headline)",
-  display: "var(--text-display)",
-} as const;
-
-export const uiFocus = {
-  ring: "var(--focus-ring)",
-  width: "var(--focus-ring-width)",
 } as const;
 
 export const uiLayers = {
@@ -143,29 +89,4 @@ export const uiLayers = {
   system: "var(--layer-system)",
   nestedPopover: "var(--layer-nested-popover)",
   systemOverlay: "var(--layer-system-overlay)",
-} as const;
-
-export const uiStates = {
-  hoverSurface: "var(--state-hover-surface)",
-  selectedSurface: "var(--state-selected-surface)",
-  focusRing: "var(--state-focus-ring)",
-  disabledOpacity: "var(--state-disabled-opacity)",
-  completedOpacity: "var(--state-completed-opacity)",
-} as const;
-
-export const uiChartColors = {
-  axis: "var(--color-chart-axis)",
-  grid: "var(--color-chart-grid)",
-  series1: "var(--color-chart-series-1)",
-  series2: "var(--color-chart-series-2)",
-  series3: "var(--color-chart-series-3)",
-  goal: "var(--color-chart-goal)",
-  average: "var(--color-chart-average)",
-} as const;
-
-export const uiLayout = {
-  pageHeaderHeight: "var(--page-header-height)",
-  appSidebarWidth: "var(--app-sidebar-width)",
-  contextSidebarWidth: "var(--context-sidebar-width)",
-  detailPanelWidth: "var(--detail-panel-width)",
 } as const;

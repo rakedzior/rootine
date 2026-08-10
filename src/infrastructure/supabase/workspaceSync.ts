@@ -29,6 +29,16 @@ export type RemoteWorkspaceSyncResult = {
   message?: string;
 };
 
+type RemoteWorkspaceSyncOutcome = {
+  result: RemoteWorkspaceSyncResult;
+  /** Hashes of the exact payloads confirmed on the remote side. */
+  knownRemoteHashes: Map<string, string>;
+};
+
+type ReconciliationControl = {
+  changedDuringInitialSync?: (storageKey: string) => boolean;
+};
+
 type RemoteWorkspaceRow = {
   storage_key: string;
   payload: unknown;
@@ -150,21 +160,36 @@ async function uploadWorkspaces(userId: string, entries: Array<[string, string]>
   return error;
 }
 
-export async function syncRemoteWorkspaces(userId: string): Promise<RemoteWorkspaceSyncResult> {
-  if (!supabase) return { status: "error", uploaded: 0, downloaded: 0, message: "Supabase nie jest skonfigurowane." };
+async function reconcileRemoteWorkspaces(
+  userId: string,
+  control: ReconciliationControl = {},
+): Promise<RemoteWorkspaceSyncOutcome> {
+  const emptyHashes = new Map<string, string>();
+  if (!supabase) {
+    return {
+      result: { status: "error", uploaded: 0, downloaded: 0, message: "Supabase nie jest skonfigurowane." },
+      knownRemoteHashes: emptyHashes,
+    };
+  }
 
   const localBackupAtStart = await exportAllLocalWorkspaces();
   const { rows, error } = await readRemoteRows(userId);
   if (error) {
     if (isMissingSchemaError(error)) {
       return {
-        status: "schema-missing",
-        uploaded: 0,
-        downloaded: 0,
-        message: `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`,
+        result: {
+          status: "schema-missing",
+          uploaded: 0,
+          downloaded: 0,
+          message: `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`,
+        },
+        knownRemoteHashes: emptyHashes,
       };
     }
-    return { status: "error", uploaded: 0, downloaded: 0, message: error.message };
+    return {
+      result: { status: "error", uploaded: 0, downloaded: 0, message: error.message },
+      knownRemoteHashes: emptyHashes,
+    };
   }
 
   // Reading Supabase is asynchronous. A user can save a task while that
@@ -174,13 +199,19 @@ export async function syncRemoteWorkspaces(userId: string): Promise<RemoteWorksp
   const localBackup = await exportAllLocalWorkspaces();
   const remoteByKey = new Map(rows.map((row) => [row.storage_key, row]));
   const restoreEntries: Array<[string, string]> = [];
-  const uploadEntries: Array<[string, string]> = [];
+  const uploadEntries = new Map<string, string>();
+  const knownRemoteHashes = new Map<string, string>();
   const localEntries = Object.entries(localBackup.workspaces);
+
+  rows.forEach((row) => {
+    const remoteRaw = payloadRaw(row.payload);
+    if (remoteRaw !== null) knownRemoteHashes.set(row.storage_key, hashRaw(remoteRaw));
+  });
 
   for (const [storageKey, raw] of localEntries) {
     const remote = remoteByKey.get(storageKey);
     if (!remote) {
-      uploadEntries.push([storageKey, raw]);
+      uploadEntries.set(storageKey, raw);
       continue;
     }
 
@@ -188,10 +219,10 @@ export async function syncRemoteWorkspaces(userId: string): Promise<RemoteWorksp
     if (remoteRaw === null || remoteRaw === raw) continue;
 
     const localAtStart = localBackupAtStart.workspaces[storageKey];
-    const changedWhileReading = localAtStart !== undefined
-      && !equivalentWorkspaceContent(localAtStart, raw);
+    const changedWhileReading = localAtStart === undefined
+      || !equivalentWorkspaceContent(localAtStart, raw);
     if (changedWhileReading) {
-      uploadEntries.push([storageKey, raw]);
+      uploadEntries.set(storageKey, raw);
       continue;
     }
 
@@ -199,7 +230,7 @@ export async function syncRemoteWorkspaces(userId: string): Promise<RemoteWorksp
     // snapshot exists, the newer top-level workspace timestamp wins; seeded
     // local defaults have timestamp zero and therefore never overwrite remote data.
     if (localUpdatedAt(raw) >= remoteUpdatedAt(remote) && localUpdatedAt(raw) > 0) {
-      uploadEntries.push([storageKey, raw]);
+      uploadEntries.set(storageKey, raw);
     } else if (remoteRaw !== null) {
       restoreEntries.push([storageKey, remoteRaw]);
     }
@@ -212,55 +243,140 @@ export async function syncRemoteWorkspaces(userId: string): Promise<RemoteWorksp
     }
   }
 
+  // A bounded provider timeout can make the app interactive while the remote
+  // read is still in flight. Re-read at the last safe point and turn every
+  // affected restore into an upload of the current local payload. Unchanged
+  // and remote-only keys still follow newer-wins, guarded by repository CAS.
+  const latestLocalBackup = restoreEntries.length > 0
+    ? await exportAllLocalWorkspaces()
+    : localBackup;
+  const safeRestoreEntries: Array<[string, string]> = [];
+  restoreEntries.forEach(([storageKey, remoteRaw]) => {
+    const currentRaw = latestLocalBackup.workspaces[storageKey];
+    const snapshotRaw = localBackup.workspaces[storageKey];
+    const changedDuringSync = control.changedDuringInitialSync?.(storageKey) ?? false;
+    const changedAfterSnapshot = currentRaw !== snapshotRaw;
+
+    if (changedDuringSync || changedAfterSnapshot) {
+      if (currentRaw !== undefined) uploadEntries.set(storageKey, currentRaw);
+      return;
+    }
+    safeRestoreEntries.push([storageKey, remoteRaw]);
+  });
+
   let downloaded = 0;
-  if (restoreEntries.length > 0) {
+  if (safeRestoreEntries.length > 0) {
     const restored = await importAllLocalWorkspaces({
       version: 1,
       exportedAt: new Date().toISOString(),
-      workspaces: Object.fromEntries(restoreEntries),
+      workspaces: Object.fromEntries(safeRestoreEntries),
+    }, {
+      expectedWorkspaces: Object.fromEntries(safeRestoreEntries.map(([storageKey]) => [
+        storageKey,
+        latestLocalBackup.workspaces[storageKey] ?? null,
+      ])),
     });
     if (!restored.ok) {
-      return { status: "error", uploaded: 0, downloaded: 0, message: restored.error };
+      return {
+        result: { status: "error", uploaded: 0, downloaded: 0, message: restored.error },
+        knownRemoteHashes,
+      };
     }
     downloaded = restored.restored;
-    notifyRemoteHydration();
+    if (downloaded > 0) notifyRemoteHydration();
+    if (restored.skipped?.length) {
+      const afterConflictBackup = await exportAllLocalWorkspaces();
+      restored.skipped.forEach((storageKey) => {
+        const currentRaw = afterConflictBackup.workspaces[storageKey];
+        if (currentRaw !== undefined) uploadEntries.set(storageKey, currentRaw);
+      });
+    }
   }
 
-  const uploadError = await uploadWorkspaces(userId, uploadEntries);
+  const finalUploadEntries = [...uploadEntries.entries()];
+  const uploadError = await uploadWorkspaces(userId, finalUploadEntries);
   if (uploadError) {
     if (isMissingSchemaError(uploadError)) {
       return {
-        status: "schema-missing",
-        uploaded: 0,
-        downloaded,
-        message: `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`,
+        result: {
+          status: "schema-missing",
+          uploaded: 0,
+          downloaded,
+          message: `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`,
+        },
+        knownRemoteHashes,
       };
     }
-    return { status: "error", uploaded: 0, downloaded, message: uploadError.message };
+    return {
+      result: { status: "error", uploaded: 0, downloaded, message: uploadError.message },
+      knownRemoteHashes,
+    };
   }
 
-  return { status: "synced", uploaded: uploadEntries.length, downloaded };
+  finalUploadEntries.forEach(([storageKey, raw]) => {
+    knownRemoteHashes.set(storageKey, hashRaw(raw));
+  });
+  return {
+    result: { status: "synced", uploaded: finalUploadEntries.length, downloaded },
+    knownRemoteHashes,
+  };
+}
+
+export async function syncRemoteWorkspaces(
+  userId: string,
+): Promise<RemoteWorkspaceSyncResult> {
+  return (await reconcileRemoteWorkspaces(userId)).result;
 }
 
 export async function startRemoteWorkspaceSync(
   userId: string,
   onResult: (result: RemoteWorkspaceSyncResult) => void,
 ) {
-  const initial = await syncRemoteWorkspaces(userId);
-  onResult(initial);
-  if (initial.status !== "synced" || !supabase || typeof window === "undefined") return () => undefined;
+  const changedDuringInitialSync = new Set<string>();
+  let everyWorkspaceChangedDuringInitialSync = false;
+  const captureInitialWorkspaceChange = (event: Event) => {
+    const detail = (event as CustomEvent<WorkspaceChangeDetail>).detail;
+    if (detail?.origin === REMOTE_HYDRATION_ORIGIN) return;
+    if (detail?.key === "*") {
+      everyWorkspaceChangedDuringInitialSync = true;
+      return;
+    }
+    if (detail?.key) changedDuringInitialSync.add(detail.key);
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
+  }
 
-  const pendingKeys = new Set<string>();
+  let outcome: RemoteWorkspaceSyncOutcome;
+  try {
+    outcome = await reconcileRemoteWorkspaces(userId, {
+      changedDuringInitialSync: (storageKey) => (
+        everyWorkspaceChangedDuringInitialSync || changedDuringInitialSync.has(storageKey)
+      ),
+    });
+  } catch (error) {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
+    }
+    throw error;
+  }
+  const initial = outcome.result;
+  onResult(initial);
+  if (initial.status !== "synced" || !supabase || typeof window === "undefined") {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
+    }
+    return () => undefined;
+  }
+
+  const pendingKeys = new Set(changedDuringInitialSync);
   const knownHashes = new Map<string, string>();
   let flushTimer: number | null = null;
   let retryTimer: number | null = null;
   let activeFlush: Promise<void> | null = null;
   let activeScan: Promise<void> | null = null;
 
-  const syncedBackup = await exportAllLocalWorkspaces();
-  Object.entries(syncedBackup.workspaces).forEach(([key, raw]) => {
-    knownHashes.set(key, hashRaw(raw));
-  });
+  outcome.knownRemoteHashes.forEach((hash, key) => knownHashes.set(key, hash));
 
   const flush = async () => {
     if (activeFlush || pendingKeys.size === 0) return activeFlush;
@@ -371,13 +487,19 @@ export async function startRemoteWorkspaceSync(
     void scanForUnannouncedChanges();
   }, SCAN_SETTLE_INTERVAL_MS);
   window.addEventListener("rootine:workspace-change", onWorkspaceChange);
+  window.removeEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
   window.addEventListener("pagehide", flushOnPageHide);
   document.addEventListener("visibilitychange", scanWhenHidden);
+  // This scan is deliberately unconditional. It compares against the exact
+  // remote payloads from reconciliation, so a write made while an upload was
+  // hanging cannot be mistaken for an already-synced current snapshot.
+  void scanForUnannouncedChanges();
 
   return () => {
     if (flushTimer !== null) window.clearTimeout(flushTimer);
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     window.clearInterval(scanTimer);
+    window.removeEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
     window.removeEventListener("rootine:workspace-change", onWorkspaceChange);
     window.removeEventListener("pagehide", flushOnPageHide);
     document.removeEventListener("visibilitychange", scanWhenHidden);

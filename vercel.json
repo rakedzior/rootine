@@ -12,6 +12,8 @@
     { "source": "/cele/:goalId", "destination": "/index.html" },
     { "source": "/sport", "destination": "/index.html" },
     { "source": "/odzywianie", "destination": "/index.html" },
+    { "source": "/odzywianie/posilki", "destination": "/index.html" },
+    { "source": "/odzywianie/analiza", "destination": "/index.html" },
     { "source": "/praca", "destination": "/index.html" },
     { "source": "/sprawy", "destination": "/index.html" },
     { "source": "/podroze", "destination": "/index.html" },

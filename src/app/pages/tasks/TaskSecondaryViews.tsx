@@ -31,7 +31,7 @@ import {
   toCalendarDateKey,
 } from "../../data/taskWorkspace";
 import { formatLocalDate, parseLocalDateKey, shiftLocalDateKey } from "../../data/localDate";
-import { Button, DatePicker, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
+import { Button, ConfirmDialog, DatePicker, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
 import { DurationTimePicker } from "./TaskSchedulePicker";
 import {
   C,
@@ -389,16 +389,11 @@ function HabitPriorityField({ value, compact = false, onChange }: {
       />
       {open && (
         <Menu
+          className="task-habit-priority-menu"
           triggerRef={triggerRef}
           onDismiss={() => setOpen(false)}
           initialFocus="selected"
           layer="drawer"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            width: "var(--component-menu-min-width)",
-          }}
         >
           {HABIT_PRIORITY_OPTIONS.map(({ value: priority, label, color: priorityColor }) => (
             <MenuItem
@@ -759,6 +754,7 @@ export function HabitDetail({
   const [showSettings, setShowSettings] = useState(false);
   const [showPause, setShowPause] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [deleteRequested, setDeleteRequested] = useState(false);
   const actionsRef = useRef<HTMLButtonElement>(null);
   const habitIdRef = useRef(habit.id);
 
@@ -819,10 +815,6 @@ export function HabitDetail({
     onUpdate(habit.id, { pausePeriods: periods });
   };
 
-  const confirmDelete = () => {
-    if (window.confirm(`Usunąć nawyk „${habit.name}” i jego historię?`)) onDelete(habit.id);
-  };
-
   return (
     <div className="task-habit-detail">
       <div className="task-habit-detail__toolbar">
@@ -862,7 +854,7 @@ export function HabitDetail({
               >
                 {activePause ? "Edytuj wstrzymanie" : "Wstrzymaj nawyk"}
               </MenuItem>
-              <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { setActionsOpen(false); confirmDelete(); }}>
+              <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { setActionsOpen(false); setDeleteRequested(true); }}>
                 Usuń nawyk
               </MenuItem>
             </Menu>
@@ -1016,6 +1008,21 @@ export function HabitDetail({
         </section>}
       </div>
 
+      {deleteRequested && (
+        <ConfirmDialog
+          title={`Usunąć nawyk „${habit.name}”?`}
+          description="Usunięty zostanie nawyk wraz z całą historią wykonań i wstrzymań."
+          confirmLabel="Usuń nawyk"
+          cancelLabel="Zostaw nawyk"
+          returnFocusRef={actionsRef}
+          onCancel={() => setDeleteRequested(false)}
+          onConfirm={() => {
+            setDeleteRequested(false);
+            onDelete(habit.id);
+          }}
+        />
+      )}
+
     </div>
   );
 }
@@ -1032,8 +1039,7 @@ export function InputFloatMenu({ anchorEl, onClose, children }: {
   const menuWidth = Math.min(190, Math.max(0, window.innerWidth - viewportGap * 2));
   const left = Math.max(viewportGap, Math.min(rect.left, window.innerWidth - menuWidth - viewportGap));
   return (
-    <Menu ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" layer="systemOverlay" style={{
-      position: "fixed",
+    <Menu className="task-input-float-menu" ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" layer="systemOverlay" style={{
       top: rect.bottom + 6,
       left,
       width: menuWidth,

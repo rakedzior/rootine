@@ -10,6 +10,7 @@ import {
   ContentHeader,
   EmptyState,
   Input,
+  Textarea,
   Menu,
   MenuItem,
   Modal,
@@ -24,6 +25,8 @@ import {
   Tabs,
   Checkbox,
   ProgressBar,
+  Toast,
+  ToastViewport,
 } from "../ui";
 ```
 
@@ -34,7 +37,7 @@ Globalny pasek `PageHeader` jest usunięty z każdej zakładki i podzakładki �
 1. Nie twórz lokalnych kopii tych komponentów ani lokalnej palety dla nowej zakładki.
 2. Układaj ekran na rytmie 4px i korzystaj z wartości z `tokens.css`.
 3. `PageShell` jest wspólnym kontenerem strony i nie renderuje żadnego tytułu. Tytuł ekranu podaje `ContentHeader`.
-4. Jedna akcja w aktualnym kontekście może używać `Button variant="primary"`; pozostałe są `quiet` lub `ghost`.
+4. Jedna akcja w aktualnym kontekście może używać `Button variant="primary"`; pozostałe są `quiet` lub `ghost`. `Button iconOnly` wymaga `aria-label` na poziomie typu.
 5. `Card` nie służy do opakowywania każdej sekcji. Używaj jej tylko dla rzeczywistej powierzchni lub jednostki danych.
 6. `Badge` opisuje status, kategorię albo krótki licznik. Kolor semantyczny musi odpowiadać znaczeniu.
 7. `Modal` zapewnia Escape, kliknięcie backdropu, pułapkę fokusu i przywrócenie fokusu. Nie implementuj tego ponownie w ekranie.
@@ -54,9 +57,10 @@ Globalny pasek `PageHeader` jest usunięty z każdej zakładki i podzakładki �
 
 1. Zatwierdzona konstytucja systemu i decyzje produktowe.
 2. Definicje tokenów w `src/styles/tokens.css` oraz rejestr wyjątków w `docs/design-system-exceptions.json`.
-3. Kontrakty komponentów w `src/app/ui/components/`.
-4. Bieżąca implementacja modułu, jeśli korzysta z zatwierdzonego wyjątku.
-5. Przykłady i dokumentacja pomocnicza.
+3. Kanoniczny manifest breakpointów w `src/app/ui/breakpoints.ts`; tokeny `--bp-*` są walidowanym mirrorem CSS.
+4. Kontrakty komponentów w `src/app/ui/components/`.
+5. Bieżąca implementacja modułu, jeśli korzysta z zatwierdzonego wyjątku.
+6. Przykłady, aliasy transportowe z `tokens.ts` i dokumentacja pomocnicza.
 
 Jeśli dokumentacja pomocnicza różni się od aktywnego kontraktu komponentu, popraw dokumentację. Jeśli token i aktywny layout mają różne wartości, nie zmieniaj wymiaru bez decyzji produktowej — zapisz konflikt w dzienniku decyzji.
 
@@ -89,17 +93,20 @@ export function NewSection() {
 
 - `Button`: `primary | quiet | ghost | danger`, rozmiary `xs | sm | md`, tryb ikonowy i disabled.
 - `Card`: powierzchnie `card | panel | input`, cztery poziomy paddingu i stan selected.
-- `Input`, `Select`: label, hint, error, disabled i spójny focus.
+- `Input`, `Textarea`, `Select`: label, hint, error, disabled i spójny focus; surowy `<textarea>` wymaga jawnie zatwierdzonego kontraktu domenowego.
 - `Menu`, `MenuItem`: wspólna powierzchnia 148px+, wiersze 28px, wariant `wide` i semantyczna warstwa.
-- `Modal`: title, description, eyebrow, footer, width i dostępne zarządzanie fokusem.
+- `Modal`: title, description, eyebrow, footer, nazwane rozmiary `sm=500 | md=680 | lg=780 | xl=960`, pojedynczy escape hatch `width` i dostępne zarządzanie fokusem.
 - `Tabs`: semantyka tablist/tab i obsługa strzałek, Home oraz End.
 - `Badge`: neutral, primary, success, warning, danger i violet; pill albo plain z opcjonalną kropką.
 - `ContentHeader`: tytuł i opis aktualnego widoku, metadane, lokalne akcje, kontrolki, drugi wiersz oraz osobna nawigacja mobilna.
 - `SectionHeader`: hierarchia nagłówka, opis, akcja oraz wariant label.
 - `EmptyState`: icon, title, description i jedna akcja.
 - `Checkbox`: natywny checkbox z rozmiarem `sm | md`, kształtem `square | round` i stanem indeterminate.
-- `ProgressBar`: wartości ograniczone przez `min`/`max`, rozmiar `sm | md`, ton, etykieta wizualna i wartość dla czytnika ekranu.
+- `ProgressBar`: wartości ograniczone przez `min`/`max`, rozmiar `sm | md`, ton, etykieta wizualna i wartość dla czytnika ekranu; służy bounded metrics (m.in. postępowi celu), nie osi/serii wykresu.
+- `Toast`, `ToastViewport`: wspólny komunikat przejściowy z semantycznym tonem, jedną opcjonalną akcją, pauzą timera przy hoverze/fokusie oraz kontrolką zamknięcia; `danger` używa alertu, pozostałe tony statusu.
 - `ModuleShell`, `ModuleMain`: wspólna topologia modułu i chroniony główny workspace.
 - `ModuleSidebar`: opcjonalna nawigacja podwidoków modułu.
 - `ContextNavItem`: wspólna pozycja sidebara; kontroluje ikonę, etykietę, licznik oraz stan aktywny.
-- `DetailPanel`: szczegóły wybranego rekordu; dockowany lub nakładany zależnie od szerokości.
+- `DetailPanel`: szczegóły wybranego rekordu; powyżej 1380px dockowany w rezerwowanym torze 408px, przy 1380px i niżej modalny drawer z backdropem i pułapką fokusu.
+
+`tokens.ts` eksportuje wyłącznie używane transporty `uiColors`, `uiLayers` i `uiShadows`. Nie są alternatywnym źródłem prawdy; nowe style używają klas i tokenów CSS, a alias bez pierwszego konsumenta nie trafia do publicznego API.

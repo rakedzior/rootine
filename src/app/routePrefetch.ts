@@ -15,22 +15,40 @@ import { APP_MODULES, type AppModulePath } from "./moduleRegistry";
  */
 type RouteLoader = () => Promise<{ default: ComponentType }>;
 
+/** Dev-only deterministic seam used to exercise the real route error boundary. */
+export const DEV_ROUTE_FAILURE_KEY = "rootine.dev.fail-route";
+
+function guardedRouteLoader(path: string, loader: RouteLoader): RouteLoader {
+  return () => {
+    if (import.meta.env.DEV && typeof window !== "undefined") {
+      try {
+        if (window.sessionStorage.getItem(DEV_ROUTE_FAILURE_KEY) === path) {
+          return Promise.reject(new Error(`Controlled route load failure: ${path}`));
+        }
+      } catch {
+        // A blocked storage API must not prevent the real route from loading.
+      }
+    }
+    return loader();
+  };
+}
+
 const MODULE_ROUTE_LOADERS = {
-  "/dzisiaj": () => import("./pages/Dzisiaj"),
-  "/zadania": () => import("./pages/Zadania"),
-  "/odzywianie": () => import("./pages/Odzywanie"),
-  "/sport": () => import("./pages/Sport"),
-  "/praca": () => import("./pages/Praca"),
-  "/cele": () => import("./pages/Cele"),
-  "/sprawy": () => import("./pages/Sprawy"),
-  "/notatki": () => import("./pages/Notatki"),
+  "/dzisiaj": guardedRouteLoader("/dzisiaj", () => import("./pages/Dzisiaj")),
+  "/zadania": guardedRouteLoader("/zadania", () => import("./pages/Zadania")),
+  "/odzywianie": guardedRouteLoader("/odzywianie", () => import("./pages/Odzywanie")),
+  "/sport": guardedRouteLoader("/sport", () => import("./pages/Sport")),
+  "/praca": guardedRouteLoader("/praca", () => import("./pages/Praca")),
+  "/cele": guardedRouteLoader("/cele", () => import("./pages/Cele")),
+  "/sprawy": guardedRouteLoader("/sprawy", () => import("./pages/Sprawy")),
+  "/notatki": guardedRouteLoader("/notatki", () => import("./pages/Notatki")),
 } satisfies Record<AppModulePath, RouteLoader>;
 
 /** Routes reachable from inside a module rather than from the primary navigation. */
 const SECONDARY_ROUTE_LOADERS = {
-  "/kalendarz": () => import("./pages/Kalendarz"),
-  "/podroze": () => import("./pages/Podroze"),
-  "/cele/:goalId": () => import("./pages/CelSzczegoly"),
+  "/kalendarz": guardedRouteLoader("/kalendarz", () => import("./pages/Kalendarz")),
+  "/podroze": guardedRouteLoader("/podroze", () => import("./pages/Podroze")),
+  "/cele/:goalId": guardedRouteLoader("/cele/:goalId", () => import("./pages/CelSzczegoly")),
 } satisfies Record<string, RouteLoader>;
 
 export const ROUTE_LOADERS = {

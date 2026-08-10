@@ -227,9 +227,6 @@ export interface ModuleSidebarProps extends HTMLAttributes<HTMLElement> {
   label: string;
 }
 
-/** @deprecated Use ModuleSidebarProps. */
-export type ContextSidebarProps = ModuleSidebarProps;
-
 export function ModuleSidebar({
   label,
   className,
@@ -246,9 +243,6 @@ export function ModuleSidebar({
     </aside>
   );
 }
-
-/** @deprecated Use ModuleSidebar. */
-export const ContextSidebar = ModuleSidebar;
 
 export interface ContextNavItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;

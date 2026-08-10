@@ -1,0 +1,121 @@
+{
+  "generatedAt": "2026-08-10T10:33:04.039Z",
+  "taskHeader": [
+    {
+      "width": 1366,
+      "height": 768,
+      "text": "11 otwartych · Poniedziałek, 10 sierpnia",
+      "clientWidth": 189,
+      "scrollWidth": 215,
+      "clipped": true,
+      "rect": {
+        "x": 480,
+        "y": 76.796875,
+        "width": 188.875,
+        "height": 18
+      },
+      "overflow": "hidden",
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "text": "11 otwartych · Poniedziałek, 10 sierpnia",
+      "clientWidth": 206,
+      "scrollWidth": 215,
+      "clipped": true,
+      "rect": {
+        "x": 480,
+        "y": 76.796875,
+        "width": 206.21875,
+        "height": 18
+      },
+      "overflow": "hidden",
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "text": "11 otwartych · Poniedziałek, 10 sierpnia",
+      "clientWidth": 215,
+      "scrollWidth": 215,
+      "clipped": false,
+      "rect": {
+        "x": 608,
+        "y": 59.59375,
+        "width": 214.828125,
+        "height": 18
+      },
+      "overflow": "hidden",
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    },
+    {
+      "width": 2560,
+      "height": 1440,
+      "text": "11 otwartych · Poniedziałek, 10 sierpnia",
+      "clientWidth": 215,
+      "scrollWidth": 215,
+      "clipped": false,
+      "rect": {
+        "x": 928,
+        "y": 59.59375,
+        "width": 214.828125,
+        "height": 18
+      },
+      "overflow": "hidden",
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    }
+  ],
+  "sportSearch": {
+    "placeholder": "Szukaj po nazwie, ćwiczeniu, kategorii…",
+    "rect": {
+      "x": 510,
+      "y": 215.28125,
+      "width": 167,
+      "height": 28
+    },
+    "clientWidth": 165,
+    "horizontalPadding": 24,
+    "measuredTextWidth": 238.56268310546875,
+    "likelyClipped": true
+  },
+  "nutritionAction": {
+    "sourceText": "Dodaj posiłek",
+    "dialogName": null,
+    "headingText": "Dodaj produkt",
+    "primaryText": "Dodaj do dziennika"
+  },
+  "todayRedundancy": {
+    "phraseCounts": {
+      "25 pozostało": 2,
+      "15 zaległych": 2,
+      "6 wymaga uwagi": 1
+    },
+    "regions": [
+      {
+        "selector": ".ui-content-header",
+        "text": "Plan dnia25 pozostało · 6 wymaga uwagiPoniedziałek, 10 sierpnia 2026 · Dzisiejszy bilans wszystkich aktywnych obszarówDodaj"
+      },
+      {
+        "selector": ".today-command",
+        "text": null
+      },
+      {
+        "selector": ".living-day",
+        "text": "Zadania: na dziś: 3 · zaległe: 11 · wykonane: 2 z 5Nawyki: 1 z 4 wykonaneOdżywianie: 0 z 1 wykonaneSport: 0 z 1 wykonanePraca: na dziś: 0 · zaległe: 4 · wykonane: 0 z 0Cele: 2 pozostało · 1 wymaga uwagiSprawy: brak aktywności dzisiajNotatki: brak aktywności dzisiajWszystkie obszary25pozostało11% wykonane"
+      },
+      {
+        "selector": ".today-overdue-panel",
+        "text": null
+      },
+      {
+        "selector": ".today-module-register",
+        "text": "Obszary dnia8 obszarówZadania3 zadania na dziś11 zadań po terminie · najstarsze 21 dni po terminieWykonane2 z 16Wykonane2 z 16Pozostałe na dziś3 z 16Pozostałe na dziś3 z 16Zaległe11 z 16Zaległe11 z 16Nawyki3 nawyki do wykonaniawt.1 z 1wt.wt.: 1 z 1 wykonaneśr.1 z 1śr.śr.: 1 z 1 wykonaneczw.2 z 2czw.czw.: 2 z 2 wykonanept.2 z 2pt.pt.: 2 z 2 wykonanesob.3 z 3sob.sob.: 3 z 3 wykonaneniedz.3 z 3niedz.niedz.: 3 z 3 wykonanepon.1 z 4pon.pon.: 1 z 4 wykonaneOdżywianieDodaj pierwszy posiłekCel kalorii0 "
+      }
+    ]
+  }
+}

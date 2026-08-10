@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Dumbbell,
   Ellipsis,
   Eye,
   GripVertical,
@@ -607,91 +606,6 @@ export function CyclePlanner({
       onCopyWeek={onCopyWeek}
     />
   );
-
-  const range = cycleDateRange(cycle);
-  const totalWeeks = cycleWeekCount(cycle);
-  const indefinite = isIndefiniteCycle(cycle);
-  const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek);
-  const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
-  const activeDays = new Set(weekWorkouts.map((workout) => workout.day)).size;
-  const weekDisciplines = Object.entries(DISCIPLINE_META)
-    .map(([discipline, meta]) => ({
-      discipline: discipline as Discipline,
-      label: meta.label,
-      count: weekWorkouts.filter((workout) => workout.discipline === discipline).length,
-    }))
-    .filter((item) => item.count > 0);
-
-  return (
-    <div className="sport-planner-section">
-      <div className="sport-cycle-summary">
-        <div className="sport-cycle-summary__identity">
-          <CalendarRange size={16} strokeWidth={1.5} />
-          <div>
-            <div className="sport-cycle-summary__title">
-              <h2>{cycle.name}</h2>
-              {isDirty && <Badge tone="warning">Niezapisane zmiany</Badge>}
-            </div>
-            <p>{formatLongDate(range.start)} {indefinite ? "· bez daty końcowej" : `— ${formatLongDate(range.end!)}`}</p>
-          </div>
-        </div>
-        <div className="sport-cycle-summary__facts">
-          <span><strong>{indefinite ? "∞" : totalWeeks}</strong> {indefinite ? "bezterminowo" : "tygodni"}</span>
-          <span><strong>{cycle.workouts.length}</strong> treningów</span>
-          <span><strong>{weekWorkouts.length}</strong> w tym tygodniu</span>
-        </div>
-        <div className="sport-cycle-summary__actions">
-          <Button variant="quiet" size="sm" onClick={onEditCycle}>Ustawienia planu</Button>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => onAddWorkout(activeWeek, 0)}>
-            Dodaj trening
-          </Button>
-          {isDirty && (
-            <div className="sport-cycle-summary__commit">
-              <Button variant="ghost" size="sm" onClick={onDiscardChanges}>
-                Odrzuć zmiany
-              </Button>
-              <Button variant="primary" size="sm" leadingIcon={<Save size={13} />} onClick={onSaveCycle}>
-                Zapisz plan
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <section className="sport-week-summary" aria-labelledby="sport-week-summary-heading">
-        <div>
-          <h3 id="sport-week-summary-heading">Podsumowanie tygodnia {activeWeek}</h3>
-          <p>Planowana objętość przed rozpoczęciem treningów.</p>
-        </div>
-        <dl>
-          <div><dt>Treningi</dt><dd>{weekWorkouts.length}</dd></div>
-          <div><dt>Planowany czas</dt><dd>{weekMinutes} min</dd></div>
-          <div><dt>Aktywne dni</dt><dd>{activeDays} z 7</dd></div>
-        </dl>
-        <div className="sport-week-summary__disciplines">
-          {weekDisciplines.length
-            ? weekDisciplines.map((item) => (
-                <span key={item.discipline}>
-                  <i style={{ background: DISCIPLINE_META[item.discipline].color }} />
-                  {item.label} · {item.count}
-                </span>
-              ))
-            : <span>Brak treningów w tym tygodniu</span>}
-        </div>
-      </section>
-
-      <WeekBoard
-        cycle={cycle}
-        activeWeek={activeWeek}
-        selectedWorkoutId={selectedWorkoutId}
-        onWeekChange={onWeekChange}
-        onMove={onMoveWorkout}
-        onSelect={onSelectWorkout}
-        onAdd={onAddWorkout}
-      />
-
-    </div>
-  );
 }
 
 function CyclePlannerLayout({
@@ -742,16 +656,6 @@ function CyclePlannerLayout({
   const range = cycleDateRange(cycle);
   const totalWeeks = cycleWeekCount(cycle);
   const indefinite = isIndefiniteCycle(cycle);
-  const weekWorkouts = cycle.workouts.filter((workout) => workout.week === activeWeek);
-  const weekMinutes = weekWorkouts.reduce((sum, workout) => sum + workout.durationMinutes, 0);
-  const activeDays = new Set(weekWorkouts.map((workout) => workout.day)).size;
-  const weekDisciplines = Object.entries(DISCIPLINE_META)
-    .map(([discipline, meta]) => ({
-      discipline: discipline as Discipline,
-      label: meta.label,
-      count: weekWorkouts.filter((workout) => workout.discipline === discipline).length,
-    }))
-    .filter((item) => item.count > 0);
   const planItems = cycles.some((item) => item.id === cycle.id)
     ? cycles.map((item) => item.id === cycle.id ? cycle : item)
     : [cycle, ...cycles];
@@ -797,6 +701,12 @@ function CyclePlannerLayout({
                 {indefinite ? "Bezterminowo" : `${totalWeeks} tygodni`} · {cycle.workouts.length} treningów
               </p>
             </div>
+            {isDirty && (
+              <div className="sport-cycle-plan-card__commit">
+                <Button variant="ghost" size="sm" onClick={onDiscardChanges}>Odrzuć zmiany</Button>
+                <Button variant="primary" size="sm" leadingIcon={<Save size={13} />} onClick={onSaveCycle}>Zapisz plan</Button>
+              </div>
+            )}
           </section>
         </section>
 
@@ -1043,9 +953,9 @@ export function TemplateDialog({
         <>
           {onDelete && (
             <Button
+              className="sport-modal-delete-action"
               variant="danger"
               size="sm"
-              style={{ marginRight: "auto" }}
               onClick={() => {
                 if (deleteArmed) onDelete();
                 else setDeleteArmed(true);
@@ -1360,7 +1270,7 @@ export function WorkoutDialog({
       footer={(
         <>
           {onDelete && (
-            <Button variant="danger" size="sm" style={{ marginRight: "auto" }} leadingIcon={<Trash2 size={13} />} onClick={onDelete}>
+            <Button className="sport-modal-delete-action" variant="danger" size="sm" leadingIcon={<Trash2 size={13} />} onClick={onDelete}>
               Usuń trening
             </Button>
           )}

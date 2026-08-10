@@ -136,6 +136,96 @@ describe("local repository", () => {
     expect(repository.listLocalRecoveryRecords()).toHaveLength(1);
   });
 
+  it("CAS-skips a remote import when the local raw changes after its snapshot", async () => {
+    const repository = await import("./localRepository");
+    const key = "rootine.fixture.cas-inline.v1";
+    const current = JSON.stringify({ version: 1, items: ["current"] });
+    const concurrent = JSON.stringify({ version: 1, items: ["concurrent"] });
+    const remote = JSON.stringify({ version: 1, items: ["remote"] });
+    window.localStorage.setItem(key, current);
+    const originalSetItem = Storage.prototype.setItem;
+    let injectedConcurrentEdit = false;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function setItem(this: Storage, storageKey, value) {
+      originalSetItem.call(this, storageKey, value);
+      if (storageKey === "rootine.recovery.index.v1" && !injectedConcurrentEdit) {
+        injectedConcurrentEdit = true;
+        originalSetItem.call(this, key, concurrent);
+      }
+    });
+
+    const result = await repository.importAllLocalWorkspaces({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      workspaces: { [key]: remote },
+    }, {
+      expectedWorkspaces: { [key]: current },
+    });
+
+    expect(result).toEqual({ ok: true, restored: 0, skipped: [key] });
+    expect(window.localStorage.getItem(key)).toBe(concurrent);
+  });
+
+  it("CAS-skips a tiered remote import when IndexedDB changes after its snapshot", async () => {
+    const repository = await import("./localRepository");
+    const store = createMemoryWorkspaceStore();
+    const key = "rootine.fixture.cas-tiered.v1";
+    const current = JSON.stringify({ version: 1, items: ["current"] });
+    const concurrent = JSON.stringify({ version: 1, items: ["concurrent"] });
+    const remote = JSON.stringify({ version: 1, items: ["remote"] });
+    const currentRecord: WorkspacePayloadRecord = {
+      key,
+      raw: current,
+      revision: 1,
+      contentHash: "hash-current",
+      updatedAt: "2026-08-10T08:00:00.000Z",
+      writtenAt: "2026-08-10T08:00:00.000Z",
+      byteLength: current.length,
+    };
+    store.records.set(key, currentRecord);
+    window.localStorage.setItem(key, JSON.stringify({
+      __rootineWorkspaceManifest: 1,
+      key,
+      storage: "indexeddb",
+      revision: currentRecord.revision,
+      contentHash: currentRecord.contentHash,
+      updatedAt: currentRecord.updatedAt,
+      byteLength: currentRecord.byteLength,
+    }));
+    repository.setWorkspacePayloadStoreForTests(store);
+    const originalRead = store.read.bind(store);
+    let targetReads = 0;
+    store.read = vi.fn(async (storageKey) => {
+      if (storageKey !== key) return originalRead(storageKey);
+      targetReads += 1;
+      if (targetReads === 2) {
+        store.records.set(key, {
+          ...currentRecord,
+          raw: concurrent,
+          revision: 2,
+          contentHash: "hash-concurrent",
+          updatedAt: "2026-08-10T08:01:00.000Z",
+          writtenAt: "2026-08-10T08:01:00.000Z",
+          byteLength: concurrent.length,
+        });
+      }
+      return originalRead(storageKey);
+    });
+    const compareAndSwap = vi.spyOn(store, "compareAndSwap");
+
+    const result = await repository.importAllLocalWorkspaces({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      workspaces: { [key]: remote },
+    }, {
+      expectedWorkspaces: { [key]: current },
+    });
+
+    expect(result).toEqual({ ok: true, restored: 0, skipped: [key] });
+    expect(store.records.get(key)?.raw).toBe(concurrent);
+    expect(compareAndSwap).not.toHaveBeenCalledWith(expect.objectContaining({ key, raw: remote }));
+    expect(window.localStorage.getItem(key)).not.toBe(remote);
+  });
+
   it("validates every imported entry before writing any workspace", async () => {
     const repository = await import("./localRepository");
     const firstKey = "rootine.fixture.first.v1";

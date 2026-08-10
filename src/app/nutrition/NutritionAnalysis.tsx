@@ -1,6 +1,5 @@
 import {
   CalendarDays,
-  ChevronDown,
   Droplets,
   Flame,
   Info,
@@ -407,13 +406,7 @@ export function NutritionAnalysis({
         <section className="nutrition-analysis-v2__chart-panel" aria-labelledby="nutrition-analysis-v2-calories-title">
           <div className="nutrition-analysis-v2__chart-heading">
             <h3 id="nutrition-analysis-v2-calories-title">Kalorie w czasie <InfoButton label="Dni bez wpisu nie są liczone do średniej." /></h3>
-            <label className="nutrition-analysis-v2__chart-select">
-              <span className="ui-sr-only">Częstotliwość wykresu kalorii</span>
-              <select defaultValue="daily" aria-label="Częstotliwość wykresu kalorii">
-                <option value="daily">Dziennie</option>
-              </select>
-              <ChevronDown size={13} aria-hidden="true" />
-            </label>
+            <span className="nutrition-analysis-v2__chart-frequency">Dziennie</span>
           </div>
           <div className="nutrition-analysis-v2__legend">
             <span><i className="is-goal" /> Cel {formatNumber(goals.calories, 0)} kcal</span>
@@ -476,13 +469,7 @@ export function NutritionAnalysis({
         <section className="nutrition-analysis-v2__chart-panel" aria-labelledby="nutrition-analysis-v2-weight-title">
           <div className="nutrition-analysis-v2__chart-heading">
             <h3 id="nutrition-analysis-v2-weight-title">Masa ciała w czasie <InfoButton label="Wykres pokazuje zapisane pomiary masy." /></h3>
-            <label className="nutrition-analysis-v2__chart-select">
-              <span className="ui-sr-only">Częstotliwość wykresu masy</span>
-              <select defaultValue="daily" aria-label="Częstotliwość wykresu masy">
-                <option value="daily">Dziennie</option>
-              </select>
-              <ChevronDown size={13} aria-hidden="true" />
-            </label>
+            <span className="nutrition-analysis-v2__chart-frequency">Dziennie</span>
           </div>
           <div className="nutrition-analysis-v2__chart-axis-caption">kg</div>
           {privacyMode ? (

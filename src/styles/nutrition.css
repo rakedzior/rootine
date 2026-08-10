@@ -33,6 +33,45 @@
   min-height: var(--control-height-sm);
 }
 
+.nutrition-module-main {
+  background: var(--color-app-bg);
+  color: var(--color-text-primary);
+}
+
+.nutrition-undo-entry__label {
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+}
+
+.nutrition-water-progress {
+  height: 4px;
+  margin-block: var(--space-md);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-progress-track);
+}
+
+.nutrition-water-progress__fill {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  transform-origin: left;
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+
+.nutrition-catalog-hint {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-micro);
+  line-height: var(--leading-snug);
+}
+
 .nutrition-date-input .ui-date-trigger {
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
@@ -1098,6 +1137,8 @@
 
 .nutrition-data-attribution a {
   color: var(--color-precision-blue-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
@@ -2991,29 +3032,16 @@
   outline: none;
 }
 
-.nutrition-analysis-v2__chart-select {
-  position: relative;
+.nutrition-analysis-v2__chart-frequency {
   display: inline-flex;
-  align-items: center;
-}
-
-.nutrition-analysis-v2__chart-select select {
   min-height: 32px;
-  appearance: none;
-  padding: 0 28px 0 10px;
+  align-items: center;
+  padding: 0 var(--space-sm);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   background: var(--color-graphite-input);
   color: var(--color-text-secondary);
-  font: inherit;
   font-size: var(--text-micro);
-}
-
-.nutrition-analysis-v2__chart-select svg {
-  position: absolute;
-  right: 9px;
-  pointer-events: none;
-  color: var(--color-text-muted);
 }
 
 .nutrition-analysis-v2__legend {
@@ -3222,8 +3250,7 @@
     flex-direction: column;
   }
 
-  .nutrition-analysis-v2__chart-select,
-  .nutrition-analysis-v2__chart-select select {
+  .nutrition-analysis-v2__chart-frequency {
     width: 100%;
     box-sizing: border-box;
   }

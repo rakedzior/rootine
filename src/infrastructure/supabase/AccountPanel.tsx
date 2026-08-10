@@ -14,6 +14,11 @@ function syncLabel(status: ReturnType<typeof useRemoteSync>["status"]) {
   return "Synchronizacja jest gotowa po zalogowaniu";
 }
 
+function elapsedLabel(elapsedMs: number) {
+  if (elapsedMs < 1_000) return `${elapsedMs} ms`;
+  return `${(elapsedMs / 1_000).toLocaleString("pl-PL", { maximumFractionDigits: 1 })} s`;
+}
+
 export function AccountPanel() {
   const auth = useSupabaseAuth();
   const remote = useRemoteSync();
@@ -43,6 +48,23 @@ export function AccountPanel() {
           </span>
         </div>
         {remote.message && <p className="app-account-panel__error">{remote.message}</p>}
+        {remote.initialSyncElapsedMs !== undefined && (
+          <p className="app-account-panel__telemetry">
+            Próba {remote.initialSyncAttempt} · {elapsedLabel(remote.initialSyncElapsedMs)}
+            {remote.initialSyncTimedOut ? " · przekroczono limit czasu" : ""}
+          </p>
+        )}
+        {(remote.status === "error" || remote.status === "schema-missing") && (
+          <Button
+            variant="quiet"
+            size="sm"
+            fullWidth
+            leadingIcon={<RefreshCw size={14} aria-hidden="true" />}
+            onClick={remote.retry}
+          >
+            Spróbuj ponownie
+          </Button>
+        )}
         <Button
           variant="quiet"
           size="sm"

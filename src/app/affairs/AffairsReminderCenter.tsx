@@ -1,4 +1,4 @@
-import { Bell, X } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AFFAIRS_STORAGE_KEY,
@@ -6,9 +6,10 @@ import {
   type AffairsWorkspace,
 } from "../data/affairsWorkspace";
 import { JDG_STORAGE_KEY, loadJdgWorkspace } from "../data/jdgWorkspace";
+import { todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { TRAVEL_STORAGE_KEY, loadTravelWorkspace } from "../data/travelWorkspace";
-import { Button } from "../ui";
+import { Toast, ToastViewport } from "../ui";
 import { buildAffairAttentionItems, type AffairAttentionItem } from "./affairsAttention";
 import "../../styles/affairs.css";
 
@@ -20,6 +21,127 @@ type DueAffairReminder = {
   body: string;
   triggersAt: Date;
 };
+
+const PERMISSION_PROMPT_DISMISS_KEY = "rootine.notification-permission-prompt-dismissed.v1";
+const PERMISSION_PROMPT_DISMISS_EVENT = "rootine:notification-permission-prompt-dismissed";
+const AFFAIRS_REMINDER_DISMISS_KEY = "rootine.affairs-reminder-dismissals.v1";
+const REMINDER_DISMISS_VERSION = 1;
+const MAX_REMINDER_DISMISSALS = 100;
+
+type ReminderDismissal = {
+  key: string;
+  identity: string;
+  day: string;
+  dismissedAt: string;
+};
+
+type ReminderDismissalStore = {
+  version: typeof REMINDER_DISMISS_VERSION;
+  entries: ReminderDismissal[];
+};
+
+function permissionPromptWasDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(PERMISSION_PROMPT_DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistPermissionPromptDismissal() {
+  try {
+    window.sessionStorage.setItem(PERMISSION_PROMPT_DISMISS_KEY, "1");
+  } catch {
+    // Component state still keeps the prompt hidden for the current mount.
+  }
+  window.dispatchEvent(new Event(PERMISSION_PROMPT_DISMISS_EVENT));
+}
+
+function reminderIdentity(reminder: DueAffairReminder): string {
+  return JSON.stringify([
+    reminder.key,
+    reminder.title,
+    reminder.body,
+    reminder.triggersAt.toISOString(),
+  ]);
+}
+
+function isReminderDismissal(value: unknown): value is ReminderDismissal {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ReminderDismissal>;
+  return typeof candidate.key === "string"
+    && typeof candidate.identity === "string"
+    && typeof candidate.day === "string"
+    && typeof candidate.dismissedAt === "string";
+}
+
+function writeReminderDismissals(entries: ReminderDismissal[]) {
+  const payload: ReminderDismissalStore = {
+    version: REMINDER_DISMISS_VERSION,
+    entries: entries.slice(-MAX_REMINDER_DISMISSALS),
+  };
+  try {
+    window.localStorage.setItem(AFFAIRS_REMINDER_DISMISS_KEY, JSON.stringify(payload));
+  } catch {
+    // A storage failure must not prevent dismissing the current in-app toast.
+  }
+}
+
+function readReminderDismissals(day = todayLocalDateKey()): ReminderDismissal[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(AFFAIRS_REMINDER_DISMISS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Partial<ReminderDismissalStore>;
+    const entries = parsed.version === REMINDER_DISMISS_VERSION && Array.isArray(parsed.entries)
+      ? parsed.entries.filter(isReminderDismissal).filter((entry) => entry.day === day).slice(-MAX_REMINDER_DISMISSALS)
+      : [];
+    const normalized = JSON.stringify({ version: REMINDER_DISMISS_VERSION, entries });
+    if (normalized !== raw) {
+      try {
+        window.localStorage.setItem(AFFAIRS_REMINDER_DISMISS_KEY, normalized);
+      } catch {
+        // Keep valid current-day entries active even when pruning cannot persist.
+      }
+    }
+    return entries;
+  } catch {
+    try {
+      window.localStorage.removeItem(AFFAIRS_REMINDER_DISMISS_KEY);
+    } catch {
+      // Storage is optional; malformed data is ignored in memory as well.
+    }
+    return [];
+  }
+}
+
+function visibleUndismissedReminders(reminders: DueAffairReminder[]): DueAffairReminder[] {
+  const dismissals = readReminderDismissals();
+  const byKey = new Map(dismissals.map((entry) => [entry.key, entry]));
+  let identityChanged = false;
+  const visible = reminders.filter((reminder) => {
+    const dismissed = byKey.get(reminder.key);
+    if (!dismissed) return true;
+    if (dismissed.identity === reminderIdentity(reminder)) return false;
+    byKey.delete(reminder.key);
+    identityChanged = true;
+    return true;
+  });
+  if (identityChanged) writeReminderDismissals([...byKey.values()]);
+  return visible;
+}
+
+function dismissReminderUntilTomorrow(reminder: DueAffairReminder) {
+  const today = todayLocalDateKey();
+  const current = readReminderDismissals(today).filter((entry) => entry.key !== reminder.key);
+  writeReminderDismissals([...current, {
+    key: reminder.key,
+    identity: reminderIdentity(reminder),
+    day: today,
+    dismissedAt: new Date().toISOString(),
+  }]);
+}
 
 function notificationPermission(): NotificationPermissionState {
   return typeof window !== "undefined" && "Notification" in window
@@ -70,7 +192,8 @@ export function AffairsReminderCenter() {
   const [jdg, setJdg] = useState(loadJdgWorkspace);
   const [travel, setTravel] = useState(loadTravelWorkspace);
   const [permission, setPermission] = useState<NotificationPermissionState>(notificationPermission);
-  const [permissionPromptDismissed, setPermissionPromptDismissed] = useState(false);
+  const [permissionPromptDismissed, setPermissionPromptDismissed] = useState(permissionPromptWasDismissed);
+  const [announcement, setAnnouncement] = useState("");
   const [reminders, setReminders] = useState<DueAffairReminder[]>([]);
   const previousCheckRef = useRef(new Date());
   const deliveredRef = useRef(new Set<string>());
@@ -91,13 +214,14 @@ export function AffairsReminderCenter() {
     const due = candidates.filter((reminder) => (
       reminder.triggersAt > previousCheckRef.current
       && reminder.triggersAt <= now
-      && !deliveredRef.current.has(reminder.key)
+      && !deliveredRef.current.has(reminderIdentity(reminder))
     ));
     previousCheckRef.current = now;
-    if (!due.length) return;
+    const visibleDue = visibleUndismissedReminders(due);
+    if (!visibleDue.length) return;
 
-    due.forEach((reminder) => {
-      deliveredRef.current.add(reminder.key);
+    visibleDue.forEach((reminder) => {
+      deliveredRef.current.add(reminderIdentity(reminder));
       if (notificationPermission() !== "granted") return;
       try {
         new window.Notification(reminder.title, { body: reminder.body, tag: reminder.key });
@@ -105,7 +229,11 @@ export function AffairsReminderCenter() {
         // The in-app toast below is the reliable fallback while Rootine is open.
       }
     });
-    setReminders((current) => [...current, ...due].slice(-3));
+    setAnnouncement("");
+    setReminders((current) => [
+      ...current.filter((item) => !visibleDue.some((reminder) => reminder.key === item.key)),
+      ...visibleDue,
+    ].slice(-3));
   }, [candidates]);
 
   useEffect(() => {
@@ -120,6 +248,13 @@ export function AffairsReminderCenter() {
     };
   }, [checkReminders]);
 
+  useEffect(() => {
+    readReminderDismissals();
+    const onPermissionPromptDismissed = () => setPermissionPromptDismissed(true);
+    window.addEventListener(PERMISSION_PROMPT_DISMISS_EVENT, onPermissionPromptDismissed);
+    return () => window.removeEventListener(PERMISSION_PROMPT_DISMISS_EVENT, onPermissionPromptDismissed);
+  }, []);
+
   const requestSystemNotifications = async () => {
     if (!("Notification" in window)) return;
     try {
@@ -129,31 +264,49 @@ export function AffairsReminderCenter() {
     }
   };
 
-  if (reminders.length === 0 && (!hasConfiguredReminder || permission !== "default" || permissionPromptDismissed)) return null;
+  const hasVisibleStack = !(reminders.length === 0 && (!hasConfiguredReminder || permission !== "default" || permissionPromptDismissed));
+  if (!hasVisibleStack && !announcement) return null;
 
   return (
-    <aside className="affairs-reminder-stack" aria-label="Przypomnienia o sprawach i wizytach">
+    <>
+    {hasVisibleStack && <ToastViewport>
       {hasConfiguredReminder && permission === "default" && !permissionPromptDismissed && (
-        <div className="affairs-reminder-toast">
-          <div>
+        <Toast
+          durationMs={null}
+          actionLabel="Włącz"
+          onAction={() => void requestSystemNotifications()}
+          dismissLabel="Ukryj prośbę o włączenie powiadomień"
+          onDismiss={() => {
+            persistPermissionPromptDismissal();
+            setPermissionPromptDismissed(true);
+            setAnnouncement("Prośba o włączenie powiadomień została ukryta do końca tej sesji.");
+          }}
+        >
+          <span className="ui-toast__copy">
             <strong><Bell size={13} aria-hidden="true" /> Włącz powiadomienia o terminach</strong>
             <span>Powiadomienia systemowe działają przy otwartym Rootine; Przegląd pozostaje trwałym zabezpieczeniem.</span>
-          </div>
-          <div className="affairs-reminder-toast__actions">
-            <Button size="sm" variant="quiet" onClick={requestSystemNotifications}>Włącz</Button>
-            <Button size="sm" variant="ghost" iconOnly aria-label="Ukryj prośbę o włączenie powiadomień" onClick={() => setPermissionPromptDismissed(true)}><X size={13} /></Button>
-          </div>
-        </div>
+          </span>
+        </Toast>
       )}
       {reminders.map((reminder) => (
-        <div key={reminder.key} className="affairs-reminder-toast" role="status">
-          <div>
+        <Toast
+          key={reminder.key}
+          durationMs={null}
+          dismissLabel={`Zamknij przypomnienie: ${reminder.title}`}
+          onDismiss={() => {
+            dismissReminderUntilTomorrow(reminder);
+            setReminders((current) => current.filter((item) => item.key !== reminder.key));
+            setAnnouncement(`Przypomnienie „${reminder.title}” zostało ukryte do jutra.`);
+          }}
+        >
+          <span className="ui-toast__copy">
             <strong><Bell size={13} aria-hidden="true" /> {reminder.title}</strong>
             <span>{reminder.body}</span>
-          </div>
-          <Button size="sm" variant="ghost" iconOnly aria-label={`Zamknij przypomnienie: ${reminder.title}`} onClick={() => setReminders((current) => current.filter((item) => item.key !== reminder.key))}><X size={13} /></Button>
-        </div>
+          </span>
+        </Toast>
       ))}
-    </aside>
+    </ToastViewport>}
+    {announcement && <p className="ui-sr-only" role="status" aria-live="polite">{announcement}</p>}
+    </>
   );
 }

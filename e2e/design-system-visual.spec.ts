@@ -71,12 +71,41 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
   });
 
   test("goal menu and edit dialog retain their context surfaces", async ({ rootinePage: page }) => {
-    await openRootineRoute(page, "/cele");
+    await openRootineRoute(page, "/cele?widok=overview");
     await page.locator(".goal-card-more button").first().click();
     await capture(page.getByRole("menu").last(), "goal-actions-menu.png");
 
     await page.getByRole("menu").last().getByRole("menuitem", { name: "Edytuj cel" }).click();
-    await capture(page.getByRole("dialog").last(), "goal-edit-dialog.png");
+    const dialog = page.getByRole("dialog").last();
+    const modalBody = dialog.locator(".ui-modal__body");
+    const modalFooter = dialog.locator(".ui-modal__footer");
+    await expect(modalFooter).toBeVisible();
+    const modalLayout = await dialog.evaluate((element) => {
+      const body = element.querySelector<HTMLElement>(".ui-modal__body");
+      const footer = element.querySelector<HTMLElement>(".ui-modal__footer");
+      if (!body || !footer) return null;
+      const dialogRect = element.getBoundingClientRect();
+      const bodyRect = body.getBoundingClientRect();
+      const footerRect = footer.getBoundingClientRect();
+      return {
+        dialogOverflow: getComputedStyle(element).overflow,
+        bodyOverflowY: getComputedStyle(body).overflowY,
+        bodyOwnsOverflow: body.scrollHeight > body.clientHeight,
+        footerInsideDialog: footerRect.bottom <= dialogRect.bottom + 1,
+        footerFollowsBody: footerRect.top >= bodyRect.bottom - 1,
+        footerInsideViewport: footerRect.bottom <= window.innerHeight,
+      };
+    });
+    expect(modalLayout).toEqual({
+      dialogOverflow: "hidden",
+      bodyOverflowY: "auto",
+      bodyOwnsOverflow: true,
+      footerInsideDialog: true,
+      footerFollowsBody: true,
+      footerInsideViewport: true,
+    });
+    await expect(modalBody).toBeVisible();
+    await capture(dialog, "goal-edit-dialog.png");
   });
 
   test("work add menu keeps its compact action grouping", async ({ rootinePage: page }) => {

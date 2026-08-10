@@ -46,7 +46,7 @@ export const ROUTE_LAYOUT_AUDIT = [
   { path: "/biuro", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /praca" },
   { path: "/finanse", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=budget" },
   { path: "/jdg", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=jdg" },
-  { path: "*", component: "RouteNotFoundState", width: "route state", moduleSidebar: false, h1: "none", layout: "error state" },
+  { path: "*", component: "RouteNotFoundState", width: "route state", moduleSidebar: false, h1: "route", layout: "error state" },
 ] as const;
 
 export const router = createBrowserRouter([

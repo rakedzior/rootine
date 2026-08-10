@@ -206,6 +206,69 @@ export function saveTaskSidebarState(patch: Partial<TaskSidebarState>): TaskSide
   return next;
 }
 
+export type TaskDeepLinkPreferences = {
+  taskView: string;
+  listFilter: string | null;
+  tagFilter: string | null;
+  viewMode: TasksViewMode;
+};
+
+export function loadInitialTaskPagePreferences(
+  tasks: readonly Pick<Task, "id">[],
+  search = typeof window === "undefined" ? "" : window.location.search,
+) {
+  const sidebar = loadTaskSidebarState();
+  const params = new URLSearchParams(search);
+  const requested = normalizeTaskView(params.get("widok") ?? "");
+  const requestedView = params.has("widok")
+    ? requested && VIEW_LABELS[requested] ? requested : "dzis"
+    : null;
+  const persistedView = VIEW_LABELS[sidebar.taskView] ? sidebar.taskView : "dzis";
+  const requestedTaskId = params.get("zadanie");
+  const parsedTaskId = requestedTaskId && /^\d+$/.test(requestedTaskId)
+    ? Number(requestedTaskId)
+    : Number.NaN;
+  const linkedTaskId = Number.isSafeInteger(parsedTaskId) && tasks.some((task) => task.id === parsedTaskId)
+    ? parsedTaskId
+    : null;
+  const hasTaskDeepLink = params.has("zadanie");
+  const hasValidTaskDeepLink = hasTaskDeepLink && linkedTaskId !== null;
+  const persistedViewMode = loadTasksViewMode();
+  const taskView = hasValidTaskDeepLink ? "wszystkie" : requestedView ?? persistedView;
+  const restoreFilters = !hasValidTaskDeepLink && (!requestedView || requestedView === persistedView);
+  const deepLinkPreferences: TaskDeepLinkPreferences | null = hasValidTaskDeepLink ? {
+    taskView: persistedView,
+    listFilter: sidebar.listFilter,
+    tagFilter: sidebar.tagFilter,
+    viewMode: persistedViewMode,
+  } : null;
+
+  return {
+    sidebar,
+    taskView,
+    listFilter: restoreFilters ? sidebar.listFilter : null,
+    tagFilter: restoreFilters ? sidebar.tagFilter : null,
+    viewMode: hasValidTaskDeepLink ? "list" as const : persistedViewMode,
+    linkedTaskId,
+    invalidTaskDeepLink: hasTaskDeepLink && linkedTaskId === null,
+    deepLinkPreferences,
+  };
+}
+
+export function buildTaskPreferenceRestoreRoute(
+  currentHref: string,
+  preferences: TaskDeepLinkPreferences,
+): string {
+  const url = new URL(currentHref);
+  url.searchParams.delete("zadanie");
+  if (preferences.taskView === "dzis") url.searchParams.delete("widok");
+  else url.searchParams.set("widok", preferences.taskView);
+  const pathname = preferences.viewMode === "calendar" && taskViewSupportsCalendar(preferences.taskView)
+    ? "/kalendarz"
+    : "/zadania";
+  return `${pathname}${url.search}${url.hash}`;
+}
+
 
 
 export const PL_MONTHS_SHORT = ["sty","lut","mar","kwi","maj","cze","lip","sie","wrz","paź","lis","gru"];

@@ -22,7 +22,7 @@
     "css:lint:fix": "stylelint \"src/**/*.{css,scss}\" --fix",
     "css:audit": "node scripts/css-audit.mjs",
     "css:audit:json": "node scripts/css-audit.mjs --json",
-    "design-system:audit": "node scripts/design-system-audit.mjs",
+    "design-system:audit": "node --test scripts/design-system-inline-audit.test.mjs && node scripts/design-system-audit.mjs",
     "architecture:audit": "node scripts/architecture-audit.mjs",
     "check": "npm run lint && npm run css:lint && npm run design-system:audit && npm run architecture:audit && npm run test && npm run build"
   },

@@ -131,7 +131,10 @@
   --state-disabled-opacity: var(--opacity-disabled);
   --state-completed-opacity: var(--opacity-completed);
 
-  /* Shared chart roles. Feature charts may add geometry, not new UI semantics. */
+  /*
+   * Chart migration vocabulary. Existing feature charts have not adopted these roles yet;
+   * keep geometry local and do not treat the declarations as a shared chart component API.
+   */
   --color-chart-axis: var(--color-text-tertiary);
   --color-chart-grid: var(--color-border-subtle);
   --color-chart-series-1: var(--color-primary);
@@ -164,8 +167,19 @@
 }
 
 :root {
-  /* Runtime data may override this property for a category-specific progress fill. */
+  /* Semantic roles make reduced-motion overrides selective and reviewable. */
+  --motion-reduced: 1ms;
+  --motion-feedback: var(--motion-fast);
+  --motion-spatial: var(--motion-normal);
+  --motion-decorative: var(--motion-slow);
+  --motion-spinner: var(--motion-progress-slow);
+}
+
+:root {
+  /* Runtime data may override these bounded component properties. */
   --progress-color: var(--color-primary);
+  --goal-icon-accent: var(--color-primary);
+  --goal-accent-option: var(--color-primary);
 }
 
 /*
@@ -597,8 +611,22 @@
   --bp-mobile: 760px;
   /* Registered feature-specific thresholds; media queries cannot consume custom properties. */
   --bp-settings: 560px;
+  --bp-command-center: 600px;
   --bp-dense-planner: 1100px;
   --bp-nutrition: 1120px;
   --bp-work: 1200px;
-  --bp-ambient: 1280px;
+  --bp-nutrition-wide: 1280px;
+}
+
+/* Density is a first-class token mode, not a late feature override. */
+:root[data-density="calm"] {
+  --row-height-compact: 42px;
+  --row-height-default: 50px;
+  --row-height-comfortable: 60px;
+}
+
+:root[data-density="compact"] {
+  --row-height-compact: 32px;
+  --row-height-default: 38px;
+  --row-height-comfortable: 48px;
 }

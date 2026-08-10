@@ -14,10 +14,11 @@ describe("responsive design-system registry", () => {
   it("registers feature-specific thresholds without making them official", () => {
     expect(BREAKPOINT_EXCEPTIONS).toEqual({
       settings: 560,
+      commandCenter: 600,
       densePlanner: 1100,
       nutrition: 1120,
       work: 1200,
-      ambient: 1280,
+      nutritionWide: 1280,
     });
     expect(maxWidthQuery("mobile")).toBe("(max-width: 760px)");
   });

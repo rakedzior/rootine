@@ -1,6 +1,11 @@
-import { act, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RemotePersistenceProvider } from "./RemotePersistenceProvider";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RemoteWorkspaceSyncResult } from "./workspaceSync";
+import {
+  REMOTE_INITIAL_SYNC_TIMEOUT_MS,
+  RemotePersistenceProvider,
+  useRemoteSync,
+} from "./RemotePersistenceProvider";
 
 const testState = vi.hoisted(() => ({
   auth: {
@@ -22,11 +27,28 @@ vi.mock("./workspaceSync", () => ({
   startRemoteWorkspaceSync: testState.startSync,
 }));
 
+function RemoteStateProbe() {
+  const remote = useRemoteSync();
+  return (
+    <>
+      <div>Rootine app</div>
+      <output data-testid="remote-state">
+        {remote.status}|{remote.message ?? ""}|{remote.initialSyncAttempt}|{remote.initialSyncElapsedMs ?? ""}|{String(remote.initialSyncTimedOut)}
+      </output>
+    </>
+  );
+}
+
 describe("RemotePersistenceProvider", () => {
   beforeEach(() => {
     testState.auth.loading = true;
     testState.auth.session = null;
     testState.startSync.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
   });
 
   it("does not mount the app before the persisted auth session is known", () => {
@@ -82,5 +104,98 @@ describe("RemotePersistenceProvider", () => {
     );
 
     expect(await screen.findByText("Rootine app")).toBeInTheDocument();
+  });
+
+  it("continues locally after a bounded initial timeout and accepts a late sync result", async () => {
+    vi.useFakeTimers();
+    let reportResult!: (result: RemoteWorkspaceSyncResult) => void;
+    let finishSync!: (cleanup: () => void) => void;
+    const syncFinished = new Promise<() => void>((resolve) => {
+      finishSync = resolve;
+    });
+    testState.auth.loading = false;
+    testState.auth.session = { user: { id: "user-1" } };
+    testState.startSync.mockImplementation((_userId, onResult) => {
+      reportResult = onResult;
+      return syncFinished;
+    });
+
+    render(
+      <RemotePersistenceProvider>
+        <RemoteStateProbe />
+      </RemotePersistenceProvider>,
+    );
+
+    expect(screen.queryByText("Rootine app")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REMOTE_INITIAL_SYNC_TIMEOUT_MS);
+    });
+
+    expect(screen.getByText("Rootine app")).toBeInTheDocument();
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("error|Synchronizacja profilu trwa zbyt długo");
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("|1|10000|true");
+    expect(screen.getByText(/Rootine działa dalej lokalnie/, { selector: ".ui-toast__message" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Spróbuj ponownie" })).toBeEnabled();
+
+    await act(async () => {
+      reportResult({ status: "synced", uploaded: 1, downloaded: 2 });
+      finishSync(() => undefined);
+      await syncFinished;
+    });
+
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("synced|");
+    expect(screen.queryByText(/Rootine działa dalej lokalnie/)).not.toBeInTheDocument();
+  });
+
+  it("retries from the global notice and ignores a late result from the stale attempt", async () => {
+    vi.useFakeTimers();
+    let reportFirst!: (result: RemoteWorkspaceSyncResult) => void;
+    let reportSecond!: (result: RemoteWorkspaceSyncResult) => void;
+    let finishFirst!: (cleanup: () => void) => void;
+    let finishSecond!: (cleanup: () => void) => void;
+    const firstFinished = new Promise<() => void>((resolve) => { finishFirst = resolve; });
+    const secondFinished = new Promise<() => void>((resolve) => { finishSecond = resolve; });
+    testState.auth.loading = false;
+    testState.auth.session = { user: { id: "user-1" } };
+    testState.startSync
+      .mockImplementationOnce((_userId, onResult) => {
+        reportFirst = onResult;
+        return firstFinished;
+      })
+      .mockImplementationOnce((_userId, onResult) => {
+        reportSecond = onResult;
+        return secondFinished;
+      });
+
+    render(
+      <RemotePersistenceProvider>
+        <RemoteStateProbe />
+      </RemotePersistenceProvider>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REMOTE_INITIAL_SYNC_TIMEOUT_MS);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Spróbuj ponownie" }));
+
+    expect(testState.startSync).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("syncing||2||false");
+
+    await act(async () => {
+      reportFirst({ status: "synced", uploaded: 99, downloaded: 99 });
+      finishFirst(() => undefined);
+      await firstFinished;
+    });
+
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("syncing||2||false");
+
+    await act(async () => {
+      reportSecond({ status: "synced", uploaded: 1, downloaded: 0 });
+      finishSecond(() => undefined);
+      await secondFinished;
+    });
+
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("synced||2|");
   });
 });

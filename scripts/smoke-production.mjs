@@ -11,8 +11,22 @@ if (!baseInput) {
 
   const checks = [
     {
-      label: "SPA route",
+      label: "SPA route: Nutrition diary",
       path: "/odzywianie",
+      init: {},
+      expectedStatus: 200,
+      expectedType: "text/html",
+    },
+    {
+      label: "SPA route: Nutrition meals",
+      path: "/odzywianie/posilki",
+      init: {},
+      expectedStatus: 200,
+      expectedType: "text/html",
+    },
+    {
+      label: "SPA route: Nutrition analysis",
+      path: "/odzywianie/analiza",
       init: {},
       expectedStatus: 200,
       expectedType: "text/html",

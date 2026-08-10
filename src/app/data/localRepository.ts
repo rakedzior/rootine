@@ -1390,15 +1390,24 @@ export async function exportLocalRecoveryRecord(id: string): Promise<string | nu
   }
 }
 
-async function persistRawImmediately(key: string, raw: string) {
+const EXPECT_ANY_WORKSPACE_RAW = Symbol("expect-any-workspace-raw");
+
+async function persistRawImmediately(
+  key: string,
+  raw: string,
+  expectedRaw: string | null | typeof EXPECT_ANY_WORKSPACE_RAW = EXPECT_ANY_WORKSPACE_RAW,
+) {
+  const guarded = expectedRaw !== EXPECT_ANY_WORKSPACE_RAW;
   if (!shouldUseIndexedDb(key)) {
+    if (guarded && window.localStorage.getItem(key) !== expectedRaw) return false;
     window.localStorage.setItem(key, raw);
     recordInlineBaseline(key, raw);
-    return;
+    return true;
   }
 
   try {
     const currentRecord = await payloadStore.read(key);
+    if (guarded && (currentRecord?.raw ?? null) !== expectedRaw) return false;
     const result = await payloadStore.compareAndSwap({
       key,
       raw,
@@ -1409,15 +1418,20 @@ async function persistRawImmediately(key: string, raw: string) {
       byteLength: byteLength(raw),
     });
     if (result.status === "conflict") {
+      if (guarded) return false;
       conflictWrite(key, raw, result.current?.updatedAt);
       throw new DOMException("The workspace changed during the operation.", "ConcurrencyError");
     }
     writeManifest(result.record);
     recordBaseline(result.record);
+    return true;
   } catch (error) {
     if (error instanceof DOMException && error.name === "ConcurrencyError") {
       throw error;
     }
+    // A guarded remote import must never fall back to a blind localStorage
+    // write when IndexedDB cannot prove the expected revision.
+    if (guarded) return false;
     window.localStorage.setItem(key, raw);
     recordInlineBaseline(key, raw);
     reportPersistenceIssue({
@@ -1427,6 +1441,7 @@ async function persistRawImmediately(key: string, raw: string) {
       retryOperation: { type: "migrate", key, raw },
       message: `Dane „${key}” zapisano w trybie zgodności, ponieważ IndexedDB jest chwilowo niedostępne.`,
     });
+    return true;
   }
 }
 
@@ -1768,7 +1783,14 @@ export async function exportAllLocalWorkspaces(): Promise<FullLocalBackup> {
 
 export async function importAllLocalWorkspaces(
   value: unknown,
-): Promise<{ ok: boolean; restored: number; error?: string }> {
+  options: {
+    /**
+     * Optional compare-and-swap guard used by late remote hydration. A key
+     * whose current raw value no longer matches is preserved and reported.
+     */
+    expectedWorkspaces?: Record<string, string | null>;
+  } = {},
+): Promise<{ ok: boolean; restored: number; error?: string; skipped?: string[] }> {
   if (typeof window === "undefined") {
     return { ok: false, restored: 0, error: "Brak pamięci przeglądarki." };
   }
@@ -1776,9 +1798,18 @@ export async function importAllLocalWorkspaces(
   if (!validation.ok) return { ok: false, restored: 0, error: validation.error };
 
   const snapshots = new Map<string, string | null>();
+  const skippedKeys = new Set<string>();
   try {
     for (const [key] of validation.entries) {
-      snapshots.set(key, await readAuthoritativeRaw(key));
+      const current = await readAuthoritativeRaw(key);
+      snapshots.set(key, current);
+      if (
+        options.expectedWorkspaces
+        && Object.prototype.hasOwnProperty.call(options.expectedWorkspaces, key)
+        && options.expectedWorkspaces[key] !== current
+      ) {
+        skippedKeys.add(key);
+      }
     }
   } catch {
     return {
@@ -1789,6 +1820,7 @@ export async function importAllLocalWorkspaces(
   }
 
   for (const [key, raw] of validation.entries) {
+    if (skippedKeys.has(key)) continue;
     const current = snapshots.get(key) ?? null;
     if (
       current !== null
@@ -1810,22 +1842,59 @@ export async function importAllLocalWorkspaces(
   const appliedKeys: string[] = [];
   try {
     for (const [key, raw] of validation.entries) {
+      if (skippedKeys.has(key)) continue;
       if (snapshots.get(key) === raw) continue;
-      await persistRawImmediately(key, raw);
+      const guarded = Boolean(
+        options.expectedWorkspaces
+        && Object.prototype.hasOwnProperty.call(options.expectedWorkspaces, key),
+      );
+      const applied = guarded
+        ? await persistRawImmediately(key, raw, snapshots.get(key) ?? null)
+        : await persistRawImmediately(key, raw);
+      if (!applied) {
+        skippedKeys.add(key);
+        continue;
+      }
       appliedKeys.push(key);
     }
   } catch (error) {
     let rollbackFailed = false;
+    const importedByKey = new Map(validation.entries);
     for (const key of appliedKeys.reverse()) {
       try {
         const previous = snapshots.get(key) ?? null;
+        const guarded = Boolean(
+          options.expectedWorkspaces
+          && Object.prototype.hasOwnProperty.call(options.expectedWorkspaces, key),
+        );
         if (previous === null) {
-          window.localStorage.removeItem(key);
-          workspaceCache.delete(key);
-          baselines.delete(key);
-          if (payloadStore.available) await payloadStore.remove(key);
+          if (guarded) {
+            // Inline compare+remove is atomic within this turn. IndexedDB has
+            // no compare-and-delete primitive, so leaving the imported value
+            // is safer than deleting a newer concurrent local edit.
+            const importedRaw = importedByKey.get(key) ?? null;
+            if (
+              shouldUseIndexedDb(key)
+              || importedRaw === null
+              || window.localStorage.getItem(key) !== importedRaw
+            ) {
+              rollbackFailed = true;
+            } else {
+              window.localStorage.removeItem(key);
+              workspaceCache.delete(key);
+              baselines.delete(key);
+            }
+          } else {
+            window.localStorage.removeItem(key);
+            workspaceCache.delete(key);
+            baselines.delete(key);
+            if (payloadStore.available) await payloadStore.remove(key);
+          }
         } else {
-          await persistRawImmediately(key, previous);
+          const rolledBack = guarded
+            ? await persistRawImmediately(key, previous, importedByKey.get(key) ?? null)
+            : await persistRawImmediately(key, previous);
+          if (!rolledBack) rollbackFailed = true;
         }
       } catch {
         rollbackFailed = true;
@@ -1843,8 +1912,19 @@ export async function importAllLocalWorkspaces(
     };
   }
 
-  validation.entries.forEach(([key]) => blockedWrites.delete(key));
-  broadcastWorkspaceChange("*", new Date().toISOString(), rollbackOrigin);
+  validation.entries.forEach(([key]) => {
+    if (!skippedKeys.has(key)) blockedWrites.delete(key);
+  });
+  if (appliedKeys.length > 0) {
+    broadcastWorkspaceChange("*", new Date().toISOString(), rollbackOrigin);
+  }
+  if (options.expectedWorkspaces) {
+    return {
+      ok: true,
+      restored: validation.entries.length - skippedKeys.size,
+      skipped: [...skippedKeys],
+    };
+  }
   return { ok: true, restored: validation.entries.length };
 }
 

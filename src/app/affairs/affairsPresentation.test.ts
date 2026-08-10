@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   AFFAIRS_VIEW_ARCHETYPE,
   NAV_GROUPS,
+  getAffairsEditorDraftKey,
   getInitialView,
 } from "./affairsPresentation";
 
@@ -47,5 +48,31 @@ describe("affairs presentation architecture", () => {
   ] as const)("keeps the legacy %s view id compatible", (legacyView, expectedView) => {
     window.history.replaceState({}, "", `/sprawy?widok=${legacyView}`);
     expect(getInitialView()).toBe(expectedView);
+  });
+
+  it("isolates new vehicle-item drafts by their parent vehicle", () => {
+    const firstVehicleKey = getAffairsEditorDraftKey({
+      kind: "vehicleItem",
+      mode: "add",
+      vehicleId: "vehicle-family",
+    }, "2026-08");
+    const secondVehicleKey = getAffairsEditorDraftKey({
+      kind: "vehicleItem",
+      mode: "add",
+      vehicleId: "vehicle-work",
+    }, "2026-08");
+
+    expect(firstVehicleKey).toBe("rootine.affairs-editor-draft.vehicleItem.add.new.vehicle-family");
+    expect(secondVehicleKey).toBe("rootine.affairs-editor-draft.vehicleItem.add.new.vehicle-work");
+    expect(secondVehicleKey).not.toBe(firstVehicleKey);
+  });
+
+  it("isolates new budget-line drafts by their canonical month", () => {
+    const augustKey = getAffairsEditorDraftKey({ kind: "budget", mode: "add" }, "2026-08");
+    const septemberKey = getAffairsEditorDraftKey({ kind: "budget", mode: "add" }, "2026-09");
+
+    expect(augustKey).toBe("rootine.affairs-editor-draft.budget.add.new.2026-08");
+    expect(septemberKey).toBe("rootine.affairs-editor-draft.budget.add.new.2026-09");
+    expect(septemberKey).not.toBe(augustKey);
   });
 });

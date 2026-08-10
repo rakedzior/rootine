@@ -57,6 +57,9 @@ import {
   ModuleMain,
   ModuleShell,
   Select,
+  Textarea,
+  Toast,
+  ToastViewport,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/notes.css";
@@ -1099,15 +1102,13 @@ export default function Notatki() {
             </button>
           </div>
 
-          <label className="ui-field">
-            <span className="ui-field__label">{draft.kind === "checklist" ? "Wprowadzenie" : "Treść"}</span>
-            <textarea
-              className="ui-field__control notes-editor__body"
-              value={draft.body}
-              placeholder={draft.kind === "checklist" ? "Krótki kontekst listy — opcjonalnie" : "Zapisz myśl, szczegóły albo wnioski…"}
-              onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
-            />
-          </label>
+          <Textarea
+            label={draft.kind === "checklist" ? "Wprowadzenie" : "Treść"}
+            className="notes-editor__body"
+            value={draft.body}
+            placeholder={draft.kind === "checklist" ? "Krótki kontekst listy — opcjonalnie" : "Zapisz myśl, szczegóły albo wnioski…"}
+            onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
+          />
 
           {draft.kind === "text" && (
             <Button
@@ -1316,10 +1317,11 @@ export default function Notatki() {
         />
 
         {deletedNoteUndo && (
-          <div className="notes-undo" role="status" aria-live="polite">
-            <span>Usunięto „{deletedNoteUndo.note.title}”.</span>
-            <Button variant="quiet" size="sm" onClick={undoNoteDelete}>Cofnij</Button>
-          </div>
+          <ToastViewport>
+            <Toast actionLabel="Cofnij" onAction={undoNoteDelete} onDismiss={() => setDeletedNoteUndo(null)}>
+              Usunięto „{deletedNoteUndo.note.title}”.
+            </Toast>
+          </ToastViewport>
         )}
 
         <div className="notes-canvas">

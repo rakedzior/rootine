@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
@@ -11,6 +11,8 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "danger" | "primary";
+  /** Stable invoker for confirmations opened from a menu whose item unmounts. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -27,6 +29,7 @@ export function ConfirmDialog({
   confirmLabel = "Usuń",
   cancelLabel = "Anuluj",
   tone = "danger",
+  returnFocusRef,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -36,6 +39,7 @@ export function ConfirmDialog({
       title={title}
       description={description}
       onClose={onCancel}
+      returnFocusRef={returnFocusRef}
       footer={(
         <>
           <Button variant="ghost" onClick={onCancel}>{cancelLabel}</Button>

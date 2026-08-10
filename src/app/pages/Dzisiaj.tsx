@@ -66,7 +66,7 @@ import {
   type LivingDayArea,
   type LivingDayAreaBreakdown,
 } from "../experience/LivingDay";
-import { AnimatedNumber, AnimatedPercentage } from "../experience/MotionValues";
+import { AnimatedPercentage } from "../experience/MotionValues";
 import { TelemetryBar, type TelemetrySegment } from "../experience/TelemetryBar";
 import {
   cycleWorkoutDate,
@@ -708,7 +708,7 @@ export default function Dzisiaj() {
     {
       moduleId: "nutrition",
       areaId: "nutrition",
-      to: APP_MODULE_BY_ID.nutrition.to,
+      to: `${APP_MODULE_BY_ID.nutrition.to}?data=${encodeURIComponent(todayKey)}`,
       icon: <NutritionIcon size={16} />,
       title: APP_MODULE_BY_ID.nutrition.label,
       message: nutritionState === "complete"
@@ -810,7 +810,6 @@ export default function Dzisiaj() {
           // The date used to live in the page header; it is the only place the user reads
           // which day the balance describes, so it moves into the description rather than out.
           description={`${formatFullDate(today)} · Dzisiejszy bilans wszystkich aktywnych obszarów`}
-          meta={<span>{remainingDailyItems} pozostało · {activeAreaCount} wymaga uwagi</span>}
           actions={(
             <div className="today-add-menu">
               <Button
@@ -834,13 +833,8 @@ export default function Dzisiaj() {
               <div className="today-day-balance__main">
                 <div className="today-day-balance__headline">
                   <h2 id="today-day-balance-title">
-                    <AnimatedNumber value={remainingDailyItems} /> <span>pozostało</span>
+                    {dayComplete ? "Plan dnia domknięty" : "Plan dnia w toku"}
                   </h2>
-                  {overdueItems > 0 && (
-                    <p className="today-day-balance__overdue-summary">
-                      w tym {overdueItems} zaległych
-                    </p>
-                  )}
                 </div>
                 <div className="today-day-balance__progress-row">
                   <span

@@ -18,8 +18,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const descriptionIds = [describedBy, hintId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <label className={`ui-field ${fieldClassName}`.trim()} htmlFor={controlId}>
-      {label && <span className="ui-field__label">{label}</span>}
+    <div className={`ui-field ${fieldClassName}`.trim()}>
+      {label && <label className="ui-field__label" htmlFor={controlId}>{label}</label>}
       <input
         ref={ref}
         id={controlId}
@@ -30,6 +30,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       />
       {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
       {error && <p id={errorId} className="ui-field__error" role="alert">{error}</p>}
-    </label>
+    </div>
   );
 });

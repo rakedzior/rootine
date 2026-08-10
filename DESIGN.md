@@ -7,21 +7,22 @@ colors:
   precision-blue-strong: "#657FCE"
   precision-blue-hover: "#7891DA"
   precision-blue-soft: "rgba(101,127,206,0.12)"
-  graphite-shell: "#101214"
-  graphite-sidebar: "#0B0D0F"
-  graphite-input: "#1A1D21"
-  graphite-canvas: "#101214"
-  graphite-panel: "#1A1D21"
-  graphite-card: "#20242A"
-  graphite-hover: "#282D35"
+  on-primary: "#0B1020"
+  graphite-shell: "#15181B"
+  graphite-sidebar: "#101316"
+  graphite-input: "#1D2125"
+  graphite-canvas: "#15181B"
+  graphite-panel: "#1D2125"
+  graphite-card: "#24292F"
+  graphite-hover: "#2B3138"
   border-subtle: "rgba(222,229,244,0.08)"
   border-strong: "rgba(222,229,244,0.16)"
-  chalk-white: "#F2F3F5"
-  text-secondary: "#AEB3BB"
-  text-muted: "#818791"
-  text-disabled: "#818791"
+  chalk-white: "#F1F0EC"
+  text-secondary: "#B6B8BB"
+  text-muted: "#92979E"
+  text-disabled: "#92979E"
   success-seaglass: "#78B789"
-  warning-ochre: "#D2A04D"
+  warning-ochre: "#D8AA58"
   danger-coral: "#DF7C7C"
   accent-violet: "#7D7FA8"
   category-sky: "#7FA6C9"
@@ -130,7 +131,7 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.precision-blue-strong}"
-    textColor: "{colors.chalk-white}"
+    textColor: "{colors.on-primary}"
     typography: "{typography.body}"
     rounded: "{rounded.md}"
     padding: "0 16px"
@@ -159,7 +160,7 @@ components:
     textColor: "{colors.chalk-white}"
     rounded: "{rounded.xl}"
     padding: "20px"
-    width: "520px"
+    width: "680px"
   tabs-active:
     backgroundColor: "{colors.precision-blue-soft}"
     textColor: "{colors.precision-blue}"
@@ -171,7 +172,7 @@ components:
     textColor: "{colors.precision-blue}"
     typography: "{typography.label}"
     rounded: "{rounded.pill}"
-    padding: "4px 8px"
+    padding: "2px 8px"
   content-header:
     backgroundColor: "{colors.graphite-canvas}"
     textColor: "{colors.chalk-white}"
@@ -196,7 +197,7 @@ components:
 
 Rootine jest spokojnym, precyzyjnym i dyskretnym narzędziem do działania. Interfejs przypomina dobrze uporządkowany warsztat: każda kontrolka ma konkretne zadanie, treść ma pierwszeństwo, a gęstość pozwala szybko skanować wiele informacji bez wizualnego hałasu.
 
-System jest ciemny, tonalny i kompaktowy. Marka ujawnia się przez konsekwentny rytm, oszczędne użycie Precyzyjnego błękitu, drobną typografię oraz dobrze rozróżnione stany, nie przez dekorację. To interfejs w trybie **Operate**: ma ułatwiać wykonanie zadania, a nie konkurować o uwagę.
+Domyślny motyw jest ciemny, tonalny i kompaktowy, ale ten sam kontrakt semantyczny obsługuje sześć motywów, w tym jasny Warm Linen. Marka ujawnia się przez konsekwentny rytm, oszczędne użycie akcentu motywu, drobną typografię oraz dobrze rozróżnione stany, nie przez dekorację. To interfejs w trybie **Operate**: ma ułatwiać wykonanie zadania, a nie konkurować o uwagę.
 
 **Key Characteristics:**
 
@@ -208,13 +209,15 @@ System jest ciemny, tonalny i kompaktowy. Marka ujawnia się przez konsekwentny 
 
 ## Colors
 
-Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym błękitem; barwy semantyczne są stonowane, aby status był czytelny bez efektu alarmowego.
+Frontmatter pokazuje wartości domyślnego `rootine-cobalt` jako czytelny snapshot dla narzędzi. Normatywnym źródłem wartości wszystkich motywów jest `src/styles/tokens.css`, a listy dostępnych identyfikatorów, nazw i mapowania preferencji `system` — `src/app/theme/appTheme.ts`. Zmiana motywu nie zmienia znaczenia ról `primary`, `surface`, `text`, `success`, `warning` i `danger`.
+
+Runtime udostępnia sześć motywów: `rootine-cobalt` (domyślny ciemny), `rootine-mineral-noir`, `rootine-graphite-sea-glass`, `rootine-warm-linen` (jasny), `rootine-burgundy` i `rootine-olive`. Historyczne nazwy `precision-*`, `graphite-*` i `chalk-*` są aliasami kompatybilności mapowanymi na role semantyczne; poza domyślnym motywem nie należy interpretować ich jako literalnej barwy.
 
 ### Primary
 
-- **Precyzyjny błękit** (`precision-blue`): aktywna nawigacja, zaznaczenie, focus, główna akcja i wybrany filtr.
+- **Akcent motywu** (`primary`, alias `precision-blue`): aktywna nawigacja, zaznaczenie, focus, główna akcja i wybrany filtr.
 - **Precyzyjny błękit tekstowy** (`precision-blue-text`): tekst aktywnego stanu na ciemnej powierzchni; jaśniejszy wariant zapewniający kontrast małego tekstu.
-- **Precyzyjny błękit mocny** (`precision-blue-strong`): tło głównej akcji pod jasnym tekstem; ciemniejszy wariant zapewniający kontrast przycisku.
+- **Powierzchnia akcji** (`precision-blue-strong` → `primary`): tło głównej akcji pod semantycznym `on-primary`; kolor tekstu zależy od motywu i nie zawsze jest biały.
 - **Mgła błękitnego sygnału** (`precision-blue-soft`): tło aktywnego stanu, zaznaczonego wiersza lub delikatnego akcentu.
 
 ### Secondary
@@ -244,7 +247,7 @@ Paleta łączy Grafit roboczy z Kredową bielą i rzadko używanym Precyzyjnym b
 
 Papier to osobne medium, nie kolejny motyw. Wydruk zawsze zakłada białą kartkę, więc powierzchnie
 i tekst muszą się odwrócić — przeniesienie tokenów ekranowych na papier dałoby czarną stronę
-z nieczytelną siatką. Te trzy wartości są jedynymi dopuszczonymi w blokach `@media print`
+z nieczytelną siatką. Te cztery wartości są jedynymi dopuszczonymi w blokach `@media print`
 i nie zmieniają się razem z motywem aplikacji.
 
 - **Papier** (`print-paper`): tło strony i komórek wydruku.
@@ -271,7 +274,7 @@ i nie zmieniają się razem z motywem aplikacji.
 - **Body** (`typography.body`): zadania, wartości pól i podstawowa treść operacyjna.
 - **Label** (`typography.label`): krótkie etykiety sekcji, zwykle uppercase z poszerzonym trackingiem.
 - **Data** (`typography.data`): czas, daty, wyniki, serie, procenty i liczniki.
-- **Supporting microcopy:** 9–11px, tylko dla metadata i informacji trzeciego rzędu; nie dla głównej instrukcji lub podstawowej akcji.
+- **Supporting microcopy:** 10–11px, tylko dla metadata i informacji trzeciego rzędu; nie dla głównej instrukcji lub podstawowej akcji.
 
 ### Role nagłówków
 
@@ -303,7 +306,7 @@ There is no global page header on application routes, and no component for one: 
 
 `PageShell` and `ModuleShell` accept **no** `title`, `subtitle`, `leading`, `meta`, `actions` or `header` prop. They used to accept and silently discard them, which turned every stale call site into invisible content instead of a build error — that is how a back button, an entire route error message and nine write-failure indicators went missing at once. Do not reintroduce those props.
 
-Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Kontekstowy sidebar służy rosnącym kolekcjom, drzewom i stałym wejściom w Zadaniach, Pracy, Celach, Sprawach i Notatkach. Sport oraz Podróże używają zakładek i filtrów nad treścią.
+Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Bieżący inwentarz tras w `ROUTE_LAYOUT_AUDIT` pokazuje sidebar modułowy w Zadaniach, Kalendarzu, Notatkach, Celach, Sporcie, Odżywianiu, Pracy, Sprawach i Podróżach; Dzisiaj i osobna trasa szczegółu celu pozostają bez niego.
 
 Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie — jest jedynym nagłówkiem ekranu. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 408px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
@@ -311,7 +314,7 @@ Zwykła kolekcja rekordów korzysta z płaskiego płótna i separatorów wierszy
 
 Podstawą rytmu jest siatka 4px. Najczęstsze odstępy to 8, 12, 16, 20, 24 i 28px. Każda trasa używa wspólnego `PageShell`, który renderuje opcjonalny `PageToolbar` i wspólną oś treści — nic ponadto. Ten sam komponent jest obowiązkowy dla nowych ekranów.
 
-Układ jest przede wszystkim desktopowy i gęsty. Globalne warianty szerokości to `standard` 1280px, `wide` 1480px oraz `fluid` bez maksymalnej szerokości; cała kompozycja sidebar + treść jest centrowana względem faktycznego `MainContent`. Przy 1380px każdy `DetailPanel` przechodzi w warstwę nakładaną, przy 980px globalny sidebar zwęża się do ikon, a przy 760px zastępuje go dolna nawigacja z czterema priorytetowymi modułami i pozycją „Więcej”. „Więcej” udostępnia wszystkie obszary, ustawienia, profil oraz przywrócenie ukrytych modułów bez poziomego przewijania paska. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
+Układ jest przede wszystkim desktopowy i gęsty. Globalne warianty szerokości to `standard` 1280px, `wide` 1480px oraz `fluid` bez maksymalnej szerokości; cała kompozycja sidebar + treść jest centrowana względem faktycznego `MainContent`. Powyżej 1380px obecny `DetailPanel` jest trzecią, dockowaną kolumną 408px i grid rezerwuje dla niego rzeczywisty tor, więc nie zasłania treści. Przy 1380px i niżej przechodzi w modalny drawer z backdropem oraz containmentem fokusu. Przy 980px globalny sidebar zwęża się do ikon, a przy 760px zastępuje go dolna nawigacja z czterema priorytetowymi modułami i pozycją „Więcej”. „Więcej” udostępnia wszystkie obszary, ustawienia, profil oraz przywrócenie ukrytych modułów bez poziomego przewijania paska. Sidebary kontekstowe są wtedy zastępowane kompaktowym Selectem w toolbarze. Treść używa 28px poziomego i 20px pionowego paddingu na desktopie oraz 16px na telefonie; Kalendarz pozostaje uzasadnionym wyjątkiem edge-to-edge.
 
 **The Workspace First Rule.** Szerokość należy oddać głównej czynności. Panele pomocnicze mogą znikać lub nakładać się wcześniej niż treść robocza.
 
@@ -351,7 +354,10 @@ This is the binding, implemented contract for complex workspaces.
 
 #### Verification
 
-- `npm run check` **PASS** (68 files / 314 tests); relevant Playwright matrix **PASS** (114); pagination package **PASS** (6/6); post-review mobile **PASS** (20/20); detector `[]`; independent reviewer **PASS**.
+- Status is computed, not preserved as a permanent PASS claim. Before merging a design-system change,
+  run `npm run design-system:audit`, `npm run css:lint`, `npm run typecheck:app` and the focused
+  viewport tests for the affected shell/component. Dated command output belongs in the change report
+  or CI; this constitution records contracts, not historical test totals.
 
 ## Elevation & Depth
 
@@ -373,7 +379,7 @@ Wartości są w `tokens.css` i zmieniają się razem z motywem; tutaj są tylko 
 
 Formy są miękko geometryczne, nie obłe. Drobne elementy kalendarza mogą używać promienia 3px, kompaktowe przyciski 6px, standardowe inputy i kontrolki 8px, karty i menu 12px, a modale 16px. Pełne zaokrąglenie jest przeznaczone dla statusów, tagów, awatarów, checkboxów kołowych i pasków postępu.
 
-Standardowe obramowanie ma 1px. Checkboxy mogą używać 1.5px dla czytelności przy małym rozmiarze. Dashed border jest dopuszczalny wyłącznie w pustych stanach lub kontrolkach „dodaj”.
+Standardowe obramowanie ma 1px. Checkboxy mogą używać 1.5px dla czytelności przy małym rozmiarze. Dashed border jest dopuszczalny dla wyspecjalizowanych kontrolek „dodaj”; wspólny `EmptyState` używa ciągłej linii.
 
 **The Radius Ladder Rule.** Promień rośnie wraz z wagą powierzchni: kontrolka → karta → modal. Nie należy losowo mieszać 6, 8, 9, 10 i 12px dla elementów tej samej klasy.
 
@@ -402,15 +408,16 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 ### Button
 
 - **Shape:** standardowy promień 8px; kompaktowe akcje narzędziowe mogą używać 6px.
-- **Primary:** Precyzyjny błękit, Kredowa biel, wysokość 40px, poziomy padding 16px; jedna dominująca akcja w bieżącym kontekście.
+- **Primary:** tło `primary`, tekst `on-primary`, wysokość 40px, poziomy padding 16px; jedna dominująca akcja w bieżącym kontekście. `on-primary` jest ciemny w motywie Cobalt i jasny w części pozostałych motywów.
 - **Quiet:** transparentne tło, subtelna linia i tekst pomocniczy; hover przechodzi w Grafit reakcji.
 - **Danger:** transparentny lub bardzo subtelny koral; pełne koralowe wypełnienie tylko dla ostatecznego potwierdzenia destrukcji.
 - **Focus:** globalny obrys 2px w Precyzyjnym błękicie z offsetem 2px.
-- **Disabled:** opacity około 0.38 i brak pozornej klikalności.
+- **Disabled:** `--opacity-disabled` (0.42) i brak pozornej klikalności.
 
-### Checkbox zadania
+### Checkbox
 
-- **Geometry:** zawsze kwadrat; standardowo 14 × 14px, w panelu szczegółów 17 × 17px, a w gęstym kalendarzu 11 × 11px. Promień `radius.xs` (3px) i obramowanie 1.5px.
+- **Shared form contract:** `Checkbox` ma rozmiary `md` 18 × 18px i `sm` 16 × 16px, kształt `square | round`, natywną semantykę oraz stan indeterminate. Geometria pochodzi z `--component-checkbox-size*`.
+- **Task checkbox:** domenowa kontrolka ukończenia pozostaje osobnym, zatwierdzonym wzorcem: 14 × 14px, w panelu szczegółów 17 × 17px, a w gęstym kalendarzu 11 × 11px.
 - **Hover:** lekkie przejście w Grafit pola bez zmiany rozmiaru lub położenia.
 - **Completed:** Precyzyjny błękit w obramowaniu, znaku i subtelnym tle. Zieleń pozostaje kolorem semantycznego sukcesu i nie oznacza zwykłego ukończenia zadania.
 - **Accessibility:** checkbox zadania jest przyciskiem z opisem akcji i wspólnym focus ringiem.
@@ -422,7 +429,7 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 - **Shadow Strategy:** brak mocnego cienia w spoczynku; zobacz Elevation & Depth.
 - **Border:** 1px w Linii subtelnej.
 - **Internal Padding:** 12–16px dla kart gęstych, 20–24px dla pustych lub skupionych stanów.
-- **Record typography:** standardowe kafelki rekordów, takie jak cel lub dzisiejszy trening, używają `ui-record-title` 13px/600 oraz `ui-record-meta` 10px. Skondensowane kafelki kalendarzowe i gęste wiersze mogą używać `ui-record-title--compact` 11px/500.
+- **Record typography:** standardowe kafelki rekordów używają `ui-record-title` 14px/600 oraz `ui-record-meta` 11px. Skondensowane kafelki kalendarzowe i gęste wiersze mogą używać `ui-record-title--compact` 12px/500.
 - **Record density:** standardowy rekord zaczyna się od 12px pionowego i 16px poziomego paddingu. Większy format wymaga funkcjonalnego uzasadnienia, nie tylko innego modułu.
 - **Calendar records:** zadania w komórce kalendarza są gęstymi, tonalnymi rekordami bez obramowania. Można je przeciągać między dniami; drop aktualizuje klucz daty, etykietę daty oraz inteligentny widok Zadania: Dziś, Jutro, Następne 7 dni albo Skrzynka.
 
@@ -430,15 +437,20 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 
 - **Style:** Grafit pola, Kredowa biel, linia subtelna, promień 8px i wysokość około 40px.
 - **Placeholder:** Popiel wyciszony.
-- **Focus:** linia przechodzi w Precyzyjny błękit, opcjonalnie z pierścieniem `0 0 0 2px rgba(71,114,250,0.08)`.
+- **Focus:** linia przechodzi w `primary`, a pierścień używa `0 0 0 2px var(--color-primary-subtle)`.
 - **Error:** Przygaszony koral na obramowaniu i krótkim komunikacie.
 - **Disabled:** Popiel nieaktywny i brak kontrastowego hovera.
+
+### Textarea
+
+- **Contract:** ten sam label, hint, error, disabled i focus co `Input`, z wielowierszową kontrolką oraz caller-owned `rows`/wysokością zależną od zadania.
+- **Usage:** nowy formularz nie tworzy surowego wizualnego wrappera `<textarea>`; domenowe edytory o odmiennym zachowaniu wymagają jawnego wyjątku.
 
 ### Select
 
 - **Style:** dziedziczy Input, z chevronem po prawej i menu na warstwie Floating Menu.
 - **Density:** pola formularzowe mają 40px, a filtry w `ContentHeader` używają wariantu compact 28px.
-- **Menu:** Grafit panelu bocznego lub Grafit karty, promień 8px, mocna linia i kompaktowe wiersze 28px.
+- **Listbox:** powierzchnia `surface-1`, promień 8px i mocna linia; opcje mają minimum 38px z paddingiem 7px × 10px. To celowo wygodniejszy cel niż 28px w menu akcji; pozycjoner używa 44px wyłącznie jako bezpiecznego oszacowania wysokości.
 - **Selected:** Precyzyjny błękit w tekście lub subtelnym tle; nie oba w pełnym nasyceniu.
 
 ### Menu
@@ -451,10 +463,10 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 
 ### Modal
 
-- **Shape:** promień 16px, mocna linia i maksymalna wysokość około 88–90vh.
-- **Backdrop:** czarny overlay około 60–62%, opcjonalny blur 2px.
+- **Shape:** promień 16px, bez dodatkowej linii, z cieniem modalnym i maksymalną wysokością 88vh (92vh jako mobilny bottom sheet).
+- **Backdrop:** semantyczny `--color-backdrop`; w domyślnym Cobalt ma 72%, a w sześciu motywach dopasowuje kontrast do powierzchni. Brak dekoracyjnego bluru.
 - **Header:** oddzielony subtelną linią; tytuł, opcjonalny eyebrow i przycisk zamknięcia.
-- **Width:** 460–700px zależnie od zadania; 520px jest domyślnym punktem startowym.
+- **Width:** nazwane kroki `sm=500`, `md=680` (domyślny), `lg=780`, `xl=960`; `width` jest pojedynczym escape hatchem dla dialogu zachowującego się jak pełna strona.
 - **Behavior:** Escape, kliknięcie backdropu, `role="dialog"` i `aria-modal="true"`.
 
 ### Tabs
@@ -466,9 +478,20 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 
 ### Badge
 
-- **Style:** mała etykieta statusu z promieniem pill i paddingiem 4px × 8px.
-- **State:** kolor tekstu i lekkie tło wynikają z semantyki; kropka 6–8px może wzmacniać identyfikację.
+- **Style:** mała etykieta statusu z minimum 22px, promieniem pill i paddingiem 2px × 8px; wariant `plain` usuwa powierzchnię i padding.
+- **State:** kolor tekstu i lekkie tło wynikają z semantyki; opcjonalna kropka ma 6px.
 - **Copy:** jedno lub dwa krótkie słowa, bez zdań.
+
+### ProgressBar
+
+- **Contract:** bounded metric z `min`/`max`, rozmiarem `sm | md`, semantycznym tonem albo świadomie przekazanym kolorem danych oraz osobnym tekstem dla czytnika ekranu.
+- **Boundary:** nadaje się do postępu celu i prostych miar; nie zastępuje osi, siatki ani serii wykresu domenowego.
+
+### Toast
+
+- **Contract:** `ToastViewport` grupuje komunikaty przejściowe, a `Toast` zapewnia ton `neutral | success | warning | danger`, jedną opcjonalną akcję i jawne zamknięcie.
+- **Behavior:** timer domyślnie trwa 8 sekund i zatrzymuje się podczas hovera lub interakcji fokusem; `danger` używa asertywnego alertu, pozostałe tony uprzejmego statusu.
+- **Boundary:** długotrwały błąd należący do bieżącego widoku pozostaje widoczny przy jego `ContentHeader`; toast służy krótkiej informacji zwrotnej i możliwości cofnięcia.
 
 ### ContentHeader
 
@@ -482,21 +505,21 @@ Jedyny nagłówek ekranu. Nazywa bieżący widok i skupia wszystko, co go dotycz
 
 ### ModuleShell
 
-- **Structure:** opcjonalny `ContextSidebar`, elastyczny `ModuleMain` oraz opcjonalny `DetailPanel`.
-- **ContextSidebar:** 220px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
+- **Structure:** opcjonalny `ModuleSidebar`, elastyczny `ModuleMain` oraz opcjonalny `DetailPanel`.
+- **ModuleSidebar:** 220px, Grafit panelu bocznego, wyłącznie nawigacja po realnych podwidokach modułu.
 - **ContentHeader:** wspólny nagłówek aktualnego widoku z tytułem, opisem, metadanymi, lokalnymi akcjami, filtrami i opcjonalnym drugim wierszem; jego wewnętrzna rama jest identyczna z ramą treści.
-- **DetailPanel:** 408px, Grafit panelu bocznego; dockowany na szerokim ekranie i nakładany poniżej 1380px.
+- **DetailPanel:** 408px, powierzchnia sidebara; dockowany w rzeczywistym torze gridu powyżej 1380px, a przy 1380px i niżej modalny drawer z backdropem, Escape, pułapką fokusu i przywróceniem fokusu.
 - **Mobile:** sidebar kontekstowy znika, toolbar pokazuje Select podwidoku, a główna nawigacja przechodzi na dół ekranu.
 - **Calendar detail:** szczegóły wydarzenia są pływającym panelem zakotwiczonym przy wybranej komórce, nie centralnym modalem ani stałym prawym panelem. Kliknięcie poza panelem go zamyka; kliknięcie innego dnia najpierw zamyka bieżący panel, a dopiero kolejne kliknięcie tworzy zadanie. Picker daty otwiera się przy przycisku z ikoną kalendarza.
 
 ### ContextNavItem
 
-- **Contract:** wszystkie klikalne pozycje `ContextSidebar` używają jednego komponentu `ContextNavItem`.
-- **Typography:** 12px, waga 400; stan aktywny używa wagi 500. Lokalne nadpisania fontu są niedozwolone.
-- **Geometry:** minimum 34px wysokości, padding poziomy 12px, odstęp 8px i promień 8px.
+- **Contract:** wszystkie klikalne pozycje `ModuleSidebar` używają jednego komponentu `ContextNavItem`.
+- **Typography:** 13px, waga 400; stan aktywny używa wagi 500. Lokalne nadpisania fontu są niedozwolone.
+- **Geometry:** minimum `--row-height-compact` (domyślnie 36px), padding poziomy 12px, odstęp 8px i promień 8px.
 - **Icon:** pole 14px z ikoną 13px oraz `stroke-width` 1.7.
-- **Active:** `precision-blue-soft` jako tło i `precision-blue-text` dla tekstu; aktywność jest również oznaczona `aria-current="page"`.
-- **Meta:** licznik 9px w `DM Mono`; dziedziczy aktywny kolor tylko dla bieżącej pozycji.
+- **Active:** tonalna powierzchnia panelu, tekst secondary i jednopikselowy znacznik `theme-signature`; aktywność jest również oznaczona `aria-current="page"`.
+- **Meta:** licznik 11px w `DM Mono`; dziedziczy aktywny kolor tylko dla bieżącej pozycji.
 - **Grouping:** pierwsza grupa podstawowych widoków używa etykiety „Główne”; nazwa aktualnego widoku pozostaje pozycją nawigacji, nie nagłówkiem grupy.
 
 ### SectionHeader
@@ -506,7 +529,7 @@ Jedyny nagłówek ekranu. Nazywa bieżący widok i skupia wszystko, co go dotycz
 
 ### EmptyState
 
-- **Style:** minimum 208px wysokości, subtelne dashed border, promień 12px i wyśrodkowana treść.
+- **Style:** minimum 208px wysokości, subtelna ciągła linia z krótkim znacznikiem `theme-signature`, promień 12px i wyśrodkowana treść.
 - **Content:** krótki tytuł, jedno zdanie wyjaśnienia i opcjonalna pojedyncza akcja.
 - **Tone:** rzeczowy i pomocny; bez ilustracyjnego hałasu.
 
@@ -516,10 +539,19 @@ Jedyny nagłówek ekranu. Nazywa bieżący widok i skupia wszystko, co go dotycz
 
 Źródłem prawdy dla nowych zakładek są:
 
-- `src/styles/tokens.css` — kolory, typografia, spacing, promienie, wymiary, cienie i motion,
-- `src/app/ui/tokens.ts` — aliasy tokenów do istniejących stylów inline,
-- `src/app/ui/components/` — wspólne komponenty,
+- zatwierdzone decyzje produktowe i `docs/design-system-decisions.md`,
+- `src/styles/tokens.css` oraz `docs/design-system-exceptions.json` — kolory, typografia, spacing, promienie, wymiary, cienie, motion i jawne wyjątki,
+- `src/app/ui/breakpoints.ts` — kanoniczny manifest liczbowy breakpointów; `--bp-*` w CSS są mirrorami sprawdzanymi przez audyt,
+- `src/app/ui/components/` — wspólne komponenty i ich aktywne API,
 - `src/app/ui/index.ts` — jedyny publiczny punkt importu komponentów UI.
+
+`src/app/ui/tokens.ts` jest wyłącznie transportem wartości CSS do istniejących, zatwierdzonych stylów dynamicznych, nie osobnym poziomem pierwszeństwa. Eksportuje tylko `uiColors`, `uiLayers` i `uiShadows`, które mają produkcyjnych konsumentów; alias bez konsumenta jest usuwany, nie utrzymywany jako fantomowy kontrakt.
+
+Wyjątek dla inline style jest kontraktem właściwości, nie zgodą na cały plik. `allowedProperties` może przepuścić wyłącznie dynamiczną geometrię, kolor danych lub nazwany CSS custom property; literalny padding, font, radius, surface albo layout nadal jest długiem raportowanym przez audyt.
+
+### Density i motion
+
+Warianty `default`, `calm` i `compact` redefiniują wyłącznie trzy tokeny wysokości w `tokens.css`; moduły nie utrzymują własnej kopii skali density. Redukcja ruchu dla preferencji aplikacji skraca nazwane role motion przez `--motion-reduced`, wyłącza ruch ciągły/dekoracyjny i pozostawia natychmiastowy feedback zmiany stanu. Nowy ruch wybiera rolę `feedback`, `spatial` albo `decorative`; nie dodaje surowego czasu w feature CSS.
 
 Nowa zakładka nie definiuje własnego obiektu palety ani lokalnego odpowiednika komponentu z tej biblioteki. Jeżeli brakuje wariantu, najpierw rozszerza komponent wspólny, a potem używa go w ekranie. Szczegółowe przykłady i kontrakt migracyjny znajdują się w `src/app/ui/README.md`.
 
@@ -530,15 +562,15 @@ Nowa zakładka nie definiuje własnego obiektu palety ani lokalnego odpowiednika
 - Błąd zapisu lokalnego jest komunikowany przez `Badge tone="danger"` w slocie `meta` komponentu `ContentHeader` — w module, w którym użytkownik pracuje, a nie tylko globalnym toastem.
 - Główne moduły są ładowane jako osobne fragmenty tras; wspólny shell i tokeny pozostają w paczce bazowej.
 
-`text-muted` jest jaśniejszy od pozostałych szarości, ponieważ tekst pomocniczy 10–11px musi zachować co najmniej kontrast 4.5:1 także na powierzchni karty (`graphite-card`). Wartości są w normatywnym frontmatterze i nie powtarzamy ich tutaj. `text-disabled` pozostaje przeznaczony wyłącznie dla faktycznie nieaktywnych kontrolek.
+`text-muted` jest jaśniejszy od pozostałych szarości, ponieważ tekst pomocniczy 10–11px musi zachować co najmniej kontrast 4.5:1 także na powierzchni karty (`graphite-card`). Wartości normatywne są w `tokens.css`; frontmatter jest snapshotem domyślnego motywu i nie zastępuje sześciu theme scopes. `text-disabled` pozostaje przeznaczony wyłącznie dla faktycznie nieaktywnych kontrolek.
 
-Precyzyjny błękit ma trzy role kontrastowe: `precision-blue` pozostaje sygnałem marki i fokusu, `precision-blue-text` służy małemu tekstowi na graficie, a `precision-blue-strong` jest powierzchnią przycisku pod jasnym tekstem. Nie należy zamieniać tych ról miejscami.
+Akcent ma trzy role kontrastowe: `primary` pozostaje sygnałem marki i fokusu, `primary-text` służy małemu tekstowi na powierzchni, a `primary` jako tło przycisku jest zawsze parowane z `on-primary`. Aliasy `precision-*` zachowują kompatybilność, ale nie należy zamieniać tych ról miejscami ani zakładać jednego koloru tekstu we wszystkich motywach.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Select, Menu, Modal, Tabs, Badge, ContentHeader, SectionHeader, EmptyState, ModuleShell, ModuleSidebar oraz DetailPanel.
+- **Do** buduj nowe sekcje wyłącznie z tokenów i wzorców Button, Card, Input, Textarea, Select, Menu, Modal, Tabs, Badge, ProgressBar, Toast, ContentHeader, SectionHeader, EmptyState, ModuleShell, ModuleSidebar oraz DetailPanel.
 - **Do** używaj różnic tonu grafitu i obramowań jako podstawowego mechanizmu grupowania.
 - **Do** rezerwuj Precyzyjny błękit dla aktywnego wyboru, focusu i głównej akcji.
 - **Do** używaj DM Mono dla czasu, dat, wartości, liczników i procentów.

@@ -1,0 +1,13 @@
+{
+  "routeChecks": 95,
+  "routeErrors": 0,
+  "axeViolations": 12,
+  "domContrastFailures": 96,
+  "horizontalOverflow": [],
+  "h1Failures": [],
+  "unnamedInteractive": 95,
+  "undersized24": 603,
+  "runtimeErrors": 0,
+  "stateChecks": 10,
+  "keyboardChecks": 3
+}

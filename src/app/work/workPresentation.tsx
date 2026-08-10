@@ -254,9 +254,9 @@ export function taskDepth(task: WorkTask, tasks: WorkTask[]): number {
   return depth;
 }
 
-export function getInitialWorkLocation(): { view: WorkView; companyId: string; projectId: string; search: string } {
-  if (typeof window === "undefined") return { view: "today", companyId: "", projectId: "", search: "" };
-  const params = new URLSearchParams(window.location.search);
+export function getInitialWorkLocation(searchParams?: URLSearchParams): { view: WorkView; companyId: string; projectId: string; search: string } {
+  if (!searchParams && typeof window === "undefined") return { view: "today", companyId: "", projectId: "", search: "" };
+  const params = searchParams ?? new URLSearchParams(window.location.search);
   const requested = params.get("widok");
   const hasProject = Boolean(params.get("projekt"));
   const hasCompany = Boolean(params.get("firma"));

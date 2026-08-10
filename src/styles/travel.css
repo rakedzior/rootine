@@ -155,25 +155,6 @@
   padding: var(--space-xl) var(--space-3xl) var(--space-3xl);
 }
 
-.travel-trip-undo {
-  display: flex;
-  width: 100%;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-sm);
-  margin: 0;
-  padding: var(--space-xs) var(--space-md);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-secondary);
-}
-
-.travel-trip-undo > span {
-  min-width: 0;
-  flex: 1;
-}
-
 .travel-overview > .ui-empty-state {
   width: min(720px, 100%);
   min-height: 300px;

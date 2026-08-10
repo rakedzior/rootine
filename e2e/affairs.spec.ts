@@ -1,6 +1,25 @@
 import { test, expect, openRootineRoute } from "./fixtures";
 
 test.describe("affairs navigation", { tag: "@shared" }, () => {
+  test.describe("command deep links", () => {
+    const commands = [
+      { action: "nowa-sprawa", view: "all" },
+      { action: "nowa-platnosc", view: "payments" },
+      { action: "nowy-wydatek", view: "budget" },
+    ] as const;
+
+    for (const { action, view } of commands) {
+      test(`${action} opens its editor on the canonical ${view} view`, async ({ rootinePage: page }) => {
+        await openRootineRoute(page, `/sprawy?akcja=${action}&tytul=Test&q=preserved`);
+
+        await expect(page.getByRole("dialog")).toBeVisible();
+        await expect.poll(() => new URL(page.url()).searchParams.get("widok")).toBe(view);
+        await expect.poll(() => new URL(page.url()).searchParams.get("akcja")).toBeNull();
+        await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("preserved");
+      });
+    }
+  });
+
   test("desktop exposes all affairs workspaces in the sidebar", async ({ rootinePage: page, isMobile }) => {
     test.skip(isMobile, "Desktop-only sidebar coverage");
     await openRootineRoute(page, "/sprawy");

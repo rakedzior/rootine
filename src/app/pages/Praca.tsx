@@ -17,7 +17,6 @@ import {
   CircleAlert,
   CircleDot,
   Clock3,
-  CornerDownRight,
   Flag,
   FolderKanban,
   Inbox,
@@ -30,9 +29,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { flushLocalWorkspaceWrites, subscribeToLocalWorkspace } from "../data/localRepository";
 import { recordActivity } from "../experience/activityLog";
 import {
   createWorkId,
@@ -49,12 +48,12 @@ import {
 import {
   Badge,
   Button,
+  ConfirmDialog,
   ContentHeader,
   ContextNavGroup,
   ContextNavItem,
   ModuleSidebar,
   DatePicker,
-  DetailPanel,
   EmptyState,
   Input,
   ListRow,
@@ -66,10 +65,15 @@ import {
   ModuleShell,
   SectionSurface,
   Select,
+  Textarea,
+  Toast,
+  ToastViewport,
 } from "../ui";
+import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { TaskInlineMenu, WorkCompanyActionsMenu, WorkProjectActionsMenu } from "./PracaMenus";
 import { WorkMobileNavigation } from "../work/WorkMobileNavigation";
 import { WorkQuickEntry } from "../work/WorkQuickEntry";
+import { WorkDetailPanel } from "../work/WorkDetailPanel";
 import "../../styles/work.css";
 import {
   COMPANY_COLORS,
@@ -82,14 +86,12 @@ import {
   TASK_STATUS_ORDER,
   addDays,
   collectTaskBranch,
-  collectTaskDescendantRows,
   formatDate,
   formatDateRange,
   formatLongDate,
   formatProjectCount,
   formatOpenTaskCount,
   formatProjectProgress,
-  formatSubtaskProgress,
   subtaskCountLabel,
   formatTaskCount,
   getInitialWorkLocation,
@@ -120,7 +122,7 @@ import {
 
 export default function Praca() {
   const [commandParams, setCommandParams] = useSearchParams();
-  const [initialLocation] = useState(getInitialWorkLocation);
+  const [initialLocation] = useState(() => getInitialWorkLocation(commandParams));
   const [workspace, setWorkspace] = useState(loadWorkWorkspace);
   const [view, setView] = useState<WorkView>(initialLocation.view);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialLocation.companyId);
@@ -162,29 +164,69 @@ export default function Praca() {
   });
   const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
   const [, setDeleteUndo] = useState<{ workspace: typeof workspace; message: string } | null>(null);
-  const [discardEditorOpen, setDiscardEditorOpen] = useState(false);
-  const [editorInitialDraft, setEditorInitialDraft] = useState<EditorDraft | null>(null);
+  const [editorInitialDraft, setEditorInitialDraft] = useState<EditorDraft>(EMPTY_DRAFT);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
   const saveNoticeTimerRef = useRef<number | null>(null);
   const saveTimerRef = useRef<number | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
+  const latestWorkspaceRef = useRef(workspace);
+  const pendingWorkspaceSaveRef = useRef(false);
+  const pendingUrlLocationRef = useRef<string | null>(null);
+  const draftSnapshotRef = useRef(draft);
+  latestWorkspaceRef.current = workspace;
+  draftSnapshotRef.current = draft;
+  const editorDraftContext = editor?.mode === "add" && editor.kind !== "company"
+    ? encodeURIComponent(JSON.stringify(editor.kind === "project"
+      ? [editorInitialDraft.companyId]
+      : [editorInitialDraft.projectId, editorInitialDraft.parentId]))
+    : "";
+  const editorDraftKey = editor
+    ? `rootine.work-editor-draft.${editor.kind}.${editor.mode}.${editor.id ?? `new${editorDraftContext ? `.${editorDraftContext}` : ""}`}`
+    : "";
+
+  const persistPendingWorkspace = useCallback((updateUi: boolean, flushRepository: boolean) => {
+    if (!pendingWorkspaceSaveRef.current) {
+      if (flushRepository) void flushLocalWorkspaceWrites();
+      return;
+    }
+
+    const saved = saveWorkWorkspace(latestWorkspaceRef.current);
+    if (saved) pendingWorkspaceSaveRef.current = false;
+    if (flushRepository) void flushLocalWorkspaceWrites();
+    if (!updateUi) return;
+
+    setStorageError(!saved);
+    setSaveStatus(saved ? "saved" : "error");
+    if (saved) {
+      if (saveNoticeTimerRef.current !== null) window.clearTimeout(saveNoticeTimerRef.current);
+      saveNoticeTimerRef.current = window.setTimeout(() => setSaveStatus("idle"), 1800);
+    }
+  }, []);
 
   useEffect(() => {
+    pendingWorkspaceSaveRef.current = true;
     setSaveStatus("saving");
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
-      const saved = saveWorkWorkspace(workspace);
-      setStorageError(!saved);
-      setSaveStatus(saved ? "saved" : "error");
-      if (saved) {
-        if (saveNoticeTimerRef.current) window.clearTimeout(saveNoticeTimerRef.current);
-        saveNoticeTimerRef.current = window.setTimeout(() => setSaveStatus("idle"), 1800);
-      }
+      saveTimerRef.current = null;
+      persistPendingWorkspace(true, false);
     }, 260);
     return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
     };
-  }, [workspace]);
+  }, [persistPendingWorkspace, workspace]);
+
+  useEffect(() => {
+    if (!editorDraftKey) return;
+    const baseline = draftSnapshotRef.current;
+    setEditorInitialDraft(baseline);
+    const recovered = readSessionDraft<Partial<EditorDraft>>(editorDraftKey);
+    if (recovered && typeof recovered === "object" && !Array.isArray(recovered)) {
+      setDraft({ ...baseline, ...recovered });
+    }
+  }, [editorDraftKey]);
 
   useEffect(() => {
     try {
@@ -198,11 +240,28 @@ export default function Praca() {
     setWorkspace(loadWorkWorkspace());
   }), []);
 
-  useEffect(() => () => {
-    if (saveNoticeTimerRef.current) window.clearTimeout(saveNoticeTimerRef.current);
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-  }, []);
+  useEffect(() => {
+    const flushPendingSave = (updateUi: boolean) => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      persistPendingWorkspace(updateUi, true);
+    };
+    const onPageHide = () => flushPendingSave(false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushPendingSave(true);
+    };
+
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flushPendingSave(false);
+      if (saveNoticeTimerRef.current !== null) window.clearTimeout(saveNoticeTimerRef.current);
+    };
+  }, [persistPendingWorkspace]);
 
   const showSaveNotice = () => {
     setSaveStatus("saving");
@@ -214,46 +273,72 @@ export default function Praca() {
   };
 
   const showToast = (message: string, undo?: () => void) => {
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     setToast({ message, undo });
-    toastTimerRef.current = window.setTimeout(() => {
-      setToast(null);
-      setDeleteUndo(null);
-    }, 6000);
   };
 
-  useEffect(() => {
-    const syncFromUrl = () => {
-      const next = getInitialWorkLocation();
-      setView(next.view);
-      setSelectedCompanyId(next.companyId);
-      setSelectedProjectId(next.projectId);
-      setSearch(next.search);
-    };
-    window.addEventListener("popstate", syncFromUrl);
-    return () => window.removeEventListener("popstate", syncFromUrl);
+  const dismissToast = useCallback(() => {
+    setToast(null);
+    setDeleteUndo(null);
   }, []);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
-    if (view === "today") url.searchParams.delete("widok");
-    else url.searchParams.set("widok", view === "untimed" ? "bezterminu" : view);
-    if (selectedCompanyId) url.searchParams.set("firma", selectedCompanyId);
-    else url.searchParams.delete("firma");
-    if (selectedProjectId) url.searchParams.set("projekt", selectedProjectId);
-    else url.searchParams.delete("projekt");
-    if (search.trim()) url.searchParams.set("q", search);
-    else url.searchParams.delete("q");
-    if (url.href !== window.location.href) window.history.replaceState({}, "", url);
-  }, [search, selectedCompanyId, selectedProjectId, view]);
+    const next = getInitialWorkLocation(commandParams);
+    pendingUrlLocationRef.current = JSON.stringify(next);
+    setView(next.view);
+    setSelectedCompanyId(next.companyId);
+    setSelectedProjectId(next.projectId);
+    setSearch(next.search);
+  }, [commandParams]);
 
   useEffect(() => {
-    if (selectedCompanyId && !workspace.companies.some((company) => company.id === selectedCompanyId)) {
-      setSelectedCompanyId("");
+    const localLocation = JSON.stringify({ view, companyId: selectedCompanyId, projectId: selectedProjectId, search });
+    if (pendingUrlLocationRef.current && pendingUrlLocationRef.current !== localLocation) return;
+    pendingUrlLocationRef.current = null;
+    const next = new URLSearchParams(commandParams);
+    if (view === "today") next.delete("widok");
+    else next.set("widok", view === "untimed" ? "bezterminu" : view);
+    if (selectedCompanyId) next.set("firma", selectedCompanyId);
+    else next.delete("firma");
+    if (selectedProjectId) next.set("projekt", selectedProjectId);
+    else next.delete("projekt");
+    if (search.trim()) next.set("q", search);
+    else next.delete("q");
+    if (next.toString() !== commandParams.toString()) setCommandParams(next, { replace: true });
+  }, [commandParams, search, selectedCompanyId, selectedProjectId, setCommandParams, view]);
+
+  useEffect(() => {
+    const requestedCompanyExists = selectedCompanyId
+      ? workspace.companies.some((company) => company.id === selectedCompanyId)
+      : false;
+    const requestedProject = selectedProjectId
+      ? workspace.projects.find((project) => project.id === selectedProjectId)
+      : undefined;
+
+    if (selectedProjectId) {
+      const projectCompanyExists = requestedProject
+        ? workspace.companies.some((company) => company.id === requestedProject.companyId)
+        : false;
+      if (requestedProject && projectCompanyExists) {
+        if (selectedCompanyId !== requestedProject.companyId) setSelectedCompanyId(requestedProject.companyId);
+        if (view !== "project") setView("project");
+        return;
+      }
+
       setSelectedProjectId("");
+      if (requestedCompanyExists) {
+        setView("company");
+      } else {
+        setSelectedCompanyId("");
+        setView("today");
+      }
+      return;
+    }
+
+    if (selectedCompanyId && !requestedCompanyExists) {
+      setSelectedCompanyId("");
       setView("today");
     }
-  }, [selectedCompanyId, workspace.companies]);
+  }, [selectedCompanyId, selectedProjectId, view, workspace.companies, workspace.projects]);
 
   useEffect(() => {
     setDetailSubtasksExpanded(false);
@@ -363,15 +448,15 @@ export default function Praca() {
     setAdvancedFiltersOpen(false);
     setExpandedCompanyProjectIds(new Set());
     setDetailTaskId(null);
-    const url = new URL(window.location.href);
-    if (nextView === "today") url.searchParams.delete("widok");
-    else url.searchParams.set("widok", nextView === "untimed" ? "bezterminu" : nextView);
-    if (companyId) url.searchParams.set("firma", companyId);
-    else url.searchParams.delete("firma");
-    if (projectId) url.searchParams.set("projekt", projectId);
-    else url.searchParams.delete("projekt");
-    url.searchParams.delete("q");
-    window.history.pushState({}, "", url);
+    const next = new URLSearchParams(commandParams);
+    if (nextView === "today") next.delete("widok");
+    else next.set("widok", nextView === "untimed" ? "bezterminu" : nextView);
+    if (companyId) next.set("firma", companyId);
+    else next.delete("firma");
+    if (projectId) next.set("projekt", projectId);
+    else next.delete("projekt");
+    next.delete("q");
+    setCommandParams(next);
   };
 
   const openCompanyEditor = (company?: WorkCompany) => {
@@ -475,16 +560,19 @@ export default function Praca() {
     setCommandParams(next, { replace: true });
   }, [commandParams, selectedProjectId, setCommandParams]);
 
-  const closeEditor = (force = false) => {
-    if (!force && editor && editorInitialDraft && JSON.stringify(draft) !== JSON.stringify(editorInitialDraft)) {
-      setDiscardEditorOpen(true);
-      return;
-    }
+  const closeEditor = useCallback(() => {
     setEditor(null);
     setEditorError("");
-    setEditorInitialDraft(null);
-    setDiscardEditorOpen(false);
-  };
+    setEditorInitialDraft(EMPTY_DRAFT);
+  }, []);
+
+  const editorDraftProtection = useDraftProtection({
+    active: Boolean(editor),
+    isDirty: Boolean(editor) && JSON.stringify(draft) !== JSON.stringify(editorInitialDraft),
+    draft,
+    storageKey: editorDraftKey,
+    onDiscard: closeEditor,
+  });
 
   const submitEditor = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -607,7 +695,8 @@ export default function Praca() {
     }
 
     showSaveNotice();
-    closeEditor(true);
+    editorDraftProtection.clearDraft();
+    closeEditor();
   };
 
   const confirmDelete = () => {
@@ -683,6 +772,15 @@ export default function Praca() {
       tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task),
     }));
     showSaveNotice();
+  };
+
+  const updateTaskNote = (taskId: string, note: string) => {
+    setWorkspace((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => task.id === taskId
+        ? { ...task, note, updatedAt: new Date().toISOString() }
+        : task),
+    }));
   };
 
   const updateProjectValues = (projectId: string, patch: Partial<Pick<WorkProject, "status" | "endDate">>) => {
@@ -789,8 +887,6 @@ export default function Praca() {
   };
 
   const detailTask = detailTaskId ? workspace.tasks.find((task) => task.id === detailTaskId) : undefined;
-  const detailTaskProject = detailTask ? projectById.get(detailTask.projectId) : undefined;
-  const detailTaskCompany = detailTaskProject ? companyById.get(detailTaskProject.companyId) : undefined;
 
   const editorTitle = editor?.kind === "company"
     ? `${editor.mode === "edit" ? "Edytuj" : "Nowa"} firma`
@@ -826,22 +922,6 @@ export default function Praca() {
       })),
   ];
 
-  const detailProjectOptions = [
-    { value: "", label: "Nieprzypisane" },
-    ...workspace.projects
-      .filter((project) => project.status !== "completed")
-      .filter((project) => !detailTaskProject || project.companyId === detailTaskProject.companyId)
-      .map((project) => ({ value: project.id, label: project.name })),
-  ];
-  const detailParentOptions = detailTask
-    ? [
-        { value: "", label: "Brak — poziom główny" },
-        ...workspace.tasks
-          .filter((task) => task.projectId === detailTask.projectId && task.id !== detailTask.id && !collectTaskBranch(workspace.tasks, detailTask.id).has(task.id))
-          .map((task) => ({ value: task.id, label: `${"— ".repeat(Math.min(taskDepth(task, workspace.tasks), 4))}${task.title}` })),
-      ]
-    : [];
-
   const taskContext = (task: WorkTask) => {
     const project = projectById.get(task.projectId);
     const company = project ? companyById.get(project.companyId) : undefined;
@@ -861,17 +941,6 @@ export default function Praca() {
       parentLabel: parentChain.join(" › "),
     };
   };
-
-  const detailTaskContext = detailTask ? taskContext(detailTask) : undefined;
-  const detailTaskParent = detailTask?.parentId ? taskById.get(detailTask.parentId) : undefined;
-  const detailTaskDescendantRows = detailTask
-    ? collectTaskDescendantRows(workspace.tasks, detailTask.id)
-    : [];
-  const detailTaskDescendants = detailTaskDescendantRows.map(({ task }) => task);
-  const detailTaskCompletedDescendants = detailTaskDescendants.filter((task) => getTaskStatus(task) === "completed").length;
-  const detailTaskProgress = detailTaskDescendants.length
-    ? Math.round((detailTaskCompletedDescendants / detailTaskDescendants.length) * 100)
-    : null;
 
   const taskMatches = (task: WorkTask, includeCompleted = true) => currentTaskMatches(task, includeCompleted);
 
@@ -1623,96 +1692,22 @@ export default function Praca() {
       pageWidth="wide"
       contextSidebar={sidebar}
       detailPanel={detailTask ? (
-        <DetailPanel label="Szczegóły zadania" onDismiss={() => setDetailTaskId(null)} className="work-detail-panel">
-          <header className="work-detail-header"><div><h2>{detailTask.title}</h2></div><Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setDetailTaskId(null)}><X size={13} /></Button></header>
-          <div className="work-detail-body">
-            <div className="work-detail-context">
-              <span>{detailTaskCompany?.name ?? "Nieprzypisane"}</span>
-              <strong>{detailTaskProject?.name ?? "Bez projektu"}</strong>
-              {detailTaskContext?.parentLabel && (
-                <span className="work-detail-context__parent"><CornerDownRight size={13} aria-hidden="true" />{detailTaskContext.parentLabel}</span>
-              )}
-              {detailTaskProject && (
-                <Button
-                  className="work-detail-project-link"
-                  variant="ghost"
-                  size="sm"
-                  fullWidth
-                  leadingIcon={<FolderKanban size={13} aria-hidden="true" />}
-                  trailingIcon={<ChevronRight size={13} aria-hidden="true" />}
-                  onClick={() => navigate("project", detailTaskProject.companyId, detailTaskProject.id)}
-                >
-                  Otwórz projekt
-                </Button>
-              )}
-            </div>
-            <div className="work-detail-facts" aria-label="Informacje o zadaniu">
-              <div><span>Typ</span><strong>{detailTaskParent ? "Podzadanie" : "Zadanie główne"}</strong></div>
-              <div><span>Utworzono</span><strong>{formatDate(detailTask.createdAt.slice(0, 10))}</strong></div>
-            </div>
-            <div className="work-detail-fields">
-              <Select label="Firma" value={detailTaskProject?.companyId ?? ""} options={[{ value: "", label: "Nieprzypisana" }, ...workspace.companies.filter((company) => !company.archived).map((company) => ({ value: company.id, label: company.name }))]} onChange={(event) => {
-                const companyId = event.target.value;
-                const nextProject = workspace.projects.find((project) => project.companyId === companyId && project.status !== "completed");
-                updateTaskValues(detailTask.id, { projectId: nextProject?.id ?? "", parentId: null });
-              }} />
-              <Select label="Projekt" value={detailTask.projectId} options={detailProjectOptions} onChange={(event) => updateTaskValues(detailTask.id, { projectId: event.target.value, parentId: null })} />
-              <Select label="Zadanie nadrzędne" value={detailTask.parentId ?? ""} options={detailParentOptions} disabled={!detailTask.projectId} onChange={(event) => updateTaskValues(detailTask.id, { parentId: event.target.value || null })} />
-              <Select label="Status" value={getTaskStatus(detailTask)} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => applyTaskStatuses([detailTask.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
-              <Select label="Priorytet" value={detailTask.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => updateTaskValues(detailTask.id, { priority: event.target.value as WorkTaskPriority })} />
-              <DatePicker  label="Termin" value={detailTask.dueDate} onChange={(value) => updateTaskValues(detailTask.id, { dueDate: value })} />
-              <label className="ui-field"><span className="ui-field__label">Notatka</span><textarea className="ui-field__control work-detail-note" value={detailTask.note ?? ""} placeholder="Krótka notatka" onChange={(event) => { setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === detailTask.id ? { ...task, note: event.target.value, updatedAt: new Date().toISOString() } : task) })); }} /></label>
-            </div>
-            {detailTask && (
-              <section className="work-detail-subtasks" aria-label="Podzadania">
-                <button
-                  type="button"
-                  className="work-detail-subtasks__header"
-                  aria-expanded={detailSubtasksExpanded}
-                  aria-controls="work-detail-subtask-list"
-                  onClick={() => setDetailSubtasksExpanded((current) => !current)}
-                >
-                  <span className="work-detail-subtasks__header-copy"><span>Podzadania</span><strong>{formatSubtaskProgress(detailTaskCompletedDescendants, detailTaskDescendants.length)}</strong></span>
-                  <span className="work-detail-subtasks__header-side"><span>{detailTaskProgress ?? 0}%</span>{detailSubtasksExpanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}</span>
-                </button>
-                <div className="work-detail-subtasks__progress" role="progressbar" aria-label="Postęp podzadań" aria-valuemin={0} aria-valuemax={100} aria-valuenow={detailTaskProgress ?? 0}>
-                  <span style={{ "--work-subtask-progress": (detailTaskProgress ?? 0) / 100 } as CSSProperties} />
-                </div>
-                <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor(undefined, detailTask.id)}>Dodaj podzadanie</Button>
-                <div id="work-detail-subtask-list">
-                  {detailSubtasksExpanded && detailTaskDescendantRows.length > 0 && (
-                    <>
-                      <div className="work-detail-subtask-list">
-                        {detailTaskDescendantRows.map(({ task: child, depth }) => {
-                          const childStatus = getTaskStatus(child);
-                          const childDate = child.dueDate;
-                          return (
-                            <div
-                              key={child.id}
-                              className="work-detail-subtask"
-                              style={{ "--work-subtask-depth": depth } as CSSProperties}
-                            >
-                              <button type="button" className="work-detail-subtask__open" title={child.title} onClick={() => toggleTaskDetails(child.id)}><span className={`work-detail-subtask__status ${taskStatusTone(childStatus)}`}>{taskStatusIcon(childStatus)}</span><span className="work-detail-subtask__title">{child.title}</span></button>
-                              <span className={`work-detail-subtask__label ${taskStatusTone(childStatus)}`}>{TASK_STATUS_LABELS[childStatus]}</span>
-                              <span className={`work-detail-subtask__date ${childDate ? "is-set" : "is-empty"}`}>{childDate ? formatDate(childDate) : "Bez terminu"}</span>
-                              <button type="button" className={`work-detail-subtask__quick-check ${childStatus === "completed" ? "is-completed" : ""}`} aria-label={childStatus === "completed" ? `Przywróć „${child.title}”` : `Ukończ „${child.title}”`} onClick={() => toggleTask(child)}>{childStatus === "completed" && <Check size={11} />}</button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </section>
-            )}
-          </div>
-          <footer className="work-detail-footer">
-            <span className={`work-detail-save-status ${saveStatus === "saved" ? "is-saved" : saveStatus === "saving" ? "is-saving" : ""}`} role="status" aria-live="polite">
-               {saveStatus === "saving" ? "Zapisywanie…" : saveStatus === "saved" ? <><Check size={13} aria-hidden="true" /> Zapisano</> : saveStatus === "error" ? "Błąd zapisu" : "Autozapis lokalny"}
-            </span>
-            <Button className="work-detail-delete" variant="danger" leadingIcon={<Trash2 size={13} />} onClick={() => setDeleteState({ kind: "task", id: detailTask.id, name: detailTask.title })}>Usuń</Button>
-          </footer>
-        </DetailPanel>
+        <WorkDetailPanel
+          task={detailTask}
+          workspace={workspace}
+          expanded={detailSubtasksExpanded}
+          saveStatus={saveStatus}
+          onDismiss={() => setDetailTaskId(null)}
+          onNavigateProject={(companyId, projectId) => navigate("project", companyId, projectId)}
+          onUpdateTask={updateTaskValues}
+          onUpdateNote={updateTaskNote}
+          onApplyStatus={applyTaskStatuses}
+          onToggleExpanded={() => setDetailSubtasksExpanded((current) => !current)}
+          onAddSubtask={(taskId) => openTaskEditor(undefined, taskId)}
+          onOpenTask={toggleTaskDetails}
+          onToggleTask={toggleTask}
+          onDelete={() => setDeleteState({ kind: "task", id: detailTask.id, name: detailTask.title })}
+        />
       ) : undefined}
     >
       <ModuleMain>
@@ -1722,11 +1717,11 @@ export default function Praca() {
       </ModuleMain>
 
       {editor && (
-        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} onClose={closeEditor} footer={<><Button variant="ghost" onClick={() => closeEditor()}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && editorInitialDraft && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
+        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} onClose={editorDraftProtection.requestClose} footer={<><Button variant="ghost" onClick={editorDraftProtection.requestClose}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
           <form id="work-editor-form" className="work-editor-form" onSubmit={submitEditor}>
             <Input label={editor.kind === "task" ? "Nazwa zadania" : "Nazwa"} value={draft.name} error={editorError} autoFocus placeholder={editor.kind === "company" ? "np. Studio North" : editor.kind === "project" ? "np. Nowa strona" : "Co trzeba zrobić?"} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); if (editorError) setEditorError(""); }} />
 
-             {editor.kind === "company" && <><label className="ui-field"><span className="ui-field__label">Opis <span className="work-optional">opcjonalnie</span></span><textarea className="ui-field__control work-textarea" value={draft.description} placeholder="Czym zajmuje się ta firma?" onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /></label><fieldset className="work-color-field"><legend>Kolor firmy</legend><div>{COMPANY_COLORS.map((color) => <button key={color} type="button" className={draft.color === color ? "is-selected" : ""} style={{ background: color }} aria-label={`Wybierz kolor ${color}`} title={`Kolor firmowy ${color}`} aria-pressed={draft.color === color} onClick={() => setDraft((current) => ({ ...current, color }))}>{draft.color === color && <Check size={13} />}</button>)}</div></fieldset></>}
+             {editor.kind === "company" && <><Textarea label="Opis (opcjonalnie)" className="work-textarea" value={draft.description} placeholder="Czym zajmuje się ta firma?" onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /><fieldset className="work-color-field"><legend>Kolor firmy</legend><div>{COMPANY_COLORS.map((color) => <button key={color} type="button" className={draft.color === color ? "is-selected" : ""} style={{ background: color }} aria-label={`Wybierz kolor ${color}`} title={`Kolor firmowy ${color}`} aria-pressed={draft.color === color} onClick={() => setDraft((current) => ({ ...current, color }))}>{draft.color === color && <Check size={13} />}</button>)}</div></fieldset></>}
 
             {editor.kind === "project" && (
               <>
@@ -1737,11 +1732,14 @@ export default function Praca() {
                   options={workspace.companies.map((company) => ({ value: company.id, label: company.name }))}
                   onChange={(event) => setDraft((current) => ({ ...current, companyId: event.target.value }))}
                 />
-                <label className="ui-field">
-                  <span className="ui-field__label">Opis <span className="work-optional">opcjonalnie</span></span>
-                  <textarea className="ui-field__control work-textarea" value={draft.description} placeholder="Krótki opis widoczny na liście projektów" onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} />
-                  <p className="ui-field__hint">Krótki opis widoczny na liście projektów.</p>
-                </label>
+                <Textarea
+                  label="Opis (opcjonalnie)"
+                  hint="Krótki opis widoczny na liście projektów."
+                  className="work-textarea"
+                  value={draft.description}
+                  placeholder="Krótki opis widoczny na liście projektów"
+                  onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                />
                 <Select
                   label="Status"
                   value={draft.projectStatus}
@@ -1756,25 +1754,28 @@ export default function Praca() {
                 </div>
                 </div>
                 <div className="work-editor-section"><h3>Szczegóły</h3>
-                <label className="ui-field">
-                  <span className="ui-field__label">Notatka wewnętrzna <span className="work-optional">opcjonalnie</span></span>
-                  <textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Informacje niewidoczne w skróconym widoku" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} />
-                  <p className="ui-field__hint">Dodatkowy kontekst dostępny po otwarciu projektu.</p>
-                </label>
+                <Textarea
+                  label="Notatka wewnętrzna (opcjonalnie)"
+                  hint="Dodatkowy kontekst dostępny po otwarciu projektu."
+                  className="work-textarea"
+                  value={draft.note}
+                  placeholder="Informacje niewidoczne w skróconym widoku"
+                  onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+                />
                 </div>
               </>
             )}
 
-            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><DatePicker  label="Termin" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} /></div><label className="ui-field"><span className="ui-field__label">Notatka <span className="work-optional">opcjonalnie</span></span><textarea className="ui-field__control work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></label></>}
+            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><DatePicker  label="Termin" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} /></div><Textarea label="Notatka (opcjonalnie)" className="work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></>}
           </form>
         </Modal>
       )}
 
-      {discardEditorOpen && <Modal title="Odrzucić niezapisane zmiany?" description="Wprowadzone zmiany zostaną utracone." onClose={() => setDiscardEditorOpen(false)} footer={<><Button variant="ghost" onClick={() => setDiscardEditorOpen(false)}>Wróć do formularza</Button><Button variant="danger" onClick={() => closeEditor(true)}>Odrzuć zmiany</Button></>}><p className="work-delete-note">Możesz wrócić do formularza i zapisać zmiany.</p></Modal>}
+      {editorDraftProtection.promptOpen && <ConfirmDialog title="Odrzucić niezapisane zmiany?" confirmLabel="Odrzuć zmiany" cancelLabel="Kontynuuj edycję" onCancel={editorDraftProtection.keepEditing} onConfirm={editorDraftProtection.confirmDiscard}><p className="work-delete-note">Szkic pozostaje w tej karcie, dopóki go nie zapiszesz albo świadomie odrzucisz.</p></ConfirmDialog>}
 
       {deleteState && <Modal title={`Usuń ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"}?`} description={deleteState.kind === "company" ? `Firma „${deleteState.name}” ma ${workspace.projects.filter((project) => project.companyId === deleteState.id).length} projektów i ${workspace.tasks.filter((task) => workspace.projects.some((project) => project.id === task.projectId && project.companyId === deleteState.id)).length} zadań. Wszystkie zostaną usunięte.` : deleteState.kind === "project" ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.` : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`} onClose={() => setDeleteState(null)} footer={<><Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button><Button variant="danger" onClick={confirmDelete}>Usuń</Button></>}><p className="work-delete-note">Archiwizacja jest bezpieczniejsza, jeśli chcesz zachować historię.</p></Modal>}
 
-      {toast && <div className="work-toast" role="status" aria-live="polite"><span>{toast.message}</span>{toast.undo && <Button variant="quiet" size="sm" onClick={toast.undo}>Cofnij</Button>}<button type="button" aria-label="Zamknij komunikat" onClick={() => { setToast(null); setDeleteUndo(null); }}><X size={13} /></button></div>}
+      {toast && <ToastViewport><Toast durationMs={6_000} actionLabel={toast.undo ? "Cofnij" : undefined} onAction={toast.undo} onDismiss={dismissToast}>{toast.message}</Toast></ToastViewport>}
     </ModuleShell>
   );
 }

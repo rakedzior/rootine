@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Check, Play, Plus, Undo2 } from "lucide-react";
+import { Check, Play, Plus } from "lucide-react";
 import { calendarDaysBetween } from "../data/localDate";
 import {
   listLocalPersistenceIssues,
@@ -79,11 +79,14 @@ import { recordActivity } from "../experience/activityLog";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   ContentHeader,
   Modal,
   ModuleMain,
   ModuleShell,
   Select,
+  Toast,
+  ToastViewport,
 } from "../ui";
 import "../../styles/sport.css";
 
@@ -117,6 +120,11 @@ interface WorkoutDeleteUndo {
   index: number;
   persisted: boolean;
 }
+
+type SportConfirmation =
+  | { kind: "copy-week"; fromWeek: number; toWeek: number }
+  | { kind: "delete-exercise"; exercise: Exercise; usage: number }
+  | { kind: "delete-template"; template: WorkoutTemplate };
 
 const SPORT_CYCLE_DRAFT_KEY = "rootine.sport-cycle-draft.v1";
 
@@ -261,7 +269,9 @@ export default function Sport() {
   const [storageFailed, setStorageFailed] = useState(false);
   const [workoutDeleteState, setWorkoutDeleteState] = useState<WorkoutDeleteState | null>(null);
   const [workoutDeleteUndo, setWorkoutDeleteUndo] = useState<WorkoutDeleteUndo | null>(null);
+  const [sportConfirmation, setSportConfirmation] = useState<SportConfirmation | null>(null);
   const activeSessionEditRef = useRef(false);
+  const confirmationReturnFocusRef = useRef<HTMLElement | null>(null);
   const persistenceQueueRef = useRef<SportPersistenceQueue<SportPlannerState> | null>(null);
 
   useEffect(() => {
@@ -407,17 +417,23 @@ export default function Sport() {
     if (url.href !== window.location.href) window.history.replaceState({}, "", url);
   }, [activeWeek, view]);
 
-  useEffect(() => {
-    if (!moveUndo) return;
-    const timer = window.setTimeout(() => setMoveUndo(null), 8000);
-    return () => window.clearTimeout(timer);
-  }, [moveUndo]);
+  const requestSportConfirmation = useCallback((
+    confirmation: SportConfirmation,
+    returnFocusTarget?: HTMLElement | null,
+  ) => {
+    confirmationReturnFocusRef.current = returnFocusTarget ?? (
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    );
+    setSportConfirmation(confirmation);
+  }, []);
 
-  useEffect(() => {
-    if (!autosaveNotice) return;
-    const timer = window.setTimeout(() => setAutosaveNotice(""), 4000);
-    return () => window.clearTimeout(timer);
-  }, [autosaveNotice]);
+  const cancelSportConfirmation = useCallback(() => {
+    setSportConfirmation(null);
+  }, []);
+
+  const dismissMoveUndo = useCallback(() => setMoveUndo(null), []);
+  const dismissWorkoutDeleteUndo = useCallback(() => setWorkoutDeleteUndo(null), []);
+  const dismissAutosaveNotice = useCallback(() => setAutosaveNotice(""), []);
 
   const closeDialogs = useCallback(() => {
     setDialog(null);
@@ -670,16 +686,9 @@ export default function Sport() {
     setPlannerState(withActiveCycle(prepared.state, updatedCycle));
   };
 
-  const copyWeek = (fromWeek: number, toWeek: number) => {
+  const applyWeekCopy = (fromWeek: number, toWeek: number) => {
     if (!cycleDraft || fromWeek === toWeek) return;
     const source = cycleDraft.workouts.filter((workout) => workout.week === fromWeek);
-    if (!source.length) {
-      setAutosaveNotice("Nie można skopiować pustego tygodnia.");
-      return;
-    }
-    const target = cycleDraft.workouts.filter((workout) => workout.week === toWeek);
-    if (target.some((workout) => workout.status === "completed") && typeof window !== "undefined"
-      && !window.confirm("Tydzień docelowy zawiera wykonane treningi. Zastąpić tylko przyszłe jednostki?")) return;
     const now = new Date().toISOString();
     const copied = source.map((workout) => ({
       ...workout,
@@ -701,6 +710,21 @@ export default function Sport() {
     setCycleDraft(nextCycle);
     setActiveWeek(toWeek);
     setAutosaveNotice(`Skopiowano tydzień ${fromWeek} do tygodnia ${toWeek}.`);
+  };
+
+  const copyWeek = (fromWeek: number, toWeek: number) => {
+    if (!cycleDraft || fromWeek === toWeek) return;
+    const source = cycleDraft.workouts.filter((workout) => workout.week === fromWeek);
+    if (!source.length) {
+      setAutosaveNotice("Nie można skopiować pustego tygodnia.");
+      return;
+    }
+    const target = cycleDraft.workouts.filter((workout) => workout.week === toWeek);
+    if (target.some((workout) => workout.status === "completed")) {
+      requestSportConfirmation({ kind: "copy-week", fromWeek, toWeek });
+      return;
+    }
+    applyWeekCopy(fromWeek, toWeek);
   };
 
   const undoMove = () => {
@@ -885,6 +909,15 @@ export default function Sport() {
     setAutosaveNotice("Utworzono kopię szablonu.");
   };
 
+  const applyTemplateDelete = (template: WorkoutTemplate) => {
+    setPlannerState((current) => ({
+      ...current,
+      templates: current.templates.filter((item) => item.id !== template.id),
+    }));
+    setSelectedTemplateId(null);
+    setAutosaveNotice("Usunięto szablon.");
+  };
+
   const saveExerciseRecord = (exercise: Exercise) => {
     setPlannerState((current) => ({
       ...current,
@@ -913,15 +946,58 @@ export default function Sport() {
     setAutosaveNotice("Utworzono kopię ćwiczenia.");
   };
 
-  const deleteExerciseRecord = (exercise: Exercise) => {
-    const usage = plannerState.templates.reduce((count, template) => count + template.exercises.filter((item) => item.exerciseId === exercise.id).length, 0);
-    if (typeof window !== "undefined" && !window.confirm(usage > 0
-      ? `Ćwiczenie jest używane ${usage} razy. Usunąć je mimo to?`
-      : `Usunąć ćwiczenie „${exercise.name}”?`)) return;
+  const applyExerciseDelete = (exercise: Exercise) => {
     setPlannerState((current) => ({ ...current, exercises: (current.exercises ?? []).filter((item) => item.id !== exercise.id) }));
     setSelectedExerciseId(null);
     setAutosaveNotice("Usunięto ćwiczenie.");
   };
+
+  const deleteExerciseRecord = (exercise: Exercise, returnFocusTarget: HTMLButtonElement) => {
+    const usage = plannerState.templates.reduce(
+      (count, template) => count + template.exercises.filter((item) => item.exerciseId === exercise.id).length,
+      0,
+    );
+    requestSportConfirmation({ kind: "delete-exercise", exercise, usage }, returnFocusTarget);
+  };
+
+  const confirmSportAction = () => {
+    if (!sportConfirmation) return;
+    setSportConfirmation(null);
+    if (sportConfirmation.kind === "copy-week") {
+      applyWeekCopy(sportConfirmation.fromWeek, sportConfirmation.toWeek);
+      return;
+    }
+    if (sportConfirmation.kind === "delete-exercise") {
+      applyExerciseDelete(sportConfirmation.exercise);
+      return;
+    }
+    applyTemplateDelete(sportConfirmation.template);
+  };
+
+  const sportConfirmationCopy = sportConfirmation?.kind === "copy-week"
+    ? {
+        title: "Zastąpić przyszłe treningi?",
+        description: `Tydzień ${sportConfirmation.toWeek} zawiera wykonane treningi. Pozostaną w historii, a pozostałe jednostki zastąpi kopia tygodnia ${sportConfirmation.fromWeek}.`,
+        confirmLabel: "Zastąp przyszłe",
+        tone: "danger" as const,
+      }
+    : sportConfirmation?.kind === "delete-exercise"
+      ? {
+          title: `Usunąć ćwiczenie „${sportConfirmation.exercise.name}”?`,
+          description: sportConfirmation.usage > 0
+            ? `Ćwiczenie występuje w ${sportConfirmation.usage} ${sportConfirmation.usage === 1 ? "pozycji szablonu" : "pozycjach szablonów"}. Te pozycje mogą stracić powiązanie z biblioteką.`
+            : "Ćwiczenie zniknie z biblioteki.",
+          confirmLabel: "Usuń ćwiczenie",
+          tone: "danger" as const,
+        }
+      : sportConfirmation?.kind === "delete-template"
+        ? {
+            title: `Usunąć szablon „${sportConfirmation.template.name}”?`,
+            description: "Szablon zniknie z biblioteki. Zaplanowane treningi zachowają zapisane kopie ćwiczeń.",
+            confirmLabel: "Usuń szablon",
+            tone: "danger" as const,
+          }
+        : null;
 
   const openTemplateWorkoutDialog = (template: WorkoutTemplate, today = false) => {
     if (!cycleDraft) {
@@ -1357,12 +1433,10 @@ export default function Sport() {
                 onAddToPlan={(template) => openTemplateWorkoutDialog(template)}
                 onTrainToday={(template) => openTemplateWorkoutDialog(template, true)}
                 onSave={saveTemplate}
-                onDelete={(template) => {
-                  if (typeof window !== "undefined" && !window.confirm(`Usunąć szablon „${template.name}”?`)) return;
-                  setPlannerState((current) => ({ ...current, templates: current.templates.filter((item) => item.id !== template.id) }));
-                  setSelectedTemplateId(null);
-                  setAutosaveNotice("Usunięto szablon.");
-                }}
+                onDelete={(template, returnFocusTarget) => requestSportConfirmation(
+                  { kind: "delete-template", template },
+                  returnFocusTarget,
+                )}
                 selectedId={selectedTemplateId}
                 onSelect={(id) => setSelectedTemplateId((current) => current === id ? null : id)}
                 editRequest={templateEditRequest}
@@ -1418,25 +1492,47 @@ export default function Sport() {
         />
       )}
 
-      {moveUndo && (
-        <div className="sport-undo-toast" role="status">
-          <span>{moveUndo.message}</span>
-          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={13} />} onClick={undoMove}>Cofnij</Button>
-        </div>
+      {(moveUndo || workoutDeleteUndo || autosaveNotice) && (
+        <ToastViewport>
+          {moveUndo && (
+            <Toast
+              tone="neutral"
+              actionLabel="Cofnij"
+              onAction={undoMove}
+              onDismiss={dismissMoveUndo}
+            >
+              {moveUndo.message}
+            </Toast>
+          )}
+          {workoutDeleteUndo && (
+            <Toast
+              tone="neutral"
+              actionLabel="Cofnij"
+              onAction={undoWorkoutDelete}
+              onDismiss={dismissWorkoutDeleteUndo}
+            >
+              Usunięto „{workoutDeleteUndo.workout.title}”.
+            </Toast>
+          )}
+          {autosaveNotice && (
+            <Toast tone="success" onDismiss={dismissAutosaveNotice}>
+              <Check size={13} aria-hidden="true" /> {autosaveNotice}
+            </Toast>
+          )}
+        </ToastViewport>
       )}
 
-      {workoutDeleteUndo && (
-        <div className="sport-undo-toast" role="status">
-          <span>Usunięto „{workoutDeleteUndo.workout.title}”.</span>
-          <Button variant="ghost" size="sm" leadingIcon={<Undo2 size={13} />} onClick={undoWorkoutDelete}>Cofnij</Button>
-        </div>
-      )}
-
-      {autosaveNotice && !moveUndo && !workoutDeleteUndo && (
-        <div className="sport-undo-toast sport-autosave-toast" role="status">
-          <Check size={13} aria-hidden="true" />
-          <span>{autosaveNotice}</span>
-        </div>
+      {sportConfirmation && sportConfirmationCopy && (
+        <ConfirmDialog
+          title={sportConfirmationCopy.title}
+          description={sportConfirmationCopy.description}
+          confirmLabel={sportConfirmationCopy.confirmLabel}
+          cancelLabel="Anuluj"
+          tone={sportConfirmationCopy.tone}
+          returnFocusRef={confirmationReturnFocusRef}
+          onConfirm={confirmSportAction}
+          onCancel={cancelSportConfirmation}
+        />
       )}
 
       {moveDialogWorkout && cycleDraft && (

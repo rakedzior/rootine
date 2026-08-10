@@ -28,6 +28,7 @@ import {
   ModuleSidebar,
   Menu,
   MenuItem,
+  ProgressBar,
 } from "../ui";
 import { AddToTasksButton } from "../ui";
 import type { ExternalTaskInput } from "../data/taskLinks";
@@ -121,7 +122,7 @@ export function GoalSubSidebar({
 
   return (
     <ModuleSidebar label="Widoki i kategorie celów">
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="goal-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-4">
         <ContextNavGroup label="Przegląd">
           {item("next", "Następne kroki", Clock3)}
           {item("week", "Ten tydzień", CalendarDays)}
@@ -162,11 +163,10 @@ export function GoalSubSidebar({
             onClick={() => setCategoriesOpen((open) => !open)}
             aria-expanded={categoriesOpen}
             aria-controls={categoriesPanelId}
-            className="flex min-w-0 items-center gap-1.5"
-            style={{ color: C.textMuted }}
+            className="goal-sidebar-section-toggle flex min-w-0 items-center gap-1.5"
           >
-            <ChevronRight size={11} strokeWidth={2} style={{ transform: categoriesOpen ? "rotate(90deg)" : "none", transition: "transform var(--motion-toggle) var(--ease-out)" }} />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">Kategorie</span>
+            <ChevronRight className="goal-sidebar-section-chevron" size={11} strokeWidth={2} />
+            <span>Kategorie</span>
           </button>
           <div className="flex items-center gap-1">
             <button
@@ -174,8 +174,7 @@ export function GoalSubSidebar({
               aria-label="Szukaj kategorii"
               title="Szukaj kategorii"
               onClick={() => { setCategoriesOpen(true); setSearchOpen((open) => !open); }}
-              className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
-              style={{ color: searchOpen ? C.iceBlueText : C.textDisabled }}
+              className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${searchOpen ? "is-active" : ""}`}
             >
               <Search size={13} strokeWidth={1.8} />
             </button>
@@ -184,8 +183,7 @@ export function GoalSubSidebar({
               aria-label="Dodaj kategorię"
               title="Dodaj kategorię"
               onClick={() => { setCategoriesOpen(true); setAdding(true); }}
-              className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
-              style={{ color: adding ? C.iceBlueText : C.textDisabled }}
+              className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${adding ? "is-active" : ""}`}
             >
               <Plus size={13} strokeWidth={1.8} />
             </button>
@@ -196,23 +194,22 @@ export function GoalSubSidebar({
           <div id={categoriesPanelId} className="space-y-1">
             {searchOpen && (
               <div className="px-1 pb-1">
-                <div className="flex items-center gap-2 rounded-lg border px-2.5 py-2" style={{ background: C.inputBg, borderColor: C.borderSubtle }}>
-                  <Search size={11} strokeWidth={1.7} style={{ color: C.textMuted }} />
+                <div className="goal-category-search flex items-center gap-2 rounded-lg border px-2.5 py-2">
+                  <Search className="goal-category-symbol" size={11} strokeWidth={1.7} />
                   <input
                     autoFocus
                     aria-label="Szukaj kategorii"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Szukaj kategorii"
-                    className="min-w-0 flex-1 bg-transparent text-[11px] outline-none"
-                    style={{ color: C.textSecond }}
+                    className="goal-category-input min-w-0 flex-1 bg-transparent outline-none"
                   />
                   {search && (
                     <button
                       type="button"
                       aria-label="Wyczyść wyszukiwanie kategorii"
                       onClick={() => setSearch("")}
-                      style={{ color: C.textDisabled }}
+                      className="goal-category-clear"
                     >
                       <X size={11} aria-hidden="true" />
                     </button>
@@ -224,10 +221,9 @@ export function GoalSubSidebar({
             {adding && (
               <form
                 onSubmit={(event) => { event.preventDefault(); addCategory(); }}
-                className="mx-1 flex items-center gap-1.5 rounded-lg border px-2 py-1.5"
-                style={{ background: C.inputBg, borderColor: C.blueBorder }}
+                className="goal-category-add mx-1 flex items-center gap-1.5 rounded-lg border px-2 py-1.5"
               >
-                <Circle size={11} style={{ color: C.textSecond }} />
+                <Circle className="goal-category-symbol" size={11} />
                 <input
                   autoFocus
                   aria-label="Nazwa nowej kategorii"
@@ -235,11 +231,10 @@ export function GoalSubSidebar({
                   onChange={(event) => setNewCategory(event.target.value)}
                   onKeyDown={(event) => { if (event.key === "Escape") setAdding(false); }}
                   placeholder="Nowa kategoria"
-                  className="min-w-0 flex-1 bg-transparent text-[11px] outline-none"
-                  style={{ color: C.textPrimary }}
+                  className="goal-category-input goal-category-input--primary min-w-0 flex-1 bg-transparent outline-none"
                 />
-                <button type="submit" aria-label="Zapisz kategorię" style={{ color: C.seaGlass }}><Check size={11} strokeWidth={2.2} /></button>
-                <button type="button" aria-label="Anuluj" onClick={() => setAdding(false)} style={{ color: C.textMuted }}><X size={11} /></button>
+                <button type="submit" aria-label="Zapisz kategorię" className="goal-category-confirm"><Check size={11} strokeWidth={2.2} /></button>
+                <button type="button" aria-label="Anuluj" onClick={() => setAdding(false)} className="goal-category-cancel"><X size={11} /></button>
               </form>
             )}
 
@@ -249,8 +244,8 @@ export function GoalSubSidebar({
               return (
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg">
                   {editingId === category.id ? (
-                    <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
-                      <Icon size={13} strokeWidth={1.7} style={{ color: C.textSecond }} />
+                    <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="goal-category-edit flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
+                      <Icon className="goal-category-symbol" size={13} strokeWidth={1.7} />
                       <input
                         autoFocus
                         aria-label={`Nazwa kategorii ${category.label}`}
@@ -258,8 +253,7 @@ export function GoalSubSidebar({
                         onChange={(event) => setEditingValue(event.target.value)}
                         onBlur={() => saveCategory(category.id)}
                         onKeyDown={(event) => { if (event.key === "Escape") setEditingId(null); }}
-                        className="min-w-0 flex-1 rounded border bg-transparent px-1.5 py-1 text-[11px] outline-none"
-                        style={{ color: C.textPrimary, borderColor: C.iceBlue }}
+                        className="goal-category-edit-input min-w-0 flex-1 rounded border bg-transparent px-1.5 py-1 outline-none"
                       />
                     </form>
                   ) : (
@@ -267,7 +261,7 @@ export function GoalSubSidebar({
                       onClick={() => onFilter(`category:${category.id}`)}
                       className="min-w-0 flex-1"
                       active={active}
-                      icon={<Icon style={{ color: active ? undefined : C.textSecond }} />}
+                      icon={<Icon className={active ? undefined : "goal-category-nav-icon"} />}
                       label={category.label}
                     />
                   )}
@@ -279,7 +273,6 @@ export function GoalSubSidebar({
                         title="Edytuj"
                         onClick={() => { setEditingId(category.id); setEditingValue(category.label); }}
                         className="goal-category-action flex h-6 w-6 items-center justify-center rounded-md"
-                        style={{ color: C.textMuted }}
                       >
                         <Pencil size={11} strokeWidth={1.7} />
                       </button>
@@ -288,8 +281,7 @@ export function GoalSubSidebar({
                           aria-label={`Usuń kategorię ${category.label}`}
                           title="Usuń"
                           onClick={() => onDeleteCategory(category.id)}
-                          className="goal-category-action flex h-6 w-6 items-center justify-center rounded-md"
-                          style={{ color: C.danger }}
+                          className="goal-category-action is-danger flex h-6 w-6 items-center justify-center rounded-md"
                         >
                           <Trash2 size={11} strokeWidth={1.7} />
                         </button>}
@@ -299,7 +291,7 @@ export function GoalSubSidebar({
               );
             })}
             {filteredCategories.length === 0 && (
-              <p className="px-2.5 py-2 text-[11px]" style={{ color: C.textMuted }}>
+              <p className="goal-category-empty px-2.5 py-2">
                 Nie znaleziono kategorii.
               </p>
             )}
@@ -307,7 +299,7 @@ export function GoalSubSidebar({
         )}
       </div>
 
-      <div className="border-t px-2 pb-4 pt-4" style={{ borderColor: C.borderSubtle, background: C.subSidebar }}>
+      <div className="goal-sidebar-footer border-t px-2 pb-4 pt-4">
         <ContextNavGroup label="Zarządzanie">
           <ContextNavItem onClick={() => setCategoriesOpen(true)} icon={<FolderCog />} label="Kategorie" />
           <ContextNavItem active={activeFilter === "archived"} onClick={() => onFilter("archived")} icon={<Archive />} label="Archiwum" />
@@ -345,7 +337,7 @@ export function GoalCard({
   selected: boolean;
   grid: boolean;
   onSelect: () => void;
-  onEdit: () => void;
+  onEdit: (returnFocus?: HTMLElement | null) => void;
   onProgress: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -361,10 +353,11 @@ export function GoalCard({
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
   const dueColor = deadlineColor(goal);
+  const deadlineTone = dueColor === C.danger ? "danger" : dueColor === C.warning ? "warning" : "neutral";
 
   return (
     <article
-      className={`goal-card group border transition-all duration-150 ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
+      className={`goal-card group border ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
       data-status={goal.status}
       style={{
         "--goal-progress": `${goal.progress}%`,
@@ -389,8 +382,8 @@ export function GoalCard({
             <h3 className="goal-card-title ui-record-title truncate">
               {goal.title}
             </h3>
-            <div className="goal-card-meta ui-record-meta order-2 mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1" style={{ color: C.textSecond }}>
-              <span className="flex items-center gap-1 font-medium" style={{ color: C.textSecond }}>
+            <div className="goal-card-meta ui-record-meta order-2 mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <span className="flex items-center gap-1 font-medium">
                 <CategoryIcon size={13} strokeWidth={1.7} aria-hidden="true" /> {goal.category}
               </span>
               <span>•</span>
@@ -399,18 +392,18 @@ export function GoalCard({
             </div>
             <div className="order-1 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
               <div
-                className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px]"
-                style={{ color: dueColor, borderColor: dueColor === C.textSecond ? C.borderStrong : `${dueColor}35`, background: C.inputBg }}
+                className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2"
+                data-deadline-tone={deadlineTone}
               >
                 <CalendarDays size={13} strokeWidth={1.7} aria-hidden="true" />
-                <span className="font-medium" style={{ color: dueColor === C.textSecond ? C.textPrimary : dueColor }}>{goal.due}</span>
-                <span style={{ color: C.textMuted }}>· {goal.daysLeft}</span>
+                <span className="goal-card-inline-date__date font-medium">{goal.due}</span>
+                <span className="goal-card-inline-date__days">· {goal.daysLeft}</span>
               </div>
-              <div className="flex min-w-[150px] flex-1 items-center gap-3">
+              <div className="goal-card-progress flex flex-1 items-center gap-3">
                 <div className="goal-card-progress-track h-1 flex-1 overflow-hidden rounded-full">
-                  <div className="goal-card-progress-fill h-full rounded-full transition-all duration-500" />
+                  <div className="goal-card-progress-fill h-full rounded-full" />
                 </div>
-                <span className="goal-card-progress-value w-9 text-right text-[11px] font-semibold tabular-nums">
+                <span className="goal-card-progress-value w-9 text-right font-semibold tabular-nums">
                   {goal.progress}%
                 </span>
               </div>
@@ -440,7 +433,7 @@ export function GoalCard({
                 className="absolute right-0 top-9 w-40"
               >
                 {(["active", "paused", "completed", "planned", "archived"] as GoalStatus[]).map((status) => (
-                  <MenuItem key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS_META[status].color }} />} style={{ color: STATUS_META[status].color }}>
+                  <MenuItem className="goal-status-menu-item" data-goal-status={status} key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="goal-status-dot h-1.5 w-1.5 rounded-full" />}>
                     {STATUS_META[status].label}
                   </MenuItem>
                 ))}
@@ -448,7 +441,7 @@ export function GoalCard({
             )}
           </div>
 
-          <div className="goal-card-date flex items-center gap-2 text-[11px] font-medium" style={{ color: dueColor }}>
+          <div className="goal-card-date flex items-center gap-2 font-medium" data-deadline-tone={deadlineTone}>
             <CalendarDays size={13} strokeWidth={1.7} aria-hidden="true" />
             <span>{goal.due}</span>
           </div>
@@ -462,7 +455,7 @@ export function GoalCard({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls={actionsMenuId}
-              className="flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors"
+              className="flex items-center justify-center rounded-lg transition-colors"
             >
               <Ellipsis size={16} strokeWidth={1.8} aria-hidden="true" />
             </button>
@@ -476,7 +469,7 @@ export function GoalCard({
               >
                 {[
                   { label: goal.rhythm === "Cel etapowy" ? "Dodaj etap" : goal.rhythm === "Wartość liczbowa" ? "Zaktualizuj wartość" : goal.rhythm === "Regularność" ? "Zapisz wykonanie" : "Zaktualizuj postęp", icon: BarChart3, action: onProgress },
-                  { label: "Edytuj cel", icon: Pencil, action: onEdit },
+                  { label: "Edytuj cel", icon: Pencil, action: () => onEdit(menuTriggerRef.current) },
                   { label: "Otwórz pełny widok", icon: Target, action: onOpen },
                   { label: "Duplikuj", icon: Plus, action: onDuplicate },
                   { label: goal.status === "archived" ? "Przywróć" : "Archiwizuj", icon: Archive, action: () => onStatus(goal.status === "archived" ? "active" : "archived") },
@@ -498,7 +491,7 @@ export function GoalCard({
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: C.textMuted }}>{title}</h3>
+      <h3 className="goal-panel-section-title mb-3 font-semibold uppercase">{title}</h3>
       {children}
     </section>
   );
@@ -507,10 +500,10 @@ function PanelSection({ title, children }: { title: string; children: React.Reac
 function DetailRow({ icon: Icon, label, children, onClick }: { icon: LucideIcon; label: string; children: React.ReactNode; onClick?: () => void }) {
   const content = (
     <>
-      <Icon size={13} strokeWidth={1.6} aria-hidden="true" style={{ color: C.textMuted }} />
-      <span className="flex-1 text-[11px]" style={{ color: C.textMuted }}>{label}</span>
-      <div className="flex items-center gap-1.5 text-right text-[11px]" style={{ color: C.textSecond }}>{children}</div>
-      {onClick && <ChevronRight size={11} strokeWidth={1.7} aria-hidden="true" style={{ color: C.textDisabled }} />}
+      <Icon className="goal-detail-row__icon" size={13} strokeWidth={1.6} aria-hidden="true" />
+      <span className="goal-detail-row__label flex-1">{label}</span>
+      <div className="goal-detail-row__value flex items-center gap-1.5 text-right">{children}</div>
+      {onClick && <ChevronRight className="goal-detail-row__chevron" size={11} strokeWidth={1.7} aria-hidden="true" />}
     </>
   );
   if (onClick) {
@@ -518,15 +511,14 @@ function DetailRow({ icon: Icon, label, children, onClick }: { icon: LucideIcon;
       <button
         type="button"
         onClick={onClick}
-        className="flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0"
-        style={{ borderColor: C.borderSubtle }}
+        className="goal-detail-row flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0"
       >
         {content}
       </button>
     );
   }
   return (
-    <div className="flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0" style={{ borderColor: C.borderSubtle }}>
+    <div className="goal-detail-row flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0">
       {content}
     </div>
   );
@@ -561,9 +553,9 @@ export function GoalDetail({
 }) {
   const Icon = goal.icon;
   const CategoryIcon = CATEGORY_ICONS[goal.category] ?? Circle;
-  const status = STATUS_META[goal.status];
-  const priority = goal.priority === "high" ? { label: "Wysoki", color: C.textSecond } : goal.priority === "medium" ? { label: "Średni", color: C.textSecond } : { label: "Niski", color: C.textSecond };
+  const priorityLabel = goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski";
   const dueColor = deadlineColor(goal);
+  const deadlineTone = dueColor === C.danger ? "danger" : dueColor === C.warning ? "warning" : "neutral";
   const measurementLabel = rawGoal.progressMode === "milestones"
     ? "Etapy"
     : rawGoal.progressMode === "regularity"
@@ -572,52 +564,55 @@ export function GoalDetail({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-5 pb-5 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="goal-detail-scroll flex-1 overflow-y-auto px-5 pb-5 pt-4">
         <div className="mb-4 flex justify-end">
-          <button type="button" onClick={onClose} aria-label="Zamknij szczegóły celu" className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ color: C.textSecond }}>
+          <button type="button" onClick={onClose} aria-label="Zamknij szczegóły celu" className="goal-detail-close flex h-8 w-8 items-center justify-center rounded-lg">
             <X size={18} strokeWidth={1.7} />
           </button>
         </div>
 
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border" style={{ color: C.textMuted, background: C.card, borderColor: C.borderSubtle }}>
+          <div className="goal-detail-panel-icon flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
             {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={18} strokeWidth={1.55} />}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[var(--text-section)] font-semibold leading-5" style={{ color: C.textPrimary }}>{goal.title}</h2>
-            <p className="mt-1.5 flex items-center gap-1 text-[11px]" style={{ color: C.textSecond }}>
+            <h2 className="goal-detail-panel-title font-semibold">{goal.title}</h2>
+            <p className="goal-detail-panel-meta mt-1.5 flex items-center gap-1">
               <CategoryIcon size={11} /> {goal.category}
-              <span style={{ color: C.textDisabled }}>•</span>
-              <span style={{ color: C.textMuted }}>{goal.rhythm}</span>
+              <span className="goal-detail-panel-separator">•</span>
+              <span className="goal-detail-panel-rhythm">{goal.rhythm}</span>
             </p>
           </div>
-          <div className="w-[106px]"><ThemedSelect compact value={rawGoal.status} onChange={(value) => onStatus(value as StoredGoalStatus)} options={[{ value: "planned", label: "Zaplanowany" }, { value: "active", label: "Aktywny" }, { value: "paused", label: "Wstrzymany" }, { value: "completed", label: "Zakończony" }, { value: "archived", label: "Archiwum" }]} ariaLabel="Status celu" /></div>
+          <div className="goal-detail-status-select"><ThemedSelect compact value={rawGoal.status} onChange={(value) => onStatus(value as StoredGoalStatus)} options={[{ value: "planned", label: "Zaplanowany" }, { value: "active", label: "Aktywny" }, { value: "paused", label: "Wstrzymany" }, { value: "completed", label: "Zakończony" }, { value: "archived", label: "Archiwum" }]} ariaLabel="Status celu" /></div>
         </div>
 
-        <div className="my-5 border-y py-4" style={{ borderColor: C.borderSubtle }}>
+        <div className="goal-detail-progress-section my-5 border-y py-4">
           <div className="mb-3 flex items-end justify-between">
-            <span className="font-semibold" style={{ color: C.textPrimary, fontFamily: "'DM Mono', monospace", fontSize: "var(--text-headline)" }}>{goal.progress}%</span>
-            <span className="text-[11px]" style={{ color: C.textMuted }}>{goal.progressLabel}</span>
+            <span className="goal-detail-panel-progress font-semibold">{goal.progress}%</span>
+            <span className="goal-detail-panel-progress-label">{goal.progressLabel}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full" style={{ background: C.progressTrack }}>
-            <div className="h-full rounded-full" style={{ width: `${goal.progress}%`, background: C.progressAccent }} />
-          </div>
-          <button type="button" onClick={rawGoal.progressMode === "milestones" ? onAddMilestone : onProgress} className="mt-3 flex items-center gap-1.5 text-[11px] font-medium" style={{ color: C.iceBlueText }}><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj etap" : rawGoal.progressMode === "numeric" ? "Zaktualizuj wartość" : rawGoal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</button>
+          <ProgressBar
+            className="goal-detail-progress-bar"
+            value={goal.progress}
+            label={`Postęp celu ${goal.title}`}
+            valueText={`${goal.progress}%`}
+          />
+          <button type="button" onClick={rawGoal.progressMode === "milestones" ? onAddMilestone : onProgress} className="goal-detail-progress-action mt-3 flex items-center gap-1.5 font-medium"><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj etap" : rawGoal.progressMode === "numeric" ? "Zaktualizuj wartość" : rawGoal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</button>
         </div>
 
         <div className="mb-5">
           <DetailRow icon={CalendarDays} label="Termin" onClick={onEdit}>
-            <span style={{ color: dueColor === C.textSecond ? C.textPrimary : dueColor }}>{goal.due}</span>
+            <span className="goal-deadline-text" data-deadline-tone={deadlineTone}>{goal.due}</span>
           </DetailRow>
           <DetailRow icon={Flag} label="Priorytet" onClick={onEdit}>
-            <Flag size={11} fill={`${priority.color}38`} style={{ color: priority.color }} />
-            <span style={{ color: priority.color }}>{priority.label}</span>
+            <Flag className="goal-detail-priority-icon" size={11} />
+            <span>{priorityLabel}</span>
           </DetailRow>
           <DetailRow icon={Target} label="Kategoria" onClick={onEdit}>
-            <span style={{ color: C.textSecond }}>{goal.category}</span>
+            <span>{goal.category}</span>
           </DetailRow>
           <DetailRow icon={BarChart3} label={measurementLabel} onClick={onProgress}>
-            <span style={{ color: C.iceBlueText }}>{goal.progress}%</span>
+            <span className="goal-detail-value--primary">{goal.progress}%</span>
           </DetailRow>
         </div>
 
@@ -626,27 +621,27 @@ export function GoalDetail({
             <button type="button" onClick={() => {
               const next = [...rawGoal.milestones].filter((item) => !item.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
               if (next) onToggleMilestone(next.id, true); else onAddMilestone();
-            }} className="w-full rounded-xl border p-3 text-left" style={{ background: C.panel, borderColor: C.borderSubtle }}>
+            }} className="goal-next-milestone w-full rounded-xl border p-3 text-left">
               <div className="flex items-start gap-2.5">
-                <div className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full border" style={{ borderColor: C.textMuted }} />
+                <div className="goal-next-milestone__marker mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full border" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-[11px] font-medium leading-4" style={{ color: C.textPrimary }}>{goal.nextMilestone.title}</p>
-                    <span className="text-[11px]" style={{ color: C.iceBlueText, fontFamily: "'DM Mono', monospace" }}>{goal.nextMilestone.progress}%</span>
+                    <p className="goal-next-milestone__title font-medium">{goal.nextMilestone.title}</p>
+                    <span className="goal-next-milestone__progress">{goal.nextMilestone.progress}%</span>
                   </div>
-                  <p className="mt-1 text-[11px]" style={{ color: C.textMuted }}>Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
+                  <p className="goal-next-milestone__meta mt-1">Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
                 </div>
               </div>
             </button>
           </PanelSection>
-          <div className="my-5 border-t" style={{ borderColor: C.borderSubtle }} />
+          <div className="goal-detail-divider my-5 border-t" />
         </>}
 
         <PanelSection title="Stan celu">
           <dl className="goal-detail-snapshot">
             <div><dt>{measurementLabel}</dt><dd>{goal.current} / {goal.total}</dd></div>
             <div><dt>Ogólny postęp</dt><dd>{goal.progress}%</dd></div>
-            <div><dt>Kondycja celu</dt><dd style={{ color: status.color }}>{goal.status === "risk" ? "Wymaga uwagi" : "Na planie"}</dd></div>
+            <div><dt>Kondycja celu</dt><dd className="goal-status-value" data-goal-status={goal.status}>{goal.status === "risk" ? "Wymaga uwagi" : "Na planie"}</dd></div>
             <div><dt>Priorytet</dt><dd>{goal.priority === "high" ? "Wysoki" : goal.priority === "medium" ? "Średni" : "Niski"}</dd></div>
           </dl>
         </PanelSection>
@@ -659,14 +654,13 @@ export function GoalDetail({
               value={note}
               onCommit={onNoteChange}
               rows={3}
-              className="w-full resize-none rounded-xl border p-3.5 text-[11px] leading-5 outline-none"
-              style={{ color: C.textSecond, background: C.inputBg, borderColor: C.borderSubtle }}
+              className="goal-detail-note-input w-full resize-none rounded-xl border p-3.5 outline-none"
             />
           </PanelSection>
         </div>
       </div>
 
-      <div className="border-t p-4" style={{ borderColor: C.borderSubtle, background: C.subSidebar }}>
+      <div className="goal-detail-panel-footer border-t p-4">
         {addToTasksInput && <div className="mb-2"><AddToTasksButton input={addToTasksInput} /></div>}
         <Button type="button" variant="quiet" fullWidth onClick={onOpen}>
           Otwórz pełny widok celu

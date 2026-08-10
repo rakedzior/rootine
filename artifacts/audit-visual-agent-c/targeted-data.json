@@ -1,0 +1,1582 @@
+{
+  "generatedAt": "2026-08-10T10:28:22.979Z",
+  "detailPanels": [
+    {
+      "profile": {
+        "id": "1366x768",
+        "width": 1366,
+        "height": 768
+      },
+      "viewport": {
+        "width": 1366,
+        "height": 768,
+        "devicePixelRatio": 1
+      },
+      "detail": {
+        "x": 958,
+        "y": 0,
+        "width": 408,
+        "height": 768,
+        "right": 1366,
+        "bottom": 768,
+        "position": "absolute",
+        "zIndex": "41",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "moduleMain": {
+        "x": 452,
+        "y": 24,
+        "width": 878,
+        "height": 839,
+        "right": 1330,
+        "bottom": 863,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "pageShell": {
+        "x": 424,
+        "y": 0,
+        "width": 934,
+        "height": 891,
+        "right": 1358,
+        "bottom": 891,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "visible",
+        "overflowY": "visible"
+      },
+      "moduleShell": {
+        "x": 204,
+        "y": 0,
+        "width": 1162,
+        "height": 768,
+        "right": 1366,
+        "bottom": 768,
+        "position": "relative",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "overlapsMain": true,
+      "bodyScroll": {
+        "x": 0,
+        "y": 0,
+        "scrollWidth": 1366,
+        "clientWidth": 1366
+      },
+      "screenshot": "targeted-1366x768__task-detail.png"
+    },
+    {
+      "profile": {
+        "id": "1440x900",
+        "width": 1440,
+        "height": 900
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 900,
+        "devicePixelRatio": 1
+      },
+      "detail": {
+        "x": 1032.010986328125,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "right": 1440.010986328125,
+        "bottom": 900,
+        "position": "absolute",
+        "zIndex": "40",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "moduleMain": {
+        "x": 452,
+        "y": 24,
+        "width": 952,
+        "height": 839,
+        "right": 1404,
+        "bottom": 863,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "pageShell": {
+        "x": 424,
+        "y": 0,
+        "width": 1008,
+        "height": 900,
+        "right": 1432,
+        "bottom": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "visible",
+        "overflowY": "visible"
+      },
+      "moduleShell": {
+        "x": 204,
+        "y": 0,
+        "width": 1236,
+        "height": 900,
+        "right": 1440,
+        "bottom": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "overlapsMain": true,
+      "bodyScroll": {
+        "x": 0,
+        "y": 0,
+        "scrollWidth": 1440,
+        "clientWidth": 1440
+      },
+      "screenshot": "targeted-1440x900__task-detail.png"
+    },
+    {
+      "profile": {
+        "id": "1920x1080",
+        "width": 1920,
+        "height": 1080
+      },
+      "viewport": {
+        "width": 1920,
+        "height": 1080,
+        "devicePixelRatio": 1
+      },
+      "detail": {
+        "x": 1512.0111083984375,
+        "y": 0,
+        "width": 408,
+        "height": 1080,
+        "right": 1920.0111083984375,
+        "bottom": 1080,
+        "position": "absolute",
+        "zIndex": "40",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "moduleMain": {
+        "x": 452,
+        "y": 24,
+        "width": 1432,
+        "height": 804.59375,
+        "right": 1884,
+        "bottom": 828.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "pageShell": {
+        "x": 424,
+        "y": 0,
+        "width": 1488,
+        "height": 1080,
+        "right": 1912,
+        "bottom": 1080,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "visible",
+        "overflowY": "visible"
+      },
+      "moduleShell": {
+        "x": 204,
+        "y": 0,
+        "width": 1716,
+        "height": 1080,
+        "right": 1920,
+        "bottom": 1080,
+        "position": "relative",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "overlapsMain": true,
+      "bodyScroll": {
+        "x": 0,
+        "y": 0,
+        "scrollWidth": 1920,
+        "clientWidth": 1920
+      },
+      "screenshot": "targeted-1920x1080__task-detail.png"
+    },
+    {
+      "profile": {
+        "id": "2560x1440",
+        "width": 2560,
+        "height": 1440
+      },
+      "viewport": {
+        "width": 2560,
+        "height": 1440,
+        "devicePixelRatio": 1
+      },
+      "detail": {
+        "x": 2152.001953125,
+        "y": 0,
+        "width": 408,
+        "height": 1440,
+        "right": 2560.001953125,
+        "bottom": 1440,
+        "position": "absolute",
+        "zIndex": "40",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "moduleMain": {
+        "x": 452,
+        "y": 24,
+        "width": 2072,
+        "height": 804.59375,
+        "right": 2524,
+        "bottom": 828.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "pageShell": {
+        "x": 424,
+        "y": 0,
+        "width": 2128,
+        "height": 1440,
+        "right": 2552,
+        "bottom": 1440,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "visible",
+        "overflowY": "visible"
+      },
+      "moduleShell": {
+        "x": 204,
+        "y": 0,
+        "width": 2356,
+        "height": 1440,
+        "right": 2560,
+        "bottom": 1440,
+        "position": "relative",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "overlapsMain": true,
+      "bodyScroll": {
+        "x": 0,
+        "y": 0,
+        "scrollWidth": 2560,
+        "clientWidth": 2560
+      },
+      "screenshot": "targeted-2560x1440__task-detail.png"
+    },
+    {
+      "profile": {
+        "id": "zoom-125",
+        "width": 1536,
+        "height": 864,
+        "deviceScaleFactor": 1.25
+      },
+      "viewport": {
+        "width": 1536,
+        "height": 864,
+        "devicePixelRatio": 1.25
+      },
+      "detail": {
+        "x": 1128.001953125,
+        "y": 0,
+        "width": 408,
+        "height": 864,
+        "right": 1536.001953125,
+        "bottom": 864,
+        "position": "absolute",
+        "zIndex": "40",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "moduleMain": {
+        "x": 452,
+        "y": 24,
+        "width": 1048,
+        "height": 804.59375,
+        "right": 1500,
+        "bottom": 828.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "pageShell": {
+        "x": 424,
+        "y": 0,
+        "width": 1104,
+        "height": 864,
+        "right": 1528,
+        "bottom": 864,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "visible",
+        "overflowY": "visible"
+      },
+      "moduleShell": {
+        "x": 204,
+        "y": 0,
+        "width": 1332,
+        "height": 864,
+        "right": 1536,
+        "bottom": 864,
+        "position": "relative",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "overlapsMain": true,
+      "bodyScroll": {
+        "x": 0,
+        "y": 0,
+        "scrollWidth": 1536,
+        "clientWidth": 1536
+      },
+      "screenshot": "targeted-zoom-125__task-detail.png"
+    },
+    {
+      "profile": {
+        "id": "zoom-150",
+        "width": 1280,
+        "height": 720,
+        "deviceScaleFactor": 1.5
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 720,
+        "devicePixelRatio": 1.5
+      },
+      "detail": {
+        "x": 872,
+        "y": 0,
+        "width": 408,
+        "height": 720,
+        "right": 1280,
+        "bottom": 720,
+        "position": "absolute",
+        "zIndex": "41",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "moduleMain": {
+        "x": 452,
+        "y": 24,
+        "width": 792,
+        "height": 860.59375,
+        "right": 1244,
+        "bottom": 884.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "pageShell": {
+        "x": 424,
+        "y": 0,
+        "width": 848,
+        "height": 912.59375,
+        "right": 1272,
+        "bottom": 912.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "overflowX": "visible",
+        "overflowY": "visible"
+      },
+      "moduleShell": {
+        "x": 204,
+        "y": 0,
+        "width": 1076,
+        "height": 720,
+        "right": 1280,
+        "bottom": 720,
+        "position": "relative",
+        "zIndex": "auto",
+        "overflowX": "hidden",
+        "overflowY": "hidden"
+      },
+      "overlapsMain": true,
+      "bodyScroll": {
+        "x": 0,
+        "y": 0,
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "screenshot": "targeted-zoom-150__task-detail.png"
+    }
+  ],
+  "goalModals": [
+    {
+      "profile": {
+        "id": "1366x768",
+        "width": 1366,
+        "height": 768
+      },
+      "initial": {
+        "viewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "modal": {
+          "x": 293.0047607421875,
+          "y": 46.084686279296875,
+          "width": 779.990478515625,
+          "height": 675.81982421875
+        },
+        "clientHeight": 676,
+        "scrollHeight": 731,
+        "scrollTop": 0,
+        "scrollable": true,
+        "overflowY": "auto",
+        "scrollbarWidthCss": "none",
+        "offsetMinusClient": 0,
+        "footer": {
+          "top": 684.358154296875,
+          "bottom": 757.3572998046875,
+          "height": 72.9991455078125,
+          "visibleTop": 684.358154296875,
+          "visibleBottom": 757.3572998046875,
+          "visibleHeight": 72.9991455078125,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "primary": {
+          "top": 701.35791015625,
+          "bottom": 741.357421875,
+          "height": 39.99951171875,
+          "visibleTop": 701.35791015625,
+          "visibleBottom": 741.357421875,
+          "visibleHeight": 39.99951171875,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "activeName": ""
+      },
+      "initialScreenshot": "targeted-1366x768__goal-edit-initial.png",
+      "beforeWheel": 0,
+      "afterWheel": {
+        "viewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "modal": {
+          "x": 293,
+          "y": 46.078125,
+          "width": 780,
+          "height": 675.828125
+        },
+        "clientHeight": 676,
+        "scrollHeight": 731,
+        "scrollTop": 55,
+        "scrollable": true,
+        "overflowY": "auto",
+        "scrollbarWidthCss": "none",
+        "offsetMinusClient": 0,
+        "footer": {
+          "top": 629.359375,
+          "bottom": 702.359375,
+          "height": 73,
+          "visibleTop": 629.359375,
+          "visibleBottom": 702.359375,
+          "visibleHeight": 73,
+          "fullyInViewport": true,
+          "fullyInsideModal": true
+        },
+        "primary": {
+          "top": 646.359375,
+          "bottom": 686.359375,
+          "height": 40,
+          "visibleTop": 646.359375,
+          "visibleBottom": 686.359375,
+          "visibleHeight": 40,
+          "fullyInViewport": true,
+          "fullyInsideModal": true
+        },
+        "activeName": ""
+      },
+      "afterPrimaryFocus": {
+        "viewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "modal": {
+          "x": 293,
+          "y": 46.078125,
+          "width": 780,
+          "height": 675.828125
+        },
+        "clientHeight": 676,
+        "scrollHeight": 731,
+        "scrollTop": 19,
+        "scrollable": true,
+        "overflowY": "auto",
+        "scrollbarWidthCss": "none",
+        "offsetMinusClient": 0,
+        "footer": {
+          "top": 665.359375,
+          "bottom": 738.359375,
+          "height": 73,
+          "visibleTop": 665.359375,
+          "visibleBottom": 738.359375,
+          "visibleHeight": 73,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "primary": {
+          "top": 682.359375,
+          "bottom": 722.359375,
+          "height": 40,
+          "visibleTop": 682.359375,
+          "visibleBottom": 722.359375,
+          "visibleHeight": 40,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "activeName": "Zapisz zmiany"
+      },
+      "focusedScreenshot": "targeted-1366x768__goal-edit-primary-focused.png",
+      "escaped": true,
+      "returnedToTrigger": false,
+      "activeAfterEscape": {
+        "tag": "BODY",
+        "text": "Przejdź do treściRRootineDzisiajZadaniaOdżywianieSportPracaCeleSprawyNotatki10:00pon., 10 sie100019°CCzęściowe zachmurze",
+        "ariaLabel": "",
+        "connected": true
+      }
+    },
+    {
+      "profile": {
+        "id": "1440x900",
+        "width": 1440,
+        "height": 900
+      },
+      "initial": {
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "modal": {
+          "x": 330.0047607421875,
+          "y": 54.007293701171875,
+          "width": 779.990478515625,
+          "height": 791.990234375
+        },
+        "clientHeight": 792,
+        "scrollHeight": 847,
+        "scrollTop": 0,
+        "scrollable": true,
+        "overflowY": "auto",
+        "scrollbarWidthCss": "none",
+        "offsetMinusClient": 0,
+        "footer": {
+          "top": 807.591796875,
+          "bottom": 880.5909423828125,
+          "height": 72.9991455078125,
+          "visibleTop": 807.591796875,
+          "visibleBottom": 880.5909423828125,
+          "visibleHeight": 72.9991455078125,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "primary": {
+          "top": 824.5916748046875,
+          "bottom": 864.5911865234375,
+          "height": 39.99951171875,
+          "visibleTop": 824.5916748046875,
+          "visibleBottom": 864.5911865234375,
+          "visibleHeight": 39.99951171875,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "activeName": ""
+      },
+      "initialScreenshot": "targeted-1440x900__goal-edit-initial.png",
+      "beforeWheel": 0,
+      "afterWheel": {
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "modal": {
+          "x": 330,
+          "y": 54,
+          "width": 780,
+          "height": 792
+        },
+        "clientHeight": 792,
+        "scrollHeight": 847,
+        "scrollTop": 55,
+        "scrollable": true,
+        "overflowY": "auto",
+        "scrollbarWidthCss": "none",
+        "offsetMinusClient": 0,
+        "footer": {
+          "top": 752.59375,
+          "bottom": 825.59375,
+          "height": 73,
+          "visibleTop": 752.59375,
+          "visibleBottom": 825.59375,
+          "visibleHeight": 73,
+          "fullyInViewport": true,
+          "fullyInsideModal": true
+        },
+        "primary": {
+          "top": 769.59375,
+          "bottom": 809.59375,
+          "height": 40,
+          "visibleTop": 769.59375,
+          "visibleBottom": 809.59375,
+          "visibleHeight": 40,
+          "fullyInViewport": true,
+          "fullyInsideModal": true
+        },
+        "activeName": ""
+      },
+      "afterPrimaryFocus": {
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "modal": {
+          "x": 330,
+          "y": 54,
+          "width": 780,
+          "height": 792
+        },
+        "clientHeight": 792,
+        "scrollHeight": 847,
+        "scrollTop": 19,
+        "scrollable": true,
+        "overflowY": "auto",
+        "scrollbarWidthCss": "none",
+        "offsetMinusClient": 0,
+        "footer": {
+          "top": 788.59375,
+          "bottom": 861.59375,
+          "height": 73,
+          "visibleTop": 788.59375,
+          "visibleBottom": 861.59375,
+          "visibleHeight": 73,
+          "fullyInViewport": true,
+          "fullyInsideModal": false
+        },
+        "primary": {
+          "top": 805.59375,
+          "bottom": 845.59375,
+          "height": 40,
+          "visibleTop": 805.59375,
+          "visibleBottom": 845.59375,
+          "visibleHeight": 40,
+          "fullyInViewport": true,
+          "fullyInsideModal": true
+        },
+        "activeName": "Zapisz zmiany"
+      },
+      "focusedScreenshot": "targeted-1440x900__goal-edit-primary-focused.png",
+      "escaped": true,
+      "returnedToTrigger": false,
+      "activeAfterEscape": {
+        "tag": "BODY",
+        "text": "Przejdź do treściRRootineDzisiajZadaniaOdżywianieSportPracaCeleSprawyNotatki10:00pon., 10 sie100019°CCzęściowe zachmurze",
+        "ariaLabel": "",
+        "connected": true
+      }
+    }
+  ],
+  "breakpoints": [
+    {
+      "width": 1379,
+      "desktopScopeNote": null,
+      "viewport": {
+        "width": 1379,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 204,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 1175,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "220px 955px 0px"
+      },
+      "contextSidebar": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 220,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 424,
+        "y": 0,
+        "width": 955,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 424,
+        "y": 0,
+        "width": 947,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "28px",
+        "paddingRight": "28px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 971,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": true,
+      "taskPriorityDisplayed": true,
+      "documentOverflowX": 0,
+      "screenshot": "targeted-breakpoint-1379__task-detail.png"
+    },
+    {
+      "width": 1381,
+      "desktopScopeNote": null,
+      "viewport": {
+        "width": 1381,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 204,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 1177,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "220px 957px 0px"
+      },
+      "contextSidebar": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 220,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 424,
+        "y": 0,
+        "width": 957,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 424,
+        "y": 0,
+        "width": 949,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "28px",
+        "paddingRight": "28px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 973.010986328125,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "40",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": null,
+      "detailAriaModal": null,
+      "managedDrawer": null,
+      "backdropDisplayed": false,
+      "focusedInsideDetail": false,
+      "taskContextDisplayed": true,
+      "taskPriorityDisplayed": true,
+      "documentOverflowX": 0,
+      "screenshot": "targeted-breakpoint-1381__task-detail.png"
+    },
+    {
+      "width": 1179,
+      "desktopScopeNote": null,
+      "viewport": {
+        "width": 1179,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 204,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 975,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "975px 0px"
+      },
+      "contextSidebar": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": true,
+        "x": 260,
+        "y": 74,
+        "width": 87.9375,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 975,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 967,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "28px",
+        "paddingRight": "28px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 771,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": false,
+      "taskPriorityDisplayed": false,
+      "documentOverflowX": 0,
+      "screenshot": null
+    },
+    {
+      "width": 1181,
+      "desktopScopeNote": null,
+      "viewport": {
+        "width": 1181,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 204,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 977,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "220px 757px 0px"
+      },
+      "contextSidebar": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 220,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 424,
+        "y": 0,
+        "width": 757,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 424,
+        "y": 0,
+        "width": 749,
+        "height": 948.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "28px",
+        "paddingRight": "28px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 773,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": true,
+      "taskPriorityDisplayed": true,
+      "documentOverflowX": 0,
+      "screenshot": null
+    },
+    {
+      "width": 979,
+      "desktopScopeNote": null,
+      "viewport": {
+        "width": 979,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 68,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 68,
+        "y": 0,
+        "width": 911,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "911px 0px"
+      },
+      "contextSidebar": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": true,
+        "x": 116,
+        "y": 74,
+        "width": 82.609375,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 68,
+        "y": 0,
+        "width": 911,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 68,
+        "y": 0,
+        "width": 903,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "20px",
+        "paddingRight": "20px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 571,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": false,
+      "taskPriorityDisplayed": false,
+      "documentOverflowX": 0,
+      "screenshot": null
+    },
+    {
+      "width": 981,
+      "desktopScopeNote": null,
+      "viewport": {
+        "width": 981,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 204,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 777,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "777px 0px"
+      },
+      "contextSidebar": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": true,
+        "x": 260,
+        "y": 56.796875,
+        "width": 180,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 777,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 204,
+        "y": 0,
+        "width": 769,
+        "height": 948.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "28px",
+        "paddingRight": "28px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 573,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": false,
+      "taskPriorityDisplayed": false,
+      "documentOverflowX": 0,
+      "screenshot": null
+    },
+    {
+      "width": 759,
+      "desktopScopeNote": "outside requested desktop viewport range; breakpoint probe only",
+      "viewport": {
+        "width": 759,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 759,
+        "height": 839,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "759px"
+      },
+      "contextSidebar": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": true,
+        "x": 44,
+        "y": 38.796875,
+        "width": 180,
+        "height": 28,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 759,
+        "height": 839,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 751,
+        "height": 998.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "16px",
+        "paddingRight": "16px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 759,
+        "height": 839,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": false,
+      "taskPriorityDisplayed": false,
+      "documentOverflowX": 0,
+      "screenshot": "targeted-breakpoint-759__task-detail.png"
+    },
+    {
+      "width": 761,
+      "desktopScopeNote": "outside requested desktop viewport range; breakpoint probe only",
+      "viewport": {
+        "width": 761,
+        "height": 900
+      },
+      "primarySidebar": {
+        "displayed": true,
+        "x": 0,
+        "y": 0,
+        "width": 68,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "moduleBody": {
+        "displayed": true,
+        "x": 68,
+        "y": 0,
+        "width": 693,
+        "height": 900,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "693px 0px"
+      },
+      "contextSidebar": {
+        "displayed": false,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "position": "relative",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mobileNavigation": {
+        "displayed": true,
+        "x": 116,
+        "y": 56.796875,
+        "width": 180,
+        "height": 0,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "mainContent": {
+        "displayed": true,
+        "x": 68,
+        "y": 0,
+        "width": 693,
+        "height": 900,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "pageShell": {
+        "displayed": true,
+        "x": 68,
+        "y": 0,
+        "width": 685,
+        "height": 948.59375,
+        "position": "static",
+        "zIndex": "auto",
+        "paddingLeft": "20px",
+        "paddingRight": "20px",
+        "gridTemplateColumns": "none"
+      },
+      "detailPanel": {
+        "displayed": true,
+        "x": 353,
+        "y": 0,
+        "width": 408,
+        "height": 900,
+        "position": "absolute",
+        "zIndex": "41",
+        "paddingLeft": "0px",
+        "paddingRight": "0px",
+        "gridTemplateColumns": "none"
+      },
+      "detailRole": "dialog",
+      "detailAriaModal": "true",
+      "managedDrawer": "true",
+      "backdropDisplayed": true,
+      "focusedInsideDetail": true,
+      "taskContextDisplayed": false,
+      "taskPriorityDisplayed": false,
+      "documentOverflowX": 0,
+      "screenshot": "targeted-breakpoint-761__task-detail.png"
+    }
+  ],
+  "skipLink": {
+    "immediate": {
+      "active": true,
+      "rect": {
+        "x": 8,
+        "y": -51,
+        "width": 136.53125,
+        "height": 39
+      },
+      "transform": "matrix(1, 0, 0, 1, 0, -59)",
+      "transitionDuration": "0.14s"
+    },
+    "settled": {
+      "active": true,
+      "rect": {
+        "x": 8,
+        "y": 8,
+        "width": 136.53125,
+        "height": 39
+      },
+      "transform": "matrix(1, 0, 0, 1, 0, 0)",
+      "transitionDuration": "0.14s"
+    },
+    "targetFocused": true,
+    "screenshot": "targeted-1440x900__skip-link-focus.png"
+  },
+  "notesEditor": {
+    "candidates": [
+      {
+        "text": "Dodaj notatkę",
+        "ariaLabel": ""
+      },
+      {
+        "text": "Widok szybkiego przechwytywania z klawiaturyPowiązania notatki z celem i podróżąCotygodniowy przegląd zmianEksport wybranej listy do PDF",
+        "ariaLabel": ""
+      }
+    ],
+    "box": {
+      "x": 1042.27,
+      "y": 0,
+      "width": 407,
+      "height": 900
+    },
+    "role": null,
+    "ariaModal": null,
+    "screenshot": "targeted-1440x900__notes-editor.png"
+  },
+  "affairsBudget": [
+    {
+      "profile": {
+        "id": "zoom-125",
+        "width": 1536,
+        "height": 864,
+        "deviceScaleFactor": 1.25
+      },
+      "scroll": {
+        "windowY": 0,
+        "documentY": 0,
+        "moduleY": 0,
+        "pageShellY": 0
+      },
+      "screenshot": "targeted-zoom-125__affairs-budget-scroll-reset.png"
+    },
+    {
+      "profile": {
+        "id": "zoom-150",
+        "width": 1280,
+        "height": 720,
+        "deviceScaleFactor": 1.5
+      },
+      "scroll": {
+        "windowY": 0,
+        "documentY": 0,
+        "moduleY": 0,
+        "pageShellY": 0
+      },
+      "screenshot": "targeted-zoom-150__affairs-budget-scroll-reset.png"
+    }
+  ]
+}

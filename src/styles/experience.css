@@ -15,7 +15,7 @@
   border: 2px solid var(--color-border);
   border-top-color: var(--color-primary);
   border-radius: 50%;
-  animation: app-supabase-bootstrap-spin 700ms linear infinite;
+  animation: app-supabase-bootstrap-spin var(--motion-spinner) linear infinite;
 }
 
 @keyframes app-supabase-bootstrap-spin {
@@ -276,7 +276,7 @@
 .app-account-panel__mode button {
   min-height: 30px;
   border: 0;
-  border-radius: calc(var(--radius-md) - 2px);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-muted);
   font-size: var(--text-micro);
@@ -298,7 +298,8 @@
 .app-account-panel__local-note,
 .app-account-panel__hint,
 .app-account-panel__error,
-.app-account-panel__message {
+.app-account-panel__message,
+.app-account-panel__telemetry {
   margin: 0;
   font-size: var(--text-micro);
   line-height: var(--leading-normal);
@@ -306,7 +307,8 @@
 
 .app-account-panel__status,
 .app-account-panel__local-note,
-.app-account-panel__hint {
+.app-account-panel__hint,
+.app-account-panel__telemetry {
   color: var(--color-text-muted);
 }
 
@@ -746,6 +748,7 @@ button.telemetry-bar__segment {
   height: 100%;
   border-radius: inherit;
   background: var(--progress-color, var(--color-primary));
+  transform-origin: left center;
 }
 
 .progress-morph--success .progress-morph__fill { background: var(--color-success); }
@@ -758,16 +761,39 @@ button.telemetry-bar__segment {
   font-size: var(--text-micro);
 }
 
-/* Desktop details float above the workspace so opening them never reflows the
-   list or calendar underneath. Smaller viewports keep the managed drawer
-   behavior (backdrop + focus containment) defined in ui.css. */
+/*
+ * Shared component geometry consumes its component tokens here until the legacy
+ * declarations in ui.css are consolidated. These overrides preserve the rendered
+ * values while making token changes effective.
+ */
+.ui-menu-item { min-height: var(--component-menu-row-height); }
+.ui-checkbox__box { width: var(--component-checkbox-size); height: var(--component-checkbox-size); }
+.ui-checkbox--sm .ui-checkbox__box { width: var(--component-checkbox-size-sm); height: var(--component-checkbox-size-sm); }
+
+/*
+ * Approved DetailPanel contract: above 1380px the panel owns a real 408px grid
+ * track; at or below 1380px ui.css and Shell.tsx provide the modal drawer,
+ * backdrop and focus containment. Existing routes render DetailPanel inside
+ * PageShell, so the desktop panel is aligned absolutely into a separately
+ * reserved outer track; it does not overlap the main-content track.
+ */
 @media (min-width: 1381px) {
+  .ui-module-shell__body:has(.ui-detail-panel) {
+    grid-template-columns: minmax(0, 1fr) var(--detail-panel-width);
+  }
+
+  .ui-module-shell__body.is-with-module-sidebar:has(.ui-detail-panel) {
+    grid-template-columns: var(--context-sidebar-width) minmax(0, 1fr) var(--detail-panel-width);
+  }
+
   .ui-detail-panel {
     position: absolute;
     z-index: var(--layer-detail);
     inset: 0 0 0 auto;
-    box-shadow: var(--shadow-floating);
-    animation: detail-panel-enter var(--motion-normal) var(--ease-enter) both;
+    width: var(--detail-panel-width);
+    min-width: var(--detail-panel-width);
+    box-shadow: none;
+    animation: detail-panel-enter var(--motion-spatial) var(--ease-enter) both;
   }
 }
 
@@ -901,19 +927,6 @@ button.telemetry-bar__segment {
 .day-replay__retention { margin: 0; max-width: 68ch; line-height: var(--leading-normal); }
 .day-replay__retention { color: var(--color-text-tertiary); font-size: var(--text-micro); }
 
-/* Rootine experience preferences are one layout with three density calibrations. */
-:root[data-density="calm"] {
-  --row-height-compact: 42px;
-  --row-height-default: 50px;
-  --row-height-comfortable: 60px;
-}
-
-:root[data-density="compact"] {
-  --row-height-compact: 32px;
-  --row-height-default: 38px;
-  --row-height-comfortable: 48px;
-}
-
 :root[data-density="calm"] .ui-list-row__subtitle,
 :root[data-density="calm"] .today-module-row__overdue-column:empty {
   display: none;
@@ -990,11 +1003,27 @@ button.telemetry-bar__segment {
   }
 }
 
-:root[data-motion="reduced"] *,
-:root[data-motion="reduced"] *::before,
-:root[data-motion="reduced"] *::after {
-  scroll-behavior: auto !important;
-  animation-duration: 1ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 1ms !important;
+:root[data-motion="reduced"] {
+  scroll-behavior: auto;
+  --motion-instant: var(--motion-reduced);
+  --motion-fast: var(--motion-reduced);
+  --motion-normal: var(--motion-reduced);
+  --motion-slow: var(--motion-reduced);
+  --motion-page: var(--motion-reduced);
+  --motion-ritual: var(--motion-reduced);
+  --motion-value-duration: var(--motion-reduced);
+  --motion-progress: var(--motion-reduced);
+  --motion-progress-slow: var(--motion-reduced);
+  --motion-toggle: var(--motion-reduced);
+  --motion-disclosure: var(--motion-reduced);
+  --motion-feedback: var(--motion-reduced);
+  --motion-spatial: var(--motion-reduced);
+  --motion-decorative: var(--motion-reduced);
+  --motion-spinner: var(--motion-reduced);
+}
+
+/* Continuous decorative motion is removed; state changes still render instantly. */
+:root[data-motion="reduced"] .app-supabase-bootstrap__spinner,
+:root[data-motion="reduced"] .living-day--foreground.has-active-area .living-day__area.is-active {
+  animation: none;
 }

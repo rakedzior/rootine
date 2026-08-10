@@ -45,7 +45,8 @@ import {
   ModuleShell,
   SectionHeader,
   Select,
-  uiLayers,
+  Toast,
+  ToastViewport,
   uiColors,
 } from "../ui";
 import {
@@ -76,6 +77,7 @@ const C = {
   muted: uiColors.textTertiary,
   disabled: uiColors.textDisabled,
   blue: uiColors.primary,
+  onAccent: "var(--color-on-accent)",
   blueText: uiColors.primaryText,
   blueSoft: uiColors.primarySubtle,
   panel: uiColors.surface1,
@@ -189,20 +191,11 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
     <div
       role="group"
       aria-label={`${event.source.label}: ${event.title || "bez nazwy"}; status ${event.status.label}${virtual ? "; wystąpienie cykliczne" : ""}${event.source.context ? `; ${event.source.context}` : ""}`}
-      className={`calendar-event ${task ? "" : "calendar-event--readonly"}`}
+      className={`calendar-event${task ? "" : " calendar-event--readonly"}${draggable ? " is-draggable" : ""}${dragging ? " is-dragging" : ""}`}
       draggable={draggable}
       aria-grabbed={draggable ? dragging : undefined}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
-      style={{
-        width: "100%", minWidth: 0, display: "flex", alignItems: "center", gap: 4,
-        border: "none", borderRadius: 4, padding: "0 5px",
-        background: task ? C.blueSoft : C.panel, color: C.text, textAlign: "left",
-        fontSize: 11, lineHeight: "var(--leading-tight)", overflow: "hidden", cursor: draggable ? dragging ? "grabbing" : "grab" : "default",
-        opacity: dragging ? 0.48 : 1, transition: "background-color var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out)",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = C.hover; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = task ? C.blueSoft : C.panel; }}
     >
       {task && onToggle && (
         <button
@@ -213,7 +206,7 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
           className={`task-checkbox task-checkbox--compact ${event.status.completed ? "is-checked" : ""}`}
           style={{ "--task-checkbox-color": event.status.completed ? C.blueText : C.second } as React.CSSProperties}
         >
-          {event.status.completed && <span style={{ fontSize: 11, lineHeight: 1, fontWeight: 600 }}>✓</span>}
+          {event.status.completed && <span className="calendar-event__checkmark">✓</span>}
         </button>
       )}
       <button
@@ -230,18 +223,17 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
           keyboardEvent.stopPropagation();
           onMoveByDay(keyboardEvent.key === "ArrowLeft" ? -1 : 1);
         }}
-        className="flex min-h-6 min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left"
-        style={{ color: "inherit", cursor: "pointer" }}
+        className="calendar-event__trigger flex min-h-6 min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left"
       >
-        <span className="calendar-event__title" title={event.title} style={{ minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "1 1 auto", textDecoration: event.status.completed ? "line-through" : "none", opacity: event.status.completed ? 0.6 : 1 }}>{event.title}</span>
-        {virtual && <span aria-hidden="true" title="Wystąpienie cykliczne" style={{ color: C.blueText, flexShrink: 0 }}>↻</span>}
+        <span className={`calendar-event__title${event.status.completed ? " is-completed" : ""}`} title={event.title}>{event.title}</span>
+        {virtual && <span className="calendar-event__recurrence" aria-hidden="true" title="Wystąpienie cykliczne">↻</span>}
         {/* The source label only earns space when the entry comes from another module. In a task
             calendar "Zadania" is redundant, and as a non-shrinking element it used to consume the
             whole chip and collapse the task name to zero width. */}
         {event.source.kind !== "task" && (
-          <span className="calendar-event__source" style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, color: C.second }}>{event.source.label}</span>
+          <span className="calendar-event__source">{event.source.label}</span>
         )}
-        {event.time && <span className="calendar-event__time" style={{ fontFamily: "var(--font-data)", fontSize: 11, color: C.blueText, flexShrink: 0 }}>{event.time}</span>}
+        {event.time && <span className="calendar-event__time">{event.time}</span>}
       </button>
     </div>
   );
@@ -298,7 +290,6 @@ export default function Kalendarz() {
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailInitialFocusIdRef = useRef<string | null>(null);
   const pendingKeyboardMoveRef = useRef<{ id: number; dateKey: string } | null>(null);
-  const trashUndoTimerRef = useRef<number | null>(null);
   const workspaceRef = useRef(initialWorkspace);
   const suppressCellClickRef = useRef(false);
   const [storageFailed, setStorageFailed] = useState(false);
@@ -321,10 +312,6 @@ export default function Kalendarz() {
     setStorageFailed(!saveTaskWorkspace(nextWorkspace));
     workspaceRef.current = nextWorkspace;
   }, [events]);
-
-  useEffect(() => () => {
-    if (trashUndoTimerRef.current !== null) window.clearTimeout(trashUndoTimerRef.current);
-  }, []);
 
   useEffect(() => {
     const syncWorkspace = () => {
@@ -793,11 +780,6 @@ export default function Kalendarz() {
     setEvents((current) => current.map((event) => event.id === id ? { ...event, deleted: true } : event));
     if (removedTask) {
       setTrashedTask(removedTask);
-      if (trashUndoTimerRef.current !== null) window.clearTimeout(trashUndoTimerRef.current);
-      trashUndoTimerRef.current = window.setTimeout(() => {
-        setTrashedTask(null);
-        trashUndoTimerRef.current = null;
-      }, 8_000);
     }
     if (draftId === id) setDraftId(null);
     setSelectedId(null);
@@ -813,11 +795,8 @@ export default function Kalendarz() {
       : event));
     setCalendarAnnouncement(`Przywrócono zadanie „${trashedTask.text || "bez nazwy"}”.`);
     setTrashedTask(null);
-    if (trashUndoTimerRef.current !== null) {
-      window.clearTimeout(trashUndoTimerRef.current);
-      trashUndoTimerRef.current = null;
-    }
   };
+  const dismissTrashUndo = useCallback(() => setTrashedTask(null), []);
   const createDraft = (calendarDate = todayKey()) => {
     const parsed = new Date(`${calendarDate}T12:00:00`);
     const event: CalendarEvent = {
@@ -1041,12 +1020,16 @@ export default function Kalendarz() {
           {calendarAnnouncement}
         </p>
         {trashedTask && (
-          <div className="calendar-undo" role="status" aria-live="polite">
-            <span>
+          <ToastViewport>
+            <Toast
+              tone="neutral"
+              actionLabel="Cofnij"
+              onAction={undoDeleteTask}
+              onDismiss={dismissTrashUndo}
+            >
               Przeniesiono {trashedTask.schedule?.recurrence ? "całą serię" : "zadanie"} „{trashedTask.text || "Zadanie bez nazwy"}” do Kosza.
-            </span>
-            <Button variant="quiet" size="sm" onClick={undoDeleteTask}>Cofnij</Button>
-          </div>
+            </Toast>
+          </ToastViewport>
         )}
 
         {/* A <div> rather than <section>: ARIA does not allow role="grid" on a sectioning
@@ -1058,10 +1041,9 @@ export default function Kalendarz() {
           aria-colcount={7}
           aria-rowcount={calendarRows.length + 1}
           className="calendar-page flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-          style={{ color: C.text }}
         >
-          <div role="row" aria-rowindex={1} className="calendar-weekdays" style={{ borderBottom: `1px solid ${C.border}` }}>
-            {WEEKDAYS.map((day) => <div key={day} role="columnheader" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: "var(--text-label)" }}>{day}</div>)}
+          <div role="row" aria-rowindex={1} className="calendar-weekdays">
+            {WEEKDAYS.map((day) => <div key={day} role="columnheader" className="calendar-weekday">{day}</div>)}
           </div>
 
           <div role="rowgroup" className="calendar-grid-rows" style={{ "--calendar-row-count": calendarRows.length } as React.CSSProperties}>
@@ -1121,16 +1103,11 @@ export default function Kalendarz() {
                 setDraggedId(null);
                 setDragOverDateKey(null);
               }}
-              style={{
-                minWidth: 0, minHeight: 0, position: "relative", padding: "7px 5px 4px",
-                borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
-                cursor: "pointer", transition: "background-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out)",
-              }}
             >
-              <div style={{ height: 25, display: "flex", alignItems: "flex-start" }}>
-                <span style={{ width: 25, height: 25, display: "grid", placeItems: "center", borderRadius: "50%", background: isToday ? C.blue : "transparent", color: isToday ? C.text : cell.current ? C.text : C.disabled, fontSize: 12, fontWeight: isToday ? 600 : 400 }}>{cell.day}</span>
+              <div className="calendar-cell__date-row">
+                <span className={`calendar-cell__date${isToday ? " is-today" : ""}${cell.current ? "" : " is-outside"}`}>{cell.day}</span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+              <div className="calendar-cell__events">
                 {dayEvents.slice(0, 3).map((event) => (
                   <CalendarEventBar
                     key={event.key}
@@ -1186,7 +1163,10 @@ export default function Kalendarz() {
                         triggerRef={agendaTriggerRef}
                         initialFocus="first"
                         onDismiss={() => setAgendaDateKey(null)}
-                        style={{ left: agendaPosition.left, top: agendaPosition.top }}
+                        style={{
+                          left: agendaPosition.left,
+                          top: agendaPosition.top,
+                        }}
                         onClick={(menuEvent) => menuEvent.stopPropagation()}
                       >
                         {dayEvents.slice(3).map((hiddenEvent) => {
@@ -1242,16 +1222,15 @@ export default function Kalendarz() {
       {selectedTask && (
         <div
           ref={detailRef}
-          className="calendar-task-detail"
+          className={`calendar-task-detail${detailPosition.ready ? " is-ready" : ""}`}
           role="dialog"
           aria-modal="false"
           aria-label={selectedVirtualOccurrence ? "Szczegóły wystąpienia cyklicznego" : "Szczegóły zadania"}
           style={{
-            position: "fixed", zIndex: uiLayers.detail, left: detailPosition.left, top: detailPosition.top,
-            visibility: detailPosition.ready ? "visible" : "hidden",
-            width: detailPosition.width, height: detailPosition.height, overflow: "hidden",
-            border: `1px solid ${C.border}`, borderRadius: 15,
-            boxShadow: "var(--shadow-floating)",
+            left: detailPosition.left,
+            top: detailPosition.top,
+            width: detailPosition.width,
+            height: detailPosition.height,
           }}
         >
           <TaskDetail
@@ -1285,16 +1264,15 @@ export default function Kalendarz() {
       {selectedExternalOccurrence && (
         <div
           ref={detailRef}
-          className="calendar-task-detail calendar-source-detail"
+          className={`calendar-task-detail calendar-source-detail${detailPosition.ready ? " is-ready" : ""}`}
           role="dialog"
           aria-modal="false"
           aria-label={`Szczegóły: ${selectedExternalOccurrence.title}`}
           style={{
-            position: "fixed", zIndex: uiLayers.detail, left: detailPosition.left, top: detailPosition.top,
-            visibility: detailPosition.ready ? "visible" : "hidden",
-            width: detailPosition.width, maxHeight: detailPosition.height, overflow: "auto",
-            border: `1px solid ${C.border}`, borderRadius: 15,
-            boxShadow: "var(--shadow-floating)",
+            left: detailPosition.left,
+            top: detailPosition.top,
+            width: detailPosition.width,
+            maxHeight: detailPosition.height,
           }}
         >
           <header className="calendar-source-detail__header">

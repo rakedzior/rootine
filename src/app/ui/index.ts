@@ -6,10 +6,8 @@ export { Checkbox, type CheckboxProps, type CheckboxShape, type CheckboxSize } f
 export { ConfirmDialog, type ConfirmDialogProps } from "./components/ConfirmDialog";
 export { CompletedSection, type CompletedSectionProps } from "./components/CompletedSection";
 export { ContentHeader, type ContentHeaderProps } from "./components/ContentHeader";
-export { IconButton, type IconButtonProps } from "./components/IconButton";
 export { ListRow, type ListRowProps, type ListRowDensity } from "./components/ListRow";
 export { ProgressBar, type ProgressBarProps, type ProgressSize, type ProgressTone } from "./components/ProgressBar";
-export { StatCard, StatGrid, type StatCardProps, type StatGridProps, type StatTone } from "./components/StatCard";
 export { BREAKPOINTS, BREAKPOINT_EXCEPTIONS, maxWidthQuery, type BreakpointName } from "./breakpoints";
 export { DatePicker, type DatePickerProps } from "./components/DatePicker";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
@@ -40,14 +38,12 @@ export {
   MainContent,
   WorkspaceLayout,
   ModuleSidebar,
-  ContextSidebar,
   ContextNavGroup,
   ContextNavItem,
   DetailPanel,
   ModuleMain,
   ModuleShell,
   type ModuleSidebarProps,
-  type ContextSidebarProps,
   type ContextNavGroupProps,
   type AmbientConfig,
   type AmbientSceneProps,
@@ -60,16 +56,6 @@ export {
   type WorkspaceLayoutProps,
 } from "./components/Shell";
 export { Tabs, type TabItem, type TabsProps } from "./components/Tabs";
-export {
-  uiChartColors,
-  uiColors,
-  uiFocus,
-  uiLayers,
-  uiLayout,
-  uiMotion,
-  uiRadii,
-  uiShadows,
-  uiSpacing,
-  uiStates,
-  uiTypography,
-} from "./tokens";
+export { Textarea, type TextareaProps } from "./components/Textarea";
+export { Toast, ToastViewport, type ToastProps, type ToastTone } from "./components/Toast";
+export { uiColors, uiLayers, uiShadows } from "./tokens";

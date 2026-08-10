@@ -26,7 +26,7 @@ import {
   Trash2,
   WalletCards,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatPercent, pluralize } from "../formatters";
@@ -59,6 +59,7 @@ import {
 import {
   Badge,
   Button,
+  ConfirmDialog,
   ContentHeader,
   ContextNavItem,
   DatePicker,
@@ -71,8 +72,12 @@ import {
   ModuleShell,
   Select,
   Tabs,
+  Textarea,
+  Toast,
+  ToastViewport,
   AddToTasksButton,
 } from "../ui";
+import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import "../../styles/travel.css";
 
 import {
@@ -133,6 +138,9 @@ export default function Podroze({
   const [statusFilter, setStatusFilter] = useState<"upcoming" | "all" | "archived" | TripStatus>("upcoming");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [editorBaseline, setEditorBaseline] = useState<Draft>(EMPTY_DRAFT);
+  const draftSnapshotRef = useRef(draft);
+  draftSnapshotRef.current = draft;
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [tripActionState, setTripActionState] = useState<TripActionState | null>(null);
@@ -146,6 +154,17 @@ export default function Podroze({
   const selectedTrip = workspace.trips.find((trip) => trip.id === tripId)!;
   const sectionParam = searchParams.get("sekcja");
   const activeSection: TravelSection = isTravelSection(sectionParam) ? sectionParam : "overview";
+  const editorDraftKey = editor
+    ? `rootine.travel-editor-draft.${selectedTrip?.id ?? "new-trip"}.${editor.kind}.${editor.mode}.${editor.id ?? "new"}`
+    : "";
+
+  useEffect(() => {
+    if (!editorDraftKey) return;
+    const baseline = draftSnapshotRef.current;
+    setEditorBaseline(baseline);
+    const recovered = readSessionDraft<Partial<Draft>>(editorDraftKey);
+    if (recovered && typeof recovered === "object") setDraft({ ...baseline, ...recovered });
+  }, [editorDraftKey]);
 
   useEffect(() => {
     setStorageError(!saveTravelWorkspace(workspace));
@@ -367,6 +386,13 @@ export default function Podroze({
     setEditor(null);
     setEditorError("");
   };
+  const editorDraftProtection = useDraftProtection({
+    active: Boolean(editor),
+    isDirty: Boolean(editor) && JSON.stringify(draft) !== JSON.stringify(editorBaseline),
+    draft,
+    storageKey: editorDraftKey,
+    onDiscard: closeEditor,
+  });
 
   const submitEditor = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -429,6 +455,7 @@ export default function Podroze({
         }));
         selectTrip(id);
       }
+      editorDraftProtection.clearDraft();
       closeEditor();
       return;
     }
@@ -597,6 +624,7 @@ export default function Podroze({
       }));
     }
 
+    editorDraftProtection.clearDraft();
     closeEditor();
   };
 
@@ -938,11 +966,11 @@ export default function Podroze({
         {!selectedTrip ? (
           <section className="travel-overview" aria-label="Przegląd podróży">
             {deletedTripUndo && (
-              <div className="travel-trip-undo" role="status">
-                <span>Usunięto podróż „{deletedTripUndo.name}”.</span>
-                <Button variant="quiet" size="sm" onClick={undoTripDelete}>Cofnij</Button>
-                <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij komunikat" onClick={() => setDeletedTripUndo(null)}>×</Button>
-              </div>
+              <ToastViewport>
+                <Toast actionLabel="Cofnij" onAction={undoTripDelete} onDismiss={() => setDeletedTripUndo(null)}>
+                  Usunięto podróż „{deletedTripUndo.name}”.
+                </Toast>
+              </ToastViewport>
             )}
             {filteredTrips.length === 0 ? (
               <EmptyState
@@ -1475,11 +1503,11 @@ export default function Podroze({
           eyebrow="Podróże"
           title={editorTitle}
           description={editor.kind === "trip" ? "Najpierw ustal ramy wyjazdu. Szczegóły uzupełnisz w jego zakładkach." : `Element zostanie zapisany w podróży ${selectedTrip?.name ?? ""}.`}
-          onClose={closeEditor}
+          onClose={editorDraftProtection.requestClose}
           size={editor.kind === "trip" || editor.kind === "transport" ? "md" : "sm"}
           footer={(
             <>
-              <Button variant="ghost" onClick={closeEditor}>Anuluj</Button>
+              <Button variant="ghost" onClick={editorDraftProtection.requestClose}>Anuluj</Button>
               <Button variant="primary" type="submit" form="travel-editor-form">
                 {editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}
               </Button>
@@ -1642,39 +1670,43 @@ export default function Podroze({
             )}
 
             {(editor.kind === "trip" || editor.kind === "itinerary" || editor.kind === "document") && (
-              <label className="ui-field">
-                <span className="ui-field__label">Notatka <span className="travel-optional">opcjonalnie</span></span>
-                <textarea
-                  className="ui-field__control travel-textarea"
-                  value={draft.note}
-                  placeholder="Ważny kontekst, adres, ograniczenia albo wskazówki"
-                  onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
-                />
-              </label>
+              <Textarea
+                label="Notatka (opcjonalnie)"
+                className="travel-textarea"
+                value={draft.note}
+                placeholder="Ważny kontekst, adres, ograniczenia albo wskazówki"
+                onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+              />
             )}
           </form>
         </Modal>
       )}
 
+      {editorDraftProtection.promptOpen && (
+        <ConfirmDialog
+          title="Odrzucić niezapisane zmiany?"
+          confirmLabel="Odrzuć zmiany"
+          cancelLabel="Kontynuuj edycję"
+          onCancel={editorDraftProtection.keepEditing}
+          onConfirm={editorDraftProtection.confirmDiscard}
+        >
+          <p className="travel-delete-note">Szkic pozostaje w tej karcie, dopóki go nie zapiszesz albo świadomie odrzucisz.</p>
+        </ConfirmDialog>
+      )}
+
       {deleteState && (
-        <Modal
-          eyebrow="Potwierdzenie"
+        <ConfirmDialog
           title={`Usunąć „${deleteState.label}”?`}
           description="Pozycja zniknie z lokalnego planu podróży."
-          onClose={() => setDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmDelete}>Usuń</Button>
-            </>
-          )}
+          onCancel={() => setDeleteState(null)}
+          onConfirm={confirmDelete}
         >
           <p className="travel-delete-note">Tej operacji nie można cofnąć.</p>
-        </Modal>
+        </ConfirmDialog>
       )}
 
       {tripActionState && (
-        <Modal
+        <ConfirmDialog
           eyebrow="Podróż"
           title={tripActionState.kind === "archive"
             ? `Archiwizować „${tripActionState.trip.name}”?`
@@ -1682,25 +1714,17 @@ export default function Podroze({
           description={tripActionState.kind === "archive"
             ? "Podróż zniknie z listy nadchodzących. Wszystkie rezerwacje, dokumenty i zadania pozostaną zapisane."
             : "Cały dossier podróży zostanie usunięty z lokalnego obszaru. Bezpośrednio po operacji będzie dostępne Cofnij."}
-          onClose={() => setTripActionState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setTripActionState(null)}>Anuluj</Button>
-              <Button
-                variant={tripActionState.kind === "archive" ? "primary" : "danger"}
-                onClick={confirmTripAction}
-              >
-                {tripActionState.kind === "archive" ? "Archiwizuj" : "Usuń podróż"}
-              </Button>
-            </>
-          )}
+          tone={tripActionState.kind === "archive" ? "primary" : "danger"}
+          confirmLabel={tripActionState.kind === "archive" ? "Archiwizuj" : "Usuń podróż"}
+          onCancel={() => setTripActionState(null)}
+          onConfirm={confirmTripAction}
         >
           <p className="travel-delete-note">
             {tripActionState.kind === "archive"
               ? "Podróż można później przywrócić z archiwum."
               : "Przed usunięciem możesz pobrać eksport JSON z nagłówka podróży."}
           </p>
-        </Modal>
+        </ConfirmDialog>
       )}
     </>
   );

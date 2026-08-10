@@ -78,6 +78,15 @@ export type EditorState =
   | { kind: "vehicle"; mode: "add" | "edit"; id?: string }
   | { kind: "vehicleItem"; mode: "add" | "edit"; id?: string; vehicleId: string }
   | { kind: "budget"; mode: "add" };
+
+export function getAffairsEditorDraftKey(editor: EditorState | null, budgetMonthKey: string): string {
+  if (!editor) return "";
+  const recordId = "id" in editor ? editor.id ?? "new" : "new";
+  const vehicleContext = editor.kind === "vehicleItem" ? `.${editor.vehicleId}` : "";
+  const budgetContext = editor.kind === "budget" ? `.${budgetMonthKey}` : "";
+  return `rootine.affairs-editor-draft.${editor.kind}.${editor.mode}.${recordId}${vehicleContext}${budgetContext}`;
+}
+
 export type DeleteState = {
   kind: "matter" | "payment" | "oneTime" | "subscription" | "document" | "vehicle" | "vehicleItem" | "budget";
   id: string;

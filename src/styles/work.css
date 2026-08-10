@@ -1446,6 +1446,60 @@
   .work-editor-grid { grid-template-columns: 1fr; }
 }
 
+/*
+ * The desktop viewport stays wide when a DetailPanel is docked, but the work list itself can be
+ * only 488px wide. Let the row respond to that owned width: secondary context moves into the
+ * detail panel and the remaining controls use their compact, still-operable representation.
+ */
+@container workspace (max-width: 760px) {
+  .work-task-row > .ui-list-row__trailing,
+  .work-task-row--with-context > .ui-list-row__trailing {
+    width: min(44%, 170px);
+    flex-basis: min(44%, 170px);
+  }
+
+  .work-task-row__controls {
+    width: auto;
+    grid-template-columns: 20px 28px 28px minmax(72px, 92px);
+    gap: 2px;
+  }
+
+  .work-task-row__context-column {
+    display: none;
+  }
+
+  .work-task-row__controls--with-context {
+    grid-template-columns: 20px 28px 28px minmax(0, 92px);
+  }
+
+  .work-task-row--compact .work-task-row__controls {
+    grid-template-columns: 28px 28px minmax(0, 92px);
+  }
+
+  .work-task-status,
+  .work-task-priority {
+    max-width: 28px;
+    padding-inline: 6px;
+    font-size: 0;
+  }
+
+  .work-task-status svg,
+  .work-task-priority svg {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+  }
+
+  .work-task-inline-date {
+    width: auto;
+  }
+
+  .work-task-inline-date .ui-date-trigger {
+    width: auto;
+    max-width: 92px;
+  }
+}
+
 @media (pointer: coarse) {
   .work-task-status,
   .work-task-priority,
@@ -1641,39 +1695,6 @@
 }
 
 .work-detail-save-status.is-error { color: var(--color-danger-coral); }
-.work-toast {
-  position: fixed;
-  z-index: var(--layer-toast);
-  right: var(--space-2xl);
-  bottom: var(--space-2xl);
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-md);
-  max-width: min(420px, calc(100vw - 32px));
-  padding: 8px 10px 8px var(--space-md);
-  border: 1px solid var(--work-border);
-  border-radius: var(--radius-md);
-  background: var(--color-graphite-card);
-  box-shadow: var(--shadow-floating);
-  color: var(--color-text-secondary);
-  font-size: var(--text-label);
-}
-.work-toast > span { min-width: 0; flex: 1; }
-.work-toast > button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-.work-toast > button:hover { background: var(--color-graphite-hover); color: var(--color-chalk-white); }
-
 .work-editor-modal-body { padding-bottom: var(--space-xl); }
 .work-editor-section { display: grid; gap: var(--space-md); }
 .work-editor-section + .work-editor-section { padding-top: var(--space-md); border-top: 1px solid var(--work-border); }
@@ -1712,7 +1733,6 @@
 .work-detail-subtask__quick-check.is-completed { border-color: var(--color-precision-blue); background: var(--color-precision-blue-strong); }
 
 @media (max-width: 760px) {
-  .work-toast { right: var(--space-lg); bottom: var(--space-lg); }
   .work-task-columns { display: none; }
 }
 

@@ -993,28 +993,13 @@
   }
 }
 
-/*
- * Global reduced-motion guard. Individual stylesheets may still opt specific elements out,
- * but this catch-all means a new module cannot ship an unguarded animation: previously only
- * 8 of 12 animated stylesheets honoured the preference.
- */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-  }
+/* The provider resolves system/user preference into data-motion; keep feedback visible. */
+:root[data-motion="reduced"] .app-sidebar {
+  transition: none;
+}
 
-  .app-sidebar {
-    transition: none;
-  }
-
-  .is-spinning {
-    animation: none;
-  }
+:root[data-motion="reduced"] .is-spinning {
+  animation: none;
 }
 
 .app-shell__body,

@@ -1,12 +1,13 @@
-import { useId, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Image as ImageIcon, Plus, Target, Upload, X } from "lucide-react";
+import { useId, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { Check, ChevronDown, Image as ImageIcon, Plus, Upload, X } from "lucide-react";
 import {
   GOAL_ACCENT_OPTIONS,
   getGoalCurrentValue,
   normalizeGoalAccentColor,
 } from "./goalsModel";
 import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
-import { Button, DatePicker, Input, Modal, Select, uiColors, type ModalSize } from "../ui";
+import { Button, ConfirmDialog as UiConfirmDialog, DatePicker, Input, Modal, Select, Textarea, type ModalSize } from "../ui";
+import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import type {
   Goal,
   GoalCategory,
@@ -20,19 +21,6 @@ import type {
   GoalRegularityPeriod,
   GoalStatus,
 } from "./goalsModel";
-
-const C = {
-  input: uiColors.surface1,
-  border: uiColors.border,
-  borderStrong: uiColors.borderStrong,
-  primary: uiColors.textPrimary,
-  second: uiColors.textSecondary,
-  muted: uiColors.textTertiary,
-  blue: uiColors.primary,
-  blueText: uiColors.primaryText,
-  green: uiColors.success,
-  danger: uiColors.danger,
-};
 
 type SelectOption = { value: string; label: string; description?: string };
 
@@ -71,7 +59,6 @@ export function ThemedSelect({
     />
   );
 }
-
 async function prepareTransparentIcon(file: File): Promise<string> {
   if (!["image/png", "image/webp"].includes(file.type)) throw new Error("Wybierz plik PNG lub WebP.");
   if (file.size > 2_000_000) throw new Error("Plik może mieć maksymalnie 2 MB.");
@@ -113,18 +100,21 @@ async function prepareTransparentIcon(file: File): Promise<string> {
     URL.revokeObjectURL(objectUrl);
   }
 }
-
 function DialogShell({
   title,
   subtitle,
   onClose,
   children,
+  footer,
+  returnFocusRef,
   size = "lg",
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   size?: ModalSize;
 }) {
   return (
@@ -134,12 +124,13 @@ function DialogShell({
       onClose={onClose}
       size={size}
       bodyClassName="p-0"
+      footer={footer}
+      returnFocusRef={returnFocusRef}
     >
       {children}
     </Modal>
   );
 }
-
 function TextareaField({
   label,
   value,
@@ -161,30 +152,21 @@ function TextareaField({
   wide?: boolean;
   maxLength?: number;
 }) {
-  const id = useId();
-  const hintId = hint ? `${id}-hint` : undefined;
-  const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
   return (
-    <div className={wide ? "col-span-2 ui-field" : "ui-field"}>
-      <label htmlFor={id} className="ui-field__label">{label}</label>
-      <textarea
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={rows}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        aria-invalid={Boolean(error)}
-        aria-describedby={describedBy}
-        className="ui-field__control resize-none"
-      />
-      {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
-      {error && <p id={errorId} className="ui-field__error" role="alert">{error}</p>}
-    </div>
+    <Textarea
+      label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      rows={rows}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      hint={hint}
+      error={error}
+      fieldClassName={wide ? "col-span-2" : undefined}
+      className={`resize-none${rows === 2 ? " goal-dialog-textarea--compact" : ""}`}
+    />
   );
 }
-
 export type GoalEditorData = {
   title: string;
   description: string;
@@ -219,24 +201,14 @@ const ICONS: { value: GoalIconKey; label: string }[] = [
   { value: "no-smoking", label: "Zdrowie" },
 ];
 
-export function GoalFormDialog({
-  goal,
-  initialTitle,
-  categories,
-  onClose,
-  onSubmit,
-}: {
-  goal?: Goal | null;
-  initialTitle?: string;
-  categories: GoalCategory[];
-  onClose: () => void;
-  onSubmit: (data: GoalEditorData) => void;
-}) {
+function createGoalEditorData(
+  goal: Goal | null | undefined,
+  initialTitle: string | undefined,
+  categories: GoalCategory[],
+): GoalEditorData {
   const defaultCategory = categories[0];
   const today = todayLocalDateKey();
-  const uploadId = useId();
-  const advancedId = useId();
-  const [form, setForm] = useState<GoalEditorData>(() => ({
+  return {
     title: goal?.title ?? initialTitle ?? "",
     description: goal?.description ?? "",
     categoryId: goal?.categoryId ?? defaultCategory?.id ?? "personal",
@@ -256,10 +228,50 @@ export function GoalFormDialog({
     unit: goal?.unit ?? "",
     manualProgress: goal?.manualProgress ?? 0,
     note: goal?.note ?? "",
-  }));
+  };
+}
+
+// End of goal dialog contracts.
+export function GoalFormDialog({
+  goal,
+  initialTitle,
+  categories,
+  onClose,
+  onSubmit,
+  returnFocusRef,
+}: {
+  goal?: Goal | null;
+  initialTitle?: string;
+  categories: GoalCategory[];
+  onClose: () => void;
+  onSubmit: (data: GoalEditorData) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+}) {
+  const uploadId = useId();
+  const advancedId = useId();
+  const formId = useId();
+  const [initialForm] = useState<GoalEditorData>(() => createGoalEditorData(goal, initialTitle, categories));
+  const draftStorageKey = `rootine.goal-form-draft.${goal?.id ?? "new"}`;
+  const [form, setForm] = useState<GoalEditorData>(() => {
+    const recovered = readSessionDraft<Partial<GoalEditorData>>(draftStorageKey);
+    if (!recovered || typeof recovered !== "object" || typeof recovered.title !== "string") return initialForm;
+    return {
+      ...initialForm,
+      ...recovered,
+      color: normalizeGoalAccentColor(recovered.color ?? initialForm.color),
+    };
+  });
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [iconError, setIconError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(initialForm);
+  const draftProtection = useDraftProtection({
+    active: true,
+    isDirty,
+    draft: form,
+    storageKey: draftStorageKey,
+    onDiscard: onClose,
+  });
 
   const set = <K extends keyof GoalEditorData>(key: K, value: GoalEditorData[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -288,6 +300,7 @@ export function GoalFormDialog({
   const submit = () => {
     setSubmitted(true);
     if (!valid) return;
+    draftProtection.clearDraft();
     onSubmit({
       ...form,
       title: form.title.trim(),
@@ -298,21 +311,30 @@ export function GoalFormDialog({
   };
 
   return (
-    <DialogShell
-      title={goal ? "Edytuj cel" : "Nowy cel"}
-      subtitle={goal ? "Zmień ustawienia i sposób mierzenia celu" : "Zdefiniuj rezultat i sposób mierzenia postępu"}
-      onClose={onClose}
-      size="lg"
-    >
+    <>
+      <DialogShell
+        title={goal ? "Edytuj cel" : "Nowy cel"}
+        subtitle={goal ? "Zmień ustawienia i sposób mierzenia celu" : "Zdefiniuj rezultat i sposób mierzenia postępu"}
+        onClose={draftProtection.requestClose}
+        returnFocusRef={returnFocusRef}
+        size="lg"
+        footer={(
+          <>
+            <Button variant="quiet" onClick={draftProtection.requestClose}>Anuluj</Button>
+            <Button variant="primary" type="submit" form={formId}>{goal ? "Zapisz zmiany" : "Dodaj cel"}</Button>
+          </>
+        )}
+      >
       <form
+        id={formId}
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
           submit();
         }}
-        className="flex max-h-[calc(90vh-84px)] flex-col"
+        className="goal-dialog-form"
       >
-        <div className="goal-dialog-grid grid flex-1 grid-cols-2 gap-4 overflow-y-auto px-6 py-5">
+        <div className="goal-dialog-grid grid grid-cols-2 gap-4 px-6 py-5">
           <Input
             autoFocus
             label="Nazwa celu"
@@ -360,23 +382,21 @@ export function GoalFormDialog({
           <fieldset className="col-span-2">
             <legend className="ui-field__label">Własna ikona</legend>
             <div
-              className="flex items-center gap-3 rounded-xl border p-3"
-              style={{ background: C.input, borderColor: iconError ? C.danger : C.border }}
+              className={`goal-icon-upload flex items-center gap-3 rounded-xl border p-3 ${iconError ? "has-error" : ""}`}
             >
               <div
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border"
-                style={{ borderColor: C.border, background: `${form.color}18` }}
+                className="goal-icon-upload__preview flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border"
+                style={{ "--goal-icon-accent": form.color } as CSSProperties}
               >
                 {form.customIcon
                   ? <img src={form.customIcon} alt="" className="h-7 w-7 object-contain" />
-                  : <ImageIcon size={16} aria-hidden="true" style={{ color: C.muted }} />}
+                  : <ImageIcon size={16} aria-hidden="true" />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px]" style={{ color: C.second }}>PNG lub WebP z przezroczystym tłem</p>
+                <p className="goal-icon-upload__description">PNG lub WebP z przezroczystym tłem</p>
                 <p
                   id={`${uploadId}-help`}
-                  className="mt-0.5 text-[11px]"
-                  style={{ color: iconError ? C.danger : C.muted }}
+                  className={`goal-icon-upload__help mt-0.5 ${iconError ? "has-error" : ""}`}
                 >
                   {iconError || "Maks. 2 MB · zapis do 128×128 px"}
                 </p>
@@ -402,8 +422,7 @@ export function GoalFormDialog({
               />
               <label
                 htmlFor={uploadId}
-                className="file-upload-trigger flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px]"
-                style={{ color: C.blueText, borderColor: C.blue }}
+                className="file-upload-trigger goal-icon-upload__trigger flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2"
               >
                 <Upload size={11} aria-hidden="true" />
                 Wgraj
@@ -550,7 +569,7 @@ export function GoalFormDialog({
                 <ChevronDown
                   size={13}
                   aria-hidden="true"
-                  style={{ transform: advancedOpen ? "rotate(180deg)" : "none" }}
+                  className={`goal-dialog-disclosure-icon ${advancedOpen ? "is-open" : ""}`}
                 />
               )}
               onClick={() => setAdvancedOpen((open) => !open)}
@@ -595,17 +614,12 @@ export function GoalFormDialog({
                         type="button"
                         aria-pressed={selected}
                         onClick={() => set("color", option.value)}
-                        className="flex min-h-11 items-center gap-2 rounded-lg border px-2.5 text-left text-[11px]"
-                        style={{
-                          color: selected ? C.primary : C.second,
-                          borderColor: selected ? option.value : C.border,
-                          background: selected ? `${option.value}18` : C.input,
-                        }}
+                        className={`goal-accent-option flex min-h-11 items-center gap-2 rounded-lg border px-2.5 text-left ${selected ? "is-selected" : ""}`}
+                        style={{ "--goal-accent-option": option.value } as CSSProperties}
                       >
                         <span
                           aria-hidden="true"
-                          className="h-3 w-3 flex-none rounded-full"
-                          style={{ background: option.value }}
+                          className="goal-accent-option__swatch h-3 w-3 flex-none rounded-full"
                         />
                         {option.label}
                       </button>
@@ -624,15 +638,22 @@ export function GoalFormDialog({
             </div>
           )}
         </div>
-        <div className="flex justify-end gap-2 border-t px-6 py-4" style={{ borderColor: C.border }}>
-          <Button variant="quiet" onClick={onClose}>Anuluj</Button>
-          <Button variant="primary" type="submit">{goal ? "Zapisz zmiany" : "Dodaj cel"}</Button>
-        </div>
       </form>
-    </DialogShell>
+      </DialogShell>
+      {draftProtection.promptOpen && (
+        <UiConfirmDialog
+          title="Odrzucić niezapisane zmiany?"
+          confirmLabel="Odrzuć zmiany"
+          cancelLabel="Kontynuuj edycję"
+          onCancel={draftProtection.keepEditing}
+          onConfirm={draftProtection.confirmDiscard}
+        >
+          <p className="ui-confirm-dialog__note">Szkic zostanie usunięty. Tej operacji nie można cofnąć.</p>
+        </UiConfirmDialog>
+      )}
+    </>
   );
 }
-
 export function ProgressDialog({
   goal,
   progress,
@@ -648,14 +669,31 @@ export function ProgressDialog({
   const isFrequency = goal.progressMode === "regularity" && goal.regularityMode === "frequency";
   const isStreak = goal.progressMode === "regularity" && goal.regularityMode !== "frequency";
   const isManual = goal.progressMode === "manual";
-  const [date, setDate] = useState(progress?.date ?? todayLocalDateKey());
-  const [kind, setKind] = useState<GoalProgressEntry["kind"]>(progress?.kind ?? (isFrequency ? "delta" : "absolute"));
-  const [value, setValue] = useState(
-    progress?.value
+  const [initialDraft] = useState(() => ({
+    date: progress?.date ?? todayLocalDateKey(),
+    kind: progress?.kind ?? (isFrequency ? "delta" : "absolute") as GoalProgressEntry["kind"],
+    value: progress?.value
       ?? (isFrequency ? 1 : isManual && !goal.progressEntries.length ? goal.manualProgress : currentValue),
-  );
-  const [note, setNote] = useState(progress?.note ?? "");
+    note: progress?.note ?? "",
+  }));
+  const progressDraftKey = `rootine.goal-progress-draft.${goal.id}.${progress?.id ?? "new"}`;
+  const [restoredDraft] = useState(() => ({
+    ...initialDraft,
+    ...readSessionDraft<Partial<typeof initialDraft>>(progressDraftKey),
+  }));
+  const [date, setDate] = useState(restoredDraft.date);
+  const [kind, setKind] = useState<GoalProgressEntry["kind"]>(restoredDraft.kind);
+  const [value, setValue] = useState(restoredDraft.value);
+  const [note, setNote] = useState(restoredDraft.note);
   const [submitted, setSubmitted] = useState(false);
+  const currentDraft = { date, kind, value, note };
+  const draftProtection = useDraftProtection({
+    active: true,
+    isDirty: JSON.stringify(currentDraft) !== JSON.stringify(initialDraft),
+    draft: currentDraft,
+    storageKey: progressDraftKey,
+    onDiscard: onClose,
+  });
   const dateError = date ? "" : "Wybierz datę aktualizacji.";
   const valueError = !Number.isFinite(value)
     ? "Podaj prawidłową wartość."
@@ -668,10 +706,11 @@ export function ProgressDialog({
           : "";
 
   return (
-    <DialogShell
+    <>
+      <DialogShell
       title={progress ? "Edytuj aktualizację" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : goal.progressMode === "manual" ? "Zaktualizuj postęp" : "Etapy celu"}
       subtitle={goal.title}
-      onClose={onClose}
+      onClose={draftProtection.requestClose}
       size="sm"
     >
       <form
@@ -680,6 +719,7 @@ export function ProgressDialog({
           event.preventDefault();
           setSubmitted(true);
           if (dateError || valueError) return;
+          draftProtection.clearDraft();
           onSubmit({
             date,
             kind: isManual || isStreak ? "absolute" : isFrequency ? "delta" : kind,
@@ -720,12 +760,7 @@ export function ProgressDialog({
                     type="button"
                     aria-pressed={kind === option.value}
                     onClick={() => setKind(option.value)}
-                    className="rounded-lg border px-3 py-2.5 text-[11px]"
-                    style={{
-                      color: kind === option.value ? C.blueText : C.second,
-                      borderColor: kind === option.value ? C.blue : C.border,
-                      background: kind === option.value ? uiColors.primarySubtle : C.input,
-                    }}
+                    className={`goal-choice-button rounded-lg border px-3 py-2.5 ${kind === option.value ? "is-selected" : ""}`}
                   >
                     {option.label}
                   </button>
@@ -743,42 +778,78 @@ export function ProgressDialog({
             wide
           />
         </div>
-        <div className="flex justify-end gap-2 border-t px-6 py-4" style={{ borderColor: C.border }}>
-          <Button variant="quiet" onClick={onClose}>Anuluj</Button>
+        <div className="goal-dialog-footer flex justify-end gap-2 border-t px-6 py-4">
+          <Button variant="quiet" onClick={draftProtection.requestClose}>Anuluj</Button>
           <Button variant="primary" type="submit">Zapisz zmianę</Button>
         </div>
       </form>
-    </DialogShell>
+      </DialogShell>
+      {draftProtection.promptOpen && (
+        <UiConfirmDialog
+          title="Odrzucić niezapisane zmiany?"
+          confirmLabel="Odrzuć zmiany"
+          cancelLabel="Kontynuuj edycję"
+          onCancel={draftProtection.keepEditing}
+          onConfirm={draftProtection.confirmDiscard}
+        >
+          <p className="ui-confirm-dialog__note">Niezapisana aktualizacja celu zostanie usunięta.</p>
+        </UiConfirmDialog>
+      )}
+    </>
   );
 }
-
+// End of goal dialog contracts.
 export function MilestoneDialog({
   milestone: current,
+  draftKey,
   onClose,
   onSubmit,
 }: {
   milestone?: GoalMilestone | null;
+  draftKey?: string;
   onClose: () => void;
   onSubmit: (draft: Omit<GoalMilestone, "id">) => void;
 }) {
-  const [title, setTitle] = useState(current?.title ?? "");
-  const [dueDate, setDueDate] = useState(current?.dueDate ?? shiftLocalDateKey(todayLocalDateKey(), 30));
-  const [note, setNote] = useState(current?.note ?? "");
-  const [weight, setWeight] = useState(current?.weight ?? 1);
-  const [done, setDone] = useState(current?.done ?? false);
+  const [initialDraft] = useState(() => ({
+    title: current?.title ?? "",
+    dueDate: current?.dueDate ?? shiftLocalDateKey(todayLocalDateKey(), 30),
+    note: current?.note ?? "",
+    weight: current?.weight ?? 1,
+    done: current?.done ?? false,
+  }));
+  const milestoneDraftKey = `rootine.goal-milestone-draft.${draftKey ?? "goal"}.${current?.id ?? "new"}`;
+  const [restoredDraft] = useState(() => ({
+    ...initialDraft,
+    ...readSessionDraft<Partial<typeof initialDraft>>(milestoneDraftKey),
+  }));
+  const [title, setTitle] = useState(restoredDraft.title);
+  const [dueDate, setDueDate] = useState(restoredDraft.dueDate);
+  const [note, setNote] = useState(restoredDraft.note);
+  const [weight, setWeight] = useState(restoredDraft.weight);
+  const [done, setDone] = useState(restoredDraft.done);
   const [submitted, setSubmitted] = useState(false);
+  const currentDraft = { title, dueDate, note, weight, done };
+  const draftProtection = useDraftProtection({
+    active: true,
+    isDirty: JSON.stringify(currentDraft) !== JSON.stringify(initialDraft),
+    draft: currentDraft,
+    storageKey: milestoneDraftKey,
+    onDiscard: onClose,
+  });
   const titleError = title.trim() ? "" : "Podaj nazwę etapu.";
   const dueDateError = dueDate ? "" : "Wybierz termin.";
   const weightError = Number.isFinite(weight) && weight > 0 ? "" : "Wpływ etapu musi być większy od zera.";
 
   return (
-    <DialogShell title={current ? "Edytuj etap" : "Dodaj etap"} onClose={onClose} size="sm">
+    <>
+      <DialogShell title={current ? "Edytuj etap" : "Dodaj etap"} onClose={draftProtection.requestClose} size="sm">
       <form
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitted(true);
           if (titleError || dueDateError || weightError) return;
+          draftProtection.clearDraft();
           onSubmit({ title: title.trim(), note: note.trim(), dueDate, weight, done });
         }}
       >
@@ -817,17 +888,11 @@ export function MilestoneDialog({
               type="button"
               aria-pressed={done}
               onClick={() => setDone((value) => !value)}
-              className="flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-[11px]"
-              style={{
-                color: done ? C.green : C.second,
-                borderColor: done ? C.green : C.border,
-                background: C.input,
-              }}
+              className={`goal-choice-button goal-milestone-state flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 ${done ? "is-selected" : ""}`}
             >
               <span
-                className="flex h-4 w-4 items-center justify-center rounded-full border"
+                className="goal-milestone-state__indicator flex h-4 w-4 items-center justify-center rounded-full border"
                 aria-hidden="true"
-                style={{ borderColor: done ? C.green : C.borderStrong }}
               >
                 {done && <Check size={9} />}
               </span>
@@ -835,8 +900,8 @@ export function MilestoneDialog({
             </button>
           </fieldset>
         </div>
-        <div className="flex justify-end gap-2 border-t px-6 py-4" style={{ borderColor: C.border }}>
-          <Button variant="quiet" onClick={onClose}>Anuluj</Button>
+        <div className="goal-dialog-footer flex justify-end gap-2 border-t px-6 py-4">
+          <Button variant="quiet" onClick={draftProtection.requestClose}>Anuluj</Button>
           <Button
             variant="primary"
             type="submit"
@@ -846,40 +911,18 @@ export function MilestoneDialog({
           </Button>
         </div>
       </form>
-    </DialogShell>
-  );
-}
-
-export function ConfirmDialog({
-  title,
-  message,
-  confirmLabel = "Usuń",
-  danger = true,
-  onClose,
-  onConfirm,
-}: {
-  title: string;
-  message: string;
-  confirmLabel?: string;
-  danger?: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <DialogShell title={title} onClose={onClose} size="sm">
-      <div className="px-6 py-5">
-        <div
-          className="flex items-start gap-3 rounded-xl border p-4"
-          style={{ background: C.input, borderColor: danger ? C.danger : C.border }}
+      </DialogShell>
+      {draftProtection.promptOpen && (
+        <UiConfirmDialog
+          title="Odrzucić niezapisane zmiany?"
+          confirmLabel="Odrzuć zmiany"
+          cancelLabel="Kontynuuj edycję"
+          onCancel={draftProtection.keepEditing}
+          onConfirm={draftProtection.confirmDiscard}
         >
-          <Target size={18} aria-hidden="true" style={{ color: danger ? C.danger : C.blueText }} />
-          <p className="text-[12px] leading-5" style={{ color: C.second }}>{message}</p>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 border-t px-6 py-4" style={{ borderColor: C.border }}>
-        <Button variant="quiet" onClick={onClose}>Anuluj</Button>
-        <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>{confirmLabel}</Button>
-      </div>
-    </DialogShell>
+          <p className="ui-confirm-dialog__note">Niezapisany etap celu zostanie usunięty.</p>
+        </UiConfirmDialog>
+      )}
+    </>
   );
 }

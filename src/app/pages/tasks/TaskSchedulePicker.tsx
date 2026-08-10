@@ -19,14 +19,13 @@ import {
   X,
 } from "lucide-react";
 import {
+  Button,
   DatePicker,
   Select,
   Tabs,
-  uiLayers,
 } from "../../ui";
 import { toCalendarDateKey } from "../../data/taskWorkspace";
 import {
-  C,
   REMINDER_OPTIONS,
   REPEAT_OPTIONS,
   browserTimezone,
@@ -304,14 +303,11 @@ export function DatePickerPopup({
       aria-label="Ustaw termin zadania"
       aria-describedby={scheduleError ? "task-schedule-error" : undefined}
       tabIndex={-1}
+      className="task-sched__popover"
       style={{
-        position: "fixed", top: popupPosition.top, left: popupPosition.left, width: `${popWidth}px`, zIndex: uiLayers.systemOverlay,
-        background: C.elevated,
-        border: `1px solid ${C.borderStrong}`,
-        borderRadius: "var(--radius-lg)",
-        boxShadow: C.floatingShadow,
-        overflow: "hidden",
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+        top: popupPosition.top,
+        left: popupPosition.left,
+        width: `${popWidth}px`,
       }}
     >
       {/* ── Top tabs ── */}
@@ -334,7 +330,7 @@ export function DatePickerPopup({
           role={dateOnly ? "group" : "tabpanel"}
           aria-label={dateOnly ? "Data zadania" : undefined}
           aria-labelledby={dateOnly ? undefined : "task-date-data-tab"}
-          style={{ padding: "12px" }}
+          className="task-sched__panel"
         >
           {/* ── Quick shortcuts ── */}
           <div className="task-sched__quick">
@@ -363,7 +359,7 @@ export function DatePickerPopup({
           />
 
           {dateOnly ? (
-            <p style={{ margin: "10px 0 0", color: C.textMuted, fontSize: 11, lineHeight: "var(--leading-normal)" }}>
+            <p className="task-sched__source-note">
               Godzinę, przypomnienie i powtarzanie edytuj w module źródłowym.
             </p>
           ) : (
@@ -564,42 +560,22 @@ export function DatePickerPopup({
       )}
 
       {scheduleError && (
-        <p
-          id="task-schedule-error"
-          role="alert"
-          style={{ margin: 0, padding: "8px 12px", color: C.danger, fontSize: 11, lineHeight: "var(--leading-normal)" }}
-        >
+        <p id="task-schedule-error" role="alert" className="task-sched__error">
           {scheduleError}
         </p>
       )}
 
       {/* ── Footer ── */}
-      <div style={{
-        display: "flex", gap: "8px", padding: "10px 12px",
-        borderTop: `1px solid ${C.borderSubtle}`,
-      }}>
-        <button type="button" onClick={handleClear} style={{
-          flex: 1, padding: "8px", borderRadius: "8px",
-          background: "transparent", border: `1px solid ${C.borderSubtle}`,
-          color: C.textSecond, fontSize: "12px", fontWeight: 500, cursor: "pointer",
-        }}>
+      <div className="task-sched__footer">
+        <Button type="button" variant="ghost" fullWidth onClick={handleClear}>
           Wyczyść
-        </button>
-        <button type="button" onClick={cancelAndClose} style={{
-          flex: 1, padding: "8px", borderRadius: "8px",
-          background: "transparent", border: `1px solid ${C.borderSubtle}`,
-          color: C.textSecond, fontSize: "12px", fontWeight: 500, cursor: "pointer",
-        }}>
+        </Button>
+        <Button type="button" variant="ghost" fullWidth onClick={cancelAndClose}>
           Anuluj
-        </button>
-        <button type="button" onClick={handleOk} disabled={Boolean(scheduleError)} style={{
-          flex: 1, padding: "8px", borderRadius: "8px",
-          background: C.iceBlueSolid, border: "none",
-          color: C.textPrimary, fontSize: "var(--text-body)", fontWeight: 600,
-          cursor: scheduleError ? "not-allowed" : "pointer", opacity: scheduleError ? 0.55 : 1,
-        }}>
+        </Button>
+        <Button type="button" variant="primary" fullWidth onClick={handleOk} disabled={Boolean(scheduleError)}>
           Zastosuj
-        </button>
+        </Button>
       </div>
     </div>
   ), document.body);

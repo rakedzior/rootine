@@ -19,7 +19,7 @@ import type {
   SubscriptionRenewal,
   VehicleItemType,
 } from "../data/affairsWorkspace";
-import { DatePicker, Input, Select } from "../ui";
+import { DatePicker, Input, Select, Textarea } from "../ui";
 
 export interface AffairsEditorFieldsProps {
   editor: EditorState;
@@ -229,15 +229,13 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
   )}
 
   {editor.kind !== "budget" && editor.kind !== "vehicle" && (
-    <label className="ui-field">
-      <span className="ui-field__label">Notatka <span className="affairs-optional">opcjonalnie</span></span>
-      <textarea
-        className="ui-field__control affairs-textarea"
-        placeholder="Dokumenty, decyzje albo kontekst do zachowania"
-        value={draft.note}
-        onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
-      />
-    </label>
+    <Textarea
+      label="Notatka (opcjonalnie)"
+      className="affairs-textarea"
+      placeholder="Dokumenty, decyzje albo kontekst do zachowania"
+      value={draft.note}
+      onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+    />
   )}
     </>
   );

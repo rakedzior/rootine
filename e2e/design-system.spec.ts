@@ -209,4 +209,45 @@ test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
       expect(box.pageHeaderCount, `${route}: global page header must be removed`).toBe(0);
     }
   });
+
+  test("DetailPanel is docked without occlusion above 1380px and modal at 1380px", async ({ rootinePage: page }) => {
+    await page.setViewportSize({ width: 1381, height: 900 });
+    await openRootineRoute(page, "/zadania?widok=dzis");
+    await page.locator(".task-item-row").first().click();
+
+    const detailPanel = page.locator(".task-detail-panel");
+    await expect(detailPanel).toBeVisible();
+    const docked = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>(".ui-detail-panel");
+      const body = panel?.closest<HTMLElement>(".ui-module-shell__body") ?? null;
+      const main = body?.querySelector<HTMLElement>(":scope > .ui-main-content") ?? null;
+      if (!body || !main || !panel) return null;
+      const mainRect = main.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      return {
+        panelPosition: getComputedStyle(panel).position,
+        panelWidth: panelRect.width,
+        panelLeft: panelRect.left,
+        mainRight: mainRect.right,
+        gridColumns: getComputedStyle(body).gridTemplateColumns,
+        role: panel.getAttribute("role"),
+        ariaModal: panel.getAttribute("aria-modal"),
+        backdropCount: body.querySelectorAll(".ui-detail-panel-backdrop").length,
+      };
+    });
+
+    expect(docked).not.toBeNull();
+    expect(docked!.panelPosition).toBe("absolute");
+    expect(docked!.panelWidth).toBeCloseTo(408, 0);
+    expect(docked!.panelLeft).toBeGreaterThanOrEqual(docked!.mainRight - 1);
+    expect(docked!.gridColumns).toMatch(/408px$/);
+    expect(docked!.role).toBeNull();
+    expect(docked!.ariaModal).toBeNull();
+    expect(docked!.backdropCount).toBe(0);
+
+    await page.setViewportSize({ width: 1380, height: 900 });
+    await expect(detailPanel).toHaveAttribute("role", "dialog");
+    await expect(detailPanel).toHaveAttribute("aria-modal", "true");
+    await expect(page.locator(".ui-detail-panel-backdrop")).toBeVisible();
+  });
 });

@@ -83,3 +83,68 @@ This log records material implementation decisions made while applying the desig
 - Visual impact: none beyond recording the current rendered output as the intentional baseline; the reviewed states showed no difference from the current UI.
 - Compatibility impact: test coverage only; no production layout or component behavior changed.
 - Verification: baseline generation was explicit, then the same desktop and mobile suites passed without snapshot-update mode.
+
+## 2026-08-10
+
+### D-009 — Implement the approved docked DetailPanel contract
+
+- Classification: product decision confirmed in the audit remediation brief.
+- Decision: above 1380px an open `DetailPanel` owns a real 408px grid track; at or below 1380px it remains the managed modal drawer.
+- Reason: the previous desktop absolute-position override left a zero-width grid track and covered workspace content.
+- Affected files: `src/styles/experience.css`, `DESIGN.md`, responsive/state documentation, focused shell test.
+- Visual impact: intentional desktop composition fix; the main workspace narrows instead of being occluded.
+- Compatibility impact: drawer semantics, focus handling, and the 408px dimension are unchanged.
+
+### D-010 — Make the breakpoint manifest auditable
+
+- Classification: governance correction.
+- Decision: `breakpoints.ts` is the canonical numeric manifest; CSS `--bp-*` values and path-scoped exceptions are mirrors validated by the audit.
+- Reason: a new 600px threshold, stale 1040px assistant registration, and an unscoped 1280px entry showed that four hand-maintained registries could drift silently.
+- Affected files: breakpoint manifest/tests, token mirrors, exception registry, governance audit and responsive documentation.
+- Visual impact: none; existing thresholds are classified without moving them.
+- Compatibility impact: stale exception paths and missing owner/migration/review metadata now fail governance.
+
+### D-011 — Treat six themes and active component APIs as documentation truth
+
+- Classification: autonomous documentation correction.
+- Decision: `tokens.css` owns semantic theme values; DESIGN frontmatter is a default Cobalt snapshot. Component documentation records the active Button, Select, Modal, Badge, EmptyState, Checkbox and DetailPanel contracts.
+- Reason: the previous single-palette values and component dimensions contradicted runtime and could not serve QA or handoff.
+- Affected files: `DESIGN.md`, `PRODUCT.md`, UI/design-system documentation and inventories.
+- Visual impact: none.
+- Compatibility impact: none; obsolete claims are removed rather than changing components to match them.
+
+### D-012 — Promote density and reduced motion to token modes
+
+- Classification: autonomous governance correction.
+- Decision: density overrides live beside the row-height tokens; reduced motion shortens named durations and explicitly removes continuous decorative motion instead of applying a second universal selector.
+- Reason: late feature overrides and blanket `*` rules obscured which feedback should remain visible.
+- Affected files: `src/styles/tokens.css`, `src/styles/experience.css`, governance and design documentation.
+- Visual impact: density values remain unchanged; reduced motion preserves state feedback with minimal duration.
+- Compatibility impact: the preference provider resolves both OS and user choice into `data-motion`; the legacy universal `app-shell.css` catch-all was removed in the same wave.
+
+### D-013 — Enforce inline-style exceptions per dynamic property
+
+- Classification: governance correction.
+- Decision: a registered inline-style path is not a whole-file suppression. Each entry declares `allowedProperties`, and only non-literal runtime values matching that contract are exempt.
+- Reason: the former path-only registry hid static padding, typography, radii, surfaces, and layout when a file also contained legitimate dynamic geometry.
+- Affected files: design-system audit/helper test, exception registry, baseline v2, governance documentation.
+- Visual impact: none.
+- Compatibility impact: the audit reports the total style-object inventory separately from violating objects and properties; per-file property ratchets block hidden regressions.
+
+### D-014 — Move Goals static presentation into its existing stylesheet
+
+- Classification: autonomous implementation correction under the existing visual contract.
+- Decision: `GoalWorkspaceViews` and `GoalDialogs` retain inline styles only for progress and user-selected accent CSS custom properties; static color, typography, layout, radius, border, and motion live in `goals.css`.
+- Reason: the files used 74 literal style objects and 25 arbitrary typography utilities despite having an established feature stylesheet and semantic token scale.
+- Affected files: Goals workspace/dialog JSX, `src/styles/goals.css`, granular exception registry.
+- Visual impact: intended values and interactions are preserved; state colors now resolve through six-theme semantic tokens.
+- Compatibility impact: form state, draft protection, data persistence, and component APIs are unchanged.
+
+### D-015 — Remove zero-consumer UI aliases instead of preserving phantom APIs
+
+- Classification: governance cleanup.
+- Decision: retain only used `uiColors`, `uiLayers`, and `uiShadows` transports; remove eight unused token groups and the unused `ContextSidebar` alias. `ModuleSidebar` remains canonical.
+- Reason: a public export without a production consumer falsely implies a supported contract and creates documentation drift.
+- Affected files: UI barrel, `tokens.ts`, Shell exports, component inventory and design documentation.
+- Visual impact: none.
+- Compatibility impact: proven zero-consumer exports are removed from the internal public barrel.

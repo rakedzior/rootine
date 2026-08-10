@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   Checkbox,
+  ConfirmDialog,
   DetailPanel,
   EmptyState,
   Input,
@@ -139,7 +140,7 @@ export function SportTemplates({
   exercises: Exercise[];
   onSave: (template: WorkoutTemplate) => void;
   onDuplicate: (template: WorkoutTemplate) => void;
-  onDelete: (template: WorkoutTemplate) => void;
+  onDelete: (template: WorkoutTemplate, returnFocusTarget: HTMLButtonElement) => void;
   onAddToPlan: (template: WorkoutTemplate) => void;
   onTrainToday: (template: WorkoutTemplate) => void;
   selectedId?: string | null;
@@ -153,6 +154,7 @@ export function SportTemplates({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const actionTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
     if (editRequest) setEditingId(editRequest.id);
   }, [editRequest]);
@@ -172,43 +174,59 @@ export function SportTemplates({
           action={<Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={() => setCreating(true)}>Dodaj szablon</Button>}
         />
         <div className="sport-record-toolbar" role="search" aria-label="Filtry szablonów">
-          <Input className="sport-record-toolbar__search" aria-label="Szukaj szablonów" placeholder="Szukaj po nazwie, ćwiczeniu, kategorii…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Input className="sport-record-toolbar__search" aria-label="Szukaj szablonów po nazwie, ćwiczeniu lub kategorii" placeholder="Szukaj szablonów…" value={query} onChange={(event) => setQuery(event.target.value)} />
           <Select compact aria-label="Kategoria szablonu" value={discipline} options={[{ value: "all", label: "Wszystkie kategorie" }, ...groups.map((value) => ({ value, label: DISCIPLINE_META[value].label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} />
         </div>
         {filtered.length === 0 ? (
           <EmptyState title="Brak pasujących szablonów" description="Zmień wyszukiwanie albo dodaj nowy szablon." />
         ) : (
-          <div className="sport-record-table__body">
+          <div className="sport-record-table__body" role="table" aria-label="Zapisane szablony treningów">
           <div className="sport-record-table__head sport-template-table__head" role="row">
-            <span>Nazwa</span>
-            <span>Kategoria</span>
-            <span>Zawartość</span>
-            <span>Elementy</span>
-            <span>Czas</span>
-            <span aria-hidden="true" />
+            <span role="columnheader">Nazwa</span>
+            <span role="columnheader">Kategoria</span>
+            <span role="columnheader">Zawartość</span>
+            <span role="columnheader">Elementy</span>
+            <span role="columnheader">Czas</span>
+            <span role="columnheader" aria-label="Akcje" />
           </div>
           {filtered.map((template) => {
             const count = templateItems(template).length;
             const sets = seriesCount(template);
             return (
               <div key={template.id} className={`sport-record-table__row sport-template-table__row ${selectedId === template.id ? "is-selected" : ""}`} role="row">
-                <button type="button" className="sport-record-table__main" onClick={() => onSelect(template.id)}>
-                  <span className="sport-record-table__name">{template.name}</span>
-                  <span className="sport-record-table__sub">{template.description || "Bez opisu"}</span>
-                </button>
-                <span>{DISCIPLINE_META[template.discipline].label}</span>
-                <span className="sport-template-table__content">{preview(template, exercises) || "Pusty szablon"}</span>
-                <span className="sport-data">{count} {count === 1 ? "element" : "elementów"} · {sets} ser.</span>
-                <span className="sport-data">{template.durationMinutes} min</span>
-                <span className="sport-record-table__actions">
-                  <MenuTrigger open={menuId === template.id} menuId={`template-menu-${template.id}`} className="sport-icon-button" aria-label={`Akcje: ${template.name}`} onClick={() => setMenuId((current) => current === template.id ? null : template.id)}><MoreHorizontal size={16} /></MenuTrigger>
+                <div className="sport-record-table__main-cell" role="cell">
+                  <button type="button" className="sport-record-table__main" onClick={() => onSelect(template.id)}>
+                    <span className="sport-record-table__name">{template.name}</span>
+                    <span className="sport-record-table__sub">{template.description || "Bez opisu"}</span>
+                  </button>
+                </div>
+                <span role="cell">{DISCIPLINE_META[template.discipline].label}</span>
+                <span role="cell" className="sport-template-table__content">{preview(template, exercises) || "Pusty szablon"}</span>
+                <span role="cell" className="sport-data">{count} {count === 1 ? "element" : "elementów"} · {sets} ser.</span>
+                <span role="cell" className="sport-data">{template.durationMinutes} min</span>
+                <span role="cell" className="sport-record-table__actions">
+                  <MenuTrigger
+                    ref={(element) => {
+                      if (element) actionTriggerRefs.current.set(template.id, element);
+                      else actionTriggerRefs.current.delete(template.id);
+                    }}
+                    open={menuId === template.id}
+                    menuId={`template-menu-${template.id}`}
+                    className="sport-icon-button"
+                    aria-label={`Akcje: ${template.name}`}
+                    onClick={() => setMenuId((current) => current === template.id ? null : template.id)}
+                  ><MoreHorizontal size={16} /></MenuTrigger>
                   {menuId === template.id && (
                     <Menu id={`template-menu-${template.id}`} className="sport-row-menu" onDismiss={() => setMenuId(null)}>
                       <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { setEditingId(template.id); setMenuId(null); }}>Edytuj</MenuItem>
                       <MenuItem leadingIcon={<Copy size={13} />} onClick={() => { onDuplicate(template); setMenuId(null); }}>Duplikuj</MenuItem>
                       <MenuItem onClick={() => { onAddToPlan(template); setMenuId(null); }}>Dodaj do planu</MenuItem>
                       <MenuItem onClick={() => { onTrainToday(template); setMenuId(null); }}>Trening na dziś</MenuItem>
-                      <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { onDelete(template); setMenuId(null); }}>Usuń</MenuItem>
+                      <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => {
+                        const returnFocusTarget = actionTriggerRefs.current.get(template.id);
+                        if (returnFocusTarget) onDelete(template, returnFocusTarget);
+                        setMenuId(null);
+                      }}>Usuń</MenuItem>
                     </Menu>
                   )}
                 </span>
@@ -370,6 +388,8 @@ function TemplateEditor({ template, exercises, onClose, onSave, onCreateExercise
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
   const [dropTargetItemId, setDropTargetItemId] = useState<string | null>(null);
   const [dropTargetSectionId, setDropTargetSectionId] = useState<string | null>(null);
+  const [pendingSectionDelete, setPendingSectionDelete] = useState<WorkoutTemplateSection | null>(null);
+  const pendingSectionDeleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   if (!template && !name && !sections.length) return null;
   const normalizeItems = (nextItems: EditorItem[]) => sections.flatMap((section) => nextItems.filter((item) => item.sectionId === section.id).sort((left, right) => left.order - right.order).map((item, index) => ({ ...item, order: index })));
   const updateItem = (id: string, patch: Partial<WorkoutTemplateItem>) => setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
@@ -451,13 +471,20 @@ function TemplateEditor({ template, exercises, onClose, onSave, onCreateExercise
     setSectionDraftName("");
     setError("");
   };
-  const deleteSection = (section: WorkoutTemplateSection) => {
-    if (sections.length === 1) { setError("Szablon musi mieć co najmniej jedną sekcję."); return; }
-    const sectionItems = items.filter((item) => item.sectionId === section.id);
+  const commitSectionDelete = (section: WorkoutTemplateSection) => {
     const fallback = sections.find((candidate) => candidate.id !== section.id);
-    if (sectionItems.length && typeof window !== "undefined" && !window.confirm(`Sekcja „${section.name}” zawiera elementy. Przenieść je do „${fallback?.name ?? "innej sekcji"}”?`)) return;
     setItems((current) => normalizeItems(current.map((item) => item.sectionId === section.id && fallback ? { ...item, sectionId: fallback.id } : item).filter((item) => item.sectionId !== section.id)));
     setSections((current) => current.filter((candidate) => candidate.id !== section.id).map((candidate, index) => ({ ...candidate, order: index })));
+  };
+  const deleteSection = (section: WorkoutTemplateSection, trigger: HTMLButtonElement) => {
+    if (sections.length === 1) { setError("Szablon musi mieć co najmniej jedną sekcję."); return; }
+    const sectionItems = items.filter((item) => item.sectionId === section.id);
+    if (sectionItems.length) {
+      pendingSectionDeleteTriggerRef.current = trigger;
+      setPendingSectionDelete(section);
+      return;
+    }
+    commitSectionDelete(section);
   };
   const moveItem = (id: string, targetSectionId: string, beforeId?: string) => {
     setItems((current) => {
@@ -516,7 +543,7 @@ function TemplateEditor({ template, exercises, onClose, onSave, onCreateExercise
                 <span className="sport-template-editor__section-drag-handle" draggable aria-label={`Przeciągnij sekcję ${section.name}`} onDragStart={(event) => { event.stopPropagation(); setDraggedSectionId(section.id); setDraggedId(null); setDropTargetSectionId(null); }} onDragEnd={clearDragState}><GripVertical size={16} aria-hidden="true" /></span>
                 {editingSectionId === section.id ? <form className="sport-template-editor__section-edit" onSubmit={(event) => { event.preventDefault(); saveSectionName(); }}><Input aria-label="Nazwa sekcji" value={sectionDraftName} data-autofocus onChange={(event) => setSectionDraftName(event.target.value)} /><Button variant="quiet" size="sm" type="submit">Zapisz</Button><Button variant="ghost" size="sm" type="button" onClick={() => setEditingSectionId(null)}>Anuluj</Button></form> : <div><strong>{section.name}</strong><small>{sectionItems.length} {sectionItems.length === 1 ? "element" : "elementów"}</small></div>}
               </div>
-              {editingSectionId !== section.id && <div className="sport-template-editor__section-heading-actions"><div className="sport-template-editor__section-position"><span>Pozycja</span><div><Button variant="ghost" size="sm" aria-label={`Przenieś sekcję ${section.name} wyżej`} disabled={sectionIndex === 0} onClick={() => moveSectionBy(section.id, -1)}><ChevronUp size={13} /></Button><Button variant="ghost" size="sm" aria-label={`Przenieś sekcję ${section.name} niżej`} disabled={sectionIndex === sections.length - 1} onClick={() => moveSectionBy(section.id, 1)}><ChevronDown size={13} /></Button></div></div><Button variant="ghost" size="sm" onClick={() => toggleSectionCollapsed(section.id)}>{sectionCollapsed ? "Rozwiń sekcję" : "Zwiń sekcję"}</Button><Button variant="ghost" size="sm" onClick={() => toggleSectionItems(section.id)}>{sectionItemsExpanded ? "Zwiń ćwiczenia" : "Rozwiń ćwiczenia"}</Button><Button variant="ghost" size="sm" leadingIcon={<Pencil size={13} />} onClick={() => startSectionEdit(section)}>Edytuj</Button><Button variant="danger" size="sm" leadingIcon={<Trash2 size={13} />} onClick={() => deleteSection(section)}>Usuń</Button></div>}
+              {editingSectionId !== section.id && <div className="sport-template-editor__section-heading-actions"><div className="sport-template-editor__section-position"><span>Pozycja</span><div><Button variant="ghost" size="sm" aria-label={`Przenieś sekcję ${section.name} wyżej`} disabled={sectionIndex === 0} onClick={() => moveSectionBy(section.id, -1)}><ChevronUp size={13} /></Button><Button variant="ghost" size="sm" aria-label={`Przenieś sekcję ${section.name} niżej`} disabled={sectionIndex === sections.length - 1} onClick={() => moveSectionBy(section.id, 1)}><ChevronDown size={13} /></Button></div></div><Button variant="ghost" size="sm" onClick={() => toggleSectionCollapsed(section.id)}>{sectionCollapsed ? "Rozwiń sekcję" : "Zwiń sekcję"}</Button><Button variant="ghost" size="sm" onClick={() => toggleSectionItems(section.id)}>{sectionItemsExpanded ? "Zwiń ćwiczenia" : "Rozwiń ćwiczenia"}</Button><Button variant="ghost" size="sm" leadingIcon={<Pencil size={13} />} onClick={() => startSectionEdit(section)}>Edytuj</Button><Button variant="danger" size="sm" leadingIcon={<Trash2 size={13} />} onClick={(event) => deleteSection(section, event.currentTarget)}>Usuń</Button></div>}
             </header>
             {!sectionCollapsed && sectionItems.length > 0 && <div className="sport-template-editor__item-columns"><span aria-hidden="true" /><span aria-hidden="true" /><span>Ćwiczenie / etap</span><span>Pozycja</span><span>Akcje</span></div>}
             {!sectionCollapsed && sectionItems.map((item, index) => <TemplateEditorItem key={item.id} item={item} index={index} sectionItems={sectionItems} exercises={exercises} supersetOptions={items.filter((candidate) => candidate.id !== item.id && candidate.exerciseId).map((candidate) => ({ id: candidate.id, label: itemLabel(candidate, exercises) }))} expanded={expandedItemIds.includes(item.id)} dropTarget={dropTargetItemId === item.id} isDragging={draggedId === item.id} onToggle={() => toggleItem(item.id)} onEnsureSeries={() => ensureSeries(item.id)} onUpdate={updateItem} onUpdateSeries={updateSeries} onAddSeries={addSeries} onRemoveSeries={removeSeries} onMoveUp={() => { const previous = sectionItems[index - 1]; if (previous) moveItem(item.id, section.id, previous.id); }} onMoveDown={() => { const next = sectionItems[index + 1]; if (next) moveItem(next.id, section.id, item.id); }} onDuplicate={() => duplicateItem(item)} onRemove={() => removeItem(item.id)} onDragStart={() => { setDraggedId(item.id); setDraggedSectionId(null); setDropTargetItemId(null); setDropTargetSectionId(null); }} onDragEnd={clearDragState} onSectionDragOver={() => { if (draggedSectionId && draggedSectionId !== section.id) setDropTargetSectionId(section.id); else if (draggedId) setDropTargetItemId(item.id); }} onDrop={() => { if (draggedSectionId) moveSection(draggedSectionId, section.id); else if (draggedId) moveItem(draggedId, section.id, item.id); clearDragState(); }} />)}
@@ -527,6 +554,22 @@ function TemplateEditor({ template, exercises, onClose, onSave, onCreateExercise
         {error && <p className="sport-planner-form__error" role="alert">{error}</p>}
       </div>
       {pickerOpen && <Modal title="Dodaj ćwiczenie" eyebrow="Picker biblioteki" description="Wybierz ćwiczenie. Jego domyślne parametry zostaną skopiowane do tego szablonu." size="md" onClose={() => setPickerOpen(false)} footer={<Button variant="ghost" onClick={onCreateExercise}>Dodaj nowe ćwiczenie</Button>}><Input label="Szukaj" value={pickerQuery} data-autofocus onChange={(event) => setPickerQuery(event.target.value)} /><div className="sport-exercise-picker">{filteredPicker.map((exercise) => <button key={exercise.id} type="button" onClick={() => chooseExercise(exercise)}><span><strong>{exercise.name}</strong><small>{exercise.primaryMuscle} · {exercise.equipment.join(", ") || "Bez sprzętu"}</small></span><Plus size={13} /></button>)}</div></Modal>}
+      {pendingSectionDelete && (
+        <ConfirmDialog
+          title={`Usunąć sekcję „${pendingSectionDelete.name}”?`}
+          description={`${items.filter((item) => item.sectionId === pendingSectionDelete.id).length} elementów zostanie przeniesionych do sekcji „${sections.find((section) => section.id !== pendingSectionDelete.id)?.name ?? "innej sekcji"}”.`}
+          confirmLabel="Przenieś i usuń"
+          cancelLabel="Zostaw sekcję"
+          returnFocusRef={pendingSectionDeleteTriggerRef}
+          onCancel={() => setPendingSectionDelete(null)}
+          onConfirm={() => {
+            commitSectionDelete(pendingSectionDelete);
+            setPendingSectionDelete(null);
+          }}
+        >
+          <p className="ui-confirm-dialog__note">Elementy treningu pozostaną w szablonie; zmieni się tylko ich sekcja.</p>
+        </ConfirmDialog>
+      )}
     </Modal>
   );
 }

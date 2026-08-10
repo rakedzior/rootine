@@ -222,7 +222,10 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
         <span className="task-report__row-dot" style={{ background: list?.color ?? "var(--color-text-muted)" }} aria-hidden="true" />
         <span className="task-report__row-text">{task.text}</span>
         {task.priority && (
-          <span className="task-report__row-priority" style={{ color: PRIORITY_COLOR[task.priority] }}>
+          <span
+            className="task-report__row-priority"
+            style={{ "--task-report-priority-color": PRIORITY_COLOR[task.priority] } as CSSProperties}
+          >
             {PRIORITY_LABEL[task.priority]}
           </span>
         )}

@@ -3,11 +3,11 @@ import {
   useEffect,
   useRef,
   useState,
-  type TextareaHTMLAttributes,
 } from "react";
+import { Textarea, type TextareaProps } from "../ui";
 
 type GoalNoteTextareaProps = Omit<
-  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  TextareaProps,
   "value" | "defaultValue" | "onChange"
 > & {
   value: string;
@@ -63,7 +63,8 @@ export function GoalNoteTextarea({
   }, [flush]);
 
   return (
-    <textarea
+    <Textarea
+      embedded
       {...props}
       value={draft}
       onChange={(event) => {

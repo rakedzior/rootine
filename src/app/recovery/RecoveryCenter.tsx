@@ -278,11 +278,11 @@ export function RecoveryCenterButton() {
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 id="persistence-issues-title" className="flex items-center gap-2 text-[13px] font-semibold text-[var(--color-chalk-white)]">
+                    <h3 id="persistence-issues-title" className="flex items-center gap-2 text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
                       <AlertTriangle size={13} aria-hidden="true" />
                       Zmiany wymagające uwagi
                     </h3>
-                    <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                    <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                       Rootine zatrzymał ryzykowny zapis. Trwała wersja nie została po cichu nadpisana; szkic możesz pobrać przed ponowieniem.
                     </p>
                   </div>
@@ -293,10 +293,10 @@ export function RecoveryCenterButton() {
                     <li key={issue.id} className="rounded-lg bg-[var(--color-graphite-input)] p-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <strong className="block truncate text-[12px] font-medium text-[var(--color-chalk-white)]">
+                          <strong className="block truncate text-[var(--text-meta)] font-medium text-[var(--color-chalk-white)]">
                             {issue.key}
                           </strong>
-                          <p className="mt-1 max-w-[60ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                          <p className="mt-1 max-w-[60ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                             {issue.message}
                           </p>
                         </div>
@@ -348,10 +348,10 @@ export function RecoveryCenterButton() {
             )}
 
             <section aria-labelledby="backup-actions-title" className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-graphite-panel)] p-4">
-              <h3 id="backup-actions-title" className="text-[13px] font-semibold text-[var(--color-chalk-white)]">
+              <h3 id="backup-actions-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
                 Pełna kopia urządzenia
               </h3>
-              <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
+              <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
                 Plik zawiera dane wszystkich modułów zapisane w tej przeglądarce. Przechowuj go jak prywatny dokument.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -384,10 +384,10 @@ export function RecoveryCenterButton() {
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 id="storage-estimate-title" className="text-[13px] font-semibold text-[var(--color-chalk-white)]">
+                  <h3 id="storage-estimate-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
                     Pamięć tej witryny
                   </h3>
-                  <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
+                  <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
                     Szacunek przeglądarki obejmuje lokalne dane Rootine oraz inne zasoby tej witryny, na przykład pamięć podręczną.
                   </p>
                 </div>
@@ -423,22 +423,22 @@ export function RecoveryCenterButton() {
                       style={{ width: `${Math.min(100, storageEstimate.ratio * 100)}%` }}
                     />
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--color-text-muted)]">
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[var(--text-label)] text-[var(--color-text-muted)]">
                     <span>{formatBytes(storageEstimate.usage)} zajęte</span>
                     <span>Limit: {formatBytes(storageEstimate.quota)}</span>
                   </div>
                   {storageEstimate.ratio >= 0.75 && (
-                    <p className="mt-2 text-[11px] leading-[var(--leading-normal)] text-[var(--color-warning-ochre)]">
+                    <p className="mt-2 text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-warning-ochre)]">
                       Zbliżasz się do limitu przeglądarki. Wyeksportuj kopię przed dodaniem większej ilości danych.
                     </p>
                   )}
                 </div>
               ) : storageEstimate.status === "unsupported" || storageEstimate.status === "error" ? (
-                <p className="mt-3 text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                <p className="mt-3 text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                   {storageEstimate.message}
                 </p>
               ) : (
-                <p className="mt-3 text-[11px] text-[var(--color-text-muted)]" role="status">
+                <p className="mt-3 text-[var(--text-label)] text-[var(--color-text-muted)]" role="status">
                   Sprawdzanie wykorzystania i limitu…
                 </p>
               )}
@@ -452,11 +452,11 @@ export function RecoveryCenterButton() {
               <div className="mt-4 border-t border-[var(--color-border-subtle)] pt-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h4 className="flex items-center gap-2 text-[12px] font-semibold text-[var(--color-chalk-white)]">
+                    <h4 className="flex items-center gap-2 text-[var(--text-meta)] font-semibold text-[var(--color-chalk-white)]">
                       <Database size={13} aria-hidden="true" />
                       Trwałość danych
                     </h4>
-                    <p className="mt-1 max-w-[70ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                    <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                       {storageTier.message}
                     </p>
                   </div>
@@ -467,7 +467,7 @@ export function RecoveryCenterButton() {
 
                 {persistentStorage.status === "ready" ? (
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                    <p className="max-w-[56ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                    <p className="max-w-[56ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                       {persistentStorage.message} Ochrona nie zwiększa limitu i nie zastępuje własnej kopii.
                     </p>
                     {persistentStorage.persisted ? (
@@ -485,11 +485,11 @@ export function RecoveryCenterButton() {
                     )}
                   </div>
                 ) : persistentStorage.status === "unsupported" || persistentStorage.status === "error" ? (
-                  <p className="mt-3 text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                  <p className="mt-3 text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                     {persistentStorage.message}
                   </p>
                 ) : (
-                  <p className="mt-3 text-[11px] text-[var(--color-text-muted)]" role="status">
+                  <p className="mt-3 text-[var(--text-label)] text-[var(--color-text-muted)]" role="status">
                     Sprawdzanie ochrony danych…
                   </p>
                 )}
@@ -500,10 +500,10 @@ export function RecoveryCenterButton() {
               <section aria-labelledby="pending-import-title" className="rounded-xl border border-[var(--color-warning-ochre)] bg-[var(--color-warning-soft)] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 id="pending-import-title" className="text-[13px] font-semibold text-[var(--color-chalk-white)]">
+                    <h3 id="pending-import-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
                       Potwierdź przywrócenie
                     </h3>
-                    <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+                    <p className="mt-1 text-[var(--text-label)] text-[var(--color-text-muted)]">
                       {pendingImport.fileName} · {Object.keys(pendingImport.backup.workspaces).length} obszarów · {formatDate(pendingImport.backup.exportedAt)}
                     </p>
                   </div>
@@ -525,10 +525,10 @@ export function RecoveryCenterButton() {
             <section aria-labelledby="recovery-records-title">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 id="recovery-records-title" className="text-[13px] font-semibold text-[var(--color-chalk-white)]">
+                  <h3 id="recovery-records-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
                     Zabezpieczone zapisy
                   </h3>
-                  <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+                  <p className="mt-1 text-[var(--text-label)] text-[var(--color-text-muted)]">
                     Powstają automatycznie, gdy format danych jest uszkodzony albo przed przywróceniem kopii.
                   </p>
                 </div>
@@ -538,7 +538,7 @@ export function RecoveryCenterButton() {
               </div>
 
               {records.length === 0 ? (
-                <div className="mt-3 rounded-xl border border-dashed border-[var(--color-border-subtle)] p-5 text-center text-[11px] text-[var(--color-text-muted)]">
+                <div className="mt-3 rounded-xl border border-dashed border-[var(--color-border-subtle)] p-5 text-center text-[var(--text-label)] text-[var(--color-text-muted)]">
                   Nie ma zapisów wymagających odzyskiwania.
                 </div>
               ) : (
@@ -546,13 +546,13 @@ export function RecoveryCenterButton() {
                   {records.map((record) => (
                     <li key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-graphite-input)] p-3">
                       <div className="min-w-0">
-                        <strong className="block truncate text-[12px] font-medium text-[var(--color-chalk-white)]">
+                        <strong className="block truncate text-[var(--text-meta)] font-medium text-[var(--color-chalk-white)]">
                           {record.storageKey}
                         </strong>
-                        <span className="mt-0.5 block text-[11px] text-[var(--color-text-muted)]">
+                        <span className="mt-0.5 block text-[var(--text-label)] text-[var(--color-text-muted)]">
                           {formatDate(record.createdAt)} · {Math.max(1, Math.round(record.byteLength / 1024))} KB
                         </span>
-                        <span className="mt-1 block max-w-[46ch] text-[11px] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                        <span className="mt-1 block max-w-[46ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
                           {record.reason}
                         </span>
                       </div>
@@ -589,7 +589,7 @@ export function RecoveryCenterButton() {
               )}
             </section>
 
-            <p className="min-h-5 text-[11px] text-[var(--color-text-secondary)]" role="status" aria-live="polite">
+            <p className="min-h-5 text-[var(--text-label)] text-[var(--color-text-secondary)]" role="status" aria-live="polite">
               {message}
             </p>
           </div>

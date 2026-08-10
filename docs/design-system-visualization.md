@@ -1,6 +1,9 @@
-# Rootine visualization contract
+# Rootine visualization migration contract
 
-The current charts and metric bars remain visually unchanged. This document establishes the reusable contract before any chart composition or information density is changed.
+The current charts and metric bars remain visually unchanged. No production chart currently consumes
+all seven `--color-chart-*` roles. The zero-consumer `uiChartColors` TypeScript alias was removed and
+must not return before a real shared chart consumer exists. This document is migration vocabulary and
+an accessibility floor, not a claim that a shared chart component already exists.
 
 ## Shared roles
 
@@ -26,6 +29,15 @@ The current charts and metric bars remain visually unchanged. This document esta
 - Task summary bars: metric/progress UI; candidate for `ProgressBar` only when the bar is not a chart axis or series.
 - Sport analysis bars: domain-specific visualization; do not force into a generic progress component without preserving its meaning.
 - Calendar geometry: dynamic layout, not visualization token debt.
+
+## Adoption status
+
+- Nutrition and Sport still own their chart geometry and local presentation.
+- `ProgressBar` is a bounded metric primitive, not a generic chart; its adoption does not make the
+  axis/grid/series contract active for Nutrition or Sport.
+- A feature may adopt CSS roles incrementally, but it must keep an accessible name/summary and empty,
+  loading, error, responsive, and reduced-motion states. Do not recreate a TypeScript chart-color
+  alias merely to make a local chart appear shared.
 
 The shared `ProgressBar` supports bounded values, semantic tones, optional data-driven fill colors,
 and a separate spoken value. Remaining local bars are intentionally retained when their geometry or

@@ -19,9 +19,9 @@ import {
   RotateCcw,
   Settings2,
   Trash2,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { formatShortDate } from "../formatters";
@@ -59,6 +59,9 @@ import {
   Input,
   Modal,
   Select,
+  Textarea,
+  Toast,
+  ToastViewport,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
@@ -113,6 +116,10 @@ function shiftMonthKey(value: string, offset: number): string {
   return getJdgMonthKey(date);
 }
 
+function isJdgMonthKey(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value));
+}
+
 function dueStatus(month: string, day: number | null, done: boolean): {
   label: string;
   tone: "neutral" | "warning" | "danger" | "success";
@@ -135,8 +142,12 @@ export function JdgWorkspace({
   layout?: (content: ReactNode) => ReactNode;
   mobileNavigation?: ReactNode;
 } = {}) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [workspace, setWorkspace] = useState(loadJdgWorkspace);
-  const [monthKey, setMonthKey] = useState(getJdgMonthKey);
+  const [monthKey, setMonthKey] = useState(() => {
+    const requestedMonth = searchParams.get("month");
+    return isJdgMonthKey(requestedMonth) ? requestedMonth : getJdgMonthKey();
+  });
   const [profileDraft, setProfileDraft] = useState<JdgTaxProfile>(() => structuredClone(workspace.taxProfile));
   const [storageError, setStorageError] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -159,6 +170,18 @@ export function JdgWorkspace({
   useEffect(() => subscribeToLocalWorkspace(JDG_STORAGE_KEY, () => {
     setWorkspace(loadJdgWorkspace());
   }), []);
+
+  useEffect(() => {
+    const requestedMonth = searchParams.get("month");
+    if (isJdgMonthKey(requestedMonth)) {
+      if (requestedMonth !== monthKey) setMonthKey(requestedMonth);
+      return;
+    }
+    if (!requestedMonth) return;
+    const canonical = new URLSearchParams(searchParams);
+    canonical.delete("month");
+    setSearchParams(canonical, { replace: true });
+  }, [monthKey, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (workspace.months.some((month) => month.month === monthKey)) return;
@@ -192,6 +215,9 @@ export function JdgWorkspace({
       ? current
       : createJdgMonthForWorkspace(current, nextKey));
     setMonthKey(nextKey);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("month", nextKey);
+    setSearchParams(nextParams);
   };
 
   const toggleItem = (itemId: string) => {
@@ -589,7 +615,7 @@ export function JdgWorkspace({
                 <small>Wyjątki, kwoty do sprawdzenia albo pytania do księgowości.</small>
               </span>
             </div>
-            <textarea
+            <Textarea
               aria-label={`Notatka do rozliczenia za ${formatMonth(monthKey)}`}
               placeholder="np. Brakuje korekty faktury za hosting…"
               value={currentMonth?.note ?? ""}
@@ -795,7 +821,7 @@ export function JdgWorkspace({
             </>
           )}
         >
-          <p className="text-[12px] leading-5" style={{ color: "var(--color-text-secondary)" }}>
+          <p className="affairs-confirm-copy">
             {pendingDestructiveAction.type === "reset"
               ? "Wszystkie oznaczenia wykonania i ich daty zostaną wyzerowane. Po operacji możesz przywrócić poprzedni stan."
               : pendingDestructiveAction.type === "delete"
@@ -806,19 +832,11 @@ export function JdgWorkspace({
       )}
 
       {undoableAction && (
-        <div className="jdg-undo">
-          <span role="status" aria-live="polite">{undoableAction.message}</span>
-          <Button variant="ghost" size="sm" onClick={undoLastAction}>Cofnij</Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            aria-label="Zamknij komunikat"
-            onClick={() => setUndoableAction(null)}
-          >
-            <X size={13} aria-hidden="true" />
-          </Button>
-        </div>
+        <ToastViewport>
+          <Toast actionLabel="Cofnij" onAction={undoLastAction} onDismiss={() => setUndoableAction(null)}>
+            {undoableAction.message}
+          </Toast>
+        </ToastViewport>
       )}
 
       {editorOpen && (

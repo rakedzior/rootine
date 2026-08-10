@@ -1022,20 +1022,6 @@
   line-height: var(--leading-normal);
 }
 
-.notes-undo {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-xs) var(--space-xl);
-  border-bottom: 1px solid var(--color-border-subtle);
-  border-left: 2px solid var(--color-precision-blue);
-  background: var(--color-graphite-panel);
-  color: var(--color-text-secondary);
-  font-size: var(--text-label);
-}
-
 @media (max-width: 1180px) {
   .notes-grid {
     grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 340px));

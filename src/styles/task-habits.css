@@ -114,6 +114,11 @@
   margin-top: var(--space-md);
 }
 
+.task-habits-list .ui-list-row.is-completed .ui-list-row__subtitle {
+  color: var(--color-text-secondary);
+  opacity: 1;
+}
+
 .task-habit-row {
   display: flex;
   min-height: 72px;
@@ -456,6 +461,17 @@
   top: calc(100% + 6px);
   left: 0;
   width: min(220px, calc(100vw - 24px));
+}
+
+.task-habit-priority-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: var(--component-menu-min-width);
+}
+
+.task-input-float-menu {
+  position: fixed;
 }
 
 .task-habits-workspace--list .task-habit-time-field.task-habit-setting--icon > .task-habit-time-popover {

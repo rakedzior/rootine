@@ -100,8 +100,9 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       "true",
     );
 
-    await expect(page.locator(".today-day-balance__overdue-summary")).toHaveText(/^w tym \d+ zaległych$/);
+    await expect(page.locator(".today-day-balance__overdue-summary")).toHaveCount(0);
     await expect(page.locator(".today-day-balance__attention-eyebrow")).toHaveText("Zaległości");
+    await expect(page.locator(".today-day-balance__attention-head strong")).toHaveText(/^\d+ zaległych$/);
 
     await page.locator(".today-day-balance__attention-action").click();
     await expect(page.locator('.today-module-row[data-area-id="tasks"]')).toBeFocused();
