@@ -144,14 +144,14 @@ const ACTIONS: readonly CommandCenterAction[] = [
     label: "Płatność",
     description: "Dodaj termin płatności.",
     icon: ReceiptText,
-    target: "/sprawy?widok=payments&akcja=nowa-platnosc",
+    target: "/sprawy?widok=finances&akcja=nowa-platnosc",
   },
   {
     id: "expense",
     label: "Wydatek",
-    description: "Otwórz zapis wydatku.",
+    description: "Dodaj jednorazowy wydatek z terminem.",
     icon: WalletCards,
-    target: "/sprawy?widok=budget&akcja=nowy-wydatek",
+    target: "/sprawy?widok=finances&akcja=nowy-wydatek",
   },
 ] as const;
 
@@ -164,6 +164,7 @@ const MODULE_PRIORITY: Record<AppModuleId, readonly CommandCenterActionId[]> = {
   sport: ["workout", "activity"],
   work: ["work", "task", "note"],
   goals: ["goal", "task", "note"],
+  travel: ["task", "note", "affair"],
   affairs: ["affair", "expense", "payment"],
   notes: ["note", "task"],
 };
@@ -211,8 +212,7 @@ function contextualPriority(moduleId: AppModuleId | null | undefined, search: st
   if (moduleId !== "affairs") return MODULE_PRIORITY[moduleId];
 
   const view = new URLSearchParams(search).get("widok");
-  if (view === "budget") return ["expense", "payment", "affair"] as const;
-  if (view === "payments" || view === "subscriptions") return ["payment", "expense", "affair"] as const;
+  if (view === "finances") return ["payment", "expense", "affair"] as const;
   return MODULE_PRIORITY.affairs;
 }
 

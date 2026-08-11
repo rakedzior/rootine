@@ -1,6 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
 import {
-  BUDGET_KIND_LABELS,
   CADENCE_LABELS,
   CATEGORY_META,
   DOCUMENT_LABELS,
@@ -12,7 +11,6 @@ import {
 } from "./affairsPresentation";
 import type {
   AffairsWorkspace,
-  BudgetLineKind,
   MatterPriority,
   MatterStatus,
   PaymentCadence,
@@ -213,22 +211,7 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
     </>
   )}
 
-  {editor.kind === "budget" && (
-    <>
-      <Select
-        label="Typ pozycji"
-        value={draft.budgetKind}
-        options={Object.entries(BUDGET_KIND_LABELS).map(([value, label]) => ({ value, label }))}
-        onChange={(event) => setDraft((current) => ({ ...current, budgetKind: event.target.value as BudgetLineKind }))}
-      />
-      <div className="affairs-form__grid">
-        <Input label="Kwota planowana" inputMode="decimal" placeholder="0,00" value={draft.planned} onChange={(event) => setDraft((current) => ({ ...current, planned: event.target.value }))} />
-        <Input label="Kwota rzeczywista" inputMode="decimal" placeholder="0,00" value={draft.actual} onChange={(event) => setDraft((current) => ({ ...current, actual: event.target.value }))} />
-      </div>
-    </>
-  )}
-
-  {editor.kind !== "budget" && editor.kind !== "vehicle" && (
+  {editor.kind !== "vehicle" && (
     <Textarea
       label="Notatka (opcjonalnie)"
       className="affairs-textarea"

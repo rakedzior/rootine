@@ -83,7 +83,7 @@ describe("affairs attention", () => {
       key: `oneTime:${payment.id}:${payment.dueDate}`,
       sourceId: payment.id,
       kind: "oneTime",
-      view: "oneTime",
+      view: "finances",
       title: payment.title,
       meta: "Płatność jednorazowa",
       dueDate: payment.dueDate,

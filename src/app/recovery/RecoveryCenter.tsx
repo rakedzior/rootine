@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Database,
@@ -92,7 +92,15 @@ function issueLabel(kind: LocalPersistenceIssue["kind"]) {
   return "Błąd zapisu";
 }
 
-export function RecoveryCenterButton() {
+export function RecoveryCenterButton({
+  label = "Kopia i odzyskiwanie",
+  className = "",
+  trailingIcon,
+}: {
+  label?: string;
+  className?: string;
+  trailingIcon?: ReactNode;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [records, setRecords] = useState(() => listLocalRecoveryRecords());
   const [issues, setIssues] = useState<LocalPersistenceIssue[]>(() => listLocalPersistenceIssues());
@@ -240,16 +248,18 @@ export function RecoveryCenterButton() {
   return (
     <>
       <Button
+        className={className}
         variant="quiet"
         size="sm"
         leadingIcon={<ShieldCheck size={13} aria-hidden="true" />}
+        trailingIcon={trailingIcon}
         onClick={() => {
           refreshRecords();
           refreshIssues();
           setOpen(true);
         }}
       >
-        Kopia i odzyskiwanie{issues.length ? ` · ${issues.length}` : ""}
+        <span>{label}{issues.length ? ` · ${issues.length}` : ""}</span>
       </Button>
 
       {open && (

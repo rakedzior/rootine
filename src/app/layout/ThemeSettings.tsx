@@ -8,22 +8,34 @@ type ThemeSettingsProps = {
   idPrefix: string;
   value: AppThemePreference;
   onChange: (themeId: AppThemePreference) => void;
+  embedded?: boolean;
 };
 
-export function ThemeSettings({ idPrefix, value, onChange }: ThemeSettingsProps) {
+export function ThemeSettings({ idPrefix, value, onChange, embedded = false }: ThemeSettingsProps) {
   const titleId = `${idPrefix}-theme-settings-title`;
 
   return (
-    <section className="app-theme-settings" aria-labelledby={titleId}>
-      <div className="app-theme-settings__heading">
-        <span>
-          <strong id={titleId}>Motyw aplikacji</strong>
-          <small>Kolory interfejsu, powierzchni i akcentów</small>
-        </span>
-        <small>Zmiana działa od razu i zapisuje się automatycznie</small>
-      </div>
+    <section
+      className={`app-theme-settings${embedded ? " is-embedded" : ""}`}
+      aria-labelledby={embedded ? undefined : titleId}
+      aria-label={embedded ? "Dostępne motywy" : undefined}
+    >
+      {!embedded && (
+        <div className="app-theme-settings__heading">
+          <span>
+            <strong id={titleId}>Motyw aplikacji</strong>
+            <small>Kolory interfejsu, powierzchni i akcentów</small>
+          </span>
+          <small>Zmiana działa od razu i zapisuje się automatycznie</small>
+        </div>
+      )}
 
-      <div className="app-theme-settings__grid" role="radiogroup" aria-labelledby={titleId}>
+      <div
+        className="app-theme-settings__grid"
+        role="radiogroup"
+        aria-labelledby={embedded ? undefined : titleId}
+        aria-label={embedded ? "Dostępne motywy" : undefined}
+      >
         <button
           type="button"
           role="radio"

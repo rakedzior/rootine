@@ -74,9 +74,9 @@
 }
 
 .command-center__input:focus {
-  border-color: var(--color-primary);
-  outline: var(--focus-ring-width) solid color-mix(in srgb, var(--color-primary) 28%, transparent);
-  outline-offset: 2px;
+  border-color: var(--color-field-focus);
+  outline: 0;
+  box-shadow: none;
 }
 
 .command-center__preview {

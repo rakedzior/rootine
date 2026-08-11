@@ -7,6 +7,13 @@ describe("module preferences", () => {
     vi.resetModules();
   });
 
+  it("uses Notatki before Pozostałe in the default navigation order", async () => {
+    const preferences = await import("./modulePreferences");
+    const defaults = preferences.createDefaultModulePreferences();
+
+    expect(defaults.order.indexOf("notes")).toBeLessThan(defaults.order.indexOf("affairs"));
+  });
+
   it("migrates the legacy shell preference and appends newly registered modules", async () => {
     const preferences = await import("./modulePreferences");
     window.localStorage.setItem(preferences.MODULE_PREFERENCES_STORAGE_KEY, JSON.stringify({

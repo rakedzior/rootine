@@ -20,14 +20,13 @@ type AffairsEditorSubmissionInput = {
   editor: EditorState;
   draft: Draft;
   workspace: AffairsWorkspace;
-  budgetMonthKey: string;
 };
 
 function invalid(title: string, error: string): AffairsEditorSubmission {
   return { title, error };
 }
 
-export function applyAffairsEditor({ editor, draft, workspace, budgetMonthKey }: AffairsEditorSubmissionInput): AffairsEditorSubmission {
+export function applyAffairsEditor({ editor, draft, workspace }: AffairsEditorSubmissionInput): AffairsEditorSubmission {
   const title = draft.title.trim();
   if (!title) return invalid(title, "Wpisz nazwę.");
 
@@ -191,55 +190,29 @@ export function applyAffairsEditor({ editor, draft, workspace, budgetMonthKey }:
     };
   }
 
-  if (editor.kind === "vehicleItem") {
-    const dueMileage = draft.dueMileage.trim() ? Number(draft.dueMileage.replace(/\s/g, "")) : null;
-    if (!draft.dueDate && dueMileage === null) return invalid(title, "Podaj termin lub przebieg graniczny.");
-    if (dueMileage !== null && (!Number.isFinite(dueMileage) || dueMileage < 0)) {
-      return invalid(title, "Podaj prawidłowy przebieg graniczny.");
-    }
-    const existing = workspace.vehicleItems.find((item) => item.id === editor.id);
-    const item: VehicleItem = {
-      id: editor.id ?? createAffairsId("vehicle-item"),
-      vehicleId: draft.vehicleId || editor.vehicleId,
-      title,
-      type: draft.vehicleType,
-      dueDate: draft.dueDate,
-      dueMileage,
-      done: existing?.done ?? false,
-      note: draft.note.trim(),
-    };
-    return {
-      title,
-      nextWorkspace: {
-        ...workspace,
-        vehicleItems: editor.mode === "edit"
-          ? workspace.vehicleItems.map((candidate) => candidate.id === editor.id ? item : candidate)
-          : [...workspace.vehicleItems, item],
-      },
-    };
+  const dueMileage = draft.dueMileage.trim() ? Number(draft.dueMileage.replace(/\s/g, "")) : null;
+  if (!draft.dueDate && dueMileage === null) return invalid(title, "Podaj termin lub przebieg graniczny.");
+  if (dueMileage !== null && (!Number.isFinite(dueMileage) || dueMileage < 0)) {
+    return invalid(title, "Podaj prawidłowy przebieg graniczny.");
   }
-
-  const planned = Number(draft.planned.replace(",", "."));
-  const actual = Number(draft.actual.replace(",", ".") || "0");
-  if (!Number.isFinite(planned) || planned < 0 || !Number.isFinite(actual) || actual < 0) {
-    return invalid(title, "Podaj prawidłowe kwoty.");
-  }
+  const existing = workspace.vehicleItems.find((item) => item.id === editor.id);
+  const item: VehicleItem = {
+    id: editor.id ?? createAffairsId("vehicle-item"),
+    vehicleId: draft.vehicleId || editor.vehicleId,
+    title,
+    type: draft.vehicleType,
+    dueDate: draft.dueDate,
+    dueMileage,
+    done: existing?.done ?? false,
+    note: draft.note.trim(),
+  };
   return {
     title,
     nextWorkspace: {
       ...workspace,
-      budgets: workspace.budgets.map((budget) => budget.month === budgetMonthKey
-        ? {
-            ...budget,
-            lines: [...budget.lines, {
-              id: createAffairsId("budget"),
-              label: title,
-              kind: draft.budgetKind,
-              planned,
-              actual,
-            }],
-          }
-        : budget),
+      vehicleItems: editor.mode === "edit"
+        ? workspace.vehicleItems.map((candidate) => candidate.id === editor.id ? item : candidate)
+        : [...workspace.vehicleItems, item],
     },
   };
 }

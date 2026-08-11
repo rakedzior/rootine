@@ -10,6 +10,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CircleHelp,
   Clock3,
@@ -72,6 +73,7 @@ import {
   type AppThemePreference,
 } from "../theme/appTheme";
 import { ThemeSettings } from "./ThemeSettings";
+import { SettingsAccordions } from "./SettingsAccordions";
 import { setActiveAreaId, useIsActiveArea } from "../experience/activeArea";
 import {
   ExperienceSettings,
@@ -147,8 +149,8 @@ const HELP_GUIDES = {
     steps: ["Zapisz mierzalny rezultat i realny termin.", "Podziel cel na etapy, które da się jednoznacznie zakończyć.", "Regularnie aktualizuj postęp i reaguj na kondycję celu „Zagrożony”."],
   },
   affairs: {
-    title: "Sprawy",
-    steps: ["Zacznij od radaru zobowiązań i najbliższych terminów.", "Przejdź do płatności, firmy albo podróży zależnie od kontekstu.", "Po wykonaniu sprawy sprawdź historię; ostatnią operację można cofnąć."],
+    title: "Pozostałe",
+    steps: ["Zacznij od radaru zobowiązań i najbliższych terminów.", "Przejdź do finansów, dokumentów, pojazdów albo firmy zależnie od kontekstu.", "Po wykonaniu sprawy sprawdź historię; ostatnią operację można cofnąć."],
   },
   travel: {
     title: "Podróże",
@@ -285,6 +287,7 @@ type ModuleSettingsProps = {
   onToggle: (moduleId: AppModule["id"]) => void;
   onReset: () => void;
   idPrefix: string;
+  embedded?: boolean;
 };
 
 function ModuleSettings({
@@ -295,16 +298,29 @@ function ModuleSettings({
   onToggle,
   onReset,
   idPrefix,
+  embedded = false,
 }: ModuleSettingsProps) {
   const titleId = `${idPrefix}-module-settings-title`;
   return (
-    <section className="app-module-settings" aria-labelledby={titleId}>
-      <div className="app-module-settings__heading">
+    <section
+      className={`app-module-settings${embedded ? " is-embedded" : ""}`}
+      aria-labelledby={embedded ? undefined : titleId}
+      aria-label={embedded ? "Widoczność i kolejność modułów" : undefined}
+    >
+      <div className={`app-module-settings__heading${embedded ? " is-embedded" : ""}`}>
         <span>
-          <strong id={titleId}>Moduły</strong>
-          <small>Ustal kolejność i widoczność</small>
+          {!embedded && <strong id={titleId}>Moduły</strong>}
+          {embedded
+            ? <strong>{enabledModuleCount} aktywnych</strong>
+            : <small>Ustal kolejność i widoczność</small>}
         </span>
-        <small>{enabledModuleCount}/{APP_MODULES.length} aktywne</small>
+        {!embedded && <small>{enabledModuleCount}/{APP_MODULES.length} aktywne</small>}
+        {embedded && (
+          <button type="button" className="app-module-settings__reset app-module-settings__reset--inline" onClick={onReset}>
+            <RotateCcw size={13} strokeWidth={1.7} aria-hidden="true" />
+            Przywróć domyślny układ
+          </button>
+        )}
       </div>
 
       <div className="app-module-settings__list">
@@ -358,10 +374,12 @@ function ModuleSettings({
         })}
       </div>
 
-      <button type="button" className="app-module-settings__reset" onClick={onReset}>
-        <RotateCcw size={13} strokeWidth={1.7} aria-hidden="true" />
-        Przywróć domyślny układ
-      </button>
+      {!embedded && (
+        <button type="button" className="app-module-settings__reset" onClick={onReset}>
+          <RotateCcw size={13} strokeWidth={1.7} aria-hidden="true" />
+          Przywróć domyślny układ
+        </button>
+      )}
     </section>
   );
 }
@@ -377,53 +395,66 @@ function ProfileSummary({
   const auth = useSupabaseAuth();
   const remote = useRemoteSync();
   const profile = getProfileIdentity(auth.user);
+  const hasSyncIssue = remote.status === "error" || remote.status === "schema-missing";
+  const connectionLabel = auth.user
+    ? hasSyncIssue ? "Synchronizacja wymaga uwagi" : "Połączono z Rootine"
+    : auth.configured ? "Zaloguj się, aby synchronizować dane" : "Dane tylko na tym urządzeniu";
   return (
-    <>
-      <div className="app-sidebar-popover__profile">
+    <div className="app-profile-dialog__content">
+      <div className="app-profile-dialog__identity">
         <ProfileAvatar user={auth.user} />
         <span>
           <strong>{profile.name}</strong>
-          <small>{auth.user ? "Konto połączone z Rootine" : auth.configured ? "Zaloguj się, aby synchronizować dane" : "Profil działa tylko na tym urządzeniu"}</small>
+          <small className={hasSyncIssue ? "is-warning" : ""}>
+            <span className="app-profile-dialog__connection-dot" aria-hidden="true" />
+            {connectionLabel}
+          </small>
         </span>
       </div>
-      <p>{auth.user
-        ? remote.status === "schema-missing"
-          ? "Konto działa, ale migracja bazy danych wymaga zastosowania."
-          : "Dane Rootine są synchronizowane z Twoim kontem."
-        : "Dane Rootine są obecnie zapisywane tylko na tym urządzeniu."}</p>
-      <AccountPanel />
+
       <button
         type="button"
         className={`app-profile-privacy${privacy.enabled ? " is-active" : ""}`}
         aria-pressed={privacy.enabled}
         onClick={privacy.toggle}
       >
-        <EyeOff size={16} aria-hidden="true" />
-        <span>
-          <strong>{privacy.enabled ? "Privacy Mode włączony" : "Włącz Privacy Mode"}</strong>
-          <small>Ukrywa kwoty, pomiary i prywatne treści. Skrót: Ctrl ⇧ P.</small>
+        <span className="app-profile-privacy__icon" aria-hidden="true"><EyeOff size={22} /></span>
+        <span className="app-profile-privacy__copy">
+          <strong>{privacy.enabled ? "Tryb prywatny włączony" : "Tryb prywatny"}</strong>
+          <small>Ukrywa kwoty, pomiary i prywatne treści</small>
         </span>
+        <kbd>Ctrl ⇧ P</kbd>
+        <span className="app-profile-privacy__toggle" aria-hidden="true"><span /></span>
       </button>
-      <div className="app-recovery-entry">
-        <RecoveryCenterButton />
-      </div>
-      {(onOpenSettings || onOpenHelp) && (
-        <div className="app-profile-dialog__actions" aria-label="Skróty profilu">
-          {onOpenSettings && (
-            <button type="button" onClick={onOpenSettings}>
-              <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
-              <span>Ustawienia</span>
-            </button>
-          )}
-          {onOpenHelp && (
-            <button type="button" onClick={onOpenHelp}>
-              <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
-              <span>Pomoc i skróty</span>
-            </button>
-          )}
+
+      <nav className="app-profile-dialog__navigation" aria-label="Narzędzia konta">
+        <div className="app-recovery-entry">
+          <RecoveryCenterButton
+            label="Kopie zapasowe"
+            className="app-profile-dialog__nav-button"
+            trailingIcon={<ChevronRight size={18} strokeWidth={1.7} aria-hidden="true" />}
+          />
         </div>
-      )}
-    </>
+        {onOpenSettings && (
+          <button type="button" className="app-profile-dialog__nav-button" onClick={onOpenSettings}>
+            <Settings size={22} strokeWidth={1.7} aria-hidden="true" />
+            <span>Ustawienia</span>
+            <ChevronRight size={18} strokeWidth={1.7} aria-hidden="true" />
+          </button>
+        )}
+        {onOpenHelp && (
+          <button type="button" className="app-profile-dialog__nav-button" onClick={onOpenHelp}>
+            <CircleHelp size={22} strokeWidth={1.7} aria-hidden="true" />
+            <span>Pomoc i skróty</span>
+            <ChevronRight size={18} strokeWidth={1.7} aria-hidden="true" />
+          </button>
+        )}
+      </nav>
+
+      <div className="app-profile-dialog__account">
+        <AccountPanel />
+      </div>
+    </div>
   );
 }
 
@@ -666,6 +697,12 @@ export default function Layout() {
     setOpenMenu(null);
     window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
   };
+  const openHelpFromSettings = () => {
+    setOpenMenu(null);
+    setHelpGuideId(contextualHelpId);
+    setHelpQuery("");
+    setHelpOpen(true);
+  };
   const resetModules = () => {
     const nextPreferences = createDefaultModulePreferences();
     setModulePreferences(nextPreferences);
@@ -835,68 +872,46 @@ export default function Layout() {
           >
             <ProfileAvatar user={auth.user} />
             <span className="app-sidebar-profile__copy">
-              <strong>{profileIdentity.name}</strong>
+              <strong>{auth.user ? "Zalogowano" : profileIdentity.name}</strong>
+              <small>{auth.user?.email ?? "Profil lokalny"}</small>
             </span>
           </button>
 
           {openMenu === "settings" && (
             <Modal
               title="Ustawienia"
-              description="Dostosuj wygląd, panel, kolejność obszarów i wspólną prognozę aplikacji."
+              description="Dostosuj wygląd i sposób działania Rootine."
               size="md"
               bodyClassName="app-settings-dialog"
               onClose={() => setOpenMenu(null)}
             >
-              <button type="button" data-autofocus onClick={toggleSidebar}>
-                {isSidebarCollapsed
-                  ? <PanelLeftOpen size={16} strokeWidth={1.7} aria-hidden="true" />
-                  : <PanelLeftClose size={16} strokeWidth={1.7} aria-hidden="true" />}
-                <span>
-                  <strong>{isSidebarCollapsed ? "Rozwiń panel" : "Zwiń panel"}</strong>
-                  <small>Wybór zostanie zapamiętany</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                disabled={weather.status === "loading"}
-                onClick={() => requestWeather(true)}
-              >
-                <RefreshCw
-                  className={weather.status === "loading" ? "is-spinning" : ""}
-                  size={16}
-                  strokeWidth={1.7}
-                  aria-hidden="true"
-                />
-                <span>
-                  <strong>Odśwież pogodę</strong>
-                  <small>{TODAY_WEATHER_LOCATION.label} · wspólna prognoza aplikacji</small>
-                </span>
-              </button>
-              <ThemeSettings
-                idPrefix="sidebar"
-                value={appTheme}
-                onChange={changeAppTheme}
+              <SettingsAccordions
+                idPrefix="sidebar-settings"
+                isSidebarCollapsed={isSidebarCollapsed}
+                onToggleSidebar={toggleSidebar}
+                weatherStatus={weather.status}
+                weatherLabel={weatherLabel}
+                weatherIcon={WeatherIcon}
+                onRefreshWeather={() => requestWeather(true)}
+                comfortContent={<ExperienceSettings embedded />}
+                themeContent={(
+                  <ThemeSettings
+                    idPrefix="sidebar"
+                    value={appTheme}
+                    onChange={changeAppTheme}
+                    embedded
+                  />
+                )}
+                modulesContent={<ModuleSettings {...settingsProps} idPrefix="sidebar" embedded />}
+                onOpenHelp={openHelpFromSettings}
               />
-              <ExperienceSettings />
-              <ModuleSettings {...settingsProps} idPrefix="sidebar" />
-              <div className="app-recovery-entry">
-                <RecoveryCenterButton />
-              </div>
-              <a
-                className="app-sidebar-popover__source"
-                href="https://open-meteo.com/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Dane pogodowe: Open-Meteo
-              </a>
             </Modal>
           )}
 
           {openMenu === "profile" && (
             <Modal
-              title="Profil lokalny"
-              description="Informacje o profilu i sposobie przechowywania danych."
+              title="Konto"
+              description="Twoje konto i preferencje w Rootine."
               size="sm"
               bodyClassName="app-profile-dialog"
               onClose={() => setOpenMenu(null)}
@@ -1073,15 +1088,15 @@ export default function Layout() {
                   {openMenu === "mobileSettings"
                     ? "Ustawienia"
                     : openMenu === "mobileProfile"
-                      ? "Profil"
+                      ? "Konto"
                       : "Rootine"}
                 </strong>
                 <small>
-                  {openMenu === "mobileSettings"
-                    ? "Wygląd, nawigacja i prognoza"
-                    : openMenu === "mobileProfile"
-                      ? "Dane lokalne"
-                      : "Wszystkie obszary"}
+                    {openMenu === "mobileSettings"
+                      ? "Wygląd, nawigacja i prognoza"
+                      : openMenu === "mobileProfile"
+                        ? "Konto i preferencje"
+                        : "Wszystkie obszary"}
                 </small>
               </span>
               <button
@@ -1150,36 +1165,27 @@ export default function Layout() {
 
             {openMenu === "mobileSettings" && (
               <div className="app-mobile-menu__settings">
-                <ThemeSettings
-                  idPrefix="mobile"
-                  value={appTheme}
-                  onChange={changeAppTheme}
+                <SettingsAccordions
+                  idPrefix="mobile-settings"
+                  isSidebarCollapsed={isSidebarCollapsed}
+                  onToggleSidebar={toggleSidebar}
+                  weatherStatus={weather.status}
+                  weatherLabel={weatherLabel}
+                  weatherIcon={WeatherIcon}
+                  onRefreshWeather={() => requestWeather(true)}
+                  comfortContent={<ExperienceSettings compact embedded />}
+                  themeContent={(
+                    <ThemeSettings
+                      idPrefix="mobile"
+                      value={appTheme}
+                      onChange={changeAppTheme}
+                      embedded
+                    />
+                  )}
+                  modulesContent={<ModuleSettings {...settingsProps} idPrefix="mobile" embedded />}
+                  onOpenHelp={openHelpFromSettings}
+                  compact
                 />
-                <ExperienceSettings compact />
-                <button
-                  type="button"
-                  className="app-mobile-menu__weather"
-                  disabled={weather.status === "loading"}
-                  onClick={() => requestWeather(true)}
-                >
-                  <WeatherIcon
-                    className={weather.status === "loading" ? "is-spinning" : ""}
-                    size={16}
-                    strokeWidth={1.7}
-                    aria-hidden="true"
-                  />
-                  <span>
-                    <strong>Odśwież pogodę</strong>
-                    <small>{TODAY_WEATHER_LOCATION.label} · {weatherLabel}</small>
-                  </span>
-                </button>
-                <ModuleSettings {...settingsProps} idPrefix="mobile" />
-                <div className="app-recovery-entry">
-                  <RecoveryCenterButton />
-                </div>
-                <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
-                  Dane pogodowe: Open-Meteo
-                </a>
               </div>
             )}
 

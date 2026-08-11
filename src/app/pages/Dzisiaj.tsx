@@ -145,21 +145,11 @@ function counted(value: number, one: string, few: string, many: string) {
   return `${value} ${polishForm(value, one, few, many)}`;
 }
 
-function overdueAgeLabel(dateKey: string, todayKey: string) {
-  const days = Math.max(1, Math.round((
-    Date.parse(`${todayKey}T12:00:00`) - Date.parse(`${dateKey}T12:00:00`)
-  ) / 86_400_000));
-  return days === 1 ? "1 dzień po terminie" : `${days} dni po terminie`;
-}
-
 function overdueSummary(
   count: number,
   nouns: [string, string, string],
-  dates: string[],
-  todayKey: string,
 ) {
-  const oldestDate = dates.reduce((oldest, date) => date < oldest ? date : oldest, dates[0]);
-  return `${counted(count, ...nouns)} · najstarsze ${overdueAgeLabel(oldestDate, todayKey)}`;
+  return counted(count, ...nouns);
 }
 
 function moduleState(total: number, remaining: number): ModuleState {
@@ -465,7 +455,7 @@ export default function Dzisiaj() {
     : overdueGoals.length > 0 && atRiskGoals.length > 0
       ? counted(goalsAttentionCount, "cel wymaga uwagi", "cele wymagają uwagi", "celów wymaga uwagi")
       : overdueGoals.length > 0
-        ? overdueSummary(overdueGoals.length, ["cel po terminie", "cele po terminie", "celów po terminie"], overdueGoals.flatMap((goal) => goal.milestones.filter((milestone) => !milestone.done && milestone.dueDate < todayKey).map((milestone) => milestone.dueDate)), todayKey)
+        ? overdueSummary(overdueGoals.length, ["cel po terminie", "cele po terminie", "celów po terminie"])
         : counted(atRiskGoals.length, "cel zagrożony", "cele zagrożone", "celów zagrożonych");
   const goalsDueToday = todayGoals.filter((goal) => !overdueGoalIds.has(goal.id));
   const remainingGoalsDueToday = Math.max(
@@ -561,7 +551,7 @@ export default function Dzisiaj() {
           ? "Plan na dziś wykonany"
           : counted(remainingTodayTasks, "zadanie na dziś", "zadania na dziś", "zadań na dziś"),
       overdueMessage: overdueTasks.length
-        ? overdueSummary(overdueTasks.length, ["zadanie po terminie", "zadania po terminie", "zadań po terminie"], overdueTasks.map((task) => task.calendarDate!), todayKey)
+        ? overdueSummary(overdueTasks.length, ["zadanie po terminie", "zadania po terminie", "zadań po terminie"])
         : undefined,
       accent: overdueTasks.length ? "warning" : "neutral",
       state: tasksState,
@@ -638,7 +628,7 @@ export default function Dzisiaj() {
           ? "Plan na dziś wykonany"
           : counted(remainingWorkTasksDueToday, "zadanie na dziś", "zadania na dziś", "zadań na dziś"),
       overdueMessage: overdueWorkTasks.length
-        ? overdueSummary(overdueWorkTasks.length, ["zadanie po terminie", "zadania po terminie", "zadań po terminie"], overdueWorkTasks.map((task) => task.dueDate!), todayKey)
+        ? overdueSummary(overdueWorkTasks.length, ["zadanie po terminie", "zadania po terminie", "zadań po terminie"])
         : undefined,
       accent: overdueWorkTasks.length ? "warning" : "neutral",
       state: workState,
@@ -691,7 +681,7 @@ export default function Dzisiaj() {
           ? counted(todayAffairsDueToday.length, "sprawa na dziś", "sprawy na dziś", "spraw na dziś")
           : undefined,
       overdueMessage: overdueAffairs.length
-        ? overdueSummary(overdueAffairs.length, ["sprawa po terminie", "sprawy po terminie", "spraw po terminie"], overdueAffairs.map((item) => item.date), todayKey)
+        ? overdueSummary(overdueAffairs.length, ["sprawa po terminie", "sprawy po terminie", "spraw po terminie"])
         : undefined,
       accent: overdueAffairs.length ? "warning" : "neutral",
       state: affairsState,

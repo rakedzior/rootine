@@ -312,9 +312,6 @@ a {
 
 button:focus-visible,
 a:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
 [role="button"]:focus-visible,
 [role="gridcell"]:focus-visible,
 [role="menuitem"]:focus-visible,
@@ -323,11 +320,32 @@ select:focus-visible,
   outline-offset: 2px !important;
 }
 
-input.tag-search-input:focus,
-input.tag-search-input:focus-visible {
+/* Text-entry controls communicate focus through the caret and one calm border.
+   Action and navigation controls retain the stronger keyboard ring above. */
+:where(
+  input,
+  textarea,
+  [contenteditable="true"]
+) {
+  caret-color: var(--color-primary);
+}
+
+:where(
+  input,
+  textarea,
+  [contenteditable="true"]
+):focus {
+  outline: 0 !important;
+  box-shadow: none !important;
+  border-color: var(--color-field-focus);
+}
+
+/* Non-text inputs keep a conventional keyboard target. */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+input[type="file"]:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-ring) !important;
   outline-offset: 2px !important;
-  box-shadow: none !important;
 }
 
 ::selection {

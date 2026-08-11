@@ -103,8 +103,8 @@
 }
 
 .task-habits-add > input:focus-visible {
-  border-color: var(--color-precision-blue);
-  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+  border-color: var(--color-field-focus);
+  box-shadow: none;
 }
 
 .task-habits-list {
@@ -429,9 +429,9 @@
 .task-habit-time-trigger:hover,
 .task-habit-time-trigger:focus-visible,
 .task-habit-time-field:focus-within .task-habit-time-trigger {
-  border-color: var(--color-precision-blue);
+  border-color: var(--color-field-focus);
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+  box-shadow: none;
 }
 
 .task-habits-workspace--list .task-habit-time-field.task-habit-setting--icon > .task-habit-time-trigger {
@@ -582,8 +582,8 @@
 .task-habit-date-setting:focus-within input,
 .task-habit-pause-form label:focus-within input,
 .task-habit-interval-input:focus-within input {
-  border-color: var(--color-precision-blue);
-  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+  border-color: var(--color-field-focus);
+  box-shadow: none;
 }
 
 .task-habit-setting__daypart {
@@ -717,9 +717,9 @@
 }
 
 .task-habit-weekday-popover__interval input:focus-visible {
-  border-color: var(--color-precision-blue);
+  border-color: var(--color-field-focus);
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+  box-shadow: none;
 }
 
 .task-habit-day-chip {
@@ -1001,7 +1001,7 @@
 .task-habit-settings-content .task-habit-time-trigger:focus-visible,
 .task-habit-settings-content .task-habit-date-setting input:focus-visible {
   border-color: transparent;
-  box-shadow: var(--focus-ring);
+  box-shadow: none;
 }
 
 .task-habit-settings-content .task-habit-setting:focus-within > input {

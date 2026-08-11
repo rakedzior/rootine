@@ -1,4 +1,12 @@
 @media (max-width: 980px) {
+  .auth-shell {
+    grid-template-columns: minmax(320px, 0.82fr) minmax(430px, 1.18fr);
+  }
+
+  .auth-context__areas {
+    display: none;
+  }
+
   .app-route-loading__workspace {
     padding-right: var(--space-xl);
     padding-left: var(--space-xl);
@@ -103,6 +111,48 @@
 }
 
 @media (max-width: 760px) {
+  .auth-shell {
+    display: block;
+  }
+
+  .auth-context {
+    display: none;
+  }
+
+  .auth-panel {
+    min-height: 100dvh;
+    grid-template-rows: auto 1fr;
+    align-content: start;
+    padding: var(--space-xl) var(--space-md);
+  }
+
+  .auth-panel__mobile-brand {
+    display: block;
+    width: min(100%, 430px);
+  }
+
+  .auth-card {
+    align-self: center;
+    gap: var(--space-lg);
+    padding-block: var(--space-3xl);
+  }
+
+  .auth-test-account {
+    padding-top: var(--space-lg);
+  }
+
+  .test-account-notice {
+    top: auto;
+    right: var(--space-sm);
+    bottom: calc(60px + env(safe-area-inset-bottom) + var(--space-sm));
+    left: var(--space-sm);
+    justify-content: space-between;
+  }
+
+  .test-account-notice small {
+    display: none;
+  }
+
   .app-route-loading__header {
     padding: 0 var(--space-lg);
   }

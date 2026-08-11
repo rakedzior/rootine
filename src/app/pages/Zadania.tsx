@@ -293,12 +293,19 @@ export default function Zadania() {
   const [editListLabel, setEditListLabel] = useState("");
   const [listSearchOpen, setListSearchOpen] = useState(false);
   const [listSearch,    setListSearch]    = useState("");
+  const [listEditMode,  setListEditMode]  = useState(false);
   const [addingTag,     setAddingTag]     = useState(false);
   const [newTagLabel,   setNewTagLabel]   = useState("");
   const [editingTagId,  setEditingTagId]  = useState<string | null>(null);
   const [editTagLabel,  setEditTagLabel]  = useState("");
   const [tagSearchOpen, setTagSearchOpen] = useState(false);
   const [tagSearch,     setTagSearch]     = useState("");
+  const [tagEditMode,   setTagEditMode]   = useState(false);
+
+  useEffect(() => {
+    if (listFilter) setListyOpen(true);
+    if (tagFilter) setTagiOpen(true);
+  }, [listFilter, tagFilter]);
 
   useEffect(() => {
     if (taskDeepLinkPreferencesRef.current) return;
@@ -916,34 +923,45 @@ export default function Zadania() {
         {/* Listy */}
         <div className="px-2 mb-2">
           <div className="flex items-center justify-between px-1.5 mb-1.5">
-            <button onClick={() => setListyOpen(v => !v)}
+            <button type="button" onClick={() => setListyOpen(v => !v)}
+              aria-expanded={listyOpen}
+              aria-controls="tasks-lists-panel"
               className="task-nav__group-toggle">
               <ChevronRight size={11} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
               <span className="task-nav__group-label">Listy</span>
             </button>
-            {listyOpen && (
-              <div className="task-taxonomy-header-actions flex items-center gap-1">
+            <div className="task-taxonomy-header-actions flex items-center gap-1">
                 <button
-                  onClick={() => { setListSearchOpen(open => !open); setListSearch(""); }}
+                  type="button"
+                  onClick={() => { setListyOpen(true); setListSearchOpen(open => !open); setListSearch(""); }}
                   aria-label="Szukaj listy"
                   title="Szukaj listy"
                   className={`task-nav__group-action${listSearchOpen ? " is-active" : ""}`}
-                  onMouseEnter={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}
-                  onMouseLeave={e => { if (!listSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}>
+                >
                   <Search size={11} strokeWidth={1.8} />
                 </button>
-                <button onClick={() => { setAddingList(true); setAddingTag(false); setListSearchOpen(false); }}
+                <button
+                  type="button"
+                  onClick={() => { setListyOpen(true); setListEditMode((open) => {
+                    if (open) setEditingListId(null);
+                    return !open;
+                  }); }}
+                  aria-label={listEditMode ? "Zakończ edycję list" : "Edytuj listy"}
+                  aria-pressed={listEditMode}
+                  title={listEditMode ? "Zakończ edycję list" : "Edytuj listy"}
+                  className={`task-nav__group-action${listEditMode ? " is-active" : ""}`}>
+                  <PenLine size={11} strokeWidth={1.8} />
+                </button>
+                <button type="button" onClick={() => { setListyOpen(true); setAddingList(true); setAddingTag(false); setListSearchOpen(false); }}
                   aria-label="Dodaj listę"
                   title="Dodaj listę"
                   className="task-nav__group-action"
-                  onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
-                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}>
+                >
                   <Plus size={11} strokeWidth={2} />
                 </button>
-              </div>
-            )}
+            </div>
           </div>
-          {listyOpen && <div className="space-y-px">
+          {listyOpen && <div id="tasks-lists-panel" className="space-y-px">
             {listSearchOpen && (
               <div className="task-nav__search">
                 <Search size={11} strokeWidth={1.7} />
@@ -968,7 +986,7 @@ export default function Zadania() {
               const active = listFilter === l.id;
               const count = tasks.filter(t => !t.done && t.list === l.id).length;
               return (
-                <div key={l.id} className="task-nav__taxonomy-row group">
+                <div key={l.id} className={`task-nav__taxonomy-row group${listEditMode ? " is-editing" : ""}`}>
                   {editingListId === l.id ? (
                     <div className="task-nav__edit-row">
                       <span className="task-nav__dot" style={{ background: l.color }} />
@@ -985,11 +1003,11 @@ export default function Zadania() {
                       }}
                       icon={<span className={`task-nav__color-dot${active ? " is-active" : ""}`} style={{ background: l.color }} />}
                       label={l.label}
-                      meta={count > 0 ? count : undefined}
+                      meta={count}
                     />
                   )}
                   {/* Hover actions */}
-                  {editingListId !== l.id && (
+                  {listEditMode && editingListId !== l.id && (
                     <div className="task-taxonomy-actions absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
                       <button type="button" aria-label={`Edytuj listę ${l.label}`} onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
                         className="task-nav__row-action">
@@ -1030,34 +1048,45 @@ export default function Zadania() {
         {/* Tagi */}
         <div className="px-2 mb-2">
           <div className="flex items-center justify-between px-1.5 mb-1.5">
-            <button onClick={() => setTagiOpen(v => !v)}
+            <button type="button" onClick={() => setTagiOpen(v => !v)}
+              aria-expanded={tagiOpen}
+              aria-controls="tasks-tags-panel"
               className="task-nav__group-toggle">
               <ChevronRight size={11} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
               <span className="task-nav__group-label">Tagi</span>
             </button>
-            {tagiOpen && (
-              <div className="task-taxonomy-header-actions flex items-center gap-1">
+            <div className="task-taxonomy-header-actions flex items-center gap-1">
                 <button
-                  onClick={() => { setTagSearchOpen(open => !open); setTagSearch(""); }}
+                  type="button"
+                  onClick={() => { setTagiOpen(true); setTagSearchOpen(open => !open); setTagSearch(""); }}
                   aria-label="Szukaj tagu"
                   title="Szukaj tagu"
                   className={`task-nav__group-action${tagSearchOpen ? " is-active" : ""}`}
-                  onMouseEnter={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}
-                  onMouseLeave={e => { if (!tagSearchOpen) (e.currentTarget as HTMLElement).style.color = C.textMuted; }}>
+                >
                   <Search size={11} strokeWidth={1.8} />
                 </button>
-                <button onClick={() => { setAddingTag(true); setAddingList(false); setTagSearchOpen(false); }}
+                <button
+                  type="button"
+                  onClick={() => { setTagiOpen(true); setTagEditMode((open) => {
+                    if (open) setEditingTagId(null);
+                    return !open;
+                  }); }}
+                  aria-label={tagEditMode ? "Zakończ edycję tagów" : "Edytuj tagi"}
+                  aria-pressed={tagEditMode}
+                  title={tagEditMode ? "Zakończ edycję tagów" : "Edytuj tagi"}
+                  className={`task-nav__group-action${tagEditMode ? " is-active" : ""}`}>
+                  <PenLine size={11} strokeWidth={1.8} />
+                </button>
+                <button type="button" onClick={() => { setTagiOpen(true); setAddingTag(true); setAddingList(false); setTagSearchOpen(false); }}
                   aria-label="Dodaj tag"
                   title="Dodaj tag"
                   className="task-nav__group-action"
-                  onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}
-                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = C.textMuted)}>
+                >
                   <Plus size={11} strokeWidth={2} />
                 </button>
-              </div>
-            )}
+            </div>
           </div>
-          {tagiOpen && <div className="space-y-px">
+          {tagiOpen && <div id="tasks-tags-panel" className="space-y-px">
             {tagSearchOpen && (
               <div className="task-nav__search">
                 <Search size={11} strokeWidth={1.7} />
@@ -1081,7 +1110,7 @@ export default function Zadania() {
             {visibleTags.map(t => {
               const active = tagFilter === t.id;
               return (
-                <div key={t.id} className="task-nav__taxonomy-row group">
+                <div key={t.id} className={`task-nav__taxonomy-row group${tagEditMode ? " is-editing" : ""}`}>
                   {editingTagId === t.id ? (
                     <div className="task-nav__edit-row">
                       <span className="task-nav__dot" style={{ background: t.color }} />
@@ -1098,10 +1127,10 @@ export default function Zadania() {
                       }}
                       icon={<span className={`task-nav__color-dot${active ? " is-active" : ""}`} style={{ background: t.color }} />}
                       label={`#${t.label}`}
-                      meta={tagUsage[t.id] > 0 ? tagUsage[t.id] : undefined}
+                      meta={tagUsage[t.id] ?? 0}
                     />
                   )}
-                  {editingTagId !== t.id && (
+                  {tagEditMode && editingTagId !== t.id && (
                     <div className="task-taxonomy-actions absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
                       <button type="button" aria-label={`Edytuj tag #${t.label}`} onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
                         className="task-nav__row-action">

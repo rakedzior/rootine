@@ -93,7 +93,7 @@ export function NewSection() {
 
 - `Button`: `primary | quiet | ghost | danger`, rozmiary `xs | sm | md`, tryb ikonowy i disabled.
 - `Card`: powierzchnie `card | panel | input`, cztery poziomy paddingu i stan selected.
-- `Input`, `Textarea`, `Select`: label, hint, error, disabled i spójny focus; surowy `<textarea>` wymaga jawnie zatwierdzonego kontraktu domenowego.
+- `Input`, `Textarea`, `Select`: label, hint, error, disabled i spójny focus. Pola tekstowe pokazują aktywny akcent przez natywny kursor oraz pojedynczą spokojną ramkę; focus ring pozostaje zarezerwowany dla nawigacji i akcji klawiaturą. Surowy `<textarea>` wymaga jawnie zatwierdzonego kontraktu domenowego.
 - `Menu`, `MenuItem`: wspólna powierzchnia 148px+, wiersze 28px, wariant `wide` i semantyczna warstwa.
 - `Modal`: title, description, eyebrow, footer, nazwane rozmiary `sm=500 | md=680 | lg=780 | xl=960`, pojedynczy escape hatch `width` i dostępne zarządzanie fokusem.
 - `Tabs`: semantyka tablist/tab i obsługa strzałek, Home oraz End.

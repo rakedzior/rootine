@@ -37,14 +37,14 @@
 
 .app-brand__mark {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: calc(2 * var(--space-lg));
+  height: calc(2 * var(--space-lg));
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-md);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: var(--text-body);
+  font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 18%, transparent), var(--shadow-control);
 }
@@ -52,7 +52,7 @@
 .app-brand-label {
   min-width: 0;
   color: var(--color-chalk-white);
-  font-size: var(--text-body);
+  font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-normal);
   white-space: nowrap;
@@ -106,8 +106,8 @@
 .app-brand-collapsed-toggle {
   position: relative;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: calc(2 * var(--space-lg));
+  height: calc(2 * var(--space-lg));
   place-items: center;
   padding: 0;
   border: 0;
@@ -186,7 +186,7 @@
   padding: 0 var(--space-md);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
-  font-size: var(--text-body);
+  font-size: var(--text-body-emphasis);
   text-decoration: none;
   transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
 }
@@ -230,9 +230,9 @@
 .app-sidebar__bottom {
   position: relative;
   display: grid;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
   margin-top: auto;
-  padding: var(--space-sm);
+  padding: var(--space-md) var(--space-sm) var(--space-lg);
   border-top: 1px solid var(--color-border-subtle);
 }
 
@@ -250,9 +250,9 @@
   padding: 0 var(--space-md);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-surface-hover) 28%, transparent);
+  background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--text-body);
+  font-size: var(--text-body-emphasis);
   text-align: left;
 }
 
@@ -271,7 +271,7 @@
   border-color: transparent;
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
-  transform: translateX(1px);
+  transform: none;
 }
 
 .app-sidebar-utility.is-active {
@@ -345,7 +345,7 @@
 .app-sidebar-glance__copy strong {
   color: var(--color-text-primary);
   font-family: var(--font-data);
-  font-size: var(--text-body);
+  font-size: var(--text-body-emphasis);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-medium);
 }
@@ -366,9 +366,9 @@
 
 .app-sidebar-profile__avatar {
   display: grid;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: calc(var(--text-title) + var(--space-xs));
+  height: calc(var(--text-title) + var(--space-xs));
+  flex: 0 0 calc(var(--text-title) + var(--space-xs));
   place-items: center;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
@@ -387,8 +387,14 @@
 
 .app-sidebar-profile__copy strong {
   color: var(--color-text-primary);
-  font-size: var(--text-body);
+  font-size: var(--text-body-emphasis);
   font-weight: var(--weight-medium);
+}
+
+.app-sidebar-profile__copy small {
+  color: var(--color-sidebar-text);
+  font-size: var(--text-micro);
+  line-height: var(--leading-tight);
 }
 
 .app-sidebar.is-collapsed .app-sidebar-utility {
@@ -883,7 +889,7 @@
   color: var(--color-text-muted);
 }
 
-.app-help-dialog__search:focus-within { border-color: var(--color-precision-blue); }
+.app-help-dialog__search:focus-within { border-color: var(--color-field-focus); }
 .app-help-dialog__search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-chalk-white); font: inherit; }
 .app-help-dialog__guide-list { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .app-help-dialog__guide-list button {
@@ -973,6 +979,765 @@
   }
 }
 
+/* Profile and settings dialogs share one quieter, more legible rhythm. */
+.app-settings-dialog {
+  display: grid;
+  gap: 0;
+}
+
+.app-settings-dialog__quick-actions {
+  display: grid;
+  gap: 2px;
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.app-settings-dialog__quick-actions > button {
+  display: grid;
+  min-height: 52px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-settings-dialog__quick-actions > button > svg {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-primary-text);
+}
+
+.app-settings-dialog__quick-actions > button:hover,
+.app-settings-dialog__quick-actions > button:focus-visible {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-settings-dialog__quick-actions > button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.app-settings-dialog__quick-actions > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.app-settings-dialog__quick-actions strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+}
+
+.app-settings-dialog__quick-actions small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-profile-dialog__content {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.app-profile-dialog .app-sidebar-popover__profile {
+  gap: var(--space-md);
+}
+
+.app-profile-dialog .app-sidebar-profile__avatar {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-color: var(--color-border-strong);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+  font-size: var(--text-body);
+}
+
+.app-profile-dialog .app-sidebar-popover__profile > span:last-child {
+  gap: 4px;
+}
+
+.app-profile-dialog .app-sidebar-popover__profile strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+}
+
+.app-profile-dialog .app-sidebar-popover__profile small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+}
+
+.app-profile-dialog__storage {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.app-profile-dialog__storage > strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+}
+
+.app-profile-dialog__storage p,
+.app-profile-dialog p.app-account-panel__error,
+.app-profile-dialog p.app-account-panel__message,
+.app-profile-dialog p.app-account-panel__telemetry {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-normal);
+}
+
+.app-account-panel {
+  gap: var(--space-sm);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.app-account-panel__status-row {
+  min-height: 48px;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+}
+
+.app-account-panel__status-row strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+}
+
+.app-account-panel__status-row small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+}
+
+.app-account-panel__status-icon {
+  width: 30px;
+  height: 30px;
+  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border-subtle));
+}
+
+.app-profile-dialog__privacy-section {
+  display: grid;
+}
+
+.app-profile-privacy {
+  min-height: 60px;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-color: var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+}
+
+.app-profile-privacy:hover,
+.app-profile-privacy:focus-visible {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.app-profile-privacy__icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-primary-text);
+}
+
+.app-profile-privacy strong {
+  font-size: var(--text-body);
+}
+
+.app-profile-privacy small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+}
+
+.app-profile-dialog__tools {
+  display: grid;
+  gap: var(--space-xs);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.app-profile-dialog__tools .app-recovery-entry {
+  margin-top: 0;
+}
+
+.app-profile-dialog__tools .app-recovery-entry .ui-button {
+  min-height: 42px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-1);
+  color: var(--color-text-secondary);
+}
+
+.app-profile-dialog__tools .app-recovery-entry .ui-button:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-profile-dialog__actions {
+  gap: 2px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.app-profile-dialog__actions button {
+  min-height: 42px;
+  color: var(--color-text-secondary);
+}
+
+.app-profile-dialog__actions button:hover,
+.app-profile-dialog__actions button:focus-visible {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-settings-dialog > .app-recovery-entry {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.app-settings-dialog > .app-sidebar-popover__source {
+  padding-inline: 0;
+}
+
+.app-settings-dialog .app-module-settings {
+  gap: var(--space-sm);
+  margin-top: 0;
+  padding-top: var(--space-xl);
+}
+
+.app-settings-dialog .app-module-settings__heading {
+  padding-inline: 0;
+}
+
+.app-settings-dialog .app-module-settings__heading strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+}
+
+.app-settings-dialog .app-module-settings__heading small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+}
+
+.app-settings-dialog .app-module-settings__heading > small {
+  font-size: var(--text-meta);
+}
+
+.app-settings-dialog .app-module-settings__list {
+  gap: 2px;
+  margin-top: var(--space-xs);
+}
+
+.app-settings-dialog .app-module-settings__row {
+  min-height: 44px;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.app-settings-dialog .app-module-settings__row > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-settings-dialog .app-module-settings__label {
+  font-size: var(--text-body);
+}
+
+.app-settings-dialog .app-module-settings__move {
+  gap: 2px;
+}
+
+.app-settings-dialog .app-module-settings__move button {
+  width: 28px;
+  height: 28px;
+}
+
+/* Account surface: a single calm identity block, one preference row, then actions. */
+.app-profile-dialog__content {
+  gap: 0;
+}
+
+.app-profile-dialog__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-sm) 0 var(--space-xl);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.app-profile-dialog__identity > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.app-profile-dialog__identity strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-title);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-profile-dialog__identity small {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-profile-dialog__identity small.is-warning {
+  color: var(--color-warning-text);
+}
+
+.app-profile-dialog__connection-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--theme-signature);
+}
+
+.app-profile-dialog__identity small.is-warning .app-profile-dialog__connection-dot {
+  background: var(--color-warning);
+}
+
+.app-profile-dialog .app-sidebar-profile__avatar {
+  width: 64px;
+  height: 64px;
+  flex-basis: 64px;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-2);
+  color: var(--theme-signature);
+  font-size: var(--text-title);
+  font-weight: var(--weight-medium);
+}
+
+.app-profile-privacy {
+  display: grid;
+  min-height: 112px;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-xl) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.app-profile-privacy:hover,
+.app-profile-privacy:focus-visible,
+.app-profile-privacy.is-active {
+  border-color: var(--color-border-subtle);
+  background: transparent;
+}
+
+.app-profile-privacy:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -3px;
+}
+
+.app-profile-privacy__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--theme-signature);
+}
+
+.app-profile-privacy__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  text-align: left;
+}
+
+.app-profile-privacy__copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-title);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.app-profile-privacy__copy small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-profile-privacy kbd {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--text-meta);
+  white-space: nowrap;
+}
+
+.app-profile-privacy__toggle {
+  position: relative;
+  display: block;
+  width: 58px;
+  height: 32px;
+  flex: 0 0 58px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-1);
+  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.app-profile-privacy__toggle > span {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-secondary);
+  transition: background-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+
+.app-profile-privacy.is-active .app-profile-privacy__toggle {
+  border-color: color-mix(in srgb, var(--theme-signature) 58%, var(--color-border-strong));
+  background: color-mix(in srgb, var(--theme-signature) 18%, var(--color-surface-1));
+}
+
+.app-profile-privacy.is-active .app-profile-privacy__toggle > span {
+  background: var(--theme-signature);
+  transform: translateX(26px);
+}
+
+.app-profile-dialog__navigation {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-md) 0 var(--space-lg);
+}
+
+.app-profile-dialog__navigation .app-recovery-entry {
+  display: block;
+  margin: 0;
+}
+
+.app-profile-dialog__nav-button {
+  display: grid !important;
+  width: 100%;
+  min-height: 60px;
+  height: auto;
+  grid-template-columns: 40px minmax(0, 1fr) 20px;
+  align-items: center;
+  justify-content: initial;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.app-profile-dialog__nav-button > svg:first-child {
+  width: 24px;
+  height: 24px;
+  justify-self: center;
+  color: var(--theme-signature);
+}
+
+.app-profile-dialog__nav-button > svg:last-child {
+  width: 20px;
+  height: 20px;
+  justify-self: end;
+  color: var(--color-text-secondary);
+}
+
+.app-profile-dialog__nav-button > span {
+  overflow: hidden;
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-profile-dialog__nav-button:hover,
+.app-profile-dialog__nav-button:focus-visible {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-profile-dialog__nav-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.app-profile-dialog__account {
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.app-profile-dialog__account .app-account-panel {
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.app-profile-dialog__account .app-account-panel__logout {
+  min-height: 58px;
+  height: auto;
+  justify-content: flex-start;
+  padding: var(--space-sm) 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+}
+
+.app-profile-dialog__account .app-account-panel__logout > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--theme-signature);
+}
+
+.app-profile-dialog__account .app-account-panel__logout:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.app-profile-dialog__account .app-account-panel__retry {
+  justify-content: flex-start;
+}
+
+.app-profile-dialog__account .app-account-panel__error,
+.app-profile-dialog__account .app-account-panel__telemetry {
+  font-size: var(--text-meta);
+}
+
+@media (max-width: 560px) {
+  .app-profile-privacy {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: var(--space-md);
+  }
+
+  .app-profile-privacy__icon {
+    width: 32px;
+  }
+
+  .app-profile-privacy kbd {
+    display: none;
+  }
+
+  .app-profile-privacy__toggle {
+    width: 50px;
+    flex-basis: 50px;
+  }
+
+  .app-profile-privacy.is-active .app-profile-privacy__toggle > span {
+    transform: translateX(18px);
+  }
+}
+
+/* Compact account scale: keep the reference's structure, but use Rootine's dense UI rhythm. */
+.ui-modal__body.app-profile-dialog {
+  padding: var(--space-lg);
+}
+
+.app-profile-dialog__identity {
+  gap: var(--space-md);
+  padding-bottom: var(--space-lg);
+}
+
+.app-profile-dialog__identity strong {
+  font-size: var(--text-body-emphasis);
+  letter-spacing: normal;
+}
+
+.app-profile-dialog__identity small {
+  font-size: var(--text-meta);
+}
+
+.app-profile-dialog .app-sidebar-profile__avatar {
+  width: 48px;
+  height: 48px;
+  flex-basis: 48px;
+  font-size: var(--text-body-emphasis);
+}
+
+.app-profile-privacy {
+  min-height: 82px;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  gap: var(--space-md);
+  padding: var(--space-lg) 0;
+}
+
+.app-profile-privacy__icon {
+  width: 32px;
+  height: 32px;
+}
+
+.app-profile-privacy__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.app-profile-privacy__copy {
+  gap: 2px;
+}
+
+.app-profile-privacy__copy strong {
+  font-size: var(--text-body-emphasis);
+  letter-spacing: normal;
+}
+
+.app-profile-privacy__copy small {
+  font-size: var(--text-meta);
+}
+
+.app-profile-privacy kbd {
+  min-height: 28px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-micro);
+}
+
+.app-profile-privacy__toggle {
+  width: 46px;
+  height: 24px;
+  flex-basis: 46px;
+}
+
+.app-profile-privacy__toggle > span {
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+}
+
+.app-profile-privacy.is-active .app-profile-privacy__toggle > span {
+  transform: translateX(22px);
+}
+
+.app-profile-dialog__navigation {
+  gap: 0;
+  padding: var(--space-sm) 0 var(--space-md);
+}
+
+.app-profile-dialog__nav-button {
+  min-height: 44px;
+  grid-template-columns: 32px minmax(0, 1fr) 16px;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
+  border-radius: var(--radius-sm);
+}
+
+.app-profile-dialog__nav-button > svg:first-child {
+  width: 18px;
+  height: 18px;
+}
+
+.app-profile-dialog__nav-button > svg:last-child {
+  width: 16px;
+  height: 16px;
+}
+
+.app-profile-dialog__nav-button > span {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+}
+
+.app-profile-dialog__account {
+  padding-top: var(--space-md);
+}
+
+.app-profile-dialog__account .app-account-panel__logout {
+  min-height: 44px;
+  padding: var(--space-xs) 0;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+}
+
+.app-profile-dialog__account .app-account-panel__logout > svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 560px) {
+  .app-profile-privacy {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: var(--space-sm);
+  }
+
+  .app-profile-privacy__icon {
+    width: 28px;
+  }
+
+  .app-profile-privacy__toggle {
+    width: 42px;
+    flex-basis: 42px;
+  }
+
+  .app-profile-privacy.is-active .app-profile-privacy__toggle > span {
+    transform: translateX(18px);
+  }
+}
+
 /* The provider resolves system/user preference into data-motion; keep feedback visible. */
 :root[data-motion="reduced"] .app-sidebar {
   transition: none;
@@ -1002,4 +1767,388 @@
 
 .app-mobile-menu {
   display: none;
+}
+
+/* Settings are one calm disclosure surface: one section can be open at a time. */
+.app-settings-accordion {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.app-settings-accordion__section {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+
+.app-settings-accordion__section.is-open {
+  border-color: color-mix(in srgb, var(--theme-signature) 34%, var(--color-border-subtle));
+}
+
+.app-settings-accordion__heading {
+  margin: 0;
+}
+
+.app-settings-accordion__trigger {
+  display: grid;
+  width: 100%;
+  min-height: 76px;
+  grid-template-columns: 40px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-settings-accordion__trigger:hover,
+.app-settings-accordion__trigger:focus-visible {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-settings-accordion__trigger:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -3px;
+}
+
+.app-settings-accordion__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: var(--color-text-muted);
+  transition: color var(--motion-feedback) var(--ease-out);
+}
+
+.app-settings-accordion__section.is-open .app-settings-accordion__icon {
+  color: var(--theme-signature);
+}
+
+.app-settings-accordion__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.app-settings-accordion__copy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-settings-accordion__copy small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-settings-accordion__chevron {
+  justify-self: end;
+  color: var(--color-text-secondary);
+  transition: transform var(--motion-disclosure) var(--ease-out), color var(--motion-feedback) var(--ease-out);
+}
+
+.app-settings-accordion__section.is-open .app-settings-accordion__chevron {
+  color: var(--theme-signature);
+  transform: rotate(90deg);
+}
+
+.app-settings-accordion__panel {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows var(--motion-spatial) var(--ease-out), visibility 0s linear var(--motion-spatial);
+}
+
+.app-settings-accordion__section.is-open .app-settings-accordion__panel {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows var(--motion-spatial) var(--ease-out), visibility 0s linear;
+}
+
+.app-settings-accordion__panel-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 var(--space-lg);
+}
+
+.app-settings-accordion__section.is-open .app-settings-accordion__panel-inner {
+  padding-bottom: var(--space-lg);
+}
+
+.app-settings-accordion__rows {
+  display: grid;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.app-settings-accordion__row {
+  display: grid;
+  width: 100%;
+  min-height: 60px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
+.app-settings-accordion__row:last-child {
+  border-bottom: 0;
+}
+
+button.app-settings-accordion__row {
+  cursor: pointer;
+}
+
+button.app-settings-accordion__row:hover,
+button.app-settings-accordion__row:focus-visible {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+button.app-settings-accordion__row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -3px;
+}
+
+button.app-settings-accordion__row:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.app-settings-accordion__row-icon {
+  display: grid;
+  width: 28px;
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
+.app-settings-accordion__row-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.app-settings-accordion__row-copy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-settings-accordion__row-copy small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-settings-accordion__row-trailing,
+.app-settings-accordion__row-refresh {
+  color: var(--color-text-muted);
+}
+
+.app-settings-accordion__row-refresh.is-spinning {
+  color: var(--theme-signature);
+}
+
+.app-settings-accordion__source {
+  display: inline-flex;
+  padding-top: var(--space-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  text-decoration: none;
+}
+
+.app-settings-accordion__source:hover,
+.app-settings-accordion__source:focus-visible {
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-settings-accordion__row--privacy.is-active .app-settings-accordion__row-icon {
+  color: var(--theme-signature);
+}
+
+.app-settings-accordion__switch {
+  position: relative;
+  display: block;
+  width: 42px;
+  height: 24px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-1);
+}
+
+.app-settings-accordion__switch > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-muted);
+  transition: background-color var(--motion-toggle) var(--ease-out), transform var(--motion-toggle) var(--ease-out);
+}
+
+.app-settings-accordion__row--privacy.is-active .app-settings-accordion__switch {
+  border-color: color-mix(in srgb, var(--theme-signature) 58%, var(--color-border-strong));
+  background: color-mix(in srgb, var(--theme-signature) 18%, var(--color-surface-1));
+}
+
+.app-settings-accordion__row--privacy.is-active .app-settings-accordion__switch > span {
+  background: var(--theme-signature);
+  transform: translateX(18px);
+}
+
+.app-settings-accordion__action {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.app-settings-accordion__action .ui-button {
+  display: grid;
+  width: 100%;
+  min-height: 60px;
+  grid-template-columns: 28px minmax(0, 1fr) 20px;
+  align-items: center;
+  justify-content: initial;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
+.app-settings-accordion__action .ui-button:hover,
+.app-settings-accordion__action .ui-button:focus-visible {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.app-settings-accordion__action .ui-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -3px;
+}
+
+.app-settings-accordion__action .ui-button > svg:first-child {
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-muted);
+}
+
+.app-settings-accordion__action .ui-button > span {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-settings-accordion__action .ui-button > svg:last-child {
+  justify-self: end;
+  color: var(--color-text-muted);
+}
+
+/* Embedded settings components lose their old standalone section framing. */
+.app-settings-accordion .app-theme-settings,
+.app-settings-accordion .experience-settings,
+.app-settings-accordion .app-module-settings {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.app-settings-accordion .app-theme-settings__grid {
+  gap: var(--space-sm);
+}
+
+.app-settings-accordion .app-theme-option {
+  min-height: 70px;
+}
+
+.app-settings-accordion .experience-settings {
+  gap: 0;
+}
+
+.app-settings-accordion .experience-settings__field {
+  min-height: 58px;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.app-settings-accordion .experience-settings__field:last-child {
+  border-bottom: 0;
+}
+
+.app-settings-accordion .app-module-settings {
+  gap: 0;
+}
+
+.app-settings-accordion .app-module-settings__heading {
+  min-height: 40px;
+  padding: 0 0 var(--space-sm);
+}
+
+.app-settings-accordion .app-module-settings__heading.is-embedded strong {
+  color: var(--color-primary-text);
+  font-family: var(--font-data);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+
+.app-settings-accordion .app-module-settings__list {
+  gap: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.app-settings-accordion .app-module-settings__row {
+  min-height: 46px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+}
+
+.app-settings-accordion .app-module-settings__row:last-child {
+  border-bottom: 0;
+}
+
+.app-settings-accordion .app-module-settings__reset--inline {
+  min-height: 28px;
+  border: 0;
+  color: var(--color-text-secondary);
+}
+
+.app-settings-accordion .app-module-settings__reset--inline:hover,
+.app-settings-accordion .app-module-settings__reset--inline:focus-visible {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

@@ -87,6 +87,11 @@ function getSnapshot() {
   return loadEvents();
 }
 
+export function resetActivityLogCacheForWorkspaceSwitch() {
+  cache = null;
+  subscribers.forEach((listener) => listener());
+}
+
 const SERVER_SNAPSHOT: ActivityEvent[] = [];
 
 export function useActivityLog() {

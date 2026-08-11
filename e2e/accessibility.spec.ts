@@ -13,7 +13,6 @@ const DESKTOP_A11Y_ROUTES = [
   { name: "Goals", path: "/cele" },
   { name: "Goal detail", path: "/cele/rehab-app" },
   { name: "Affairs", path: "/sprawy" },
-  { name: "Affairs travel", path: "/sprawy?widok=travel" },
 ] as const;
 
 const MOBILE_A11Y_ROUTES = [
@@ -23,7 +22,7 @@ const MOBILE_A11Y_ROUTES = [
   { name: "Goals", path: "/cele" },
   { name: "Goal detail", path: "/cele/rehab-app" },
   { name: "Affairs", path: "/sprawy" },
-  { name: "Affairs travel", path: "/sprawy?widok=travel" },
+  { name: "Travel", path: "/podroze" },
 ] as const;
 
 type AxeViolation = {

@@ -38,10 +38,10 @@ test.describe("legacy navigation aliases", { tag: "@shared" }, () => {
     await expect(page.getByRole("link", { name: "Biuro", exact: true })).toHaveCount(0);
   });
 
-  test("old Finanse bookmark redirects to the canonical Sprawy budget view", async ({ rootinePage: page }) => {
+  test("old Finanse bookmark redirects to the unified Sprawy finances view", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/finanse");
 
-    await expect(page).toHaveURL(/\/sprawy\?widok=budget$/);
+    await expect(page).toHaveURL(/\/sprawy\?widok=finances$/);
     await expect(page.locator(".ui-page-shell")).toBeVisible();
     await expect(page.getByRole("link", { name: "Finanse", exact: true })).toHaveCount(0);
   });
@@ -52,6 +52,17 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await openRootineRoute(page, "/dzisiaj");
 
     const primaryNavigation = page.getByRole("navigation", { name: "Obszary aplikacji" });
+    await expect(primaryNavigation.getByRole("link")).toHaveText([
+      "Dzisiaj",
+      "Zadania",
+      "Odżywianie",
+      "Sport",
+      "Praca",
+      "Cele",
+      "Podróże",
+      "Notatki",
+      "Pozostałe",
+    ]);
     const tasksLink = primaryNavigation.getByRole("link", { name: "Zadania" });
     await tasksLink.click();
     await page.getByRole("button", { name: "Widok kalendarza" }).click();

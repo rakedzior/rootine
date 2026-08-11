@@ -2,6 +2,7 @@ import {
   BriefcaseBusiness,
   CheckSquare,
   Dumbbell,
+  Map,
   NotebookPen,
   Salad,
   ShieldCheck,
@@ -17,6 +18,7 @@ export type AppModuleId =
   | "sport"
   | "work"
   | "goals"
+  | "travel"
   | "affairs"
   | "notes";
 
@@ -43,8 +45,9 @@ export const APP_MODULES = [
   { id: "sport", label: "Sport", icon: Dumbbell, to: "/sport", mobilePriority: null },
   { id: "work", label: "Praca", icon: BriefcaseBusiness, to: "/praca", mobilePriority: 2 },
   { id: "goals", label: "Cele", icon: Target, to: "/cele", mobilePriority: null },
-  { id: "affairs", label: "Sprawy", icon: ShieldCheck, to: "/sprawy", ownedPaths: ["/podroze"], mobilePriority: null },
+  { id: "travel", label: "Podróże", icon: Map, to: "/podroze", mobilePriority: null },
   { id: "notes", label: "Notatki", icon: NotebookPen, to: "/notatki", mobilePriority: 3 },
+  { id: "affairs", label: "Pozostałe", icon: ShieldCheck, to: "/sprawy", mobilePriority: null },
 ] as const satisfies readonly AppModule[];
 
 export type AppModulePath = (typeof APP_MODULES)[number]["to"];

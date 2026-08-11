@@ -19,7 +19,7 @@ import {
   type TripStatus,
 } from "../data/travelWorkspace";
 
-export type TravelSection = "overview" | "itinerary" | "reservations" | "budget" | "documents" | "tasks";
+export type TravelSection = "overview" | "itinerary" | "reservations" | "budget" | "documents" | "tasks" | "packing";
 export type EditorKind = "trip" | "itinerary" | "stay" | "transport" | "budget" | "document" | "task";
 export type EditorState = { kind: EditorKind; mode: "add" | "edit"; id?: string };
 export type DeleteState = {
@@ -186,19 +186,21 @@ export const SECTION_COPY: Record<TravelSection, string> = {
   budget: "Plan i rzeczywiste wydatki",
   documents: "Dokumenty i formalności",
   tasks: "Sprawy do załatwienia",
+  packing: "Lista rzeczy do spakowania",
 };
 
-export const SECTION_TABS = [
-  { id: "overview", label: "Pulpit", tabId: "travel-tab-overview", panelId: "travel-panel-overview" },
-  { id: "itinerary", label: "Plan podróży", tabId: "travel-tab-itinerary", panelId: "travel-panel-itinerary" },
-  { id: "reservations", label: "Rezerwacje", tabId: "travel-tab-reservations", panelId: "travel-panel-reservations" },
-  { id: "budget", label: "Budżet", tabId: "travel-tab-budget", panelId: "travel-panel-budget" },
-  { id: "documents", label: "Dokumenty", tabId: "travel-tab-documents", panelId: "travel-panel-documents" },
-  { id: "tasks", label: "Do zrobienia", tabId: "travel-tab-tasks", panelId: "travel-panel-tasks" },
+export const TRAVEL_SECTION_ITEMS: ReadonlyArray<{ id: TravelSection; label: string }> = [
+  { id: "overview", label: "Przegląd" },
+  { id: "itinerary", label: "Plan podróży" },
+  { id: "reservations", label: "Noclegi i transport" },
+  { id: "budget", label: "Budżet" },
+  { id: "documents", label: "Dokumenty" },
+  { id: "tasks", label: "Sprawy" },
+  { id: "packing", label: "Pakowanie" },
 ];
 
 export function isTravelSection(value: string | null): value is TravelSection {
-  return SECTION_TABS.some((tab) => tab.id === value);
+  return TRAVEL_SECTION_ITEMS.some((item) => item.id === value);
 }
 
 export function formatDate(value: string, withYear = true): string {
@@ -240,7 +242,10 @@ export function readinessParts(trip: TravelTrip) {
   const reservations = [...trip.stays, ...trip.transports];
   const securedReservations = reservations.filter((item) => item.status !== "planned").length;
   const readyDocuments = trip.documents.filter((item) => item.status === "ready").length;
-  const completedTasks = trip.tasks.filter((item) => item.completed).length;
+  const preparationTasks = trip.tasks.filter((item) => item.category !== "packing");
+  const packingTasks = trip.tasks.filter((item) => item.category === "packing");
+  const completedTasks = preparationTasks.filter((item) => item.completed).length;
+  const packedItems = packingTasks.filter((item) => item.completed).length;
   const itineraryDays = new Set(trip.itinerary.map((item) => item.date)).size;
   const totalDays = tripDuration(trip);
   const budgetReady = trip.budget.length > 0 || reservations.some((item) => item.amount > 0) ? 1 : 0;
@@ -273,8 +278,14 @@ export function readinessParts(trip: TravelTrip) {
     {
       id: "tasks" as TravelSection,
       label: "Sprawy",
-      value: trip.tasks.length ? completedTasks / trip.tasks.length : 1,
-      meta: `${completedTasks}/${trip.tasks.length}`,
+      value: preparationTasks.length ? completedTasks / preparationTasks.length : 1,
+      meta: `${completedTasks}/${preparationTasks.length}`,
+    },
+    {
+      id: "packing" as TravelSection,
+      label: "Pakowanie",
+      value: packingTasks.length ? packedItems / packingTasks.length : 0,
+      meta: `${packedItems}/${packingTasks.length}`,
     },
   ];
 }

@@ -8,7 +8,6 @@ describe("affairs matter editor", () => {
     const result = applyAffairsEditor({
       editor: { kind: "matter", mode: "add" },
       workspace: createDefaultAffairsWorkspace(),
-      budgetMonthKey: "2026-08",
       draft: {
         ...EMPTY_DRAFT,
         title: "Wizyta w urzędzie",
@@ -37,7 +36,6 @@ describe("affairs matter editor", () => {
     const result = applyAffairsEditor({
       editor: { kind: "matter", mode: "add" },
       workspace: createDefaultAffairsWorkspace(),
-      budgetMonthKey: "2026-08",
       draft: {
         ...EMPTY_DRAFT,
         title: "Wizyta",
@@ -54,7 +52,6 @@ describe("affairs matter editor", () => {
     const result = applyAffairsEditor({
       editor: { kind: "matter", mode: "add" },
       workspace: createDefaultAffairsWorkspace(),
-      budgetMonthKey: "2026-08",
       draft: {
         ...EMPTY_DRAFT,
         title: "Zebrać dokumenty",

@@ -45,6 +45,14 @@
   gap: var(--space-sm);
 }
 
+.notes-sidebar__group-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin-right: var(--space-sm);
+}
+
 .notes-sidebar__group-toggle {
   display: flex;
   min-width: 0;
@@ -85,19 +93,12 @@
   white-space: nowrap;
 }
 
-.notes-sidebar__group-count {
-  flex: 0 0 auto;
-  color: var(--color-text-muted);
-  font-family: var(--font-data);
-  font-size: var(--text-micro);
-}
-
 .notes-sidebar__group-action {
   display: grid;
   width: 24px;
   height: 24px;
   flex: 0 0 24px;
-  margin-right: var(--space-sm);
+  margin-right: 0;
   place-items: center;
   border: 0;
   border-radius: var(--radius-sm);
@@ -151,7 +152,7 @@
   color: var(--color-chalk-white);
 }
 
-.notes-sidebar__tag-search {
+.notes-sidebar__filter {
   display: flex;
   min-height: 30px;
   align-items: center;
@@ -164,11 +165,11 @@
   color: var(--color-text-muted);
 }
 
-.notes-sidebar__tag-search:focus-within {
-  border-color: var(--color-precision-blue);
+.notes-sidebar__filter:focus-within {
+  border-color: var(--color-field-focus);
 }
 
-.notes-sidebar__tag-search input {
+.notes-sidebar__filter input {
   min-width: 0;
   flex: 1;
   border: 0;
@@ -216,8 +217,8 @@
 }
 
 .notes-search:focus-within {
-  border-color: var(--color-precision-blue);
-  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+  border-color: var(--color-field-focus);
+  box-shadow: none;
 }
 
 .notes-search input {
@@ -351,29 +352,21 @@
 
 .notes-grid--list {
   grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-section-surface);
+  gap: var(--space-sm);
+  overflow: visible;
 }
 
 .notes-grid--list .notes-card {
   height: auto;
   min-height: 116px;
-  border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--note-accent) 2%, var(--color-graphite-card));
 }
 
 .notes-grid--list .notes-card:hover,
 .notes-grid--list .notes-card:focus-within {
   background: var(--color-graphite-hover);
-}
-
-.notes-grid--list .notes-card:last-child {
-  border-bottom: 0;
 }
 
 .notes-grid--list .notes-card__color {
@@ -768,7 +761,7 @@
 }
 
 .notes-editor__title-field input:focus {
-  border-color: var(--color-precision-blue);
+  border-color: var(--color-field-focus);
 }
 
 .notes-editor__error {

@@ -2470,7 +2470,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-disclosure:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .sport-field { display: grid; gap: 6px; color: var(--color-text-secondary); font-size: var(--text-label); }
 .sport-field textarea { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); outline: 0; background: var(--color-graphite-input); color: var(--color-chalk-white); font: inherit; line-height: var(--leading-normal); }
-.sport-field textarea:focus { border-color: var(--color-precision-blue); box-shadow: var(--focus-ring); }
+.sport-field textarea:focus { border-color: var(--color-field-focus); box-shadow: none; }
 .sport-exercise-picker { display: grid; max-height: 380px; overflow-y: auto; margin-top: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
 .sport-exercise-picker button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: 12px; border: 0; border-bottom: 1px solid var(--color-border-subtle); background: transparent; color: var(--color-text-secondary); font: inherit; text-align: left; cursor: pointer; }
 .sport-exercise-picker button:last-child { border-bottom: 0; }
@@ -3728,8 +3728,8 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-session-number__control input:focus-visible {
-  border-color: var(--color-precision-blue);
-  box-shadow: var(--focus-ring);
+  border-color: var(--color-field-focus);
+  box-shadow: none;
 }
 
 .sport-session-number__control small {

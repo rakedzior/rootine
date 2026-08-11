@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type React from "react";
 import type { LucideIcon } from "lucide-react";
 import type {
@@ -51,6 +51,18 @@ import {
   X,
 } from "lucide-react";
 
+const GOALS_SIDEBAR_STATE_KEY = "rootine.goals.sidebar.v1";
+
+function loadGoalsCategoriesOpen(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const value = JSON.parse(window.localStorage.getItem(GOALS_SIDEBAR_STATE_KEY) ?? "null") as { categoriesOpen?: unknown } | null;
+    return value?.categoriesOpen === true;
+  } catch {
+    return false;
+  }
+}
+
 export function GoalSubSidebar({
   activeFilter,
   scopedGoalId,
@@ -72,15 +84,28 @@ export function GoalSubSidebar({
   onDeleteCategory: (id: string) => void;
   onSettings: () => void;
 }) {
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(loadGoalsCategoriesOpen);
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [newCategory, setNewCategory] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [editMode, setEditMode] = useState(false);
   const categoriesPanelId = useId();
   const filteredCategories = categories.filter((category) => category.label.toLocaleLowerCase("pl-PL").includes(search.toLocaleLowerCase("pl-PL")));
+
+  useEffect(() => {
+    if (activeFilter.startsWith("category:")) setCategoriesOpen(true);
+  }, [activeFilter]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(GOALS_SIDEBAR_STATE_KEY, JSON.stringify({ categoriesOpen }));
+    } catch {
+      // A sidebar preference is optional and must not block goal management.
+    }
+  }, [categoriesOpen]);
 
   const addCategory = () => {
     const label = newCategory.trim();
@@ -123,10 +148,10 @@ export function GoalSubSidebar({
 
         <ContextNavGroup label="Cele">
           {item("overview", "Aktywne", BarChart3, countForFilter("overview", goals), "Aktywne cele")}
-          {item("all", "Wszystkie", Target, countForFilter("all", goals), "Wszystkie cele")}
           {item("planned", "Zaplanowane", FILTER_ITEMS.find((filter) => filter.id === "planned")!.icon, countForFilter("planned", goals))}
           {item("paused", "Wstrzymane", FILTER_ITEMS.find((filter) => filter.id === "paused")!.icon, countForFilter("paused", goals))}
           {item("completed", "Zakończone", FILTER_ITEMS.find((filter) => filter.id === "completed")!.icon, countForFilter("completed", goals))}
+          {item("all", "Wszystkie", Target, countForFilter("all", goals), "Wszystkie cele")}
         </ContextNavGroup>
 
         <div className={`goal-sidebar-section-heading${categoriesOpen || searchOpen || adding ? " is-open" : ""}`}>
@@ -135,10 +160,10 @@ export function GoalSubSidebar({
             onClick={() => setCategoriesOpen((open) => !open)}
             aria-expanded={categoriesOpen}
             aria-controls={categoriesPanelId}
-            className="goal-sidebar-section-toggle flex min-w-0 flex-1 items-center justify-between gap-1.5"
+            className="goal-sidebar-section-toggle flex min-w-0 flex-1 items-center gap-1.5"
           >
-            <span>Kategorie</span>
             <ChevronRight className="goal-sidebar-section-chevron" size={11} strokeWidth={2} />
+            <span>Kategorie</span>
           </button>
           <div className="goal-sidebar-section-actions flex items-center gap-1">
             <button
@@ -149,6 +174,19 @@ export function GoalSubSidebar({
               className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${searchOpen ? "is-active" : ""}`}
             >
               <Search size={13} strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              aria-label={editMode ? "Zakończ edycję kategorii" : "Edytuj kategorie"}
+              aria-pressed={editMode}
+              title={editMode ? "Zakończ edycję kategorii" : "Edytuj kategorie"}
+              onClick={() => { setCategoriesOpen(true); setEditMode((open) => {
+                if (open) setEditingId(null);
+                return !open;
+              }); }}
+              className={`goal-sidebar-icon-action ${editMode ? "is-active" : ""}`}
+            >
+              <Pencil size={13} strokeWidth={1.8} />
             </button>
             <button
               type="button"
@@ -212,11 +250,12 @@ export function GoalSubSidebar({
 
             {filteredCategories.map((category) => {
               const active = !scopedGoalId && activeFilter === `category:${category.id}`;
+              const count = goals.filter((goal) => goal.categoryId === category.id && goal.status !== "archived").length;
               return (
                 <div key={category.id} className="group flex min-h-8 items-center rounded-lg">
                   {editingId === category.id ? (
                     <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="goal-category-edit flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
-                      <span className="goal-category-dot" style={{ backgroundColor: category.color }} aria-hidden="true" />
+                      <span className="goal-category-dot" style={{ "--goal-category-color": category.color } as React.CSSProperties} aria-hidden="true" />
                       <input
                         autoFocus
                         aria-label={`Nazwa kategorii ${category.label}`}
@@ -232,12 +271,13 @@ export function GoalSubSidebar({
                       onClick={() => onFilter(`category:${category.id}`)}
                       className="min-w-0 flex-1"
                       active={active}
-                      icon={<span className="goal-category-dot" style={{ backgroundColor: category.color }} />}
+                      icon={<span className="goal-category-dot" style={{ "--goal-category-color": category.color } as React.CSSProperties} />}
                       label={category.label}
+                      meta={count}
                     />
                   )}
-                  {editingId !== category.id && (
-                    <div className="flex flex-shrink-0 items-center pr-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  {editMode && editingId !== category.id && (
+                    <div className="goal-category-actions is-editing flex flex-shrink-0 items-center pr-1">
                       <button
                         type="button"
                         aria-label={`Edytuj kategorię ${category.label}`}

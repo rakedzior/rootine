@@ -41,6 +41,7 @@ export default async function globalSetup() {
     [path.join(ROOT_DIR, "node_modules/vite/bin/vite.js"), "--host", HOST, "--port", String(PORT)],
     {
       cwd: ROOT_DIR,
+      env: { ...process.env, VITE_ROOTINE_QA_AUTH: "1" },
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,
     },

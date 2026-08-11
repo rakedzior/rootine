@@ -4,8 +4,8 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
   test.describe("command deep links", () => {
     const commands = [
       { action: "nowa-sprawa", view: "all" },
-      { action: "nowa-platnosc", view: "payments" },
-      { action: "nowy-wydatek", view: "budget" },
+      { action: "nowa-platnosc", view: "finances" },
+      { action: "nowy-wydatek", view: "finances" },
     ] as const;
 
     for (const { action, view } of commands) {
@@ -25,16 +25,16 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
     await openRootineRoute(page, "/sprawy");
 
     const sidebar = page.getByRole("complementary", { name: "Widoki spraw" });
-    await expect(sidebar.getByRole("heading", { name: "Plan" })).toBeVisible();
+    await expect(sidebar.getByRole("heading", { name: "Sprawy" })).toBeVisible();
     await expect(sidebar.getByRole("heading", { name: "Finanse" })).toBeVisible();
     await expect(sidebar.getByRole("heading", { name: "Rejestry" })).toBeVisible();
     await expect(sidebar.getByRole("heading", { name: "Obszary" })).toBeVisible();
-    await expect(sidebar.getByRole("button", { name: "Cykliczne" })).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: "Przegląd" })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Dokumenty" })).toBeVisible();
     await expect(sidebar.getByRole("button", { name: "Pojazdy" })).toBeVisible();
 
-    await sidebar.getByRole("button", { name: "Budżet" }).click();
-    await expect(page).toHaveURL(/widok=budget/);
+    await sidebar.getByRole("button", { name: "Przegląd" }).click();
+    await expect(page).toHaveURL(/widok=finances/);
   });
 
   test("mobile exposes every affairs workspace in one selector", async ({ rootinePage: page, isMobile }) => {
@@ -44,7 +44,7 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
     const selector = page.getByRole("combobox", { name: "Wybierz widok spraw" });
     await expect(selector).toBeVisible();
     await selector.click();
-    await expect(page.getByRole("option", { name: "Budżet" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "Przegląd" })).toBeVisible();
     await expect(page.getByRole("option", { name: "Pojazdy" })).toBeVisible();
     await page.getByRole("option", { name: "Pojazdy" }).click();
     await expect(page).toHaveURL(/widok=vehicles/);
@@ -70,13 +70,13 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
     await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "register");
     await expect(page.locator(".affairs-section-surface--documents")).toBeVisible();
 
-    await openRootineRoute(page, "/sprawy?widok=budget");
-    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "workspace");
-    await expect(page.locator(".affairs-section-surface--budget")).toBeVisible();
+    await openRootineRoute(page, "/sprawy?widok=finances");
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "register");
+    await expect(page.locator(".affairs-finance-summary")).toBeVisible();
 
     await openRootineRoute(page, "/sprawy?widok=jdg");
     await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "workspace");
-    await expect(page.locator(".jdg-stage").first()).toBeVisible();
+    await expect(page.locator(".jdg-simple-checklist")).toBeVisible();
   });
 
   test("legacy affairs view ids remain compatible", async ({ rootinePage: page }) => {
@@ -85,35 +85,34 @@ test.describe("affairs navigation", { tag: "@shared" }, () => {
 
     await openRootineRoute(page, "/sprawy?widok=matters");
     await expect(page.getByRole("heading", { name: "Wszystkie", level: 1 })).toBeVisible();
-    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "register");
+    await expect(page.locator(".affairs-module")).toHaveAttribute("data-affairs-archetype", "agenda");
   });
 
-  test("travel stays inside the affairs module", async ({ rootinePage: page, isMobile }) => {
-    await openRootineRoute(page, "/sprawy");
+  test("travel is a standalone module with its own overview and trip rail", async ({ rootinePage: page, isMobile }) => {
+    await openRootineRoute(page, "/podroze");
 
-    if (isMobile) {
-      const selector = page.getByRole("combobox", { name: "Wybierz widok spraw" });
-      await selector.click();
-      await page.getByRole("option", { name: /Podr/ }).click();
+    await expect(page).toHaveURL(/\/podroze$/);
+    await expect(page.getByRole("heading", { name: /przegląd podróży/i })).toBeVisible();
+    if (!isMobile) {
+      const sidebar = page.getByRole("complementary", { name: "Podróże" });
+      await expect(sidebar).toBeVisible();
+      await sidebar.locator(".travel-sidebar__trip > .context-nav-item").first().click();
+      await expect(sidebar.getByRole("button", { name: "Plan podróży", exact: true })).toBeVisible();
+      await sidebar.getByRole("button", { name: "Plan podróży", exact: true }).click();
+      await expect(page).toHaveURL(/sekcja=itinerary/);
     } else {
-      await page.getByRole("complementary", { name: "Widoki spraw" }).getByRole("button", { name: /Podr/ }).click();
+      await page.goto("/podroze/trip-lisbon-2026?sekcja=packing");
+      await expect(page.getByRole("combobox", { name: "Wybierz sekcję podróży" })).toContainText("Pakowanie");
     }
-
-    await expect(page).toHaveURL(/\/sprawy\?widok=travel/);
-    await expect(page.getByRole("heading", { name: /podróż/i }).first()).toBeVisible();
-    if (isMobile) {
-      await expect(page.getByRole("combobox", { name: "Wybierz widok spraw" })).toContainText("Podr");
-    } else {
-      await expect(page.getByRole("complementary", { name: "Widoki spraw" })).toBeVisible();
-    }
+    await expect(page.locator(".travel-tabs")).toHaveCount(0);
   });
 
-  test("budget and JDG keep their content in a bounded layout", async ({ rootinePage: page }) => {
-    await openRootineRoute(page, "/sprawy?widok=budget");
-    await expect(page.locator(".affairs-budget__summary")).toBeVisible();
+  test("finances and JDG keep their content in a bounded layout", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/sprawy?widok=finances");
+    await expect(page.locator(".affairs-finance-summary")).toBeVisible();
 
     await page.goto("/sprawy?widok=jdg");
-    await expect(page.locator(".jdg-stage").first()).toBeVisible();
-    await expect(page.locator(".jdg-stage__header h3").first()).toBeVisible();
+    await expect(page.locator(".jdg-simple-checklist")).toBeVisible();
+    await expect(page.getByText("Wystawiłem fakturę", { exact: true })).toBeVisible();
   });
 });

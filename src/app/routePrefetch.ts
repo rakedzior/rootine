@@ -40,6 +40,7 @@ const MODULE_ROUTE_LOADERS = {
   "/sport": guardedRouteLoader("/sport", () => import("./pages/Sport")),
   "/praca": guardedRouteLoader("/praca", () => import("./pages/Praca")),
   "/cele": guardedRouteLoader("/cele", () => import("./pages/Cele")),
+  "/podroze": guardedRouteLoader("/podroze", () => import("./pages/Podroze")),
   "/sprawy": guardedRouteLoader("/sprawy", () => import("./pages/Sprawy")),
   "/notatki": guardedRouteLoader("/notatki", () => import("./pages/Notatki")),
 } satisfies Record<AppModulePath, RouteLoader>;
@@ -47,7 +48,6 @@ const MODULE_ROUTE_LOADERS = {
 /** Routes reachable from inside a module rather than from the primary navigation. */
 const SECONDARY_ROUTE_LOADERS = {
   "/kalendarz": guardedRouteLoader("/kalendarz", () => import("./pages/Kalendarz")),
-  "/podroze": guardedRouteLoader("/podroze", () => import("./pages/Podroze")),
   "/cele/:goalId": guardedRouteLoader("/cele/:goalId", () => import("./pages/CelSzczegoly")),
 } satisfies Record<string, RouteLoader>;
 

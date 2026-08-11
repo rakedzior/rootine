@@ -96,6 +96,28 @@ test.describe("Calm Layered Workspace", { tag: "@shared" }, () => {
 
     await page.getByRole("button", { name: "Widok listy" }).click();
     await expect(page.locator(".notes-grid--list")).toBeVisible();
+    const listCards = page.locator(".notes-grid--list .notes-card");
+    const listLayout = await page.locator(".notes-grid--list").evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        gap: Number.parseFloat(style.rowGap),
+        padding: Number.parseFloat(style.paddingTop),
+        borderWidth: Number.parseFloat(style.borderTopWidth),
+        background: style.backgroundColor,
+      };
+    });
+    const listCardStyles = await listCards.evaluateAll((elements) => elements.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        borderWidth: Number.parseFloat(style.borderTopWidth),
+        radius: Number.parseFloat(style.borderTopLeftRadius),
+      };
+    }));
+    expect(listLayout.gap).toBeGreaterThan(0);
+    expect(listLayout.padding).toBe(0);
+    expect(listLayout.borderWidth).toBe(0);
+    expect(listLayout.background).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    expect(listCardStyles.every(({ borderWidth, radius }) => borderWidth >= 1 && radius >= 6)).toBe(true);
     const listPreview = page.locator(".notes-grid--list .notes-card__body p").first();
     await expect(listPreview).toHaveCSS("-webkit-line-clamp", "2");
     await expect(page.locator(".notes-grid--list .notes-card__content-scroll").first()).toHaveCSS("overflow-y", "hidden");

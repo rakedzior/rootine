@@ -47,21 +47,26 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.travel-tabs {
-  overflow-x: auto;
-  scrollbar-width: none;
+.travel-toolbar {
+  justify-content: flex-start;
 }
 
-.travel-tabs::-webkit-scrollbar {
+.travel-toolbar__section-select {
   display: none;
 }
 
-.travel-tabs .ui-tab {
-  flex: 0 0 auto;
+.travel-sidebar__trip,
+.travel-sidebar__sections {
+  display: grid;
+  gap: 1px;
 }
 
-.travel-toolbar {
-  justify-content: flex-start;
+.travel-sidebar__trip.is-expanded > .context-nav-item {
+  color: var(--color-text-secondary);
+}
+
+.travel-sidebar__sections {
+  margin: 1px 0 var(--space-sm);
 }
 
 .travel-toolbar__mobile {
@@ -1593,6 +1598,20 @@ article:focus-within > .travel-row-actions {
     display: none;
   }
 
+  .travel-toolbar__section-select {
+    display: block;
+    width: 100%;
+    order: 1;
+  }
+
+  .travel-toolbar__section-select .ui-field {
+    width: min(240px, 100%);
+  }
+
+  .travel-toolbar .travel-toolbar__trip-select {
+    display: block;
+  }
+
   .travel-toolbar__route {
     order: 2;
     width: 100%;
@@ -1786,6 +1805,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-toolbar__trip-select {
+  display: none;
   min-width: 180px;
 }
 

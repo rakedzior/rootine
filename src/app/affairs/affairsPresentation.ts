@@ -10,15 +10,13 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
-  Map,
+  Map as MapIcon,
   ReceiptText,
   RefreshCw,
   ShieldCheck,
-  WalletCards,
 } from "lucide-react";
 import {
   getMonthKey,
-  type BudgetLineKind,
   type DocumentCategory,
   type DocumentRecord,
   type MatterCategory,
@@ -40,14 +38,10 @@ export type AffairsView =
   | "today"
   | "week"
   | "all"
-  | "oneTime"
-  | "payments"
-  | "subscriptions"
+  | "finances"
   | "documents"
   | "vehicles"
-  | "budget"
-  | "jdg"
-  | "travel";
+  | "jdg";
 
 export type AffairsViewArchetype = "agenda" | "register" | "workspace";
 
@@ -59,15 +53,11 @@ export type AffairsViewArchetype = "agenda" | "register" | "workspace";
 export const AFFAIRS_VIEW_ARCHETYPE: Record<AffairsView, AffairsViewArchetype> = {
   today: "agenda",
   week: "agenda",
-  all: "register",
-  oneTime: "register",
-  payments: "register",
-  subscriptions: "register",
+  all: "agenda",
+  finances: "register",
   documents: "register",
   vehicles: "register",
-  budget: "workspace",
   jdg: "workspace",
-  travel: "workspace",
 };
 export type EditorState =
   | { kind: "matter"; mode: "add" | "edit"; id?: string }
@@ -76,19 +66,17 @@ export type EditorState =
   | { kind: "subscription"; mode: "add" | "edit"; id?: string }
   | { kind: "document"; mode: "add" | "edit"; id?: string }
   | { kind: "vehicle"; mode: "add" | "edit"; id?: string }
-  | { kind: "vehicleItem"; mode: "add" | "edit"; id?: string; vehicleId: string }
-  | { kind: "budget"; mode: "add" };
+  | { kind: "vehicleItem"; mode: "add" | "edit"; id?: string; vehicleId: string };
 
-export function getAffairsEditorDraftKey(editor: EditorState | null, budgetMonthKey: string): string {
+export function getAffairsEditorDraftKey(editor: EditorState | null): string {
   if (!editor) return "";
   const recordId = "id" in editor ? editor.id ?? "new" : "new";
   const vehicleContext = editor.kind === "vehicleItem" ? `.${editor.vehicleId}` : "";
-  const budgetContext = editor.kind === "budget" ? `.${budgetMonthKey}` : "";
-  return `rootine.affairs-editor-draft.${editor.kind}.${editor.mode}.${recordId}${vehicleContext}${budgetContext}`;
+  return `rootine.affairs-editor-draft.${editor.kind}.${editor.mode}.${recordId}${vehicleContext}`;
 }
 
 export type DeleteState = {
-  kind: "matter" | "payment" | "oneTime" | "subscription" | "document" | "vehicle" | "vehicleItem" | "budget";
+  kind: "matter" | "payment" | "oneTime" | "subscription" | "document" | "vehicle" | "vehicleItem";
   id: string;
   label: string;
 };
@@ -117,9 +105,6 @@ export type Draft = {
   dueMileage: string;
   vehicleId: string;
   vehicleType: VehicleItemType;
-  budgetKind: BudgetLineKind;
-  planned: string;
-  actual: string;
 };
 
 export type MatterReminderPreset = "none" | "at-time" | "two-hours" | "day-and-two-hours";
@@ -170,23 +155,16 @@ export const EMPTY_DRAFT: Draft = {
   dueMileage: "",
   vehicleId: "",
   vehicleType: "service",
-  budgetKind: "fixed",
-  planned: "",
-  actual: "",
 };
 
 export const VIEW_COPY: Record<AffairsView, { title: string; description: string }> = {
-  travel: { title: "Sprawy", description: "Podróże · Plan, rezerwacje, budżet i przygotowania" },
   today: { title: "Dzisiaj", description: "Sprawy wymagające uwagi dzisiaj" },
   week: { title: "Ten tydzień", description: "Terminy i zobowiązania na najbliższe dni" },
-  all: { title: "Wszystkie", description: "Wszystkie aktywne sprawy i najbliższe zobowiązania" },
-  oneTime: { title: "Sprawy", description: "Jednorazowe rachunki, opłaty i zobowiązania" },
-  payments: { title: "Sprawy", description: "Stałe rachunki i płatności cykliczne" },
-  subscriptions: { title: "Sprawy", description: "Subskrypcje, członkostwa i kończące się umowy" },
-  documents: { title: "Sprawy", description: "Ważność dokumentów, polis, kart i gwarancji" },
-  vehicles: { title: "Sprawy", description: "OC, przeglądy, serwis i terminy pojazdów" },
-  budget: { title: "Sprawy", description: "Miesięczny plan wpływów, wydatków i oszczędności" },
-  jdg: { title: "Sprawy", description: "JDG · Miesięczne dokumenty, podatki i zamknięcie działalności" },
+  all: { title: "Wszystkie", description: "Pełny horyzont aktywnych spraw i zobowiązań" },
+  finances: { title: "Finanse", description: "Jednorazowe, cykliczne i subskrypcje w jednym rejestrze" },
+  documents: { title: "Dokumenty", description: "Ważność dokumentów, polis, kart i gwarancji" },
+  vehicles: { title: "Pojazdy", description: "OC, przeglądy, serwis i terminy pojazdów" },
+  jdg: { title: "JDG", description: "Sześć kroków do zamknięcia poprzedniego miesiąca" },
 };
 
 export const CATEGORY_META: Record<MatterCategory, { label: string; icon: typeof Landmark }> = {
@@ -208,13 +186,6 @@ export const CADENCE_LABELS: Record<PaymentCadence, string> = {
   monthly: "Co miesiąc",
   quarterly: "Co kwartał",
   yearly: "Co rok",
-};
-
-export const BUDGET_KIND_LABELS: Record<BudgetLineKind, string> = {
-  income: "Wpływy",
-  fixed: "Stałe",
-  flexible: "Elastyczne",
-  savings: "Oszczędności",
 };
 
 export const DOCUMENT_LABELS: Record<DocumentCategory, string> = {
@@ -241,7 +212,7 @@ export const NAV_GROUPS: Array<{
   items: Array<{ view: AffairsView; label: string; icon: typeof LayoutDashboard }>;
 }> = [
   {
-    label: "Plan",
+    label: "Sprawy",
     items: [
       { view: "today", label: "Dzisiaj", icon: Clock3 },
       { view: "week", label: "Ten tydzień", icon: CalendarDays },
@@ -251,10 +222,7 @@ export const NAV_GROUPS: Array<{
   {
     label: "Finanse",
     items: [
-      { view: "oneTime", label: "Jednorazowe", icon: ReceiptText },
-      { view: "payments", label: "Cykliczne", icon: RefreshCw },
-      { view: "subscriptions", label: "Subskrypcje", icon: CreditCard },
-      { view: "budget", label: "Budżet", icon: WalletCards },
+      { view: "finances", label: "Przegląd", icon: CreditCard },
     ],
   },
   {
@@ -268,7 +236,6 @@ export const NAV_GROUPS: Array<{
     label: "Obszary",
     items: [
       { view: "jdg", label: "JDG", icon: Building2 },
-      { view: "travel", label: "Podróże", icon: Map },
     ],
   },
 ];
@@ -292,12 +259,16 @@ export const UPCOMING_ICONS = {
   document: FileText,
   vehicle: Car,
   jdg: Building2,
-  travel: Map,
+  travel: MapIcon,
 };
 
 const LEGACY_VIEW_ALIASES: Record<string, AffairsView> = {
   overview: "today",
   matters: "all",
+  oneTime: "finances",
+  payments: "finances",
+  subscriptions: "finances",
+  budget: "finances",
 };
 
 export function getInitialView(): AffairsView {
@@ -326,7 +297,7 @@ export type EditorPresentation = {
   placeholder: string;
 };
 
-export function getEditorPresentation(editor: EditorState | null, budgetMonthKey: string): EditorPresentation | null {
+export function getEditorPresentation(editor: EditorState | null): EditorPresentation | null {
   if (!editor) return null;
   if (editor.kind === "matter") return {
     title: editor.mode === "edit" ? "Edytuj sprawę" : "Nowa sprawa",
@@ -364,17 +335,11 @@ export function getEditorPresentation(editor: EditorState | null, budgetMonthKey
     label: "Nazwa pojazdu",
     placeholder: "np. Samochód rodzinny",
   };
-  if (editor.kind === "vehicleItem") return {
+  return {
     title: editor.mode === "edit" ? "Edytuj termin" : "Nowy termin",
     description: "Ustaw datę, przebieg graniczny albo oba warunki jednocześnie.",
     label: "Nazwa terminu",
     placeholder: "np. Wymiana oleju i filtrów",
-  };
-  return {
-    title: `Nowa pozycja budżetu · ${formatMonth(budgetMonthKey)}`,
-    description: "Przydziel pieniądze zanim zaczniesz je wydawać.",
-    label: "Nazwa kategorii",
-    placeholder: "np. Jedzenie",
   };
 }
 

@@ -24,7 +24,7 @@ export type AffairAttentionItem = {
   sourceId: string;
   containerId?: string;
   kind: AffairAttentionKind;
-  view: AffairsView;
+  view: AffairsView | "travel";
   title: string;
   meta: string;
   dueDate: string;
@@ -61,10 +61,14 @@ export function buildAffairAttentionItems(
   jdg: JdgWorkspace,
   travel: TravelWorkspace,
   now = new Date(),
+  horizonDays: number | null = 30,
 ): AffairAttentionItem[] {
   const today = localDateKey(now);
   const states = new Map((affairs.attentionStates ?? []).map((state) => [state.key, state]));
   const items: AffairAttentionItem[] = [];
+  const isVisible = (dueDate: string, defaultLeadDays: number) => horizonDays === null
+    ? Number.isFinite(daysBetween(today, dueDate))
+    : isVisibleByDate(dueDate, today, defaultLeadDays);
 
   const add = (item: AffairAttentionItem) => {
     if (!item.dueDate) return;
@@ -75,7 +79,7 @@ export function buildAffairAttentionItems(
   };
 
   affairs.matters
-    .filter((matter) => matter.status !== "done" && isVisibleByDate(matter.dueDate, today, 30))
+    .filter((matter) => matter.status !== "done" && isVisible(matter.dueDate, 30))
     .forEach((matter) => add({
       key: `matter:${matter.id}:${matter.dueDate}:${matter.time ?? ""}`,
       sourceId: matter.id,
@@ -92,12 +96,12 @@ export function buildAffairAttentionItems(
     }));
 
   affairs.oneTimePayments
-    .filter((payment) => !payment.paid && isVisibleByDate(payment.dueDate, today, 30))
+    .filter((payment) => !payment.paid && isVisible(payment.dueDate, 30))
     .forEach((payment) => add({
       key: `oneTime:${payment.id}:${payment.dueDate}`,
       sourceId: payment.id,
       kind: "oneTime",
-      view: "oneTime",
+      view: "finances",
       title: payment.title,
       meta: `Płatność jednorazowa · ${payment.category}`,
       dueDate: payment.dueDate,
@@ -107,12 +111,12 @@ export function buildAffairAttentionItems(
     }));
 
   affairs.payments
-    .filter((payment) => payment.active && !payment.automatic && isVisibleByDate(payment.nextDueDate, today, 30))
+    .filter((payment) => payment.active && !payment.automatic && isVisible(payment.nextDueDate, 30))
     .forEach((payment) => add({
       key: `payment:${payment.id}:${payment.nextDueDate}`,
       sourceId: payment.id,
       kind: "payment",
-      view: "payments",
+      view: "finances",
       title: payment.name,
       meta: `Płatność cykliczna · ${payment.category}`,
       dueDate: payment.nextDueDate,
@@ -122,12 +126,12 @@ export function buildAffairAttentionItems(
     }));
 
   affairs.subscriptions
-    .filter((subscription) => subscription.active && subscription.renewal === "manual" && isVisibleByDate(subscription.nextBillingDate, today, 30))
+    .filter((subscription) => subscription.active && subscription.renewal === "manual" && isVisible(subscription.nextBillingDate, 30))
     .forEach((subscription) => add({
       key: `subscription:${subscription.id}:${subscription.nextBillingDate}`,
       sourceId: subscription.id,
       kind: "subscription",
-      view: "subscriptions",
+      view: "finances",
       title: subscription.name,
       meta: `Odnowienie ręczne · ${subscription.category}`,
       dueDate: subscription.nextBillingDate,
@@ -137,7 +141,7 @@ export function buildAffairAttentionItems(
     }));
 
   affairs.documents
-    .filter((document) => document.expiresAt && isVisibleByDate(document.expiresAt, today, document.reminderDays))
+    .filter((document) => document.expiresAt && isVisible(document.expiresAt, document.reminderDays))
     .forEach((document) => add({
       key: `document:${document.id}:${document.expiresAt}`,
       sourceId: document.id,
@@ -155,7 +159,7 @@ export function buildAffairAttentionItems(
     .filter((item) => {
       if (item.done) return false;
       const vehicle = affairs.vehicles.find((candidate) => candidate.id === item.vehicleId);
-      const dateNear = item.dueDate && isVisibleByDate(item.dueDate, today, 30);
+      const dateNear = item.dueDate && isVisible(item.dueDate, 30);
       const mileageNear = item.dueMileage !== null && vehicle && item.dueMileage <= vehicle.mileage + 1_000;
       return Boolean(dateNear || mileageNear);
     })
@@ -180,7 +184,7 @@ export function buildAffairAttentionItems(
       .filter((item) => !item.done && item.dueDay !== null)
       .forEach((item) => {
         const dueDate = dateForMonthDay(month.month, item.dueDay!);
-        if (!isVisibleByDate(dueDate, today, 7)) return;
+        if (!isVisible(dueDate, 7)) return;
         add({
           key: `jdg:${month.month}:${item.id}:${dueDate}`,
           sourceId: item.id,
@@ -200,7 +204,7 @@ export function buildAffairAttentionItems(
   travel.trips
     .filter((trip) => trip.status !== "completed" && !trip.archivedAt)
     .forEach((trip) => trip.tasks
-      .filter((task) => !task.completed && task.dueDate && isVisibleByDate(task.dueDate, today, 30))
+      .filter((task) => !task.completed && task.dueDate && isVisible(task.dueDate, 30))
       .forEach((task) => add({
         key: `travel:${trip.id}:${task.id}:${task.dueDate}`,
         sourceId: task.id,

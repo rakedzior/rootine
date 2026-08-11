@@ -197,8 +197,8 @@
 }
 
 .work-search:focus-within {
-  border-color: var(--color-precision-blue);
-  box-shadow: 0 0 0 2px var(--color-precision-blue-soft);
+  border-color: var(--color-field-focus);
+  box-shadow: none;
 }
 
 .work-search input {
@@ -1624,10 +1624,11 @@
 }
 
 .work-quick-entry > input:focus-visible {
-  outline: 2px solid var(--color-precision-blue);
-  outline-offset: 3px;
-  border-radius: var(--radius-sm);
+  outline: 0;
+  box-shadow: none;
 }
+
+.work-quick-entry:focus-within { border-color: var(--color-field-focus); }
 
 .work-quick-entry > input::placeholder { color: var(--color-text-muted); }
 
@@ -2020,6 +2021,56 @@
   .work-task-row > .ui-list-row__meta > .work-inline-control > button { justify-content: center; }
 }
 
+/* Review rows keep company, project, priority and status together at the right edge. */
+@media (min-width: 761px) {
+  .work-task-row--with-context.ui-list-row {
+    grid-template-columns: var(--list-rail-width) 24px minmax(0, 1fr) 160px 190px 92px 118px;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta {
+    display: contents;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta > .work-task-row__context-column,
+  .work-task-row--with-context > .ui-list-row__meta > .work-inline-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta > .work-task-row__company-column {
+    grid-column: 4;
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta > .work-task-row__project-column {
+    grid-column: 5;
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta > .work-inline-control:nth-of-type(1) {
+    grid-column: 6;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta > .work-inline-control:nth-of-type(2) {
+    grid-column: 7;
+  }
+
+  .work-task-row--with-context > .ui-list-row__meta > .work-inline-control > button {
+    justify-content: flex-end;
+  }
+
+  .work-task-columns {
+    grid-template-columns: var(--list-rail-width) 24px minmax(0, 1fr) 160px 190px 92px 118px;
+  }
+
+  .work-task-columns > span:nth-child(n + 3) {
+    justify-self: end;
+    text-align: right;
+  }
+}
+
 /* Project previews use a lighter task grid: checkbox, title, then only meaningful metadata. */
 .work-project-record__preview-list .work-task-row--compact.ui-list-row {
   grid-template-columns: 24px minmax(0, 1fr) minmax(0, auto) minmax(0, auto) minmax(0, auto);
@@ -2116,7 +2167,14 @@
     grid-template-columns: var(--list-rail-width) 24px minmax(0, 1fr) 28px 28px 24px;
     gap: var(--space-sm);
   }
+  .work-task-row--with-context > .ui-list-row__meta {
+    display: contents;
+    grid-column: auto;
+    margin-left: 0;
+  }
+  .work-task-row--with-context > .ui-list-row__meta > .work-inline-control { width: 100%; }
   .work-task-row:not(.work-task-row--with-context) > .ui-list-row__trailing { grid-column: 6; }
   .work-task-row__context-column { display: none; }
   .work-task-row > .ui-list-row__meta > .work-inline-control > button { justify-content: center; }
+  .work-task-columns { display: none; }
 }

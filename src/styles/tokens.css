@@ -84,6 +84,9 @@
   --theme-signature: color-mix(in srgb, var(--theme-ambient-brand) 72%, var(--color-primary));
   --focus-ring-width: 2px;
   --focus-ring: 0 0 0 2px var(--color-app-bg), 0 0 0 4px var(--color-focus-ring);
+  /* Text-entry focus is intentionally quieter than navigation/action focus. */
+  --color-field-focus: color-mix(in srgb, var(--color-primary) 78%, var(--color-border-strong));
+  --color-field-focus-muted: color-mix(in srgb, var(--color-primary) 36%, transparent);
 }
 
 :root {

@@ -8,7 +8,6 @@
 import {
   Archive,
   ArchiveRestore,
-  ArrowLeft,
   BedDouble,
   CalendarDays,
   Check,
@@ -71,7 +70,6 @@ import {
   ModuleMain,
   ModuleShell,
   Select,
-  Tabs,
   Textarea,
   Toast,
   ToastViewport,
@@ -88,7 +86,7 @@ import {
   ITINERARY_KIND_LABELS,
   RESERVATION_STATUS_LABELS,
   SECTION_COPY,
-  SECTION_TABS,
+  TRAVEL_SECTION_ITEMS,
   TASK_CATEGORY_LABELS,
   TRANSPORT_ICONS,
   TRANSPORT_MODE_LABELS,
@@ -371,13 +369,13 @@ export default function Podroze({
     setEditor({ kind: "document", mode: document ? "edit" : "add", id: document?.id });
   };
 
-  const openTaskEditor = (task?: TravelTask) => {
+  const openTaskEditor = (task?: TravelTask, defaultCategory: TravelTaskCategory = "other") => {
     setDraft(task ? {
       ...EMPTY_DRAFT,
       name: task.title,
       taskCategory: task.category,
       dueDate: task.dueDate,
-    } : EMPTY_DRAFT);
+    } : { ...EMPTY_DRAFT, taskCategory: defaultCategory });
     setEditorError("");
     setEditor({ kind: "task", mode: task ? "edit" : "add", id: task?.id });
   };
@@ -725,9 +723,7 @@ export default function Podroze({
               kind: "travel",
               entity: `${encodeURIComponent(selectedTrip?.id ?? "")}/${encodeURIComponent(task.id)}`,
               context: `${selectedTrip?.name ?? "Podróż"} · ${selectedTrip?.destination ?? ""}`,
-              href: embedded
-                ? `/sprawy?widok=travel&podroz=${encodeURIComponent(selectedTrip?.id ?? "")}&sekcja=tasks`
-                : `/podroze/${encodeURIComponent(selectedTrip?.id ?? "")}?sekcja=tasks`,
+            href: `/podroze/${encodeURIComponent(selectedTrip?.id ?? "")}?sekcja=${task.category === "packing" ? "packing" : "tasks"}`,
             },
             text: task.title,
             done: task.completed,
@@ -766,12 +762,46 @@ export default function Podroze({
               ? `${editor.mode === "edit" ? "Edytuj" : "Nowy"} dokument`
               : `${editor?.mode === "edit" ? "Edytuj" : "Nowa"} sprawa`;
 
+  const renderTripNavigation = (trip: TravelTrip, archived = false) => {
+    const expanded = selectedTrip?.id === trip.id;
+    const sectionNavigationId = `travel-sections-${trip.id}`;
+    return (
+      <div key={trip.id} className={`travel-sidebar__trip ${expanded ? "is-expanded" : ""}`}>
+        <ContextNavItem
+          active={expanded && activeSection === "overview"}
+          aria-expanded={expanded}
+          aria-controls={expanded ? sectionNavigationId : undefined}
+          icon={archived ? <Check /> : <MapPin />}
+          label={trip.name}
+          meta={archived ? new Date(`${trip.startDate}T12:00:00`).getFullYear() : formatDate(trip.startDate, false)}
+          onClick={() => selectTrip(trip.id)}
+        />
+        {expanded && (
+          <div
+            id={sectionNavigationId}
+            className="travel-sidebar__sections"
+            aria-label={`Sekcje podróży: ${trip.name}`}
+          >
+            {TRAVEL_SECTION_ITEMS.filter((item) => item.id !== "overview").map((item) => (
+              <ContextNavItem
+                key={item.id}
+                depth={1}
+                active={activeSection === item.id}
+                label={item.label}
+                title={item.label}
+                onClick={() => setSection(item.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const contextSidebar = (
     <ModuleSidebar label="Podróże" className="travel-sidebar">
       <div className="travel-sidebar__nav">
-        <p className="travel-sidebar__label">Obszar nadrzędny</p>
-        {!embedded && <ContextNavItem icon={<ArrowLeft />} label="Wróć do Spraw" onClick={() => navigate("/sprawy")} />}
-        <p className="travel-sidebar__label travel-sidebar__label--spaced">Wyjazdy</p>
+        <p className="travel-sidebar__label">Wyjazdy</p>
         <ContextNavItem
           active={!selectedTrip}
           icon={<LayoutDashboard />}
@@ -782,31 +812,13 @@ export default function Podroze({
         {upcomingTrips.length > 0 && (
           <>
             <p className="travel-sidebar__label travel-sidebar__label--spaced">Nadchodzące</p>
-            {upcomingTrips.map((trip) => (
-              <ContextNavItem
-                key={trip.id}
-                active={selectedTrip?.id === trip.id}
-                icon={<MapPin />}
-                label={trip.name}
-                meta={formatDate(trip.startDate, false)}
-                onClick={() => selectTrip(trip.id)}
-              />
-            ))}
+            {upcomingTrips.map((trip) => renderTripNavigation(trip))}
           </>
         )}
         {completedTrips.length > 0 && (
           <>
             <p className="travel-sidebar__label travel-sidebar__label--spaced">Archiwum</p>
-            {completedTrips.map((trip) => (
-              <ContextNavItem
-                key={trip.id}
-                active={selectedTrip?.id === trip.id}
-                icon={<Check />}
-                label={trip.name}
-                meta={new Date(`${trip.startDate}T12:00:00`).getFullYear()}
-                onClick={() => selectTrip(trip.id)}
-              />
-            ))}
+            {completedTrips.map((trip) => renderTripNavigation(trip, true))}
           </>
         )}
       </div>
@@ -871,7 +883,7 @@ export default function Podroze({
             if (activeSection === "itinerary") openItineraryEditor();
             else if (activeSection === "budget") openBudgetEditor();
             else if (activeSection === "documents") openDocumentEditor();
-            else openTaskEditor();
+            else openTaskEditor(undefined, activeSection === "packing" ? "packing" : "other");
           }}
         >
           {activeSection === "itinerary"
@@ -880,7 +892,9 @@ export default function Podroze({
               ? "Pozycja"
               : activeSection === "documents"
                 ? "Dokument"
-                : "Zadanie"}
+                : activeSection === "packing"
+                  ? "Rzecz"
+                  : "Sprawa"}
         </Button>
       )}
     </>
@@ -889,6 +903,10 @@ export default function Podroze({
       Dodaj podróż
     </Button>
   );
+
+  const visibleTravelTasks = selectedTrip?.tasks.filter((task) => (
+    activeSection === "packing" ? task.category === "packing" : task.category !== "packing"
+  )) ?? [];
 
   const pageContent = (
     <>
@@ -938,13 +956,15 @@ export default function Podroze({
             {tripHeaderActions}
           </>}
           controls={selectedTrip ? <>
-            <Tabs
-              items={SECTION_TABS}
-              activeId={activeSection}
-              ariaLabel="Obszary podróży"
-              onChange={(id) => setSection(id as TravelSection)}
-              className="travel-tabs ui-tabs--segmented"
-            />
+            <div className="travel-toolbar__section-select">
+              <Select
+                compact
+                aria-label="Wybierz sekcję podróży"
+                value={activeSection}
+                options={TRAVEL_SECTION_ITEMS.map((item) => ({ value: item.id, label: item.label }))}
+                onChange={(event) => setSection(event.target.value as TravelSection)}
+              />
+            </div>
             <div className="travel-toolbar__route">
                 <CalendarDays size={13} aria-hidden="true" />
                 <strong>{formatDate(selectedTrip.startDate)} — {formatDate(selectedTrip.endDate)}</strong>
@@ -1065,9 +1085,7 @@ export default function Podroze({
         ) : (
           <section
             id={`travel-panel-${activeSection}`}
-            role="tabpanel"
-            aria-labelledby={`travel-tab-${activeSection}`}
-            tabIndex={0}
+            aria-label={SECTION_COPY[activeSection]}
             className="travel-canvas"
           >
             {activeSection === "overview" && (
@@ -1414,22 +1432,27 @@ export default function Podroze({
               </div>
             )}
 
-            {activeSection === "tasks" && (
+            {(activeSection === "tasks" || activeSection === "packing") && (
               <div className="travel-tasks">
                 <div className="travel-section-intro">
-                  <div><h2>Sprawy do załatwienia</h2><p>Rezerwacje, zdrowie, pieniądze, formalności i pakowanie w jednym miejscu.</p></div>
-                  <Badge tone="primary">{selectedTrip.tasks.filter((item) => !item.completed).length} otwartych</Badge>
+                  <div>
+                    <h2>{activeSection === "packing" ? "Lista rzeczy do spakowania" : "Sprawy do załatwienia"}</h2>
+                    <p>{activeSection === "packing"
+                      ? "Osobna checklista bagażu, której nie mieszamy z rezerwacjami i formalnościami."
+                      : "Rezerwacje, kontakt, zdrowie, pieniądze i formalności przed wyjazdem."}</p>
+                  </div>
+                  <Badge tone="primary">{visibleTravelTasks.filter((item) => !item.completed).length} otwartych</Badge>
                 </div>
-                {selectedTrip.tasks.length === 0 ? (
+                {visibleTravelTasks.length === 0 ? (
                   <EmptyState
                     icon={<ListChecks size={18} />}
-                    title="Lista przygotowań jest pusta"
-                    description="Dodaj pierwszą sprawę z kategorią i terminem."
-                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor()}>Dodaj sprawę</Button>}
+                    title={activeSection === "packing" ? "Lista pakowania jest pusta" : "Brak spraw przed wyjazdem"}
+                    description={activeSection === "packing" ? "Dodaj pierwszą rzecz do zabrania." : "Dodaj pierwszą sprawę z kategorią i terminem."}
+                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor(undefined, activeSection === "packing" ? "packing" : "other")}>{activeSection === "packing" ? "Dodaj rzecz" : "Dodaj sprawę"}</Button>}
                   />
                 ) : (
                   <section className="travel-task-register">
-                    {selectedTrip.tasks
+                    {visibleTravelTasks
                       .slice()
                       .sort((a, b) => Number(a.completed) - Number(b.completed) || (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
                       .map((task, index, sortedTasks) => {
@@ -1443,52 +1466,6 @@ export default function Podroze({
                           );
                         }
                         return renderTravelTask(task);
-                        return (
-                        <article key={task.id} className={`travel-task-row ${task.completed ? "is-completed" : ""}`}>
-                          <button
-                            type="button"
-                            className="travel-check"
-                            aria-label={task.completed ? `Przywróć ${task.title}` : `Oznacz jako zrobione: ${task.title}`}
-                            aria-pressed={task.completed}
-                            onClick={() => toggleTask(task)}
-                          >
-                            {task.completed && <Check size={11} />}
-                          </button>
-                          <span className="travel-task-row__copy">
-                            <strong>{task.title}</strong>
-                            <small>{TASK_CATEGORY_LABELS[task.category]}</small>
-                          </span>
-                          <Badge tone={task.category === "health" ? "warning" : task.category === "documents" ? "violet" : "neutral"}>
-                            {TASK_CATEGORY_LABELS[task.category]}
-                          </Badge>
-                          <span className={`travel-task-row__due ${task.dueDate && daysUntil(task.dueDate) < 0 && !task.completed ? "is-overdue" : ""}`}>
-                            {task.dueDate ? formatDate(task.dueDate) : "Bez terminu"}
-                          </span>
-                          <span className="travel-row-actions">
-                            <AddToTasksButton
-                              compact
-                              input={{
-                                source: {
-                                  kind: "travel",
-                                  entity: `${encodeURIComponent(selectedTrip?.id ?? "")}/${encodeURIComponent(task.id)}`,
-                                  context: `${selectedTrip.name} · ${selectedTrip.destination}`,
-                                  href: embedded
-                                    ? `/sprawy?widok=travel&podroz=${encodeURIComponent(selectedTrip?.id ?? "")}&sekcja=tasks`
-                                    : `/podroze/${encodeURIComponent(selectedTrip?.id ?? "")}?sekcja=tasks`,
-                                },
-                                text: task.title,
-                                done: task.completed,
-                                calendarDate: task.dueDate || undefined,
-                                date: task.dueDate || undefined,
-                                list: "podroze",
-                                tags: ["podroze"],
-                              }}
-                            />
-                            <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={13} /></Button>
-                            <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={13} /></Button>
-                          </span>
-                        </article>
-                      );
                       })}
                   </section>
                 )}

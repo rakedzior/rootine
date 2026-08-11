@@ -69,6 +69,7 @@ type NotesSort = "updated" | "created" | "title";
 type NotesLayout = "cards" | "list";
 type EditorState = { mode: "add" | "edit"; id?: string };
 type ListEditorState = { mode: "add" | "edit"; id?: string };
+type TagEditorState = { mode: "add" | "edit"; name: string };
 
 type NoteDraft = {
   title: string;
@@ -95,8 +96,47 @@ const EMPTY_DRAFT: NoteDraft = {
 };
 
 const NOTE_DRAFT_STORAGE_KEY = "rootine.notes-editor-draft.v1";
+const NOTES_SIDEBAR_STATE_KEY = "rootine.notes.sidebar.v1";
+const NOTES_TAGS_STORAGE_KEY = "rootine.notes-tags.v1";
 const NOTE_DRAFT_SAVE_DELAY_MS = 250;
 const NOTES_VIEWS = new Set<NotesView>(["all", "pinned", "archive"]);
+
+type NotesSidebarState = {
+  listsExpanded: boolean;
+  tagsExpanded: boolean;
+};
+
+function loadNotesSidebarState(): NotesSidebarState {
+  const fallback: NotesSidebarState = { listsExpanded: false, tagsExpanded: false };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(NOTES_SIDEBAR_STATE_KEY);
+    if (!raw) return fallback;
+    const value = JSON.parse(raw) as Partial<NotesSidebarState>;
+    return {
+      listsExpanded: value.listsExpanded === true,
+      tagsExpanded: value.tagsExpanded === true,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function loadNotesTags(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(NOTES_TAGS_STORAGE_KEY);
+    const value = raw ? JSON.parse(raw) : [];
+    return Array.isArray(value)
+      ? Array.from(new Set(value
+        .filter((tag): tag is string => typeof tag === "string")
+        .map((tag) => normalizedTags(tag)[0])
+        .filter((tag): tag is string => Boolean(tag))))
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 type StoredDraftSession = {
   editor: EditorState;
@@ -204,6 +244,8 @@ function textPreviewLines(body: string): Array<{ text: string; bullet: boolean }
 
 export default function Notatki() {
   const [initialUrlState] = useState(getInitialNotesUrlState);
+  const [initialSidebarState] = useState(loadNotesSidebarState);
+  const [initialTags] = useState(loadNotesTags);
   const [storedDraftSession] = useState(loadStoredDraftSession);
   const [workspace, setWorkspace] = useState(loadNotesWorkspace);
   const quickAddRequested = typeof window !== "undefined"
@@ -236,15 +278,46 @@ export default function Notatki() {
   const [listDeleteState, setListDeleteState] = useState<{ id: string; name: string } | null>(null);
   const [listName, setListName] = useState("");
   const [listError, setListError] = useState("");
+  const [tagEditor, setTagEditor] = useState<TagEditorState | null>(null);
+  const [tagDeleteState, setTagDeleteState] = useState<{ name: string; count: number } | null>(null);
+  const [tagName, setTagName] = useState("");
+  const [tagError, setTagError] = useState("");
   const [storageError, setStorageError] = useState(false);
-  const [listsExpanded, setListsExpanded] = useState(true);
-  const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [knownTags, setKnownTags] = useState<string[]>(initialTags);
+  const [listsExpanded, setListsExpanded] = useState(initialSidebarState.listsExpanded);
+  const [listsEditMode, setListsEditMode] = useState(false);
+  const [listsSearchOpen, setListsSearchOpen] = useState(false);
+  const [listSearch, setListSearch] = useState("");
+  const [tagsExpanded, setTagsExpanded] = useState(initialSidebarState.tagsExpanded);
+  const [tagsEditMode, setTagsEditMode] = useState(false);
+  const [tagSearchOpen, setTagSearchOpen] = useState(false);
   const [tagSearch, setTagSearch] = useState("");
   const [dirtyPromptOpen, setDirtyPromptOpen] = useState(false);
   const pendingEditorActionRef = useRef<null | (() => void)>(null);
   const draftPersistenceTimerRef = useRef<number | null>(null);
   const draftSessionRef = useRef<StoredDraftSession | null>(storedDraftSession);
   const isEditorDirty = Boolean(editor) && serializeDraft(draft) !== draftBaseline;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NOTES_SIDEBAR_STATE_KEY, JSON.stringify({ listsExpanded, tagsExpanded }));
+    } catch {
+      // A sidebar preference is optional and must not block notes.
+    }
+  }, [listsExpanded, tagsExpanded]);
+
+  useEffect(() => {
+    if (view.startsWith("list:")) setListsExpanded(true);
+    if (view.startsWith("tag:")) setTagsExpanded(true);
+  }, [view]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NOTES_TAGS_STORAGE_KEY, JSON.stringify(knownTags));
+    } catch {
+      // A tag registry is optional; note content remains authoritative.
+    }
+  }, [knownTags]);
 
   useEffect(() => {
     if (!quickAddRequested) return;
@@ -367,9 +440,16 @@ export default function Notatki() {
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
+    knownTags.forEach((tagName) => counts.set(tagName, 0));
     activeNotes.forEach((note) => note.tags.forEach((tagName) => counts.set(tagName, (counts.get(tagName) ?? 0) + 1)));
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pl"));
-  }, [activeNotes]);
+  }, [activeNotes, knownTags]);
+  const visibleLists = useMemo(() => {
+    const query = listSearch.trim().toLocaleLowerCase("pl-PL");
+    return query
+      ? workspace.lists.filter((list) => list.name.toLocaleLowerCase("pl-PL").includes(query))
+      : workspace.lists;
+  }, [listSearch, workspace.lists]);
   const visibleTagCounts = useMemo(() => {
     const query = tagSearch.trim().toLocaleLowerCase("pl-PL");
     return query ? tagCounts.filter(([tagName]) => tagName.toLocaleLowerCase("pl-PL").includes(query)) : tagCounts;
@@ -509,6 +589,9 @@ export default function Notatki() {
 
     const now = new Date().toISOString();
     const tags = normalizedTags(draft.tags);
+    if (tags.length > 0) {
+      setKnownTags((current) => Array.from(new Set([...current, ...tags])));
+    }
     const savedDraft: NoteDraft = {
       ...draft,
       title,
@@ -666,6 +749,51 @@ export default function Notatki() {
     setListEditor(list ? { mode: "edit", id: list.id } : { mode: "add" });
   };
 
+  const openTagEditor = (name = "") => {
+    setTagName(name);
+    setTagError("");
+    setTagEditor({ mode: name ? "edit" : "add", name });
+  };
+
+  const saveTag = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!tagEditor) return;
+    const name = normalizedTags(tagName)[0] ?? "";
+    if (!name) {
+      setTagError("Wpisz nazwę tagu.");
+      return;
+    }
+    if (name !== tagEditor.name && (knownTags.includes(name) || workspace.notes.some((note) => note.tags.includes(name)))) {
+      setTagError("Tag o tej nazwie już istnieje.");
+      return;
+    }
+    if (tagEditor.mode === "add") {
+      setKnownTags((current) => Array.from(new Set([...current, name])));
+    } else if (name !== tagEditor.name) {
+      const now = new Date().toISOString();
+      setKnownTags((current) => current.map((tag) => tag === tagEditor.name ? name : tag));
+      setWorkspace((current) => ({
+        ...current,
+        notes: current.notes.map((note) => {
+          if (!note.tags.includes(tagEditor.name)) return note;
+          return {
+            ...note,
+            tags: Array.from(new Set(note.tags.map((tag) => tag === tagEditor.name ? name : tag))),
+            updatedAt: now,
+          };
+        }),
+      }));
+      setDraft((current) => ({
+        ...current,
+        tags: normalizedTags(current.tags).map((tag) => tag === tagEditor.name ? name : tag).join(", "),
+      }));
+      if (view === `tag:${tagEditor.name}`) setView(`tag:${name}`);
+    }
+    setTagName("");
+    setTagError("");
+    setTagEditor(null);
+  };
+
   const closeListEditor = () => {
     setListEditor(null);
     setListName("");
@@ -686,6 +814,24 @@ export default function Notatki() {
       setView("all");
     }
     setListDeleteState(null);
+  };
+
+  const confirmTagDelete = () => {
+    if (!tagDeleteState) return;
+    const { name } = tagDeleteState;
+    setKnownTags((current) => current.filter((tag) => tag !== name));
+    setWorkspace((current) => ({
+      ...current,
+      notes: current.notes.map((note) => note.tags.includes(name)
+        ? { ...note, tags: note.tags.filter((tag) => tag !== name), updatedAt: new Date().toISOString() }
+        : note),
+    }));
+    setDraft((current) => ({
+      ...current,
+      tags: normalizedTags(current.tags).filter((tag) => tag !== name).join(", "),
+    }));
+    if (view === `tag:${name}`) setView("all");
+    setTagDeleteState(null);
   };
 
   const confirmDelete = () => {
@@ -770,21 +916,63 @@ export default function Notatki() {
             >
               <ChevronDown size={13} aria-hidden="true" />
               <span className="notes-sidebar__label">Listy</span>
-              <span className="notes-sidebar__group-count">{workspace.lists.length}</span>
             </button>
-            <button
-              type="button"
-              className="notes-sidebar__group-action"
-              aria-label="Dodaj listę"
-              title="Utwórz listę"
-              onClick={() => openListEditor()}
-            >
-              <Plus size={13} />
-            </button>
+            <div className="notes-sidebar__group-actions">
+              <button
+                type="button"
+                className={`notes-sidebar__group-action ${listsSearchOpen ? "is-active" : ""}`}
+                aria-label={listsSearchOpen ? "Zamknij wyszukiwanie list" : "Szukaj listy"}
+                aria-pressed={listsSearchOpen}
+                title="Szukaj listy"
+                onClick={() => {
+                  setListsSearchOpen((open) => !open);
+                  setListsExpanded(true);
+                }}
+              >
+                <Search size={13} />
+              </button>
+              <button
+                type="button"
+                className={`notes-sidebar__group-action ${listsEditMode ? "is-active" : ""}`}
+                aria-label={listsEditMode ? "Zakończ edycję list" : "Edytuj listy"}
+                aria-pressed={listsEditMode}
+                title={listsEditMode ? "Zakończ edycję list" : "Edytuj listy"}
+                onClick={() => {
+                  setListsExpanded(true);
+                  setListsEditMode((open) => !open);
+                }}
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                type="button"
+                className="notes-sidebar__group-action"
+                aria-label="Dodaj listę"
+                title="Utwórz listę"
+                onClick={() => {
+                  setListsExpanded(true);
+                  openListEditor();
+                }}
+              >
+                <Plus size={13} />
+              </button>
+            </div>
           </div>
           {listsExpanded && (
             <div id="notes-lists-panel" className="notes-sidebar__group-items">
-              {workspace.lists.map((list) => (
+              {listsSearchOpen && (
+                <label className="notes-sidebar__filter">
+                  <Search size={11} aria-hidden="true" />
+                  <span className="ui-sr-only">Filtruj wszystkie listy</span>
+                  <input
+                    autoFocus
+                    value={listSearch}
+                    placeholder="Filtruj listy"
+                    onChange={(event) => setListSearch(event.target.value)}
+                  />
+                </label>
+              )}
+              {visibleLists.map((list) => (
                 <div key={list.id} className="notes-sidebar__list-row">
                   <ContextNavItem
                     active={view === `list:${list.id}`}
@@ -793,7 +981,7 @@ export default function Notatki() {
                     meta={activeNotes.filter((note) => note.listId === list.id).length}
                     onClick={() => selectView(`list:${list.id}`)}
                   />
-                  <span className="notes-sidebar__list-actions">
+                  {listsEditMode && <span className="notes-sidebar__list-actions">
                     <button
                       type="button"
                       aria-label={`Zmień nazwę listy ${list.name}`}
@@ -810,14 +998,17 @@ export default function Notatki() {
                     >
                       <Trash2 size={11} />
                     </button>
-                  </span>
+                  </span>}
                 </div>
               ))}
+              {visibleLists.length === 0 && (
+                <p className="notes-sidebar__tag-empty">Nie znaleziono list.</p>
+              )}
             </div>
           )}
         </section>
 
-        {tagCounts.length > 0 && (
+        {(
           <section className="notes-sidebar__group" aria-labelledby="notes-tags-heading">
             <div className="notes-sidebar__group-heading">
               <button
@@ -830,16 +1021,56 @@ export default function Notatki() {
               >
                 <ChevronDown size={13} aria-hidden="true" />
                 <span className="notes-sidebar__label">Tagi</span>
-                <span className="notes-sidebar__group-count">{tagCounts.length}</span>
               </button>
+              <div className="notes-sidebar__group-actions">
+                <button
+                  type="button"
+                  className={`notes-sidebar__group-action ${tagSearchOpen ? "is-active" : ""}`}
+                  aria-label={tagSearchOpen ? "Zamknij wyszukiwanie tagów" : "Szukaj tagu"}
+                  aria-pressed={tagSearchOpen}
+                  title="Szukaj tagu"
+                  onClick={() => {
+                    setTagSearchOpen((open) => !open);
+                    setTagsExpanded(true);
+                  }}
+                >
+                  <Search size={13} />
+                </button>
+                <button
+                  type="button"
+                  className={`notes-sidebar__group-action ${tagsEditMode ? "is-active" : ""}`}
+                  aria-label={tagsEditMode ? "Zakończ edycję tagów" : "Edytuj tagi"}
+                  aria-pressed={tagsEditMode}
+                  title={tagsEditMode ? "Zakończ edycję tagów" : "Edytuj tagi"}
+                  onClick={() => {
+                    setTagsExpanded(true);
+                    setTagsEditMode((open) => !open);
+                  }}
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="notes-sidebar__group-action"
+                  aria-label="Dodaj tag"
+                  title="Dodaj tag"
+                  onClick={() => {
+                    setTagsExpanded(true);
+                    openTagEditor();
+                  }}
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
             </div>
             {tagsExpanded && (
               <div id="notes-tags-panel" className="notes-sidebar__group-items">
-                {tagCounts.length > 7 && (
-                  <label className="notes-sidebar__tag-search">
+                {tagSearchOpen && (
+                  <label className="notes-sidebar__filter">
                     <Search size={11} aria-hidden="true" />
                     <span className="ui-sr-only">Filtruj wszystkie tagi</span>
                     <input
+                      autoFocus
                       value={tagSearch}
                       placeholder="Filtruj tagi"
                       onChange={(event) => setTagSearch(event.target.value)}
@@ -847,14 +1078,36 @@ export default function Notatki() {
                   </label>
                 )}
                 {visibleTagCounts.map(([tagName, count]) => (
-                  <ContextNavItem
-                    key={tagName}
-                    active={view === `tag:${tagName}`}
-                    icon={<Tag />}
-                    label={`#${tagName}`}
-                    meta={count}
-                    onClick={() => selectView(`tag:${tagName}`)}
-                  />
+                  <div key={tagName} className="notes-sidebar__list-row">
+                    <ContextNavItem
+                      active={view === `tag:${tagName}`}
+                      icon={<Tag />}
+                      label={`#${tagName}`}
+                      meta={count}
+                      onClick={() => selectView(`tag:${tagName}`)}
+                    />
+                    {tagsEditMode && <span className="notes-sidebar__list-actions">
+                      <button
+                        type="button"
+                        aria-label={`Zmień nazwę tagu ${tagName}`}
+                        title="Zmień nazwę"
+                        onClick={() => openTagEditor(tagName)}
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Usuń tag ${tagName}`}
+                        title="Usuń tag"
+                        onClick={() => setTagDeleteState({
+                          name: tagName,
+                          count: workspace.notes.filter((note) => note.tags.includes(tagName)).length,
+                        })}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </span>}
+                  </div>
                 ))}
                 {tagSearch && visibleTagCounts.length === 0 && (
                   <p className="notes-sidebar__tag-empty">Brak pasujących tagów</p>
@@ -1380,6 +1633,39 @@ export default function Notatki() {
         </Modal>
       )}
 
+      {tagEditor && (
+        <Modal
+          eyebrow="Tagi notatek"
+          title={tagEditor.mode === "add" ? "Nowy tag" : "Zmień nazwę tagu"}
+          description={tagEditor.mode === "add"
+            ? "Tag będzie dostępny przy porządkowaniu notatek."
+            : "Nowa nazwa pojawi się przy wszystkich przypisanych notatkach."}
+          onClose={() => { setTagEditor(null); setTagName(""); setTagError(""); }}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => { setTagEditor(null); setTagName(""); setTagError(""); }}>Anuluj</Button>
+              <Button variant="primary" type="submit" form="notes-tag-form">
+                {tagEditor.mode === "add" ? "Utwórz tag" : "Zapisz nazwę"}
+              </Button>
+            </>
+          )}
+        >
+          <form id="notes-tag-form" onSubmit={saveTag}>
+            <Input
+              label="Nazwa tagu"
+              placeholder="np. ważne, pomysł"
+              value={tagName}
+              error={tagError}
+              autoFocus
+              onChange={(event) => {
+                setTagName(event.target.value);
+                if (tagError) setTagError("");
+              }}
+            />
+          </form>
+        </Modal>
+      )}
+
       {listDeleteState && (
         <Modal
           eyebrow="Listy notatek"
@@ -1396,6 +1682,23 @@ export default function Notatki() {
           <p className="notes-delete-note">
             Dotyczy {workspace.notes.filter((note) => note.listId === listDeleteState.id).length} notatek.
           </p>
+        </Modal>
+      )}
+
+      {tagDeleteState && (
+        <Modal
+          eyebrow="Tagi notatek"
+          title={`Usunąć tag „${tagDeleteState.name}”?`}
+          description="Tag zostanie usunięty ze wszystkich przypisanych notatek."
+          onClose={() => setTagDeleteState(null)}
+          footer={(
+            <>
+              <Button variant="ghost" onClick={() => setTagDeleteState(null)}>Anuluj</Button>
+              <Button variant="danger" onClick={confirmTagDelete}>Usuń tag</Button>
+            </>
+          )}
+        >
+          <p className="notes-delete-note">Dotyczy {tagDeleteState.count} notatek.</p>
         </Modal>
       )}
 

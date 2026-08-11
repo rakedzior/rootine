@@ -36,7 +36,7 @@ function createAttentionItem(title = "Opłać polisę", dueDate = "2026-08-10"):
     key: "oneTime:policy:stable",
     sourceId: "policy",
     kind: "oneTime",
-    view: "oneTime",
+    view: "finances",
     title,
     meta: "Płatność jednorazowa · Ubezpieczenie",
     dueDate,

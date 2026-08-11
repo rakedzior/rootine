@@ -11,19 +11,14 @@ import {
   CalendarClock,
   Car,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   CreditCard,
   FileText,
-  MapPin,
   Pencil,
   Plus,
   ReceiptText,
   RefreshCw,
-  ShieldCheck,
   Trash2,
-  WalletCards,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -35,8 +30,6 @@ import { formatDate as formatPolishDate, pluralize } from "../formatters";
 import {
   AFFAIRS_STORAGE_KEY,
   advancePaymentDateToFuture,
-  createBudgetMonth,
-  getMonthKey,
   loadAffairsWorkspace,
   saveAffairsWorkspace,
   setAffairAttentionState,
@@ -45,7 +38,6 @@ import {
   type DocumentRecord,
   type Matter,
   type MatterCategory,
-  type MatterStatus,
   type OneTimePayment,
   type Subscription,
   type Vehicle,
@@ -59,7 +51,6 @@ import { applyAffairsEditor } from "../affairs/affairsMutations";
 import { buildAffairAttentionItems, resolveAffairAttentionItem, type AffairAttentionItem } from "../affairs/affairsAttention";
 import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { JdgWorkspace } from "./Jdg";
-import Podroze from "./Podroze";
 import {
   Badge,
   Button,
@@ -74,18 +65,20 @@ import {
   EmptyState,
   Input,
   Modal,
+  Menu,
+  MenuItem,
   ModuleMain,
   ModuleShell,
   Select,
   SectionSurface,
   SummaryStrip,
+  Tabs,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
 
 import {
   AFFAIRS_VIEW_ARCHETYPE,
-  BUDGET_KIND_LABELS,
   CADENCE_LABELS,
   CATEGORY_META,
   DOCUMENT_LABELS,
@@ -102,11 +95,9 @@ import {
   formatDate,
   formatMileage,
   formatMoney,
-  formatMonth,
   getAffairsEditorDraftKey,
   getEditorPresentation,
   getInitialView,
-  shiftMonthKey,
   reminderPresetFromMinutes,
   vehicleItemDueCopy,
   type AffairsView,
@@ -122,11 +113,15 @@ export default function Sprawy() {
   const [jdgWorkspace, setJdgWorkspace] = useState(loadJdgWorkspace);
   const [travelWorkspace, setTravelWorkspace] = useState(loadTravelWorkspace);
   const [view, setView] = useState<AffairsView>(getInitialView);
-  const [statusFilter, setStatusFilter] = useState<"active" | MatterStatus>("active");
-  const [categoryFilter, setCategoryFilter] = useState<"all" | MatterCategory>("all");
+  const [financeFilter, setFinanceFilter] = useState<"all" | "oneTime" | "payments" | "subscriptions">(() => {
+    if (typeof window === "undefined") return "all";
+    const requested = new URLSearchParams(window.location.search).get("widok");
+    return requested === "oneTime" || requested === "payments" || requested === "subscriptions" ? requested : "all";
+  });
   const [subscriptionCategoryFilter, setSubscriptionCategoryFilter] = useState("all");
   const [selectedMatterId, setSelectedMatterId] = useState("");
-  const [budgetMonthKey, setBudgetMonthKey] = useState(getMonthKey);
+  const [financeAddOpen, setFinanceAddOpen] = useState(false);
+  const financeAddButtonRef = useRef<HTMLButtonElement>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editorBaseline, setEditorBaseline] = useState<Draft>(EMPTY_DRAFT);
@@ -135,8 +130,7 @@ export default function Sprawy() {
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [storageError, setStorageError] = useState(false);
-  const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
-  const editorDraftKey = getAffairsEditorDraftKey(editor, budgetMonthKey);
+  const editorDraftKey = getAffairsEditorDraftKey(editor);
 
   useEffect(() => {
     if (!editorDraftKey) return;
@@ -163,10 +157,14 @@ export default function Sprawy() {
   }), []);
 
   useEffect(() => {
+    const requestedView = new URLSearchParams(location.search).get("widok");
+    if (requestedView === "travel") {
+      navigate("/podroze", { replace: true });
+      return;
+    }
     const canonicalView = getInitialView();
     setView(canonicalView);
     const params = new URLSearchParams(location.search);
-    const requestedView = params.get("widok");
     const canonicalParam = canonicalView === "today" ? null : canonicalView;
     if (requestedView === canonicalParam) return;
     if (canonicalParam) params.set("widok", canonicalParam);
@@ -196,28 +194,7 @@ export default function Sprawy() {
     });
   }, []);
 
-  useEffect(() => {
-    if (workspace.budgets.some((budget) => budget.month === budgetMonthKey)) return;
-    setWorkspace((current) => ({
-      ...current,
-      budgets: [...current.budgets, createBudgetMonth(budgetMonthKey, current.budgets.at(-1))],
-    }));
-  }, [budgetMonthKey, workspace.budgets]);
-
-  const activeMatters = workspace.matters.filter((matter) => matter.status !== "done");
   const selectedMatter = workspace.matters.find((matter) => matter.id === selectedMatterId);
-  const currentBudget = workspace.budgets.find((budget) => budget.month === budgetMonthKey);
-
-  const filteredMatters = useMemo(() => {
-    return workspace.matters
-      .filter((matter) => statusFilter === "active" ? matter.status !== "done" : matter.status === statusFilter)
-      .filter((matter) => categoryFilter === "all" || matter.category === categoryFilter)
-      .sort((a, b) => {
-        if (!a.dueDate) return b.dueDate ? 1 : a.title.localeCompare(b.title, "pl");
-        if (!b.dueDate) return -1;
-        return a.dueDate.localeCompare(b.dueDate);
-      });
-  }, [categoryFilter, statusFilter, workspace.matters]);
 
   const monthlyPaymentTotal = useMemo(
     () => workspace.payments
@@ -253,6 +230,18 @@ export default function Sprawy() {
   const documentAlerts = workspace.documents.filter((document) => (
     document.expiresAt && daysUntil(document.expiresAt) <= document.reminderDays
   )).length;
+  const orderedDocuments = useMemo(() => workspace.documents
+    .slice()
+    .sort((a, b) => {
+      if (!a.expiresAt) return 1;
+      if (!b.expiresAt) return -1;
+      return a.expiresAt.localeCompare(b.expiresAt);
+    }), [workspace.documents]);
+  const documentsRequiringAttention = orderedDocuments.filter((document) => {
+    const tone = documentDueCopy(document).tone;
+    return tone === "danger" || tone === "warning";
+  });
+  const stableDocuments = orderedDocuments.filter((document) => !documentsRequiringAttention.includes(document));
 
   const vehicleAlerts = workspace.vehicleItems.filter((item) => {
     if (item.done) return false;
@@ -264,33 +253,31 @@ export default function Sprawy() {
     return dateNear || mileageNear;
   }).length;
 
-  const budgetSummary = useMemo(() => {
-    const lines = currentBudget?.lines ?? [];
-    const income = lines.filter((line) => line.kind === "income").reduce((sum, line) => sum + line.planned, 0);
-    const plannedOut = lines.filter((line) => line.kind !== "income").reduce((sum, line) => sum + line.planned, 0);
-    const actualIncome = lines.filter((line) => line.kind === "income").reduce((sum, line) => sum + line.actual, 0);
-    const actualOut = lines.filter((line) => line.kind !== "income").reduce((sum, line) => sum + line.actual, 0);
-    return {
-      income,
-      plannedOut,
-      actualIncome,
-      actualOut,
-      plannedAvailable: income - plannedOut,
-      actualAvailable: actualIncome - actualOut,
-    };
-  }, [currentBudget]);
-
   const attentionItems = useMemo(
-    () => buildAffairAttentionItems(workspace, jdgWorkspace, travelWorkspace),
+    () => buildAffairAttentionItems(workspace, jdgWorkspace, travelWorkspace, new Date(), null),
     [jdgWorkspace, travelWorkspace, workspace],
   );
+  const undatedMatterItems = useMemo<AffairAttentionItem[]>(() => workspace.matters
+    .filter((matter) => matter.status !== "done" && !matter.dueDate)
+    .map((matter) => ({
+      key: `matter:${matter.id}:undated`,
+      sourceId: matter.id,
+      kind: "matter",
+      view: "all",
+      title: matter.title,
+      meta: matter.note || "Sprawa bez terminu",
+      dueDate: "",
+      time: matter.time ?? "",
+      amount: null,
+      canSchedule: false,
+    })), [workspace.matters]);
   const agendaItems = useMemo(() => {
-    if (view === "all") return attentionItems;
+    if (view === "all") return [...attentionItems, ...undatedMatterItems];
     return attentionItems.filter((item) => {
       const days = daysUntil(item.dueDate);
       return view === "today" ? days <= 0 : days >= 0 && days <= 7;
     });
-  }, [attentionItems, view]);
+  }, [attentionItems, undatedMatterItems, view]);
   const todayAttentionCount = useMemo(
     () => attentionItems.filter((item) => daysUntil(item.dueDate) <= 0).length,
     [attentionItems],
@@ -407,22 +394,14 @@ export default function Sprawy() {
     setEditor({ kind: "vehicleItem", mode: item ? "edit" : "add", id: item?.id, vehicleId });
   };
 
-  const openBudgetEditor = () => {
-    setDraft({ ...EMPTY_DRAFT, category: "", budgetKind: "fixed" });
-    setEditorError("");
-    setEditor({ kind: "budget", mode: "add" });
-  };
-
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const action = params.get("akcja");
     const targetView: AffairsView | null = action === "nowa-sprawa"
       ? "all"
-      : action === "nowa-platnosc"
-        ? "payments"
-        : action === "nowy-wydatek"
-          ? "budget"
-          : null;
+      : action === "nowa-platnosc" || action === "nowy-wydatek"
+        ? "finances"
+        : null;
     if (!targetView) return;
 
     const initialTitle = params.get("tytul")?.trim() ?? "";
@@ -447,9 +426,9 @@ export default function Sprawy() {
       setEditorError("");
       setEditor({ kind: "payment", mode: "add" });
     } else {
-      setDraft({ ...EMPTY_DRAFT, title: initialTitle, category: "", budgetKind: "fixed" });
+      setDraft({ ...EMPTY_DRAFT, title: initialTitle, dueDate: initialDate, category: "Inne" });
       setEditorError("");
-      setEditor({ kind: "budget", mode: "add" });
+      setEditor({ kind: "oneTime", mode: "add" });
     }
 
     ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => params.delete(key));
@@ -480,7 +459,6 @@ export default function Sprawy() {
       editor,
       draft,
       workspace,
-      budgetMonthKey,
     });
     if ("error" in submission) {
       setEditorError(submission.error);
@@ -536,12 +514,7 @@ export default function Sprawy() {
       if (deleteState.kind === "vehicleItem") {
         return { ...current, vehicleItems: current.vehicleItems.filter((item) => item.id !== deleteState.id) };
       }
-      return {
-        ...current,
-        budgets: current.budgets.map((budget) => budget.month === budgetMonthKey
-          ? { ...budget, lines: budget.lines.filter((item) => item.id !== deleteState.id) }
-          : budget),
-      };
+      return current;
     });
     if (deleteState.id === selectedMatterId) setSelectedMatterId("");
     setDeleteState(null);
@@ -596,7 +569,7 @@ export default function Sprawy() {
         <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.title}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
         <span className="affairs-payment-row__actions">
           <AddToTasksButton compact input={{
-            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Sprawy", href: "/sprawy?widok=oneTime" },
+            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Finanse", href: "/sprawy?widok=finances" },
             text: payment.title,
             done: payment.paid,
             calendarDate: payment.dueDate,
@@ -629,37 +602,38 @@ export default function Sprawy() {
     );
   };
 
-  const budgetDraftKey = (lineId: string, field: "planned" | "actual") => `${lineId}:${field}`;
-
-  const updateBudgetDraft = (lineId: string, field: "planned" | "actual", value: string) => {
-    const key = budgetDraftKey(lineId, field);
-    setBudgetDrafts((current) => ({ ...current, [key]: value }));
-  };
-
-  const commitBudgetValue = (lineId: string, field: "planned" | "actual") => {
-    const key = budgetDraftKey(lineId, field);
-    const rawValue = budgetDrafts[key];
-    if (rawValue === undefined) return;
-    const value = Number(rawValue.replace(",", "."));
-    setBudgetDrafts((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-    if (!rawValue.trim() || !Number.isFinite(value) || value < 0) return;
-    setWorkspace((current) => ({
-      ...current,
-      budgets: current.budgets.map((budget) => budget.month === budgetMonthKey
-        ? {
-            ...budget,
-            lines: budget.lines.map((line) => line.id === lineId ? { ...line, [field]: value } : line),
-          }
-        : budget),
-    }));
-  };
-
-  const changeBudgetMonth = (offset: number) => {
-    setBudgetMonthKey((current) => shiftMonthKey(current, offset));
+  const renderDocumentRow = (document: DocumentRecord) => {
+    const due = documentDueCopy(document);
+    return (
+      <article key={document.id} className={`affairs-document-row is-${due.tone}`}>
+        <span className="affairs-document-row__identity">
+          <span className="affairs-payment-row__icon"><FileText size={13} /></span>
+          <span>
+            <strong>{document.name}</strong>
+            <small>{document.holder} · {document.note || "Bez dodatkowej notatki"}</small>
+          </span>
+        </span>
+        <span className="affairs-document-row__type">{DOCUMENT_LABELS[document.category]}</span>
+        <span className="affairs-document-row__date">
+          <strong>{document.expiresAt ? formatDate(document.expiresAt) : "Bezterminowy"}</strong>
+          <small>{document.expiresAt ? `Alarm ${document.reminderDays} dni wcześniej` : "Bez przypomnienia"}</small>
+        </span>
+        <Badge tone={due.tone}>{due.text}</Badge>
+        <span className="affairs-payment-row__actions">
+          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={13} /></Button>
+          <Button
+            variant="ghost"
+            className="ui-button--ghost-danger"
+            size="sm"
+            iconOnly
+            aria-label={`Usuń ${document.name}`}
+            onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}
+          >
+            <Trash2 size={13} />
+          </Button>
+        </span>
+      </article>
+    );
   };
 
   const selectView = (nextView: AffairsView) => {
@@ -676,6 +650,12 @@ export default function Sprawy() {
   };
 
   const openAttentionSource = (item: AffairAttentionItem) => {
+    if (item.view === "travel") {
+      navigate(item.containerId
+        ? `/podroze/${encodeURIComponent(item.containerId)}?sekcja=tasks`
+        : "/podroze");
+      return;
+    }
     selectView(item.view);
     if (item.kind === "matter") setSelectedMatterId(item.sourceId);
   };
@@ -729,14 +709,36 @@ export default function Sprawy() {
   };
 
   const renderPrimaryAction = () => {
-    if (view === "oneTime") {
-      return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openOneTimeEditor()}><span className="header-action-label">Dodaj płatność</span></Button>;
-    }
-    if (view === "payments") {
-      return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openPaymentEditor()}><span className="header-action-label">Dodaj cykliczną</span></Button>;
-    }
-    if (view === "subscriptions") {
-      return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openSubscriptionEditor()}><span className="header-action-label">Dodaj subskrypcję</span></Button>;
+    if (view === "finances") {
+      return (
+        <div className="affairs-finance-add">
+          <Button
+            ref={financeAddButtonRef}
+            variant="primary"
+            className="ui-button--icon-mobile"
+            leadingIcon={<Plus size={13} />}
+            aria-haspopup="menu"
+            aria-expanded={financeAddOpen}
+            aria-controls="affairs-finance-add-menu"
+            onClick={() => setFinanceAddOpen((current) => !current)}
+          >
+            <span className="header-action-label">Dodaj płatność</span>
+          </Button>
+          {financeAddOpen && (
+            <Menu
+              id="affairs-finance-add-menu"
+              triggerRef={financeAddButtonRef}
+              onDismiss={() => setFinanceAddOpen(false)}
+              size="wide"
+              className="affairs-finance-add__menu"
+            >
+              <MenuItem leadingIcon={<ReceiptText size={13} />} onClick={() => { setFinanceAddOpen(false); openOneTimeEditor(); }}>Jednorazowa</MenuItem>
+              <MenuItem leadingIcon={<RefreshCw size={13} />} onClick={() => { setFinanceAddOpen(false); openPaymentEditor(); }}>Cykliczna</MenuItem>
+              <MenuItem leadingIcon={<CreditCard size={13} />} onClick={() => { setFinanceAddOpen(false); openSubscriptionEditor(); }}>Subskrypcja</MenuItem>
+            </Menu>
+          )}
+        </div>
+      );
     }
     if (view === "documents") {
       return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openDocumentEditor()}><span className="header-action-label">Dodaj dokument</span></Button>;
@@ -744,19 +746,16 @@ export default function Sprawy() {
     if (view === "vehicles") {
       return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openVehicleEditor()}><span className="header-action-label">Dodaj pojazd</span></Button>;
     }
-    if (view === "budget") {
-      return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openBudgetEditor()}><span className="header-action-label">Dodaj pozycję</span></Button>;
-    }
     return <Button variant="primary" className="ui-button--icon-mobile" leadingIcon={<Plus size={13} />} onClick={() => openMatterEditor()}><span className="header-action-label">Dodaj sprawę</span></Button>;
   };
 
   const navMeta = (itemView: AffairsView) => {
     if (itemView === "today") return todayAttentionCount || undefined;
     if (itemView === "week") return weekAttentionCount || undefined;
-    if (itemView === "all") return activeMatters.length;
-    if (itemView === "oneTime") return workspace.oneTimePayments.filter((item) => !item.paid).length;
-    if (itemView === "payments") return workspace.payments.filter((item) => item.active).length;
-    if (itemView === "subscriptions") return workspace.subscriptions.filter((item) => item.active).length;
+    if (itemView === "all") return attentionItems.length + undatedMatterItems.length;
+    if (itemView === "finances") return workspace.oneTimePayments.filter((item) => !item.paid).length
+      + workspace.payments.filter((item) => item.active).length
+      + workspace.subscriptions.filter((item) => item.active).length;
     if (itemView === "documents") return documentAlerts || undefined;
     if (itemView === "vehicles") return vehicleAlerts || undefined;
     return undefined;
@@ -853,7 +852,7 @@ export default function Sprawy() {
     </DetailPanel>
   ) : undefined;
 
-  const editorPresentation = getEditorPresentation(editor, budgetMonthKey);
+  const editorPresentation = getEditorPresentation(editor);
 
   if (view === "jdg") {
     return (
@@ -882,33 +881,6 @@ export default function Sprawy() {
     );
   }
 
-  if (view === "travel") {
-    return (
-      <Podroze
-        embeddedViewSelect={(
-          <Select
-            compact
-            aria-label="Wybierz widok spraw"
-            fieldClassName="context-mobile-select affairs-mobile-view-select"
-            value={view}
-            options={mobileViewOptions}
-            onChange={(event) => selectView(event.target.value as AffairsView)}
-          />
-        )}
-        layout={(content) => (
-          <ModuleShell
-            contextSidebar={contextSidebar}
-            className="affairs-module affairs-module--workspace affairs-module--view-travel affairs-module--travel"
-            data-affairs-archetype="workspace"
-            pageWidth="wide"
-          >
-            {content}
-          </ModuleShell>
-        )}
-      />
-    );
-  }
-
   return (
     <ModuleShell
       contextSidebar={contextSidebar}
@@ -920,8 +892,8 @@ export default function Sprawy() {
       <ModuleMain className={`affairs-main affairs-main--${viewArchetype}`} transitionKey={view}>
         <ContentHeader
           headingLevel={1}
-          className={`affairs-toolbar affairs-toolbar--${viewArchetype} ${view === "today" || view === "week" || view === "budget" ? "affairs-toolbar--compact" : ""}`.trim()}
-          title={NAV_ITEMS.find((item) => item.view === view)?.label ?? "Sprawy"}
+          className={`affairs-toolbar affairs-toolbar--${viewArchetype} ${viewArchetype === "agenda" ? "affairs-toolbar--compact" : ""}`.trim()}
+          title={VIEW_COPY[view].title}
           description={VIEW_COPY[view].description}
           meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
           mobileNavigation={<Select
@@ -932,63 +904,26 @@ export default function Sprawy() {
             options={mobileViewOptions}
             onChange={(event) => selectView(event.target.value as AffairsView)}
           />}
+          controls={view === "finances" ? (
+            <Tabs
+              items={[
+                { id: "all", label: "Wszystkie" },
+                { id: "oneTime", label: "Jednorazowe" },
+                { id: "payments", label: "Cykliczne" },
+                { id: "subscriptions", label: "Subskrypcje" },
+              ]}
+              activeId={financeFilter}
+              onChange={(id) => setFinanceFilter(id as typeof financeFilter)}
+              ariaLabel="Typ płatności"
+              className="affairs-finance-tabs ui-tabs--segmented"
+            />
+          ) : undefined}
           actions={<>
-          {view === "all" && (
-            <>
-              <Select
-                compact
-                aria-label="Filtr statusu"
-                value={statusFilter}
-                options={[
-                  { value: "active", label: "Aktywne" },
-                  { value: "open", label: "Do zrobienia" },
-                  { value: "waiting", label: "Oczekujące" },
-                  { value: "done", label: "Załatwione" },
-                ]}
-                onChange={(event) => setStatusFilter(event.target.value as "active" | MatterStatus)}
-              />
-              <Select
-                compact
-                aria-label="Filtr kategorii"
-                value={categoryFilter}
-                options={[
-                  { value: "all", label: "Wszystkie obszary" },
-                  ...Object.entries(CATEGORY_META).map(([value, meta]) => ({ value, label: meta.label })),
-                ]}
-                onChange={(event) => setCategoryFilter(event.target.value as "all" | MatterCategory)}
-              />
-              <span className="affairs-toolbar__count">{filteredMatters.length} pozycji</span>
-            </>
-          )}
-          {view === "payments" && (
+          {view === "finances" && (
             <span className="affairs-toolbar__context">
               <CreditCard size={13} aria-hidden="true" />
-              Szacunkowo <SensitiveValue label="Miesięczna kwota płatności">{formatMoney(monthlyPaymentTotal)}</SensitiveValue> / mies.
+              <SensitiveValue label="Miesięczne koszty stałe">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue> / mies.
             </span>
-          )}
-          {view === "oneTime" && (
-            <span className="affairs-toolbar__context">
-              <ReceiptText size={13} aria-hidden="true" />
-              Do opłacenia <SensitiveValue label="Kwota do opłacenia">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>
-            </span>
-          )}
-          {view === "subscriptions" && (
-            <>
-              <Select
-                compact
-                aria-label="Filtr kategorii subskrypcji"
-                value={subscriptionCategoryFilter}
-                options={[
-                  { value: "all", label: "Wszystkie kategorie" },
-                  ...subscriptionCategories.map((category) => ({ value: category, label: category })),
-                ]}
-                onChange={(event) => setSubscriptionCategoryFilter(event.target.value)}
-              />
-              <span className="affairs-toolbar__context">
-                <CreditCard size={13} aria-hidden="true" />
-                Aktywne <SensitiveValue label="Miesięczna kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue> / mies.
-              </span>
-            </>
           )}
           {view === "documents" && (
             <span className="affairs-toolbar__context">
@@ -1002,25 +937,18 @@ export default function Sprawy() {
               {pluralize(workspace.vehicles.length, "pojazd", "pojazdy", "pojazdów")} · {pluralize(vehicleAlerts, "bliski termin", "bliskie terminy", "bliskich terminów")}
             </span>
           )}
-          {view === "budget" && (
-            <div className="affairs-month-switcher">
-              <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => changeBudgetMonth(-1)}><ChevronLeft size={13} /></Button>
-              <strong>{formatMonth(budgetMonthKey)}</strong>
-              <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => changeBudgetMonth(1)}><ChevronRight size={13} /></Button>
-            </div>
-          )}
           {renderPrimaryAction()}
           </>}
         />
 
         <div className={`affairs-canvas affairs-canvas--${viewArchetype} affairs-canvas--${view}`}>
-          {(view === "today" || view === "week") && (
+          {(view === "today" || view === "week" || view === "all") && (
             <div className="affairs-overview">
               <SectionSurface className="affairs-agenda affairs-section-surface affairs-section-surface--agenda" aria-labelledby="affairs-radar-heading">
                 <header className="affairs-section-heading">
                   <div>
-                    <h2 id="affairs-radar-heading">{view === "today" ? "Dzisiejsze terminy" : "Terminy w tym tygodniu"}</h2>
-                    <p>{view === "today" ? "Zaległe i dzisiejsze terminy wymagające reakcji" : "Najbliższe terminy, żeby tydzień był pod kontrolą"}</p>
+                    <h2 id="affairs-radar-heading">{view === "today" ? "Dzisiejsze terminy" : view === "week" ? "Terminy w tym tygodniu" : "Wszystkie aktywne sprawy"}</h2>
+                    <p>{view === "today" ? "Zaległe i dzisiejsze terminy wymagające reakcji" : view === "week" ? "Najbliższe terminy, żeby tydzień był pod kontrolą" : "Ten sam rejestr w pełnym horyzoncie czasowym"}</p>
                   </div>
                   <span className={`affairs-section-heading__meta ${agendaItems.length ? "is-warning" : ""}`}>
                     {pluralize(agendaItems.length, "termin", "terminy", "terminów")}
@@ -1072,66 +1000,24 @@ export default function Sprawy() {
             </div>
           )}
 
-          {view === "all" && (
-            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--plan" aria-label="Lista spraw">
-              <div className="affairs-ledger__head affairs-ledger__head--matters">
-                <span>Sprawa</span>
-                <span>Obszar</span>
-                <span>Termin</span>
-                <span>Status</span>
-                <span />
-              </div>
-              {filteredMatters.length === 0 ? (
-                <EmptyState
-                  icon={<ShieldCheck size={18} />}
-                  title="Brak spraw w tym widoku"
-                  description="Zmień filtry albo dodaj nową ważną sprawę."
-                  action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openMatterEditor()}>Dodaj sprawę</Button>}
-                />
-              ) : filteredMatters.map((matter) => {
-                const CategoryIcon = CATEGORY_META[matter.category].icon;
-                const due = dueCopy(matter.dueDate);
-                return (
-                  <div key={matter.id} className={`affairs-matter-row ${selectedMatterId === matter.id ? "is-selected" : ""} ${matter.status === "done" ? "is-done" : ""}`}>
-                    <Checkbox
-                      size="sm"
-                      checked={matter.status === "done"}
-                      aria-label={matter.status === "done" ? `Przywróć: ${matter.title}` : `Oznacz jako załatwione: ${matter.title}`}
-                      onChange={() => toggleMatter(matter.id)}
-                    />
-                    <button type="button" className="affairs-matter-row__title" onClick={() => setSelectedMatterId(matter.id)}>
-                      <strong>{matter.kind === "appointment" && <CalendarClock size={13} aria-hidden="true" />}{matter.title}</strong>
-                      <small>
-                        {matter.kind === "appointment"
-                          ? <><span>{matter.time || "Bez godziny"}</span>{matter.location && <><span aria-hidden="true"> · </span><span><MapPin size={10} aria-hidden="true" /> {matter.location}</span></>}</>
-                          : matter.note || "Bez dodatkowej notatki"}
-                      </small>
-                    </button>
-                    <span className="affairs-matter-row__category"><CategoryIcon size={13} />{CATEGORY_META[matter.category].label}</span>
-                    <Badge tone={due.tone}>{due.text}</Badge>
-                    <Badge tone={matter.status === "done" ? "success" : matter.status === "waiting" ? "warning" : matter.priority === "high" ? "danger" : "primary"} dot>
-                      {STATUS_LABELS[matter.status]}
-                    </Badge>
-                    <AddToTasksButton compact input={{
-                      source: { kind: "affairs", entity: `${encodeURIComponent(matter.id)}/matter`, context: "Sprawy", href: "/sprawy?widok=all" },
-                      text: matter.title,
-                      done: matter.status === "done",
-                      calendarDate: matter.dueDate || undefined,
-                      date: matter.dueDate || undefined,
-                      time: matter.time || undefined,
-                      priority: matter.priority === "normal" ? undefined : matter.priority,
-                      list: "sprawy",
-                      tags: ["sprawy"],
-                      notes: matter.note,
-                    }} />
-                  </div>
-                );
-              })}
-            </SectionSurface>
+          {view === "finances" && (
+            <SummaryStrip
+              label="Przegląd finansów"
+              className="affairs-finance-summary"
+              items={[
+                { label: "Do opłacenia", value: <SensitiveValue label="Jednorazowe do opłacenia">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>, note: "jednorazowe", tone: unpaidOneTimeTotal > 0 ? "warning" : "success" },
+                { label: "Płatności stałe", value: <SensitiveValue label="Miesięczna kwota płatności stałych">{formatMoney(monthlyPaymentTotal)}</SensitiveValue>, note: "miesięcznie" },
+                { label: "Subskrypcje", value: <SensitiveValue label="Miesięczna kwota subskrypcji">{formatMoney(monthlySubscriptionTotal)}</SensitiveValue>, note: "miesięcznie" },
+              ]}
+            />
           )}
 
-          {view === "oneTime" && (
+          {view === "finances" && (financeFilter === "all" || financeFilter === "oneTime") && (
             <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--one-time" aria-label="Płatności jednorazowe">
+              <header className="affairs-register-section__header">
+                <div><ReceiptText size={16} aria-hidden="true" /><div><h2>Jednorazowe</h2><p>Opłaty i zobowiązania z jednym terminem.</p></div></div>
+                <Badge tone={workspace.oneTimePayments.some((item) => !item.paid) ? "warning" : "success"}>{workspace.oneTimePayments.filter((item) => !item.paid).length} otwartych</Badge>
+              </header>
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Zobowiązanie</span>
                 <span>Kategoria</span>
@@ -1174,7 +1060,7 @@ export default function Sprawy() {
                       <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.title}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
                       <span className="affairs-payment-row__actions">
                         <AddToTasksButton compact input={{
-                          source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Sprawy", href: "/sprawy?widok=oneTime" },
+                            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Finanse", href: "/sprawy?widok=finances" },
                           text: payment.title,
                           done: payment.paid,
                           calendarDate: payment.dueDate,
@@ -1209,8 +1095,12 @@ export default function Sprawy() {
             </SectionSurface>
           )}
 
-          {view === "payments" && (
+          {view === "finances" && (financeFilter === "all" || financeFilter === "payments") && (
             <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--payments" aria-label="Płatności cykliczne">
+              <header className="affairs-register-section__header">
+                <div><RefreshCw size={16} aria-hidden="true" /><div><h2>Cykliczne</h2><p>Stałe rachunki i regularne zobowiązania.</p></div></div>
+                <Badge tone="neutral">{workspace.payments.filter((item) => item.active).length} aktywnych</Badge>
+              </header>
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Płatność</span>
                 <span>Cykl</span>
@@ -1239,7 +1129,7 @@ export default function Sprawy() {
                     <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.name}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
                     <span className="affairs-payment-row__actions">
                       <AddToTasksButton compact input={{
-                        source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/recurring`, context: "Sprawy", href: "/sprawy?widok=payments" },
+                        source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/recurring`, context: "Finanse", href: "/sprawy?widok=finances" },
                         text: payment.name,
                         done: false,
                         calendarDate: payment.nextDueDate,
@@ -1292,8 +1182,21 @@ export default function Sprawy() {
             </SectionSurface>
           )}
 
-          {view === "subscriptions" && (
+          {view === "finances" && (financeFilter === "all" || financeFilter === "subscriptions") && (
             <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--subscriptions" aria-label="Subskrypcje i członkostwa">
+              <header className="affairs-register-section__header">
+                <div><CreditCard size={16} aria-hidden="true" /><div><h2>Subskrypcje</h2><p>Usługi, członkostwa i terminy odnowień.</p></div></div>
+                <Select
+                  compact
+                  aria-label="Filtr kategorii subskrypcji"
+                  value={subscriptionCategoryFilter}
+                  options={[
+                    { value: "all", label: "Wszystkie kategorie" },
+                    ...subscriptionCategories.map((category) => ({ value: category, label: category })),
+                  ]}
+                  onChange={(event) => setSubscriptionCategoryFilter(event.target.value)}
+                />
+              </header>
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Subskrypcja</span>
                 <span>Cykl</span>
@@ -1331,7 +1234,7 @@ export default function Sprawy() {
                       <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${subscription.name}`}>{formatMoney(subscription.amount)}</SensitiveValue></strong>
                       <span className="affairs-payment-row__actions">
                         <AddToTasksButton compact input={{
-                          source: { kind: "affairs", entity: `${encodeURIComponent(subscription.id)}/subscription`, context: "Sprawy", href: "/sprawy?widok=subscriptions" },
+                          source: { kind: "affairs", entity: `${encodeURIComponent(subscription.id)}/subscription`, context: "Finanse", href: "/sprawy?widok=finances" },
                           text: subscription.name,
                           done: false,
                           calendarDate: subscription.nextBillingDate,
@@ -1385,59 +1288,37 @@ export default function Sprawy() {
           )}
 
           {view === "documents" && (
-            <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--documents" aria-label="Ważność dokumentów">
-              <div className="affairs-ledger__head affairs-ledger__head--payments">
-                <span>Dokument</span>
-                <span>Typ</span>
-                <span>Ważność</span>
-                <span>Alarm</span>
-                <span />
-              </div>
+            <div className="affairs-register-stack" aria-label="Ważność dokumentów">
               {workspace.documents.length === 0 ? (
-                <EmptyState
-                  icon={<FileText size={18} />}
-                  title="Brak dokumentów"
-                  description="Dodaj dowód, paszport, prawo jazdy, kartę, polisę, umowę lub gwarancję."
-                  action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openDocumentEditor()}>Dodaj dokument</Button>}
-                />
-              ) : workspace.documents
-                .slice()
-                .sort((a, b) => {
-                  if (!a.expiresAt) return 1;
-                  if (!b.expiresAt) return -1;
-                  return a.expiresAt.localeCompare(b.expiresAt);
-                })
-                .map((document) => {
-                  const due = documentDueCopy(document);
-                  return (
-                    <div key={document.id} className="affairs-payment-row">
-                      <span className="affairs-payment-row__icon"><FileText size={13} /></span>
-                      <span className="affairs-payment-row__title">
-                        <strong>{document.name}</strong>
-                        <small>{document.holder} · {document.note || "Bez dodatkowej notatki"}</small>
-                      </span>
-                      <span className="affairs-payment-row__cadence">{DOCUMENT_LABELS[document.category]}</span>
-                      <Badge tone={due.tone}>{due.text}</Badge>
-                      <span className="affairs-record-value">
-                        {document.expiresAt ? `${document.reminderDays} dni wcześniej` : "—"}
-                      </span>
-                      <span className="affairs-payment-row__actions">
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={13} /></Button>
-                        <Button
-                          variant="ghost"
-                          className="ui-button--ghost-danger"
-                          size="sm"
-                          iconOnly
-                          aria-label={`Usuń ${document.name}`}
-                          onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}
-                        >
-                          <Trash2 size={13} />
-                        </Button>
-                      </span>
-                    </div>
-                  );
-                })}
-            </SectionSurface>
+                <SectionSurface className="affairs-section-surface affairs-section-surface--documents">
+                  <EmptyState
+                    icon={<FileText size={18} />}
+                    title="Brak dokumentów"
+                    description="Dodaj dowód, paszport, prawo jazdy, kartę, polisę, umowę lub gwarancję."
+                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openDocumentEditor()}>Dodaj dokument</Button>}
+                  />
+                </SectionSurface>
+              ) : (
+                <>
+                  {documentsRequiringAttention.length > 0 && (
+                    <SectionSurface className="affairs-document-group affairs-section-surface affairs-section-surface--documents is-attention">
+                      <header className="affairs-register-section__header">
+                        <div><Bell size={16} aria-hidden="true" /><div><h2>Wymagają uwagi</h2><p>Najpierw odnowienia i kończące się ważności.</p></div></div>
+                        <Badge tone="warning">{documentsRequiringAttention.length}</Badge>
+                      </header>
+                      <div className="affairs-document-group__rows">{documentsRequiringAttention.map(renderDocumentRow)}</div>
+                    </SectionSurface>
+                  )}
+                  <SectionSurface className="affairs-document-group affairs-section-surface affairs-section-surface--documents">
+                    <header className="affairs-register-section__header">
+                      <div><FileText size={16} aria-hidden="true" /><div><h2>Pozostałe dokumenty</h2><p>Bezpieczne terminy i dokumenty bez daty końcowej.</p></div></div>
+                      <Badge tone="neutral">{stableDocuments.length}</Badge>
+                    </header>
+                    <div className="affairs-document-group__rows">{stableDocuments.map(renderDocumentRow)}</div>
+                  </SectionSurface>
+                </>
+              )}
+            </div>
           )}
 
           {view === "vehicles" && (
@@ -1493,6 +1374,13 @@ export default function Sprawy() {
                     </div>
                   );
                 };
+                const completedItems = items.filter((item) => item.done);
+                const attentionVehicleItems = items.filter((item) => {
+                  if (item.done) return false;
+                  const tone = vehicleItemDueCopy(item, vehicle).tone;
+                  return tone === "danger" || tone === "warning";
+                });
+                const plannedVehicleItems = items.filter((item) => !item.done && !attentionVehicleItems.includes(item));
                 return (
                   <SectionSurface key={vehicle.id} className="affairs-vehicle affairs-section-surface affairs-section-surface--vehicles">
                     <header className="affairs-vehicle__header">
@@ -1501,6 +1389,11 @@ export default function Sprawy() {
                         <h2>{vehicle.name}</h2>
                         <p>{vehicle.registration || "Bez numeru rejestracyjnego"} · {formatMileage(vehicle.mileage)}</p>
                       </div>
+                      <span className="affairs-vehicle__status">
+                        <Badge tone={attentionVehicleItems.length ? "warning" : "success"}>
+                          {attentionVehicleItems.length ? `${attentionVehicleItems.length} wymaga uwagi` : "Terminy bezpieczne"}
+                        </Badge>
+                      </span>
                       <span className="affairs-vehicle__actions">
                         <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openVehicleItemEditor(vehicle.id)}>Dodaj termin</Button>
                         <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${vehicle.name}`} onClick={() => openVehicleEditor(vehicle)}><Pencil size={13} /></Button>
@@ -1523,55 +1416,23 @@ export default function Sprawy() {
                       </div>
                     ) : (
                       <div className="affairs-vehicle__items">
-                        {items.map((item, index, sortedItems) => {
-                          if (item.done) {
-                            if (sortedItems[index - 1]?.done) return null;
-                            const completedItems = sortedItems.filter((candidate) => candidate.done);
-                            return (
-                              <CompletedSection key="completed-vehicle-items" label="Ukończone terminy" count={completedItems.length} className="affairs-completed-section">
-                                <div className="affairs-vehicle-row-list">
-                                  {completedItems.map(renderVehicleItem)}
-                                </div>
-                              </CompletedSection>
-                            );
-                          }
-                          const due = vehicleItemDueCopy(item, vehicle);
-                          return (
-                            <div key={item.id} className={`affairs-vehicle-row ${item.done ? "is-done" : ""}`}>
-                              <Checkbox
-                                size="sm"
-                                checked={item.done}
-                                aria-label={item.done ? `Przywróć ${item.title}` : `Oznacz jako zrobione: ${item.title}`}
-                                onChange={() => setWorkspace((current) => ({
-                                  ...current,
-                                  vehicleItems: current.vehicleItems.map((candidate) => candidate.id === item.id ? { ...candidate, done: !candidate.done } : candidate),
-                                }))}
-                              />
-                              <span className="affairs-vehicle-row__title">
-                                <strong>{item.title}</strong>
-                                <small>{VEHICLE_ITEM_LABELS[item.type]}{item.note ? ` · ${item.note}` : ""}</small>
-                              </span>
-                              <span className="affairs-vehicle-row__target">
-                                {item.dueDate && <span>{formatDate(item.dueDate)}</span>}
-                                {item.dueMileage !== null && <span>{formatMileage(item.dueMileage)}</span>}
-                              </span>
-                              <Badge tone={due.tone}>{due.text}</Badge>
-                              <span className="affairs-vehicle-row__actions">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openVehicleItemEditor(vehicle.id, item)}><Pencil size={13} /></Button>
-                                <Button
-                                  variant="ghost"
-                          className="ui-button--ghost-danger"
-                                  size="sm"
-                                  iconOnly
-                                  aria-label={`Usuń ${item.title}`}
-                                  onClick={() => setDeleteState({ kind: "vehicleItem", id: item.id, label: item.title })}
-                                >
-                                  <Trash2 size={13} />
-                                </Button>
-                              </span>
-                            </div>
-                          );
-                        })}
+                        {attentionVehicleItems.length > 0 && (
+                          <section className="affairs-vehicle-group is-attention" aria-label="Terminy wymagające uwagi">
+                            <header><span>Wymagają uwagi</span><strong>{attentionVehicleItems.length}</strong></header>
+                            <div className="affairs-vehicle-row-list">{attentionVehicleItems.map(renderVehicleItem)}</div>
+                          </section>
+                        )}
+                        {plannedVehicleItems.length > 0 && (
+                          <section className="affairs-vehicle-group" aria-label="Zaplanowane terminy">
+                            <header><span>Zaplanowane</span><strong>{plannedVehicleItems.length}</strong></header>
+                            <div className="affairs-vehicle-row-list">{plannedVehicleItems.map(renderVehicleItem)}</div>
+                          </section>
+                        )}
+                        {completedItems.length > 0 && (
+                          <CompletedSection label="Ukończone terminy" count={completedItems.length} className="affairs-completed-section">
+                            <div className="affairs-vehicle-row-list">{completedItems.map(renderVehicleItem)}</div>
+                          </CompletedSection>
+                        )}
                       </div>
                     )}
                   </SectionSurface>
@@ -1580,95 +1441,6 @@ export default function Sprawy() {
             </div>
           )}
 
-          {view === "budget" && (
-            <div className="affairs-budget">
-              <SummaryStrip
-                label="Podsumowanie budżetu"
-                className="affairs-budget__summary"
-                items={[
-                  { label: "Planowane wpływy", value: <SensitiveValue label="Planowane wpływy">{formatMoney(budgetSummary.income)}</SensitiveValue>, note: "miesiąc" },
-                  { label: "Przydzielone", value: <SensitiveValue label="Przydzielona kwota">{formatMoney(budgetSummary.plannedOut)}</SensitiveValue>, note: "plan" },
-                  { label: "Rzeczywiste wydatki", value: <SensitiveValue label="Rzeczywiste wydatki">{formatMoney(budgetSummary.actualOut)}</SensitiveValue>, note: "wykonanie" },
-                  { label: "Rzeczywiście zostaje", value: <SensitiveValue label="Pozostała kwota">{formatMoney(budgetSummary.actualAvailable)}</SensitiveValue>, note: "po wydatkach", tone: budgetSummary.actualAvailable < 0 ? "danger" : "success" },
-                ]}
-              />
-              <SectionSurface className="affairs-budget-table affairs-section-surface affairs-section-surface--budget">
-                <div className="affairs-budget-table__head">
-                  <span>Kategoria</span>
-                  <span>Typ</span>
-                  <span>Plan</span>
-                  <span>Rzeczywiście</span>
-                  <span />
-                </div>
-                {(currentBudget?.lines ?? []).map((line) => {
-                  const ratio = line.planned > 0 ? Math.min(100, (line.actual / line.planned) * 100) : 0;
-                  return (
-                    <div key={line.id} className="affairs-budget-row">
-                      <span className="affairs-budget-row__identity">
-                        <strong>{line.label}</strong>
-                        {line.kind !== "income" && (
-                          <span className="affairs-budget-row__track"><i style={{ width: `${ratio}%` }} /></span>
-                        )}
-                      </span>
-                      <Badge tone={line.kind === "income" ? "success" : line.kind === "savings" ? "primary" : "neutral"}>
-                        {BUDGET_KIND_LABELS[line.kind]}
-                      </Badge>
-                      <label data-label="Plan">
-                        <span className="ui-sr-only">Plan dla {line.label}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={budgetDrafts[budgetDraftKey(line.id, "planned")] ?? String(line.planned)}
-                          onChange={(event) => updateBudgetDraft(line.id, "planned", event.target.value)}
-                          onBlur={() => commitBudgetValue(line.id, "planned")}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") event.currentTarget.blur();
-                          }}
-                        />
-                        <span>zł</span>
-                      </label>
-                      <label data-label="Rzeczywiście">
-                        <span className="ui-sr-only">Kwota rzeczywista dla {line.label}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={budgetDrafts[budgetDraftKey(line.id, "actual")] ?? String(line.actual)}
-                          onChange={(event) => updateBudgetDraft(line.id, "actual", event.target.value)}
-                          onBlur={() => commitBudgetValue(line.id, "actual")}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") event.currentTarget.blur();
-                          }}
-                        />
-                        <span>zł</span>
-                      </label>
-                      <Button
-                        variant="ghost"
-                          className="ui-button--ghost-danger"
-                        size="sm"
-                        iconOnly
-                        aria-label={`Usuń ${line.label}`}
-                        onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}
-                      >
-                        <Trash2 size={13} />
-                      </Button>
-                    </div>
-                  );
-                })}
-                {!currentBudget?.lines.length && (
-                  <EmptyState
-                    icon={<WalletCards size={18} />}
-                    title="Ten miesiąc nie ma jeszcze planu"
-                    description="Dodaj wpływy, koszty stałe, elastyczne i cel oszczędności."
-                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openBudgetEditor()}>Dodaj pozycję</Button>}
-                  />
-                )}
-              </SectionSurface>
-            </div>
-          )}
         </div>
       </ModuleMain>
 

@@ -1200,8 +1200,8 @@
 }
 
 .nutrition-inline-number:focus {
-  outline: 2px solid color-mix(in srgb, var(--color-precision-blue) 24%, transparent);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: none;
 }
 
 .nutrition-inline-error {
@@ -1378,7 +1378,7 @@
 }
 
 .nutrition-weight-inline-form input:focus {
-  border-color: var(--color-precision-blue);
+  border-color: var(--color-field-focus);
   outline: none;
 }
 
@@ -1419,7 +1419,7 @@
 }
 
 .nutrition-textarea-field textarea:focus {
-  border-color: var(--color-precision-blue);
+  border-color: var(--color-field-focus);
 }
 
 .nutrition-weight-form {
@@ -1949,7 +1949,7 @@
 }
 
 .nutrition-analysis__custom-range input:focus {
-  border-color: var(--color-precision-blue);
+  border-color: var(--color-field-focus);
   outline: none;
 }
 
@@ -2701,9 +2701,9 @@
 }
 
 .nutrition-analysis-v2__custom-range input:focus-visible {
-  border-color: var(--color-precision-blue);
-  outline: 2px solid var(--color-precision-blue-soft);
-  outline-offset: 1px;
+  border-color: var(--color-field-focus);
+  outline: 0;
+  box-shadow: none;
 }
 
 .nutrition-analysis-v2__overview {

@@ -1,18 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { LogIn, LogOut, RefreshCw, UserRound } from "lucide-react";
+import { FlaskConical, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { Button, Input } from "../../app/ui";
+import { useAppSession } from "../../app/auth/AppSession";
 import { useSupabaseAuth } from "./auth";
 import { useRemoteSync } from "./RemotePersistenceProvider";
 
 type AuthMode = "sign-in" | "sign-up";
-
-function syncLabel(status: ReturnType<typeof useRemoteSync>["status"]) {
-  if (status === "syncing") return "Synchronizuję dane…";
-  if (status === "synced") return "Dane są zsynchronizowane";
-  if (status === "schema-missing") return "Brakuje migracji bazy danych";
-  if (status === "error") return "Synchronizacja wymaga uwagi";
-  return "Synchronizacja jest gotowa po zalogowaniu";
-}
 
 function elapsedLabel(elapsedMs: number) {
   if (elapsedMs < 1_000) return `${elapsedMs} ms`;
@@ -22,6 +15,7 @@ function elapsedLabel(elapsedMs: number) {
 export function AccountPanel() {
   const auth = useSupabaseAuth();
   const remote = useRemoteSync();
+  const appSession = useAppSession();
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,8 +23,29 @@ export function AccountPanel() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  if (appSession.isTestAccount) {
+    return (
+      <div className="app-account-panel app-account-panel--test">
+        <p className="app-account-panel__message">
+          <FlaskConical size={14} aria-hidden="true" />
+          Korzystasz z przykładowych danych. Zmiany nie trafią do Twojego konta ani urządzenia.
+        </p>
+        <Button
+          className="app-account-panel__logout"
+          variant="quiet"
+          size="sm"
+          fullWidth
+          leadingIcon={<LogOut size={14} aria-hidden="true" />}
+          onClick={appSession.exitTestAccount}
+        >
+          Zakończ demo
+        </Button>
+      </div>
+    );
+  }
+
   if (!auth.configured) {
-    return <p className="app-account-panel__local-note">{auth.configurationIssue ?? "Tryb lokalny jest aktywny. Skonfiguruj Supabase, aby włączyć konto i synchronizację."}</p>;
+    return null;
   }
 
   if (auth.loading) {
@@ -40,13 +55,6 @@ export function AccountPanel() {
   if (auth.user) {
     return (
       <div className="app-account-panel">
-        <div className="app-account-panel__status-row">
-          <span className="app-account-panel__status-icon" aria-hidden="true"><UserRound size={14} /></span>
-          <span>
-            <strong>{auth.user.email}</strong>
-            <small>{syncLabel(remote.status)}</small>
-          </span>
-        </div>
         {remote.message && <p className="app-account-panel__error">{remote.message}</p>}
         {remote.initialSyncElapsedMs !== undefined && (
           <p className="app-account-panel__telemetry">
@@ -56,6 +64,7 @@ export function AccountPanel() {
         )}
         {(remote.status === "error" || remote.status === "schema-missing") && (
           <Button
+            className="app-account-panel__retry"
             variant="quiet"
             size="sm"
             fullWidth
@@ -66,6 +75,7 @@ export function AccountPanel() {
           </Button>
         )}
         <Button
+          className="app-account-panel__logout"
           variant="quiet"
           size="sm"
           fullWidth

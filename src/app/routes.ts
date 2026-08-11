@@ -40,11 +40,10 @@ export const ROUTE_LAYOUT_AUDIT = [
   { path: "/praca", component: "PracaPage", width: "wide", moduleSidebar: true, h1: "route", layout: "workspace + detail" },
   { path: "/sprawy", component: "SprawyPage", width: "wide", moduleSidebar: true, h1: "route", layout: "register + detail" },
   { path: "/sprawy?widok=jdg", component: "JdgWorkspace", width: "wide", moduleSidebar: true, h1: "route", layout: "monthly checklist" },
-  { path: "/sprawy?widok=travel", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier" },
   { path: "/podroze", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier" },
   { path: "/podroze/:tripId", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
   { path: "/biuro", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /praca" },
-  { path: "/finanse", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=budget" },
+  { path: "/finanse", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=finances" },
   { path: "/jdg", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=jdg" },
   { path: "*", component: "RouteNotFoundState", width: "route state", moduleSidebar: false, h1: "route", layout: "error state" },
 ] as const;
@@ -77,7 +76,7 @@ export const router = createBrowserRouter([
           { path: "podroze/:tripId", Component: PodrozePage },
           // Legacy bookmarks only: these are intentionally absent from APP_MODULES/navigation.
           { path: "biuro",         loader: () => redirect("/praca") },
-          { path: "finanse",       loader: () => redirect("/sprawy?widok=budget") },
+          { path: "finanse",       loader: () => redirect("/sprawy?widok=finances") },
           { path: "jdg",           loader: () => redirect("/sprawy?widok=jdg") },
           { path: "*",             Component: RouteNotFoundState },
         ],

@@ -1,109 +1,109 @@
 /**
- * THESIS: JDG is a repeatable monthly close, not a loose tax checklist; it refuses tasks without sequence or evidence.
- * OWN-WORLD: Rootine's graphite register, three ordered ledgers, date-driven status, and one blue completion path.
- * STORY: Prepare documents, settle obligations, verify proof, and only then close the month with confidence.
- * FIRST VIEWPORT: The selected month, completion state, and every required checkpoint are visible without changing context.
- * FORM: The seventh grounded structure — a monthly responsibility cockpit — selected with seed 54454916.
+ * THESIS: JDG is one predictable monthly close: six checks, one previous month, one clear finish.
  */
 import {
-  Archive,
   CalendarCheck,
+  Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
-  FileCheck2,
+  FileUp,
   Landmark,
-  LayoutTemplate,
-  Plus,
   ReceiptText,
   RotateCcw,
-  Settings2,
-  Trash2,
+  ShieldCheck,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
-import { formatShortDate } from "../formatters";
 import {
-  applyJdgMonthTemplate,
-  createJdgItemId,
   createJdgMonthForWorkspace,
-  createJdgTemplateFromMonth,
-  deleteJdgMonthItem,
   getJdgMonthKey,
-  JDG_ACCOUNTING_MODE_OPTIONS as ACCOUNTING_MODE_OPTIONS,
-  JDG_TAX_FORM_OPTIONS as TAX_FORM_OPTIONS,
-  JDG_VAT_CADENCE_OPTIONS as VAT_CADENCE_OPTIONS,
-  JDG_VAT_STATUS_OPTIONS as VAT_STATUS_OPTIONS,
-  JDG_ZUS_SCHEME_OPTIONS as ZUS_SCHEME_OPTIONS,
   JDG_STORAGE_KEY,
   loadJdgWorkspace,
-  resetJdgMonth,
   saveJdgWorkspace,
-  setJdgDefaultTemplate,
-  undoJdgAuditEvent,
-  updateJdgTaxProfile,
   type JdgChecklistGroup,
   type JdgChecklistItem,
-  type JdgMonth,
-  type JdgTaxProfile,
+  type JdgWorkspace as JdgWorkspaceData,
 } from "../data/jdgWorkspace";
 import {
   Badge,
   Button,
-  Card,
   Checkbox,
-  CompletedSection,
+  ConfirmDialog,
   ContentHeader,
-  Input,
-  Modal,
-  Select,
-  Textarea,
-  Toast,
-  ToastViewport,
-  AddToTasksButton,
+  ProgressBar,
+  SectionSurface,
 } from "../ui";
 import "../../styles/affairs.css";
 
-const GROUPS: Array<{
-  id: JdgChecklistGroup;
-  title: string;
+type SimpleChecklistDefinition = Pick<JdgChecklistItem, "id" | "label" | "group" | "required" | "dueDay"> & {
   description: string;
-  icon: typeof FileCheck2;
-}> = [
+  legacyIds?: string[];
+  icon: typeof ReceiptText;
+};
+
+const MONTHLY_CLOSE: SimpleChecklistDefinition[] = [
   {
-    id: "documents",
-    title: "Dokumenty",
-    description: "Materiały przekazane do księgowości i zgodne z kontem.",
-    icon: FileCheck2,
+    id: "simple-invoice",
+    label: "Wystawiłem fakturę",
+    description: "Faktura sprzedażowa za rozliczany miesiąc jest gotowa.",
+    group: "documents",
+    required: true,
+    dueDay: 1,
+    icon: ReceiptText,
   },
   {
-    id: "settlements",
-    title: "Rozliczenia",
-    description: "Księgowość, składki i podatki opłacone w terminie.",
+    id: "simple-accounting-upload",
+    label: "Wgrałem dokumenty do księgowości",
+    description: "Faktura, ZUS z poprzedniego miesiąca i wszystkie koszty są przekazane.",
+    group: "documents",
+    required: true,
+    dueDay: 5,
+    legacyIds: ["documents-sales", "documents-costs", "documents-zus"],
+    icon: FileUp,
+  },
+  {
+    id: "simple-books-closed",
+    label: "Zamknąłem miesiąc w księgowości",
+    description: "Dokumenty zostały sprawdzone, a wynik miesiąca jest ostateczny.",
+    group: "control",
+    required: true,
+    dueDay: 10,
+    legacyIds: ["control-close", "settlements-accounting"],
+    icon: ShieldCheck,
+  },
+  {
+    id: "simple-pit-28",
+    label: "Opłaciłem PIT-28",
+    description: "Podatek dochodowy został opłacony i potwierdzony.",
+    group: "settlements",
+    required: true,
+    dueDay: 20,
+    legacyIds: ["settlements-income-tax"],
     icon: Landmark,
   },
   {
-    id: "control",
-    title: "Kontrola i zamknięcie",
-    description: "Dowody wysyłki, należności i kompletne archiwum miesiąca.",
-    icon: Archive,
+    id: "simple-vat-7",
+    label: "Opłaciłem VAT-7",
+    description: "VAT za rozliczany miesiąc został opłacony.",
+    group: "settlements",
+    required: true,
+    dueDay: 25,
+    legacyIds: ["settlements-vat"],
+    icon: Landmark,
+  },
+  {
+    id: "simple-zus",
+    label: "Opłaciłem ZUS",
+    description: "Składki za działalność zostały opłacone.",
+    group: "settlements",
+    required: true,
+    dueDay: 20,
+    legacyIds: ["settlements-zus"],
+    icon: Landmark,
   },
 ];
-
-const EMPTY_JDG_ITEMS: JdgChecklistItem[] = [];
-
-type PendingDestructiveAction =
-  | { type: "reset"; month: JdgMonth }
-  | { type: "delete"; monthKey: string; item: JdgChecklistItem }
-  | { type: "replace-template"; monthKey: string; templateId: string; templateName: string };
-
-type UndoableAction = {
-  type: "reset" | "delete" | "replace-template";
-  eventId: string;
-  message: string;
-};
 
 function formatMonth(value: string): string {
   const date = new Date(`${value}-01T12:00:00`);
@@ -116,23 +116,49 @@ function shiftMonthKey(value: string, offset: number): string {
   return getJdgMonthKey(date);
 }
 
-function isJdgMonthKey(value: string | null): value is string {
+function previousMonthKey(date = new Date()): string {
+  const previous = new Date(date.getFullYear(), date.getMonth() - 1, 1, 12);
+  return getJdgMonthKey(previous);
+}
+
+function isMonthKey(value: string | null): value is string {
   return Boolean(value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value));
 }
 
-function dueStatus(month: string, day: number | null, done: boolean): {
-  label: string;
-  tone: "neutral" | "warning" | "danger" | "success";
-} {
-  if (done) return { label: "Gotowe", tone: "success" };
-  if (!day) return { label: "Bez terminu", tone: "neutral" };
-  const [year, monthNumber] = month.split("-").map(Number);
-  const lastDay = new Date(year, monthNumber, 0).getDate();
-  const target = `${year}-${String(monthNumber).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
-  const difference = calendarDaysBetween(todayLocalDateKey(), target) ?? 0;
-  if (difference < 0) return { label: "Po terminie", tone: "danger" };
-  if (difference <= 3) return { label: `Do ${day}. dnia`, tone: "warning" };
-  return { label: `Do ${day}. dnia`, tone: "neutral" };
+function normalizeSimpleMonth(workspace: JdgWorkspaceData, monthKey: string): JdgWorkspaceData {
+  const withMonth = workspace.months.some((month) => month.month === monthKey)
+    ? workspace
+    : createJdgMonthForWorkspace(workspace, monthKey);
+  const month = withMonth.months.find((candidate) => candidate.month === monthKey);
+  if (!month) return withMonth;
+
+  const items = MONTHLY_CLOSE.map((definition) => {
+    const exact = month.items.find((item) => item.id === definition.id);
+    const legacy = (definition.legacyIds ?? [])
+      .map((id) => month.items.find((item) => item.id === id))
+      .filter((item): item is JdgChecklistItem => Boolean(item));
+    const legacyDone = legacy.length > 0 && legacy.every((item) => item.done);
+    const done = exact?.done ?? legacyDone;
+    const doneAt = exact?.doneAt
+      ?? (legacyDone ? legacy.map((item) => item.doneAt).filter(Boolean).sort().at(-1) ?? new Date().toISOString() : "");
+    return {
+      id: definition.id,
+      label: definition.label,
+      group: definition.group as JdgChecklistGroup,
+      required: true,
+      dueDay: definition.dueDay,
+      done,
+      doneAt: done ? doneAt : "",
+    };
+  });
+
+  const unchanged = month.items.length === items.length
+    && month.items.every((item, index) => JSON.stringify(item) === JSON.stringify(items[index]));
+  if (unchanged) return withMonth;
+  return {
+    ...withMonth,
+    months: withMonth.months.map((candidate) => candidate.month === monthKey ? { ...candidate, items } : candidate),
+  };
 }
 
 export function JdgWorkspace({
@@ -143,756 +169,171 @@ export function JdgWorkspace({
   mobileNavigation?: ReactNode;
 } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [workspace, setWorkspace] = useState(loadJdgWorkspace);
-  const [monthKey, setMonthKey] = useState(() => {
-    const requestedMonth = searchParams.get("month");
-    return isJdgMonthKey(requestedMonth) ? requestedMonth : getJdgMonthKey();
-  });
-  const [profileDraft, setProfileDraft] = useState<JdgTaxProfile>(() => structuredClone(workspace.taxProfile));
+  const initialMonth = isMonthKey(searchParams.get("month")) ? searchParams.get("month")! : previousMonthKey();
+  const [monthKey, setMonthKey] = useState(initialMonth);
+  const [workspace, setWorkspace] = useState(() => normalizeSimpleMonth(loadJdgWorkspace(), initialMonth));
   const [storageError, setStorageError] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [draftLabel, setDraftLabel] = useState("");
-  const [draftGroup, setDraftGroup] = useState<JdgChecklistGroup>("documents");
-  const [draftRequired, setDraftRequired] = useState(false);
-  const [draftDueDay, setDraftDueDay] = useState("");
-  const [editorError, setEditorError] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [templateName, setTemplateName] = useState("");
-  const [settingsError, setSettingsError] = useState("");
-  const [settingsNotice, setSettingsNotice] = useState("");
-  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction | null>(null);
-  const [undoableAction, setUndoableAction] = useState<UndoableAction | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
 
   useEffect(() => {
     setStorageError(!saveJdgWorkspace(workspace));
   }, [workspace]);
 
   useEffect(() => subscribeToLocalWorkspace(JDG_STORAGE_KEY, () => {
-    setWorkspace(loadJdgWorkspace());
-  }), []);
+    setWorkspace((current) => normalizeSimpleMonth(loadJdgWorkspace(), current.months.some((month) => month.month === monthKey) ? monthKey : previousMonthKey()));
+  }), [monthKey]);
 
   useEffect(() => {
-    const requestedMonth = searchParams.get("month");
-    if (isJdgMonthKey(requestedMonth)) {
-      if (requestedMonth !== monthKey) setMonthKey(requestedMonth);
-      return;
+    const requested = searchParams.get("month");
+    if (isMonthKey(requested) && requested !== monthKey) {
+      setMonthKey(requested);
+      setWorkspace((current) => normalizeSimpleMonth(current, requested));
+    } else if (requested && !isMonthKey(requested)) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("month");
+      setSearchParams(next, { replace: true });
     }
-    if (!requestedMonth) return;
-    const canonical = new URLSearchParams(searchParams);
-    canonical.delete("month");
-    setSearchParams(canonical, { replace: true });
   }, [monthKey, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (workspace.months.some((month) => month.month === monthKey)) return;
-    setWorkspace((current) => createJdgMonthForWorkspace(current, monthKey));
-  }, [monthKey, workspace.months]);
-
   const currentMonth = workspace.months.find((month) => month.month === monthKey);
-  const items = currentMonth?.items ?? EMPTY_JDG_ITEMS;
-  const requiredItems = items.filter((item) => item.required);
-  const closeItem = items.find((item) => item.id === "control-close");
-  const requiredBeforeClose = requiredItems.filter((item) => item.id !== "control-close");
-  const readyToClose = requiredBeforeClose.every((item) => item.done);
-  const closed = Boolean(closeItem?.done && readyToClose);
+  const items = currentMonth?.items ?? [];
   const completedCount = items.filter((item) => item.done).length;
-  const requiredCompleted = requiredItems.filter((item) => item.done).length;
-  const progress = items.length ? Math.round((completedCount / items.length) * 100) : 0;
-  const taxFormLabel = TAX_FORM_OPTIONS.find((option) => option.value === workspace.taxProfile.taxForm)?.label
-    ?? "Profil podatkowy";
-  const profileNeedsSetup = Object.entries(workspace.taxProfile)
-    .some(([key, value]) => key !== "updatedAt" && value === "unconfigured");
-
-  const nextDeadline = useMemo(() => {
-    return items
-      .filter((item) => !item.done && item.dueDay !== null)
-      .sort((a, b) => (a.dueDay ?? 32) - (b.dueDay ?? 32))[0];
-  }, [items]);
+  const closed = items.length === MONTHLY_CLOSE.length && completedCount === MONTHLY_CLOSE.length;
+  const progress = Math.round(completedCount / MONTHLY_CLOSE.length * 100);
+  const nextItem = items.find((item) => !item.done);
+  const executionMonth = shiftMonthKey(monthKey, 1);
 
   const navigateMonth = (offset: number) => {
-    const nextKey = shiftMonthKey(monthKey, offset);
-    setWorkspace((current) => current.months.some((month) => month.month === nextKey)
-      ? current
-      : createJdgMonthForWorkspace(current, nextKey));
-    setMonthKey(nextKey);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("month", nextKey);
-    setSearchParams(nextParams);
+    const nextMonth = shiftMonthKey(monthKey, offset);
+    setMonthKey(nextMonth);
+    setWorkspace((current) => normalizeSimpleMonth(current, nextMonth));
+    const next = new URLSearchParams(searchParams);
+    next.set("month", nextMonth);
+    setSearchParams(next);
   };
 
   const toggleItem = (itemId: string) => {
-    if (itemId === "control-close" && !readyToClose && !closeItem?.done) return;
-    setUndoableAction(null);
     setWorkspace((current) => ({
       ...current,
       months: current.months.map((month) => month.month === monthKey
         ? {
             ...month,
             items: month.items.map((item) => item.id === itemId
-              ? {
-                  ...item,
-                  done: !item.done,
-                  doneAt: item.done ? "" : new Date().toISOString(),
-                }
+              ? { ...item, done: !item.done, doneAt: item.done ? "" : new Date().toISOString() }
               : item),
           }
         : month),
     }));
   };
 
-  const requestMonthReset = () => {
-    if (!currentMonth || completedCount === 0) return;
-    setPendingDestructiveAction({ type: "reset", month: structuredClone(currentMonth) });
-  };
-
-  const resetMonth = (snapshot: JdgMonth) => {
-    const previousEventIds = new Set(workspace.history.map((event) => event.id));
-    const next = resetJdgMonth(workspace, snapshot.month);
-    const eventId = next.history.find((event) => !previousEventIds.has(event.id))?.id ?? "";
-    setWorkspace(next);
-    setUndoableAction({
-      type: "reset",
-      eventId,
-      message: `Wyczyszczono potwierdzenia za ${formatMonth(snapshot.month)}.`,
-    });
-    setPendingDestructiveAction(null);
-  };
-
-  const requestCustomItemDeletion = (itemId: string) => {
-    if (!currentMonth) return;
-    const index = currentMonth.items.findIndex((item) => item.id === itemId);
-    const item = currentMonth.items[index];
-    if (!item || index < 0) return;
-    setPendingDestructiveAction({
-      type: "delete",
-      monthKey,
-      item: structuredClone(item),
-    });
-  };
-
-  const deleteCustomItem = (action: Extract<PendingDestructiveAction, { type: "delete" }>) => {
-    const previousEventIds = new Set(workspace.history.map((event) => event.id));
-    const next = deleteJdgMonthItem(workspace, action.monthKey, action.item.id);
-    const eventId = next.history.find((event) => !previousEventIds.has(event.id))?.id ?? "";
-    setWorkspace(next);
-    setUndoableAction({
-      type: "delete",
-      eventId,
-      message: `Usunięto punkt „${action.item.label}”.`,
-    });
-    setPendingDestructiveAction(null);
-  };
-
-  const undoLastAction = () => {
-    if (!undoableAction) return;
-    if (undoableAction.eventId) {
-      setWorkspace((current) => undoJdgAuditEvent(current, undoableAction.eventId));
-    }
-    setUndoableAction(null);
-  };
-
-  const openEditor = () => {
-    setDraftLabel("");
-    setDraftGroup("documents");
-    setDraftRequired(false);
-    setDraftDueDay("");
-    setEditorError("");
-    setEditorOpen(true);
-  };
-
-  const openSettings = () => {
-    setProfileDraft(structuredClone(workspace.taxProfile));
-    setTemplateName("");
-    setSettingsError("");
-    setSettingsNotice("");
-    setSettingsOpen(true);
-  };
-
-  const saveTaxProfile = () => {
-    setWorkspace((current) => updateJdgTaxProfile(current, profileDraft));
-    setSettingsNotice("Profil i jego szablon zaktualizowano. Checklista z profilu jest teraz domyślna dla nowych miesięcy.");
-    setSettingsError("");
-  };
-
-  const saveCurrentMonthAsTemplate = () => {
-    const name = templateName.trim();
-    if (!name) {
-      setSettingsError("Podaj nazwę szablonu.");
-      return;
-    }
-    setWorkspace((current) => createJdgTemplateFromMonth(current, monthKey, { name }));
-    setTemplateName("");
-    setSettingsError("");
-    setSettingsNotice(`Zapisano szablon „${name}”.`);
-  };
-
-  const applyTemplate = (templateId: string, templateNameLabel: string) => {
-    const next = applyJdgMonthTemplate(workspace, monthKey, templateId, "merge");
-    setWorkspace(next);
-    if (next !== workspace) setUndoableAction(null);
-    setSettingsNotice(next === workspace
-      ? `Miesiąc ma już wszystkie punkty z szablonu „${templateNameLabel}”.`
-      : `Dodano brakujące punkty z szablonu „${templateNameLabel}”.`);
-    setSettingsError("");
-  };
-
-  const replaceMonthWithTemplate = (
-    action: Extract<PendingDestructiveAction, { type: "replace-template" }>,
-  ) => {
-    const previousEventIds = new Set(workspace.history.map((event) => event.id));
-    const next = applyJdgMonthTemplate(workspace, action.monthKey, action.templateId, "replace");
-    const eventId = next.history.find((event) => !previousEventIds.has(event.id))?.id ?? "";
-    setWorkspace(next);
-    setUndoableAction({
-      type: "replace-template",
-      eventId,
-      message: `Zastosowano szablon „${action.templateName}” do ${formatMonth(action.monthKey)}.`,
-    });
-    setSettingsOpen(false);
-    setPendingDestructiveAction(null);
-  };
-
-  const chooseDefaultTemplate = (templateId: string, templateNameLabel: string) => {
-    setWorkspace((current) => setJdgDefaultTemplate(current, templateId));
-    setSettingsNotice(`Szablon „${templateNameLabel}” będzie używany dla nowych miesięcy.`);
-    setSettingsError("");
-  };
-
-  const submitCustomItem = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const label = draftLabel.trim();
-    const parsedDueDay = draftDueDay ? Number(draftDueDay) : null;
-    if (!label) {
-      setEditorError("Wpisz nazwę punktu.");
-      return;
-    }
-    if (parsedDueDay !== null && (!Number.isInteger(parsedDueDay) || parsedDueDay < 1 || parsedDueDay > 31)) {
-      setEditorError("Dzień terminu musi mieścić się między 1 a 31.");
-      return;
-    }
+  const resetMonth = () => {
     setWorkspace((current) => ({
       ...current,
       months: current.months.map((month) => month.month === monthKey
-        ? {
-            ...month,
-            items: [...month.items, {
-              id: createJdgItemId(),
-              label,
-              group: draftGroup,
-              required: draftRequired,
-              dueDay: parsedDueDay,
-              done: false,
-              doneAt: "",
-            }],
-          }
+        ? { ...month, items: month.items.map((item) => ({ ...item, done: false, doneAt: "" })) }
         : month),
     }));
-    setUndoableAction(null);
-    setEditorOpen(false);
+    setResetOpen(false);
   };
 
   const content = (
     <>
       <ContentHeader
         headingLevel={1}
-        className="jdg-toolbar"
+        className="jdg-toolbar jdg-toolbar--simple"
         title="JDG"
-        description="Miesięczne zamknięcie działalności"
+        description={`Rozliczenie ${formatMonth(monthKey)} wykonywane w ${formatMonth(executionMonth)}`}
         mobileNavigation={mobileNavigation}
         meta={storageError ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
         actions={(
-          <div className="jdg-toolbar__actions-wrap">
-            <div className="jdg-toolbar__period">
-              {/* Shared with the budget view: one month stepper for the whole module. */}
-              <div className="affairs-month-switcher">
-                <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
-                <strong>{formatMonth(monthKey)}</strong>
-                <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
-              </div>
-              {closed ? <Badge tone="success" dot>Miesiąc zamknięty</Badge> : <Badge tone="warning" dot>W toku</Badge>}
-              <Badge tone={profileNeedsSetup ? "warning" : "neutral"}>{profileNeedsSetup ? "Uzupełnij profil podatkowy" : taxFormLabel}</Badge>
-              <div className="jdg-toolbar__status">
-                <span>{requiredCompleted}/{requiredItems.length} wymaganych</span>
-                <span className="jdg-toolbar__divider" />
-                <span>{completedCount}/{items.length} wszystkich</span>
-              </div>
+          <>
+            <div className="affairs-month-switcher">
+              <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => navigateMonth(-1)}><ChevronLeft size={13} /></Button>
+              <strong>{formatMonth(monthKey)}</strong>
+              <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => navigateMonth(1)}><ChevronRight size={13} /></Button>
             </div>
-            <div className="jdg-toolbar__actions">
-              <Button variant="quiet" size="sm" leadingIcon={<Settings2 size={13} />} onClick={openSettings}>Profil i szablony</Button>
-              <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={13} />} onClick={requestMonthReset} disabled={completedCount === 0}>Wyczyść miesiąc</Button>
-              <Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={openEditor}>Dodaj punkt</Button>
-            </div>
-          </div>
+            {completedCount > 0 && (
+              <Button variant="ghost" size="sm" leadingIcon={<RotateCcw size={13} />} onClick={() => setResetOpen(true)}>Wyczyść</Button>
+            )}
+          </>
         )}
       />
 
-      <div className="jdg-canvas">
-          <section className={`jdg-month-state ${closed ? "is-closed" : ""}`}>
-            <div className="jdg-month-state__identity">
-              <span className="jdg-month-state__icon">
-                {closed ? <CalendarCheck size={18} /> : <CalendarCheck size={18} />}
-              </span>
-              <div>
-                <h2>{closed ? "Miesiąc zamknięty" : "Zamknięcie miesiąca w toku"}</h2>
-                <p>
-                  {closed
-                    ? `Wszystkie wymagane punkty za ${formatMonth(monthKey)} są potwierdzone.`
-                    : nextDeadline
-                      ? `Najbliższy punkt: ${nextDeadline.label.toLocaleLowerCase("pl-PL")}.`
-                      : "Uzupełnij rejestr i zamknij miesiąc po wykonaniu wymaganych punktów."}
-                </p>
-              </div>
-            </div>
-            <div className="jdg-month-state__progress">
-              <span><i style={{ transform: `scaleX(${progress / 100})` }} /></span>
-              <strong>{progress}%</strong>
-            </div>
-          </section>
+      <div className="jdg-simple-canvas">
+        <section className={`jdg-simple-status ${closed ? "is-closed" : ""}`} aria-live="polite">
+          <span className="jdg-simple-status__icon">
+            {closed ? <CalendarCheck size={22} aria-hidden="true" /> : <CircleAlert size={22} aria-hidden="true" />}
+          </span>
+          <div className="jdg-simple-status__copy">
+            <h2>{closed ? "Miesiąc zamknięty" : `${completedCount} z ${MONTHLY_CLOSE.length} kroków gotowe`}</h2>
+            <p>{closed
+              ? `Wszystkie obowiązki za ${formatMonth(monthKey)} są załatwione.`
+              : nextItem
+                ? `Następny krok: ${nextItem.label.toLocaleLowerCase("pl-PL")}.`
+                : "Zacznij od wystawienia faktury."}</p>
+          </div>
+          <ProgressBar
+            value={progress}
+            tone={closed ? "success" : "default"}
+            label={`Postęp zamknięcia ${formatMonth(monthKey)}`}
+            valueLabel={`${progress}%`}
+            className="jdg-simple-status__progress"
+          />
+        </section>
 
-          <div className="jdg-checklist">
-            {GROUPS.map((group, groupIndex) => {
-              const groupItems = items.filter((item) => item.group === group.id);
-              const groupDone = groupItems.filter((item) => item.done).length;
-              const GroupIcon = group.icon;
-              const completedGroupItems = groupItems.filter((item) => item.done);
-              const renderChecklistItem = (item: JdgChecklistItem) => {
-                const due = dueStatus(monthKey, item.dueDay, item.done);
-                const isClose = item.id === "control-close";
-                const closeLocked = isClose && !readyToClose && !item.done;
-                const dueDate = item.dueDay ? `${monthKey}-${String(item.dueDay).padStart(2, "0")}` : undefined;
-                return (
-                  <div key={item.id} className={`jdg-check-row ${item.done ? "is-done" : ""} ${isClose ? "is-final" : ""}`}>
-                    <Checkbox
-                      size="sm"
-                      checked={item.done}
-                      aria-label={item.done ? `Cofnij: ${item.label}` : `Potwierdź: ${item.label}`}
-                      disabled={closeLocked}
-                      title={closeLocked ? "Najpierw ukończ pozostałe wymagane punkty." : undefined}
-                      onChange={() => toggleItem(item.id)}
-                    />
-                    <button
-                      type="button"
-                      className="jdg-check-row__label"
-                      disabled={closeLocked}
-                      onClick={() => toggleItem(item.id)}
-                    >
-                      <strong>{item.label}</strong>
-                      <small>
-                        {item.doneAt
-                          ? `Potwierdzono ${formatShortDate(item.doneAt)}`
-                          : item.required ? "Punkt wymagany" : "Punkt kontrolny"}
-                      </small>
-                    </button>
-                    <Badge tone={closeLocked ? "warning" : due.tone}>
-                      {closeLocked ? "Po wymaganych" : due.label}
-                    </Badge>
-                    <AddToTasksButton compact input={{
-                      source: {
-                        kind: "affairs",
-                        entity: `${encodeURIComponent(monthKey)}/${encodeURIComponent(item.id)}`,
-                        context: `JDG · ${monthKey}`,
-                        href: `/sprawy?widok=jdg&month=${encodeURIComponent(monthKey)}`,
-                      },
-                      text: item.label,
-                      done: item.done,
-                      calendarDate: dueDate,
-                      date: dueDate,
-                      list: "sprawy",
-                      tags: ["sprawy", "jdg"],
-                    }} />
-                    {item.id.startsWith("custom-") && (
-                      <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
-                        <Trash2 size={13} />
-                      </Button>
-                    )}
-                  </div>
-                );
-              };
+        <SectionSurface className="jdg-simple-checklist" aria-labelledby="jdg-simple-checklist-title">
+          <header className="jdg-simple-checklist__header">
+            <div>
+              <h2 id="jdg-simple-checklist-title">Zamknięcie {formatMonth(monthKey)}</h2>
+              <p>Wykonuj po kolei. Wszystkie sześć punktów zamyka miesiąc.</p>
+            </div>
+            <Badge tone={closed ? "success" : "neutral"}>{completedCount}/{MONTHLY_CLOSE.length}</Badge>
+          </header>
+
+          <div className="jdg-simple-checklist__rows">
+            {MONTHLY_CLOSE.map((definition, index) => {
+              const item = items.find((candidate) => candidate.id === definition.id);
+              const done = Boolean(item?.done);
+              const Icon = definition.icon;
               return (
-                <Card key={group.id} as="section" tone="panel" padding="none" className="jdg-stage">
-                  <header className="jdg-stage__header">
-                    <span className="jdg-stage__number">{groupIndex + 1}</span>
-                    <span className="jdg-stage__icon"><GroupIcon size={16} /></span>
-                    <div>
-                      <h3>{group.title}</h3>
-                      <p>{group.description}</p>
-                    </div>
-                    <Badge tone={groupDone === groupItems.length && groupItems.length > 0 ? "success" : "neutral"}>
-                      {groupDone}/{groupItems.length}
-                    </Badge>
-                  </header>
-
-                  <div className="jdg-stage__items">
-                    {groupItems.map((item) => {
-                      if (item.done) {
-                        if (item.id !== completedGroupItems[0]?.id) return null;
-                        return (
-                          <CompletedSection key={`completed-${group.id}`} label="Ukończone" count={completedGroupItems.length} className="jdg-completed-section">
-                            <div className="jdg-stage__items">{completedGroupItems.map(renderChecklistItem)}</div>
-                          </CompletedSection>
-                        );
-                      }
-                      return renderChecklistItem(item);
-                      const due = dueStatus(monthKey, item.dueDay, item.done);
-                      const isClose = item.id === "control-close";
-                      const closeLocked = isClose && !readyToClose && !item.done;
-                      const dueDate = item.dueDay ? `${monthKey}-${String(item.dueDay).padStart(2, "0")}` : undefined;
-                      return (
-                        <div key={item.id} className={`jdg-check-row ${item.done ? "is-done" : ""} ${isClose ? "is-final" : ""}`}>
-                          <Checkbox
-                            size="sm"
-                            checked={item.done}
-                            aria-label={item.done ? `Cofnij: ${item.label}` : `Potwierdź: ${item.label}`}
-                            disabled={closeLocked}
-                            title={closeLocked ? "Najpierw ukończ pozostałe wymagane punkty." : undefined}
-                            onChange={() => toggleItem(item.id)}
-                          />
-                          <button
-                            type="button"
-                            className="jdg-check-row__label"
-                            disabled={closeLocked}
-                            onClick={() => toggleItem(item.id)}
-                          >
-                            <strong>{item.label}</strong>
-                            <small>
-                              {item.doneAt
-                                ? `Potwierdzono ${formatShortDate(item.doneAt)}`
-                                : item.required ? "Punkt wymagany" : "Punkt kontrolny"}
-                            </small>
-                          </button>
-                          <Badge tone={closeLocked ? "warning" : due.tone}>
-                            {closeLocked ? "Po wymaganych" : due.label}
-                          </Badge>
-                          <AddToTasksButton compact input={{
-                            source: {
-                              kind: "affairs",
-                              entity: `${encodeURIComponent(monthKey)}/${encodeURIComponent(item.id)}`,
-                              context: `JDG · ${monthKey}`,
-                              href: `/sprawy?widok=jdg&month=${encodeURIComponent(monthKey)}`,
-                            },
-                            text: item.label,
-                            done: item.done,
-                            calendarDate: dueDate,
-                            date: dueDate,
-                            list: "sprawy",
-                            tags: ["sprawy", "jdg"],
-                          }} />
-                          {item.id.startsWith("custom-") && (
-                            <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.label}`} onClick={() => requestCustomItemDeletion(item.id)}>
-                              <Trash2 size={13} />
-                            </Button>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {groupItems.length === 0 && (
-                      <div className="jdg-stage__empty">
-                        <span>Brak punktów w tym etapie.</span>
-                        <button type="button" onClick={openEditor}>Dodaj własny</button>
-                      </div>
-                    )}
-                  </div>
-                </Card>
+                <label key={definition.id} className={`jdg-simple-row ${done ? "is-done" : ""}`}>
+                  <span className="jdg-simple-row__step" aria-hidden="true">{index + 1}</span>
+                  <Checkbox
+                    checked={done}
+                    aria-label={done ? `Przywróć: ${definition.label}` : `Oznacz jako wykonane: ${definition.label}`}
+                    onChange={() => toggleItem(definition.id)}
+                  />
+                  <span className="jdg-simple-row__icon"><Icon size={16} aria-hidden="true" /></span>
+                  <span className="jdg-simple-row__copy">
+                    <strong>{definition.label}</strong>
+                    <small>{definition.description}</small>
+                  </span>
+                  <span className="jdg-simple-row__due">do {definition.dueDay}. dnia</span>
+                  {done && <Check className="jdg-simple-row__done" size={16} aria-hidden="true" />}
+                </label>
               );
             })}
           </div>
-
-          {!readyToClose && (
-            <div className="jdg-close-hint">
-              <CircleAlert size={13} aria-hidden="true" />
-              <p>
-                <strong>Miesiąc można zamknąć po wymaganych punktach.</strong>
-                Zostało {requiredBeforeClose.filter((item) => !item.done).length}; punkty kontrolne są pomocnicze i nie blokują zamknięcia.
-              </p>
-            </div>
-          )}
-
-          <Card as="section" tone="input" padding="default" className="jdg-note">
-            <div>
-              <ReceiptText size={13} aria-hidden="true" />
-              <span>
-                <strong>Notatka do miesiąca</strong>
-                <small>Wyjątki, kwoty do sprawdzenia albo pytania do księgowości.</small>
-              </span>
-            </div>
-            <Textarea
-              aria-label={`Notatka do rozliczenia za ${formatMonth(monthKey)}`}
-              placeholder="np. Brakuje korekty faktury za hosting…"
-              value={currentMonth?.note ?? ""}
-              onChange={(event) => {
-                setUndoableAction(null);
-                setWorkspace((current) => ({
-                  ...current,
-                  months: current.months.map((month) => month.month === monthKey ? { ...month, note: event.target.value } : month),
-                }));
-              }}
-            />
-          </Card>
+        </SectionSurface>
       </div>
 
-      {settingsOpen && (
-        <Modal
-          title="Profil podatkowy i szablony"
-          description="Ustaw zgodnie z informacją od księgowości. Rootine organizuje obowiązki, ale nie wylicza podatku."
-          onClose={() => setSettingsOpen(false)}
-          size="md"
-          footer={(
-            <>
-              <Button variant="quiet" onClick={() => setSettingsOpen(false)}>Zamknij</Button>
-              <Button variant="primary" onClick={saveTaxProfile}>Zapisz profil</Button>
-            </>
-          )}
+      {resetOpen && (
+        <ConfirmDialog
+          title="Wyczyścić miesiąc?"
+          description={formatMonth(monthKey)}
+          confirmLabel="Wyczyść zaznaczenia"
+          onConfirm={resetMonth}
+          onCancel={() => setResetOpen(false)}
         >
-          <div className="jdg-settings">
-            <div className="jdg-settings-intro">
-              <LayoutTemplate size={18} aria-hidden="true" />
-              <p>
-                <strong>Profil buduje bezpieczny szablon obowiązków.</strong>
-                Bieżący rejestr pozostaje bez zmian, dopóki nie zastosujesz do niego szablonu. Nowe miesiące użyją szablonu domyślnego.
-              </p>
-            </div>
-
-            <section className="jdg-settings__section" aria-labelledby="jdg-profile-heading">
-              <div className="jdg-settings__heading">
-                <h3 id="jdg-profile-heading">Profil działalności</h3>
-                <p>Nie zakładamy automatycznie ryczałtu, VAT ani konkretnego wariantu ZUS.</p>
-              </div>
-              <div className="jdg-settings__grid">
-                <Select
-                  label="Forma opodatkowania"
-                  value={profileDraft.taxForm}
-                  options={TAX_FORM_OPTIONS}
-                  onChange={(event) => setProfileDraft((current) => ({
-                    ...current,
-                    taxForm: event.target.value as JdgTaxProfile["taxForm"],
-                  }))}
-                />
-                <Select
-                  label="Status VAT"
-                  value={profileDraft.vatStatus}
-                  options={VAT_STATUS_OPTIONS}
-                  onChange={(event) => {
-                    const vatStatus = event.target.value as JdgTaxProfile["vatStatus"];
-                    setProfileDraft((current) => ({
-                      ...current,
-                      vatStatus,
-                      vatCadence: vatStatus === "active" ? current.vatCadence ?? "monthly" : null,
-                    }));
-                  }}
-                />
-                <Select
-                  label="Okres rozliczenia VAT"
-                  value={profileDraft.vatCadence ?? "monthly"}
-                  disabled={profileDraft.vatStatus !== "active"}
-                  hint={profileDraft.vatStatus === "active" ? undefined : "Dostępne dla czynnego podatnika VAT."}
-                  options={[...VAT_CADENCE_OPTIONS]}
-                  onChange={(event) => setProfileDraft((current) => ({
-                    ...current,
-                    vatCadence: event.target.value as NonNullable<JdgTaxProfile["vatCadence"]>,
-                  }))}
-                />
-                <Select
-                  label="Schemat ZUS"
-                  value={profileDraft.zusScheme}
-                  options={ZUS_SCHEME_OPTIONS}
-                  onChange={(event) => setProfileDraft((current) => ({
-                    ...current,
-                    zusScheme: event.target.value as JdgTaxProfile["zusScheme"],
-                  }))}
-                />
-                <Select
-                  label="Sposób prowadzenia księgowości"
-                  value={profileDraft.accountingMode}
-                  options={ACCOUNTING_MODE_OPTIONS}
-                  onChange={(event) => setProfileDraft((current) => ({
-                    ...current,
-                    accountingMode: event.target.value as JdgTaxProfile["accountingMode"],
-                  }))}
-                />
-              </div>
-            </section>
-
-            <section className="jdg-settings__section" aria-labelledby="jdg-templates-heading">
-              <div className="jdg-settings__heading">
-                <h3 id="jdg-templates-heading">Szablony miesiąca</h3>
-                <p>Zapisz bieżący układ albo dodaj brakujące punkty z gotowego szablonu bez kasowania obecnych danych.</p>
-              </div>
-              <div className="jdg-template-create">
-                <Input
-                  label="Nazwa nowego szablonu"
-                  placeholder={`np. ${formatMonth(monthKey)} po korektach`}
-                  value={templateName}
-                  error={settingsError || undefined}
-                  onChange={(event) => {
-                    setTemplateName(event.target.value);
-                    if (settingsError) setSettingsError("");
-                  }}
-                />
-                <Button variant="quiet" onClick={saveCurrentMonthAsTemplate}>Zapisz bieżący miesiąc</Button>
-              </div>
-              <div className="jdg-template-list">
-                {workspace.templates.map((template) => {
-                  const isDefault = workspace.defaultTemplateId === template.id;
-                  return (
-                    <div key={template.id} className="jdg-template-row">
-                      <div>
-                        <strong>{template.name}</strong>
-                        <small>
-                          {template.items.length} {template.items.length === 1 ? "punkt" : "punktów"}
-                          {" · "}
-                          {template.source === "profile" ? "z profilu podatkowego" : "własny"}
-                        </small>
-                      </div>
-                      <div className="jdg-template-row__actions">
-                        {isDefault && <Badge tone="primary">Domyślny</Badge>}
-                        {!isDefault && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => chooseDefaultTemplate(template.id, template.name)}
-                          >
-                            Ustaw domyślny
-                          </Button>
-                        )}
-                        <Button
-                          variant="quiet"
-                          size="sm"
-                          onClick={() => applyTemplate(template.id, template.name)}
-                        >
-                          Dodaj do miesiąca
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPendingDestructiveAction({
-                            type: "replace-template",
-                            monthKey,
-                            templateId: template.id,
-                            templateName: template.name,
-                          })}
-                        >
-                          Zastąp miesiąc
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <div aria-live="polite" aria-atomic="true">
-              {settingsNotice && <p className="jdg-settings__notice" role="status">{settingsNotice}</p>}
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {pendingDestructiveAction && (
-        <Modal
-          title={pendingDestructiveAction.type === "reset"
-            ? "Wyczyścić potwierdzenia miesiąca?"
-            : pendingDestructiveAction.type === "delete"
-              ? "Usunąć własny punkt?"
-              : "Zastąpić układ miesiąca?"}
-          description={pendingDestructiveAction.type === "reset"
-            ? formatMonth(pendingDestructiveAction.month.month)
-            : pendingDestructiveAction.type === "delete"
-              ? pendingDestructiveAction.item.label
-              : `${pendingDestructiveAction.templateName} · ${formatMonth(pendingDestructiveAction.monthKey)}`}
-          onClose={() => setPendingDestructiveAction(null)}
-          size="sm"
-          footer={(
-            <>
-              <Button variant="quiet" onClick={() => setPendingDestructiveAction(null)}>Anuluj</Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  if (pendingDestructiveAction.type === "reset") resetMonth(pendingDestructiveAction.month);
-                  else if (pendingDestructiveAction.type === "delete") deleteCustomItem(pendingDestructiveAction);
-                  else replaceMonthWithTemplate(pendingDestructiveAction);
-                }}
-              >
-                {pendingDestructiveAction.type === "reset"
-                  ? "Wyczyść potwierdzenia"
-                  : pendingDestructiveAction.type === "delete"
-                    ? "Usuń punkt"
-                    : "Zastąp miesiąc"}
-              </Button>
-            </>
-          )}
-        >
-          <p className="affairs-confirm-copy">
-            {pendingDestructiveAction.type === "reset"
-              ? "Wszystkie oznaczenia wykonania i ich daty zostaną wyzerowane. Po operacji możesz przywrócić poprzedni stan."
-              : pendingDestructiveAction.type === "delete"
-                ? "Punkt zniknie z wybranego miesiąca wraz z jego potwierdzeniem. Po operacji możesz go przywrócić."
-                : "Obecne punkty, potwierdzenia i daty zostaną zastąpione czystym układem z szablonu. Operacja zostanie zapisana w historii i będzie możliwa do cofnięcia."}
-          </p>
-        </Modal>
-      )}
-
-      {undoableAction && (
-        <ToastViewport>
-          <Toast actionLabel="Cofnij" onAction={undoLastAction} onDismiss={() => setUndoableAction(null)}>
-            {undoableAction.message}
-          </Toast>
-        </ToastViewport>
-      )}
-
-      {editorOpen && (
-        <Modal
-          eyebrow={formatMonth(monthKey)}
-          title="Własny punkt checklisty"
-          description="Dodaj kontrolę specyficzną dla Twojej działalności. Bieżący układ możesz potem zapisać jako szablon."
-          onClose={() => setEditorOpen(false)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setEditorOpen(false)}>Anuluj</Button>
-              <Button variant="primary" type="submit" form="jdg-item-form">Dodaj punkt</Button>
-            </>
-          )}
-        >
-          <form id="jdg-item-form" className="jdg-form" onSubmit={submitCustomItem}>
-            <Input
-              label="Nazwa punktu"
-              placeholder="np. Sprawdziłem limit zwolnienia"
-              value={draftLabel}
-              error={editorError}
-              autoFocus
-              onChange={(event) => {
-                setDraftLabel(event.target.value);
-                if (editorError) setEditorError("");
-              }}
-            />
-            <div className="jdg-form__grid">
-              <Select
-                label="Etap"
-                value={draftGroup}
-                options={GROUPS.map((group) => ({ value: group.id, label: group.title }))}
-                onChange={(event) => setDraftGroup(event.target.value as JdgChecklistGroup)}
-              />
-              <Input
-                type="number"
-                min="1"
-                max="31"
-                label="Termin — dzień miesiąca"
-                placeholder="opcjonalnie"
-                value={draftDueDay}
-                onChange={(event) => setDraftDueDay(event.target.value)}
-              />
-            </div>
-            <label className="affairs-form__check">
-              <input type="checkbox" checked={draftRequired} onChange={(event) => setDraftRequired(event.target.checked)} />
-              <span>
-                <strong>Wymagany do zamknięcia</strong>
-                <small>Nie pozwoli oznaczyć miesiąca jako zamknięty, dopóki nie będzie gotowy.</small>
-              </span>
-            </label>
-          </form>
-        </Modal>
+          <p className="affairs-confirm-copy">Wszystkie sześć checkboxów wróci do stanu niewykonanego.</p>
+        </ConfirmDialog>
       )}
     </>
   );
 
   return layout ? layout(content) : content;
+}
+
+export default function Jdg() {
+  return <JdgWorkspace />;
 }

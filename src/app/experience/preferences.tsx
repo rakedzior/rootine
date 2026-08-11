@@ -198,17 +198,24 @@ export function SensitiveValue({
   );
 }
 
-export function ExperienceSettings({ compact = false }: { compact?: boolean }) {
+export function ExperienceSettings({ compact = false, embedded = false }: { compact?: boolean; embedded?: boolean }) {
   const motion = useMotionPreferences();
-  const privacy = usePrivacy();
   const density = useDensity();
 
+  const titleId = `experience-settings-title${compact ? "-compact" : ""}`;
+
   return (
-    <section className={`experience-settings${compact ? " is-compact" : ""}`} aria-labelledby={`experience-settings-title${compact ? "-compact" : ""}`}>
-      <div className="experience-settings__heading">
-        <strong id={`experience-settings-title${compact ? "-compact" : ""}`}>Komfort pracy</strong>
-        <small>Ruch, gęstość i prywatność są zapisywane lokalnie.</small>
-      </div>
+    <section
+      className={`experience-settings${compact ? " is-compact" : ""}${embedded ? " is-embedded" : ""}`}
+      aria-labelledby={embedded ? undefined : titleId}
+      aria-label={embedded ? "Komfort interfejsu" : undefined}
+    >
+      {!embedded && (
+        <div className="experience-settings__heading">
+          <strong id={titleId}>Komfort pracy</strong>
+          <small>Ruch i gęstość są zapisywane lokalnie.</small>
+        </div>
+      )}
       {/* Native selects rendered with the OS chevron at the browser default font size, so the
           only two dropdowns in Settings looked nothing like every other select in the app. */}
       <div className="experience-settings__field">
@@ -239,10 +246,6 @@ export function ExperienceSettings({ compact = false }: { compact?: boolean }) {
           onChange={(event) => density.setDensity(event.target.value as DensityPreference)}
         />
       </div>
-      <label className="experience-settings__toggle">
-        <input type="checkbox" checked={privacy.enabled} onChange={(event) => privacy.setEnabled(event.target.checked)} />
-        <span>Privacy Mode <kbd>Ctrl ⇧ P</kbd></span>
-      </label>
     </section>
   );
 }
