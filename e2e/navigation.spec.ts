@@ -60,8 +60,8 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
       "Praca",
       "Cele",
       "Podróże",
-      "Notatki",
       "Pozostałe",
+      "Notatki",
     ]);
     const tasksLink = primaryNavigation.getByRole("link", { name: "Zadania" });
     await tasksLink.click();

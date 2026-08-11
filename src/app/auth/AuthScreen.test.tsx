@@ -11,6 +11,8 @@ const testState = vi.hoisted(() => ({
     session: null,
     user: null,
     passwordRecovery: false,
+    authError: null as string | null,
+    clearAuthError: vi.fn(),
     signIn: vi.fn(async () => ({ error: null })),
     signInWithGoogle: vi.fn(async () => ({ error: null })),
     signUp: vi.fn(async () => ({ error: null })),
@@ -20,9 +22,13 @@ const testState = vi.hoisted(() => ({
   },
   session: {
     isTestAccount: false,
+    isLocalAccount: false,
     authenticationBypassed: false,
     enterTestAccount: vi.fn(),
+    enterLocalAccount: vi.fn(),
+    goToToday: vi.fn(),
     exitTestAccount: vi.fn(),
+    exitToAuthScreen: vi.fn(),
   },
 }));
 
@@ -39,23 +45,41 @@ describe("AuthScreen", () => {
     testState.auth.configured = true;
     testState.auth.configurationIssue = null;
     testState.auth.passwordRecovery = false;
+    testState.auth.authError = null;
+    testState.auth.clearAuthError.mockClear();
     testState.auth.signIn.mockClear();
     testState.auth.signInWithGoogle.mockClear();
     testState.auth.signUp.mockClear();
     testState.auth.requestPasswordReset.mockClear();
     testState.auth.updatePassword.mockClear();
     testState.session.enterTestAccount.mockClear();
+    testState.session.enterLocalAccount.mockClear();
+    testState.session.goToToday.mockClear();
   });
 
   afterEach(cleanup);
 
-  it("exposes password, Google and test-account entry paths", async () => {
+  it("shows the product areas in the left context panel", () => {
+    render(<AuthScreen />);
+
+    expect(screen.getByRole("heading", { name: "Codzienność nie mieści się w jednej liście." })).toBeInTheDocument();
+    expect(screen.getByText("Rootine łączy zadania, cele, rutyny i ważne sprawy w jeden osobisty system.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ułóż codzienność po swojemu." })).toBeInTheDocument();
+    expect(screen.getByText("Finanse i podróże")).toBeInTheDocument();
+    expect(screen.getByText("Notatki i rzeczy do zapamiętania")).toBeInTheDocument();
+    expect(screen.queryByText("Twoje dane pozostają dostępne lokalnie, a konto włącza synchronizację między sesjami.")).not.toBeInTheDocument();
+  });
+
+  it("exposes password, Google, local and test-account entry paths", async () => {
     const user = userEvent.setup();
     render(<AuthScreen />);
 
     expect(screen.getByRole("heading", { name: "Dobrze Cię widzieć" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kontynuuj z Google" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Nie pamiętasz hasła?" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Wejdź do danych lokalnych" }));
+    expect(testState.session.enterLocalAccount).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole("button", { name: "Wejdź do konta testowego" }));
     expect(testState.session.enterTestAccount).toHaveBeenCalledOnce();
@@ -87,6 +111,7 @@ describe("AuthScreen", () => {
     await user.type(screen.getByLabelText("Hasło"), "sekret");
     await user.click(screen.getByRole("button", { name: "Zaloguj się" }));
     expect(testState.auth.signIn).toHaveBeenCalledWith("ola@example.com", "sekret");
+    expect(testState.session.goToToday).toHaveBeenCalledOnce();
 
     await user.click(screen.getByRole("button", { name: "Utwórz konto" }));
     expect(screen.getByRole("heading", { name: "Utwórz konto" })).toBeInTheDocument();
@@ -103,5 +128,17 @@ describe("AuthScreen", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Hasła nie są takie same");
     expect(testState.auth.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it("shows an OAuth callback error and clears it before retrying", async () => {
+    const user = userEvent.setup();
+    testState.auth.authError = "Logowanie przez Google zostało anulowane. Możesz spróbować ponownie.";
+    render(<AuthScreen />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Logowanie przez Google zostało anulowane");
+
+    await user.click(screen.getByRole("button", { name: "Kontynuuj z Google" }));
+    expect(testState.auth.clearAuthError).toHaveBeenCalledOnce();
+    expect(testState.auth.signInWithGoogle).toHaveBeenCalledOnce();
   });
 });

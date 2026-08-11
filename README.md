@@ -50,3 +50,14 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 The legacy `VITE_SUPABASE_ANON_KEY` name is also supported. Never put a secret or service-role key in a `VITE_` variable.
 
 The database migration in `supabase/migrations/20260806120000_rootine_workspace_snapshots.sql` creates the per-user JSON workspace table and its RLS policies. After signing in from the profile panel, Rootine uploads the existing local workspaces to the account and continues syncing later local changes. Without a session, the app keeps using local browser storage.
+
+### Google sign-in
+
+Google OAuth also requires provider configuration outside the frontend:
+
+1. Create a Google OAuth client of type **Web application**. Add every application origin, for example `http://127.0.0.1:5173`, under **Authorized JavaScript origins**.
+2. Add `https://<project-ref>.supabase.co/auth/v1/callback` under the Google client's **Authorized redirect URIs**.
+3. In Supabase, open **Authentication → Providers → Google**, enable the provider, and enter the Google Client ID and Client Secret.
+4. In **Authentication → URL Configuration**, set the production Site URL and allow the exact post-login URLs used by Rootine, including `http://127.0.0.1:5173/dzisiaj` locally and `https://<production-origin>/dzisiaj` in production.
+
+The Google Client Secret belongs only in Google/Supabase configuration. Never store it in a `VITE_` variable or commit it to this repository. The callback registered in Google and the application redirect allowlisted in Supabase are different URLs.

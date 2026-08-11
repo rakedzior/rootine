@@ -10,8 +10,20 @@ import {
 } from "./localRepository";
 
 export const MODULE_PREFERENCES_STORAGE_KEY = "rootine.sidebar.modules";
-const MODULE_PREFERENCES_VERSION = 1 as const;
+const MODULE_PREFERENCES_VERSION = 2 as const;
 const MODULE_PREFERENCES_CHANGE_EVENT = "rootine:module-preferences-change";
+
+const LEGACY_DEFAULT_ORDER: AppModuleId[] = [
+  "today",
+  "tasks",
+  "nutrition",
+  "sport",
+  "work",
+  "goals",
+  "travel",
+  "notes",
+  "affairs",
+];
 
 export type ModulePreferences = {
   version: typeof MODULE_PREFERENCES_VERSION;
@@ -92,7 +104,15 @@ function migrateModulePreferences(value: unknown): ModulePreferences | null {
   if (!isRecord(value) || !Array.isArray(value.order) || !Array.isArray(value.disabled)) {
     return null;
   }
-  return normalizeModulePreferences(value);
+
+  const persistedOrder = value.order;
+  const normalized = normalizeModulePreferences(value);
+  const usedLegacyDefaultOrder = persistedOrder.length === LEGACY_DEFAULT_ORDER.length
+    && LEGACY_DEFAULT_ORDER.every((moduleId, index) => persistedOrder[index] === moduleId);
+
+  return usedLegacyDefaultOrder
+    ? { ...normalized, order: defaultOrder() }
+    : normalized;
 }
 
 export function loadModulePreferences(): ModulePreferences {

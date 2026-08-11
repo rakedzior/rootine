@@ -9,15 +9,19 @@ import {
   Archive,
   Bell,
   CalendarClock,
+  CalendarOff,
   Car,
+  ChevronRight,
   Check,
   Clock3,
   CreditCard,
   FileText,
+  HeartPulse,
   Pencil,
   Plus,
   ReceiptText,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -44,6 +48,12 @@ import {
   type VehicleItem,
   monthlyEquivalent,
 } from "../data/affairsWorkspace";
+import {
+  HEALTH_STORAGE_KEY,
+  loadHealthWorkspace,
+  saveHealthWorkspace,
+  type HealthWorkspace,
+} from "../data/healthWorkspace";
 import { JDG_STORAGE_KEY, loadJdgWorkspace, saveJdgWorkspace } from "../data/jdgWorkspace";
 import { TRAVEL_STORAGE_KEY, loadTravelWorkspace, saveTravelWorkspace } from "../data/travelWorkspace";
 import { AffairsEditorFields } from "../affairs/AffairsEditorFields";
@@ -51,6 +61,7 @@ import { applyAffairsEditor } from "../affairs/affairsMutations";
 import { buildAffairAttentionItems, resolveAffairAttentionItem, type AffairAttentionItem } from "../affairs/affairsAttention";
 import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { JdgWorkspace } from "./Jdg";
+import { HealthWorkspace as HealthArea } from "../health/HealthWorkspace";
 import {
   Badge,
   Button,
@@ -72,7 +83,6 @@ import {
   Select,
   SectionSurface,
   SummaryStrip,
-  Tabs,
   AddToTasksButton,
 } from "../ui";
 import "../../styles/affairs.css";
@@ -112,12 +122,8 @@ export default function Sprawy() {
   const [workspace, setWorkspace] = useState(loadAffairsWorkspace);
   const [jdgWorkspace, setJdgWorkspace] = useState(loadJdgWorkspace);
   const [travelWorkspace, setTravelWorkspace] = useState(loadTravelWorkspace);
+  const [healthWorkspace, setHealthWorkspace] = useState<HealthWorkspace>(loadHealthWorkspace);
   const [view, setView] = useState<AffairsView>(getInitialView);
-  const [financeFilter, setFinanceFilter] = useState<"all" | "oneTime" | "payments" | "subscriptions">(() => {
-    if (typeof window === "undefined") return "all";
-    const requested = new URLSearchParams(window.location.search).get("widok");
-    return requested === "oneTime" || requested === "payments" || requested === "subscriptions" ? requested : "all";
-  });
   const [subscriptionCategoryFilter, setSubscriptionCategoryFilter] = useState("all");
   const [selectedMatterId, setSelectedMatterId] = useState("");
   const [financeAddOpen, setFinanceAddOpen] = useState(false);
@@ -156,6 +162,10 @@ export default function Sprawy() {
     setTravelWorkspace(loadTravelWorkspace());
   }), []);
 
+  useEffect(() => subscribeToLocalWorkspace(HEALTH_STORAGE_KEY, () => {
+    setHealthWorkspace(loadHealthWorkspace());
+  }), []);
+
   useEffect(() => {
     const requestedView = new URLSearchParams(location.search).get("widok");
     if (requestedView === "travel") {
@@ -165,7 +175,7 @@ export default function Sprawy() {
     const canonicalView = getInitialView();
     setView(canonicalView);
     const params = new URLSearchParams(location.search);
-    const canonicalParam = canonicalView === "today" ? null : canonicalView;
+    const canonicalParam = canonicalView === "overview" ? null : canonicalView;
     if (requestedView === canonicalParam) return;
     if (canonicalParam) params.set("widok", canonicalParam);
     else params.delete("widok");
@@ -241,6 +251,7 @@ export default function Sprawy() {
     const tone = documentDueCopy(document).tone;
     return tone === "danger" || tone === "warning";
   });
+  const hasExpiredDocuments = documentsRequiringAttention.some((document) => documentDueCopy(document).tone === "danger");
   const stableDocuments = orderedDocuments.filter((document) => !documentsRequiringAttention.includes(document));
 
   const vehicleAlerts = workspace.vehicleItems.filter((item) => {
@@ -254,8 +265,8 @@ export default function Sprawy() {
   }).length;
 
   const attentionItems = useMemo(
-    () => buildAffairAttentionItems(workspace, jdgWorkspace, travelWorkspace, new Date(), null),
-    [jdgWorkspace, travelWorkspace, workspace],
+    () => buildAffairAttentionItems(workspace, jdgWorkspace, travelWorkspace, new Date(), null, healthWorkspace),
+    [healthWorkspace, jdgWorkspace, travelWorkspace, workspace],
   );
   const undatedMatterItems = useMemo<AffairAttentionItem[]>(() => workspace.matters
     .filter((matter) => matter.status !== "done" && !matter.dueDate)
@@ -278,6 +289,37 @@ export default function Sprawy() {
       return view === "today" ? days <= 0 : days >= 0 && days <= 7;
     });
   }, [attentionItems, undatedMatterItems, view]);
+  const agendaGroups = useMemo(() => {
+    const groups = {
+      overdue: [] as AffairAttentionItem[],
+      soon: [] as AffairAttentionItem[],
+      later: [] as AffairAttentionItem[],
+      undated: [] as AffairAttentionItem[],
+    };
+
+    agendaItems.forEach((item) => {
+      if (!item.dueDate) {
+        groups.undated.push(item);
+        return;
+      }
+      const days = daysUntil(item.dueDate);
+      if (days < 0) groups.overdue.push(item);
+      else if (days <= 7) groups.soon.push(item);
+      else groups.later.push(item);
+    });
+
+    return [
+      { id: "overdue", label: "Po terminie", description: "Zaległe terminy wymagające decyzji.", tone: "danger" as const, icon: Bell, items: groups.overdue },
+      { id: "soon", label: "Najbliższe", description: "Dzisiaj i kolejne 7 dni.", tone: "warning" as const, icon: CalendarClock, items: groups.soon },
+      { id: "later", label: "W przyszłości", description: "Terminy późniejsze niż 7 dni.", tone: "neutral" as const, icon: Clock3, items: groups.later },
+      { id: "undated", label: "Bez daty", description: "Do zaplanowania, gdy termin będzie znany.", tone: "neutral" as const, icon: CalendarOff, items: groups.undated },
+    ].filter((group) => group.items.length > 0);
+  }, [agendaItems]);
+  const agendaHeadingTone = agendaItems.some((item) => item.dueDate && daysUntil(item.dueDate) < 0)
+    ? "danger"
+    : agendaItems.some((item) => item.dueDate && daysUntil(item.dueDate) <= 7)
+      ? "warning"
+      : "neutral";
   const todayAttentionCount = useMemo(
     () => attentionItems.filter((item) => daysUntil(item.dueDate) <= 0).length,
     [attentionItems],
@@ -290,6 +332,13 @@ export default function Sprawy() {
     [attentionItems],
   );
   const dueSoon = attentionItems.length;
+  const healthOpenCount = healthWorkspace.entries.filter((entry) => entry.status !== "done").length;
+  const healthDueCount = healthWorkspace.entries.filter((entry) => {
+    if (entry.status === "done" || !entry.dueDate) return false;
+    const days = daysUntil(entry.dueDate);
+    return days <= 30;
+  }).length;
+  const isFinanceView = view === "finances" || view === "finance-one-time" || view === "finance-recurring";
 
   const openMatterEditor = (matter?: Matter) => {
     setDraft(matter ? {
@@ -569,7 +618,7 @@ export default function Sprawy() {
         <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.title}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
         <span className="affairs-payment-row__actions">
           <AddToTasksButton compact input={{
-            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Finanse", href: "/sprawy?widok=finances" },
+            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Finanse", href: "/sprawy?widok=finance-one-time" },
             text: payment.title,
             done: payment.paid,
             calendarDate: payment.dueDate,
@@ -605,9 +654,9 @@ export default function Sprawy() {
   const renderDocumentRow = (document: DocumentRecord) => {
     const due = documentDueCopy(document);
     return (
-      <article key={document.id} className={`affairs-document-row is-${due.tone}`}>
+      <article key={document.id} className={`affairs-document-row affairs-document-row--${document.category} is-${due.tone}`}>
         <span className="affairs-document-row__identity">
-          <span className="affairs-payment-row__icon"><FileText size={13} /></span>
+          <span className="affairs-payment-row__icon affairs-document-row__icon"><FileText size={13} /></span>
           <span>
             <strong>{document.name}</strong>
             <small>{document.holder} · {document.note || "Bez dodatkowej notatki"}</small>
@@ -640,7 +689,7 @@ export default function Sprawy() {
     setView(nextView);
     if (nextView !== "all") setSelectedMatterId("");
     const params = new URLSearchParams(location.search);
-    if (nextView === "today") {
+    if (nextView === "overview") {
       params.delete("widok");
     } else {
       params.set("widok", nextView);
@@ -665,6 +714,8 @@ export default function Sprawy() {
       ? "dokumenty"
       : item.kind === "vehicle"
         ? "auto"
+        : item.kind === "health"
+          ? "zdrowie"
         : ["oneTime", "payment", "subscription", "jdg"].includes(item.kind)
           ? "finanse"
           : "dom";
@@ -696,7 +747,7 @@ export default function Sprawy() {
   };
 
   const resolveAttention = (item: AffairAttentionItem) => {
-    const resolved = resolveAffairAttentionItem(workspace, jdgWorkspace, travelWorkspace, item);
+    const resolved = resolveAffairAttentionItem(workspace, jdgWorkspace, travelWorkspace, item, new Date(), healthWorkspace);
     setWorkspace(resolved.affairs);
     if (resolved.jdg !== jdgWorkspace) {
       setJdgWorkspace(resolved.jdg);
@@ -706,10 +757,53 @@ export default function Sprawy() {
       setTravelWorkspace(resolved.travel);
       if (!saveTravelWorkspace(resolved.travel)) setStorageError(true);
     }
+    if (resolved.health && resolved.health !== healthWorkspace) {
+      setHealthWorkspace(resolved.health);
+      if (!saveHealthWorkspace(resolved.health)) setStorageError(true);
+    }
+  };
+
+  const renderAgendaRow = (item: AffairAttentionItem) => {
+    const due = dueCopy(item.dueDate);
+    const UpcomingIcon = UPCOMING_ICONS[item.kind as keyof typeof UPCOMING_ICONS];
+    const days = item.dueDate ? daysUntil(item.dueDate) : Number.POSITIVE_INFINITY;
+    const timeState = !item.dueDate ? "undated" : days < 0 ? "overdue" : days <= 7 ? "soon" : "later";
+    return (
+      <div key={item.key} className={`affairs-agenda-row affairs-agenda-row--time-${timeState}`}>
+        <button type="button" className="affairs-agenda-row__main" onClick={() => openAttentionSource(item)}>
+          <span className="affairs-agenda-row__icon">
+            <UpcomingIcon size={13} />
+          </span>
+          <span className="affairs-agenda-row__copy">
+            <strong>{item.title}</strong>
+            <small>{item.meta}</small>
+          </span>
+        </button>
+        {item.amount !== null && (
+          <span className="affairs-agenda-row__amount">
+            <SensitiveValue label={`Kwota: ${item.title}`}>{formatMoney(item.amount)}</SensitiveValue>
+          </span>
+        )}
+        <Badge tone={due.tone}>{due.text}</Badge>
+        <span className="affairs-agenda-row__actions">
+          {item.canSchedule && (
+            <Button variant="ghost" size="sm" iconOnly title="Zaplanuj jako sprawę" aria-label={`Zaplanuj: ${item.title}`} onClick={() => scheduleAttention(item)}>
+              <CalendarClock size={13} />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" iconOnly title="Przypomnij za 7 dni" aria-label={`Przypomnij za 7 dni: ${item.title}`} onClick={() => snoozeAttention(item)}>
+            <Bell size={13} />
+          </Button>
+          <Button variant="ghost" size="sm" iconOnly title="Oznacz jako załatwione" aria-label={`Oznacz jako załatwione: ${item.title}`} onClick={() => resolveAttention(item)}>
+            <Check size={13} />
+          </Button>
+        </span>
+      </div>
+    );
   };
 
   const renderPrimaryAction = () => {
-    if (view === "finances") {
+    if (isFinanceView) {
       return (
         <div className="affairs-finance-add">
           <Button
@@ -750,22 +844,30 @@ export default function Sprawy() {
   };
 
   const navMeta = (itemView: AffairsView) => {
+    if (itemView === "overview") return undefined;
     if (itemView === "today") return todayAttentionCount || undefined;
     if (itemView === "week") return weekAttentionCount || undefined;
     if (itemView === "all") return attentionItems.length + undatedMatterItems.length;
     if (itemView === "finances") return workspace.oneTimePayments.filter((item) => !item.paid).length
       + workspace.payments.filter((item) => item.active).length
       + workspace.subscriptions.filter((item) => item.active).length;
+    if (itemView === "finance-one-time") return workspace.oneTimePayments.filter((item) => !item.paid).length || undefined;
+    if (itemView === "finance-recurring") return workspace.payments.filter((item) => item.active).length
+      + workspace.subscriptions.filter((item) => item.active).length;
     if (itemView === "documents") return documentAlerts || undefined;
     if (itemView === "vehicles") return vehicleAlerts || undefined;
+    if (itemView === "health") return healthDueCount || undefined;
     return undefined;
   };
 
-  const mobileViewOptions = NAV_ITEMS.map((item) => (
-    item.view === "today"
-      ? { value: item.view, label: item.label, description: "Terminy wymagające uwagi dzisiaj" }
-      : { value: item.view, label: item.label }
-  ));
+  const mobileViewOptions = NAV_ITEMS.map((item) => {
+    if (item.view === "overview") return { value: item.view, label: item.label, description: "Najważniejsze sygnały z całego modułu" };
+    if (item.view === "today") return { value: item.view, label: item.label, description: "Terminy wymagające uwagi dzisiaj" };
+    if (item.view === "finances") return { value: item.view, label: "Finanse — przegląd" };
+    if (item.view === "finance-one-time") return { value: item.view, label: "Finanse — jednorazowe" };
+    if (item.view === "finance-recurring") return { value: item.view, label: "Finanse — cykliczne" };
+    return { value: item.view, label: item.label };
+  });
   const viewArchetype = AFFAIRS_VIEW_ARCHETYPE[view];
 
   const contextSidebar = (
@@ -779,6 +881,7 @@ export default function Sprawy() {
                 <ContextNavItem
                   key={item.view}
                   active={view === item.view}
+                  depth={item.depth}
                   icon={<ItemIcon />}
                   label={item.label}
                   meta={navMeta(item.view)}
@@ -854,7 +957,7 @@ export default function Sprawy() {
 
   const editorPresentation = getEditorPresentation(editor);
 
-  if (view === "jdg") {
+    if (view === "jdg") {
     return (
       <JdgWorkspace
         mobileNavigation={(
@@ -890,6 +993,19 @@ export default function Sprawy() {
       pageWidth="wide"
     >
       <ModuleMain className={`affairs-main affairs-main--${viewArchetype}`} transitionKey={view}>
+        {view === "health" ? (
+          <HealthArea
+            onWorkspaceChange={setHealthWorkspace}
+            mobileNavigation={<Select
+              compact
+              aria-label="Wybierz widok spraw"
+              fieldClassName="context-mobile-select affairs-mobile-view-select"
+              value={view}
+              options={mobileViewOptions}
+              onChange={(event) => selectView(event.target.value as AffairsView)}
+            />}
+          />
+        ) : <>
         <ContentHeader
           headingLevel={1}
           className={`affairs-toolbar affairs-toolbar--${viewArchetype} ${viewArchetype === "agenda" ? "affairs-toolbar--compact" : ""}`.trim()}
@@ -904,22 +1020,8 @@ export default function Sprawy() {
             options={mobileViewOptions}
             onChange={(event) => selectView(event.target.value as AffairsView)}
           />}
-          controls={view === "finances" ? (
-            <Tabs
-              items={[
-                { id: "all", label: "Wszystkie" },
-                { id: "oneTime", label: "Jednorazowe" },
-                { id: "payments", label: "Cykliczne" },
-                { id: "subscriptions", label: "Subskrypcje" },
-              ]}
-              activeId={financeFilter}
-              onChange={(id) => setFinanceFilter(id as typeof financeFilter)}
-              ariaLabel="Typ płatności"
-              className="affairs-finance-tabs ui-tabs--segmented"
-            />
-          ) : undefined}
           actions={<>
-          {view === "finances" && (
+          {isFinanceView && (
             <span className="affairs-toolbar__context">
               <CreditCard size={13} aria-hidden="true" />
               <SensitiveValue label="Miesięczne koszty stałe">{formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)}</SensitiveValue> / mies.
@@ -942,58 +1044,123 @@ export default function Sprawy() {
         />
 
         <div className={`affairs-canvas affairs-canvas--${viewArchetype} affairs-canvas--${view}`}>
+          {view === "overview" && (
+            <div className="affairs-overview-home">
+              <SectionSurface className="affairs-overview-hero" aria-labelledby="affairs-overview-heading">
+                <div>
+                  <span className="affairs-overview-hero__icon" aria-hidden="true"><ShieldCheck size={18} /></span>
+                  <div>
+                    <h2 id="affairs-overview-heading">Na radarze</h2>
+                    <p>Jedno spokojne miejsce dla spraw, pieniędzy, rejestrów i ważnych obszarów.</p>
+                  </div>
+                </div>
+                <span className="affairs-overview-hero__status">
+                  {attentionItems.length ? `${attentionItems.length} ${attentionItems.length === 1 ? "wpis" : "wpisów"} wymaga uwagi` : "Wszystko dopilnowane"}
+                </span>
+              </SectionSurface>
+
+              <SummaryStrip
+                label="Podsumowanie pozostałych"
+                className="affairs-overview-summary"
+                items={[
+                  { label: "Radar", value: attentionItems.length, note: "najbliższych terminów", tone: attentionItems.length ? "warning" : "success" },
+                  { label: "Sprawy", value: workspace.matters.filter((matter) => matter.status !== "done").length, note: "otwartych", tone: "primary" },
+                  { label: "Finanse", value: <SensitiveValue label="Jednorazowe do opłacenia">{formatMoney(unpaidOneTimeTotal)}</SensitiveValue>, note: "do opłacenia", tone: unpaidOneTimeTotal ? "warning" : "success" },
+                  { label: "Zdrowie", value: healthOpenCount, note: "otwartych terminów", tone: healthDueCount ? "warning" : "neutral" },
+                ]}
+              />
+
+              <div className="affairs-overview-home__grid">
+                <SectionSurface className="affairs-overview-radar" aria-labelledby="affairs-overview-radar-heading">
+                  <header className="affairs-overview-panel-heading">
+                    <div>
+                      <h2 id="affairs-overview-radar-heading">Najbliższe zobowiązania</h2>
+                      <p>Terminy z różnych rejestrów ułożone według pilności.</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => selectView("today")}>Zobacz sprawy</Button>
+                  </header>
+                  {attentionItems.length === 0 ? (
+                    <EmptyState icon={<Archive size={18} />} title="Nic nie wymaga teraz reakcji" description="Możesz spokojnie przejrzeć jeden z rejestrów albo dodać nową sprawę." />
+                  ) : (
+                    <div className="affairs-overview-radar__list">
+                      {attentionItems.slice(0, 6).map((item) => {
+                        const due = dueCopy(item.dueDate);
+                        const UpcomingIcon = UPCOMING_ICONS[item.kind as keyof typeof UPCOMING_ICONS];
+                        return (
+                          <button key={item.key} type="button" className="affairs-overview-radar__row" onClick={() => openAttentionSource(item)}>
+                            <span className="affairs-overview-radar__type" aria-hidden="true"><UpcomingIcon size={14} /></span>
+                            <span className="affairs-overview-radar__copy"><strong>{item.title}</strong><small>{item.meta}</small></span>
+                            <Badge tone={due.tone}>{due.text}</Badge>
+                            <ChevronRight size={14} aria-hidden="true" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </SectionSurface>
+
+                <div className="affairs-overview-links" aria-label="Główne sekcje Pozostałych">
+                  <button type="button" className="affairs-overview-link affairs-overview-link--matters" onClick={() => selectView("all")}>
+                    <span className="affairs-overview-link__icon" aria-hidden="true"><ShieldCheck size={16} /></span>
+                    <span><strong>Sprawy</strong><small>{workspace.matters.filter((matter) => matter.status !== "done").length} otwartych spraw · {todayAttentionCount} dziś</small></span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                  <button type="button" className="affairs-overview-link affairs-overview-link--finance" onClick={() => selectView("finances")}>
+                    <span className="affairs-overview-link__icon" aria-hidden="true"><CreditCard size={16} /></span>
+                    <span><strong>Finanse</strong><small>{workspace.payments.filter((payment) => payment.active).length + workspace.subscriptions.filter((subscription) => subscription.active).length} stałych zobowiązań · {formatMoney(monthlyPaymentTotal + monthlySubscriptionTotal)} / mies.</small></span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                  <button type="button" className="affairs-overview-link affairs-overview-link--registers" onClick={() => selectView("documents")}>
+                    <span className="affairs-overview-link__icon" aria-hidden="true"><FileText size={16} /></span>
+                    <span><strong>Rejestry</strong><small>{workspace.documents.length} dokumentów · {workspace.vehicles.length} pojazdów</small></span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                  <button type="button" className="affairs-overview-link affairs-overview-link--other" onClick={() => selectView("health")}>
+                    <span className="affairs-overview-link__icon" aria-hidden="true"><HeartPulse size={16} /></span>
+                    <span><strong>Pozostałe</strong><small>Zdrowie · JDG · {healthDueCount ? `${healthDueCount} bliskich terminów` : "bez pilnych terminów"}</small></span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {(view === "today" || view === "week" || view === "all") && (
             <div className="affairs-overview">
               <SectionSurface className="affairs-agenda affairs-section-surface affairs-section-surface--agenda" aria-labelledby="affairs-radar-heading">
                 <header className="affairs-section-heading">
                   <div>
-                    <h2 id="affairs-radar-heading">{view === "today" ? "Dzisiejsze terminy" : view === "week" ? "Terminy w tym tygodniu" : "Wszystkie aktywne sprawy"}</h2>
-                    <p>{view === "today" ? "Zaległe i dzisiejsze terminy wymagające reakcji" : view === "week" ? "Najbliższe terminy, żeby tydzień był pod kontrolą" : "Ten sam rejestr w pełnym horyzoncie czasowym"}</p>
+                    <h2 id="affairs-radar-heading">{view === "today" ? "Dzisiejsze terminy" : view === "week" ? "Terminy w tym tygodniu" : "Wszystkie terminy i sprawy"}</h2>
+                    <p>{view === "today" ? "Zaległe i dzisiejsze terminy wymagające reakcji" : view === "week" ? "Najbliższe terminy, żeby tydzień był pod kontrolą" : "Zobowiązania pogrupowane według pilności i terminu"}</p>
                   </div>
-                  <span className={`affairs-section-heading__meta ${agendaItems.length ? "is-warning" : ""}`}>
+                  <span className={`affairs-section-heading__meta is-${agendaHeadingTone}`}>
                     {pluralize(agendaItems.length, "termin", "terminy", "terminów")}
                   </span>
                 </header>
                 {agendaItems.length === 0 ? (
                   <EmptyState icon={<Archive size={18} />} title="Wszystko dopilnowane" description="Nie ma teraz żadnych terminów wymagających reakcji." />
-                ) : (
-                  <div className="affairs-agenda__list">
-                    {agendaItems.map((item) => {
-                      const due = dueCopy(item.dueDate);
-                      const UpcomingIcon = UPCOMING_ICONS[item.kind as keyof typeof UPCOMING_ICONS];
+                ) : view === "all" ? (
+                  <div className="affairs-agenda__groups">
+                    {agendaGroups.map((group) => {
+                      const GroupIcon = group.icon;
                       return (
-                        <div key={item.key} className={`affairs-agenda-row affairs-agenda-row--${item.kind}`}>
-                          <button type="button" className="affairs-agenda-row__main" onClick={() => openAttentionSource(item)}>
-                            <span className={`affairs-agenda-row__icon affairs-agenda-row__icon--${item.kind}`}>
-                              <UpcomingIcon size={13} />
-                            </span>
-                            <span className="affairs-agenda-row__copy">
-                              <strong>{item.title}</strong>
-                              <small>{item.meta}</small>
-                            </span>
-                          </button>
-                          {item.amount !== null && (
-                            <span className="affairs-agenda-row__amount">
-                              <SensitiveValue label={`Kwota: ${item.title}`}>{formatMoney(item.amount)}</SensitiveValue>
-                            </span>
-                          )}
-                          <Badge tone={due.tone}>{due.text}</Badge>
-                          <span className="affairs-agenda-row__actions">
-                            {item.canSchedule && (
-                              <Button variant="ghost" size="sm" iconOnly title="Zaplanuj jako sprawę" aria-label={`Zaplanuj: ${item.title}`} onClick={() => scheduleAttention(item)}>
-                                <CalendarClock size={13} />
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="sm" iconOnly title="Przypomnij za 7 dni" aria-label={`Przypomnij za 7 dni: ${item.title}`} onClick={() => snoozeAttention(item)}>
-                              <Bell size={13} />
-                            </Button>
-                            <Button variant="ghost" size="sm" iconOnly title="Oznacz jako załatwione" aria-label={`Oznacz jako załatwione: ${item.title}`} onClick={() => resolveAttention(item)}>
-                              <Check size={13} />
-                            </Button>
-                          </span>
-                        </div>
+                        <section key={group.id} className={`affairs-agenda-group affairs-agenda-group--${group.id}`} aria-labelledby={`affairs-agenda-group-${group.id}`}>
+                          <header className="affairs-agenda-group__header">
+                            <span className="affairs-agenda-group__icon" aria-hidden="true"><GroupIcon size={14} /></span>
+                            <div>
+                              <h3 id={`affairs-agenda-group-${group.id}`}>{group.label}</h3>
+                              <p>{group.description}</p>
+                            </div>
+                            <Badge tone={group.tone}>{group.items.length}</Badge>
+                          </header>
+                          <div className="affairs-agenda-group__rows">{group.items.map(renderAgendaRow)}</div>
+                        </section>
                       );
                     })}
+                  </div>
+                ) : (
+                  <div className="affairs-agenda__list">
+                    {agendaItems.map(renderAgendaRow)}
                   </div>
                 )}
               </SectionSurface>
@@ -1012,11 +1179,11 @@ export default function Sprawy() {
             />
           )}
 
-          {view === "finances" && (financeFilter === "all" || financeFilter === "oneTime") && (
+          {(view === "finances" || view === "finance-one-time") && (
             <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--one-time" aria-label="Płatności jednorazowe">
               <header className="affairs-register-section__header">
                 <div><ReceiptText size={16} aria-hidden="true" /><div><h2>Jednorazowe</h2><p>Opłaty i zobowiązania z jednym terminem.</p></div></div>
-                <Badge tone={workspace.oneTimePayments.some((item) => !item.paid) ? "warning" : "success"}>{workspace.oneTimePayments.filter((item) => !item.paid).length} otwartych</Badge>
+                <Badge tone={workspace.oneTimePayments.some((item) => !item.paid) ? "warning" : "success"}>{pluralize(workspace.oneTimePayments.filter((item) => !item.paid).length, "otwarta", "otwarte", "otwartych")}</Badge>
               </header>
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Zobowiązanie</span>
@@ -1060,7 +1227,7 @@ export default function Sprawy() {
                       <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.title}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
                       <span className="affairs-payment-row__actions">
                         <AddToTasksButton compact input={{
-                            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Finanse", href: "/sprawy?widok=finances" },
+                            source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/one-time`, context: "Finanse", href: "/sprawy?widok=finance-one-time" },
                           text: payment.title,
                           done: payment.paid,
                           calendarDate: payment.dueDate,
@@ -1095,11 +1262,11 @@ export default function Sprawy() {
             </SectionSurface>
           )}
 
-          {view === "finances" && (financeFilter === "all" || financeFilter === "payments") && (
+          {(view === "finances" || view === "finance-recurring") && (
             <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--payments" aria-label="Płatności cykliczne">
               <header className="affairs-register-section__header">
-                <div><RefreshCw size={16} aria-hidden="true" /><div><h2>Cykliczne</h2><p>Stałe rachunki i regularne zobowiązania.</p></div></div>
-                <Badge tone="neutral">{workspace.payments.filter((item) => item.active).length} aktywnych</Badge>
+                <div><RefreshCw size={16} aria-hidden="true" /><div><h2>Rachunki i opłaty</h2><p>Stałe zobowiązania rozliczane w regularnym cyklu.</p></div></div>
+                <Badge tone="neutral">{pluralize(workspace.payments.filter((item) => item.active).length, "aktywna", "aktywne", "aktywnych")}</Badge>
               </header>
               <div className="affairs-ledger__head affairs-ledger__head--payments">
                 <span>Płatność</span>
@@ -1120,16 +1287,16 @@ export default function Sprawy() {
                 return (
                   <div key={payment.id} className={`affairs-payment-row ${payment.active ? "" : "is-paused"}`}>
                     <span className="affairs-payment-row__icon"><ReceiptText size={13} /></span>
-                    <span className="affairs-payment-row__title">
-                      <strong>{payment.name}</strong>
-                      <small>{payment.category} · {payment.automatic ? "automatycznie" : "ręcznie"}</small>
+                      <span className="affairs-payment-row__title">
+                        <strong>{payment.name}</strong>
+                        <small><span className="affairs-inline-tag">Opłata stała</span><span aria-hidden="true"> · </span>{payment.category} · {payment.automatic ? "automatycznie" : "ręcznie"}</small>
                     </span>
                     <span className="affairs-payment-row__cadence">{CADENCE_LABELS[payment.cadence]}</span>
                     <Badge tone={payment.active ? due.tone : "neutral"}>{payment.active ? due.text : "Wstrzymana"}</Badge>
                     <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${payment.name}`}>{formatMoney(payment.amount)}</SensitiveValue></strong>
                     <span className="affairs-payment-row__actions">
                       <AddToTasksButton compact input={{
-                        source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/recurring`, context: "Finanse", href: "/sprawy?widok=finances" },
+                        source: { kind: "affairs", entity: `${encodeURIComponent(payment.id)}/recurring`, context: "Finanse", href: "/sprawy?widok=finance-recurring" },
                         text: payment.name,
                         done: false,
                         calendarDate: payment.nextDueDate,
@@ -1182,10 +1349,10 @@ export default function Sprawy() {
             </SectionSurface>
           )}
 
-          {view === "finances" && (financeFilter === "all" || financeFilter === "subscriptions") && (
+          {(view === "finances" || view === "finance-recurring") && (
             <SectionSurface className="affairs-ledger affairs-section-surface affairs-section-surface--subscriptions" aria-label="Subskrypcje i członkostwa">
               <header className="affairs-register-section__header">
-                <div><CreditCard size={16} aria-hidden="true" /><div><h2>Subskrypcje</h2><p>Usługi, członkostwa i terminy odnowień.</p></div></div>
+                <div><CreditCard size={16} aria-hidden="true" /><div><h2>Subskrypcje i członkostwa</h2><p>Cykliczne usługi z kosztem, odnowieniem i końcem zobowiązania.</p></div></div>
                 <Select
                   compact
                   aria-label="Filtr kategorii subskrypcji"
@@ -1224,8 +1391,8 @@ export default function Sprawy() {
                       <span className="affairs-payment-row__title">
                         <strong>{subscription.name}</strong>
                         <small>
-                          <span className="affairs-inline-tag">{subscription.category}</span>
-                          <span aria-hidden="true"> · </span>{subscription.renewal === "automatic" ? "odnowienie automatyczne" : "odnowienie ręczne"}
+                          <span className="affairs-inline-tag">Subskrypcja</span>
+                          <span aria-hidden="true"> · </span>{subscription.category} · {subscription.renewal === "automatic" ? "odnowienie automatyczne" : "odnowienie ręczne"}
                           {subscription.commitmentEndDate ? ` · umowa do ${formatDate(subscription.commitmentEndDate)}` : ""}
                         </small>
                       </span>
@@ -1234,7 +1401,7 @@ export default function Sprawy() {
                       <strong className="affairs-payment-row__amount"><SensitiveValue label={`Kwota: ${subscription.name}`}>{formatMoney(subscription.amount)}</SensitiveValue></strong>
                       <span className="affairs-payment-row__actions">
                         <AddToTasksButton compact input={{
-                          source: { kind: "affairs", entity: `${encodeURIComponent(subscription.id)}/subscription`, context: "Finanse", href: "/sprawy?widok=finances" },
+                          source: { kind: "affairs", entity: `${encodeURIComponent(subscription.id)}/subscription`, context: "Finanse", href: "/sprawy?widok=finance-recurring" },
                           text: subscription.name,
                           done: false,
                           calendarDate: subscription.nextBillingDate,
@@ -1304,7 +1471,7 @@ export default function Sprawy() {
                     <SectionSurface className="affairs-document-group affairs-section-surface affairs-section-surface--documents is-attention">
                       <header className="affairs-register-section__header">
                         <div><Bell size={16} aria-hidden="true" /><div><h2>Wymagają uwagi</h2><p>Najpierw odnowienia i kończące się ważności.</p></div></div>
-                        <Badge tone="warning">{documentsRequiringAttention.length}</Badge>
+                      <Badge tone={hasExpiredDocuments ? "danger" : "warning"}>{documentsRequiringAttention.length}</Badge>
                       </header>
                       <div className="affairs-document-group__rows">{documentsRequiringAttention.map(renderDocumentRow)}</div>
                     </SectionSurface>
@@ -1339,7 +1506,7 @@ export default function Sprawy() {
                 const renderVehicleItem = (item: VehicleItem) => {
                   const due = vehicleItemDueCopy(item, vehicle);
                   return (
-                    <div key={item.id} className={`affairs-vehicle-row ${item.done ? "is-done" : ""}`}>
+                    <div key={item.id} className={`affairs-vehicle-row is-${due.tone} ${item.done ? "is-done" : ""}`}>
                       <Checkbox
                         size="sm"
                         checked={item.done}
@@ -1380,6 +1547,7 @@ export default function Sprawy() {
                   const tone = vehicleItemDueCopy(item, vehicle).tone;
                   return tone === "danger" || tone === "warning";
                 });
+                const hasOverdueVehicleItems = attentionVehicleItems.some((item) => vehicleItemDueCopy(item, vehicle).tone === "danger");
                 const plannedVehicleItems = items.filter((item) => !item.done && !attentionVehicleItems.includes(item));
                 return (
                   <SectionSurface key={vehicle.id} className="affairs-vehicle affairs-section-surface affairs-section-surface--vehicles">
@@ -1389,25 +1557,27 @@ export default function Sprawy() {
                         <h2>{vehicle.name}</h2>
                         <p>{vehicle.registration || "Bez numeru rejestracyjnego"} · {formatMileage(vehicle.mileage)}</p>
                       </div>
-                      <span className="affairs-vehicle__status">
-                        <Badge tone={attentionVehicleItems.length ? "warning" : "success"}>
-                          {attentionVehicleItems.length ? `${attentionVehicleItems.length} wymaga uwagi` : "Terminy bezpieczne"}
-                        </Badge>
-                      </span>
-                      <span className="affairs-vehicle__actions">
-                        <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openVehicleItemEditor(vehicle.id)}>Dodaj termin</Button>
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${vehicle.name}`} onClick={() => openVehicleEditor(vehicle)}><Pencil size={13} /></Button>
-                        <Button
-                          variant="ghost"
-                          className="ui-button--ghost-danger"
-                          size="sm"
-                          iconOnly
-                          aria-label={`Usuń ${vehicle.name}`}
-                          onClick={() => setDeleteState({ kind: "vehicle", id: vehicle.id, label: vehicle.name })}
-                        >
-                          <Trash2 size={13} />
-                        </Button>
-                      </span>
+                      <div className="affairs-vehicle__header-tools">
+                        <span className="affairs-vehicle__status">
+                          <Badge tone={hasOverdueVehicleItems ? "danger" : attentionVehicleItems.length ? "warning" : "success"}>
+                            {attentionVehicleItems.length ? `${attentionVehicleItems.length} wymaga uwagi` : "Terminy bezpieczne"}
+                          </Badge>
+                        </span>
+                        <span className="affairs-vehicle__actions">
+                          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openVehicleItemEditor(vehicle.id)}>Dodaj termin</Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${vehicle.name}`} onClick={() => openVehicleEditor(vehicle)}><Pencil size={13} /></Button>
+                          <Button
+                            variant="ghost"
+                            className="ui-button--ghost-danger"
+                            size="sm"
+                            iconOnly
+                            aria-label={`Usuń ${vehicle.name}`}
+                            onClick={() => setDeleteState({ kind: "vehicle", id: vehicle.id, label: vehicle.name })}
+                          >
+                            <Trash2 size={13} />
+                          </Button>
+                        </span>
+                      </div>
                     </header>
                     {items.length === 0 ? (
                       <div className="affairs-vehicle__empty">
@@ -1417,7 +1587,7 @@ export default function Sprawy() {
                     ) : (
                       <div className="affairs-vehicle__items">
                         {attentionVehicleItems.length > 0 && (
-                          <section className="affairs-vehicle-group is-attention" aria-label="Terminy wymagające uwagi">
+                          <section className={`affairs-vehicle-group is-attention ${hasOverdueVehicleItems ? "is-danger" : ""}`} aria-label="Terminy wymagające uwagi">
                             <header><span>Wymagają uwagi</span><strong>{attentionVehicleItems.length}</strong></header>
                             <div className="affairs-vehicle-row-list">{attentionVehicleItems.map(renderVehicleItem)}</div>
                           </section>
@@ -1442,6 +1612,7 @@ export default function Sprawy() {
           )}
 
         </div>
+        </>}
       </ModuleMain>
 
       {editor && (

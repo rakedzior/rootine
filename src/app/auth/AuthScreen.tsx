@@ -1,9 +1,13 @@
 import { useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
+  BriefcaseBusiness,
   CalendarCheck2,
-  Dumbbell,
   FlaskConical,
+  HardDrive,
+  HeartPulse,
+  NotebookPen,
+  Plane,
   RefreshCw,
   Target,
 } from "lucide-react";
@@ -39,15 +43,21 @@ function AuthContextPanel() {
     <section className="auth-context" aria-label="O Rootine">
       <AuthBrand />
       <div className="auth-context__body">
-        <h1>Codzienność pod kontrolą, bez zbędnego hałasu.</h1>
-        <p>Planuj dzień, prowadź zadania i dbaj o najważniejsze obszary życia w jednym miejscu.</p>
+        <h1>Codzienność nie mieści się w jednej liście.</h1>
+        <p>Rootine łączy zadania, cele, rutyny i ważne sprawy w jeden osobisty system.</p>
+        <div className="auth-context__lead">
+          <h2>Ułóż codzienność po swojemu.</h2>
+          <p>Zadania, plany i sprawy, które masz na głowie w jednym miejscu.</p>
+        </div>
         <ul className="auth-context__areas">
-          <li><CalendarCheck2 aria-hidden="true" /><span><strong>Plan i zadania</strong><small>Jeden obraz dnia, terminów i zobowiązań.</small></span></li>
-          <li><Target aria-hidden="true" /><span><strong>Cele i postęp</strong><small>Realne etapy zamiast kolejnej listy życzeń.</small></span></li>
-          <li><Dumbbell aria-hidden="true" /><span><strong>Zdrowie i rytm</strong><small>Odżywianie, trening i codzienne nawyki.</small></span></li>
+          <li><CalendarCheck2 aria-hidden="true" /><span><strong>Dzień i zadania</strong><small>Zobacz, co czeka dziś, co może poczekać i jaki jest następny krok.</small></span></li>
+          <li><Target aria-hidden="true" /><span><strong>Cele i postęp</strong><small>Zamień większe plany na konkretne kroki i obserwuj, jak nabierają kształtu.</small></span></li>
+          <li><BriefcaseBusiness aria-hidden="true" /><span><strong>Praca i bieżące sprawy</strong><small>Miej swoje obowiązki pod ręką, bez konieczności trzymania wszystkiego w głowie.</small></span></li>
+          <li><HeartPulse aria-hidden="true" /><span><strong>Zdrowie i rytm dnia</strong><small>Zapisuj treningi, posiłki i nawyki, które pomagają Ci dobrze funkcjonować.</small></span></li>
+          <li><Plane aria-hidden="true" /><span><strong>Finanse i podróże</strong><small>Miej pod ręką wydatki, rezerwacje i wszystko, co trzeba przygotować.</small></span></li>
+          <li><NotebookPen aria-hidden="true" /><span><strong>Notatki i rzeczy do zapamiętania</strong><small>Zachowuj myśli, pomysły i informacje, do których chcesz później wrócić.</small></span></li>
         </ul>
       </div>
-      <p className="auth-context__footnote">Twoje dane pozostają dostępne lokalnie, a konto włącza synchronizację między sesjami.</p>
     </section>
   );
 }
@@ -78,6 +88,7 @@ export function AuthScreen() {
   const [pending, setPending] = useState<PendingAction>(null);
 
   const clearFeedback = () => {
+    auth.clearAuthError();
     setError(null);
     setEmailError(null);
     setMessage(null);
@@ -98,7 +109,9 @@ export function AuthScreen() {
     if (result.needsEmailConfirmation) {
       setMessage("Sprawdź skrzynkę i potwierdź adres e-mail. Potem wróć tutaj, aby się zalogować.");
       setPassword("");
+      return;
     }
+    appSession.goToToday();
   };
 
   const signInWithGoogle = async () => {
@@ -138,7 +151,11 @@ export function AuthScreen() {
     setPending("password");
     const result = await auth.updatePassword(password);
     setPending(null);
-    if (result.error) setError(result.error);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    appSession.goToToday();
   };
 
   const changeView = (next: AuthView) => {
@@ -182,7 +199,7 @@ export function AuthScreen() {
                   onChange={(event) => setPasswordConfirmation(event.target.value)}
                   required
                 />
-                {error && <p className="auth-feedback is-error" role="alert">{error}</p>}
+                {(error ?? auth.authError) && <p className="auth-feedback is-error" role="alert">{error ?? auth.authError}</p>}
                 <Button type="submit" variant="primary" fullWidth disabled={pending !== null}>
                   {pending === "password" ? <><RefreshCw className="is-spinning" aria-hidden="true" />Zapisuję…</> : "Zapisz nowe hasło"}
                 </Button>
@@ -243,7 +260,7 @@ export function AuthScreen() {
                 />
 
                 {!auth.configured && <p className="auth-feedback is-warning" role="status">{unavailableMessage}</p>}
-                {error && <p className="auth-feedback is-error" role="alert">{error}</p>}
+                {(error ?? auth.authError) && <p className="auth-feedback is-error" role="alert">{error ?? auth.authError}</p>}
                 {message && <p className="auth-feedback is-success" role="status">{message}</p>}
 
                 <Button type="submit" variant="primary" fullWidth disabled={!auth.configured || pending !== null}>
@@ -260,15 +277,27 @@ export function AuthScreen() {
                 </button>
               </p>
 
-              <div className="auth-test-account">
-                <span className="auth-test-account__icon" aria-hidden="true"><FlaskConical /></span>
-                <div>
-                  <strong>Najpierw chcesz się rozejrzeć?</strong>
-                  <p>Przykładowe dane są w każdej części aplikacji. Możesz wszystko dodawać i edytować — twarde odświeżenie przywróci stan początkowy.</p>
+              <div className="auth-entry-options" aria-label="Szybki start">
+                <div className="auth-entry-option">
+                  <span className="auth-entry-option__icon" aria-hidden="true"><HardDrive /></span>
+                  <div>
+                    <strong>Dane lokalne</strong>
+                    <p>Otwórz workspace zapisany w tej przeglądarce. Bez konta i bez synchronizacji.</p>
+                  </div>
+                  <Button variant="quiet" fullWidth onClick={appSession.enterLocalAccount}>
+                    Wejdź do danych lokalnych
+                  </Button>
                 </div>
-                <Button variant="quiet" fullWidth onClick={appSession.enterTestAccount}>
-                  Wejdź do konta testowego
-                </Button>
+                <div className="auth-entry-option">
+                  <span className="auth-entry-option__icon" aria-hidden="true"><FlaskConical /></span>
+                  <div>
+                    <strong>Konto testowe</strong>
+                    <p>Przykładowe dane do obejrzenia aplikacji. Zmiany znikną po wyjściu z trybu testowego.</p>
+                  </div>
+                  <Button variant="quiet" fullWidth onClick={appSession.enterTestAccount}>
+                    Wejdź do konta testowego
+                  </Button>
+                </div>
               </div>
             </>
           )}

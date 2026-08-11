@@ -6,6 +6,11 @@ import {
   type AffairsWorkspace,
 } from "../data/affairsWorkspace";
 import type { JdgWorkspace } from "../data/jdgWorkspace";
+import {
+  HEALTH_ENTRY_KIND_LABELS,
+  setHealthEntryCompletionState,
+  type HealthWorkspace,
+} from "../data/healthWorkspace";
 import { setTravelTaskCompletionState, type TravelWorkspace } from "../data/travelWorkspace";
 import type { AffairsView } from "./affairsPresentation";
 
@@ -16,6 +21,7 @@ export type AffairAttentionKind =
   | "subscription"
   | "document"
   | "vehicle"
+  | "health"
   | "jdg"
   | "travel";
 
@@ -62,6 +68,7 @@ export function buildAffairAttentionItems(
   travel: TravelWorkspace,
   now = new Date(),
   horizonDays: number | null = 30,
+  health?: HealthWorkspace,
 ): AffairAttentionItem[] {
   const today = localDateKey(now);
   const states = new Map((affairs.attentionStates ?? []).map((state) => [state.key, state]));
@@ -101,7 +108,7 @@ export function buildAffairAttentionItems(
       key: `oneTime:${payment.id}:${payment.dueDate}`,
       sourceId: payment.id,
       kind: "oneTime",
-      view: "finances",
+      view: "finance-one-time",
       title: payment.title,
       meta: `Płatność jednorazowa · ${payment.category}`,
       dueDate: payment.dueDate,
@@ -116,7 +123,7 @@ export function buildAffairAttentionItems(
       key: `payment:${payment.id}:${payment.nextDueDate}`,
       sourceId: payment.id,
       kind: "payment",
-      view: "finances",
+      view: "finance-recurring",
       title: payment.name,
       meta: `Płatność cykliczna · ${payment.category}`,
       dueDate: payment.nextDueDate,
@@ -131,7 +138,7 @@ export function buildAffairAttentionItems(
       key: `subscription:${subscription.id}:${subscription.nextBillingDate}`,
       sourceId: subscription.id,
       kind: "subscription",
-      view: "finances",
+      view: "finance-recurring",
       title: subscription.name,
       meta: `Odnowienie ręczne · ${subscription.category}`,
       dueDate: subscription.nextBillingDate,
@@ -178,6 +185,21 @@ export function buildAffairAttentionItems(
         canSchedule: true,
       });
     });
+
+  health?.entries
+    .filter((entry) => entry.status !== "done" && isVisible(entry.dueDate, 30))
+    .forEach((entry) => add({
+      key: `health:${entry.id}:${entry.dueDate}:${entry.time}`,
+      sourceId: entry.id,
+      kind: "health",
+      view: "health",
+      title: entry.title,
+      meta: `Zdrowie - ${HEALTH_ENTRY_KIND_LABELS[entry.kind]}`,
+      dueDate: entry.dueDate,
+      time: entry.time,
+      amount: null,
+      canSchedule: true,
+    }));
 
   jdg.months.forEach((month) => {
     month.items
@@ -232,7 +254,16 @@ export function resolveAffairAttentionItem(
   travel: TravelWorkspace,
   item: AffairAttentionItem,
   completedAt = new Date(),
-): { affairs: AffairsWorkspace; jdg: JdgWorkspace; travel: TravelWorkspace } {
+  health?: HealthWorkspace,
+): { affairs: AffairsWorkspace; jdg: JdgWorkspace; travel: TravelWorkspace; health?: HealthWorkspace } {
+  if (item.kind === "health" && health) {
+    return {
+      affairs,
+      jdg,
+      travel,
+      health: setHealthEntryCompletionState(health, item.sourceId, true),
+    };
+  }
   if (item.kind === "matter") {
     return { affairs: setMatterCompletionState(affairs, item.sourceId, true), jdg, travel };
   }

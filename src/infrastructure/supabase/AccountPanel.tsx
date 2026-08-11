@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router";
 import { FlaskConical, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { Button, Input } from "../../app/ui";
 import { useAppSession } from "../../app/auth/AppSession";
@@ -16,12 +17,18 @@ export function AccountPanel() {
   const auth = useSupabaseAuth();
   const remote = useRemoteSync();
   const appSession = useAppSession();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const signOut = async () => {
+    const result = await auth.signOut();
+    if (!result.error) appSession.exitToAuthScreen();
+  };
 
   if (appSession.isTestAccount) {
     return (
@@ -39,6 +46,25 @@ export function AccountPanel() {
           onClick={appSession.exitTestAccount}
         >
           Zakończ demo
+        </Button>
+      </div>
+    );
+  }
+
+  if (appSession.isLocalAccount) {
+    return (
+      <div className="app-account-panel app-account-panel--local">
+        <p className="app-account-panel__message">
+          Dane lokalne są zapisane w tej przeglądarce i nie są synchronizowane z kontem.
+        </p>
+        <Button
+          className="app-account-panel__logout"
+          variant="quiet"
+          size="sm"
+          fullWidth
+          onClick={appSession.exitToAuthScreen}
+        >
+          Wróć do ekranu startowego
         </Button>
       </div>
     );
@@ -80,7 +106,7 @@ export function AccountPanel() {
           size="sm"
           fullWidth
           leadingIcon={<LogOut size={14} aria-hidden="true" />}
-          onClick={() => { void auth.signOut(); }}
+          onClick={() => { void signOut(); }}
         >
           Wyloguj
         </Button>
@@ -106,6 +132,7 @@ export function AccountPanel() {
       return;
     }
     setMessage("Konto połączone. Dane lokalne zostaną teraz zsynchronizowane.");
+    navigate("/dzisiaj");
     setPassword("");
   };
 

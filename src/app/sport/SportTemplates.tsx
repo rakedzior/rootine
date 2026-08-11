@@ -109,11 +109,6 @@ function templateItems(template: WorkoutTemplate) {
     .flatMap((section) => [...section.items].sort((left, right) => left.order - right.order));
 }
 
-function preview(template: WorkoutTemplate, exercises: Exercise[]) {
-  const labels = templateItems(template).map((item) => itemLabel(item, exercises));
-  return labels.length > 4 ? `${labels.slice(0, 3).join(" · ")} · +${labels.length - 3}` : labels.join(" · ");
-}
-
 function seriesCount(template: WorkoutTemplate) {
   return template.exercises.reduce((total, exercise) => total + exercise.sets.length, 0);
 }
@@ -170,7 +165,7 @@ export function SportTemplates({
           variant="label"
           className="sport-record-module__header"
           title="Zapisane szablony"
-          description="Powtarzalne definicje treningów. Zawartość jest widoczna od razu, bez otwierania edycji."
+          description="Powtarzalne definicje treningów z liczbą ćwiczeń i serii."
           action={<Button variant="primary" size="sm" leadingIcon={<Plus size={13} />} onClick={() => setCreating(true)}>Dodaj szablon</Button>}
         />
         <div className="sport-record-toolbar" role="search" aria-label="Filtry szablonów">
@@ -184,13 +179,13 @@ export function SportTemplates({
           <div className="sport-record-table__head sport-template-table__head" role="row">
             <span role="columnheader">Nazwa</span>
             <span role="columnheader">Kategoria</span>
-            <span role="columnheader">Zawartość</span>
-            <span role="columnheader">Elementy</span>
+            <span role="columnheader">Ćwiczenia</span>
+            <span role="columnheader">Serie</span>
             <span role="columnheader">Czas</span>
             <span role="columnheader" aria-label="Akcje" />
           </div>
           {filtered.map((template) => {
-            const count = templateItems(template).length;
+            const exerciseCount = template.exercises.length;
             const sets = seriesCount(template);
             return (
               <div key={template.id} className={`sport-record-table__row sport-template-table__row ${selectedId === template.id ? "is-selected" : ""}`} role="row">
@@ -201,8 +196,8 @@ export function SportTemplates({
                   </button>
                 </div>
                 <span role="cell">{DISCIPLINE_META[template.discipline].label}</span>
-                <span role="cell" className="sport-template-table__content">{preview(template, exercises) || "Pusty szablon"}</span>
-                <span role="cell" className="sport-data">{count} {count === 1 ? "element" : "elementów"} · {sets} ser.</span>
+                <span role="cell" className="sport-data">{exerciseCount}</span>
+                <span role="cell" className="sport-data">{sets}</span>
                 <span role="cell" className="sport-data">{template.durationMinutes} min</span>
                 <span role="cell" className="sport-record-table__actions">
                   <MenuTrigger

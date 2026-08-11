@@ -46,8 +46,8 @@ export const APP_MODULES = [
   { id: "work", label: "Praca", icon: BriefcaseBusiness, to: "/praca", mobilePriority: 2 },
   { id: "goals", label: "Cele", icon: Target, to: "/cele", mobilePriority: null },
   { id: "travel", label: "Podróże", icon: Map, to: "/podroze", mobilePriority: null },
-  { id: "notes", label: "Notatki", icon: NotebookPen, to: "/notatki", mobilePriority: 3 },
   { id: "affairs", label: "Pozostałe", icon: ShieldCheck, to: "/sprawy", mobilePriority: null },
+  { id: "notes", label: "Notatki", icon: NotebookPen, to: "/notatki", mobilePriority: 3 },
 ] as const satisfies readonly AppModule[];
 
 export type AppModulePath = (typeof APP_MODULES)[number]["to"];

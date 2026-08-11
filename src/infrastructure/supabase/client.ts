@@ -8,6 +8,10 @@ const supabaseKey = (
 const isSecretKey = supabaseKey?.startsWith("sb_secret_") ?? false;
 const usesPublishableKey = supabaseKey?.startsWith("sb_publishable_") ?? false;
 
+type SupabaseAuthSettings = {
+  external?: Record<string, boolean>;
+};
+
 const supabaseFetch: typeof fetch | undefined = usesPublishableKey
   ? (input, init) => {
     const headers = new Headers(init?.headers);
@@ -41,6 +45,20 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
     },
   })
   : null;
+
+export async function isSupabaseAuthProviderEnabled(provider: string): Promise<boolean> {
+  if (!supabaseUrl || !supabaseKey || !isSupabaseConfigured) return false;
+
+  const response = await globalThis.fetch(`${supabaseUrl}/auth/v1/settings`, {
+    headers: { apikey: supabaseKey },
+  });
+  if (!response.ok) {
+    throw new Error(`Supabase auth settings request failed with status ${response.status}.`);
+  }
+
+  const settings = await response.json() as SupabaseAuthSettings;
+  return settings.external?.[provider] === true;
+}
 
 export function getSupabaseClient(): SupabaseClient {
   if (!supabase) {

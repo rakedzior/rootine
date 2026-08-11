@@ -1,0 +1,118 @@
+import { useState } from "react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SupabaseAuthProvider, useSupabaseAuth } from "./auth";
+
+const testState = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  getSession: vi.fn(),
+  onAuthStateChange: vi.fn(),
+  unsubscribe: vi.fn(),
+  signInWithOAuth: vi.fn(),
+  signInWithPassword: vi.fn(),
+  signUp: vi.fn(),
+  resetPasswordForEmail: vi.fn(),
+  updateUser: vi.fn(),
+  signOut: vi.fn(),
+  providerEnabled: vi.fn(),
+}));
+
+vi.mock("./client", () => ({
+  isSupabaseConfigured: true,
+  supabaseConfigurationIssue: null,
+  isSupabaseAuthProviderEnabled: testState.providerEnabled,
+  supabase: {
+    auth: {
+      initialize: testState.initialize,
+      getSession: testState.getSession,
+      onAuthStateChange: testState.onAuthStateChange,
+      signInWithOAuth: testState.signInWithOAuth,
+      signInWithPassword: testState.signInWithPassword,
+      signUp: testState.signUp,
+      resetPasswordForEmail: testState.resetPasswordForEmail,
+      updateUser: testState.updateUser,
+      signOut: testState.signOut,
+    },
+  },
+}));
+
+function AuthProbe() {
+  const auth = useSupabaseAuth();
+  const [result, setResult] = useState("");
+
+  return (
+    <>
+      <output data-testid="loading">{String(auth.loading)}</output>
+      {auth.authError && <p role="alert">{auth.authError}</p>}
+      <button
+        type="button"
+        onClick={() => {
+          void auth.signInWithGoogle().then(({ error }) => setResult(error ?? "ok"));
+        }}
+      >
+        Google
+      </button>
+      <output data-testid="result">{result}</output>
+    </>
+  );
+}
+
+describe("SupabaseAuthProvider Google OAuth", () => {
+  beforeEach(() => {
+    window.history.replaceState(window.history.state, "", "/");
+    testState.initialize.mockReset().mockResolvedValue({ error: null });
+    testState.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
+    testState.unsubscribe.mockReset();
+    testState.onAuthStateChange.mockReset().mockReturnValue({
+      data: { subscription: { unsubscribe: testState.unsubscribe } },
+    });
+    testState.signInWithOAuth.mockReset().mockResolvedValue({ data: { provider: "google" }, error: null });
+    testState.providerEnabled.mockReset().mockResolvedValue(true);
+  });
+
+  afterEach(cleanup);
+
+  it("stops before navigation when Google is disabled in Supabase", async () => {
+    const user = userEvent.setup();
+    testState.providerEnabled.mockResolvedValue(false);
+    render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+    await user.click(screen.getByRole("button", { name: "Google" }));
+
+    expect(await screen.findByTestId("result")).toHaveTextContent("Logowanie kontem Google nie jest jeszcze włączone");
+    expect(testState.providerEnabled).toHaveBeenCalledWith("google");
+    expect(testState.signInWithOAuth).not.toHaveBeenCalled();
+  });
+
+  it("starts Google OAuth with the allowlisted post-login route", async () => {
+    const user = userEvent.setup();
+    render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+    await user.click(screen.getByRole("button", { name: "Google" }));
+
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("ok"));
+    expect(testState.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: { redirectTo: new URL("/dzisiaj", window.location.origin).toString() },
+    });
+  });
+
+  it("surfaces an OAuth callback error and removes it from the URL", async () => {
+    const callbackError = Object.assign(new Error("User denied access"), { code: "access_denied" });
+    testState.initialize.mockResolvedValue({ error: callbackError });
+    window.history.replaceState(
+      window.history.state,
+      "",
+      "/dzisiaj#error=access_denied&error_code=access_denied&error_description=User+denied+access",
+    );
+
+    render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Logowanie przez Google zostało anulowane");
+    expect(window.location.pathname).toBe("/dzisiaj");
+    expect(window.location.hash).toBe("");
+  });
+});

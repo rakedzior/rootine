@@ -2337,6 +2337,11 @@ button.sport-cycle-plan-card:focus-visible {
 /* The floors summed to 866px inside an 838px card, so the last column escaped the table.
    Columns keep their proportions but may shrink; the cells already truncate. */
 .sport-record-table__row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1fr) 110px 44px; align-items: center; gap: var(--space-md); padding: 0 var(--space-lg); }
+.sport-exercise-table__head,
+.sport-exercise-table__row { grid-template-columns: minmax(0, 1.35fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1fr) 124px 44px; }
+.sport-exercise-table__head > span:nth-child(5) { white-space: nowrap; }
+.sport-template-table__head,
+.sport-template-table__row { grid-template-columns: minmax(0, 1fr) 132px 88px 72px 88px 44px; }
 .sport-record-table__head { min-height: 36px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
 .sport-record-table__row { position: relative; min-height: 64px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-secondary); font-size: var(--text-label); }
 .sport-record-table__row:last-child { border-bottom: 0; }
@@ -2384,7 +2389,6 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-row__title small { overflow: hidden; color: var(--color-text-muted); font-size: var(--text-micro); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .sport-template-row__content { overflow: hidden; color: var(--color-text-secondary); font-size: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
 .sport-template-table__row.is-selected { background: var(--color-precision-blue-soft); box-shadow: inset 2px 0 0 var(--color-precision-blue); }
-.sport-template-table__content { min-width: 0; overflow: hidden; color: var(--color-text-secondary); font-size: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
 .sport-template-editor { display: grid; gap: var(--space-lg); }
 .sport-template-editor__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, auto); align-items: end; gap: var(--space-lg); padding: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-graphite-panel); }
 .sport-template-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
@@ -2507,6 +2511,11 @@ button.sport-cycle-plan-card:focus-visible {
   .sport-record-table__row > span:nth-child(3) { display: none; }
   .sport-record-table__row > span:nth-child(4) { grid-column: 2; }
   .sport-record-table__row > span:nth-child(5) { grid-column: 3; }
+  .sport-template-table__row { grid-template-columns: minmax(160px, 1fr) 64px 64px 76px 44px; }
+  .sport-template-table__row > span:nth-child(2) { display: none; }
+  .sport-template-table__row > span:nth-child(3) { display: inline; grid-column: 2; }
+  .sport-template-table__row > span:nth-child(4) { grid-column: 3; }
+  .sport-template-table__row > span:nth-child(5) { grid-column: 4; }
   .sport-template-row__main { grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.4fr) 120px; }
   .sport-template-row__main > :nth-child(4) { display: none; }
 }

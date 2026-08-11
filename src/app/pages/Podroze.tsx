@@ -1,9 +1,9 @@
 /**
- * THESIS: Podróże is an operational trip dossier, not a destination gallery; it refuses decorative cards with no planning depth.
+ * THESIS: Podróże is an operational trip dossier, not a destination gallery; the trip overview stays quiet and action-led.
  * OWN-WORLD: Rootine's graphite workshop, a compact trip rail, dated itinerary bands, quiet ledgers, and precision blue for the active journey.
- * STORY: Scan every departure, open one trip, then close the gaps across plan, bookings, money, documents, and preparation.
- * FIRST VIEWPORT: The trip rail frames a departure board where readiness, the next action, dates, and committed budget meet in one scan.
- * FORM: The sixth grounded structure — a trip dossier with a readiness ledger — selected with seed 46ce9e6f.
+ * STORY: Scan where and when the trip happens, take the next action, then open details only when a decision needs them.
+ * FIRST VIEWPORT: The selected trip overview gives the next step first, the nearest plan second, and one combined reservation/budget summary third.
+ * FORM: The sixth grounded structure — a calm trip dashboard with progressive disclosure — selected with seed 46ce9e6f.
  */
 import {
   Archive,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   FileText,
   Download,
+  Ellipsis,
   LayoutDashboard,
   ListChecks,
   Map as MapIcon,
@@ -21,14 +22,14 @@ import {
   Pencil,
   Plane,
   Plus,
-  ReceiptText,
   Trash2,
   WalletCards,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
-import { formatPercent, pluralize } from "../formatters";
+import { formatLongDate } from "../formatters";
 import { AnimatedCurrency } from "../experience/MotionValues";
 import { SensitiveValue } from "../experience/preferences";
 import {
@@ -64,11 +65,14 @@ import {
   DatePicker,
   ModuleSidebar,
   CompletedSection,
+  DetailPanel,
   EmptyState,
   Input,
   Modal,
   ModuleMain,
   ModuleShell,
+  Menu,
+  MenuItem,
   Select,
   Textarea,
   Toast,
@@ -91,19 +95,19 @@ import {
   TRANSPORT_ICONS,
   TRANSPORT_MODE_LABELS,
   TRIP_STATUS_LABELS,
-  TRIP_STATUS_TONES,
   daysUntil,
+  buildItineraryDays,
   formatDate,
   formatDateTime,
   isTravelSection,
   nextAction,
   numberFrom,
   readinessParts,
-  readinessScore,
   tripCountdown,
   tripDuration,
   type DeleteState,
   type Draft,
+  type EditorKind,
   type EditorState,
   type TravelSection,
   type TripActionState,
@@ -125,6 +129,46 @@ function PrivateMoney({
   );
 }
 
+function formatTripDateRange(trip: TravelTrip) {
+  const start = formatLongDate(trip.startDate).split(" ");
+  const end = formatLongDate(trip.endDate).split(" ");
+  return start.slice(1).join(" ") === end.slice(1).join(" ")
+    ? `${start[0]}–${end[0]} ${end.slice(1).join(" ")}`
+    : `${start.join(" ")} — ${end.join(" ")}`;
+}
+
+function overviewNextAction(trip: TravelTrip) {
+  const openTasks = trip.tasks.filter((task) => !task.completed);
+  if (openTasks.length > 1) return `${openTasks.length} otwarte sprawy`;
+  if (openTasks.length === 1) return openTasks[0].title;
+  const action = nextAction(trip);
+  return action === "Plan jest domknięty" ? "Brak pilnych działań" : action;
+}
+
+type TripDetailPanel = "summary" | "incomplete";
+type TravelItemDetail = {
+  kind: Exclude<EditorKind, "trip">;
+  id: string;
+  title: string;
+};
+
+const TRAVEL_ROUTE_SECTION: Record<string, TravelSection> = {
+  overview: "overview",
+  plan: "itinerary",
+  itinerary: "itinerary",
+  reservations: "reservations",
+  budget: "budget",
+  "to-do": "tasks",
+  tasks: "tasks",
+  documents: "documents",
+  packing: "packing",
+};
+
+const TRAVEL_SECTION_ROUTE: Partial<Record<TravelSection, string>> = {
+  itinerary: "plan",
+  tasks: "to-do",
+};
+
 export default function Podroze({
   layout,
   embeddedViewSelect,
@@ -133,7 +177,7 @@ export default function Podroze({
   embeddedViewSelect?: ReactNode;
 } = {}) {
   const [workspace, setWorkspace] = useState(loadTravelWorkspace);
-  const [statusFilter, setStatusFilter] = useState<"upcoming" | "all" | "archived" | TripStatus>("upcoming");
+  const [statusFilter, setStatusFilter] = useState<"upcoming" | "all" | "completed" | "archived">("upcoming");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editorBaseline, setEditorBaseline] = useState<Draft>(EMPTY_DRAFT);
@@ -142,16 +186,24 @@ export default function Podroze({
   const [editorError, setEditorError] = useState("");
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [tripActionState, setTripActionState] = useState<TripActionState | null>(null);
+  const [tripDetailPanel, setTripDetailPanel] = useState<TripDetailPanel | null>(null);
+  const [travelItemDetail, setTravelItemDetail] = useState<TravelItemDetail | null>(null);
+  const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  const tripMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [deletedTripUndo, setDeletedTripUndo] = useState<TravelTrip | null>(null);
   const [storageError, setStorageError] = useState(false);
-  const { tripId: routeTripId } = useParams();
+  const { tripId: routeTripId, travelSection: routeTravelSection } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const embedded = Boolean(layout);
   const tripId = routeTripId ?? searchParams.get("podroz") ?? undefined;
   const selectedTrip = workspace.trips.find((trip) => trip.id === tripId)!;
-  const sectionParam = searchParams.get("sekcja");
-  const activeSection: TravelSection = isTravelSection(sectionParam) ? sectionParam : "overview";
+  const routeSectionParam = routeTravelSection ? TRAVEL_ROUTE_SECTION[routeTravelSection] ?? null : null;
+  const sectionParam = searchParams.get("sekcja") ?? routeSectionParam;
+  const parsedSection: TravelSection = isTravelSection(sectionParam) ? sectionParam : "overview";
+  const activeSection: TravelSection = parsedSection === "preparation" ? "tasks" : parsedSection;
+  const isCanonicalTravelRoute = location.pathname.startsWith("/travel/");
   const editorDraftKey = editor
     ? `rootine.travel-editor-draft.${selectedTrip?.id ?? "new-trip"}.${editor.kind}.${editor.mode}.${editor.id ?? "new"}`
     : "";
@@ -176,6 +228,12 @@ export default function Podroze({
     if (tripId && !selectedTrip) navigate(embedded ? "/sprawy?widok=travel" : "/podroze", { replace: true });
   }, [embedded, navigate, selectedTrip, tripId]);
 
+  useEffect(() => {
+    setTripDetailPanel(null);
+    setTravelItemDetail(null);
+    setTripMenuOpen(false);
+  }, [activeSection, selectedTrip?.id]);
+
   const upcomingTrips = useMemo(
     () => workspace.trips
       .filter((trip) => !trip.archivedAt && trip.status !== "completed")
@@ -194,8 +252,9 @@ export default function Podroze({
     .filter((trip) => {
       if (statusFilter === "all") return true;
       if (statusFilter === "upcoming") return !trip.archivedAt && trip.status !== "completed";
+      if (statusFilter === "completed") return trip.status === "completed";
       if (statusFilter === "archived") return Boolean(trip.archivedAt);
-      return trip.status === statusFilter;
+      return true;
     })
     .sort((a, b) => {
       if (Boolean(a.archivedAt) !== Boolean(b.archivedAt)) return a.archivedAt ? 1 : -1;
@@ -205,19 +264,42 @@ export default function Podroze({
         ? b.startDate.localeCompare(a.startDate)
         : a.startDate.localeCompare(b.startDate);
     }), [statusFilter, workspace.trips]);
+  const nearestTrip = upcomingTrips[0];
+  const showNearestTrip = Boolean(nearestTrip && (statusFilter === "upcoming" || statusFilter === "all"));
+  const remainingTrips = filteredTrips.filter((trip) => !showNearestTrip || trip.id !== nearestTrip?.id);
 
-  const itineraryDays = useMemo(() => {
-    const groups = new Map<string, ItineraryItem[]>();
-    (selectedTrip?.itinerary ?? [])
-      .slice()
-      .sort((a, b) => `${a.date}-${a.time}`.localeCompare(`${b.date}-${b.time}`))
-      .forEach((item) => {
-        const bucket = groups.get(item.date) ?? [];
-        bucket.push(item);
-        groups.set(item.date, bucket);
-      });
-    return Array.from(groups.entries());
+  const itineraryDays = useMemo(
+    () => selectedTrip ? buildItineraryDays(selectedTrip) : [],
+    [selectedTrip],
+  );
+  const plannedItineraryDays = itineraryDays.filter((day) => day.items.length).length;
+  const selectedTripStatusLabel = selectedTrip
+    ? selectedTrip.status === "completed" ? TRIP_STATUS_LABELS[selectedTrip.status] : "W toku"
+    : "";
+  const selectedTripStatusTone = selectedTrip
+    ? selectedTrip.status === "completed" ? "neutral" as const : selectedTrip.status === "ready" ? "success" as const : "primary" as const
+    : "neutral" as const;
+  const tripDateRangeLabel = selectedTrip ? formatTripDateRange(selectedTrip) : "";
+  const nextStepTiming = selectedTrip ? tripCountdown(selectedTrip).replace(/^Za /, "za ") : "";
+
+  const reservationSummary = useMemo(() => {
+    if (!selectedTrip) return { secured: 0, total: 0 };
+    const reservations = [...selectedTrip.stays, ...selectedTrip.transports];
+    return {
+      secured: reservations.filter((item) => item.status !== "planned").length,
+      total: reservations.length,
+    };
   }, [selectedTrip]);
+
+  const unfinishedTripItems = useMemo(() => {
+    if (!selectedTrip) return 0;
+    const openTasks = selectedTrip.tasks.filter((task) => !task.completed).length;
+    const emptyPlanDays = Math.max(0, tripDuration(selectedTrip) - plannedItineraryDays);
+    const pendingReservations = [...selectedTrip.stays, ...selectedTrip.transports]
+      .filter((item) => item.status === "planned").length;
+    const pendingDocuments = selectedTrip.documents.filter((document) => document.status !== "ready").length;
+    return openTasks + emptyPlanDays + pendingReservations + pendingDocuments;
+  }, [plannedItineraryDays, selectedTrip]);
 
   const budgetSummary = useMemo(() => {
     if (!selectedTrip) {
@@ -234,16 +316,22 @@ export default function Podroze({
   }, [selectedTrip]);
 
   const setSection = (section: TravelSection) => {
+    const normalizedSection = section === "preparation" ? "tasks" : section;
+    if (isCanonicalTravelRoute && tripId) {
+      const routeSection = TRAVEL_SECTION_ROUTE[normalizedSection as TravelSection] ?? normalizedSection;
+      navigate(routeSection === "overview" ? `/travel/${tripId}` : `/travel/${tripId}/${routeSection}`);
+      return;
+    }
     if (embedded) {
       const next = new URLSearchParams();
       next.set("widok", "travel");
       if (tripId) next.set("podroz", tripId);
-      if (section !== "overview") next.set("sekcja", section);
+      if (normalizedSection !== "overview") next.set("sekcja", normalizedSection);
       setSearchParams(next);
       return;
     }
-    if (section === "overview") setSearchParams({});
-    else setSearchParams({ sekcja: section });
+    if (normalizedSection === "overview") setSearchParams({});
+    else setSearchParams({ sekcja: normalizedSection });
   };
 
   const selectTrip = (id: string) => {
@@ -254,7 +342,12 @@ export default function Podroze({
       navigate(`/sprawy?${next.toString()}`);
       return;
     }
-    navigate(`/podroze/${id}`);
+    if (isCanonicalTravelRoute) {
+      const routeSection = TRAVEL_SECTION_ROUTE[activeSection] ?? activeSection;
+      navigate(`/travel/${id}${activeSection === "overview" ? "" : `/${routeSection}`}`);
+    } else {
+      navigate(`/podroze/${id}`);
+    }
   };
   const showAllTrips = () => {
     if (embedded) {
@@ -265,7 +358,7 @@ export default function Podroze({
       navigate(`/sprawy?${next.toString()}`);
       return;
     }
-    navigate("/podroze");
+    navigate(isCanonicalTravelRoute ? "/travel/overview" : "/podroze");
   };
 
   const updateTrip = (tripIdToUpdate: string, updater: (trip: TravelTrip) => TravelTrip) => {
@@ -694,8 +787,19 @@ export default function Podroze({
     ));
   };
 
+  const openTravelDetail = (detail: TravelItemDetail) => {
+    setTravelItemDetail(detail);
+  };
+
   const renderTravelTask = (task: TravelTask) => (
-    <article key={task.id} className={`travel-task-row ${task.completed ? "is-completed" : ""}`}>
+    <article
+      key={task.id}
+      className={`travel-task-row ${task.completed ? "is-completed" : ""}`}
+      role="button"
+      tabIndex={0}
+      onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) openTravelDetail({ kind: "task", id: task.id, title: task.title }); }}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openTravelDetail({ kind: "task", id: task.id, title: task.title }); }}
+    >
       <button
         type="button"
         className="travel-check"
@@ -707,7 +811,6 @@ export default function Podroze({
       </button>
       <span className="travel-task-row__copy">
         <strong>{task.title}</strong>
-        <small>{TASK_CATEGORY_LABELS[task.category]}</small>
       </span>
       <Badge tone={task.category === "health" ? "warning" : task.category === "documents" ? "violet" : "neutral"}>
         {TASK_CATEGORY_LABELS[task.category]}
@@ -763,12 +866,12 @@ export default function Podroze({
               : `${editor?.mode === "edit" ? "Edytuj" : "Nowa"} sprawa`;
 
   const renderTripNavigation = (trip: TravelTrip, archived = false) => {
-    const expanded = selectedTrip?.id === trip.id;
+    const expanded = selectedTrip?.id === trip.id || (!selectedTrip && nearestTrip?.id === trip.id);
     const sectionNavigationId = `travel-sections-${trip.id}`;
     return (
       <div key={trip.id} className={`travel-sidebar__trip ${expanded ? "is-expanded" : ""}`}>
         <ContextNavItem
-          active={expanded && activeSection === "overview"}
+          active={Boolean(selectedTrip?.id === trip.id && activeSection === "overview")}
           aria-expanded={expanded}
           aria-controls={expanded ? sectionNavigationId : undefined}
           icon={archived ? <Check /> : <MapPin />}
@@ -829,74 +932,58 @@ export default function Podroze({
     </ModuleSidebar>
   );
 
-  const tripHeaderActions = selectedTrip ? (
-    <>
-      <Button variant="ghost" size="sm" iconOnly aria-label="Edytuj podróż" title="Edytuj podróż" onClick={() => openTripEditor(selectedTrip)}>
-        <Pencil size={13} />
-      </Button>
-      <Button variant="ghost" size="sm" iconOnly aria-label="Eksportuj podróż" title="Eksportuj JSON" onClick={() => exportTrip(selectedTrip)}>
-        <Download size={13} />
-      </Button>
-      {selectedTrip.archivedAt ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          aria-label="Przywróć podróż z archiwum"
-          title="Przywróć z archiwum"
-          onClick={() => restoreArchivedTrip(selectedTrip)}
-        >
-          <ArchiveRestore size={13} />
-        </Button>
-      ) : (
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          aria-label="Archiwizuj podróż"
-          title="Archiwizuj podróż"
-          onClick={() => setTripActionState({ kind: "archive", trip: selectedTrip })}
-        >
-          <Archive size={13} />
-        </Button>
-      )}
+  const primaryTripAction = activeSection === "itinerary"
+    ? { label: "Punkt planu", onClick: () => openItineraryEditor() }
+    : activeSection === "reservations"
+      ? { label: "Rezerwacja", onClick: () => openStayEditor() }
+      : activeSection === "budget"
+        ? { label: "Pozycja", onClick: () => openBudgetEditor() }
+        : activeSection === "documents"
+          ? { label: "Dokument", onClick: () => openDocumentEditor() }
+          : activeSection === "packing"
+            ? { label: "Element", onClick: () => openTaskEditor(undefined, "packing") }
+            : { label: "Sprawa", onClick: () => openTaskEditor(undefined, "other") };
+
+  const tripActionsMenu = selectedTrip && (
+    <div className="travel-trip-menu">
       <Button
+        ref={tripMenuTriggerRef}
         variant="ghost"
         size="sm"
         iconOnly
-        aria-label="Usuń podróż"
-        title="Usuń podróż"
-        onClick={() => setTripActionState({ kind: "delete", trip: selectedTrip })}
+        aria-label="Więcej opcji podróży"
+        aria-haspopup="menu"
+        aria-expanded={tripMenuOpen}
+        aria-controls="travel-trip-actions-menu"
+        onClick={() => setTripMenuOpen((open) => !open)}
       >
-        <Trash2 size={13} />
+        <Ellipsis size={16} />
       </Button>
-      {activeSection === "reservations" ? (
-        <>
-          <Button variant="quiet" leadingIcon={<BedDouble size={13} />} onClick={() => openStayEditor()}>Nocleg</Button>
-          <Button variant="primary" leadingIcon={<Plane size={13} />} onClick={() => openTransportEditor()}>Transport</Button>
-        </>
-      ) : (
-        <Button
-          variant="primary"
-          leadingIcon={<Plus size={13} />}
-          onClick={() => {
-            if (activeSection === "itinerary") openItineraryEditor();
-            else if (activeSection === "budget") openBudgetEditor();
-            else if (activeSection === "documents") openDocumentEditor();
-            else openTaskEditor(undefined, activeSection === "packing" ? "packing" : "other");
-          }}
+      {tripMenuOpen && (
+        <Menu
+          id="travel-trip-actions-menu"
+          triggerRef={tripMenuTriggerRef}
+          onDismiss={() => setTripMenuOpen(false)}
+          layer="detail"
+          className="travel-trip-menu__panel"
         >
-          {activeSection === "itinerary"
-            ? "Punkt planu"
-            : activeSection === "budget"
-              ? "Pozycja"
-              : activeSection === "documents"
-                ? "Dokument"
-                : activeSection === "packing"
-                  ? "Rzecz"
-                  : "Sprawa"}
-        </Button>
+          <MenuItem leadingIcon={<Pencil size={13} />} onClick={() => { setTripMenuOpen(false); openTripEditor(selectedTrip); }}>Edytuj podróż</MenuItem>
+          <MenuItem leadingIcon={<Download size={13} />} onClick={() => { setTripMenuOpen(false); exportTrip(selectedTrip); }}>Eksportuj dane</MenuItem>
+          {selectedTrip.archivedAt ? (
+            <MenuItem leadingIcon={<ArchiveRestore size={13} />} onClick={() => { setTripMenuOpen(false); restoreArchivedTrip(selectedTrip); }}>Przywróć z archiwum</MenuItem>
+          ) : (
+            <MenuItem leadingIcon={<Archive size={13} />} onClick={() => { setTripMenuOpen(false); setTripActionState({ kind: "archive", trip: selectedTrip }); }}>Archiwizuj podróż</MenuItem>
+          )}
+          <MenuItem tone="danger" leadingIcon={<Trash2 size={13} />} onClick={() => { setTripMenuOpen(false); setTripActionState({ kind: "delete", trip: selectedTrip }); }}>Usuń podróż</MenuItem>
+        </Menu>
       )}
+    </div>
+  );
+
+  const tripHeaderActions = selectedTrip ? (
+    <>
+      <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={primaryTripAction.onClick}>{primaryTripAction.label}</Button>
+      {tripActionsMenu}
     </>
   ) : (
     <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTripEditor()}>
@@ -904,9 +991,213 @@ export default function Podroze({
     </Button>
   );
 
+  const tripDetailPanelContent = selectedTrip && activeSection === "overview" && tripDetailPanel ? (
+    <DetailPanel
+      label={tripDetailPanel === "summary" ? "Podsumowanie podróży" : "Elementy do uzupełnienia"}
+      className="travel-detail-panel"
+      onDismiss={() => setTripDetailPanel(null)}
+    >
+      <header className="travel-detail-panel__header">
+        <div>
+          <h2>{tripDetailPanel === "summary" ? "Podsumowanie" : "Co zostało do zrobienia"}</h2>
+          <p>{selectedTrip.name}</p>
+        </div>
+        <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setTripDetailPanel(null)}>
+          <X size={13} />
+        </Button>
+      </header>
+
+      {tripDetailPanel === "incomplete" ? (
+        <div className="travel-detail-panel__body">
+          <p className="travel-detail-panel__intro">Szczegółowy stan elementów podróży. Wybierz kategorię, aby przejść do jej widoku.</p>
+          <div className="travel-detail-panel__items">
+            {readinessParts(selectedTrip).map((part) => (
+              <button
+                key={part.id}
+                type="button"
+                className="travel-detail-panel__item"
+                onClick={() => {
+                  setTripDetailPanel(null);
+                  setSection(part.id);
+                }}
+              >
+                <span>
+                  <strong>{part.label}</strong>
+                  <small>{part.meta === "0/0" ? "Brak elementów" : part.meta}</small>
+                </span>
+                <span className={part.value >= 1 ? "travel-detail-panel__status is-ready" : "travel-detail-panel__status"}>
+                  {part.value >= 1 ? "Gotowe" : "Do uzupełnienia"}
+                </span>
+                <ChevronRight size={14} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="travel-detail-panel__body">
+          <dl className="travel-detail-panel__facts">
+            <div><dt>Rezerwacje</dt><dd>{reservationSummary.secured}/{reservationSummary.total}</dd></div>
+            <div><dt>Wydano</dt><dd><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Wydano na podróż" /></dd></div>
+            <div><dt>Budżet</dt><dd><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Budżet podróży" /></dd></div>
+            <div><dt>Pozostało</dt><dd className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Pozostały budżet" /></dd></div>
+          </dl>
+
+          <section className="travel-detail-panel__section">
+            <h3>Rezerwacje</h3>
+            {[...selectedTrip.stays.map((stay) => ({
+              id: stay.id,
+              title: stay.name,
+              meta: `${stay.city} · ${formatDate(stay.checkIn, false)} — ${formatDate(stay.checkOut, false)}`,
+              status: RESERVATION_STATUS_LABELS[stay.status],
+            })), ...selectedTrip.transports.map((transport) => ({
+              id: transport.id,
+              title: transport.title,
+              meta: `${transport.from} → ${transport.to} · ${formatDateTime(transport.departure)}`,
+              status: RESERVATION_STATUS_LABELS[transport.status],
+            }))].map((reservation) => (
+              <div key={reservation.id} className="travel-detail-panel__row">
+                <span><strong>{reservation.title}</strong><small>{reservation.meta}</small></span>
+                <em>{reservation.status}</em>
+              </div>
+            ))}
+            {reservationSummary.total === 0 && <p className="travel-detail-panel__empty">Brak zapisanych rezerwacji.</p>}
+          </section>
+
+          <section className="travel-detail-panel__section">
+            <h3>Budżet</h3>
+            {selectedTrip.budget.map((line) => (
+              <div key={line.id} className="travel-detail-panel__row">
+                <span><strong>{line.label}</strong><small>{BUDGET_CATEGORY_LABELS[line.category]} · plan</small></span>
+                <em><PrivateMoney value={line.planned} currency={selectedTrip.baseCurrency} label={`Plan: ${line.label}`} /></em>
+              </div>
+            ))}
+            {selectedTrip.budget.length === 0 && <p className="travel-detail-panel__empty">Brak pozycji budżetu.</p>}
+          </section>
+
+          <div className="travel-detail-panel__footer">
+            <Button variant="quiet" onClick={() => { setTripDetailPanel(null); setSection("reservations"); }}>Otwórz rezerwacje</Button>
+            <Button variant="quiet" onClick={() => { setTripDetailPanel(null); setSection("budget"); }}>Otwórz budżet</Button>
+          </div>
+        </div>
+      )}
+    </DetailPanel>
+  ) : undefined;
+
+  const openTravelItemEditor = () => {
+    if (!travelItemDetail) return;
+    const { kind, id } = travelItemDetail;
+    if (kind === "itinerary") openItineraryEditor(selectedTrip?.itinerary.find((item) => item.id === id));
+    if (kind === "stay") openStayEditor(selectedTrip?.stays.find((item) => item.id === id));
+    if (kind === "transport") openTransportEditor(selectedTrip?.transports.find((item) => item.id === id));
+    if (kind === "budget") openBudgetEditor(selectedTrip?.budget.find((item) => item.id === id));
+    if (kind === "document") openDocumentEditor(selectedTrip?.documents.find((item) => item.id === id));
+    if (kind === "task") openTaskEditor(selectedTrip?.tasks.find((item) => item.id === id));
+    setTravelItemDetail(null);
+  };
+
+  const travelItemDetailPanelContent = selectedTrip && travelItemDetail ? (() => {
+    let meta = "Szczegóły elementu podróży";
+    if (travelItemDetail.kind === "itinerary") {
+      const item = selectedTrip.itinerary.find((entry) => entry.id === travelItemDetail.id);
+      meta = item ? `${formatDate(item.date)} · ${item.time || "Bez godziny"}${item.location ? ` · ${item.location}` : ""}` : meta;
+    } else if (travelItemDetail.kind === "stay") {
+      const item = selectedTrip.stays.find((entry) => entry.id === travelItemDetail.id);
+      meta = item ? `${item.city || "Nocleg"} · ${formatDate(item.checkIn, false)} — ${formatDate(item.checkOut, false)}` : meta;
+    } else if (travelItemDetail.kind === "transport") {
+      const item = selectedTrip.transports.find((entry) => entry.id === travelItemDetail.id);
+      meta = item ? `${item.from || "—"} → ${item.to || "—"} · ${formatDateTime(item.departure)}` : meta;
+    } else if (travelItemDetail.kind === "budget") {
+      const item = selectedTrip.budget.find((entry) => entry.id === travelItemDetail.id);
+      meta = item ? `${BUDGET_CATEGORY_LABELS[item.category]} · Pozycja budżetu` : meta;
+    } else if (travelItemDetail.kind === "document") {
+      const item = selectedTrip.documents.find((entry) => entry.id === travelItemDetail.id);
+      meta = item ? `${item.owner} · ${DOCUMENT_STATUS_LABELS[item.status]}` : meta;
+    } else if (travelItemDetail.kind === "task") {
+      const item = selectedTrip.tasks.find((entry) => entry.id === travelItemDetail.id);
+      meta = item ? `${TASK_CATEGORY_LABELS[item.category]} · ${item.dueDate ? formatDate(item.dueDate) : "Bez terminu"}` : meta;
+    }
+    return (
+      <DetailPanel
+        label={`Szczegóły: ${travelItemDetail.title}`}
+        className="travel-detail-panel"
+        onDismiss={() => setTravelItemDetail(null)}
+      >
+        <header className="travel-detail-panel__header">
+          <div>
+            <h2>{travelItemDetail.title}</h2>
+            <p>{meta}</p>
+          </div>
+          <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij szczegóły" onClick={() => setTravelItemDetail(null)}>
+            <X size={13} />
+          </Button>
+        </header>
+        <div className="travel-detail-panel__body">
+          <p className="travel-detail-panel__intro">Szczegóły pozostają w panelu bocznym, żeby główny plan podróży był spokojny i czytelny.</p>
+          <div className="travel-detail-panel__footer">
+            <Button variant="quiet" onClick={openTravelItemEditor}>Edytuj</Button>
+            <Button variant="ghost" onClick={() => {
+              setTravelItemDetail(null);
+              setDeleteState({ kind: travelItemDetail.kind, id: travelItemDetail.id, label: travelItemDetail.title });
+            }}>Usuń</Button>
+          </div>
+        </div>
+      </DetailPanel>
+    );
+  })() : undefined;
+
+  const detailPanelContent = tripDetailPanelContent ?? travelItemDetailPanelContent;
+
   const visibleTravelTasks = selectedTrip?.tasks.filter((task) => (
     activeSection === "packing" ? task.category === "packing" : task.category !== "packing"
   )) ?? [];
+
+  const packingGroups = [
+    { label: "Dokumenty", tasks: visibleTravelTasks.filter((task) => /dokument|paszport|dowód|bilet|rezerw/i.test(task.title)) },
+    { label: "Ubrania", tasks: visibleTravelTasks.filter((task) => /ubran|kurt|but|koszul|spod/i.test(task.title)) },
+    { label: "Elektronika", tasks: visibleTravelTasks.filter((task) => /adapter|ładow|kabel|telefon|aparat|elektr/i.test(task.title)) },
+    { label: "Pozostałe", tasks: visibleTravelTasks.filter((task) => !/dokument|paszport|dowód|bilet|rezerw|ubran|kurt|but|koszul|spod|adapter|ładow|kabel|telefon|aparat|elektr/i.test(task.title)) },
+  ];
+
+  const renderOverviewTripRow = (trip: TravelTrip) => {
+    const tripBudget = summarizeTravelBudget(trip);
+    const completed = trip.status === "completed" || Boolean(trip.archivedAt);
+    return (
+      <button
+        key={trip.id}
+        type="button"
+        className={`travel-board__row ${completed ? "is-completed" : ""}`}
+        onClick={() => selectTrip(trip.id)}
+      >
+        <span className="travel-board__trip">
+          <i className={`travel-board__status travel-board__status--${trip.status}`} />
+          <span>
+            <strong>{trip.name}</strong>
+            <small>{trip.destination}</small>
+          </span>
+        </span>
+        <span className="travel-board__date">
+          <strong>{formatTripDateRange(trip)}</strong>
+        </span>
+        <span className="travel-board__next">
+          {!completed && <strong>{overviewNextAction(trip)}</strong>}
+          <small>{completed ? "Zakończona" : tripCountdown(trip)}</small>
+        </span>
+        <span className="travel-board__money">
+          <strong>
+            <PrivateMoney value={tripBudget.actual} currency={trip.baseCurrency} label={`Wydano na podróż: ${trip.name}`} />
+            <span aria-hidden="true"> / </span>
+            <PrivateMoney value={tripBudget.planned} currency={trip.baseCurrency} label={`Budżet podróży: ${trip.name}`} />
+          </strong>
+        </span>
+        <ChevronRight size={13} aria-hidden="true" />
+      </button>
+    );
+  };
+
+  const remainingUpcomingTrips = remainingTrips.filter((trip) => !trip.archivedAt && trip.status !== "completed");
+  const remainingCompletedTrips = remainingTrips.filter((trip) => trip.archivedAt || trip.status === "completed");
+
+  const mobileSectionOptions = TRAVEL_SECTION_ITEMS.map((item) => ({ value: item.id, label: item.label }));
 
   const pageContent = (
     <>
@@ -914,40 +1205,24 @@ export default function Podroze({
         <ContentHeader
           headingLevel={1}
           className="travel-toolbar"
-          title={selectedTrip?.name ?? "Przegląd podróży"}
-          description={selectedTrip ? `${SECTION_COPY[activeSection]} · ${selectedTrip.destination}` : "Zaplanowane i zakończone wyjazdy"}
+          title={selectedTrip?.name ?? "Przegląd"}
+          description={selectedTrip
+            ? <span className="travel-trip-header__details"><span>{selectedTrip.destination}</span><span><CalendarDays size={13} aria-hidden="true" />{tripDateRangeLabel}</span></span>
+            : "Zaplanowane i zakończone wyjazdy"}
           mobileNavigation={embeddedViewSelect}
           meta={<>
             {storageError && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
-            {/* The trip picker always shows the same text as the title next to it, and in the
-                `leading` slot it pushed that title 192px right of every other module. It is a
-                navigation control, so it sits with the other controls. */}
-            <div className="travel-toolbar__trip-select">
-              <Select
-                compact
-                aria-label="Wybierz podróż"
-                value={selectedTrip?.id ?? ""}
-                options={[
-                  { value: "", label: "Przegląd podróży" },
-                  ...workspace.trips.map((trip) => ({ value: trip.id, label: trip.name })),
-                ]}
-                onChange={(event) => event.target.value ? selectTrip(event.target.value) : showAllTrips()}
-              />
-            </div>
-            {selectedTrip && <Badge tone={TRIP_STATUS_TONES[selectedTrip.status]}>{TRIP_STATUS_LABELS[selectedTrip.status]}</Badge>}
+            {selectedTrip && <Badge tone={selectedTripStatusTone}>{selectedTripStatusLabel}</Badge>}
             {selectedTrip?.archivedAt && <Badge tone="neutral">W archiwum</Badge>}
           </>}
           actions={<>
             {!selectedTrip && <Select
               compact
-              aria-label="Filtr statusu podróży"
+              aria-label="Filtr podróży"
               value={statusFilter}
               options={[
                 { value: "upcoming", label: "Nadchodzące" },
                 { value: "all", label: "Wszystkie" },
-                { value: "idea", label: "Pomysły" },
-                { value: "planning", label: "W planowaniu" },
-                { value: "ready", label: "Gotowe" },
                 { value: "completed", label: "Zakończone" },
                 { value: "archived", label: "Archiwum" },
               ]}
@@ -961,26 +1236,11 @@ export default function Podroze({
                 compact
                 aria-label="Wybierz sekcję podróży"
                 value={activeSection}
-                options={TRAVEL_SECTION_ITEMS.map((item) => ({ value: item.id, label: item.label }))}
+                options={mobileSectionOptions}
                 onChange={(event) => setSection(event.target.value as TravelSection)}
               />
             </div>
-            <div className="travel-toolbar__route">
-                <CalendarDays size={13} aria-hidden="true" />
-                <strong>{formatDate(selectedTrip.startDate)} — {formatDate(selectedTrip.endDate)}</strong>
-                <span>{pluralize(tripDuration(selectedTrip), "dzień", "dni", "dni")}</span>
-              </div>
-              <div className="travel-toolbar__readiness">
-                <span>Gotowość</span>
-                <i><b style={{ transform: `scaleX(${readinessScore(selectedTrip) / 100})` }} /></i>
-                <strong>{formatPercent(readinessScore(selectedTrip))}</strong>
-              </div>
-          </> : (
-              <div className="travel-toolbar__summary">
-                <span>{upcomingTrips.length} nadchodzące</span>
-                <span>{completedTrips.length} zakończone</span>
-              </div>
-          )}
+          </> : undefined}
         />
 
         {!selectedTrip ? (
@@ -995,90 +1255,57 @@ export default function Podroze({
             {filteredTrips.length === 0 ? (
               <EmptyState
                 icon={<MapIcon size={18} />}
-                title="Brak podróży w tym widoku"
-                description="Zmień filtr albo dodaj pierwszy wyjazd z datami i miejscem docelowym."
+                title="Nie masz jeszcze żadnych podróży"
+                description="Zaplanuj pierwszy wyjazd i trzymaj w jednym miejscu plan, rezerwacje, dokumenty oraz budżet."
                 action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTripEditor()}>Dodaj podróż</Button>}
               />
             ) : (
               <>
-                {filteredTrips[0] && !filteredTrips[0].archivedAt && filteredTrips[0].status !== "completed" && (
-                  <button type="button" className="travel-next-departure" onClick={() => selectTrip(filteredTrips[0].id)}>
+                {showNearestTrip && nearestTrip && (
+                  <button type="button" className="travel-next-departure" onClick={() => selectTrip(nearestTrip.id)}>
                     <span className="travel-next-departure__marker"><Plane size={16} /></span>
                     <span className="travel-next-departure__identity">
-                      <small>Najbliższy wyjazd · {tripCountdown(filteredTrips[0])}</small>
-                      <strong>{filteredTrips[0].name}</strong>
-                      <span>{filteredTrips[0].destination}</span>
+                      <small>Najbliższy wyjazd</small>
+                      <strong>{nearestTrip.name}</strong>
+                      <span>{nearestTrip.destination}</span>
                     </span>
                     <span className="travel-next-departure__date">
                       <small>Termin</small>
-                      <strong>{formatDate(filteredTrips[0].startDate)} — {formatDate(filteredTrips[0].endDate, false)}</strong>
+                      <strong>{formatTripDateRange(nearestTrip)}</strong>
                     </span>
                     <span className="travel-next-departure__action">
                       <small>Następny krok</small>
-                      <strong>{nextAction(filteredTrips[0])}</strong>
-                    </span>
-                    <span className="travel-next-departure__progress">
-                      <small>Gotowość</small>
-                      <span><i style={{ width: `${readinessScore(filteredTrips[0])}%` }} /></span>
-                      <strong>{formatPercent(readinessScore(filteredTrips[0]))}</strong>
+                      <strong>{overviewNextAction(nearestTrip)} · {tripCountdown(nearestTrip).replace(/^Za /, "za ")}</strong>
+                      <span className="travel-next-departure__open">Otwórz podróż</span>
                     </span>
                     <ChevronRight size={16} />
                   </button>
                 )}
 
-                <div className="travel-board">
-                  <div className="travel-board__heading">
-                    <div>
-                      <MapIcon size={13} aria-hidden="true" />
-                      <h2>Wszystkie podróże</h2>
+                {remainingTrips.length > 0 && (
+                  <section className="travel-board" aria-labelledby="travel-remaining-trips-title">
+                    <div className="travel-board__heading">
+                      <div>
+                        <MapIcon size={13} aria-hidden="true" />
+                        <h2 id="travel-remaining-trips-title">{showNearestTrip ? "Pozostałe podróże" : "Podróże"}</h2>
+                      </div>
+                      <span>{remainingTrips.length} {remainingTrips.length === 1 ? "podróż" : "podróże"}</span>
                     </div>
-                    <span>{filteredTrips.length} w widoku</span>
-                  </div>
-                  <div className="travel-board__head" aria-hidden="true">
-                    <span>Podróż</span>
-                    <span>Termin</span>
-                    <span>Gotowość</span>
-                    <span>Następny krok</span>
-                    <span>Budżet</span>
-                    <span />
-                  </div>
-                  {filteredTrips.map((trip) => {
-                    const tripBudget = summarizeTravelBudget(trip);
-                    const score = readinessScore(trip);
-                    return (
-                      <button key={trip.id} type="button" className="travel-board__row" onClick={() => selectTrip(trip.id)}>
-                        <span className="travel-board__trip">
-                          <i className={`travel-board__status travel-board__status--${trip.status}`} />
-                          <span>
-                            <strong>{trip.name}</strong>
-                            <small>{trip.destination} · {TRIP_STATUS_LABELS[trip.status]}</small>
-                          </span>
-                        </span>
-                        <span className="travel-board__date">
-                          <strong>{formatDate(trip.startDate)}</strong>
-                          <small>{tripDuration(trip)} dni · {trip.travelers.length || 1} os.</small>
-                        </span>
-                        <span className="travel-board__progress">
-                          <span><i style={{ width: `${score}%` }} /></span>
-                          <strong>{formatPercent(score)}</strong>
-                        </span>
-                        <span className="travel-board__next">
-                          <strong>{nextAction(trip)}</strong>
-                          <small>{tripCountdown(trip)}</small>
-                        </span>
-                        <span className="travel-board__money">
-                          <strong><PrivateMoney value={tripBudget.planned} currency={trip.baseCurrency} label={`Planowany budżet: ${trip.name}`} /></strong>
-                          <small>
-                            {tripBudget.actual
-                              ? <><PrivateMoney value={tripBudget.actual} currency={trip.baseCurrency} label={`Rzeczywiste wydatki: ${trip.name}`} /> rzeczywiście</>
-                              : "Brak wydatków"}
-                          </small>
-                        </span>
-                        <ChevronRight size={13} aria-hidden="true" />
-                      </button>
-                    );
-                  })}
-                </div>
+                    {statusFilter === "all" && remainingUpcomingTrips.length > 0 && (
+                      <div className="travel-board__group">
+                        <h3>Nadchodzące</h3>
+                        {remainingUpcomingTrips.map(renderOverviewTripRow)}
+                      </div>
+                    )}
+                    {statusFilter === "all" && remainingCompletedTrips.length > 0 && (
+                      <div className="travel-board__group">
+                        <h3>Zakończone</h3>
+                        {remainingCompletedTrips.map(renderOverviewTripRow)}
+                      </div>
+                    )}
+                    {statusFilter !== "all" && remainingTrips.map(renderOverviewTripRow)}
+                  </section>
+                )}
               </>
             )}
           </section>
@@ -1090,51 +1317,42 @@ export default function Podroze({
           >
             {activeSection === "overview" && (
               <div className="travel-trip-overview">
-                <section className="travel-readiness" aria-labelledby="travel-readiness-title">
-                  <header>
-                    <div>
-                      <h2 id="travel-readiness-title">Gotowość do wyjazdu</h2>
-                      <p>{tripCountdown(selectedTrip)} · następny krok: {nextAction(selectedTrip)}</p>
-                    </div>
-                    <strong>{formatPercent(readinessScore(selectedTrip))}</strong>
-                  </header>
-                  <div className="travel-readiness__track"><span style={{ transform: `scaleX(${readinessScore(selectedTrip) / 100})` }} /></div>
-                  <div className="travel-readiness__parts">
-                    {readinessParts(selectedTrip).map((part) => (
-                      <button key={part.id} type="button" onClick={() => setSection(part.id)}>
-                        <span>
-                          <strong>{part.label}</strong>
-                          <small>{part.meta}</small>
-                        </span>
-                        <i><b style={{ width: `${Math.round(part.value * 100)}%` }} /></i>
-                        <ChevronRight size={13} />
-                      </button>
-                    ))}
-                  </div>
-                </section>
+              <button type="button" className="travel-next-step" onClick={() => setTripDetailPanel("incomplete")}>
+                  <span className="travel-next-step__marker"><Check size={15} aria-hidden="true" /></span>
+                  <span className="travel-next-step__copy">
+                    <small>Następny krok</small>
+                    <strong>{nextAction(selectedTrip)} · {nextStepTiming}</strong>
+                  </span>
+                  {unfinishedTripItems > 0 && (
+                    <span className="travel-next-step__pending">
+                      <span>{unfinishedTripItems} {unfinishedTripItems === 1 ? "rzecz do uzupełnienia" : "rzeczy do uzupełnienia"}</span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </span>
+                  )}
+                </button>
 
-                <div className="travel-dashboard-grid">
-                  <section className="travel-panel travel-panel--agenda">
+                <div className="travel-trip-overview__columns">
+                  <section className="travel-panel travel-panel--agenda" aria-labelledby="travel-nearest-points-title">
                     <header>
-                      <div><CalendarDays size={13} /><h3>Najbliższe punkty planu</h3></div>
+                      <h2 id="travel-nearest-points-title">Najbliższe punkty</h2>
                       <button type="button" onClick={() => setSection("itinerary")}>Pełny plan</button>
                     </header>
                     <div>
                       {selectedTrip.itinerary
                         .slice()
-                        .sort((a, b) => `${a.date}-${a.time}`.localeCompare(`${b.date}-${b.time}`))
-                        .slice(0, 5)
+                        .sort((a, b) => `${a.date}-${a.time || "99:99"}`.localeCompare(`${b.date}-${b.time || "99:99"}`))
+                        .slice(0, 4)
                         .map((item) => (
-                          <button key={item.id} type="button" className="travel-agenda-row" onClick={() => openItineraryEditor(item)}>
+                          <button key={item.id} type="button" className="travel-agenda-row" onClick={() => openTravelDetail({ kind: "itinerary", id: item.id, title: item.title })}>
                             <span className="travel-agenda-row__date">
                               <strong>{new Date(`${item.date}T12:00:00`).toLocaleDateString("pl-PL", { day: "2-digit" })}</strong>
                               <small>{new Date(`${item.date}T12:00:00`).toLocaleDateString("pl-PL", { month: "short" })}</small>
                             </span>
-                            <span>
+                            <span className={`travel-agenda-row__dot travel-agenda-row__dot--${item.kind}`} aria-hidden="true" />
+                            <span className="travel-agenda-row__copy">
                               <strong>{item.title}</strong>
                               <small>{item.time || "Bez godziny"}{item.location ? ` · ${item.location}` : ""}</small>
                             </span>
-                            <Badge tone={item.reserved ? "success" : "neutral"}>{ITINERARY_KIND_LABELS[item.kind]}</Badge>
                           </button>
                         ))}
                       {selectedTrip.itinerary.length === 0 && (
@@ -1143,48 +1361,15 @@ export default function Podroze({
                     </div>
                   </section>
 
-                  <section className="travel-panel travel-panel--basics">
-                    <header>
-                      <div><MapPin size={13} /><h3>Podstawy wyjazdu</h3></div>
-                      <button type="button" onClick={() => openTripEditor(selectedTrip)}>Edytuj</button>
-                    </header>
+                  <button type="button" className="travel-overview-summary" aria-label="Otwórz szczegóły rezerwacji i budżetu" onClick={() => setTripDetailPanel("summary")}>
+                    <span className="travel-overview-summary__heading"><h2>Podsumowanie</h2><ChevronRight size={15} aria-hidden="true" /></span>
                     <dl>
-                      <div><dt>Termin</dt><dd>{formatDate(selectedTrip.startDate)} — {formatDate(selectedTrip.endDate)}</dd></div>
-                      <div><dt>Trasa</dt><dd>{selectedTrip.destination || "Nie ustalono"}</dd></div>
-                      <div><dt>Podróżni</dt><dd>{selectedTrip.travelers.join(", ") || "1 osoba"}</dd></div>
-                      <div><dt>Waluta bazowa</dt><dd>{selectedTrip.baseCurrency}</dd></div>
+                      <div><dt>Rezerwacje</dt><dd>{reservationSummary.secured}/{reservationSummary.total}</dd></div>
+                      <div><dt>Wydano</dt><dd><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Wydano na podróż" /></dd></div>
+                      <div><dt>Budżet</dt><dd><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Budżet podróży" /></dd></div>
+                      <div><dt>Pozostało</dt><dd className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Pozostały budżet" /></dd></div>
                     </dl>
-                    {selectedTrip.note && <p>{selectedTrip.note}</p>}
-                  </section>
-
-                  <section className="travel-panel travel-panel--bookings">
-                    <header>
-                      <div><ReceiptText size={13} /><h3>Rezerwacje</h3></div>
-                      <button type="button" onClick={() => setSection("reservations")}>Szczegóły</button>
-                    </header>
-                    <div className="travel-booking-summary">
-                      <div>
-                        <BedDouble size={13} />
-                        <span><strong>{selectedTrip.stays.filter((item) => item.status !== "planned").length}/{selectedTrip.stays.length}</strong><small>noclegi zabezpieczone</small></span>
-                      </div>
-                      <div>
-                        <Plane size={13} />
-                        <span><strong>{selectedTrip.transports.filter((item) => item.status !== "planned").length}/{selectedTrip.transports.length}</strong><small>przejazdy zabezpieczone</small></span>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="travel-panel travel-panel--money">
-                    <header>
-                      <div><WalletCards size={13} /><h3>Budżet</h3></div>
-                      <button type="button" onClick={() => setSection("budget")}>Szczegóły</button>
-                    </header>
-                    <div className="travel-money-summary">
-                      <span><small>Plan</small><strong><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Planowany budżet podróży" /></strong></span>
-                      <span><small>Rzeczywiste</small><strong><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Rzeczywiste wydatki podróży" /></strong></span>
-                      <span><small>Zostaje</small><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Pozostały budżet podróży" /></strong></span>
-                    </div>
-                  </section>
+                  </button>
                 </div>
               </div>
             )}
@@ -1193,14 +1378,11 @@ export default function Podroze({
               <div className="travel-itinerary">
                 <div className="travel-section-intro">
                   <div>
-                    <h2>Plan dzień po dniu</h2>
-                    <p>{itineraryDays.length} z {tripDuration(selectedTrip)} dni ma już zapisany plan.</p>
+                    <h2>Plan podróży</h2>
+                    <p>{plannedItineraryDays} z {tripDuration(selectedTrip)} dni ma już zapisany plan.</p>
                   </div>
-                  <Badge tone={itineraryDays.length >= tripDuration(selectedTrip) ? "success" : "warning"}>
-                    {selectedTrip.itinerary.length} punktów
-                  </Badge>
                 </div>
-                {itineraryDays.length === 0 ? (
+                {selectedTrip.itinerary.length === 0 ? (
                   <EmptyState
                     icon={<CalendarDays size={18} />}
                     title="Zacznij od pierwszego dnia"
@@ -1209,13 +1391,13 @@ export default function Podroze({
                   />
                 ) : (
                   <div className="travel-day-list">
-                    {itineraryDays.map(([date, items], dayIndex) => (
+                    {itineraryDays.map(({ date, items, dayNumber }) => (
                       <section key={date} className="travel-day">
                         <header>
-                          <span><strong>{new Date(`${date}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "short" })}</strong><small>Dzień {dayIndex + 1}</small></span>
+                          <span><strong>{new Date(date + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "short" })}</strong><small>Dzień {dayNumber}</small></span>
                           <div>
                             <h3>{formatDate(date)}</h3>
-                            <p>{items.map((item) => item.location).filter(Boolean).filter((value, index, list) => list.indexOf(value) === index).slice(0, 2).join(" · ") || "Bez lokalizacji"}</p>
+                            <p>{items.map((item) => item.location).filter(Boolean).filter((value, index, list) => list.indexOf(value) === index).slice(0, 2).join(" · ") || (items.length ? "Bez lokalizacji" : "Brak punktów planu")}</p>
                           </div>
                           <Button variant="ghost" size="sm" leadingIcon={<Plus size={13} />} onClick={() => {
                             openItineraryEditor();
@@ -1223,15 +1405,22 @@ export default function Podroze({
                           }}>Dodaj</Button>
                         </header>
                         <div>
+                          {items.length === 0 && <p className="travel-day__empty">Ten dzień jest jeszcze pusty.</p>}
                           {items.map((item) => (
-                            <article key={item.id} className="travel-plan-row">
+                            <article
+                              key={item.id}
+                              className="travel-plan-row"
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) openTravelDetail({ kind: "itinerary", id: item.id, title: item.title }); }}
+                              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openTravelDetail({ kind: "itinerary", id: item.id, title: item.title }); }}
+                            >
                               <span className="travel-plan-row__time">{item.time || "—"}</span>
                               <span className={`travel-plan-row__signal travel-plan-row__signal--${item.kind}`} />
                               <span className="travel-plan-row__copy">
                                 <strong>{item.title}</strong>
                                 <small>{item.location || ITINERARY_KIND_LABELS[item.kind]}{item.note ? ` · ${item.note}` : ""}</small>
                               </span>
-                              <Badge tone={item.reserved ? "success" : "neutral"}>{item.reserved ? "Zarezerwowano" : ITINERARY_KIND_LABELS[item.kind]}</Badge>
                               <span className="travel-row-actions">
                                 <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openItineraryEditor(item)}><Pencil size={13} /></Button>
                                 <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.title}`} onClick={() => setDeleteState({ kind: "itinerary", id: item.id, label: item.title })}><Trash2 size={13} /></Button>
@@ -1248,6 +1437,9 @@ export default function Podroze({
 
             {activeSection === "reservations" && (
               <div className="travel-reservations">
+                <div className="travel-section-intro">
+                  <div><h2>Rezerwacje</h2><p>Noclegi i transport</p></div>
+                </div>
                 <section className="travel-register">
                   <div className="travel-register__heading">
                     <div><BedDouble size={16} /><span><h2>Noclegi</h2><p>{selectedTrip.stays.length} zapisanych miejsc</p></span></div>
@@ -1261,7 +1453,14 @@ export default function Podroze({
                         .slice()
                         .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
                         .map((stay) => (
-                          <article key={stay.id} className="travel-stay-row">
+                            <article
+                              key={stay.id}
+                              className="travel-stay-row"
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) openTravelDetail({ kind: "stay", id: stay.id, title: stay.name }); }}
+                              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openTravelDetail({ kind: "stay", id: stay.id, title: stay.name }); }}
+                            >
                             <span className="travel-reservation-icon"><BedDouble size={16} /></span>
                             <span className="travel-reservation-copy">
                               <strong>{stay.name}</strong>
@@ -1298,7 +1497,14 @@ export default function Podroze({
                         .map((transport) => {
                           const Icon = TRANSPORT_ICONS[transport.mode];
                           return (
-                            <article key={transport.id} className="travel-transport-row">
+                            <article
+                              key={transport.id}
+                              className="travel-transport-row"
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) openTravelDetail({ kind: "transport", id: transport.id, title: transport.title }); }}
+                              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openTravelDetail({ kind: "transport", id: transport.id, title: transport.title }); }}
+                            >
                               <span className="travel-reservation-icon"><Icon size={16} /></span>
                               <span className="travel-reservation-copy">
                                 <strong>{transport.title}</strong>
@@ -1325,59 +1531,41 @@ export default function Podroze({
 
             {activeSection === "budget" && (
               <div className="travel-budget">
-                <section className="travel-budget-summary" aria-label="Podsumowanie budżetu">
-                  <div><span>Plan podróży</span><strong><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Planowany budżet podróży" /></strong></div>
-                  <div><span>Rzeczywiste wydatki</span><strong><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Rzeczywiste wydatki podróży" /></strong></div>
-                  <div><span>Już opłacone</span><strong><PrivateMoney value={budgetSummary.paid} currency={selectedTrip.baseCurrency} label="Opłacona kwota podróży" /></strong></div>
-                  <div><span>Do dyspozycji</span><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Kwota do dyspozycji" /></strong></div>
-                </section>
-                <div className="travel-budget-link-note" role="note">
-                  <ReceiptText size={13} aria-hidden="true" />
-                  <span>
-                    <strong>Rezerwacje są połączone z podsumowaniem</strong>
-                    <small>
-                      Noclegi i transport wnoszą <PrivateMoney value={budgetSummary.reservationCommitted} currency={selectedTrip.baseCurrency} label="Kwota rezerwacji" />.
-                      Dla tych kategorii podsumowanie bierze wyższą z kwot — wpis budżetowy albo rezerwacje — aby ich nie dublować.
-                    </small>
-                  </span>
-                  {budgetSummary.unbudgetedReservations > 0 && (
-                    <Badge tone="warning">
-                      <PrivateMoney value={budgetSummary.unbudgetedReservations} currency={selectedTrip.baseCurrency} label="Kwota rezerwacji poza planem" /> poza planem
-                    </Badge>
-                  )}
+                <div className="travel-section-intro">
+                  <div><h2>Budżet</h2><p>Planowane i rzeczywiste wydatki</p></div>
                 </div>
+                <section className="travel-budget-summary" aria-label="Podsumowanie budżetu">
+                  <div><span>Budżet</span><strong><PrivateMoney value={budgetSummary.planned} currency={selectedTrip.baseCurrency} label="Planowany budżet podróży" /></strong></div>
+                  <div><span>Wydano</span><strong><PrivateMoney value={budgetSummary.actual} currency={selectedTrip.baseCurrency} label="Rzeczywiste wydatki podróży" /></strong></div>
+                  <div><span>Pozostało</span><strong className={budgetSummary.remaining < 0 ? "is-negative" : ""}><PrivateMoney value={budgetSummary.remaining} currency={selectedTrip.baseCurrency} label="Pozostały budżet" /></strong></div>
+                  <div><span>Pozycje</span><strong>{selectedTrip.budget.length}</strong></div>
+                </section>
                 <section className="travel-budget-register">
                   <div className="travel-budget-register__head">
-                    <span>Kategoria</span><span>Plan</span><span>Rzeczywiście</span><span>Realizacja</span><span>Status</span><span />
+                    <span>Kategoria</span><span>Plan</span><span>Rzeczywiście</span><span>Pozostało</span><span />
                   </div>
-                  {selectedTrip.budget.map((line) => {
-                    const ratio = line.planned ? Math.min(100, Math.round(line.actual / line.planned * 100)) : 0;
-                    return (
-                      <article key={line.id} className="travel-budget-row">
-                        <span className="travel-budget-row__identity">
-                          <strong>{line.label}</strong>
-                          <small>{BUDGET_CATEGORY_LABELS[line.category]}</small>
-                        </span>
-                        <span className="travel-budget-row__value"><PrivateMoney value={line.planned} currency={selectedTrip.baseCurrency} label={`Planowana kwota: ${line.label}`} /></span>
-                        <span className="travel-budget-row__value"><PrivateMoney value={line.actual} currency={selectedTrip.baseCurrency} label={`Rzeczywista kwota: ${line.label}`} /></span>
-                        <span
-                          className="travel-budget-row__progress"
-                          role="progressbar"
-                          aria-label={`Realizacja budżetu: ${line.label}`}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={ratio}
-                        >
-                          <i><b style={{ width: `${ratio}%` }} /></i><strong>{formatPercent(ratio)}</strong>
-                        </span>
-                        <Badge tone={line.paid ? "success" : line.actual > line.planned ? "danger" : "neutral"}>{line.paid ? "Opłacono" : "Plan"}</Badge>
-                        <span className="travel-row-actions">
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${line.label}`} onClick={() => openBudgetEditor(line)}><Pencil size={13} /></Button>
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${line.label}`} onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}><Trash2 size={13} /></Button>
-                        </span>
-                      </article>
-                    );
-                  })}
+                  {selectedTrip.budget.map((line) => (
+                    <article
+                      key={line.id}
+                      className="travel-budget-row"
+                      role="button"
+                      tabIndex={0}
+                      onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) openTravelDetail({ kind: "budget", id: line.id, title: line.label }); }}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openTravelDetail({ kind: "budget", id: line.id, title: line.label }); }}
+                    >
+                      <span className="travel-budget-row__identity">
+                        <strong>{line.label}</strong>
+                        <small>{BUDGET_CATEGORY_LABELS[line.category]}</small>
+                      </span>
+                      <span className="travel-budget-row__value"><PrivateMoney value={line.planned} currency={selectedTrip.baseCurrency} label={`Planowana kwota: ${line.label}`} /></span>
+                      <span className="travel-budget-row__value"><PrivateMoney value={line.actual} currency={selectedTrip.baseCurrency} label={`Rzeczywista kwota: ${line.label}`} /></span>
+                      <span className={`travel-budget-row__value ${line.planned - line.actual < 0 ? "is-negative" : ""}`}><PrivateMoney value={line.planned - line.actual} currency={selectedTrip.baseCurrency} label={`Pozostała kwota: ${line.label}`} /></span>
+                      <span className="travel-row-actions">
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${line.label}`} onClick={() => openBudgetEditor(line)}><Pencil size={13} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${line.label}`} onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}><Trash2 size={13} /></Button>
+                      </span>
+                    </article>
+                  ))}
                   {selectedTrip.budget.length === 0 && (
                     <EmptyState
                       icon={<WalletCards size={18} />}
@@ -1393,9 +1581,9 @@ export default function Podroze({
             {activeSection === "documents" && (
               <div className="travel-documents">
                 <div className="travel-section-intro">
-                  <div><h2>Dokumenty i formalności</h2><p>Kliknij status, aby przesunąć dokument do kolejnego etapu.</p></div>
+                  <div><h2>Dokumenty</h2><p>Najważniejsze dokumenty na wyjazd</p></div>
                   <Badge tone={selectedTrip.documents.every((item) => item.status === "ready") ? "success" : "warning"}>
-                    {selectedTrip.documents.filter((item) => item.status === "ready").length}/{selectedTrip.documents.length} gotowych
+                    {selectedTrip.documents.filter((item) => item.status === "ready").length}/{selectedTrip.documents.length} dodanych
                   </Badge>
                 </div>
                 {selectedTrip.documents.length === 0 ? (
@@ -1411,14 +1599,25 @@ export default function Podroze({
                       <span>Dokument</span><span>Właściciel</span><span>Ważność</span><span>Status</span><span />
                     </div>
                     {selectedTrip.documents.map((document) => (
-                      <article key={document.id} className="travel-document-row">
+                      <article
+                        key={document.id}
+                        className="travel-document-row"
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => { if (!(event.target as HTMLElement).closest("button")) openTravelDetail({ kind: "document", id: document.id, title: document.name }); }}
+                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openTravelDetail({ kind: "document", id: document.id, title: document.name }); }}
+                      >
                         <span className="travel-document-row__identity">
                           <FileText size={13} />
                           <span><strong>{document.name}</strong><small>{document.note || "Bez dodatkowych uwag"}</small></span>
                         </span>
                         <span className="travel-document-row__owner">{document.owner}</span>
-                        <span className="travel-document-row__date">{document.expiresAt ? formatDate(document.expiresAt) : "Nie dotyczy"}</span>
-                        <button type="button" className="travel-status-button" onClick={() => cycleDocumentStatus(document)}>
+                        <span className={`travel-document-row__date ${document.expiresAt && document.expiresAt < selectedTrip.startDate ? "is-danger" : ""}`}>
+                          <strong>{document.expiresAt ? formatDate(document.expiresAt) : "Nie dotyczy"}</strong>
+                          {document.expiresAt && document.expiresAt < selectedTrip.startDate && <small>Wygasa przed wyjazdem</small>}
+                          {document.expiresAt && document.expiresAt >= selectedTrip.startDate && daysUntil(document.expiresAt) < 30 && <small>Wygasa wkrótce</small>}
+                        </span>
+                        <button type="button" className="travel-status-button" title="Zmień status dokumentu" onClick={() => cycleDocumentStatus(document)}>
                           <Badge tone={DOCUMENT_STATUS_TONES[document.status]}>{DOCUMENT_STATUS_LABELS[document.status]}</Badge>
                         </button>
                         <span className="travel-row-actions">
@@ -1436,20 +1635,32 @@ export default function Podroze({
               <div className="travel-tasks">
                 <div className="travel-section-intro">
                   <div>
-                    <h2>{activeSection === "packing" ? "Lista rzeczy do spakowania" : "Sprawy do załatwienia"}</h2>
-                    <p>{activeSection === "packing"
-                      ? "Osobna checklista bagażu, której nie mieszamy z rezerwacjami i formalnościami."
-                      : "Rezerwacje, kontakt, zdrowie, pieniądze i formalności przed wyjazdem."}</p>
+                    <h2>{activeSection === "packing" ? "Pakowanie" : "Sprawy do załatwienia"}</h2>
+                    <p>{activeSection === "packing" ? "Lista rzeczy na 4 dni" : "Rzeczy, które trzeba zrobić przed wyjazdem"}</p>
                   </div>
-                  <Badge tone="primary">{visibleTravelTasks.filter((item) => !item.completed).length} otwartych</Badge>
+                  {activeSection === "tasks" && <Badge tone="primary">{visibleTravelTasks.filter((item) => !item.completed).length} otwartych</Badge>}
                 </div>
-                {visibleTravelTasks.length === 0 ? (
+                {visibleTravelTasks.length === 0 && activeSection !== "packing" ? (
                   <EmptyState
                     icon={<ListChecks size={18} />}
-                    title={activeSection === "packing" ? "Lista pakowania jest pusta" : "Brak spraw przed wyjazdem"}
-                    description={activeSection === "packing" ? "Dodaj pierwszą rzecz do zabrania." : "Dodaj pierwszą sprawę z kategorią i terminem."}
-                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor(undefined, activeSection === "packing" ? "packing" : "other")}>{activeSection === "packing" ? "Dodaj rzecz" : "Dodaj sprawę"}</Button>}
+                    title="Brak spraw przed wyjazdem"
+                    description="Dodaj pierwszą sprawę z kategorią i terminem."
+                    action={<Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openTaskEditor(undefined, "other")}>Dodaj sprawę</Button>}
                   />
+                ) : activeSection === "packing" ? (
+                  <div className="travel-packing-groups">
+                    {packingGroups.map((group) => (
+                      <section key={group.label} className="travel-packing-group">
+                        <h3>{group.label}</h3>
+                        {group.tasks.length > 0
+                          ? group.tasks
+                            .slice()
+                            .sort((a, b) => Number(a.completed) - Number(b.completed) || (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
+                            .map(renderTravelTask)
+                          : <p className="travel-packing-group__empty">Brak elementów</p>}
+                      </section>
+                    ))}
+                  </div>
                 ) : (
                   <section className="travel-task-register">
                     {visibleTravelTasks
@@ -1707,10 +1918,11 @@ export default function Podroze({
   );
 
   return layout
-    ? layout(pageContent)
+    ? layout(<>{pageContent}{detailPanelContent}</>)
     : (
       <ModuleShell
         contextSidebar={contextSidebar}
+        detailPanel={detailPanelContent}
         className="travel-module"
         pageWidth="wide"
       >

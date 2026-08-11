@@ -1,5 +1,5 @@
 import { Bus, Car, Plane, Route, Ship, Train } from "lucide-react";
-import { calendarDaysBetween, todayLocalDateKey } from "../data/localDate";
+import { calendarDaysBetween, shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
 import {
   formatCurrency,
   formatDate as formatPolishDate,
@@ -11,6 +11,7 @@ import {
   normalizeIsoCurrency,
   type BudgetCategory,
   type DocumentStatus,
+  type ItineraryItem,
   type ItineraryKind,
   type ReservationStatus,
   type TransportMode,
@@ -19,7 +20,8 @@ import {
   type TripStatus,
 } from "../data/travelWorkspace";
 
-export type TravelSection = "overview" | "itinerary" | "reservations" | "budget" | "documents" | "tasks" | "packing";
+export type TravelSection = "overview" | "itinerary" | "reservations" | "budget" | "preparation" | "documents" | "tasks" | "packing";
+export type PreparationSection = "tasks" | "documents" | "packing";
 export type EditorKind = "trip" | "itinerary" | "stay" | "transport" | "budget" | "document" | "task";
 export type EditorState = { kind: EditorKind; mode: "add" | "edit"; id?: string };
 export type DeleteState = {
@@ -123,9 +125,9 @@ export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
 };
 
 export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
-  todo: "Do zdobycia",
-  pending: "W toku",
-  ready: "Gotowy",
+  todo: "Brak",
+  pending: "Sprawdź",
+  ready: "Dodany",
 };
 
 export const DOCUMENT_STATUS_TONES: Record<DocumentStatus, "danger" | "warning" | "success"> = {
@@ -180,27 +182,57 @@ export const TRANSPORT_ICONS: Record<TransportMode, typeof Plane> = {
 };
 
 export const SECTION_COPY: Record<TravelSection, string> = {
-  overview: "Pulpit podróży",
-  itinerary: "Plan dzień po dniu",
+  preparation: "Przygotowanie",
+  overview: "Przegląd podróży",
+  itinerary: "Plan podróży",
   reservations: "Noclegi i transport",
-  budget: "Plan i rzeczywiste wydatki",
-  documents: "Dokumenty i formalności",
-  tasks: "Sprawy do załatwienia",
-  packing: "Lista rzeczy do spakowania",
+  budget: "Planowane i rzeczywiste wydatki",
+  documents: "Najważniejsze dokumenty na wyjazd",
+  tasks: "Rzeczy, które trzeba zrobić przed wyjazdem",
+  packing: "Lista rzeczy na 4 dni",
 };
 
 export const TRAVEL_SECTION_ITEMS: ReadonlyArray<{ id: TravelSection; label: string }> = [
   { id: "overview", label: "Przegląd" },
   { id: "itinerary", label: "Plan podróży" },
-  { id: "reservations", label: "Noclegi i transport" },
+  { id: "reservations", label: "Rezerwacje" },
   { id: "budget", label: "Budżet" },
+  { id: "tasks", label: "Do załatwienia" },
   { id: "documents", label: "Dokumenty" },
-  { id: "tasks", label: "Sprawy" },
   { id: "packing", label: "Pakowanie" },
 ];
 
 export function isTravelSection(value: string | null): value is TravelSection {
-  return TRAVEL_SECTION_ITEMS.some((item) => item.id === value);
+  return TRAVEL_SECTION_ITEMS.some((item) => item.id === value)
+    || value === "preparation";
+}
+
+export function isPreparationSection(value: string | null): value is PreparationSection {
+  return value === "tasks" || value === "documents" || value === "packing";
+}
+
+export type ItineraryDay = {
+  date: string;
+  dayNumber: number;
+  items: ItineraryItem[];
+};
+
+export function buildItineraryDays(trip: TravelTrip): ItineraryDay[] {
+  const byDate = new Map<string, ItineraryItem[]>();
+  trip.itinerary.forEach((item) => {
+    const bucket = byDate.get(item.date) ?? [];
+    bucket.push(item);
+    byDate.set(item.date, bucket);
+  });
+
+  return Array.from({ length: tripDuration(trip) }, (_, dayNumber) => {
+    const date = shiftLocalDateKey(trip.startDate, dayNumber);
+    return {
+      date,
+      dayNumber: dayNumber + 1,
+      items: (byDate.get(date) ?? []).slice().sort((a, b) => a.time.localeCompare(b.time) || a.title.localeCompare(b.title)),
+    };
+  });
 }
 
 export function formatDate(value: string, withYear = true): string {
@@ -242,10 +274,8 @@ export function readinessParts(trip: TravelTrip) {
   const reservations = [...trip.stays, ...trip.transports];
   const securedReservations = reservations.filter((item) => item.status !== "planned").length;
   const readyDocuments = trip.documents.filter((item) => item.status === "ready").length;
-  const preparationTasks = trip.tasks.filter((item) => item.category !== "packing");
-  const packingTasks = trip.tasks.filter((item) => item.category === "packing");
-  const completedTasks = preparationTasks.filter((item) => item.completed).length;
-  const packedItems = packingTasks.filter((item) => item.completed).length;
+  const taskItems = trip.tasks.filter((item) => item.category !== "packing");
+  const packingItems = trip.tasks.filter((item) => item.category === "packing");
   const itineraryDays = new Set(trip.itinerary.map((item) => item.date)).size;
   const totalDays = tripDuration(trip);
   const budgetReady = trip.budget.length > 0 || reservations.some((item) => item.amount > 0) ? 1 : 0;
@@ -277,15 +307,15 @@ export function readinessParts(trip: TravelTrip) {
     },
     {
       id: "tasks" as TravelSection,
-      label: "Sprawy",
-      value: preparationTasks.length ? completedTasks / preparationTasks.length : 1,
-      meta: `${completedTasks}/${preparationTasks.length}`,
+      label: "Do załatwienia",
+      value: taskItems.length ? taskItems.filter((item) => item.completed).length / taskItems.length : 1,
+      meta: `${taskItems.filter((item) => item.completed).length}/${taskItems.length}`,
     },
     {
       id: "packing" as TravelSection,
       label: "Pakowanie",
-      value: packingTasks.length ? packedItems / packingTasks.length : 0,
-      meta: `${packedItems}/${packingTasks.length}`,
+      value: packingItems.length ? packingItems.filter((item) => item.completed).length / packingItems.length : 1,
+      meta: `${packingItems.filter((item) => item.completed).length}/${packingItems.length}`,
     },
   ];
 }

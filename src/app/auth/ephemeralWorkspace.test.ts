@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { NUTRITION_STORAGE_KEY, type NutritionWorkspace } from "../data/nutritionWorkspace";
+import { loadNutritionWorkspace, NUTRITION_STORAGE_KEY, type NutritionWorkspace } from "../data/nutritionWorkspace";
 import {
   loadTaskWorkspace,
   saveTaskWorkspace,
@@ -11,6 +11,7 @@ import {
   deactivateEphemeralTestWorkspaceForTests,
   isEphemeralTestWorkspaceActive,
 } from "./ephemeralWorkspace";
+import { createGeneratedDemoEntries } from "./demoWorkspace";
 
 describe("ephemeral test workspace", () => {
   afterEach(() => {
@@ -47,9 +48,26 @@ describe("ephemeral test workspace", () => {
       window.localStorage.getItem(NUTRITION_STORAGE_KEY) ?? "null",
     ) as NutritionWorkspace;
 
-    expect(Object.keys(nutrition.days).length).toBeGreaterThanOrEqual(14);
+    expect(loadNutritionWorkspace().status).toBe("ok");
+    expect(Object.keys(nutrition.days).length).toBeGreaterThanOrEqual(30);
     expect(Object.keys(nutrition.weightMeasurements).length).toBeGreaterThanOrEqual(6);
     expect(nutrition.customMeals?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("provides synthetic data across every workspace and removes the old persona", () => {
+    activateEphemeralTestWorkspace();
+
+    const expectedKeys = createGeneratedDemoEntries().map(([key]) => key);
+    expectedKeys.forEach((key) => expect(window.localStorage.getItem(key)).not.toBeNull());
+
+    const demoRaw = expectedKeys
+      .map((key) => window.localStorage.getItem(key) ?? "")
+      .join(" ");
+    ["Tomasz Karcz", "Japonia", "Lizbona", "Dolomity", "Studio North", "Owsianka z bananem"].forEach((oldValue) => {
+      expect(demoRaw).not.toContain(oldValue);
+    });
+    expect(demoRaw).toContain("Aurora");
+    expect(demoRaw).toContain("Sigma");
   });
 
   it("starts from the same examples after a new hard-refresh-equivalent session", () => {

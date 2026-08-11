@@ -13,7 +13,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
       "Sport",
       "Praca",
       "Cele",
-      "Sprawy",
+      "Pozostałe",
       "Notatki",
     ]);
     await expect(page.getByText("6 obszarów wymaga uwagi", { exact: true })).toBeVisible();
@@ -146,7 +146,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     const emptyRows = page.locator(".today-module-row.is-empty");
     await expect(emptyRows).toHaveCount(2);
     await expect(emptyRows.locator(".today-module-row__identity > strong")).toHaveText([
-      "Sprawy",
+      "Pozostałe",
       "Notatki",
     ]);
 

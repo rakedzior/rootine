@@ -160,13 +160,13 @@ export function SportExercises({
           <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo użyj przycisku Dodaj ćwiczenie w nagłówku modułu." />
         ) : (
           <div className="sport-record-table__body" role="table" aria-label="Biblioteka ćwiczeń">
-          <div className="sport-record-table__head" role="row">
+          <div className="sport-record-table__head sport-exercise-table__head" role="row">
             <span role="columnheader">Nazwa</span><span role="columnheader">Partia główna</span><span role="columnheader">Sprzęt</span><span role="columnheader">Domyślne parametry</span><span role="columnheader">W szablonach</span><span role="columnheader" aria-label="Akcje" />
           </div>
           {filtered.map((exercise) => {
           const usage = templates.reduce((count, template) => count + (exerciseCountForTemplate(template, exercise.id) > 0 ? 1 : 0), 0);
           return (
-            <div key={exercise.id} className="sport-record-table__row" role="row">
+            <div key={exercise.id} className="sport-record-table__row sport-exercise-table__row" role="row">
               <div className="sport-record-table__main-cell" role="cell">
                 <button type="button" className="sport-record-table__main" onClick={() => onSelect(exercise.id)}>
                   <span className="sport-record-table__name"><Dumbbell size={13} aria-hidden="true" />{exercise.name}</span>

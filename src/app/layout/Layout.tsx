@@ -150,7 +150,7 @@ const HELP_GUIDES = {
   },
   affairs: {
     title: "Pozostałe",
-    steps: ["Zacznij od radaru zobowiązań i najbliższych terminów.", "Przejdź do finansów, dokumentów, pojazdów albo firmy zależnie od kontekstu.", "Po wykonaniu sprawy sprawdź historię; ostatnią operację można cofnąć."],
+    steps: ["Zacznij od Przeglądu i radaru najbliższych terminów.", "Przejdź do Spraw, Finansów, Rejestrów albo obszaru Zdrowie zależnie od kontekstu.", "Po wykonaniu sprawy sprawdź historię; ostatnią operację można cofnąć."],
   },
   travel: {
     title: "Podróże",
@@ -423,7 +423,6 @@ function ProfileSummary({
           <strong>{privacy.enabled ? "Tryb prywatny włączony" : "Tryb prywatny"}</strong>
           <small>Ukrywa kwoty, pomiary i prywatne treści</small>
         </span>
-        <kbd>Ctrl ⇧ P</kbd>
         <span className="app-profile-privacy__toggle" aria-hidden="true"><span /></span>
       </button>
 

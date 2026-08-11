@@ -294,9 +294,13 @@ export function JdgWorkspace({
             {MONTHLY_CLOSE.map((definition, index) => {
               const item = items.find((candidate) => candidate.id === definition.id);
               const done = Boolean(item?.done);
+              const current = !done && nextItem?.id === definition.id;
               const Icon = definition.icon;
               return (
-                <label key={definition.id} className={`jdg-simple-row ${done ? "is-done" : ""}`}>
+                <div
+                  key={definition.id}
+                  className={`jdg-simple-row jdg-simple-row--${definition.group} ${done ? "is-done" : ""} ${current ? "is-current" : ""}`.trim()}
+                >
                   <span className="jdg-simple-row__step" aria-hidden="true">{index + 1}</span>
                   <Checkbox
                     checked={done}
@@ -310,7 +314,7 @@ export function JdgWorkspace({
                   </span>
                   <span className="jdg-simple-row__due">do {definition.dueDay}. dnia</span>
                   {done && <Check className="jdg-simple-row__done" size={16} aria-hidden="true" />}
-                </label>
+                </div>
               );
             })}
           </div>

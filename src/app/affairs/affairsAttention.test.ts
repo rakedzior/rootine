@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultAffairsWorkspace } from "../data/affairsWorkspace";
 import { createDefaultJdgWorkspace } from "../data/jdgWorkspace";
+import { createDefaultHealthWorkspace, setHealthEntryCompletionState } from "../data/healthWorkspace";
 import type { TravelWorkspace } from "../data/travelWorkspace";
 import { buildAffairAttentionItems, resolveAffairAttentionItem, type AffairAttentionItem } from "./affairsAttention";
 
@@ -83,7 +84,7 @@ describe("affairs attention", () => {
       key: `oneTime:${payment.id}:${payment.dueDate}`,
       sourceId: payment.id,
       kind: "oneTime",
-      view: "finances",
+      view: "finance-one-time",
       title: payment.title,
       meta: "Płatność jednorazowa",
       dueDate: payment.dueDate,
@@ -147,5 +148,30 @@ describe("affairs attention", () => {
 
     const resolved = resolveAffairAttentionItem(affairs, jdg, travel, item);
     expect(resolved.travel.trips[0].tasks[0].completed).toBe(true);
+  });
+
+  it("includes health reminders in the shared radar and resolves their source entry", () => {
+    const affairs = createDefaultAffairsWorkspace();
+    affairs.matters = [];
+    affairs.oneTimePayments = [];
+    affairs.payments = [];
+    affairs.subscriptions = [];
+    affairs.documents = [];
+    affairs.vehicles = [];
+    affairs.vehicleItems = [];
+    const now = new Date("2026-08-06T12:00:00");
+    const health = createDefaultHealthWorkspace();
+    const entry = health.entries[0];
+    entry.dueDate = "2026-08-10";
+    const jdg = createDefaultJdgWorkspace(now);
+    jdg.months = [];
+
+    const items = buildAffairAttentionItems(affairs, jdg, EMPTY_TRAVEL, now, 30, health);
+    const item = items.find((candidate) => candidate.kind === "health");
+    expect(item?.sourceId).toBe(entry.id);
+
+    const resolved = resolveAffairAttentionItem(affairs, jdg, EMPTY_TRAVEL, item!, now, health);
+    expect(resolved.health?.entries.find((candidate) => candidate.id === entry.id)?.status).toBe("done");
+    expect(setHealthEntryCompletionState(health, entry.id, true).entries[0].status).toBe("done");
   });
 });

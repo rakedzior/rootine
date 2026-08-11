@@ -11,6 +11,16 @@
       "review": "Review when the settings preview layout changes."
     },
     {
+      "value": 560,
+      "paths": [
+        "src/styles/app-shell.css"
+      ],
+      "owner": "app-shell",
+      "reason": "The profile privacy control needs a narrower three-column layout than the shared mobile threshold.",
+      "migration": "Consolidate with the shared compact control breakpoint when the profile dialog is moved to container-query layout.",
+      "review": "Review when the profile privacy control changes."
+    },
+    {
       "value": 600,
       "paths": [
         "src/styles/experience.css"
@@ -67,6 +77,7 @@
     {
       "paths": [
         "src/app/goals/goalsModel.ts",
+        "src/app/auth/demoWorkspace.ts",
         "src/app/data/workWorkspace.ts",
         "src/app/data/taskWorkspace.ts",
         "src/app/work/workPresentation.tsx"
@@ -220,7 +231,8 @@
     {
       "paths": [
         "src/app/pages/Praca.tsx",
-        "src/app/work/WorkDetailPanel.tsx"
+        "src/app/work/WorkDetailPanel.tsx",
+        "src/app/work/WorkQuickEntry.tsx"
       ],
       "allowedProperties": [
         "--work-*",
@@ -365,6 +377,15 @@
       "reason": "ProgressMorph accepts a dynamic duration prop as an explicit shared animation contract.",
       "migration": "Keep the value data-driven; clamp it to the documented motion range if the public API expands.",
       "review": "Review when MotionValues gains another consumer or duration role."
+    },
+    {
+      "paths": [
+        "src/styles/app-shell.css"
+      ],
+      "owner": "app-shell",
+      "reason": "The disclosure panel delays visibility removal by zero seconds after its spatial transition so collapsed content is not exposed during the animation.",
+      "migration": "Keep the visibility delay tied to the shared disclosure transition contract; remove the exception if the panel is moved to a state-driven primitive.",
+      "review": "Review when the app-shell disclosure animation changes."
     }
   ]
 }

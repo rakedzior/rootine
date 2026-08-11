@@ -1948,6 +1948,7 @@
   border-color: transparent;
   background: transparent;
   color: var(--color-precision-blue-text);
+  text-align: right;
 }
 
 .work-task-row > .ui-list-row__rail .work-task-inline-date .ui-date-trigger:hover,

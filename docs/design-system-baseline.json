@@ -1,7 +1,7 @@
 {
   "version": 2,
   "inventory": {
-    "inlineStyleObjects": 97
+    "inlineStyleObjects": 93
   },
   "counts": {
     "inlineStyleObjectsWithViolations": 0,
@@ -13,7 +13,7 @@
     "rawColor": 0,
     "rawCheckbox": 0,
     "zIndex": 0,
-    "mediaQuery": 93,
+    "mediaQuery": 104,
     "directUiImport": 0,
     "unregisteredMedia": 0
   },

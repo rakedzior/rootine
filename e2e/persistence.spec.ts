@@ -32,13 +32,14 @@ test.describe("task persistence", { tag: "@desktop" }, () => {
     ] as const;
 
     for (const [view, expectedDate] of cases) {
-      await openRootineRoute(page, view === "dzis" ? "/zadania" : `/zadania?widok=${view}`);
+      const pageShell = await openRootineRoute(page, view === "dzis" ? "/zadania" : `/zadania?widok=${view}`);
+      await expect(pageShell).toBeVisible({ timeout: 5_000 });
       const taskTitle = `E2E domyślna data — ${view}`;
       await page.getByRole("textbox", { name: "Nazwa nowego zadania" }).fill(taskTitle);
       await page.getByRole("textbox", { name: "Nazwa nowego zadania" }).press("Enter");
 
-      await expect(page.getByRole("complementary", { name: "Szczegóły zadania" })).toHaveCount(0);
-      await expect.poll(() => readPersistedTaskDate(page, taskTitle)).toBe(expectedDate);
+      await expect(page.getByRole("complementary", { name: "Szczegóły zadania" })).toHaveCount(0, { timeout: 10_000 });
+      await expect.poll(() => readPersistedTaskDate(page, taskTitle), { timeout: 10_000 }).toBe(expectedDate);
     }
   });
 

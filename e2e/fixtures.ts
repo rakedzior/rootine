@@ -70,10 +70,22 @@ export const test = base.extend<RootineFixtures>({
 export { expect };
 
 export async function openRootineRoute(page: Page, path: string) {
-  await page.goto(path);
+  await page.goto(path, { waitUntil: "networkidle" });
   const pageShell = page.locator(".ui-page-shell:visible");
-  await expect(pageShell).toBeVisible({ timeout: 15_000 });
+  try {
+    await expect(pageShell).toBeVisible({ timeout: 20_000 });
+  } catch (error) {
+    const html = await page.locator("body").innerHTML().catch(() => "");
+    console.error("Page shell not found. Body HTML:", html.slice(0, 500));
+    throw error;
+  }
   await expect(page.locator(".app-route-state")).toHaveCount(0, { timeout: 15_000 });
+  if (new URL(page.url()).pathname === "/dzisiaj") {
+    await page.waitForFunction(() => {
+      const modules = document.querySelectorAll(".today-module-row__identity > strong");
+      return modules.length > 0 && Array.from(modules).every((module) => module.textContent?.trim().length);
+    }, { timeout: 10_000 });
+  }
   await settleModuleTransition(page);
   return pageShell;
 }

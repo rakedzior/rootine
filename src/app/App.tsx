@@ -45,7 +45,7 @@ function SessionGate() {
   const appSession = useAppSession();
   if (auth.loading) return <AuthLoadingScreen />;
   if (auth.passwordRecovery) return <AuthScreen />;
-  if (!auth.user && !appSession.isTestAccount && !appSession.authenticationBypassed) return <AuthScreen />;
+  if (!auth.user && !appSession.isTestAccount && !appSession.isLocalAccount && !appSession.authenticationBypassed) return <AuthScreen />;
   return <WorkspaceApplication />;
 }
 

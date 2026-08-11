@@ -35,12 +35,16 @@ import {
 } from "../formatters";
 
 export type AffairsView =
+  | "overview"
   | "today"
   | "week"
   | "all"
   | "finances"
+  | "finance-one-time"
+  | "finance-recurring"
   | "documents"
   | "vehicles"
+  | "health"
   | "jdg";
 
 export type AffairsViewArchetype = "agenda" | "register" | "workspace";
@@ -51,12 +55,16 @@ export type AffairsViewArchetype = "agenda" | "register" | "workspace";
  * from the shell that presents them.
  */
 export const AFFAIRS_VIEW_ARCHETYPE: Record<AffairsView, AffairsViewArchetype> = {
+  overview: "workspace",
   today: "agenda",
   week: "agenda",
   all: "agenda",
   finances: "register",
+  "finance-one-time": "register",
+  "finance-recurring": "register",
   documents: "register",
   vehicles: "register",
+  health: "workspace",
   jdg: "workspace",
 };
 export type EditorState =
@@ -158,12 +166,16 @@ export const EMPTY_DRAFT: Draft = {
 };
 
 export const VIEW_COPY: Record<AffairsView, { title: string; description: string }> = {
+  overview: { title: "Przegląd", description: "Najważniejsze zobowiązania, rejestry i obszary w jednym miejscu" },
   today: { title: "Dzisiaj", description: "Sprawy wymagające uwagi dzisiaj" },
   week: { title: "Ten tydzień", description: "Terminy i zobowiązania na najbliższe dni" },
   all: { title: "Wszystkie", description: "Pełny horyzont aktywnych spraw i zobowiązań" },
-  finances: { title: "Finanse", description: "Jednorazowe, cykliczne i subskrypcje w jednym rejestrze" },
+  finances: { title: "Przegląd finansów", description: "Jednorazowe i cykliczne zobowiązania w jednym rejestrze" },
+  "finance-one-time": { title: "Jednorazowe", description: "Opłaty i zobowiązania z jednym terminem" },
+  "finance-recurring": { title: "Cykliczne", description: "Stałe opłaty, subskrypcje i terminy odnowień" },
   documents: { title: "Dokumenty", description: "Ważność dokumentów, polis, kart i gwarancji" },
   vehicles: { title: "Pojazdy", description: "OC, przeglądy, serwis i terminy pojazdów" },
+  health: { title: "Zdrowie", description: "Wizyty, badania i przypomnienia zdrowotne w jednym rejestrze" },
   jdg: { title: "JDG", description: "Sześć kroków do zamknięcia poprzedniego miesiąca" },
 };
 
@@ -209,8 +221,14 @@ export const VEHICLE_ITEM_LABELS: Record<VehicleItemType, string> = {
 
 export const NAV_GROUPS: Array<{
   label: string;
-  items: Array<{ view: AffairsView; label: string; icon: typeof LayoutDashboard }>;
+  items: Array<{ view: AffairsView; label: string; icon: typeof LayoutDashboard; depth?: 0 | 1 }>;
 }> = [
+  {
+    label: "Centrum",
+    items: [
+      { view: "overview", label: "Przegląd", icon: LayoutDashboard },
+    ],
+  },
   {
     label: "Sprawy",
     items: [
@@ -223,6 +241,8 @@ export const NAV_GROUPS: Array<{
     label: "Finanse",
     items: [
       { view: "finances", label: "Przegląd", icon: CreditCard },
+      { view: "finance-one-time", label: "Jednorazowe", icon: ReceiptText, depth: 1 },
+      { view: "finance-recurring", label: "Cykliczne", icon: RefreshCw, depth: 1 },
     ],
   },
   {
@@ -233,8 +253,9 @@ export const NAV_GROUPS: Array<{
     ],
   },
   {
-    label: "Obszary",
+    label: "Pozostałe",
     items: [
+      { view: "health", label: "Zdrowie", icon: HeartPulse },
       { view: "jdg", label: "JDG", icon: Building2 },
     ],
   },
@@ -258,25 +279,26 @@ export const UPCOMING_ICONS = {
   subscription: CreditCard,
   document: FileText,
   vehicle: Car,
+  health: HeartPulse,
   jdg: Building2,
   travel: MapIcon,
 };
 
 const LEGACY_VIEW_ALIASES: Record<string, AffairsView> = {
-  overview: "today",
+  dashboard: "overview",
   matters: "all",
-  oneTime: "finances",
-  payments: "finances",
-  subscriptions: "finances",
+  oneTime: "finance-one-time",
+  payments: "finance-recurring",
+  subscriptions: "finance-recurring",
   budget: "finances",
 };
 
 export function getInitialView(): AffairsView {
-  if (typeof window === "undefined") return "today";
+  if (typeof window === "undefined") return "overview";
   const requested = new URLSearchParams(window.location.search).get("widok");
   if (requested && LEGACY_VIEW_ALIASES[requested]) return LEGACY_VIEW_ALIASES[requested];
   if (requested && AFFAIRS_VIEWS.has(requested as AffairsView)) return requested as AffairsView;
-  return "today";
+  return "overview";
 }
 
 export function formatDate(value: string): string {
@@ -359,7 +381,7 @@ export function daysUntil(value: string): number {
 export function dueCopy(value: string): { text: string; tone: "neutral" | "warning" | "danger" | "success" } {
   if (!value) return { text: "Bez terminu", tone: "neutral" };
   const days = daysUntil(value);
-  if (days < 0) return { text: `${Math.abs(days)} dni po terminie`, tone: "warning" };
+  if (days < 0) return { text: `${Math.abs(days)} dni po terminie`, tone: "danger" };
   if (days === 0) return { text: "Dzisiaj", tone: "warning" };
   if (days === 1) return { text: "Jutro", tone: "warning" };
   if (days <= 7) return { text: `Za ${days} dni`, tone: "warning" };

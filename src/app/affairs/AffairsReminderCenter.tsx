@@ -6,6 +6,7 @@ import {
   type AffairsWorkspace,
 } from "../data/affairsWorkspace";
 import { JDG_STORAGE_KEY, loadJdgWorkspace } from "../data/jdgWorkspace";
+import { HEALTH_STORAGE_KEY, loadHealthWorkspace } from "../data/healthWorkspace";
 import { todayLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { TRAVEL_STORAGE_KEY, loadTravelWorkspace } from "../data/travelWorkspace";
@@ -153,6 +154,7 @@ function dateOnlyReminderDays(item: AffairAttentionItem): number[] {
   if (["document", "vehicle"].includes(item.kind)) return [30, 7, 1];
   if (["oneTime", "payment", "subscription", "jdg"].includes(item.kind)) return [3, 0];
   if (item.kind === "travel") return [7, 1];
+  if (item.kind === "health") return [7, 1, 0];
   return [];
 }
 
@@ -191,6 +193,7 @@ export function AffairsReminderCenter() {
   const [affairs, setAffairs] = useState(loadAffairsWorkspace);
   const [jdg, setJdg] = useState(loadJdgWorkspace);
   const [travel, setTravel] = useState(loadTravelWorkspace);
+  const [health, setHealth] = useState(loadHealthWorkspace);
   const [permission, setPermission] = useState<NotificationPermissionState>(notificationPermission);
   const [permissionPromptDismissed, setPermissionPromptDismissed] = useState(permissionPromptWasDismissed);
   const [announcement, setAnnouncement] = useState("");
@@ -201,8 +204,9 @@ export function AffairsReminderCenter() {
   useEffect(() => subscribeToLocalWorkspace(AFFAIRS_STORAGE_KEY, () => setAffairs(loadAffairsWorkspace())), []);
   useEffect(() => subscribeToLocalWorkspace(JDG_STORAGE_KEY, () => setJdg(loadJdgWorkspace())), []);
   useEffect(() => subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, () => setTravel(loadTravelWorkspace())), []);
+  useEffect(() => subscribeToLocalWorkspace(HEALTH_STORAGE_KEY, () => setHealth(loadHealthWorkspace())), []);
 
-  const attentionItems = useMemo(() => buildAffairAttentionItems(affairs, jdg, travel), [affairs, jdg, travel]);
+  const attentionItems = useMemo(() => buildAffairAttentionItems(affairs, jdg, travel, new Date(), 30, health), [affairs, health, jdg, travel]);
   const candidates = useMemo(
     () => [...appointmentReminders(affairs), ...attentionReminders(attentionItems)],
     [affairs, attentionItems],

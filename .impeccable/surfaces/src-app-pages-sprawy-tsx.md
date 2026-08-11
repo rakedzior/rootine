@@ -2,7 +2,7 @@
 version: 1
 slug: "src-app-pages-sprawy-tsx"
 primary_target: "src/app/pages/Sprawy.tsx"
-related_targets: ["src/app/pages/Jdg.tsx","src/app/data/affairsWorkspace.ts","src/app/data/jdgWorkspace.ts","src/styles/affairs.css"]
+related_targets: ["src/app/pages/Jdg.tsx","src/app/health/HealthWorkspace.tsx","src/app/data/affairsWorkspace.ts","src/app/data/healthWorkspace.ts","src/app/data/jdgWorkspace.ts","src/styles/affairs.css","src/styles/health.css"]
 ---
 
 # Sprawy
