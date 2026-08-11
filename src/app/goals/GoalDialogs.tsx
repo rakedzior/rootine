@@ -345,15 +345,6 @@ export function GoalFormDialog({
             error={submitted ? titleError : undefined}
             fieldClassName="col-span-2"
           />
-          <TextareaField
-            label="Opis"
-            value={form.description}
-            onChange={(value) => set("description", value)}
-            placeholder="Dlaczego ten cel jest ważny?"
-            rows={2}
-            maxLength={4_000}
-            wide
-          />
           <ThemedSelect
             label="Kategoria"
             value={form.categoryId}
@@ -453,7 +444,6 @@ export function GoalFormDialog({
             ]}
             ariaLabel="Priorytet celu"
           />
-          <div aria-hidden="true" />
           <DatePicker
             label="Data rozpoczęcia"
             value={form.startDate}
@@ -579,7 +569,7 @@ export function GoalFormDialog({
           </div>
 
           {advancedOpen && (
-            <div id={advancedId} className="col-span-2 grid grid-cols-2 gap-4">
+            <div id={advancedId} className="goal-dialog-advanced-fields col-span-2 grid grid-cols-2 gap-4">
               <ThemedSelect
                 label="Status"
                 value={form.status}

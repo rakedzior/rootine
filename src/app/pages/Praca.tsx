@@ -990,18 +990,15 @@ export default function Praca() {
         {status === "completed" && <Check size={11} strokeWidth={2.4} />}
       </button>
     );
-    const compactDate = compact && task.dueDate && !hideDate ? (
-      <>
-        <DatePicker
-          value={task.dueDate}
-          displayValue={dateLabel}
-          aria-label={`Zmień termin zadania „${task.title}”`}
-          fieldClassName="work-task-inline-date work-task-inline-date--compact"
-          portalLayer="featurePopup"
-          onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
-        />
-        <span className="work-task-row__compact-separator" aria-hidden="true">|</span>
-      </>
+    const compactDate = compact && !hideDate ? (
+      <DatePicker
+        value={task.dueDate}
+        displayValue={dateLabel}
+        aria-label={`Zmień termin zadania „${task.title}”`}
+        fieldClassName="work-task-inline-date work-task-inline-date--compact"
+        portalLayer="featurePopup"
+        onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
+      />
     ) : null;
     return (
       <ListRow
@@ -1029,7 +1026,7 @@ export default function Praca() {
             onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
           />
         ) : undefined}
-        leading={compact ? <span className="work-task-row__compact-leading">{taskCheck}{compactDate}</span> : taskCheck}
+        leading={taskCheck}
         title={<span>{task.title}</span>}
         titleLabel={detailTaskId === task.id ? `Zamknij szczegóły zadania „${task.title}”` : `Otwórz szczegóły zadania „${task.title}”`}
         onTitleClick={() => toggleTaskDetails(task.id)}
@@ -1047,48 +1044,45 @@ export default function Praca() {
                 <span className="work-task-row__context-column work-task-row__project-column" title={projectName}>{projectName}</span>
               </>
             )}
-            {(!compact || task.priority !== "none") && (
-              <TaskInlineMenu
-                value={task.priority}
-                ariaLabel={`Zmień priorytet zadania „${task.title}”`}
-                triggerClassName={`work-task-priority work-task-priority--${task.priority}`}
-                options={PRIORITY_ORDER.map((priority) => ({
-                  value: priority,
-                  label: PRIORITY_LABELS[priority],
-                  leadingIcon: <Flag size={11} aria-hidden="true" />,
-                  selected: priority === task.priority,
-                  className: `work-inline-menu__item--${priority}`,
-                }))}
-                onChange={(value) => updateTaskValues(task.id, { priority: value as WorkTaskPriority })}
-              >
-                <Flag size={11} aria-hidden="true" />
-              </TaskInlineMenu>
-            )}
-            {(!compact || status !== "todo") && (
-              <TaskInlineMenu
-                value={status}
-                ariaLabel={`Zmień status zadania „${task.title}”`}
-                triggerClassName={`work-task-status ${taskStatusTone(status)}`}
-                options={TASK_STATUS_ORDER.map((candidate) => ({
-                  value: candidate,
-                  label: TASK_STATUS_LABELS[candidate],
-                  leadingIcon: taskStatusIcon(candidate),
-                  selected: candidate === status,
-                  className: `work-inline-menu__item--${candidate}`,
-                }))}
-                onChange={(value) => {
-                  const nextStatus = value as WorkTaskStatus;
-                  if (nextStatus === "completed" && status !== "completed") {
-                    toggleTask(task);
-                    return;
-                  }
-                  applyTaskStatuses([task.id], nextStatus, `Status: ${TASK_STATUS_LABELS[nextStatus]}`);
-                }}
-              >
-                {taskStatusIcon(status)}
-                {TASK_STATUS_LABELS[status]}
-              </TaskInlineMenu>
-            )}
+            <TaskInlineMenu
+              value={task.priority}
+              ariaLabel={`Zmień priorytet zadania „${task.title}”`}
+              triggerClassName={`work-task-priority work-task-priority--${task.priority}`}
+              options={PRIORITY_ORDER.map((priority) => ({
+                value: priority,
+                label: PRIORITY_LABELS[priority],
+                leadingIcon: <Flag size={11} aria-hidden="true" />,
+                selected: priority === task.priority,
+                className: `work-inline-menu__item--${priority}`,
+              }))}
+              onChange={(value) => updateTaskValues(task.id, { priority: value as WorkTaskPriority })}
+            >
+              <Flag size={11} aria-hidden="true" />
+            </TaskInlineMenu>
+            <TaskInlineMenu
+              value={status}
+              ariaLabel={`Zmień status zadania „${task.title}”`}
+              triggerClassName={`work-task-status ${taskStatusTone(status)}`}
+              options={TASK_STATUS_ORDER.map((candidate) => ({
+                value: candidate,
+                label: TASK_STATUS_LABELS[candidate],
+                leadingIcon: taskStatusIcon(candidate),
+                selected: candidate === status,
+                className: `work-inline-menu__item--${candidate}`,
+              }))}
+              onChange={(value) => {
+                const nextStatus = value as WorkTaskStatus;
+                if (nextStatus === "completed" && status !== "completed") {
+                  toggleTask(task);
+                  return;
+                }
+                applyTaskStatuses([task.id], nextStatus, `Status: ${TASK_STATUS_LABELS[nextStatus]}`);
+              }}
+            >
+              {taskStatusIcon(status)}
+              {TASK_STATUS_LABELS[status]}
+            </TaskInlineMenu>
+            {compactDate}
           </>
         )}
         trailing={isProjectTreeTask && hasChildren ? (

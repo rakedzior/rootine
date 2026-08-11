@@ -140,6 +140,7 @@ test("@desktop nazwa projektu otwiera zakres, a chevron rozwija kompaktowy podgl
     await expect(compactRows.first()).toBeVisible();
     await expect(compactRows.first().locator(".work-task-check")).toBeVisible();
     await expect(compactRows.first().locator(".work-task-priority")).toBeVisible();
+    await expect(compactRows.first().locator(".work-task-status")).toBeVisible();
     await expect(compactRows.first().locator(".work-task-inline-date")).toBeVisible();
     await expect(compactRows.first().getByRole("button", { name: /Otwórz szczegóły zadania/ })).toBeVisible();
 

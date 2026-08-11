@@ -306,6 +306,7 @@ export default function Cele() {
   }, [activeFilter, goalActionItems, goalStepDepth]);
 
   const isAgendaView = activeFilter === "next" || activeFilter === "week";
+  const showLayoutSwitch = !isAgendaView || activeFilter === "next";
 
   const selectedGoal = goals.find((goal) => goal.id === selectedId) ?? null;
   const scopedGoal = goals.find((goal) => String(goal.id) === scopedGoalId) ?? null;
@@ -519,22 +520,20 @@ export default function Cele() {
                 <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 3} onClick={() => setGoalStepDepth(3)}>3 kroki</Button>
               </div>
             )}
-            {!isAgendaView && <>
-            <div className="relative goals-sort">
+            {!isAgendaView && <div className="relative goals-sort">
               <Button ref={sortMenuTriggerRef} variant="quiet" size="sm" onClick={() => setSortMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortMenuOpen} aria-controls={sortMenuId} trailingIcon={<ChevronDown size={11} />}>
                 Sortuj: <span className="goals-sort-label">{({ priority: "Priorytet", due: "Termin", progress: "Postęp", updated: "Ostatnia zmiana", name: "Nazwa" } as const)[sortKey]}</span>
               </Button>
               {sortMenuOpen && <Menu id={sortMenuId} triggerRef={sortMenuTriggerRef} onDismiss={() => setSortMenuOpen(false)} initialFocus="selected" layer="detail" className="absolute right-0 top-11 w-44">{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <MenuItem key={option.id} selected={sortKey === option.id} onClick={() => { setGoalSort(option.id); setSortMenuOpen(false); }} trailingIcon={sortKey === option.id ? <Check size={11} /> : undefined}>{option.label}</MenuItem>)}</Menu>}
-            </div>
-            <div className="ui-view-switch" aria-label="Sposób wyświetlania celów">
+            </div>}
+            {showLayoutSwitch && <div className="ui-view-switch" aria-label="Sposób wyświetlania celów">
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("list")} aria-label="Widok listy" aria-pressed={layout === "list"}>
                 <List size={16} strokeWidth={1.8} />
               </Button>
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("grid")} aria-label="Widok kafelków" aria-pressed={layout === "grid"}>
                 <Grid2X2 size={13} strokeWidth={1.8} />
               </Button>
-            </div>
-            </>}
+            </div>}
             <div className="relative">
               <Button
                 ref={headerMenuTriggerRef}
@@ -605,7 +604,7 @@ export default function Cele() {
                   variant="label"
                 />
                 {activeFilter === "next" ? (
-                  <div className="goal-next-groups">
+                  <div className={`goal-next-groups${layout === "grid" ? " goal-next-groups--grid" : ""}`}>
                     {nextStepGroups.map(({ goal, items }) => {
                       const GoalIcon = goal.icon;
                       return (

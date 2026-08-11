@@ -2050,9 +2050,9 @@
   }
 }
 
-/* In project previews, deadline + title are the primary scan target; metadata stays secondary. */
+/* In project previews, the title is primary; all task metadata stays aligned in one right-side group. */
 .work-project-record__preview-list .work-task-row--compact.ui-list-row {
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
 }
 
 .work-project-record__preview-list .work-task-row--compact > .ui-list-row__leading {
@@ -2060,19 +2060,6 @@
   min-width: 0;
   align-items: center;
   grid-column: 1;
-}
-
-.work-project-record__preview-list .work-task-row__compact-leading {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-sm);
-  white-space: nowrap;
-}
-
-.work-project-record__preview-list .work-task-row__compact-separator {
-  color: var(--color-text-muted);
-  font-size: var(--text-micro);
 }
 
 .work-project-record__preview-list .work-task-row--compact .work-task-inline-date {
@@ -2113,7 +2100,7 @@
 
 @media (max-width: 760px) {
   .work-project-record__preview-list .work-task-row--compact.ui-list-row {
-    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) max-content;
     gap: var(--space-sm);
   }
 }

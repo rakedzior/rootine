@@ -1364,6 +1364,18 @@
   gap: var(--space-lg);
 }
 
+.goal-next-groups--grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  align-items: stretch;
+}
+
+.goal-next-groups--grid .goal-next-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  height: 100%;
+}
+
 .goal-next-group {
   background: color-mix(in srgb, var(--color-section-surface) 96%, var(--color-primary-subtle));
 }
@@ -1477,6 +1489,44 @@
   background: transparent;
 }
 
+.goal-next-groups--grid .goal-next-group__header {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-md);
+  min-height: 0;
+  padding: var(--space-lg);
+}
+
+.goal-next-groups--grid .goal-next-group__identity {
+  width: 100%;
+  align-items: flex-start;
+  padding: 0;
+}
+
+.goal-next-groups--grid .goal-next-group__icon {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+}
+
+.goal-next-groups--grid .goal-next-group__summary {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.goal-next-groups--grid .goal-next-group__open {
+  margin-inline-start: auto;
+}
+
+.goal-next-groups--grid .goal-next-group__rows {
+  flex: 1;
+  padding: var(--space-sm) var(--space-lg) var(--space-lg);
+}
+
+.goal-next-groups--grid .goal-next-group__rows .goal-agenda-row {
+  padding-inline: 0;
+}
+
 .goal-next-group__rows .goal-agenda-row {
   padding-inline: var(--space-lg);
   border-radius: 0;
@@ -1563,10 +1613,6 @@
   display: none;
 }
 
-.goal-context-sidebar {
-  background: var(--color-surface-1);
-}
-
 .goal-context-sidebar .context-nav-group + .context-nav-group {
   margin-top: var(--space-2xl);
   padding-top: 0;
@@ -1596,10 +1642,6 @@
 
 .goal-context-sidebar .context-nav-item[aria-current="page"] .context-nav-item__meta {
   color: var(--color-text-muted);
-}
-
-.goal-sidebar-footer {
-  background: var(--color-surface-1);
 }
 
 .goal-sidebar-section-heading {
@@ -1723,11 +1765,7 @@
   color: var(--color-danger);
 }
 
-.goal-sidebar-footer {
-  border-color: var(--color-border);
-  background: var(--color-surface-1);
-}
-
+.goal-sidebar-footer,
 .goal-detail-panel-footer {
   border-color: var(--color-border);
   background: var(--color-graphite-sidebar);
@@ -1918,6 +1956,24 @@
 }
 
 /* Goal dialog state and data colors are expressed through semantic modifiers/custom properties. */
+.goal-dialog-grid {
+  align-items: start;
+}
+
+.goal-dialog-grid > .ui-field,
+.goal-dialog-grid > fieldset,
+.goal-dialog-advanced-fields {
+  min-width: 0;
+}
+
+.goal-dialog-grid > fieldset {
+  margin: 0;
+}
+
+.goal-dialog-advanced-fields {
+  align-items: start;
+}
+
 .goal-icon-upload,
 .goal-choice-button,
 .goal-accent-option {
