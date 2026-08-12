@@ -1271,12 +1271,12 @@ input.task-entry-input:focus-visible {
   overflow: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-surface-hover);
+  background: var(--color-surface-1);
   box-shadow: var(--shadow-floating);
   font-family: var(--font-sans);
 }
 
-.task-sched__panel { padding: var(--space-md); }
+.task-sched__panel { padding: var(--space-md) var(--space-md) var(--space-sm); }
 
 .task-sched__source-note {
   margin: var(--space-sm) 0 0;
@@ -1303,7 +1303,7 @@ input.task-entry-input:focus-visible {
 .task-sched__quick {
   display: flex;
   gap: 6px;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .task-sched__quick-btn {
@@ -1312,10 +1312,11 @@ input.task-entry-input:focus-visible {
   flex-direction: column;
   align-items: center;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-xs);
+  min-height: 44px;
+  padding: var(--space-xs);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--color-graphite-card);
+  background: transparent;
   color: var(--color-text-muted);
   font-size: var(--text-label);
   line-height: 1;
@@ -1323,7 +1324,8 @@ input.task-entry-input:focus-visible {
   cursor: pointer;
 }
 
-.task-sched__quick-btn:hover { background: var(--color-graphite-hover); }
+.task-sched__quick-btn:hover,
+.task-sched__quick-btn:focus-visible { background: var(--color-graphite-hover); color: var(--color-chalk-white); }
 .task-sched__quick-btn:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .task-sched__quick-btn.is-active {
   border-color: color-mix(in srgb, var(--color-precision-blue) 30%, transparent);
@@ -1347,8 +1349,10 @@ input.task-entry-input:focus-visible {
   color: var(--color-text-muted);
   font-size: var(--text-meta);
   cursor: pointer;
+  border-radius: var(--radius-sm);
 }
 
+.task-sched__row-btn:hover { background: var(--color-surface-hover); color: var(--color-text-secondary); }
 .task-sched__row-btn:focus-visible { outline: 0; border-radius: var(--radius-sm); box-shadow: var(--focus-ring); }
 .task-sched__row-btn--split { justify-content: space-between; }
 .task-sched__row-label { flex: 1; text-align: left; }
@@ -1509,23 +1513,25 @@ input.task-entry-input:focus-visible {
 
 .task-sched__time-options {
   display: grid;
-  max-height: 176px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 2px;
+  max-height: 220px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
   overflow-y: auto;
-  padding: var(--space-xs);
+  padding: 2px;
   scrollbar-width: thin;
 }
 
 .task-sched__time-options button {
-  min-height: 28px;
+  min-height: 40px;
+  padding: 0 var(--space-md);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-secondary);
   font-family: var(--font-data);
-  font-size: var(--text-micro);
+  font-size: var(--text-meta);
   line-height: var(--leading-snug);
+  text-align: left;
   cursor: pointer;
 }
 
@@ -1545,7 +1551,10 @@ input.task-entry-input:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  margin: 4px;
   padding: var(--space-sm) 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-hover);
 }
 
 .task-sched__time-menu-input > svg { flex: 0 0 auto; color: var(--color-precision-blue-text); }
@@ -1563,6 +1572,18 @@ input.task-entry-input:focus-visible {
 }
 
 .task-sched__time-menu-input input:focus-visible { outline: 0; box-shadow: none; }
+.task-sched__time-menu-input input::-webkit-calendar-picker-indicator { width: 0; margin: 0; opacity: 0; }
+.task-sched__time-menu-input button {
+  display: flex;
+  padding: var(--space-xs);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.task-sched__time-menu-input button:hover,
+.task-sched__time-menu-input button:focus-visible { background: var(--color-graphite-hover); color: var(--color-chalk-white); }
 
 .task-sched__tz {
   display: flex;
@@ -1580,6 +1601,420 @@ input.task-entry-input:focus-visible {
 .task-sched__row--inset { margin-inline: var(--space-md); }
 /* A row whose value is set reads as active. */
 .task-sched__row-btn.is-set { color: var(--color-precision-blue-text); }
+
+/* Compact, layered schedule editor. The modifier isolates this revision from
+   older picker styles still used by the habit editor. */
+.task-sched--v2.task-sched__popover {
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-color: var(--color-border-strong);
+  border-radius: 14px;
+  background: var(--color-graphite-panel);
+}
+
+.task-sched--v2 .task-schedule-tabs {
+  padding: 10px 10px 0;
+}
+
+.task-sched--v2 .task-schedule-tabs .ui-tabs__list,
+.task-sched--v2 .task-schedule-tabs .ui-tabs-list {
+  min-height: 38px;
+}
+
+.task-sched--v2 .task-schedule-tabs .ui-tab {
+  min-height: 34px;
+  padding-block: 6px;
+}
+
+.task-sched--v2 .task-sched__panel {
+  padding: 14px 14px 8px;
+}
+
+.task-sched--v2 .task-sched__quick {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.task-sched--v2 .task-sched__quick-btn {
+  display: grid;
+  min-width: 0;
+  min-height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text-tertiary);
+}
+
+.task-sched--v2 .task-sched__quick-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.task-sched--v2 .task-sched__quick-btn:hover,
+.task-sched--v2 .task-sched__quick-btn:focus-visible {
+  background: var(--color-graphite-hover);
+  color: var(--color-text-primary);
+}
+
+.task-sched--v2 .task-sched__quick-btn.is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--color-precision-blue) 14%, transparent);
+  color: var(--color-precision-blue-text);
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__header,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__header {
+  min-height: 28px;
+  margin-bottom: 3px;
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__header > strong,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__header > strong {
+  font-size: var(--text-meta);
+  font-weight: var(--weight-medium);
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__header .ui-button,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__header .ui-button {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__calendar,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__calendar {
+  gap: 0;
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__weekdays,
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__week,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__weekdays,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__week {
+  gap: 1px;
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__weekdays,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__weekdays {
+  margin-bottom: 1px;
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__weekdays span,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__weekdays span {
+  height: 20px;
+  font-size: var(--text-nano);
+  font-weight: var(--weight-regular);
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__week button,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__week button {
+  width: 29px;
+  height: 29px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-label);
+}
+
+.task-sched--v2 .task-sched__main-calendar .ui-date-picker__week button.is-today::after,
+.task-sched--v2 .task-sched__layer-calendar .ui-date-picker__week button.is-today::after {
+  bottom: 2px;
+}
+
+.task-sched--v2 .task-sched__rows {
+  margin-top: 9px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.task-sched--v2 .task-sched__row {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.task-sched--v2 .task-sched__row + .task-sched__row {
+  border-top: 1px solid color-mix(in srgb, var(--color-border-subtle) 65%, transparent);
+}
+
+.task-sched--v2 .task-sched__row-btn {
+  min-height: 39px;
+  gap: 9px;
+  padding: 7px 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+}
+
+.task-sched--v2 .task-sched__row-btn > svg:first-child {
+  color: var(--color-text-tertiary);
+}
+
+.task-sched--v2 .task-sched__row-btn:hover,
+.task-sched--v2 .task-sched__row-btn:focus-visible {
+  background: var(--color-graphite-hover);
+  color: var(--color-text-primary);
+}
+
+.task-sched--v2 .task-sched__row-btn.is-set,
+.task-sched--v2 .task-sched__row-btn.is-set > svg:first-child {
+  color: var(--color-precision-blue-text);
+}
+
+.task-sched--v2 .task-sched__row-chevron {
+  color: var(--color-text-tertiary);
+}
+
+.task-sched--v2 .task-sched__row-btn[aria-expanded="true"] .task-sched__row-chevron {
+  transform: none;
+}
+
+.task-sched--v2 .task-sched__footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 10px 14px 12px;
+}
+
+.task-sched--v2 .task-sched__footer .ui-button {
+  min-height: 38px;
+}
+
+.task-sched--v2 .task-sched__source-note,
+.task-sched--v2 .task-sched__error {
+  font-size: var(--text-label);
+}
+
+.task-sched--v2 .task-sched__duration-panel {
+  padding: 24px 16px 0;
+}
+
+.task-sched--v2 .task-sched__duration-grid {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.task-sched--v2 .task-sched__duration-label {
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+}
+
+.task-sched--v2 .task-sched__duration-control {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.task-sched--v2 .task-sched__duration-control:hover,
+.task-sched--v2 .task-sched__duration-control[aria-expanded="true"] {
+  border-color: var(--color-border-strong);
+  background: var(--color-graphite-hover);
+}
+
+.task-sched--v2 .task-sched__duration-control:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.task-sched--v2 .task-sched__duration-control:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.task-sched--v2 .task-sched__dur-row {
+  min-height: 48px;
+  padding: 10px 0 6px;
+  font-size: var(--text-meta);
+}
+
+.task-sched--v2 .task-sched__timezone-btn {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-sched--v2 .task-sched__timezone-btn:hover,
+.task-sched--v2 .task-sched__timezone-btn[aria-expanded="true"] {
+  border-color: var(--color-border-strong);
+  background: var(--color-graphite-hover);
+  color: var(--color-text-primary);
+}
+
+.task-sched--v2 .task-sched__timezone-btn:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.task-sched--v2 .task-sched__duration-actions {
+  margin: 16px -16px 0;
+  padding: 8px 16px 4px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.task-sched--v2.task-sched__layer {
+  position: fixed;
+  z-index: var(--layer-nested-popover);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 13px;
+  background: var(--color-graphite-panel);
+  box-shadow: var(--shadow-floating);
+  font-family: var(--font-sans);
+}
+
+.task-sched--v2 .task-sched__layer-options,
+.task-sched--v2 .task-sched__timezone-options {
+  display: grid;
+  max-height: min(356px, calc(100vh - 80px));
+  gap: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  scrollbar-width: thin;
+}
+
+.task-sched--v2 .task-sched__layer-options button,
+.task-sched--v2 .task-sched__timezone-options button {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-sched--v2 .task-sched__layer-options button:hover,
+.task-sched--v2 .task-sched__layer-options button:focus-visible,
+.task-sched--v2 .task-sched__timezone-options button:hover,
+.task-sched--v2 .task-sched__timezone-options button:focus-visible {
+  outline: 0;
+  background: var(--color-graphite-hover);
+  color: var(--color-text-primary);
+}
+
+.task-sched--v2 .task-sched__layer-options button.is-selected,
+.task-sched--v2 .task-sched__timezone-options button.is-selected {
+  color: var(--color-precision-blue-text);
+}
+
+.task-sched--v2 .task-sched__time-menu {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.task-sched--v2 .task-sched__time-menu-input {
+  margin: 7px;
+}
+
+.task-sched--v2 .task-sched__time-options {
+  max-height: min(260px, calc(100vh - 150px));
+  padding: 3px 7px 7px;
+}
+
+.task-sched--v2 .task-sched__time-options button {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.task-sched--v2 .task-sched__layer-timezone {
+  display: flex;
+  width: calc(100% - 14px);
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  margin: 0 7px 7px;
+  background: var(--color-graphite-input);
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-sched--v2 .task-sched__layer-timezone:hover,
+.task-sched--v2 .task-sched__layer-timezone:focus-visible {
+  outline: 0;
+  background: var(--color-graphite-hover);
+  color: var(--color-text-primary);
+}
+
+.task-sched--v2 .task-sched__timezone-layer {
+  display: grid;
+}
+
+.task-sched--v2 .task-sched__layer-search {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 7px 1px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-graphite-input);
+  color: var(--color-text-tertiary);
+}
+
+.task-sched--v2 .task-sched__layer-search:focus-within {
+  border-color: var(--color-field-focus);
+  box-shadow: var(--focus-ring);
+}
+
+.task-sched--v2 .task-sched__layer-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-label);
+}
+
+.task-sched--v2 .task-sched__layer-calendar {
+  padding: 12px;
+}
 
 /* ---------------------------------------------------------------------------
  * Menus attached to the task entry bar and task detail.
@@ -2252,7 +2687,15 @@ input.task-entry-input:focus-visible {
     border-color var(--motion-fast) var(--ease-out),
     background-color var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
+  cursor: pointer;
 }
+
+.task-entry-control:hover:not(.is-active),
+.task-entry-control:focus-visible:not(.is-active) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+.task-entry-control:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 
 .task-entry-control.is-open {
   background: var(--color-surface-hover);

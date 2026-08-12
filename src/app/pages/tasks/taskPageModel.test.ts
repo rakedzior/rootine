@@ -5,6 +5,7 @@ import {
   isTaskUndated,
   loadTasksViewMode,
   saveTasksViewMode,
+  scheduleFromDateValue,
   smartDateViewRange,
   normalizeTaskView,
   tasksForCalendarView,
@@ -68,6 +69,50 @@ describe("task presentation model", () => {
     expect(dateKey("30dni")).toBe("2026-09-04");
     expect(dateKey("wszystkie")).toBe("2026-08-04");
     expect(dateKey("bezterminu")).toBeNull();
+  });
+
+  it("keeps a cross-day duration and the timezone selected in the picker", () => {
+    const schedule = scheduleFromDateValue({
+      date: new Date("2026-08-12T12:00:00"),
+      endDate: new Date("2026-08-14T12:00:00"),
+      time: "",
+      reminder: "30",
+      repeat: "",
+      startTime: "23:30",
+      endTime: "01:00",
+      duration: true,
+      allDay: false,
+      timezone: "America/New_York",
+    });
+
+    expect(schedule).toMatchObject({
+      allDay: false,
+      startTime: "23:30",
+      endTime: "01:00",
+      endDate: "2026-08-14",
+      reminderMinutes: 30,
+      timezone: "America/New_York",
+    });
+  });
+
+  it("keeps both dates when a duration is switched to all day", () => {
+    expect(scheduleFromDateValue({
+      date: new Date("2026-08-12T12:00:00"),
+      endDate: new Date("2026-08-13T12:00:00"),
+      time: "",
+      reminder: "",
+      repeat: "",
+      startTime: "",
+      endTime: "",
+      duration: true,
+      allDay: true,
+      timezone: "Europe/Warsaw",
+    })).toMatchObject({
+      allDay: true,
+      startTime: "",
+      endDate: "2026-08-13",
+      timezone: "Europe/Warsaw",
+    });
   });
 
   it("keeps the requested primary navigation order and migrates the old inbox id", () => {

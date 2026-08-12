@@ -291,6 +291,7 @@ export function fmtTaskDate(iso: string): string {
 
 export type DateVal = {
   date: Date | null;
+  endDate: Date | null;
   time: string;
   reminder: string;
   repeat: string;
@@ -298,11 +299,13 @@ export type DateVal = {
   endTime: string;
   duration: boolean;
   allDay: boolean;
+  timezone: string;
 };
 
 export const DEFAULT_DATE_VAL: DateVal = {
-  date: null, time: "", reminder: "", repeat: "",
+  date: null, endDate: null, time: "", reminder: "", repeat: "",
   startTime: "09:00", endTime: "10:00", duration: false, allDay: true,
+  timezone: browserTimezone(),
 };
 
 export function defaultDateValueForTaskView(view: string, todayKey = todayLocalDateKey()): DateVal {
@@ -553,15 +556,18 @@ export function scheduleFromDateValue(
   if (!value.date) return undefined;
   const hasTime = value.duration ? Boolean(value.startTime && value.endTime) : Boolean(value.time);
   const allDay = value.allDay || !hasTime;
+  const startDateKey = toLocalDateKey(value.date);
+  const endDateKey = value.endDate ? toLocalDateKey(value.endDate) : startDateKey;
   return {
     allDay,
     startTime: allDay ? "" : value.duration ? value.startTime : value.time,
     endTime: !allDay && value.duration ? value.endTime : undefined,
+    ...(value.duration && endDateKey !== startDateKey ? { endDate: endDateKey } : {}),
     reminderMinutes: allDay || value.reminder === "" ? undefined : Number(value.reminder),
     recurrence: (value.repeat || undefined) as TaskRecurrence | undefined,
     completedDates: completedDates?.length ? [...completedDates].sort() : undefined,
     completedAtByDate: completedAtByDate && Object.keys(completedAtByDate).length ? { ...completedAtByDate } : undefined,
-    timezone: browserTimezone(),
+    timezone: value.timezone || browserTimezone(),
   };
 }
 

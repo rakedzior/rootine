@@ -1461,9 +1461,9 @@ export default function Zadania() {
                   className="task-entry-control"
                   title="Priorytet"
                   style={{
-                    background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? C.elevated : "transparent",
+                    background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? C.elevated : undefined,
                     color: flagColor ?? C.textMuted,
-                    border: `1px solid ${flagColor ? flagColor + "40" : "transparent"}`,
+                    border: flagColor ? `1px solid ${flagColor + "40"}` : undefined,
                   }}>
                   <Flag size={13} strokeWidth={1.5} fill={flagColor ?? "none"} />
                 </button>
@@ -1478,9 +1478,9 @@ export default function Zadania() {
                   className="task-entry-control"
                   title="Lista"
                   style={{
-                    background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? C.elevated : "transparent",
+                    background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? C.elevated : undefined,
                     color: newTaskList ? listy.find(l => l.id === newTaskList)?.color : C.textMuted,
-                    border: `1px solid ${newTaskList ? (listy.find(l => l.id === newTaskList)?.color ?? C.iceBlue) + "40" : "transparent"}`,
+                    border: newTaskList ? `1px solid ${(listy.find(l => l.id === newTaskList)?.color ?? C.iceBlue) + "40"}` : undefined,
                   }}>
                   <List size={13} strokeWidth={1.5} />
                 </button>

@@ -149,6 +149,33 @@ describe("task workspace", () => {
     expect(loadTaskWorkspaceResult().status).toBe("corrupt");
   });
 
+  it("accepts a duration that ends on a later date after midnight", () => {
+    const workspace = {
+      version: 2,
+      updatedAt: "2026-08-12T12:00:00.000Z",
+      tasks: [{
+        id: 74,
+        text: "Nocna podróż",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-08-12",
+        schedule: {
+          allDay: false,
+          startTime: "23:30",
+          endTime: "01:00",
+          endDate: "2026-08-13",
+          timezone: "Europe/Warsaw",
+        },
+      }],
+      habits: [],
+      lists: [],
+      tags: [],
+    } satisfies TaskWorkspace;
+
+    expect(saveTaskWorkspace(workspace)).toBe(true);
+    expect(loadTaskWorkspaceResult().workspace.tasks[0]?.schedule?.endDate).toBe("2026-08-13");
+  });
+
   it("rejects malformed nested source metadata instead of accepting a partial source", () => {
     window.localStorage.setItem("rootine.task-workspace.v1", JSON.stringify({
       version: 2,

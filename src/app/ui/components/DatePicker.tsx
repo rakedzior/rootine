@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Circle } from "lucide-react";
 import { Button } from "./Button";
 import { uiLayers } from "../tokens";
 
@@ -20,6 +20,10 @@ export interface DatePickerProps {
   /** @deprecated Use portalLayer so layering remains semantic. */
   portalZIndex?: number;
   fieldClassName?: string;
+  /** Render the calendar as part of its parent surface instead of a trigger + floating popover. */
+  inline?: boolean;
+  /** Use one-letter weekday headers for dense calendar surfaces. */
+  compactWeekdays?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
@@ -108,6 +112,8 @@ export function DatePicker({
   portalLayer,
   portalZIndex,
   fieldClassName = "",
+  inline = false,
+  compactWeekdays = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   "aria-describedby": describedBy,
@@ -131,7 +137,8 @@ export function DatePicker({
   const maxKey = maxDate ? toDateKey(maxDate) : undefined;
   const today = calendarToday();
   const todayKey = toDateKey(today);
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = inline || openState;
   const [visibleMonth, setVisibleMonth] = useState(() => selectedDate ?? today);
   const [focusedDateKey, setFocusedDateKey] = useState(() => toDateKey(selectedDate ?? today));
   const [position, setPosition] = useState({ left: 0, top: 0, above: false });
@@ -162,22 +169,22 @@ export function DatePicker({
     });
   };
 
-  const close = (restoreFocus = false) => {
-    setOpen(false);
+  const close = useCallback((restoreFocus = false) => {
+    if (!inline) setOpenState(false);
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
-  };
+  }, [inline]);
 
   const show = () => {
     if (disabled) return;
     const initial = clampToRange(selectedDate ?? calendarToday(), minDate, maxDate);
     setVisibleMonth(new Date(initial.getFullYear(), initial.getMonth(), 1, 12));
     setFocusedDateKey(toDateKey(initial));
-    setOpen(true);
+    setOpenState(true);
     requestAnimationFrame(updatePosition);
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inline) return;
     updatePosition();
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -198,7 +205,7 @@ export function DatePicker({
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportChange, true);
     };
-  }, [open]);
+  }, [close, inline, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -263,13 +270,126 @@ export function DatePicker({
   const previousMonthDisabled = !monthHasAvailableDate(previousMonth, minKey, maxKey);
   const nextMonthDisabled = !monthHasAvailableDate(nextMonth, minKey, maxKey);
 
+  const calendar = (
+    <div
+      ref={calendarRef}
+      id={dialogId}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={`${dialogLabelId} ${monthHeadingId}`}
+      className={`ui-date-picker ${inline ? "ui-date-picker--inline" : position.above ? "ui-date-picker--above" : ""}`.trim()}
+      style={inline ? undefined : {
+        left: position.left,
+        top: position.top,
+        ...(portalLayer ? { zIndex: uiLayers[portalLayer] } : portalZIndex ? { zIndex: portalZIndex } : {}),
+      }}
+      onKeyDown={handleDialogKeyDown}
+    >
+      <span id={dialogLabelId} className="ui-sr-only">
+        {ariaLabel ?? (label ? `Wybierz datę: ${label}` : "Wybierz datę")}
+      </span>
+      <div className="ui-date-picker__header">
+        <strong id={monthHeadingId} aria-live="polite">{monthFormatter.format(visibleMonth)}</strong>
+        <div>
+          {inline && (
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              aria-label="Przejdź do dzisiaj"
+              title="Dzisiaj"
+              onClick={() => moveFocus(today)}
+            >
+              <Circle size={11} strokeWidth={1.5} />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label="Poprzedni miesiąc"
+            disabled={previousMonthDisabled}
+            onClick={() => changeMonth(-1)}
+          >
+            <ChevronLeft size={13} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label="Następny miesiąc"
+            disabled={nextMonthDisabled}
+            onClick={() => changeMonth(1)}
+          >
+            <ChevronRight size={13} />
+          </Button>
+        </div>
+      </div>
+      <div className="ui-date-picker__calendar" role="grid" aria-labelledby={monthHeadingId}>
+        <div className="ui-date-picker__weekdays" role="row">
+          {WEEKDAYS.map((day) => (
+            <span key={day.short} role="columnheader" aria-label={day.label}>
+              {compactWeekdays ? day.short.slice(0, 1) : day.short}
+            </span>
+          ))}
+        </div>
+        {weeks.map((week) => (
+          <div key={toDateKey(week[0])} className="ui-date-picker__week" role="row">
+            {week.map((date) => {
+              const dateKey = toDateKey(date);
+              const outside = date.getMonth() !== visibleMonth.getMonth();
+              const unavailable = isUnavailable(dateKey);
+              const selected = dateKey === value;
+              return (
+                <div key={dateKey} role="gridcell" aria-selected={selected}>
+                  <button
+                    type="button"
+                    disabled={unavailable}
+                    tabIndex={dateKey === focusedDateKey ? 0 : -1}
+                    data-date-key={dateKey}
+                    aria-label={dateFormatter.format(date)}
+                    aria-current={dateKey === todayKey ? "date" : undefined}
+                    className={`${outside ? "is-outside" : ""} ${dateKey === todayKey ? "is-today" : ""} ${selected ? "is-selected" : ""}`.trim()}
+                    onFocus={() => setFocusedDateKey(dateKey)}
+                    onKeyDown={(event) => handleDayKeyDown(event, date)}
+                    onClick={() => {
+                      onChange(dateKey);
+                      if (!inline) close(true);
+                    }}
+                  >
+                    {date.getDate()}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {!inline && (
+        <div className="ui-date-picker__footer">
+          <button type="button" disabled={!value} onClick={() => { onChange(""); close(true); }}>Wyczyść</button>
+          <button
+            type="button"
+            disabled={isUnavailable(todayKey)}
+            onClick={() => {
+              onChange(todayKey);
+              close(true);
+            }}
+          >
+            Dzisiaj
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className={`ui-field ${fieldClassName}`.trim()}>
-      {label && <label id={labelId} className="ui-field__label" htmlFor={triggerId}>{label}</label>}
-      {(ariaLabel || fallbackLabel) && (
+    <div className={`${inline ? "ui-field ui-field--date-inline" : "ui-field"} ${fieldClassName}`.trim()}>
+      {!inline && label && <label id={labelId} className="ui-field__label" htmlFor={triggerId}>{label}</label>}
+      {!inline && (ariaLabel || fallbackLabel) && (
         <span id={hiddenTriggerLabelId} className="ui-sr-only">{ariaLabel ?? fallbackLabel}</span>
       )}
-      <button
+      {!inline && <button
         ref={triggerRef}
         id={triggerId}
         type="button"
@@ -292,107 +412,11 @@ export function DatePicker({
       >
         <span id={valueId}>{displayValue}</span>
         <CalendarDays size={13} aria-hidden="true" />
-      </button>
-      {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
-      {error && <p id={errorId} className="ui-field__error" role="alert">{error}</p>}
+      </button>}
+      {!inline && hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
+      {!inline && error && <p id={errorId} className="ui-field__error" role="alert">{error}</p>}
 
-      {open && createPortal(
-        <div
-          ref={calendarRef}
-          id={dialogId}
-          role="dialog"
-          aria-modal="false"
-          aria-labelledby={`${dialogLabelId} ${monthHeadingId}`}
-          className={`ui-date-picker ${position.above ? "ui-date-picker--above" : ""}`.trim()}
-          style={{
-            left: position.left,
-            top: position.top,
-            ...(portalLayer ? { zIndex: uiLayers[portalLayer] } : portalZIndex ? { zIndex: portalZIndex } : {}),
-          }}
-          onKeyDown={handleDialogKeyDown}
-        >
-          <span id={dialogLabelId} className="ui-sr-only">
-            {ariaLabel ?? (label ? `Wybierz datę: ${label}` : "Wybierz datę")}
-          </span>
-          <div className="ui-date-picker__header">
-            <strong id={monthHeadingId} aria-live="polite">{monthFormatter.format(visibleMonth)}</strong>
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                iconOnly
-                aria-label="Poprzedni miesiąc"
-                disabled={previousMonthDisabled}
-                onClick={() => changeMonth(-1)}
-              >
-                <ChevronLeft size={13} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                iconOnly
-                aria-label="Następny miesiąc"
-                disabled={nextMonthDisabled}
-                onClick={() => changeMonth(1)}
-              >
-                <ChevronRight size={13} />
-              </Button>
-            </div>
-          </div>
-          <div className="ui-date-picker__calendar" role="grid" aria-labelledby={monthHeadingId}>
-            <div className="ui-date-picker__weekdays" role="row">
-              {WEEKDAYS.map((day) => (
-                <span key={day.short} role="columnheader" aria-label={day.label}>{day.short}</span>
-              ))}
-            </div>
-            {weeks.map((week) => (
-              <div key={toDateKey(week[0])} className="ui-date-picker__week" role="row">
-                {week.map((date) => {
-                  const dateKey = toDateKey(date);
-                  const outside = date.getMonth() !== visibleMonth.getMonth();
-                  const unavailable = isUnavailable(dateKey);
-                  const selected = dateKey === value;
-                  return (
-                    <div key={dateKey} role="gridcell" aria-selected={selected}>
-                      <button
-                        type="button"
-                        disabled={unavailable}
-                        tabIndex={dateKey === focusedDateKey ? 0 : -1}
-                        data-date-key={dateKey}
-                        aria-label={dateFormatter.format(date)}
-                        aria-current={dateKey === todayKey ? "date" : undefined}
-                        className={`${outside ? "is-outside" : ""} ${dateKey === todayKey ? "is-today" : ""} ${selected ? "is-selected" : ""}`.trim()}
-                        onFocus={() => setFocusedDateKey(dateKey)}
-                        onKeyDown={(event) => handleDayKeyDown(event, date)}
-                        onClick={() => {
-                          onChange(dateKey);
-                          close(true);
-                        }}
-                      >
-                        {date.getDate()}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-          <div className="ui-date-picker__footer">
-            <button type="button" disabled={!value} onClick={() => { onChange(""); close(true); }}>Wyczyść</button>
-            <button
-              type="button"
-              disabled={isUnavailable(todayKey)}
-              onClick={() => {
-                onChange(todayKey);
-                close(true);
-              }}
-            >
-              Dzisiaj
-            </button>
-          </div>
-        </div>,
-        document.body,
-      )}
+      {open && (inline ? calendar : createPortal(calendar, document.body))}
     </div>
   );
 }

@@ -66,8 +66,33 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
     // the checked-in baseline while preserving the popup geometry and content.
     await capture(datePicker, "task-date-picker-portal.png", { maxDiffPixels: 512 });
 
+    const pickerSize = await datePicker.boundingBox();
+    await datePicker.getByRole("button", { name: "Przypomnienie", exact: true }).click();
+    const reminderPicker = page.getByRole("dialog", { name: "Przypomnienie", exact: true });
+    await expect(reminderPicker).toBeVisible();
+    await capture(reminderPicker, "task-reminder-picker-portal.png", { maxDiffPixels: 256 });
+    expect(await datePicker.boundingBox()).toEqual(pickerSize);
+    const [parentLayer, childLayer, reminderSize] = await Promise.all([
+      datePicker.evaluate((element) => Number(getComputedStyle(element).zIndex)),
+      reminderPicker.evaluate((element) => Number(getComputedStyle(element).zIndex)),
+      reminderPicker.boundingBox(),
+    ]);
+    expect(childLayer).toBeGreaterThan(parentLayer);
+    expect(reminderSize && pickerSize && reminderSize.y < pickerSize.y + pickerSize.height).toBe(true);
+
+    await datePicker.getByRole("tab", { name: "Czas trwania" }).click();
+    await expect(reminderPicker).toBeHidden();
+    await expect(datePicker.getByText("Start", { exact: true })).toBeVisible();
+    await expect(datePicker.getByText("Koniec", { exact: true })).toBeVisible();
+    await capture(datePicker, "task-duration-picker-portal.png", { maxDiffPixels: 384 });
+
+    const outsideX = pickerSize && pickerSize.x >= 8
+      ? Math.max(2, pickerSize.x - 4)
+      : Math.min((await page.evaluate(() => window.innerWidth)) - 2, (pickerSize?.x ?? 0) + (pickerSize?.width ?? 0) + 4);
+    await page.mouse.click(outsideX, 2);
+    await expect(datePicker).toBeHidden();
+
     if (!isMobile) {
-      await page.keyboard.press("Escape");
       await page.locator(".task-detail__toggle--plain").click();
       await capture(page.getByRole("menu", { name: "Akcje zadania" }), "task-actions-menu.png");
     }

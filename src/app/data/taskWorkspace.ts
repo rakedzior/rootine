@@ -27,6 +27,7 @@ export type TaskSchedule = {
   allDay: boolean;
   startTime: string;
   endTime?: string;
+  endDate?: string;
   reminderMinutes?: number;
   recurrence?: TaskRecurrence;
   completedDates?: string[];
@@ -203,12 +204,16 @@ function isCompletionTimestampMap(value: unknown): value is Record<string, strin
 function isTaskSchedule(value: unknown): value is TaskSchedule {
   if (!isRecord(value)) return false;
   if (typeof value.allDay !== "boolean" || typeof value.startTime !== "string") return false;
+  const validEndDate = value.endDate === undefined || (typeof value.endDate === "string" && isLocalDateKey(value.endDate));
   const validTimeRange = value.allDay
     ? value.startTime === "" && value.endTime === undefined
     : isClockTime(value.startTime)
       && (value.endTime === undefined
-        || (typeof value.endTime === "string" && isClockTime(value.endTime) && value.endTime > value.startTime));
-  return validTimeRange
+        || (typeof value.endTime === "string"
+          && isClockTime(value.endTime)
+          && (value.endDate !== undefined || value.endTime > value.startTime)));
+  return validEndDate
+    && validTimeRange
     && (value.reminderMinutes === undefined
       || (typeof value.reminderMinutes === "number"
         && Number.isInteger(value.reminderMinutes)

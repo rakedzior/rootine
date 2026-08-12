@@ -678,6 +678,7 @@ function HabitTimeField({ value, compact = false, onChange }: {
             editMode={editMode}
             onChange={onChange}
             onClose={() => setOpen(false)}
+            onEditModeChange={setEditMode}
           />
         </div>
       )}

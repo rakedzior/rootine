@@ -26,6 +26,7 @@ import { Button, ListRow, Menu, MenuItem, Modal, Textarea } from "../../ui";
 import { DatePickerPopup } from "./TaskSchedulePicker";
 import {
   C,
+  browserTimezone,
   formatDateLabel,
   scheduleFromDateValue,
   type DateVal,
@@ -379,29 +380,35 @@ export function TaskDetail({
   const taskCalendarDate = task.calendarDate;
   const parsedTaskDate = taskCalendarDate ? new Date(`${taskCalendarDate}T12:00:00`) : null;
   const storedSchedule = task.schedule;
+  const parsedTaskEndDate = storedSchedule?.endDate ? new Date(`${storedSchedule.endDate}T12:00:00`) : parsedTaskDate;
   const [taskDateVal,    setTaskDateVal]    = useState<DateVal>({
     date: parsedTaskDate && !Number.isNaN(parsedTaskDate.getTime()) ? parsedTaskDate : null,
+    endDate: parsedTaskEndDate && !Number.isNaN(parsedTaskEndDate.getTime()) ? parsedTaskEndDate : null,
     time: (storedSchedule?.endTime ?? task.endTime) ? "" : storedSchedule?.startTime ?? task.time ?? "",
     reminder: storedSchedule?.reminderMinutes === undefined ? "" : String(storedSchedule.reminderMinutes),
     repeat: storedSchedule?.recurrence ?? "",
     startTime: storedSchedule?.startTime || task.time || "09:00",
     endTime: storedSchedule?.endTime || task.endTime || "10:00",
-    duration: Boolean(storedSchedule?.endTime ?? task.endTime),
+    duration: Boolean(storedSchedule?.endTime ?? storedSchedule?.endDate ?? task.endTime),
     allDay: storedSchedule?.allDay ?? !task.time,
+    timezone: storedSchedule?.timezone || browserTimezone(),
   });
   useEffect(() => {
     const nextDate = taskCalendarDate ? new Date(`${taskCalendarDate}T12:00:00`) : null;
     const schedule = task.schedule;
+    const nextEndDate = schedule?.endDate ? new Date(`${schedule.endDate}T12:00:00`) : nextDate;
     setTaskDateVal((current) => ({
       ...current,
       date: nextDate && !Number.isNaN(nextDate.getTime()) ? nextDate : null,
+      endDate: nextEndDate && !Number.isNaN(nextEndDate.getTime()) ? nextEndDate : null,
       time: (schedule?.endTime ?? task.endTime) ? "" : schedule?.startTime ?? task.time ?? "",
       reminder: schedule?.reminderMinutes === undefined ? "" : String(schedule.reminderMinutes),
       repeat: schedule?.recurrence ?? "",
       startTime: schedule?.startTime || task.time || "09:00",
       endTime: schedule?.endTime || task.endTime || "10:00",
-      duration: Boolean(schedule?.endTime ?? task.endTime),
+      duration: Boolean(schedule?.endTime ?? schedule?.endDate ?? task.endTime),
       allDay: schedule?.allDay ?? !task.time,
+      timezone: schedule?.timezone || browserTimezone(),
     }));
   }, [task.id, taskCalendarDate, task.time, task.endTime, task.schedule]);
 

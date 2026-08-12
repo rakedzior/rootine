@@ -298,6 +298,25 @@
 .ui-date-picker__footer button { min-height: 28px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-precision-blue-text); font-size: var(--text-label); cursor: pointer; }
 .ui-date-picker__footer button:hover:not(:disabled) { background: var(--color-precision-blue-soft); }
 .ui-date-picker__footer button:disabled { color: var(--color-text-disabled); cursor: not-allowed; }
+.ui-field--date-inline { display: block; }
+.ui-date-picker--inline {
+  position: static;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.ui-date-picker--inline .ui-date-picker__header { margin-bottom: var(--space-xs); }
+.ui-date-picker--inline .ui-date-picker__weekdays span { height: 24px; }
+.ui-date-picker--inline .ui-date-picker__week button {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+}
 
 .ui-badge {
   display: inline-flex;
