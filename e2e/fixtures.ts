@@ -70,7 +70,11 @@ export const test = base.extend<RootineFixtures>({
 export { expect };
 
 export async function openRootineRoute(page: Page, path: string) {
-  await page.goto(path, { waitUntil: "networkidle" });
+  // Route readiness is owned by the app shell, not by the network. Waiting for
+  // `networkidle` makes the matrix depend on background Supabase/weather/font
+  // requests and causes otherwise healthy pages to time out when several
+  // viewport projects share the Vite server.
+  await page.goto(path, { waitUntil: "domcontentloaded" });
   const pageShell = page.locator(".ui-page-shell:visible");
   try {
     await expect(pageShell).toBeVisible({ timeout: 20_000 });

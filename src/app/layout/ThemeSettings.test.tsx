@@ -17,17 +17,17 @@ function ThemeSettingsFixture() {
 }
 
 describe("ThemeSettings", () => {
-  it("offers six named themes plus system mode and updates the selected radio", async () => {
+  it("offers the two named themes plus system mode and updates the selected radio", async () => {
     const user = userEvent.setup();
     render(<ThemeSettingsFixture />);
 
-    expect(screen.getAllByRole("radio")).toHaveLength(7);
-    expect(screen.getByRole("radio", { name: /Rootine Midnight Instrument/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.getByRole("radio", { name: /Atrament.*Domyślny/ })).toHaveAttribute("aria-checked", "true");
 
-    const warmTheme = screen.getByRole("radio", { name: /Rootine Warm Linen/ });
+    const warmTheme = screen.getByRole("radio", { name: /Pergamin.*Ciepły, naturalny/ });
     await user.click(warmTheme);
 
     expect(warmTheme).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("radio", { name: /Rootine Midnight Instrument/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("radio", { name: /Atrament.*Domyślny/ })).toHaveAttribute("aria-checked", "false");
   });
 });

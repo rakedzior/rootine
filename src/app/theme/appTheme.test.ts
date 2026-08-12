@@ -31,11 +31,11 @@ describe("app theme", () => {
     expect(loadAppTheme()).toBe("rootine-warm-linen");
   });
 
-  it("migrates legacy material theme ids", () => {
+  it("migrates a removed theme to the remaining dark theme", () => {
     window.localStorage.setItem(APP_THEME_STORAGE_KEY, "deep-teal-smoked-oak-pearl");
 
-    expect(loadAppTheme()).toBe("rootine-graphite-sea-glass");
-    expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe("rootine-graphite-sea-glass");
+    expect(loadAppTheme()).toBe(DEFAULT_APP_THEME_ID);
+    expect(window.localStorage.getItem(APP_THEME_STORAGE_KEY)).toBe(DEFAULT_APP_THEME_ID);
   });
 
   it("supports a system preference without making it the product default", () => {

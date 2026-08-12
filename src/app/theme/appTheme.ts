@@ -1,45 +1,17 @@
 export const APP_THEMES = [
   {
     id: "rootine-cobalt",
-    name: "Rootine Midnight Instrument",
+    name: "Atrament",
     description: "Neutralny grafit z precyzyjnym, kobaltowym światłem",
     role: "Domyślny · ciemny",
     scheme: "dark",
   },
   {
-    id: "rootine-mineral-noir",
-    name: "Rootine Mineral Noir",
-    description: "Matowy onyks z dyskretnym mineralnym żyłkowaniem",
-    role: "Opcjonalny · ciemny",
-    scheme: "dark",
-  },
-  {
-    id: "rootine-graphite-sea-glass",
-    name: "Rootine Graphite Sea Glass",
-    description: "Neutralny grafit z dyskretnym morskim akcentem",
-    role: "Opcjonalny · ciemny",
-    scheme: "dark",
-  },
-  {
     id: "rootine-warm-linen",
-    name: "Rootine Warm Linen",
+    name: "Pergamin",
     description: "Ciepły, naturalny i spokojny",
     role: "Oficjalny · jasny",
     scheme: "light",
-  },
-  {
-    id: "rootine-burgundy",
-    name: "Rootine Burgundy",
-    description: "Nastrojowy i bardziej wyrazisty",
-    role: "Opcjonalny · ciemny",
-    scheme: "dark",
-  },
-  {
-    id: "rootine-olive",
-    name: "Rootine Olive",
-    description: "Organiczny, miękki i skupiony",
-    role: "Opcjonalny · ciemny",
-    scheme: "dark",
   },
 ] as const;
 
@@ -51,11 +23,11 @@ export const LIGHT_APP_THEME_ID: AppThemeId = "rootine-warm-linen";
 export const APP_THEME_STORAGE_KEY = "rootine.appearance.theme";
 
 const LEGACY_THEME_MIGRATIONS: Record<string, AppThemeId> = {
-  "olive-walnut-ivory": "rootine-olive",
-  "deep-teal-smoked-oak-pearl": "rootine-graphite-sea-glass",
+  "olive-walnut-ivory": DEFAULT_APP_THEME_ID,
+  "deep-teal-smoked-oak-pearl": DEFAULT_APP_THEME_ID,
   "onyx-ebony-stone": "rootine-cobalt",
   "putty-natural-oak-calacatta": "rootine-warm-linen",
-  "burgundy-soft-ivory": "rootine-burgundy",
+  "burgundy-soft-ivory": DEFAULT_APP_THEME_ID,
 };
 
 export function isAppThemeId(value: string | null): value is AppThemeId {

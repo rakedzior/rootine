@@ -184,7 +184,7 @@ export function GoalSubSidebar({
                 if (open) setEditingId(null);
                 return !open;
               }); }}
-              className={`goal-sidebar-icon-action ${editMode ? "is-active" : ""}`}
+              className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${editMode ? "is-active" : ""}`}
             >
               <Pencil size={13} strokeWidth={1.8} />
             </button>

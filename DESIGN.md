@@ -197,7 +197,7 @@ components:
 
 Rootine jest spokojnym, precyzyjnym i dyskretnym narzędziem do działania. Interfejs przypomina dobrze uporządkowany warsztat: każda kontrolka ma konkretne zadanie, treść ma pierwszeństwo, a gęstość pozwala szybko skanować wiele informacji bez wizualnego hałasu.
 
-Domyślny motyw jest ciemny, tonalny i kompaktowy, ale ten sam kontrakt semantyczny obsługuje sześć motywów, w tym jasny Warm Linen. Marka ujawnia się przez konsekwentny rytm, oszczędne użycie akcentu motywu, drobną typografię oraz dobrze rozróżnione stany, nie przez dekorację. To interfejs w trybie **Operate**: ma ułatwiać wykonanie zadania, a nie konkurować o uwagę.
+Domyślny motyw jest ciemny, tonalny i kompaktowy, a ten sam kontrakt semantyczny obsługuje jasny wariant Pergamin. Marka ujawnia się przez konsekwentny rytm, oszczędne użycie akcentu motywu, drobną typografię oraz dobrze rozróżnione stany, nie przez dekorację. To interfejs w trybie **Operate**: ma ułatwiać wykonanie zadania, a nie konkurować o uwagę.
 
 **Key Characteristics:**
 
@@ -211,7 +211,7 @@ Domyślny motyw jest ciemny, tonalny i kompaktowy, ale ten sam kontrakt semantyc
 
 Frontmatter pokazuje wartości domyślnego `rootine-cobalt` jako czytelny snapshot dla narzędzi. Normatywnym źródłem wartości wszystkich motywów jest `src/styles/tokens.css`, a listy dostępnych identyfikatorów, nazw i mapowania preferencji `system` — `src/app/theme/appTheme.ts`. Zmiana motywu nie zmienia znaczenia ról `primary`, `surface`, `text`, `success`, `warning` i `danger`.
 
-Runtime udostępnia sześć motywów: `rootine-cobalt` (domyślny ciemny), `rootine-mineral-noir`, `rootine-graphite-sea-glass`, `rootine-warm-linen` (jasny), `rootine-burgundy` i `rootine-olive`. Historyczne nazwy `precision-*`, `graphite-*` i `chalk-*` są aliasami kompatybilności mapowanymi na role semantyczne; poza domyślnym motywem nie należy interpretować ich jako literalnej barwy.
+Runtime udostępnia dwa motywy: `rootine-cobalt` (Atrament, domyślny ciemny) oraz `rootine-warm-linen` (Pergamin, jasny). Historyczne nazwy `precision-*`, `graphite-*` i `chalk-*` są aliasami kompatybilności mapowanymi na role semantyczne.
 
 ### Primary
 

@@ -34,17 +34,20 @@ jobs:
 
   browser-regressions:
     name: Browser regressions (${{ matrix.suite.name }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.suite.os }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         suite:
           - name: core
+            os: windows-latest
             command: npx playwright test --project=desktop-1440 --project=mobile-390
           - name: viewport
+            os: ubuntu-latest
             command: npm run test:e2e:viewport
           - name: zoom
+            os: ubuntu-latest
             command: npm run test:e2e:zoom
 
     steps:

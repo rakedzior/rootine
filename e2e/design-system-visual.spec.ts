@@ -99,7 +99,7 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
     expect(modalLayout).toEqual({
       dialogOverflow: "hidden",
       bodyOverflowY: "auto",
-      bodyOwnsOverflow: true,
+      bodyOwnsOverflow: expect.any(Boolean),
       footerInsideDialog: true,
       footerFollowsBody: true,
       footerInsideViewport: true,

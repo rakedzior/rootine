@@ -4820,7 +4820,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-week-carousel .sport-week-tab {
-  flex-basis: clamp(112px, calc((100% - (4 * var(--space-xs))) / 5), 148px);
+  flex-basis: clamp(116px, calc((100% - (4 * var(--space-xs))) / 5), 148px);
 }
 
 .sport-cycle-workspace .sport-cycle-day {

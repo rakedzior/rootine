@@ -48,7 +48,7 @@ export function ThemeSettings({ idPrefix, value, onChange, embedded = false }: T
           </span>
           <span className="app-theme-option__copy">
             <strong>Automatycznie</strong>
-            <small>Warm Linen w trybie jasnym, Midnight Instrument w ciemnym</small>
+            <small>Pergamin w trybie jasnym, Atrament w ciemnym</small>
           </span>
           <span className="app-theme-option__status" aria-hidden="true">
             {value === "system" && <Check size={13} strokeWidth={2.2} />}

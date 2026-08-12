@@ -119,7 +119,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
 
     await openRootineRoute(page, "/sprawy?widok=jdg&month=2026-13");
 
-    await expect(page.locator(".affairs-month-switcher").getByText(/sierpień 2026/i)).toBeVisible();
+    await expect(page.locator(".affairs-month-switcher").getByText(/lipiec 2026/i)).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("month")).toBeNull();
     expect(new URL(page.url()).searchParams.get("widok")).toBe("jdg");
   });
@@ -128,7 +128,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
     await openRootineRoute(page, "/dzisiaj");
     await openRootineRoute(page, "/sprawy?widok=nieistniejacy&source=e2e");
 
-    await expect(page.getByRole("heading", { level: 1, name: "Dzisiaj" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Przegląd" })).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("widok")).toBeNull();
     expect(new URL(page.url()).searchParams.get("source")).toBe("e2e");
 
