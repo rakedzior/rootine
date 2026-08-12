@@ -1023,10 +1023,10 @@
 .ui-list-row.is-selected { background: var(--color-primary-subtle); box-shadow: inset 2px 0 0 0 var(--color-primary); }
 .ui-list-row.is-empty { background: var(--color-neutral-subtle); }
 .ui-list-row.is-empty .ui-list-row__title { color: var(--color-text-secondary); }
-/* Completed rows dim without changing height, so the list does not reflow on toggle. */
+/* Completed rows keep their height and stable contrast, so the list does not reflow on toggle. */
 .ui-list-row.is-completed .ui-list-row__title { color: var(--color-text-secondary); text-decoration: line-through; }
 .ui-list-row.is-completed .ui-list-row__subtitle,
-.ui-list-row.is-completed .ui-list-row__meta { color: var(--color-text-tertiary); opacity: var(--opacity-completed); }
+.ui-list-row.is-completed .ui-list-row__meta { color: var(--color-text-tertiary); }
 /* Fixed-width "when" column. Rows without a value still reserve it, so the checkbox and
    title stay on one vertical line down the whole list. */
 .ui-list-row__rail {

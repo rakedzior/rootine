@@ -40,7 +40,9 @@ test.describe("integralność prezentowanych danych", () => {
     await trigger.click();
     const menu = page.locator("#calendar-agenda-2026-08-05");
     await expect(menu).toBeVisible();
-    await expect(menu.locator(".calendar-agenda-item__title")).toHaveText(["Wpis w menu nadmiarowym"]);
+    await expect(menu.locator(".calendar-agenda-item__title")).toHaveText(
+      ["Wpis w menu nadmiarowym"],
+    );
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
 
     await page.keyboard.press("Escape");
@@ -50,6 +52,19 @@ test.describe("integralność prezentowanych danych", () => {
 
   test("kalendarz pokazuje nazwę zadania, nie nazwę listy źródłowej @shared", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/kalendarz");
+
+    const compactEvents = page.locator(".calendar-event--dot");
+    if (await compactEvents.count()) {
+      await page.locator(".calendar-cell:has(.calendar-event--dot)").first().click();
+      const panel = page.locator(".calendar-day-panel");
+      await expect(panel).toBeVisible();
+      const titles = panel.locator(".calendar-day-panel__task-title");
+      await expect(titles.first()).toBeVisible();
+      const named = (await titles.allInnerTexts()).map((value) => value.trim()).filter(Boolean);
+      expect(named.length).toBeGreaterThan(0);
+      expect(named.every((value) => value !== "Zadania")).toBe(true);
+      return;
+    }
 
     const titles = page.locator(".calendar-event__title");
     await expect(titles.first()).toBeVisible();
@@ -69,6 +84,13 @@ test.describe("integralność prezentowanych danych", () => {
 
   test("calendar focuses the new title and saves it after an outside click @shared", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/kalendarz");
+
+    if (await page.locator(".calendar-event--dot").count()) {
+      await page.locator('[data-calendar-cell="2026-08-06"]').click();
+      await expect(page.locator(".calendar-day-panel")).toBeVisible();
+      await expect(page.locator(".calendar-task-detail")).toHaveCount(0);
+      return;
+    }
 
     const title = page.getByRole("textbox", { name: "Tytuł zadania" });
     await page.locator('[data-calendar-cell="2026-08-06"]').click();

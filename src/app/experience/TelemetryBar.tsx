@@ -180,7 +180,6 @@ export function TelemetryBar({
               aria-valuemin={0}
               aria-valuemax={safeMax}
               aria-valuenow={clamp(segment.value, 0, safeMax)}
-              tabIndex={segment.disabled ? undefined : 0}
               aria-disabled={segment.disabled ? "true" : undefined}
             >
               {content}

@@ -7,7 +7,7 @@ import path from "node:path";
 const ROOT_DIR = process.cwd();
 const HOST = "127.0.0.1";
 const PORT = 4174;
-const STARTUP_TIMEOUT_MS = 120_000;
+const STARTUP_TIMEOUT_MS = process.env.CI ? 30_000 : 120_000;
 export const SERVER_PID_FILE = path.join(os.tmpdir(), "rootine-playwright-vite.json");
 
 function probeServer() {
@@ -24,33 +24,54 @@ function probeServer() {
   });
 }
 
-async function waitForServer() {
+async function waitForServer(server: ReturnType<typeof spawn>) {
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (await probeServer()) return;
+    if (server.exitCode !== null) {
+      throw new Error(`Playwright web server exited during startup with code ${server.exitCode}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`Playwright web server did not become available at http://${HOST}:${PORT}`);
 }
 
+async function waitForPortRelease() {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (!(await probeServer())) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Port ${PORT} is still serving another process after teardown`);
+}
+
 export default async function globalSetup() {
+  if (process.env.PLAYWRIGHT_EXTERNAL_SERVER === "1") return;
+
+  await waitForPortRelease();
   await fs.rm(SERVER_PID_FILE, { force: true });
+
+  const viteArguments = [
+    path.join(ROOT_DIR, "node_modules/vite/bin/vite.js"),
+    ...(process.env.CI ? ["preview"] : []),
+    "--host",
+    HOST,
+    "--port",
+    String(PORT),
+    "--strictPort",
+  ];
 
   const server = spawn(
     process.execPath,
-    [path.join(ROOT_DIR, "node_modules/vite/bin/vite.js"), "--host", HOST, "--port", String(PORT)],
+    viteArguments,
     {
       cwd: ROOT_DIR,
       env: { ...process.env, VITE_ROOTINE_QA_AUTH: "1" },
-      stdio: ["ignore", "ignore", "pipe"],
+      detached: process.platform !== "win32",
+      stdio: "ignore",
       windowsHide: true,
     },
   );
-
-  let stderr = "";
-  server.stderr?.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString();
-  });
 
   if (!server.pid) {
     throw new Error("Unable to start the Playwright web server");
@@ -59,13 +80,13 @@ export default async function globalSetup() {
   await fs.writeFile(SERVER_PID_FILE, JSON.stringify({ pid: server.pid }), "utf8");
 
   try {
-    await waitForServer();
+    await waitForServer(server);
   } catch (error) {
     try {
-      process.kill(server.pid);
+      process.kill(process.platform === "win32" ? server.pid : -server.pid);
     } catch {
       // The process may have exited while the server was starting.
     }
-    throw new Error(`${error instanceof Error ? error.message : String(error)}${stderr ? `\n${stderr}` : ""}`, { cause: error });
+    throw error;
   }
 }

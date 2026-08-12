@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
+    "build:e2e": "vite build --mode e2e",
     "preview": "vite preview",
     "lint": "eslint src api functions worker e2e scripts playwright.config.ts playwright.global-setup.ts playwright.global-teardown.ts vite.config.ts vitest.config.ts --max-warnings=0",
     "typecheck": "npm run typecheck:app && npm run typecheck:api",
@@ -24,7 +25,7 @@
     "css:audit:json": "node scripts/css-audit.mjs --json",
     "design-system:audit": "node --test scripts/design-system-inline-audit.test.mjs && node scripts/design-system-audit.mjs",
     "architecture:audit": "node scripts/architecture-audit.mjs",
-    "check": "npm run lint && npm run css:lint && npm run design-system:audit && npm run architecture:audit && npm run test && npm run build"
+    "check": "npm run lint && npm run css:lint && npm run design-system:audit && npm run architecture:audit && npm run test && npm run typecheck && vite build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.1",

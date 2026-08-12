@@ -167,6 +167,8 @@
   --opacity-decorative: 0.04;
   --icon-stroke-width: 1.7;
   --telemetry-segment-weight: 1;
+  /* Set per segment by TelemetryBar to keep one hue while varying intensity. */
+  --telemetry-segment-progress: 1;
 }
 
 :root {
@@ -241,7 +243,7 @@
   --color-app-bg: #f2eee6;
   --color-sidebar-bg: #e8e0d3;
   --color-surface-1: #faf8f3;
-  --color-surface-2: #f5f0e8;
+  --color-surface-2: #ffffff;
   --color-surface-hover: #efe8dd;
   --color-border: rgba(70, 55, 40, 0.12);
   --color-border-strong: rgba(70, 55, 40, 0.22);
@@ -249,10 +251,10 @@
   --color-text-secondary: #756e64;
   --color-text-tertiary: #6f685f;
   --color-sidebar-text: #665f56;
-  --color-primary: #76583e;
-  --color-primary-hover: #654a34;
-  --color-primary-subtle: rgba(118, 88, 62, 0.1);
-  --color-primary-text: #76583e;
+  --color-primary: #4f63a6;
+  --color-primary-hover: #40538f;
+  --color-primary-subtle: rgba(79, 99, 166, 0.12);
+  --color-primary-text: #435796;
   --color-on-primary: #ffffff;
   --color-warning: #b97828;
   --color-warning-subtle: rgba(185, 120, 40, 0.12);
@@ -273,7 +275,7 @@
   --color-category-sand: #7b633c;
   --color-category-rose: #80566a;
   --color-category-slate: #626e76;
-  --theme-ambient-brand: #76583e;
+  --theme-ambient-brand: #4f63a6;
   --theme-ambient-warm: #946a3d;
   --theme-ambient-cool: #5e7e83;
   --theme-ambient-focus: #777c58;

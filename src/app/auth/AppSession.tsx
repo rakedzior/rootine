@@ -25,7 +25,7 @@ type AppSessionContextValue = {
 
 const AppSessionContext = createContext<AppSessionContextValue | null>(null);
 
-const qaAuthBypassEnabled = import.meta.env.DEV
+const qaAuthBypassEnabled = (import.meta.env.DEV || import.meta.env.MODE === "e2e")
   && import.meta.env.VITE_ROOTINE_QA_AUTH === "1";
 const TEST_ACCOUNT_QUERY_KEY = "konto";
 const TEST_ACCOUNT_QUERY_VALUE = "testowe";

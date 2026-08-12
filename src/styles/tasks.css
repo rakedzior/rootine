@@ -2205,11 +2205,28 @@ input.task-entry-input:focus-visible {
 
 .task-entry__tag button {
   display: flex;
+  width: 0;
+  overflow: hidden;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
+  opacity: 0;
+  transition: width var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out);
+}
+
+.task-entry__tag:hover button,
+.task-entry__tag:focus-within button {
+  width: 13px;
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .task-entry__tag button {
+    width: 13px;
+    opacity: 1;
+  }
 }
 
 .task-entry__input {

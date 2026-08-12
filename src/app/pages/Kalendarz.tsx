@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   ChevronLeft, ChevronRight,
-  CalendarDays, List, Plus, Printer, RotateCcw, Trash2, X,
+  CalendarDays, Check, List, Plus, Printer, RotateCcw, Trash2, X,
 } from "lucide-react";
 import { TaskDetail } from "./tasks/TaskViews";
 import {
@@ -91,6 +91,7 @@ const MONTHS = [
 const WEEKDAYS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
 
 type CalendarEvent = Task & { calendarDate: string };
+type CalendarMode = "full" | "compact" | "narrow";
 type CalendarPriority = NonNullable<Task["priority"]>;
 type CalendarFilter =
   | { kind: "all" }
@@ -103,6 +104,25 @@ const CALENDAR_PRIORITIES: Array<{ id: CalendarPriority; label: string }> = [
   { id: "medium", label: "Średni" },
   { id: "low", label: "Niski" },
 ];
+
+function getCalendarMode(width: number): CalendarMode {
+  if (width >= 1160) return "full";
+  if (width >= 760) return "compact";
+  return "narrow";
+}
+
+function calendarPriorityClass(event: CalendarOccurrence) {
+  if (event.kind !== "task") return "is-default";
+  if (event.task.priority === "high") return "is-high";
+  if (event.task.priority === "medium") return "is-medium";
+  return "is-low";
+}
+
+function calendarPriorityColor(priority: Task["priority"]) {
+  if (priority === "high") return uiColors.danger;
+  if (priority === "medium") return uiColors.warning;
+  return uiColors.primaryText;
+}
 
 function calendarFilterKey(filter: CalendarFilter) {
   return filter.kind === "all" ? "all" : `${filter.kind}:${filter.id}`;
@@ -154,6 +174,17 @@ function formatTaskDate(calendarDate: string) {
   return parsed.toLocaleDateString("pl-PL", { weekday: "short", day: "numeric", month: "short" });
 }
 
+function formatCalendarDayTitle(calendarDate: string) {
+  const parsed = new Date(`${calendarDate}T12:00:00`);
+  return parsed.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function formatCalendarOccurrenceCount(count: number) {
+  if (count === 1) return "1 zadanie";
+  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return `${count} zadania`;
+  return `${count} zadań`;
+}
+
 function shiftCalendarDate(calendarDate: string, amount: number) {
   const parsed = new Date(`${calendarDate}T12:00:00`);
   parsed.setDate(parsed.getDate() + amount);
@@ -175,8 +206,9 @@ const currencyFormatter = new Intl.NumberFormat("pl-PL", {
   maximumFractionDigits: 2,
 });
 
-function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onDragStart, onDragEnd }: {
+function CalendarEventBar({ event, mode, dragging, onClick, onToggle, onMoveByDay, onDragStart, onDragEnd }: {
   event: CalendarOccurrence;
+  mode: CalendarMode;
   dragging: boolean;
   onClick: (trigger: HTMLButtonElement) => void;
   onToggle?: () => void;
@@ -184,6 +216,16 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
 }) {
+  if (mode !== "full") {
+    return (
+      <span
+        className={`calendar-event calendar-event--dot ${calendarPriorityClass(event)}`}
+        aria-hidden="true"
+        title={`${event.title || "Wpis bez nazwy"}${event.time ? ` · ${event.time}` : ""}`}
+      />
+    );
+  }
+
   const task = event.kind === "task" ? event.task : null;
   const virtual = task?.occurrence.virtual ?? false;
   const draggable = Boolean(task && !virtual);
@@ -239,6 +281,89 @@ function CalendarEventBar({ event, dragging, onClick, onToggle, onMoveByDay, onD
   );
 }
 
+function CalendarDayPanel({
+  calendarDate,
+  events,
+  mode,
+  onClose,
+  onAddTask,
+  onSelectEvent,
+  onToggle,
+}: {
+  calendarDate: string;
+  events: CalendarOccurrence[];
+  mode: CalendarMode;
+  onClose: () => void;
+  onAddTask: () => void;
+  onSelectEvent: (event: CalendarOccurrence, trigger: HTMLElement) => void;
+  onToggle: (occurrence: TaskOccurrence) => void;
+}) {
+  const headingId = `calendar-day-panel-${calendarDate}`;
+  return (
+    <aside className={`calendar-day-panel calendar-day-panel--${mode}`} aria-labelledby={headingId}>
+      <header className="calendar-day-panel__header">
+        <div className="calendar-day-panel__heading">
+          <h2 id={headingId}>{formatCalendarDayTitle(calendarDate)}</h2>
+          <p>{formatCalendarOccurrenceCount(events.length)}</p>
+        </div>
+        <Button variant="ghost" size="sm" iconOnly aria-label="Zamknij listę dnia" onClick={onClose}>
+          <X size={13} />
+        </Button>
+      </header>
+
+      {events.length > 0 ? (
+        <div className="calendar-day-panel__list" role="list">
+          {events.map((event) => {
+            const task = event.kind === "task" ? event.task : null;
+            return (
+              <div key={event.key} className="calendar-day-panel__row" role="listitem">
+                {task ? (
+                  <button
+                    type="button"
+                    aria-label={event.status.completed ? "Oznacz jako niewykonane" : "Oznacz jako wykonane"}
+                    className={`task-checkbox calendar-day-panel__checkbox ${event.status.completed ? "is-checked" : ""}`}
+                    style={{ "--task-checkbox-color": calendarPriorityColor(task.priority) } as React.CSSProperties}
+                    onClick={() => onToggle(task)}
+                  >
+                    {event.status.completed && <Check size={9} strokeWidth={2.5} />}
+                  </button>
+                ) : (
+                  <span className={`calendar-day-panel__source-dot ${calendarPriorityClass(event)}`} aria-hidden="true" />
+                )}
+                <button
+                  type="button"
+                  className="calendar-day-panel__task"
+                  onClick={(clickEvent) => onSelectEvent(event, clickEvent.currentTarget)}
+                  aria-label={`Otwórz szczegóły: ${event.title || "bez nazwy"}`}
+                >
+                  <span className="calendar-day-panel__task-title">{event.title || "Wpis bez nazwy"}</span>
+                  {event.source.kind !== "task" && <span className="calendar-day-panel__task-meta">{event.source.label}</span>}
+                </button>
+                {event.time && <time className="calendar-day-panel__time">{event.time}</time>}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="calendar-day-panel__empty">
+          <p>Brak zadań w tym dniu.</p>
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} strokeWidth={1.7} />} onClick={onAddTask}>
+            Dodaj zadanie
+          </Button>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <footer className="calendar-day-panel__footer">
+          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} strokeWidth={1.7} />} onClick={onAddTask}>
+            Dodaj zadanie
+          </Button>
+        </footer>
+      )}
+    </aside>
+  );
+}
+
 export default function Kalendarz() {
   const now = new Date();
   const [initialWorkspace] = useState(loadTaskWorkspace);
@@ -274,6 +399,8 @@ export default function Kalendarz() {
   const [agendaDateKey, setAgendaDateKey] = useState<string | null>(null);
   const [agendaPosition, setAgendaPosition] = useState({ left: 8, top: 8 });
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
+  const [calendarWidth, setCalendarWidth] = useState<number | null>(null);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   useEffect(() => {
     writeModuleMemoryValue(
@@ -284,6 +411,7 @@ export default function Kalendarz() {
   }, [viewDate]);
   const [trashedTask, setTrashedTask] = useState<CalendarEvent | null>(null);
   const calendarRootRef = useRef<HTMLDivElement>(null);
+  const calendarViewMonthRef = useRef(`${viewDate.getFullYear()}-${viewDate.getMonth()}`);
   const detailRef = useRef<HTMLDivElement>(null);
   const agendaMenuRef = useRef<HTMLDivElement>(null);
   const agendaTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -295,6 +423,22 @@ export default function Kalendarz() {
   const [storageFailed, setStorageFailed] = useState(false);
   const [focusedDateKey, setFocusedDateKey] = useState(todayKey);
   const sidebarTasks = workspaceRef.current.tasks;
+  const calendarMode: CalendarMode = calendarWidth === null ? "full" : getCalendarMode(calendarWidth);
+  const visibleEventLimit = 3;
+  const hideCalendarTime = calendarMode !== "full";
+
+  useLayoutEffect(() => {
+    const root = calendarRootRef.current;
+    if (!root || typeof ResizeObserver === "undefined") return undefined;
+    const update = () => {
+      const width = root.getBoundingClientRect().width;
+      if (width > 0) setCalendarWidth(width);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     saveTasksViewMode("calendar");
@@ -426,6 +570,7 @@ export default function Kalendarz() {
     visibleOccurrences.forEach((event) => grouped.set(event.calendarDate, [...(grouped.get(event.calendarDate) ?? []), event]));
     return grouped;
   }, [visibleOccurrences]);
+  const selectedDayOccurrences = selectedCalendarDate ? eventsByDate.get(selectedCalendarDate) ?? [] : [];
   const selectedTask = selectedId === null ? null : events.find((event) => event.id === selectedId && !event.deleted) ?? null;
   const selectedExternalOccurrence = selectedExternalKey === null
     ? null
@@ -473,6 +618,18 @@ export default function Kalendarz() {
     const next = cells.find((cell) => dateKey(cell.year, cell.month, cell.day) === today) ?? cells[0];
     if (next) setFocusedDateKey(dateKey(next.year, next.month, next.day));
   }, [cells, focusedDateKey]);
+
+  useEffect(() => {
+    const currentViewMonth = `${viewDate.getFullYear()}-${viewDate.getMonth()}`;
+    const previousViewMonth = calendarViewMonthRef.current;
+    calendarViewMonthRef.current = currentViewMonth;
+    if (!selectedCalendarDate || previousViewMonth === currentViewMonth) return;
+    const parsed = new Date(`${selectedCalendarDate}T12:00:00`);
+    if (Number.isNaN(parsed.getTime())) return;
+    const day = Math.min(parsed.getDate(), new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate());
+    const nextDate = dateKey(viewDate.getFullYear(), viewDate.getMonth(), day);
+    if (nextDate !== selectedCalendarDate) setSelectedCalendarDate(nextDate);
+  }, [selectedCalendarDate, viewDate]);
 
   useLayoutEffect(() => {
     const pending = pendingKeyboardMoveRef.current;
@@ -819,6 +976,16 @@ export default function Kalendarz() {
     setSelectedId(event.id);
     setSelectedOccurrenceDate(null);
   };
+  const selectCalendarDate = (calendarDate: string) => {
+    setFocusedDateKey(calendarDate);
+    setAgendaDateKey(null);
+    closeTaskDetail(false);
+    setSelectedCalendarDate((current) => calendarMode === "compact" && current === calendarDate ? null : calendarDate);
+  };
+  const activateCalendarDate = (calendarDate: string) => {
+    if (calendarMode === "full") createDraft(calendarDate);
+    else selectCalendarDate(calendarDate);
+  };
 
   return (
     <ModuleShell
@@ -959,7 +1126,7 @@ export default function Kalendarz() {
             />}
           actions={<>
           {openUndatedCount > 0 && (
-            <Button variant="quiet" size="sm" onClick={() => openTaskView("bezterminu")}>
+            <Button className="calendar-undated-button" variant="quiet" size="sm" onClick={() => openTaskView("bezterminu")}>
               Bez terminu · {openUndatedCount}
             </Button>
           )}
@@ -987,7 +1154,7 @@ export default function Kalendarz() {
                 );
               })}
             </div>
-            <Button size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={16} strokeWidth={1.5} /></Button>
+            <Button className="calendar-print-button" size="sm" variant="ghost" iconOnly aria-label="Drukuj kalendarz" onClick={() => window.print()}><Printer size={16} strokeWidth={1.5} /></Button>
             <div className="ui-view-switch" role="group" aria-label="Sposób wyświetlania zadań">
               <Button
                 variant="ghost"
@@ -1037,8 +1204,8 @@ export default function Kalendarz() {
 
         {/* A <div> rather than <section>: ARIA does not allow role="grid" on a sectioning
             element, and the grid already carries its own accessible name. */}
+        <div ref={calendarRootRef} className={`calendar-workspace calendar-workspace--${calendarMode}`}>
         <div
-          ref={calendarRootRef}
           role="grid"
           aria-label={`Kalendarz: ${formatHeaderDate(viewDate)}`}
           aria-colcount={7}
@@ -1063,16 +1230,16 @@ export default function Kalendarz() {
               role="gridcell"
               tabIndex={focusedDateKey === key ? 0 : -1}
               aria-colindex={(cellIndex % 7) + 1}
-              aria-label={`${cell.day} ${MONTHS[cell.month]} ${cell.year}. Enter, aby dodać zadanie.`}
+              aria-label={`${cell.day} ${MONTHS[cell.month]} ${cell.year}. ${dayEvents.length > 0 ? `${formatCalendarOccurrenceCount(dayEvents.length)}: ${dayEvents.map((event) => event.title || "wpis bez nazwy").join(", ")}. ` : ""}Enter, aby ${calendarMode === "full" ? "dodać zadanie" : "wybrać dzień"}.`}
               data-calendar-cell={key}
-              className={`calendar-cell${isToday ? " is-today" : ""}${dragOverDateKey === key ? " is-drop-target" : ""}`}
+              className={`calendar-cell${isToday ? " is-today" : ""}${selectedCalendarDate === key ? " is-selected" : ""}${dragOverDateKey === key ? " is-drop-target" : ""}`}
               onFocus={() => setFocusedDateKey(key)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   if (event.target !== event.currentTarget) return;
                   event.preventDefault();
                   if (selectedTask || selectedExternalOccurrence) closeTaskDetail();
-                  else createDraft(key);
+                  else activateCalendarDate(key);
                   return;
                 }
                 handleCellKeyDown(event, cellIndex, key);
@@ -1082,7 +1249,7 @@ export default function Kalendarz() {
                   suppressCellClickRef.current = false;
                   return;
                 }
-                createDraft(key);
+                activateCalendarDate(key);
               }}
               onDragOver={(event) => {
                 if (draggedId === null) return;
@@ -1111,10 +1278,11 @@ export default function Kalendarz() {
                 <span className={`calendar-cell__date${isToday ? " is-today" : ""}${cell.current ? "" : " is-outside"}`}>{cell.day}</span>
               </div>
               <div className="calendar-cell__events">
-                {dayEvents.slice(0, 3).map((event) => (
+                {dayEvents.slice(0, visibleEventLimit).map((event) => (
                   <CalendarEventBar
                     key={event.key}
                     event={event}
+                    mode={calendarMode}
                     dragging={event.kind === "task" && draggedId === event.task.id}
                     onClick={(trigger) => selectEvent(event, trigger)}
                     onToggle={event.kind === "task" ? () => toggleOccurrence(event.task) : undefined}
@@ -1135,13 +1303,13 @@ export default function Kalendarz() {
                       : undefined}
                   />
                 ))}
-                {dayEvents.length > 3 && (
+                {dayEvents.length > visibleEventLimit && (
                   <>
                     <button
                       id={`calendar-overflow-trigger-${key}`}
                       type="button"
                       className="calendar-overflow-trigger"
-                      aria-label={`Pokaż pozostałe wpisy z ${cell.day} ${MONTHS[cell.month]}: ${dayEvents.length - 3}`}
+                      aria-label={`Pokaż pozostałe wpisy z ${cell.day} ${MONTHS[cell.month]}: ${dayEvents.length - visibleEventLimit}`}
                       aria-haspopup="menu"
                       aria-expanded={agendaDateKey === key}
                       aria-controls={agendaDateKey === key ? `calendar-agenda-${key}` : undefined}
@@ -1155,13 +1323,13 @@ export default function Kalendarz() {
                         setAgendaDateKey(key);
                       }}
                     >
-                      +{dayEvents.length - 3} więcej
+                      +{dayEvents.length - visibleEventLimit} więcej
                     </button>
                     {agendaDateKey === key && (
                       <Menu
                         ref={agendaMenuRef}
                         id={`calendar-agenda-${key}`}
-                        className="calendar-agenda"
+                        className={`calendar-agenda${hideCalendarTime ? " calendar-agenda--compact" : ""}`}
                         aria-labelledby={`calendar-overflow-trigger-${key}`}
                         triggerRef={agendaTriggerRef}
                         initialFocus="first"
@@ -1172,7 +1340,7 @@ export default function Kalendarz() {
                         }}
                         onClick={(menuEvent) => menuEvent.stopPropagation()}
                       >
-                        {dayEvents.slice(3).map((hiddenEvent) => {
+                        {dayEvents.slice(visibleEventLimit).map((hiddenEvent) => {
                           const task = hiddenEvent.kind === "task" ? hiddenEvent.task : null;
                           return (
                             <MenuItem
@@ -1197,9 +1365,19 @@ export default function Kalendarz() {
                                 <span className="calendar-agenda-item__title">
                                   {hiddenEvent.title || "Wpis bez nazwy"}
                                 </span>
-                                {(hiddenEvent.time || task?.occurrence.virtual || hiddenEvent.source.label) && (
+                                {(hiddenEvent.time || task?.occurrence.virtual || hiddenEvent.source.label || hiddenEvent.status.label) && (
                                   <span className="calendar-agenda-item__meta">
-                                    {[hiddenEvent.time, task?.occurrence.virtual ? "Cykliczne" : null, hiddenEvent.source.label, hiddenEvent.status.label].filter(Boolean).join(" · ")}
+                                    {[
+                                      hiddenEvent.time ? { key: "time", label: hiddenEvent.time, className: "calendar-agenda-item__time" } : null,
+                                      task?.occurrence.virtual ? { key: "recurrence", label: "Cykliczne" } : null,
+                                      hiddenEvent.source.label ? { key: "source", label: hiddenEvent.source.label } : null,
+                                      hiddenEvent.status.label ? { key: "status", label: hiddenEvent.status.label } : null,
+                                    ].filter((item): item is { key: string; label: string; className?: string } => Boolean(item)).map((item, index, items) => (
+                                      <span key={item.key} className={`calendar-agenda-item__meta-part${item.className ? ` ${item.className}` : ""}`}>
+                                        {item.label}
+                                        {index < items.length - 1 && <span aria-hidden="true"> · </span>}
+                                      </span>
+                                    ))}
                                   </span>
                                 )}
                               </span>
@@ -1217,6 +1395,18 @@ export default function Kalendarz() {
           </div>
         ))}
           </div>
+        </div>
+        {selectedCalendarDate && calendarMode !== "full" && (
+          <CalendarDayPanel
+            calendarDate={selectedCalendarDate}
+            events={selectedDayOccurrences}
+            mode={calendarMode}
+            onClose={() => setSelectedCalendarDate(null)}
+            onAddTask={() => createDraft(selectedCalendarDate)}
+            onSelectEvent={selectEvent}
+            onToggle={toggleOccurrence}
+          />
+        )}
         </div>
       </ModuleMain>
 

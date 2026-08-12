@@ -311,7 +311,7 @@
 
 .app-sidebar-utility:disabled {
   cursor: wait;
-  opacity: var(--opacity-completed);
+  opacity: var(--opacity-disabled);
 }
 
 .app-sidebar-utility > svg {

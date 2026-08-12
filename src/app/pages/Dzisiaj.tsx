@@ -61,12 +61,6 @@ import { useGoalsStore } from "../goals/goalsContext";
 import type { Goal } from "../goals/goalsModel";
 import { APP_MODULE_BY_ID, type AppModuleId } from "../moduleRegistry";
 import { setActiveAreaId, useActiveAreaId, type RootineAreaId } from "../experience/activeArea";
-import {
-  LivingDay,
-  type LivingDayArea,
-  type LivingDayAreaBreakdown,
-} from "../experience/LivingDay";
-import { AnimatedPercentage } from "../experience/MotionValues";
 import { TelemetryBar, type TelemetrySegment } from "../experience/TelemetryBar";
 import {
   cycleWorkoutDate,
@@ -110,8 +104,38 @@ type ModuleSummaryProps = {
   remaining: number;
   attention?: number;
   telemetry?: TelemetrySegment[];
-  livingDayBreakdown?: LivingDayAreaBreakdown;
 };
+
+type TodayQueueItem = {
+  id: string;
+  time: string;
+  title: string;
+};
+
+function TodayProgressDonut({ value }: { value: number }) {
+  return (
+    <div
+      className="today-day-balance__donut"
+      role="img"
+      aria-label={`${value}% planu dnia ukończone`}
+    >
+      <svg viewBox="0 0 144 144" aria-hidden="true" focusable="false">
+        <circle className="today-day-balance__donut-track" cx="72" cy="72" r="55" pathLength="100" />
+        <circle
+          className="today-day-balance__donut-progress"
+          cx="72"
+          cy="72"
+          r="55"
+          pathLength="100"
+          strokeDasharray={100}
+          strokeDashoffset={100 - value}
+        />
+        <text className="today-day-balance__donut-value" x="72" y="70" textAnchor="middle">{value}%</text>
+        <text className="today-day-balance__donut-label" x="72" y="91" textAnchor="middle">ukończone</text>
+      </svg>
+    </div>
+  );
+}
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -249,12 +273,12 @@ function ModuleSummary({
         <strong>{title}</strong>
       </span>
       <span className="today-module-row__summary">
-        {message && <span className={`today-module-row__message tone-${accent}`}>{message}</span>}
+        {message && <span className="today-module-row__message">{message}</span>}
       </span>
       <span className="today-module-row__overdue-column">
         {overdueMessage && (
           <span className="today-module-row__overdue" aria-label={overdueMessage} title={overdueMessage}>
-            {overdueMessage}
+            {overdueMessage.replace(/\s+(?:zadanie|zadania|zadań|sprawa|sprawy|spraw|cel|cele|celów)\s+po terminie$/, " po terminie")}
           </span>
         )}
       </span>
@@ -262,7 +286,7 @@ function ModuleSummary({
         {telemetry?.length ? (
           <TelemetryBar
             segments={telemetry}
-            label={`Telemetryka: ${title}`}
+            label={`Stan i postęp: ${title}`}
             activeSegmentId={undefined}
             onActiveSegmentChange={(segmentId) => setActiveAreaId(segmentId ? areaId : null)}
           />
@@ -424,6 +448,31 @@ export default function Dzisiaj() {
   const workProgress = percentage(completedWorkTasksDueToday, workTasksDueToday.length);
   const workState = moduleState(workTasksForToday.length, todayWorkTasks.length);
 
+  const nextScheduledItems = useMemo<TodayQueueItem[]>(() => {
+    const personalItems = todayTasks
+      .filter((task) => !task.done && Boolean(task.time))
+      .map((task) => ({
+        id: `task-${task.id}`,
+        time: task.time!,
+        title: task.text,
+      }));
+    const workItems = workTasksForToday
+      .filter((task) => (
+        !task.completed
+        && task.dueDate === todayKey
+        && Boolean(task.linkedTask?.time)
+      ))
+      .map((task) => ({
+        id: `work-${task.id}`,
+        time: task.linkedTask!.time!,
+        title: task.title,
+      }));
+
+    return [...personalItems, ...workItems]
+      .sort((left, right) => left.time.localeCompare(right.time))
+      .slice(0, 3);
+  }, [todayKey, todayTasks, workTasksForToday]);
+
   const dailyRegularGoals = useMemo(
     () => goalsStore.goals.filter((goal) => isDailyRegularGoal(goal, todayKey)),
     [goalsStore.goals, todayKey],
@@ -560,11 +609,6 @@ export default function Dzisiaj() {
       completed: completedTodayTasks,
       remaining: taskModuleRemaining,
       attention: overdueTasks.length,
-      livingDayBreakdown: {
-        plannedToday: todayTasks.length,
-        completedToday: completedTodayTasks,
-        overdue: overdueTasks.length,
-      },
       telemetry: [
         { id: "done", label: "Wykonane", value: completedTodayTasks, max: Math.max(1, taskModuleTotal), weight: Math.max(1, completedTodayTasks), tone: "success" },
         { id: "remaining", label: "Pozostałe na dziś", value: remainingTodayTasks, max: Math.max(1, taskModuleTotal), weight: Math.max(1, remainingTodayTasks), tone: "primary" },
@@ -637,11 +681,6 @@ export default function Dzisiaj() {
       completed: completedWorkTasks,
       remaining: todayWorkTasks.length,
       attention: overdueWorkTasks.length,
-      livingDayBreakdown: {
-        plannedToday: workTasksDueToday.length,
-        completedToday: completedWorkTasksDueToday,
-        overdue: overdueWorkTasks.length,
-      },
       telemetry: [
         { id: "done", label: "Wykonane", value: completedWorkTasksDueToday, max: Math.max(1, workTasksForToday.length), weight: Math.max(1, completedWorkTasksDueToday), tone: "success" },
         { id: "remaining", label: "Pozostałe na dziś", value: remainingWorkTasksDueToday, max: Math.max(1, workTasksForToday.length), weight: Math.max(1, remainingWorkTasksDueToday), tone: "primary" },
@@ -739,67 +778,26 @@ export default function Dzisiaj() {
   const orderedModuleRows = modulePreferences.order
     .filter((moduleId) => visibleModuleIds.has(moduleId))
     .flatMap((moduleId) => moduleRows.filter((module) => module.moduleId === moduleId));
-  const activeAreaCount = new Set(
-    orderedModuleRows
-      .filter((module) => module.state === "active")
-      .map((module) => module.areaId),
-  ).size;
   const overdueAreaIds = new Set<RootineAreaId>();
   if (visibleModuleIds.has("tasks") && overdueTasks.length > 0) overdueAreaIds.add("tasks");
   if (visibleModuleIds.has("work") && overdueWorkTasks.length > 0) overdueAreaIds.add("work");
   if (visibleModuleIds.has("goals") && overdueGoals.length > 0) overdueAreaIds.add("goals");
   if (visibleModuleIds.has("affairs") && overdueAffairs.length > 0) overdueAreaIds.add("affairs");
-  const firstOverdueAreaId = orderedModuleRows.find((module) => overdueAreaIds.has(module.areaId))?.areaId;
-
-  const reviewOverdueAreas = () => {
-    if (!firstOverdueAreaId) return;
-    const target = document.querySelector<HTMLElement>(
-      `.today-module-row[data-area-id="${firstOverdueAreaId}"]`,
-    );
-    target?.focus({ preventScroll: true });
-    target?.scrollIntoView({ block: "nearest" });
-  };
 
   const dailyProgress = percentage(completedDailyItems, totalDailyItems);
-  const dayProgress = ((today.getHours() * 60) + today.getMinutes()) / (24 * 60);
-  const livingDayAreas: LivingDayArea[] = orderedModuleRows.map((module) => ({
-    id: module.areaId,
-    label: module.title,
-    to: module.to,
-    total: module.total,
-    completed: module.completed,
-    remaining: module.remaining,
-    progress: module.progress,
-    breakdown: module.livingDayBreakdown,
-    weight: Math.max(1, module.total),
-    status: module.attention
-      ? "attention"
-      : module.state === "complete"
-        ? "complete"
-        : module.state === "active"
-          ? "active"
-          : "empty",
-    valueLabel: module.livingDayBreakdown
-      ? undefined
-      : module.attention
-      ? `${module.remaining} pozostało · ${module.attention} wymaga uwagi`
-      : module.total > 0
-        ? `${module.completed} z ${module.total} wykonane`
-        : "brak aktywności dzisiaj",
-  }));
 
   return (
-    <ModuleShell
-      className="today-module"
-      pageWidth="standard"
-    >
+      <ModuleShell
+        className="today-module"
+        pageWidth="standard"
+      >
       <ModuleMain>
         <ContentHeader
           headingLevel={1}
           title="Plan dnia"
           // The date used to live in the page header; it is the only place the user reads
           // which day the balance describes, so it moves into the description rather than out.
-          description={`${formatFullDate(today)} · Dzisiejszy bilans wszystkich aktywnych obszarów`}
+          description={formatFullDate(today)}
           actions={(
             <div className="today-add-menu">
               <Button
@@ -820,11 +818,11 @@ export default function Dzisiaj() {
               className={`today-day-balance ${dayComplete ? "is-complete" : ""}`}
               aria-labelledby="today-day-balance-title"
             >
-              <div className="today-day-balance__main">
-                <div className="today-day-balance__headline">
-                  <h2 id="today-day-balance-title">
-                    {dayComplete ? "Plan dnia domknięty" : "Plan dnia w toku"}
-                  </h2>
+              <div className="today-day-balance__progress-panel">
+                <h2 id="today-day-balance-title">Postęp dnia</h2>
+                <div className="today-day-balance__remaining-value">
+                  <strong>{remainingDailyItems}</strong>
+                  <span>z {totalDailyItems} pozostało</span>
                 </div>
                 <div className="today-day-balance__progress-row">
                   <span
@@ -837,29 +835,32 @@ export default function Dzisiaj() {
                   >
                     <i style={{ transform: `scaleX(${dailyProgress / 100})` }} />
                   </span>
-                  <strong><AnimatedPercentage value={dailyProgress} /></strong>
                   <span className="today-day-balance__progress-copy">
-                    {completedDailyItems} z {totalDailyItems} wykonane
+                    {completedDailyItems} z {totalDailyItems} wykonane dzisiaj
                   </span>
-                </div>
-                <div className="today-day-balance__footer">
-                  <LayoutGrid size={16} aria-hidden="true" />
-                  <span>{counted(activeAreaCount, "obszar wymaga uwagi", "obszary wymagają uwagi", "obszarów wymaga uwagi")}</span>
                 </div>
               </div>
 
-              <div className="today-day-balance__living">
-                <LivingDay
-                  areas={livingDayAreas}
-                  dayProgress={dayProgress * 100}
-                  planProgress={dailyProgress}
-                  remaining={remainingDailyItems}
-                  activeAreaId={activeAreaId}
-                  variant="foreground"
-                  ariaLabel="Interaktywny bilans obszarów dnia"
-                  onActiveAreaChange={(areaId) => setActiveAreaId(areaId)}
-                />
+              <div className="today-day-balance__queue">
+                <h2 id="today-day-balance-queue-title">Następne w kolejce</h2>
+                {nextScheduledItems.length > 0 ? (
+                  <ol className="today-day-balance__queue-list">
+                    {nextScheduledItems.map((item) => (
+                      <li key={item.id}>
+                        <time dateTime={`T${item.time}`}>{item.time}</time>
+                        <strong>{item.title}</strong>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="today-day-balance__queue-empty">Brak zadań z wyznaczoną godziną na dziś.</p>
+                )}
+                <Link className="today-day-balance__queue-link" to={`${APP_MODULE_BY_ID.tasks.to}?widok=dzis`}>
+                  Zobacz wszystkie <ChevronRight size={13} aria-hidden="true" />
+                </Link>
               </div>
+
+              <TodayProgressDonut value={dailyProgress} />
 
               <aside className={`today-day-balance__attention ${overdueItems ? "has-overdue" : "is-clear"}`}>
                 <div className="today-day-balance__attention-eyebrow">
@@ -873,25 +874,16 @@ export default function Dzisiaj() {
                 <div className="today-day-balance__attention-head">
                   <strong>
                     {overdueItems
-                      ? counted(overdueItems, "zaległa", "zaległe", "zaległych")
+                      ? counted(overdueItems, "zadanie", "zadania", "zadań")
                       : "Brak zaległości"}
                   </strong>
                 </div>
-                {firstOverdueAreaId && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="today-day-balance__attention-action"
-                    trailingIcon={<ChevronRight size={13} aria-hidden="true" />}
-                    onClick={reviewOverdueAreas}
-                  >
-                    Przejrzyj zaległe
-                  </Button>
-                )}
                 {overdueAreaIds.size > 0 && (
                   <div className="today-day-balance__attention-footer">
                     <LayoutGrid size={16} aria-hidden="true" />
-                    <span>{counted(overdueAreaIds.size, "obszar z zaległościami", "obszary z zaległościami", "obszarów z zaległościami")}</span>
+                    <span>
+                      w {overdueAreaIds.size} {overdueAreaIds.size === 1 ? "obszarze" : "obszarach"}
+                    </span>
                   </div>
                 )}
               </aside>
@@ -900,7 +892,10 @@ export default function Dzisiaj() {
             <section className="today-module-register" aria-labelledby="today-module-register-title">
               <div className="today-module-register__header">
                 <h2 id="today-module-register-title">Obszary dnia</h2>
-                <span>{orderedModuleRows.length} obszarów</span>
+                <div className="today-module-register__meta">
+                  <span className="today-module-register__visual-label">Stan / postęp</span>
+                  <span>{orderedModuleRows.length} obszarów</span>
+                </div>
               </div>
 
               <div className="today-module-list" data-active-area={activeAreaId ?? undefined}>

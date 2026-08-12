@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -27,28 +31,61 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Lint, typecheck web and API, test, and build
         run: npm run check
 
   browser-regressions:
-    name: Browser regressions (${{ matrix.suite.name }})
+    name: Browser regressions (${{ matrix.suite.name }} ${{ matrix.suite.shard }})
     runs-on: ${{ matrix.suite.os }}
-    timeout-minutes: 35
+    timeout-minutes: 15
+    env:
+      VITE_ROOTINE_QA_AUTH: "1"
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         suite:
           - name: core
             os: windows-latest
-            command: npx playwright test --project=desktop-1440 --project=mobile-390
+            args: --project=desktop-1440 --project=mobile-390
+            shard: 1/4
+          - name: core
+            os: windows-latest
+            args: --project=desktop-1440 --project=mobile-390
+            shard: 2/4
+          - name: core
+            os: windows-latest
+            args: --project=desktop-1440 --project=mobile-390
+            shard: 3/4
+          - name: core
+            os: windows-latest
+            args: --project=desktop-1440 --project=mobile-390
+            shard: 4/4
           - name: viewport
             os: ubuntu-latest
-            command: npm run test:e2e:viewport
+            args: --grep @viewport-matrix
+            shard: 1/4
+          - name: viewport
+            os: ubuntu-latest
+            args: --grep @viewport-matrix
+            shard: 2/4
+          - name: viewport
+            os: ubuntu-latest
+            args: --grep @viewport-matrix
+            shard: 3/4
+          - name: viewport
+            os: ubuntu-latest
+            args: --grep @viewport-matrix
+            shard: 4/4
           - name: zoom
             os: ubuntu-latest
-            command: npm run test:e2e:zoom
+            args: --grep @zoom-matrix
+            shard: 1/2
+          - name: zoom
+            os: ubuntu-latest
+            args: --grep @zoom-matrix
+            shard: 2/2
 
     steps:
       - name: Check out repository
@@ -62,10 +99,13 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Build browser test bundle
+        run: npm run build:e2e
+
       - name: Run ${{ matrix.suite.name }} browser regressions
-        run: ${{ matrix.suite.command }}
+        run: npx playwright test ${{ matrix.suite.args }} --shard=${{ matrix.suite.shard }}

@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const localBrowserChannel = process.env.PLAYWRIGHT_CHANNEL === "chrome"
   ? "chrome"
   : undefined;
+const isCI = Boolean(process.env.CI);
 
 const desktopChrome = {
   ...devices["Desktop Chrome"],
@@ -45,15 +46,19 @@ const zoomMatrix = [
 
 export default defineConfig({
   testDir: "./e2e",
-  // Several matrix tests intentionally inspect many routes in one test. The
-  // GitHub runner is slower than a local machine, so keep CI from expiring
-  // those checks before their assertions can finish.
-  timeout: process.env.CI ? 60_000 : 30_000,
+  timeout: isCI ? 45_000 : 30_000,
   fullyParallel: true,
-  forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
-  workers: 4,
-  reporter: [["list"], ["html", { open: "never" }]],
+  forbidOnly: isCI,
+  maxFailures: isCI ? 1 : 0,
+  // A retry multiplied an unavailable dev server into three minute-long
+  // failures. CI now exercises a prebuilt bundle, so fail once and surface the
+  // real regression immediately.
+  retries: 0,
+  // Parallelize CI across isolated GitHub jobs. One browser per small runner
+  // avoids CPU/memory starvation that previously made the app entry chunk stop
+  // loading under four simultaneous contexts.
+  workers: isCI ? 1 : 4,
+  reporter: isCI ? "github" : [["list"], ["html", { open: "never" }]],
   globalSetup: "./playwright.global-setup.ts",
   globalTeardown: "./playwright.global-teardown.ts",
   use: {

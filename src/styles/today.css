@@ -24,6 +24,7 @@
 
 .today-content {
   display: grid;
+  min-width: 0;
   width: min(100%, calc(var(--page-width-standard) + (2 * var(--space-3xl))));
   margin-inline: auto;
   grid-template-rows: auto auto;
@@ -246,27 +247,6 @@
   color: var(--color-success-seaglass);
 }
 
-.today-day-balance__attention-action {
-  grid-row: 3;
-  justify-self: start;
-  align-self: start;
-  margin-top: 0;
-  padding: 6px var(--space-sm);
-  border: 1px solid color-mix(in srgb, var(--color-warning-ochre) 32%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-warning-ochre) 6%, transparent);
-  color: var(--color-warning-ochre);
-  font-size: var(--text-label);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-snug);
-}
-
-.today-day-balance__attention-action:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--color-warning-ochre) 48%, transparent);
-  background: var(--color-warning-soft);
-  color: var(--color-warning-ochre);
-}
-
 .today-day-balance__attention-footer {
   display: flex;
   grid-row: 4;
@@ -417,7 +397,6 @@
 .today-module-row.is-complete .today-module-row__message,
 .today-module-row.is-complete .today-module-row__arrow {
   color: var(--color-text-tertiary);
-  opacity: var(--opacity-completed);
 }
 
 .today-module-row.is-empty .today-module-row__identity > strong {
@@ -550,23 +529,6 @@
   transform: translateX(2px);
 }
 
-@media (max-width: 1180px) {
-  .today-content {
-    padding-right: var(--space-xl);
-    padding-left: var(--space-xl);
-  }
-
-  .today-module-row {
-    grid-template-columns:
-      minmax(160px, 1fr)
-      minmax(160px, 0.95fr)
-      minmax(140px, 0.8fr)
-      minmax(150px, 0.95fr)
-      16px;
-    column-gap: var(--space-lg);
-  }
-}
-
 @media ((max-width: 980px)) {
   .today-content {
     display: block;
@@ -658,34 +620,6 @@
     margin-top: 0;
   }
 
-  .today-day-balance__attention-action {
-    margin-top: 0;
-  }
-}
-
-@media (max-width: 760px) {
-  .today-day-balance__headline {
-    gap: var(--space-sm) var(--space-md);
-  }
-
-  .today-day-balance__headline h2 {
-    font-size: var(--text-display-compact);
-  }
-
-  .today-day-balance__progress-row {
-    gap: var(--space-sm);
-  }
-
-  .today-module-row {
-    grid-template-areas:
-      "identity arrow"
-      "summary overdue"
-      "visual visual";
-  }
-
-  .today-module-row__summary {
-    justify-content: flex-start;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -694,4 +628,687 @@
   .today-module-row__arrow {
     transition: none;
   }
+}
+
+/* Today redesign: the queue is the content anchor; status and attention stay secondary. */
+.today-add-menu .ui-button--primary {
+  border-color: color-mix(in srgb, var(--color-primary) 36%, transparent);
+  background: var(--color-primary-subtle);
+  box-shadow: none;
+  color: var(--color-primary-text);
+}
+
+.today-add-menu .ui-button--primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-primary) 54%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary-text);
+  transform: none;
+}
+
+.today-add-menu .ui-button--primary {
+  min-width: 149px;
+  min-height: 49px;
+  font-size: var(--text-body-emphasis);
+}
+
+.today-add-menu .ui-button--primary > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.today-day-balance {
+  min-height: 224px;
+  grid-template-areas: "queue status attention";
+  grid-template-columns: minmax(360px, 1.45fr) minmax(200px, 0.72fr) minmax(240px, 0.76fr);
+}
+
+.today-day-balance__queue {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-md);
+  padding-right: var(--space-xl);
+  border-right: 1px solid var(--color-border-subtle);
+  grid-area: queue;
+}
+
+.today-day-balance__queue h2,
+.today-day-balance__status h2 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-section);
+  font-weight: var(--weight-semibold);
+}
+
+.today-day-balance__queue-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-day-balance__queue-list li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-md);
+}
+
+.today-day-balance__queue-list time {
+  padding: 3px 0;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-data);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-day-balance__queue-list li > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.today-day-balance__queue-list strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-day-balance__queue-list small,
+.today-day-balance__queue-empty {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-meta);
+}
+
+.today-day-balance__queue-empty {
+  margin: 0;
+  max-width: 34ch;
+  line-height: var(--leading-normal);
+}
+
+.today-day-balance__queue-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: auto;
+  color: var(--color-primary-text);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+.today-day-balance__queue-link:hover {
+  color: var(--color-primary-hover);
+}
+
+.today-day-balance__status {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-md);
+  padding-inline: var(--space-xl);
+  border-right: 1px solid var(--color-border-subtle);
+  grid-area: status;
+}
+
+.today-day-balance__status-value {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.today-day-balance__status-value strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-display-compact);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.today-day-balance__status-value span {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-meta);
+}
+
+.today-day-balance__progress-row {
+  display: grid;
+  grid-template-areas: "track" "copy";
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+
+.today-day-balance__progress-copy {
+  grid-area: copy;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  text-align: left;
+}
+
+.today-day-balance__progress {
+  grid-area: track;
+}
+
+.today-day-balance__attention {
+  grid-area: attention;
+  padding-left: var(--space-xl);
+  border-left: 0;
+}
+
+.today-day-balance__attention-eyebrow {
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
+}
+
+.today-day-balance__attention-head {
+  width: fit-content;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-subtle);
+}
+
+.today-day-balance__attention-head strong {
+  font-size: var(--text-headline);
+}
+
+.today-day-balance__attention.has-overdue .today-day-balance__attention-head {
+  border-color: color-mix(in srgb, var(--color-warning) 60%, var(--color-border));
+  background: var(--color-warning-subtle);
+}
+
+.today-day-balance__attention.is-clear .today-day-balance__attention-head {
+  border-color: color-mix(in srgb, var(--color-success) 44%, var(--color-border));
+  background: var(--color-success-subtle);
+}
+
+.today-module-register__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  color: var(--color-text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-module-register__visual-label {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-variant-numeric: normal;
+  font-weight: var(--weight-medium);
+}
+
+.today-module-list {
+  overflow: clip;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+
+.today-module-row {
+  grid-template-columns: minmax(190px, 1.2fr) minmax(220px, 1.25fr) minmax(140px, 0.72fr) minmax(160px, 0.9fr) 16px;
+  padding-inline: var(--space-md);
+}
+
+.today-module-row.is-complete .today-module-row__identity > strong,
+.today-module-row.is-complete .today-module-row__message,
+.today-module-row.is-complete .today-module-row__arrow {
+  opacity: 1;
+}
+
+.today-module-row.is-complete .today-module-row__identity > strong {
+  color: var(--color-text-secondary);
+}
+
+.today-module-row.is-complete .today-module-row__message {
+  color: var(--color-success-text);
+}
+
+.today-module-row__message,
+.today-module-row__overdue {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reference layout: wide canvas, four-part hero, and individually grouped area rows. */
+.today-module .ui-page-shell {
+  max-width: var(--page-width-standard);
+  padding-top: var(--space-2xl);
+}
+
+.today-content {
+  width: min(100%, calc(var(--page-width-standard) + (2 * var(--space-3xl))));
+  margin-inline: auto;
+  padding: 22px var(--space-3xl) var(--space-3xl);
+  gap: 40px;
+}
+
+.today-day-balance {
+  min-height: 272px;
+  grid-template-areas: "progress queue donut attention";
+  grid-template-columns:
+    minmax(0, 1.18fr)
+    minmax(0, 1.42fr)
+    minmax(120px, 0.66fr)
+    minmax(180px, 0.82fr);
+  padding: 35px;
+}
+
+.today-day-balance__progress-panel {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  grid-area: progress;
+  grid-template-rows: auto auto auto;
+  gap: var(--space-md);
+  padding-right: var(--space-2xl);
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.today-day-balance__progress-panel h2,
+.today-day-balance__queue h2 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-section);
+  font-weight: var(--weight-semibold);
+}
+
+.today-day-balance__remaining-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
+.today-day-balance__remaining-value strong {
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: 48px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.today-day-balance__remaining-value span {
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-emphasis);
+}
+
+.today-day-balance__progress-panel .today-day-balance__progress-row {
+  display: grid;
+  align-content: start;
+  grid-template-areas: "track" "copy";
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  margin-top: -1px;
+}
+
+.today-day-balance__progress-panel .today-day-balance__progress {
+  max-width: 384px;
+}
+
+.today-day-balance__progress-panel .today-day-balance__progress-copy {
+  color: var(--color-text-tertiary);
+  text-align: left;
+}
+
+.today-day-balance__queue {
+  display: flex;
+  flex-direction: column;
+  grid-area: queue;
+  padding-inline: var(--space-2xl);
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.today-day-balance__queue-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-day-balance__queue-list li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
+.today-day-balance__queue-list time {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-data);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-day-balance__queue-list strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-day-balance__queue-link {
+  margin-top: auto;
+}
+
+.today-day-balance__donut {
+  display: grid;
+  width: 164px;
+  aspect-ratio: 1;
+  place-items: center;
+  align-self: center;
+  justify-self: center;
+  grid-area: donut;
+}
+
+.today-day-balance__donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.today-day-balance__donut-track,
+.today-day-balance__donut-progress {
+  fill: none;
+  stroke-width: 10;
+}
+
+.today-day-balance__donut-track {
+  stroke: var(--color-progress-track);
+}
+
+.today-day-balance__donut-progress {
+  stroke: var(--color-primary);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 72px 72px;
+  transition: stroke-dashoffset var(--motion-progress) var(--ease-out);
+}
+
+.today-day-balance__donut-value {
+  fill: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: 22px;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-day-balance__donut-label {
+  fill: var(--color-text-tertiary);
+  font-size: 10px;
+}
+
+.today-day-balance__attention {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  grid-area: attention;
+  padding-top: 39px;
+  padding-left: var(--space-2xl);
+  border-left: 0;
+  gap: 0;
+  grid-template-rows: none;
+}
+
+.today-day-balance__attention-eyebrow {
+  line-height: 18px;
+  text-transform: none;
+}
+
+.today-day-balance__attention-head {
+  display: flex;
+  width: auto;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  margin-top: 16px;
+}
+
+.today-day-balance__attention.has-overdue .today-day-balance__attention-head {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.today-day-balance__attention.has-overdue .today-day-balance__attention-head::before {
+  width: 10px;
+  height: 10px;
+  margin-right: var(--space-md);
+  border-radius: 50%;
+  background: var(--color-warning);
+  content: "";
+}
+
+.today-day-balance__attention-head strong {
+  font-size: var(--text-headline);
+}
+
+.today-day-balance__attention-footer {
+  grid-row: auto;
+  margin-top: 24px;
+}
+
+.today-module-register__header {
+  min-height: 24px;
+  margin-bottom: 18px;
+}
+
+.today-module-register__header h2 {
+  color: var(--color-text-primary);
+}
+
+.today-module-list {
+  display: grid;
+  gap: 6px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.today-module-row {
+  min-height: 70px;
+  grid-template-columns: 0.85fr 1.35fr 2.45fr 1fr 16px;
+  column-gap: var(--space-lg);
+  padding: var(--space-sm) 28px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+
+.today-module-row:is(.is-empty, .is-complete) {
+  background: var(--color-surface-1);
+}
+
+.today-module-row__icon,
+.today-module-row:is(.is-empty, .is-complete) .today-module-row__icon {
+  background: transparent;
+}
+
+.today-module-row.is-complete .today-module-row__icon,
+.today-module-row.is-complete .today-module-row__state.is-complete {
+  color: var(--color-success);
+}
+
+.today-module-row.is-complete .today-module-row__identity > strong {
+  color: var(--color-text-primary);
+}
+
+.today-module-row.is-complete .today-module-row__message {
+  color: var(--color-success-text);
+}
+
+.today-module-row__visual {
+  padding-left: 10px;
+}
+
+@media (max-width: 1180px) {
+  .today-day-balance {
+    grid-template-areas:
+      "progress queue"
+      "donut attention";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    row-gap: var(--space-xl);
+  }
+
+  .today-day-balance__progress-panel,
+  .today-day-balance__queue {
+    padding-inline: 0 var(--space-xl);
+  }
+
+  .today-day-balance__donut,
+  .today-day-balance__attention {
+    padding-left: 0;
+  }
+
+  .today-day-balance__donut {
+    justify-self: start;
+  }
+
+  .today-day-balance__attention {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .today-module-row {
+    grid-template-columns: 1fr 1.2fr 1.4fr 1fr 16px;
+  }
+
+}
+
+@media (max-width: 760px) {
+  .today-module .ui-page-shell {
+    padding-top: var(--space-xl);
+  }
+
+  .today-content {
+    padding: var(--space-lg);
+  }
+
+  .today-day-balance {
+    grid-template-areas:
+      "progress"
+      "queue"
+      "donut"
+      "attention";
+    grid-template-columns: 1fr;
+  }
+
+  .today-day-balance__progress-panel,
+  .today-day-balance__queue {
+    padding: 0 0 var(--space-lg);
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .today-day-balance__donut {
+    justify-self: center;
+  }
+
+  .today-day-balance__attention {
+    padding-top: 0;
+  }
+
+  .today-module-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-inline: var(--space-md);
+  }
+
+  .today-module-row__visual {
+    padding-left: 0;
+  }
+}
+
+/* Keep the Today screen on the shared application scale. */
+.today-add-menu .ui-button--primary {
+  min-width: 0;
+  min-height: var(--control-height-md);
+  font-size: var(--text-body);
+}
+
+.today-add-menu .ui-button--primary > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.today-module .ui-page-shell {
+  padding-top: var(--space-2xl);
+}
+
+.today-module .ui-content-header__title {
+  font-size: var(--text-page-title);
+}
+
+.today-module .ui-content-header__description {
+  font-size: var(--text-meta);
+}
+
+.today-day-balance {
+  min-height: 224px;
+  padding: var(--space-lg);
+}
+
+.today-day-balance__remaining-value strong {
+  font-size: var(--text-display-compact);
+}
+
+.today-day-balance__donut {
+  width: 132px;
+}
+
+.today-day-balance__donut-value {
+  font-size: 18px;
+}
+
+.today-day-balance__donut-label {
+  font-size: 10px;
+}
+
+.today-day-balance__attention-head strong {
+  font-size: 20px;
+}
+
+.today-module-register__header {
+  margin-bottom: var(--space-md);
+}
+
+.today-module-register__header h2,
+.today-module-register__visual-label {
+  font-size: var(--text-section);
+}
+
+.today-module-row {
+  min-height: 58px;
+  padding: var(--space-sm) var(--space-md);
+}
+
+.today-module-row__identity > strong {
+  font-size: var(--text-body-emphasis);
+}
+
+.today-module-row__message {
+  font-size: var(--text-meta);
+}
+
+.today-module-row__overdue {
+  font-size: var(--text-label);
 }

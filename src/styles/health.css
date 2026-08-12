@@ -200,7 +200,6 @@
 
 .health-entry-row.is-done {
   background: transparent;
-  opacity: var(--opacity-completed);
 }
 
 .health-entry-row.is-done .health-entry-row__copy strong {
