@@ -1,7 +1,8 @@
 {
-  "version": 2,
+  "version": 3,
   "inventory": {
-    "inlineStyleObjects": 93
+    "inlineStyleObjects": 80,
+    "registeredMigrationDebt": 0
   },
   "counts": {
     "inlineStyleObjectsWithViolations": 0,
@@ -12,9 +13,21 @@
     "rawTransition": 0,
     "rawColor": 0,
     "rawCheckbox": 0,
+    "rawSwitch": 0,
+    "rawSelect": 0,
+    "rawTextarea": 0,
+    "rawTimeInput": 0,
+    "rawPriorityIcon": 0,
     "zIndex": 0,
-    "mediaQuery": 104,
+    "mediaQuery": 102,
     "directUiImport": 0,
+    "cssLiteralRadius": 0,
+    "uiInternalOverride": 0,
+    "globalTokenOverride": 0,
+    "localControlHeight": 0,
+    "ctaIconSize": 0,
+    "ctaIconStroke": 0,
+    "legacyVisualToken": 0,
     "unregisteredMedia": 0
   },
   "inlineStylesByFile": {
@@ -22,31 +35,27 @@
     "src/app/experience/TelemetryBar.tsx": 1,
     "src/app/experience/transitions.tsx": 1,
     "src/app/goals/GoalDialogs.tsx": 2,
-    "src/app/goals/GoalWorkspaceViews.tsx": 1,
+    "src/app/goals/GoalWorkspaceViews.tsx": 3,
     "src/app/nutrition/NutritionAnalysis.tsx": 2,
     "src/app/pages/CelSzczegoly.tsx": 4,
     "src/app/pages/Dzisiaj.tsx": 2,
-    "src/app/pages/Jdg.tsx": 1,
     "src/app/pages/Kalendarz.tsx": 8,
     "src/app/pages/Odzywanie.tsx": 3,
-    "src/app/pages/Podroze.tsx": 6,
-    "src/app/pages/Praca.tsx": 5,
-    "src/app/pages/Sprawy.tsx": 1,
-    "src/app/pages/tasks/TaskSchedulePicker.tsx": 1,
-    "src/app/pages/tasks/TaskSecondaryViews.tsx": 4,
+    "src/app/pages/Praca.tsx": 6,
+    "src/app/pages/tasks/TaskSecondaryViews.tsx": 1,
     "src/app/pages/tasks/TaskSummaryReport.tsx": 11,
-    "src/app/pages/tasks/TaskViews.tsx": 13,
-    "src/app/pages/Zadania.tsx": 15,
+    "src/app/pages/tasks/TaskViews.tsx": 8,
+    "src/app/pages/Zadania.tsx": 12,
     "src/app/recovery/RecoveryCenter.tsx": 1,
     "src/app/sport/SportActiveSession.tsx": 1,
     "src/app/sport/SportInsights.tsx": 5,
     "src/app/sport/SportPlanner.tsx": 1,
-    "src/app/ui/components/DatePicker.tsx": 1,
     "src/app/ui/components/Menu.tsx": 1,
     "src/app/ui/components/Modal.tsx": 1,
     "src/app/ui/components/Select.tsx": 1,
     "src/app/ui/components/Shell.tsx": 1,
-    "src/app/work/WorkDetailPanel.tsx": 2
+    "src/app/work/WorkDetailPanel.tsx": 2,
+    "src/app/work/WorkQuickEntry.tsx": 1
   },
   "inlineStyleViolationsByFile": {}
 }

@@ -83,7 +83,7 @@ export function NutritionWeightCard({
               }}
             />
           </div>
-          <Button type="submit" variant="quiet" size="sm" disabled={disabled || !draft.weightKg}>Zapisz</Button>
+          <Button type="submit" variant="quiet" size="sm" disabled={disabled || !draft.weightKg}>Zapisz pomiar</Button>
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>Anuluj</Button>
           {error && <p role="alert">{error}</p>}
         </form>

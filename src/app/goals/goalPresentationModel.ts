@@ -42,31 +42,16 @@ import {
 } from "lucide-react";
 
 export const C = {
-  bg: uiColors.appBg,
-  subSidebar: uiColors.sidebarBg,
-  card: uiColors.surface2,
-  cardHover: uiColors.surfaceHover,
-  panel: uiColors.surface1,
-  inputBg: uiColors.surface1,
-  borderSubtle: uiColors.border,
-  borderStrong: uiColors.borderStrong,
-  textPrimary: uiColors.textPrimary,
-  textSecond: uiColors.textSecondary,
-  textMuted: uiColors.textTertiary,
-  textDisabled: uiColors.textDisabled,
-  iceBlue: uiColors.primary,
-  iceBlueText: uiColors.primaryText,
-  iceBlueBg: uiColors.primarySubtle,
-  seaGlass: uiColors.success,
+  textSecondary: uiColors.textSecondary,
+  primary: uiColors.primary,
+  primaryText: uiColors.primaryText,
+  success: uiColors.success,
   warning: uiColors.warning,
   danger: uiColors.danger,
-  progressTrack: uiColors.progressTrack,
-  progressAccent: "color-mix(in srgb, var(--color-primary) 72%, var(--color-text-secondary))",
-  blueBorder: "color-mix(in srgb, var(--color-precision-blue) 35%, transparent)",
 } as const;
 
 // Goal identity stays neutral across the workspace. Color is reserved for status and deadline meaning.
-export const GOAL_UI_ACCENT = C.iceBlue;
+export const GOAL_UI_ACCENT = C.primary;
 
 export type GoalStatus = "active" | "risk" | "paused" | "completed" | "planned" | "archived";
 export type GoalPriority = "high" | "medium" | "low";
@@ -192,29 +177,29 @@ export function toViewGoal(goal: StoredGoal, categories: GoalCategory[]): Goal {
 }
 
 export const STATUS_META: Record<GoalStatus, { label: string; color: string }> = {
-  active: { label: "Aktywny", color: C.iceBlueText },
+  active: { label: "Aktywny", color: C.primaryText },
   risk: { label: "Zagrożony", color: C.warning },
-  paused: { label: "Wstrzymany", color: C.textSecond },
-  completed: { label: "Zakończony", color: C.seaGlass },
-  planned: { label: "Zaplanowany", color: C.textSecond },
-  archived: { label: "Zarchiwizowany", color: C.textSecond },
+  paused: { label: "Wstrzymany", color: C.textSecondary },
+  completed: { label: "Zakończony", color: C.success },
+  planned: { label: "Zaplanowany", color: C.textSecondary },
+  archived: { label: "Zarchiwizowany", color: C.textSecondary },
 };
 
 export const FILTER_ITEMS: { id: FilterId; label: string; icon: LucideIcon; color?: string }[] = [
   { id: "all", label: "Wszystkie cele", icon: Target },
   { id: "risk", label: "Zagrożone", icon: AlertTriangle, color: C.warning },
-  { id: "paused", label: "Wstrzymane", icon: CirclePause, color: C.textSecond },
-  { id: "completed", label: "Zakończone", icon: CheckCircle2, color: C.seaGlass },
-  { id: "planned", label: "Zaplanowane", icon: CircleDashed, color: C.textSecond },
+  { id: "paused", label: "Wstrzymane", icon: CirclePause, color: C.textSecondary },
+  { id: "completed", label: "Zakończone", icon: CheckCircle2, color: C.success },
+  { id: "planned", label: "Zaplanowane", icon: CircleDashed, color: C.textSecondary },
 ];
 
 export function deadlineColor(goal: Goal) {
-  if (["paused", "completed", "planned", "archived"].includes(goal.status)) return C.textSecond;
+  if (["paused", "completed", "planned", "archived"].includes(goal.status)) return C.textSecondary;
   if (goal.daysLeft.includes("po terminie")) return C.danger;
   const daysRemaining = Number(goal.daysLeft.match(/^za (\d+) dni/)?.[1]);
   if (Number.isFinite(daysRemaining) && daysRemaining <= 14) return C.warning;
   if (goal.status === "risk") return C.warning;
-  return C.textSecond;
+  return C.textSecondary;
 }
 
 export const countForFilter = (id: FilterId, goals: Goal[]) => {

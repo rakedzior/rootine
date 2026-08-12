@@ -63,8 +63,8 @@ test("@shared Praca ma podzakładki i właściwości szybkiego dodawania", async
     await expect(quickEntry.getByRole("button", { name, exact: true })).toBeVisible();
   }
   await quickEntry.getByRole("button", { name: "Status: Do zrobienia", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "W trakcie", exact: true })).toBeVisible();
-  await page.getByRole("menuitem", { name: "W trakcie", exact: true }).click();
+  await expect(page.getByRole("menuitemradio", { name: "W trakcie", exact: true })).toBeVisible();
+  await page.getByRole("menuitemradio", { name: "W trakcie", exact: true }).click();
   await expect(quickEntry.getByRole("button", { name: "Status: W trakcie", exact: true })).toBeVisible();
   await quickEntry.getByRole("button", { name: /Termin zadania/ }).click();
   await expect(page.getByRole("dialog", { name: /Termin zadania/ })).toBeVisible();

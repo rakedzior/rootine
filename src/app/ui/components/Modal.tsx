@@ -46,6 +46,9 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+/** Portalled controls explicitly opt into the active modal's focus boundary. */
+const ownedOverlaySelector = ".ui-date-picker, .ui-select-menu, [data-ui-owned-overlay]";
+
 export function Modal({ title, description, eyebrow, onClose, children, footer, size = "md", width, bodyClassName = "", labelledBy, returnFocusRef }: ModalProps) {
   const generatedId = useId();
   const titleId = labelledBy ?? `${generatedId}-title`;
@@ -66,7 +69,7 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
       return dialogs.at(-1) === dialog;
     };
     const isOwnedOverlayTarget = (target: EventTarget | null) => target instanceof Element
-      && Boolean(target.closest(".ui-date-picker, .ui-select-menu"));
+      && Boolean(target.closest(ownedOverlaySelector));
     const initialFocus = dialog?.querySelector<HTMLElement>("[autofocus], [data-autofocus]")
       ?? dialog?.querySelector<HTMLElement>(".ui-modal__body input:not([type='hidden']), .ui-modal__body select, .ui-modal__body textarea, .ui-modal__body button:not([disabled])")
       ?? dialog?.querySelector<HTMLElement>("button:not([disabled])");

@@ -81,7 +81,6 @@ import {
   Button,
   ConfirmDialog,
   ContentHeader,
-  Modal,
   ModuleMain,
   ModuleShell,
   Select,
@@ -1357,7 +1356,7 @@ export default function Sport() {
             {view === "cycle" && cycleDraft && cycleDirty && (
               <>
                 <Button variant="ghost" size="sm" onClick={discardCycleChanges}>Odrzuć zmiany</Button>
-                <Button variant="quiet" size="sm" onClick={saveCycle}>Zapisz zmiany</Button>
+                <Button variant="quiet" size="sm" onClick={saveCycle}>Zapisz plan</Button>
               </>
             )}
             {headerAction}
@@ -1576,22 +1575,18 @@ export default function Sport() {
       )}
 
       {workoutDeleteState && (
-        <Modal
+        <ConfirmDialog
           eyebrow="Plan treningowy"
-          title={`Usunąć „${workoutDeleteState.workout.title}”?`}
+          title={`Usunąć trening „${workoutDeleteState.workout.title}”?`}
           description="Trening zniknie z aktywnego planu. Po zatwierdzeniu możesz od razu cofnąć tę zmianę."
-          onClose={() => setWorkoutDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setWorkoutDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmWorkoutDelete}>Usuń trening</Button>
-            </>
-          )}
+          confirmLabel="Usuń trening"
+          onCancel={() => setWorkoutDeleteState(null)}
+          onConfirm={confirmWorkoutDelete}
         >
           <p className="sport-delete-note">
             Pozostałe treningi i zapisane wyniki planu nie zostaną zmienione.
           </p>
-        </Modal>
+        </ConfirmDialog>
       )}
 
       {activeSession && requestedWorkout && (

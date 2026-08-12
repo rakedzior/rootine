@@ -29,6 +29,7 @@ import {
 } from "../../data/taskWorkspace";
 import { pluralize } from "../../formatters";
 import { uiColors, uiShadows } from "../../ui";
+import { TAXONOMY_COLORS } from "../../data/taxonomyPalette";
 
 export const C = {
   bg:           uiColors.appBg,
@@ -51,7 +52,7 @@ export const C = {
   warning:      uiColors.warning,
   danger:       uiColors.danger,
   dangerBg:     uiColors.dangerSubtle,
-  blueBorder:   "color-mix(in srgb, var(--color-precision-blue) 35%, transparent)",
+  blueBorder:   "color-mix(in srgb, var(--color-primary) 35%, transparent)",
   floatingShadow: uiShadows.floating,
 } as const;
 
@@ -113,8 +114,12 @@ export function initialTaskView() {
 }
 
 export const PALETTE = [
-  C.iceBlue, C.seaGlass, C.warning, C.danger,
-  C.textSecond, uiColors.violet,
+  TAXONOMY_COLORS.sky,
+  TAXONOMY_COLORS.teal,
+  TAXONOMY_COLORS.sand,
+  TAXONOMY_COLORS.rose,
+  TAXONOMY_COLORS.slate,
+  TAXONOMY_COLORS.violet,
 ];
 export const VISIBLE_TAG_LIMIT = 4;
 

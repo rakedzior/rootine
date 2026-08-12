@@ -150,7 +150,7 @@ export function NutritionProductField({
             type="button"
             variant="quiet"
             size="sm"
-            className="shrink-0"
+            className="nutrition-food-search__online-action"
             disabled={pending || searchedQuery === query}
             leadingIcon={pending ? <LoaderCircle size={13} className="nutrition-search-spinner" /> : undefined}
             onMouseDown={(event) => event.preventDefault()}

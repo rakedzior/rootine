@@ -1,20 +1,6 @@
 import {
-  BriefcaseBusiness,
-  CheckSquare2,
   ChevronDown,
   ChevronRight,
-  Dumbbell,
-  Footprints,
-  GlassWater,
-  NotebookPen,
-  ReceiptText,
-  Repeat2,
-  Scale,
-  ShieldCheck,
-  Target,
-  Utensils,
-  WalletCards,
-  type LucideIcon,
 } from "lucide-react";
 import {
   useEffect,
@@ -29,31 +15,14 @@ import { Button, Modal } from "../ui";
 import {
   deterministicQuickCaptureParser,
   type QuickCaptureKind,
-  type QuickCaptureResult,
 } from "./quickCapture";
-
-type CommandCenterActionId =
-  | "task"
-  | "habit"
-  | "meal"
-  | "water"
-  | "weight"
-  | "workout"
-  | "activity"
-  | "note"
-  | "goal"
-  | "affair"
-  | "work"
-  | "payment"
-  | "expense";
-
-type CommandCenterAction = {
-  id: CommandCenterActionId;
-  label: string;
-  description: string;
-  icon: LucideIcon;
-  target: string;
-};
+import {
+  COMMAND_CENTER_ACTIONS,
+  actionTarget,
+  payloadForAction,
+  type CommandCenterAction,
+  type CommandCenterActionId,
+} from "./commandCenterActions";
 
 export interface CommandCenterProps {
   open: boolean;
@@ -61,101 +30,7 @@ export interface CommandCenterProps {
   currentModuleId: AppModuleId | null | undefined;
 }
 
-const ACTIONS: readonly CommandCenterAction[] = [
-  {
-    id: "task",
-    label: "Zadanie",
-    description: "Dodaj zadanie do planu dnia.",
-    icon: CheckSquare2,
-    target: "/zadania?widok=dzis&akcja=nowe-zadanie",
-  },
-  {
-    id: "habit",
-    label: "Nawyk",
-    description: "Dodaj powtarzalny element dnia.",
-    icon: Repeat2,
-    target: "/zadania?widok=nawyki&akcja=nowy-nawyk",
-  },
-  {
-    id: "meal",
-    label: "Posiłek",
-    description: "Otwórz zapis posiłku.",
-    icon: Utensils,
-    target: "/odzywianie?akcja=dodaj-posilek",
-  },
-  {
-    id: "water",
-    label: "Woda",
-    description: "Zapisz porcję wody.",
-    icon: GlassWater,
-    target: "/odzywianie?akcja=dodaj-wode",
-  },
-  {
-    id: "weight",
-    label: "Waga",
-    description: "Otwórz formularz pomiaru wagi.",
-    icon: Scale,
-    target: "/odzywianie?akcja=dodaj-wage",
-  },
-  {
-    id: "workout",
-    label: "Trening",
-    description: "Zaplanuj lub rozpocznij trening.",
-    icon: Dumbbell,
-    target: "/sport?widok=today&akcja=dodaj-trening",
-  },
-  {
-    id: "activity",
-    label: "Aktywność",
-    description: "Dodaj aktywność poza planem.",
-    icon: Footprints,
-    target: "/sport?widok=today&akcja=dodaj-aktywnosc",
-  },
-  {
-    id: "note",
-    label: "Notatka",
-    description: "Otwórz czystą notatkę.",
-    icon: NotebookPen,
-    target: "/notatki?akcja=nowa-notatka",
-  },
-  {
-    id: "goal",
-    label: "Cel",
-    description: "Zdefiniuj nowy cel.",
-    icon: Target,
-    target: "/cele?akcja=nowy-cel",
-  },
-  {
-    id: "affair",
-    label: "Sprawa",
-    description: "Dodaj sprawę do dopilnowania.",
-    icon: ShieldCheck,
-    target: "/sprawy?widok=all&akcja=nowa-sprawa",
-  },
-  {
-    id: "work",
-    label: "Element pracy",
-    description: "Dodaj zadanie w bieżącym projekcie.",
-    icon: BriefcaseBusiness,
-    target: "/praca?akcja=nowe-zadanie",
-  },
-  {
-    id: "payment",
-    label: "Płatność",
-    description: "Dodaj termin płatności.",
-    icon: ReceiptText,
-    target: "/sprawy?widok=finances&akcja=nowa-platnosc",
-  },
-  {
-    id: "expense",
-    label: "Wydatek",
-    description: "Dodaj jednorazowy wydatek z terminem.",
-    icon: WalletCards,
-    target: "/sprawy?widok=finances&akcja=nowy-wydatek",
-  },
-] as const;
-
-const ACTION_BY_ID = new Map(ACTIONS.map((action) => [action.id, action]));
+const ACTION_BY_ID = new Map(COMMAND_CENTER_ACTIONS.map((action) => [action.id, action]));
 
 const MODULE_PRIORITY: Record<AppModuleId, readonly CommandCenterActionId[]> = {
   today: ["task", "note", "affair", "workout", "meal", "expense"],
@@ -202,6 +77,7 @@ const KIND_LABEL: Record<QuickCaptureKind, string> = {
 };
 
 const PRIORITY_LABEL = {
+  normal: "normalny priorytet",
   low: "niski priorytet",
   medium: "średni priorytet",
   high: "wysoki priorytet",
@@ -221,7 +97,7 @@ function orderActions(priority: readonly CommandCenterActionId[]) {
     .map((id) => ACTION_BY_ID.get(id))
     .filter((action): action is CommandCenterAction => Boolean(action));
   const priorityIds = new Set(priority);
-  return [...prioritized, ...ACTIONS.filter((action) => !priorityIds.has(action.id))];
+  return [...prioritized, ...COMMAND_CENTER_ACTIONS.filter((action) => !priorityIds.has(action.id))];
 }
 
 function formatPreviewDate(date: string) {
@@ -230,18 +106,6 @@ function formatPreviewDate(date: string) {
     day: "numeric",
     month: "short",
   }).format(new Date(`${date}T12:00:00`));
-}
-
-function actionTarget(action: CommandCenterAction, capture?: QuickCaptureResult) {
-  if (!capture) return action.target;
-
-  const [pathname, query = ""] = action.target.split("?");
-  const params = new URLSearchParams(query);
-  params.set("tytul", capture.title);
-  if (capture.date) params.set("data", capture.date);
-  if (capture.time) params.set("godzina", capture.time);
-  if (capture.priority) params.set("priorytet", capture.priority);
-  return `${pathname}?${params.toString()}`;
 }
 
 export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterProps) {
@@ -296,7 +160,7 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      moveActionFocus(actions.length - 1);
+      moveActionFocus(visibleActions.length - 1);
       return;
     }
     if (event.key === "Enter") {
@@ -325,12 +189,15 @@ export function CommandCenter({ open, onClose, currentModuleId }: CommandCenterP
     }
   };
 
-  const previewParts = capture
+  const previewPayload = capture && inferredAction
+    ? payloadForAction(inferredAction, capture)
+    : null;
+  const previewParts = capture && previewPayload
     ? [
         KIND_LABEL[capture.kind],
-        capture.date ? formatPreviewDate(capture.date) : null,
-        capture.time ? capture.time : null,
-        capture.priority ? PRIORITY_LABEL[capture.priority] : null,
+        previewPayload.date ? formatPreviewDate(previewPayload.date) : null,
+        previewPayload.time ? previewPayload.time : null,
+        previewPayload.priority ? PRIORITY_LABEL[previewPayload.priority] : null,
       ].filter(Boolean)
     : [];
 

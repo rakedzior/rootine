@@ -122,7 +122,7 @@ test.describe("desktop sidebar", { tag: "@desktop" }, () => {
     await expect(weekdayDialog.getByRole("button", { name: "So", exact: true })).toHaveAttribute("aria-pressed", "true");
 
     await page.getByRole("button", { name: "Priorytet nawyku", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Średni", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Średni", exact: true }).click();
     const afterPriority = await addHabitForm.boundingBox();
     expect(afterPriority?.height).toBe(before?.height);
   });

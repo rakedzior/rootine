@@ -18,7 +18,7 @@
   justify-content: space-between;
   gap: var(--space-lg);
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-primary) 2%, transparent);
 }
 
@@ -56,7 +56,7 @@
 .health-register__heading p,
 .health-category__header p {
   margin-top: var(--space-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   line-height: var(--leading-normal);
 }
@@ -75,7 +75,7 @@
 }
 
 .health-category + .health-category {
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .health-category__header {
@@ -85,7 +85,7 @@
   justify-content: space-between;
   gap: var(--space-lg);
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-1);
 }
 
@@ -107,7 +107,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: transparent;
   transition: background-color var(--motion-feedback) var(--ease-standard);
 }
@@ -158,7 +158,7 @@
 
 .health-entry-row__copy small,
 .health-entry-row__schedule small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   line-height: var(--leading-normal);
 }
@@ -203,7 +203,7 @@
 }
 
 .health-entry-row.is-done .health-entry-row__copy strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-decoration: line-through;
 }
 
@@ -220,7 +220,7 @@
 
 .health-category__completed {
   margin-top: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .health-category__completed > .ui-completed-section__toggle {
@@ -229,14 +229,14 @@
 
 .health-category__completed > .ui-completed-section__content {
   margin-top: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .health-scope-note {
   align-items: flex-start;
   gap: var(--space-sm);
   padding-inline: var(--space-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .health-scope-note svg {

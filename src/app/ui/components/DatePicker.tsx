@@ -4,6 +4,8 @@ import { CalendarDays, ChevronLeft, ChevronRight, Circle } from "lucide-react";
 import { Button } from "./Button";
 import { uiLayers } from "../tokens";
 
+export type DatePickerDensity = "compact" | "standard";
+
 export interface DatePickerProps {
   value: string;
   onChange: (value: string) => void;
@@ -20,6 +22,10 @@ export interface DatePickerProps {
   /** @deprecated Use portalLayer so layering remains semantic. */
   portalZIndex?: number;
   fieldClassName?: string;
+  /** Feature-owned class applied directly to the trigger root. */
+  triggerClassName?: string;
+  /** Controls both trigger and calendar geometry. */
+  density?: DatePickerDensity;
   /** Render the calendar as part of its parent surface instead of a trigger + floating popover. */
   inline?: boolean;
   /** Use one-letter weekday headers for dense calendar surfaces. */
@@ -112,6 +118,8 @@ export function DatePicker({
   portalLayer,
   portalZIndex,
   fieldClassName = "",
+  triggerClassName = "",
+  density = "standard",
   inline = false,
   compactWeekdays = false,
   "aria-label": ariaLabel,
@@ -277,7 +285,7 @@ export function DatePicker({
       role="dialog"
       aria-modal="false"
       aria-labelledby={`${dialogLabelId} ${monthHeadingId}`}
-      className={`ui-date-picker ${inline ? "ui-date-picker--inline" : position.above ? "ui-date-picker--above" : ""}`.trim()}
+      className={`ui-date-picker ui-date-picker--${density} ${inline ? "ui-date-picker--inline" : position.above ? "ui-date-picker--above" : ""}`.trim()}
       style={inline ? undefined : {
         left: position.left,
         top: position.top,
@@ -384,7 +392,7 @@ export function DatePicker({
   );
 
   return (
-    <div className={`${inline ? "ui-field ui-field--date-inline" : "ui-field"} ${fieldClassName}`.trim()}>
+    <div className={`${inline ? "ui-field ui-field--date-inline" : "ui-field"} ui-date-field--${density} ${fieldClassName}`.trim()}>
       {!inline && label && <label id={labelId} className="ui-field__label" htmlFor={triggerId}>{label}</label>}
       {!inline && (ariaLabel || fallbackLabel) && (
         <span id={hiddenTriggerLabelId} className="ui-sr-only">{ariaLabel ?? fallbackLabel}</span>
@@ -393,7 +401,7 @@ export function DatePicker({
         ref={triggerRef}
         id={triggerId}
         type="button"
-        className={`ui-field__control ui-date-trigger ${open ? "is-open" : ""}`.trim()}
+        className={`ui-field__control ui-date-trigger ui-date-trigger--${density} ${open ? "is-open" : ""} ${triggerClassName}`.trim()}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={dialogId}

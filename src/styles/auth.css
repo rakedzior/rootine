@@ -257,11 +257,6 @@
   gap: var(--space-lg);
 }
 
-.auth-form .ui-button svg:not(.auth-google-mark) {
-  width: 15px;
-  height: 15px;
-}
-
 .auth-password-row {
   display: flex;
   align-items: center;

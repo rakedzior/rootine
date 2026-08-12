@@ -1,8 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatePicker } from "./DatePicker";
+
+afterEach(cleanup);
 
 function ControlledDatePicker({ initial = "2026-07-28" }: { initial?: string }) {
   const [value, setValue] = useState(initial);
@@ -49,5 +51,35 @@ describe("DatePicker", () => {
     await user.click(screen.getByRole("button", { name: /Data zadania.*28 lipca 2026/i }));
     await user.click(screen.getByRole("button", { name: "30 lipca 2026" }));
     expect(onChange).toHaveBeenCalledWith("2026-07-30");
+  });
+
+  it("applies compact density to both the trigger and inline calendar", async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <DatePicker label="Termin" value="2026-07-28" density="compact" onChange={() => undefined} />,
+    );
+    const trigger = screen.getByRole("button", { name: /Termin.*28 lipca 2026/i });
+    expect(trigger).toHaveClass("ui-date-trigger--compact");
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: /Wybierz datę/i })).toHaveClass("ui-date-picker--compact");
+
+    view.unmount();
+    render(<DatePicker aria-label="Termin" value="2026-07-28" density="compact" inline onChange={() => undefined} />);
+    const inlineCalendar = screen.getByRole("dialog", { name: /Termin.*lipiec 2026/i });
+    expect(inlineCalendar).toHaveClass("ui-date-picker--compact", "ui-date-picker--inline");
+  });
+
+  it("applies a feature hook directly to the trigger root", () => {
+    render(
+      <DatePicker
+        aria-label="Termin projektu"
+        value="2026-07-28"
+        triggerClassName="work-project-date-trigger"
+        onChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Termin projektu.*28 lipca 2026/i }))
+      .toHaveClass("ui-date-trigger", "work-project-date-trigger");
   });
 });

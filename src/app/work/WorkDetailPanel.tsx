@@ -10,12 +10,10 @@ import {
   X,
 } from "lucide-react";
 import type { WorkTask, WorkTaskPriority, WorkTaskStatus, WorkWorkspace } from "../data/workWorkspace";
-import { Button, DatePicker, DetailPanel, Select, Textarea } from "../ui";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
+import { Button, DatePicker, DetailPanel, Select, Textarea, TimePicker } from "../ui";
 import {
-  PRIORITY_LABELS,
-  PRIORITY_ORDER,
   TASK_STATUS_LABELS,
-  TASK_STATUS_ORDER,
   collectTaskBranch,
   collectTaskDescendantRows,
   formatDate,
@@ -24,10 +22,12 @@ import {
   taskDepth,
   taskStatusIcon,
   taskStatusTone,
+  workTaskStatusSelectOptions,
+  workPrioritySelectOptions,
   type SaveStatus,
 } from "./workPresentation";
 
-type TaskPatch = Partial<Pick<WorkTask, "companyId" | "priority" | "dueDate" | "projectId" | "parentId">>;
+type TaskPatch = Partial<Pick<WorkTask, "companyId" | "priority" | "dueDate" | "dueTime" | "projectId" | "parentId">>;
 
 interface WorkDetailPanelProps {
   expanded: boolean;
@@ -129,9 +129,18 @@ export function WorkDetailPanel({
             onUpdateTask(task.id, { companyId: nextProject?.companyId ?? task.companyId, projectId, parentId: null });
           }} />
           <Select label="Zadanie nadrzędne" value={task.parentId ?? ""} options={parentOptions} disabled={!task.projectId} onChange={(event) => onUpdateTask(task.id, { parentId: event.target.value || null })} />
-          <Select label="Status" value={getTaskStatus(task)} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => onApplyStatus([task.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
-          <Select label="Priorytet" value={task.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => onUpdateTask(task.id, { priority: event.target.value as WorkTaskPriority })} />
-          <DatePicker label="Termin" value={task.dueDate} onChange={(value) => onUpdateTask(task.id, { dueDate: value })} />
+          <Select label="Status" value={getTaskStatus(task)} options={workTaskStatusSelectOptions()} onChange={(event) => onApplyStatus([task.id], event.target.value as WorkTaskStatus, `Status: ${TASK_STATUS_LABELS[event.target.value as WorkTaskStatus]}`)} />
+          <Select label="Priorytet" value={task.priority} options={workPrioritySelectOptions()} onChange={(event) => onUpdateTask(task.id, { priority: event.target.value as WorkTaskPriority })} />
+          <div className="work-detail-schedule">
+            <DatePicker label="Termin" value={task.dueDate} onChange={(value) => onUpdateTask(task.id, { dueDate: value, ...(!value ? { dueTime: "" } : {}) })} />
+            <TimePicker
+              label="Godzina"
+              value={task.dueTime ?? task.linkedTask?.schedule?.startTime ?? task.linkedTask?.time ?? ""}
+              options={HALF_HOUR_TIME_OPTIONS}
+              disabled={!task.dueDate}
+              onChange={(value) => onUpdateTask(task.id, { dueTime: value })}
+            />
+          </div>
           <Textarea label="Notatka" className="work-detail-note" value={task.note ?? ""} placeholder="Krótka notatka" onChange={(event) => onUpdateNote(task.id, event.target.value)} />
         </div>
         <section className="work-detail-subtasks" aria-label="Podzadania">
@@ -142,7 +151,7 @@ export function WorkDetailPanel({
           <div className="work-detail-subtasks__progress" role="progressbar" aria-label="Postęp podzadań" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
             <span style={{ "--work-subtask-progress": progress / 100 } as CSSProperties} />
           </div>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => onAddSubtask(task.id)}>Dodaj podzadanie</Button>
+          <Button className="work-detail-subtasks__add" variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => onAddSubtask(task.id)}>Dodaj podzadanie</Button>
           <div id="work-detail-subtask-list">
             {expanded && descendantRows.length > 0 && (
               <div className="work-detail-subtask-list">

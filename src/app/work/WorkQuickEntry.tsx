@@ -1,17 +1,18 @@
-import { Building2, Flag, FolderKanban, Plus } from "lucide-react";
+import { Building2, FolderKanban, Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import type { WorkCompany, WorkProject, WorkTaskPriority, WorkTaskStatus } from "../data/workWorkspace";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import { formatShortDate } from "../formatters";
 import { TaskInlineMenu } from "../pages/PracaMenus";
 import {
   PRIORITY_LABELS,
-  PRIORITY_ORDER,
   TASK_STATUS_LABELS,
   TASK_STATUS_ORDER,
   taskStatusIcon,
   taskStatusTone,
+  workPriorityMenuOptions,
 } from "./workPresentation";
-import { Button, DatePicker } from "../ui";
+import { Button, DatePicker, PriorityIcon, QuickComposer, TimePicker } from "../ui";
 
 export type WorkQuickEntryValues = {
   companyId: string;
@@ -19,6 +20,7 @@ export type WorkQuickEntryValues = {
   status: WorkTaskStatus;
   priority: WorkTaskPriority;
   dueDate: string;
+  dueTime: string;
 };
 
 type WorkQuickEntryProps = {
@@ -44,6 +46,7 @@ export function WorkQuickEntry({
   const [status, setStatus] = useState<WorkTaskStatus>("todo");
   const [priority, setPriority] = useState<WorkTaskPriority>("none");
   const [selectedDueDate, setSelectedDueDate] = useState(dueDate);
+  const [selectedDueTime, setSelectedDueTime] = useState("");
   const normalizedTitle = title.trim();
   const availableCompanies = companies.filter((company) => !company.archived);
   const availableProjects = projects
@@ -54,6 +57,7 @@ export function WorkQuickEntry({
 
   useEffect(() => {
     setSelectedDueDate(dueDate);
+    setSelectedDueTime("");
   }, [dueDate]);
 
   const dueDateLabel = selectedDueDate === dueDate
@@ -65,8 +69,16 @@ export function WorkQuickEntry({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!normalizedTitle) return;
-    onCreate(normalizedTitle, { companyId, projectId, status, priority, dueDate: selectedDueDate });
+    onCreate(normalizedTitle, {
+      companyId,
+      projectId,
+      status,
+      priority,
+      dueDate: selectedDueDate,
+      dueTime: selectedDueDate ? selectedDueTime : "",
+    });
     setTitle("");
+    setSelectedDueTime("");
   };
 
   const selectCompany = (value: string) => {
@@ -117,26 +129,27 @@ export function WorkQuickEntry({
       selected: candidate === status,
       className: `work-inline-menu__item--${candidate}`,
     }));
-  const priorityOptions = PRIORITY_ORDER.map((candidate) => ({
-    value: candidate,
-    label: PRIORITY_LABELS[candidate],
-    leadingIcon: <Flag size={13} aria-hidden="true" />,
-    selected: candidate === priority,
-    className: `work-inline-menu__item--${candidate}`,
-  }));
+  const priorityOptions = workPriorityMenuOptions();
 
   return (
-    <form className="work-quick-entry" aria-label="Szybkie dodawanie zadania do pracy" onSubmit={submit}>
-      <button type="submit" className="work-quick-entry__lead" aria-label="Dodaj zadanie" disabled={!normalizedTitle}>
-        <Plus size={13} aria-hidden="true" />
-      </button>
-      <input
+    <QuickComposer
+      className="work-quick-entry"
+      density="compact"
+      aria-label="Szybkie dodawanie zadania do pracy"
+      onSubmit={submit}
+      leadingAction={(
+        <button type="submit" className="work-quick-entry__lead" aria-label="Dodaj zadanie" disabled={!normalizedTitle}>
+          <Plus size={13} aria-hidden="true" />
+        </button>
+      )}
+      editor={<input
+        className="work-quick-entry__input"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         aria-label="Nazwa nowego zadania w pracy"
         placeholder={`Dodaj zadanie do „${destinationLabel}”`}
-      />
-      <div className="work-quick-entry__filters" aria-label="Właściwości nowego zadania">
+      />}
+      propertyControls={<>
         <TaskInlineMenu
           value={companyId}
           ariaLabel={`Firma: ${selectedCompany?.name ?? "Bez firmy"}`}
@@ -171,18 +184,34 @@ export function WorkQuickEntry({
           options={priorityOptions}
           onChange={(value) => setPriority(value as WorkTaskPriority)}
         >
-          <Flag size={13} aria-hidden="true" />
+          <PriorityIcon level={priority} />
         </TaskInlineMenu>
-      </div>
-      <DatePicker
-        value={selectedDueDate}
-        displayValue={dueDateLabel}
-        aria-label="Termin zadania"
-        fieldClassName="work-quick-entry__date"
-        portalLayer="featurePopup"
-        onChange={setSelectedDueDate}
-      />
-      <Button variant="quiet" size="sm" type="submit" disabled={!normalizedTitle}>Dodaj</Button>
-    </form>
+      </>}
+      scheduleControl={<div className="work-quick-entry__schedule">
+        <DatePicker
+          value={selectedDueDate}
+          displayValue={dueDateLabel}
+          aria-label="Termin zadania"
+          fieldClassName="work-quick-entry__date"
+          triggerClassName="work-quick-date-trigger"
+          density="compact"
+          portalLayer="featurePopup"
+          onChange={(value) => {
+            setSelectedDueDate(value);
+            if (!value) setSelectedDueTime("");
+          }}
+        />
+        <TimePicker
+          value={selectedDueTime}
+          aria-label="Godzina zadania"
+          fieldClassName="work-quick-entry__time"
+          density="compact"
+          options={HALF_HOUR_TIME_OPTIONS}
+          disabled={!selectedDueDate}
+          onChange={setSelectedDueTime}
+        />
+      </div>}
+      submitAction={<Button variant="quiet" size="sm" type="submit" disabled={!normalizedTitle}>Dodaj zadanie</Button>}
+    />
   );
 }

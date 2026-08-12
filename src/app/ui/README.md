@@ -1,5 +1,40 @@
 # Rootine UI
 
+## Wspólne prymitywy planowania i szybkiego dodawania
+
+- `TimePicker` jest kanonicznym polskim polem czasu 24h. Zachowuje natywne `type="time"`, ręczne wpisywanie, `min`, `max`, `step`, label, hint i error. Opcjonalne `options` tworzą dostępny listbox; `optionsPresentation="inline"` służy warstwie, która już zarządza własnym portalem.
+- `AnchoredPopover` zapewnia portal, collision fallback, placement `auto | top | bottom | left | right`, click/focus outside, Escape i przywrócenie fokusu. Zawartość nadal deklaruje właściwą rolę ARIA: `menu`, `listbox` albo `dialog`.
+- `SelectOption` może mieć `leadingIcon`, `description`, `meta` i semantyczny `tone`. `Select density="compact | standard"` zastępuje lokalne wysokości; boolean `compact` pozostaje aliasem migracyjnym.
+- `PriorityIcon` jest jedyną flagą priorytetu (`none | normal | low | medium | high`). Szybkie menu i pełne `Select` używają tej samej ikony 13px, wypełnienia i semantycznego koloru.
+- `PropertyMenu` łączy ikonowy trigger właściwości z zarządzanym `menuitemradio`: ikona, ton, meta, zaznaczenie, strzałki, Home/End, Escape i restore focus.
+- `QuickComposer` jest bezdomenowym, responsywnym shellem formularza: `leadingAction`, `editor`, `propertyControls`, `scheduleControl`, `submitAction`. Przy 760px editor zajmuje pierwszy wiersz, a wszystkie akcje pozostają dostępne poniżej.
+- `DatePicker` i `Tabs` przyjmują `density="compact | standard"`. Compact obejmuje trigger oraz cały inline calendar. Feature, który potrzebuje własnej prezentacji triggera, przekazuje bezpośredni hook przez `DatePicker.triggerClassName` zamiast selektora potomnego `.ui-date-trigger`. `Menu` ma gęstości `compact=28px`, `standard=40px` i `comfortable=36px` z 44px przy `pointer: coarse`.
+- Tokeny `--component-option-height-*`, `--component-option-padding-inline-*`, `--component-scheduler-radius` i `--component-scheduler-layer-radius` są jedynym źródłem geometrii wspólnych list i schedulera.
+
+Przykład kompozycji:
+
+```tsx
+<QuickComposer
+  aria-label="Dodaj zadanie"
+  density="compact"
+  editor={<Input aria-label="Nazwa zadania" value={title} onChange={handleTitle} />}
+  propertyControls={(
+    <PropertyMenu
+      ariaLabel="Priorytet"
+      value={priority}
+      options={priorityOptions}
+      onChange={setPriority}
+    >
+      <Flag size={13} aria-hidden="true" />
+    </PropertyMenu>
+  )}
+  scheduleControl={(
+    <DatePicker aria-label="Termin" density="compact" value={date} onChange={setDate} />
+  )}
+  submitAction={<Button type="submit" size="sm">Dodaj</Button>}
+/>
+```
+
 To jest publiczna warstwa interfejsu dla wszystkich zakładek aplikacji. Importuj wyłącznie z `src/app/ui`:
 
 ```tsx
@@ -24,7 +59,9 @@ import {
   Select,
   Tabs,
   Checkbox,
+  Switch,
   ProgressBar,
+  PriorityIcon,
   Toast,
   ToastViewport,
 } from "../ui";
@@ -102,6 +139,7 @@ export function NewSection() {
 - `SectionHeader`: hierarchia nagłówka, opis, akcja oraz wariant label.
 - `EmptyState`: icon, title, description i jedna akcja.
 - `Checkbox`: natywny checkbox z rozmiarem `sm | md`, kształtem `square | round` i stanem indeterminate.
+- `Switch`: natywny checkbox z semantyką `switch`, wspólną geometrią i obsługą label/description dla ustawień binarnych.
 - `ProgressBar`: wartości ograniczone przez `min`/`max`, rozmiar `sm | md`, ton, etykieta wizualna i wartość dla czytnika ekranu; służy bounded metrics (m.in. postępowi celu), nie osi/serii wykresu.
 - `Toast`, `ToastViewport`: wspólny komunikat przejściowy z semantycznym tonem, jedną opcjonalną akcją, pauzą timera przy hoverze/fokusie oraz kontrolką zamknięcia; `danger` używa alertu, pozostałe tony statusu.
 - `ModuleShell`, `ModuleMain`: wspólna topologia modułu i chroniony główny workspace.

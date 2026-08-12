@@ -201,7 +201,7 @@ export function AuthScreen() {
                 />
                 {(error ?? auth.authError) && <p className="auth-feedback is-error" role="alert">{error ?? auth.authError}</p>}
                 <Button type="submit" variant="primary" fullWidth disabled={pending !== null}>
-                  {pending === "password" ? <><RefreshCw className="is-spinning" aria-hidden="true" />Zapisuję…</> : "Zapisz nowe hasło"}
+                  {pending === "password" ? <><RefreshCw className="is-spinning" size={13} aria-hidden="true" />Zapisuję…</> : "Zapisz nowe hasło"}
                 </Button>
               </form>
             </>
@@ -265,8 +265,8 @@ export function AuthScreen() {
 
                 <Button type="submit" variant="primary" fullWidth disabled={!auth.configured || pending !== null}>
                   {pending === "credentials"
-                    ? <><RefreshCw className="is-spinning" aria-hidden="true" />{view === "sign-in" ? "Loguję…" : "Tworzę konto…"}</>
-                    : <>{view === "sign-in" ? "Zaloguj się" : "Utwórz konto"}<ArrowRight aria-hidden="true" /></>}
+                    ? <><RefreshCw className="is-spinning" size={13} aria-hidden="true" />{view === "sign-in" ? "Loguję…" : "Tworzę konto…"}</>
+                    : <>{view === "sign-in" ? "Zaloguj się" : "Utwórz konto"}<ArrowRight size={13} aria-hidden="true" /></>}
                 </Button>
               </form>
 

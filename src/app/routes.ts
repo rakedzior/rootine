@@ -27,28 +27,49 @@ const PodrozePage = lazy(ROUTE_LOADERS["/podroze"]);
  * becoming a second routing source of truth.
  */
 export const ROUTE_LAYOUT_AUDIT = [
-  { path: "/dzisiaj", component: "DzisiajPage", width: "standard", moduleSidebar: false, h1: "route", layout: "dashboard" },
-  { path: "/zadania", component: "ZadaniaPage", width: "fluid", moduleSidebar: true, h1: "route", layout: "list + detail" },
-  { path: "/kalendarz", component: "KalendarzPage", width: "fluid", moduleSidebar: true, h1: "route", layout: "calendar" },
-  { path: "/notatki", component: "NotatkiPage", width: "standard", moduleSidebar: true, h1: "route", layout: "collection + editor" },
-  { path: "/cele", component: "CelePage", width: "standard", moduleSidebar: true, h1: "route", layout: "collection + detail" },
-  { path: "/cele/:goalId", component: "CelSzczegolyPage", width: "fluid", moduleSidebar: false, h1: "route", layout: "detail" },
-  { path: "/sport", component: "SportPage", width: "wide", moduleSidebar: true, h1: "route", layout: "planner + detail" },
-  { path: "/odzywianie", component: "OdzywianiePage", width: "wide", moduleSidebar: true, h1: "route", layout: "register + analysis" },
-  { path: "/odzywianie/posilki", component: "OdzywianiePage", width: "wide", moduleSidebar: true, h1: "route", layout: "library + editor" },
-  { path: "/odzywianie/analiza", component: "OdzywianiePage", width: "wide", moduleSidebar: true, h1: "route", layout: "analysis" },
-  { path: "/praca", component: "PracaPage", width: "wide", moduleSidebar: true, h1: "route", layout: "workspace + detail" },
-  { path: "/sprawy", component: "SprawyPage", width: "wide", moduleSidebar: true, h1: "route", layout: "overview + registers + detail" },
-  { path: "/sprawy?widok=jdg", component: "JdgWorkspace", width: "wide", moduleSidebar: true, h1: "route", layout: "monthly checklist" },
-  { path: "/podroze", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier" },
-  { path: "/podroze/:tripId", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
-  { path: "/travel/overview", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier" },
-  { path: "/travel/:tripId/:travelSection", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
-  { path: "/travel/:tripId", component: "PodrozePage", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
-  { path: "/biuro", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /praca" },
-  { path: "/finanse", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=finances" },
-  { path: "/jdg", component: "redirect", width: "—", moduleSidebar: false, h1: "—", layout: "redirect → /sprawy?widok=jdg" },
-  { path: "*", component: "RouteNotFoundState", width: "route state", moduleSidebar: false, h1: "route", layout: "error state" },
+  { path: "/", component: "redirect", moduleId: null, redirectTo: "/dzisiaj", width: "—", moduleSidebar: false, h1: "—", layout: "index redirect" },
+  { path: "/dzisiaj", component: "DzisiajPage", moduleId: "today", width: "standard", moduleSidebar: false, h1: "route", layout: "dashboard" },
+  {
+    path: "/zadania", component: "ZadaniaPage", moduleId: "tasks", width: "fluid", moduleSidebar: true, h1: "route", layout: "list + detail",
+    queryViews: ["widok=jutro", "widok=7dni", "widok=30dni", "widok=bezterminu", "widok=wszystkie", "widok=nawyki", "widok=podsumowanie", "widok=ukonczone", "widok=kosz", "zadanie=<taskId>"],
+  },
+  {
+    path: "/kalendarz", component: "KalendarzPage", moduleId: "tasks", width: "fluid", moduleSidebar: true, h1: "route", layout: "calendar",
+    queryViews: ["widok=jutro", "widok=7dni", "widok=30dni", "widok=bezterminu", "widok=wszystkie", "zadanie=<taskId>"],
+  },
+  {
+    path: "/notatki", component: "NotatkiPage", moduleId: "notes", width: "standard", moduleSidebar: true, h1: "route", layout: "collection + editor",
+    queryViews: ["widok=pinned", "widok=archive", "widok=list:<listId>", "widok=tag:<tagName>"],
+  },
+  {
+    path: "/cele", component: "CelePage", moduleId: "goals", width: "standard", moduleSidebar: true, h1: "route", layout: "collection + detail",
+    queryViews: ["widok=overview", "widok=week", "widok=all", "widok=active", "widok=ontrack", "widok=risk", "widok=paused", "widok=completed", "widok=planned", "widok=archived", "widok=category:<categoryId>", "uklad=list|grid", "sort=priority|due|progress|updated|name", "zakres=<goalId>", "cel=<goalId>"],
+  },
+  { path: "/cele/:goalId", component: "CelSzczegolyPage", moduleId: "goals", width: "fluid", moduleSidebar: false, h1: "route", layout: "detail" },
+  {
+    path: "/sport", component: "SportPage", moduleId: "sport", width: "wide", moduleSidebar: true, h1: "route", layout: "planner + detail",
+    queryViews: ["widok=cycle", "widok=templates", "widok=exercises", "widok=history", "widok=analysis", "tydzien=<number>"],
+  },
+  { path: "/odzywianie", component: "OdzywianiePage", moduleId: "nutrition", width: "wide", moduleSidebar: true, h1: "route", layout: "daily register" },
+  { path: "/odzywianie/posilki", component: "OdzywianiePage", moduleId: "nutrition", width: "wide", moduleSidebar: true, h1: "route", layout: "meal library + editor" },
+  { path: "/odzywianie/analiza", component: "OdzywianiePage", moduleId: "nutrition", width: "wide", moduleSidebar: true, h1: "route", layout: "analysis" },
+  {
+    path: "/praca", component: "PracaPage", moduleId: "work", width: "wide", moduleSidebar: true, h1: "route", layout: "workspace + detail",
+    queryViews: ["widok=jutro", "widok=week", "widok=bezterminu", "widok=active", "widok=unassigned", "widok=archive", "firma=<companyId>", "projekt=<projectId>", "q=<query>"],
+  },
+  {
+    path: "/sprawy", component: "SprawyPage", moduleId: "affairs", width: "wide", moduleSidebar: true, h1: "route", layout: "overview + agenda + registers + workspaces",
+    queryViews: ["widok=overview", "widok=today", "widok=week", "widok=all", "widok=finances", "widok=finance-one-time", "widok=finance-recurring", "widok=documents", "widok=vehicles", "widok=health", "widok=jdg"],
+  },
+  { path: "/podroze", component: "PodrozePage", moduleId: "travel", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier" },
+  { path: "/podroze/:tripId", component: "PodrozePage", moduleId: "travel", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
+  { path: "/travel/overview", component: "PodrozePage", moduleId: "travel", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier" },
+  { path: "/travel/:tripId/:travelSection", component: "PodrozePage", moduleId: "travel", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
+  { path: "/travel/:tripId", component: "PodrozePage", moduleId: "travel", width: "wide", moduleSidebar: true, h1: "route", layout: "dossier detail" },
+  { path: "/biuro", component: "redirect", moduleId: null, redirectTo: "/praca", width: "—", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
+  { path: "/finanse", component: "redirect", moduleId: null, redirectTo: "/sprawy?widok=finances", width: "—", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
+  { path: "/jdg", component: "redirect", moduleId: null, redirectTo: "/sprawy?widok=jdg", width: "—", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
+  { path: "*", component: "RouteNotFoundState", moduleId: null, width: "route state", moduleSidebar: false, h1: "route", layout: "error state" },
 ] as const;
 
 export const router = createBrowserRouter([

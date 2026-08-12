@@ -29,6 +29,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import { formatLongDate } from "../formatters";
 import { AnimatedCurrency } from "../experience/MotionValues";
 import { SensitiveValue } from "../experience/preferences";
@@ -59,6 +60,7 @@ import {
 import {
   Badge,
   Button,
+  Checkbox,
   ConfirmDialog,
   ContentHeader,
   ContextNavItem,
@@ -78,8 +80,10 @@ import {
   Toast,
   ToastViewport,
   AddToTasksButton,
+  TimePicker,
 } from "../ui";
 import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
+import { TravelDateTimeField } from "../travel/TravelDateTimeField";
 import "../../styles/travel.css";
 
 import {
@@ -836,8 +840,8 @@ export default function Podroze({
             tags: ["podroze"],
           }}
         />
-        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${task.title}`} onClick={() => openTaskEditor(task)}><Pencil size={13} /></Button>
-        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${task.title}`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={13} /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj zadanie „${task.title}”`} onClick={() => openTaskEditor(task)}><Pencil size={13} /></Button>
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń zadanie „${task.title}”`} onClick={() => setDeleteState({ kind: "task", id: task.id, label: task.title })}><Trash2 size={13} /></Button>
       </span>
     </article>
   );
@@ -863,7 +867,37 @@ export default function Podroze({
             ? `${editor.mode === "edit" ? "Edytuj" : "Nowa"} pozycja budżetu`
             : editor?.kind === "document"
               ? `${editor.mode === "edit" ? "Edytuj" : "Nowy"} dokument`
-              : `${editor?.mode === "edit" ? "Edytuj" : "Nowa"} sprawa`;
+              : `${editor?.mode === "edit" ? "Edytuj" : "Nowe"} zadanie`;
+
+  const editorCreateLabel = editor?.kind === "trip"
+    ? "Dodaj podróż"
+    : editor?.kind === "itinerary"
+      ? "Dodaj punkt planu"
+      : editor?.kind === "stay"
+        ? "Dodaj nocleg"
+        : editor?.kind === "transport"
+          ? "Dodaj transport"
+          : editor?.kind === "budget"
+            ? "Dodaj pozycję budżetu"
+            : editor?.kind === "document"
+              ? "Dodaj dokument"
+              : "Dodaj zadanie";
+
+  const editorSubmitLabel = editor?.mode === "edit"
+    ? editorCreateLabel.replace(/^Dodaj /, "Zapisz ")
+    : editorCreateLabel;
+
+  const deleteEntityLabel = deleteState?.kind === "itinerary"
+    ? "punkt planu"
+    : deleteState?.kind === "stay"
+      ? "nocleg"
+      : deleteState?.kind === "transport"
+        ? "transport"
+        : deleteState?.kind === "budget"
+          ? "pozycję budżetu"
+          : deleteState?.kind === "document"
+            ? "dokument"
+            : "zadanie";
 
   const renderTripNavigation = (trip: TravelTrip, archived = false) => {
     const expanded = selectedTrip?.id === trip.id || (!selectedTrip && nearestTrip?.id === trip.id);
@@ -1422,8 +1456,8 @@ export default function Podroze({
                                 <small>{item.location || ITINERARY_KIND_LABELS[item.kind]}{item.note ? ` · ${item.note}` : ""}</small>
                               </span>
                               <span className="travel-row-actions">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${item.title}`} onClick={() => openItineraryEditor(item)}><Pencil size={13} /></Button>
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${item.title}`} onClick={() => setDeleteState({ kind: "itinerary", id: item.id, label: item.title })}><Trash2 size={13} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj punkt planu „${item.title}”`} onClick={() => openItineraryEditor(item)}><Pencil size={13} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń punkt planu „${item.title}”`} onClick={() => setDeleteState({ kind: "itinerary", id: item.id, label: item.title })}><Trash2 size={13} /></Button>
                               </span>
                             </article>
                           ))}
@@ -1473,8 +1507,8 @@ export default function Podroze({
                             <span className="travel-reservation-money"><PrivateMoney value={stay.amount} currency={selectedTrip.baseCurrency} label={`Kwota noclegu: ${stay.name}`} /></span>
                             <Badge tone={stay.status === "paid" ? "success" : stay.status === "booked" ? "primary" : "warning"}>{RESERVATION_STATUS_LABELS[stay.status]}</Badge>
                             <span className="travel-row-actions">
-                              <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${stay.name}`} onClick={() => openStayEditor(stay)}><Pencil size={13} /></Button>
-                              <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${stay.name}`} onClick={() => setDeleteState({ kind: "stay", id: stay.id, label: stay.name })}><Trash2 size={13} /></Button>
+                              <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj nocleg „${stay.name}”`} onClick={() => openStayEditor(stay)}><Pencil size={13} /></Button>
+                              <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń nocleg „${stay.name}”`} onClick={() => setDeleteState({ kind: "stay", id: stay.id, label: stay.name })}><Trash2 size={13} /></Button>
                             </span>
                           </article>
                         ))}
@@ -1517,8 +1551,8 @@ export default function Podroze({
                               <span className="travel-reservation-money"><PrivateMoney value={transport.amount} currency={selectedTrip.baseCurrency} label={`Kwota transportu: ${transport.title}`} /></span>
                               <Badge tone={transport.status === "paid" ? "success" : transport.status === "booked" ? "primary" : "warning"}>{RESERVATION_STATUS_LABELS[transport.status]}</Badge>
                               <span className="travel-row-actions">
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${transport.title}`} onClick={() => openTransportEditor(transport)}><Pencil size={13} /></Button>
-                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${transport.title}`} onClick={() => setDeleteState({ kind: "transport", id: transport.id, label: transport.title })}><Trash2 size={13} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj transport „${transport.title}”`} onClick={() => openTransportEditor(transport)}><Pencil size={13} /></Button>
+                                <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń transport „${transport.title}”`} onClick={() => setDeleteState({ kind: "transport", id: transport.id, label: transport.title })}><Trash2 size={13} /></Button>
                               </span>
                             </article>
                           );
@@ -1561,8 +1595,8 @@ export default function Podroze({
                       <span className="travel-budget-row__value"><PrivateMoney value={line.actual} currency={selectedTrip.baseCurrency} label={`Rzeczywista kwota: ${line.label}`} /></span>
                       <span className={`travel-budget-row__value ${line.planned - line.actual < 0 ? "is-negative" : ""}`}><PrivateMoney value={line.planned - line.actual} currency={selectedTrip.baseCurrency} label={`Pozostała kwota: ${line.label}`} /></span>
                       <span className="travel-row-actions">
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${line.label}`} onClick={() => openBudgetEditor(line)}><Pencil size={13} /></Button>
-                        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${line.label}`} onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}><Trash2 size={13} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj pozycję budżetu „${line.label}”`} onClick={() => openBudgetEditor(line)}><Pencil size={13} /></Button>
+                        <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń pozycję budżetu „${line.label}”`} onClick={() => setDeleteState({ kind: "budget", id: line.id, label: line.label })}><Trash2 size={13} /></Button>
                       </span>
                     </article>
                   ))}
@@ -1621,8 +1655,8 @@ export default function Podroze({
                           <Badge tone={DOCUMENT_STATUS_TONES[document.status]}>{DOCUMENT_STATUS_LABELS[document.status]}</Badge>
                         </button>
                         <span className="travel-row-actions">
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj ${document.name}`} onClick={() => openDocumentEditor(document)}><Pencil size={13} /></Button>
-                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń ${document.name}`} onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}><Trash2 size={13} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Edytuj dokument „${document.name}”`} onClick={() => openDocumentEditor(document)}><Pencil size={13} /></Button>
+                          <Button variant="ghost" size="sm" iconOnly aria-label={`Usuń dokument „${document.name}”`} onClick={() => setDeleteState({ kind: "document", id: document.id, label: document.name })}><Trash2 size={13} /></Button>
                         </span>
                       </article>
                     ))}
@@ -1697,7 +1731,7 @@ export default function Podroze({
             <>
               <Button variant="ghost" onClick={editorDraftProtection.requestClose}>Anuluj</Button>
               <Button variant="primary" type="submit" form="travel-editor-form">
-                {editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}
+                {editorSubmitLabel}
               </Button>
             </>
           )}
@@ -1719,8 +1753,8 @@ export default function Podroze({
               <>
                 <Input label="Trasa / kierunek" placeholder="np. Tokio · Kioto · Osaka" value={draft.destination} onChange={(event) => setDraft((current) => ({ ...current, destination: event.target.value }))} />
                 <div className="travel-form__grid">
-                  <DatePicker label="Początek" value={draft.startDate} max={draft.endDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
-                  <DatePicker label="Koniec" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
+                  <DatePicker label="Data rozpoczęcia" value={draft.startDate} max={draft.endDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
+                  <DatePicker label="Data zakończenia" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
                 </div>
                 <div className="travel-form__grid">
                   <Select
@@ -1739,7 +1773,12 @@ export default function Podroze({
               <>
                 <div className="travel-form__grid">
                   <DatePicker label="Dzień" min={selectedTrip?.startDate} max={selectedTrip?.endDate} value={draft.date} onChange={(value) => setDraft((current) => ({ ...current, date: value }))} />
-                  <Input type="time" label="Godzina" value={draft.time} onChange={(event) => setDraft((current) => ({ ...current, time: event.target.value }))} />
+                  <TimePicker
+                    label="Godzina"
+                    value={draft.time}
+                    options={HALF_HOUR_TIME_OPTIONS}
+                    onChange={(value) => setDraft((current) => ({ ...current, time: value }))}
+                  />
                 </div>
                 <div className="travel-form__grid">
                   <Select
@@ -1750,10 +1789,13 @@ export default function Podroze({
                   />
                   <Input label="Miejsce" placeholder="Dzielnica, adres lub punkt" value={draft.location} onChange={(event) => setDraft((current) => ({ ...current, location: event.target.value }))} />
                 </div>
-                <label className="travel-form__check">
-                  <input type="checkbox" checked={draft.reserved} onChange={(event) => setDraft((current) => ({ ...current, reserved: event.target.checked }))} />
-                  <span><strong>Wymagana rezerwacja jest gotowa</strong><small>Bilet albo potwierdzenie zostały już zabezpieczone.</small></span>
-                </label>
+                <Checkbox
+                  className="travel-form__check"
+                  checked={draft.reserved}
+                  label="Wymagana rezerwacja jest gotowa"
+                  description="Bilet albo potwierdzenie zostały już zabezpieczone."
+                  onChange={(event) => setDraft((current) => ({ ...current, reserved: event.target.checked }))}
+                />
               </>
             )}
 
@@ -1796,8 +1838,20 @@ export default function Podroze({
                   <Input label="Dokąd" value={draft.to} onChange={(event) => setDraft((current) => ({ ...current, to: event.target.value }))} />
                 </div>
                 <div className="travel-form__grid">
-                  <Input type="datetime-local" label="Odjazd / wylot" min={selectedTrip ? `${selectedTrip.startDate}T00:00` : undefined} max={draft.arrival || (selectedTrip ? `${selectedTrip.endDate}T23:59` : undefined)} value={draft.departure} onChange={(event) => setDraft((current) => ({ ...current, departure: event.target.value }))} />
-                  <Input type="datetime-local" label="Przyjazd / przylot" min={draft.departure || (selectedTrip ? `${selectedTrip.startDate}T00:00` : undefined)} max={selectedTrip ? `${selectedTrip.endDate}T23:59` : undefined} value={draft.arrival} onChange={(event) => setDraft((current) => ({ ...current, arrival: event.target.value }))} />
+                  <TravelDateTimeField
+                    label="Odjazd / wylot"
+                    min={selectedTrip ? `${selectedTrip.startDate}T00:00` : undefined}
+                    max={draft.arrival || (selectedTrip ? `${selectedTrip.endDate}T23:59` : undefined)}
+                    value={draft.departure}
+                    onChange={(value) => setDraft((current) => ({ ...current, departure: value }))}
+                  />
+                  <TravelDateTimeField
+                    label="Przyjazd / przylot"
+                    min={draft.departure || (selectedTrip ? `${selectedTrip.startDate}T00:00` : undefined)}
+                    max={selectedTrip ? `${selectedTrip.endDate}T23:59` : undefined}
+                    value={draft.arrival}
+                    onChange={(value) => setDraft((current) => ({ ...current, arrival: value }))}
+                  />
                 </div>
                 <div className="travel-form__grid">
                   <Input label="Numer rezerwacji" value={draft.bookingRef} onChange={(event) => setDraft((current) => ({ ...current, bookingRef: event.target.value }))} />
@@ -1823,10 +1877,13 @@ export default function Podroze({
                   <Input label="Plan" inputMode="decimal" placeholder="0" value={draft.planned} onChange={(event) => setDraft((current) => ({ ...current, planned: event.target.value }))} />
                   <Input label="Rzeczywiście" inputMode="decimal" placeholder="0" value={draft.actual} onChange={(event) => setDraft((current) => ({ ...current, actual: event.target.value }))} />
                 </div>
-                <label className="travel-form__check">
-                  <input type="checkbox" checked={draft.paid} onChange={(event) => setDraft((current) => ({ ...current, paid: event.target.checked }))} />
-                  <span><strong>Wydatek opłacony</strong><small>Kwota nie pozostaje już do zapłaty.</small></span>
-                </label>
+                <Checkbox
+                  className="travel-form__check"
+                  checked={draft.paid}
+                  label="Wydatek opłacony"
+                  description="Kwota nie pozostaje już do zapłaty."
+                  onChange={(event) => setDraft((current) => ({ ...current, paid: event.target.checked }))}
+                />
               </>
             )}
 
@@ -1884,8 +1941,9 @@ export default function Podroze({
 
       {deleteState && (
         <ConfirmDialog
-          title={`Usunąć „${deleteState.label}”?`}
+          title={`Usunąć ${deleteEntityLabel} „${deleteState.label}”?`}
           description="Pozycja zniknie z lokalnego planu podróży."
+          confirmLabel={`Usuń ${deleteEntityLabel}`}
           onCancel={() => setDeleteState(null)}
           onConfirm={confirmDelete}
         >
@@ -1897,13 +1955,13 @@ export default function Podroze({
         <ConfirmDialog
           eyebrow="Podróż"
           title={tripActionState.kind === "archive"
-            ? `Archiwizować „${tripActionState.trip.name}”?`
-            : `Usunąć „${tripActionState.trip.name}”?`}
+            ? `Archiwizować podróż „${tripActionState.trip.name}”?`
+            : `Usunąć podróż „${tripActionState.trip.name}”?`}
           description={tripActionState.kind === "archive"
             ? "Podróż zniknie z listy nadchodzących. Wszystkie rezerwacje, dokumenty i zadania pozostaną zapisane."
             : "Cały dossier podróży zostanie usunięty z lokalnego obszaru. Bezpośrednio po operacji będzie dostępne Cofnij."}
           tone={tripActionState.kind === "archive" ? "primary" : "danger"}
-          confirmLabel={tripActionState.kind === "archive" ? "Archiwizuj" : "Usuń podróż"}
+          confirmLabel={tripActionState.kind === "archive" ? "Archiwizuj podróż" : "Usuń podróż"}
           onCancel={() => setTripActionState(null)}
           onConfirm={confirmTripAction}
         >

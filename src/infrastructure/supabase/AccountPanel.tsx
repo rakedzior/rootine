@@ -172,7 +172,7 @@ export function AccountPanel() {
           size="sm"
           fullWidth
           disabled={submitting}
-          leadingIcon={submitting ? <RefreshCw className="is-spinning" size={14} aria-hidden="true" /> : <LogIn size={14} aria-hidden="true" />}
+          leadingIcon={submitting ? <RefreshCw className="is-spinning" size={13} aria-hidden="true" /> : <LogIn size={13} aria-hidden="true" />}
         >
           {submitting ? "Przetwarzam…" : mode === "sign-in" ? "Zaloguj i synchronizuj" : "Utwórz konto"}
         </Button>

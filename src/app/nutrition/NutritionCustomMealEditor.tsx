@@ -217,7 +217,7 @@ export function NutritionCustomMealEditor({
         <>
           <Button variant="ghost" onClick={onClose}>Anuluj</Button>
           <Button type="submit" form="custom-meal-form" variant="primary" leadingIcon={<Save size={13} />}>
-            {meal ? "Zapisz zmiany" : "Zapisz posiłek"}
+            {meal ? "Zapisz posiłek" : "Dodaj posiłek"}
           </Button>
         </>
       )}
@@ -259,6 +259,8 @@ export function NutritionCustomMealEditor({
                     </span>
                     <span className="nutrition-ingredient-row__amount">
                       <Input
+                        fieldClassName="nutrition-ingredient-row__amount-field"
+                        className="nutrition-ingredient-row__amount-input"
                         type="number"
                         min="0.1"
                         step="0.1"
@@ -276,7 +278,7 @@ export function NutritionCustomMealEditor({
                       variant="ghost"
                       size="sm"
                       iconOnly
-                      aria-label={`Usuń składnik: ${ingredient.name}`}
+                      aria-label={`Usuń składnik „${ingredient.name}”`}
                       onClick={() => removeIngredient(ingredient.id)}
                     >
                       <Trash2 size={13} />

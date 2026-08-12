@@ -1,7 +1,4 @@
-/**
- * Runtime aliases for the CSS custom properties defined in styles/tokens.css.
- * Use these values when an existing inline style cannot yet be expressed as a class.
- */
+/** Semantic runtime references to CSS custom properties from styles/tokens.css. */
 export const uiColors = {
   appBg: "var(--color-app-bg)",
   sidebarBg: "var(--color-sidebar-bg)",
@@ -13,55 +10,27 @@ export const uiColors = {
   textTertiary: "var(--color-text-tertiary)",
   primary: "var(--color-primary)",
   primaryText: "var(--color-primary-text)",
-  primaryHover: "var(--color-primary-hover)",
   primarySubtle: "var(--color-primary-subtle)",
-  warningText: "var(--color-warning-text)",
   warningSubtle: "var(--color-warning-subtle)",
-  successText: "var(--color-success-text)",
   successSubtle: "var(--color-success-subtle)",
-  dangerText: "var(--color-danger-text)",
   dangerSubtle: "var(--color-danger-subtle)",
   progressTrack: "var(--color-progress-track)",
-  disabledBg: "var(--color-disabled-bg)",
-  precisionBlue: "var(--color-precision-blue)",
-  precisionBlueText: "var(--color-precision-blue-text)",
-  precisionBlueStrong: "var(--color-precision-blue-strong)",
-  precisionBlueSoft: "var(--color-precision-blue-soft)",
-  graphiteShell: "var(--color-graphite-shell)",
-  graphiteSidebar: "var(--color-graphite-sidebar)",
-  graphiteInput: "var(--color-graphite-input)",
-  graphiteCanvas: "var(--color-graphite-canvas)",
-  graphitePanel: "var(--color-graphite-panel)",
-  graphiteCard: "var(--color-graphite-card)",
-  graphiteHover: "var(--color-graphite-hover)",
-  borderSubtle: "var(--color-border-subtle)",
   borderStrong: "var(--color-border-strong)",
-  chalkWhite: "var(--color-chalk-white)",
   textSecondary: "var(--color-text-secondary)",
-  textMuted: "var(--color-text-muted)",
-  textDisabled: "var(--color-text-disabled)",
+  textDisabled: "var(--color-disabled-text)",
   success: "var(--color-success)",
-  successSoft: "var(--color-success-soft)",
   warning: "var(--color-warning)",
-  warningSoft: "var(--color-warning-soft)",
   danger: "var(--color-danger)",
-  dangerSoft: "var(--color-danger-soft)",
-  violet: "var(--color-accent-violet)",
-  violetSoft: "var(--color-violet-soft)",
+  violet: "var(--color-accent)",
   categorySky: "var(--color-category-sky)",
   categoryTeal: "var(--color-category-teal)",
   categorySand: "var(--color-category-sand)",
   categoryRose: "var(--color-category-rose)",
-  categorySlate: "var(--color-category-slate)",
   categoryUnlisted: "var(--color-category-unlisted)",
 } as const;
 
 export const uiShadows = {
   floating: "var(--shadow-floating)",
-  modal: "var(--shadow-modal)",
-  sm: "var(--shadow-sm)",
-  md: "var(--shadow-md)",
-  control: "var(--shadow-control)",
 } as const;
 
 export const uiLayers = {

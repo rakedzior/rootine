@@ -14,7 +14,7 @@ import {
   ProgressDialog,
   ThemedSelect,
 } from "../goals/GoalDialogs";
-import type { GoalEditorData } from "../goals/GoalDialogs";
+import type { GoalEditorData, GoalEditorInitialValues } from "../goals/GoalDialogs";
 import {
   readGoalViewState,
   writeGoalViewState,
@@ -156,7 +156,7 @@ export default function Cele() {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [goalFormId, setGoalFormId] = useState<"new" | string | null>(null);
-  const [quickGoalTitle, setQuickGoalTitle] = useState("");
+  const [goalCommandPrefill, setGoalCommandPrefill] = useState<GoalEditorInitialValues>({});
   const [progressGoalId, setProgressGoalId] = useState<string | null>(null);
   const [milestoneGoalId, setMilestoneGoalId] = useState<string | null>(null);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
@@ -194,7 +194,17 @@ export default function Cele() {
   useEffect(() => {
     if (searchParams.get("akcja") !== "nowy-cel") return;
 
-    setQuickGoalTitle(searchParams.get("tytul")?.trim() ?? "");
+    const requestedPriority = searchParams.get("priorytet");
+    const requestedDueDate = searchParams.get("data");
+    setGoalCommandPrefill({
+      title: searchParams.get("tytul")?.trim() ?? "",
+      ...(requestedDueDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDueDate)
+        ? { dueDate: requestedDueDate }
+        : {}),
+      ...(requestedPriority === "low" || requestedPriority === "medium" || requestedPriority === "high"
+        ? { priority: requestedPriority }
+        : {}),
+    });
     goalFormReturnFocusRef.current = null;
     setGoalFormId("new");
 
@@ -369,7 +379,7 @@ export default function Cele() {
       recordActivity({ moduleId: "goals", kind: "save", title: data.title, detail: "Zaktualizowano cel" });
     }
     setGoalFormId(null);
-    setQuickGoalTitle("");
+    setGoalCommandPrefill({});
   };
 
   const downloadJson = (raw: string, fileName: string) => {
@@ -474,7 +484,7 @@ export default function Cele() {
             aria-live={importNotice.tone === "danger" ? "assertive" : "polite"}
             className={`goal-import-notice ${importNotice.tone === "danger" ? "is-danger" : "is-success"}`}
           >
-            <span className="min-w-0 flex-1">{importNotice.message}</span>
+            <span className="goal-import-notice__message">{importNotice.message}</span>
             <button
               type="button"
               aria-label="Zamknij komunikat importu"
@@ -512,19 +522,19 @@ export default function Cele() {
               : importNotice
                 ? <Badge tone={importNotice.tone}>{importNotice.tone === "success" ? "Import zakończony" : "Błąd importu"}</Badge>
                 : undefined}
-          actions={<div className="flex items-center gap-2">
+          actions={<div className="goals-header-actions">
             {activeFilter === "next" && (
-              <div className="ui-view-switch goal-step-depth" aria-label="Liczba kroków pokazywanych dla każdego celu">
-                <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 1} onClick={() => setGoalStepDepth(1)}>1 krok</Button>
-                <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 2} onClick={() => setGoalStepDepth(2)}>2 kroki</Button>
-                <Button variant="ghost" size="sm" aria-pressed={goalStepDepth === 3} onClick={() => setGoalStepDepth(3)}>3 kroki</Button>
+              <div className="ui-view-switch" aria-label="Liczba kroków pokazywanych dla każdego celu">
+                <Button className="goal-step-depth__button" variant="ghost" size="sm" aria-pressed={goalStepDepth === 1} onClick={() => setGoalStepDepth(1)}>1 krok</Button>
+                <Button className="goal-step-depth__button" variant="ghost" size="sm" aria-pressed={goalStepDepth === 2} onClick={() => setGoalStepDepth(2)}>2 kroki</Button>
+                <Button className="goal-step-depth__button" variant="ghost" size="sm" aria-pressed={goalStepDepth === 3} onClick={() => setGoalStepDepth(3)}>3 kroki</Button>
               </div>
             )}
-            {!isAgendaView && <div className="relative goals-sort">
+            {!isAgendaView && <div className="goals-sort">
               <Button ref={sortMenuTriggerRef} variant="quiet" size="sm" onClick={() => setSortMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortMenuOpen} aria-controls={sortMenuId} trailingIcon={<ChevronDown size={11} />}>
-                Sortuj: <span className="goals-sort-label">{({ priority: "Priorytet", due: "Termin", progress: "Postęp", updated: "Ostatnia zmiana", name: "Nazwa" } as const)[sortKey]}</span>
+                Sortuj: {({ priority: "Priorytet", due: "Termin", progress: "Postęp", updated: "Ostatnia zmiana", name: "Nazwa" } as const)[sortKey]}
               </Button>
-              {sortMenuOpen && <Menu id={sortMenuId} triggerRef={sortMenuTriggerRef} onDismiss={() => setSortMenuOpen(false)} initialFocus="selected" layer="detail" className="absolute right-0 top-11 w-44">{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <MenuItem key={option.id} selected={sortKey === option.id} onClick={() => { setGoalSort(option.id); setSortMenuOpen(false); }} trailingIcon={sortKey === option.id ? <Check size={11} /> : undefined}>{option.label}</MenuItem>)}</Menu>}
+              {sortMenuOpen && <Menu id={sortMenuId} triggerRef={sortMenuTriggerRef} onDismiss={() => setSortMenuOpen(false)} initialFocus="selected" layer="detail" className="goals-sort-menu">{([{ id: "priority", label: "Priorytet" }, { id: "due", label: "Termin" }, { id: "progress", label: "Postęp" }, { id: "updated", label: "Ostatnia zmiana" }, { id: "name", label: "Nazwa" }] as const).map((option) => <MenuItem key={option.id} selected={sortKey === option.id} onClick={() => { setGoalSort(option.id); setSortMenuOpen(false); }} trailingIcon={sortKey === option.id ? <Check size={11} /> : undefined}>{option.label}</MenuItem>)}</Menu>}
             </div>}
             {showLayoutSwitch && <div className="ui-view-switch" aria-label="Sposób wyświetlania celów">
               <Button variant="ghost" size="sm" iconOnly onClick={() => setGoalLayout("list")} aria-label="Widok listy" aria-pressed={layout === "list"}>
@@ -534,7 +544,7 @@ export default function Cele() {
                 <Grid2X2 size={13} strokeWidth={1.8} />
               </Button>
             </div>}
-            <div className="relative">
+            <div className="goals-header-menu">
               <Button
                 ref={headerMenuTriggerRef}
                 variant="quiet"
@@ -559,14 +569,14 @@ export default function Cele() {
                   event.currentTarget.value = "";
                 }}
               />
-              {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} layer="detail" className="absolute right-0 top-12 w-48">
+              {headerMenuOpen && <Menu id={headerMenuId} triggerRef={headerMenuTriggerRef} onDismiss={() => setHeaderMenuOpen(false)} layer="detail" className="goals-header-overflow-menu">
                 <MenuItem onClick={() => importInputRef.current?.click()} leadingIcon={<Archive />}>Importuj dane</MenuItem>
                 <MenuItem onClick={exportGoals} leadingIcon={<NotebookPen />}>Eksportuj dane</MenuItem>
                 <MenuItem onClick={() => { handleFilter("archived"); setHeaderMenuOpen(false); }} leadingIcon={<Archive />}>Otwórz archiwum</MenuItem>
                 <MenuItem onClick={() => { setSettingsOpen(true); setHeaderMenuOpen(false); }} leadingIcon={<Settings2 />}>Ustawienia celów</MenuItem>
               </Menu>}
             </div>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={(event) => openGoalForm("new", event.currentTarget)} leadingIcon={<Plus size={16} strokeWidth={2} />}><span className="header-action-label">Dodaj cel</span></Button>
+            <Button className="ui-button--icon-mobile" variant="primary" onClick={(event) => openGoalForm("new", event.currentTarget)} leadingIcon={<Plus size={13} />}><span className="header-action-label">Dodaj cel</span></Button>
           </div>}
         />
 
@@ -582,11 +592,11 @@ export default function Cele() {
           />
         )}
 
-        <div className="goals-content flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="goals-content">
           {isAgendaView ? (
             agendaItems.length === 0 ? (
               <EmptyState
-                className="h-full"
+                className="goals-empty-state"
                 icon={<CircleDot size={18} strokeWidth={1.4} />}
                 title={activeFilter === "week" ? "Spokojny tydzień" : "Brak następnych kroków"}
                 description={activeFilter === "week" ? "Żaden krok celu nie ma terminu w ciągu najbliższych siedmiu dni." : "Dodaj etap do aktywnego celu albo zapisz kolejną aktualizację."}
@@ -727,11 +737,11 @@ export default function Cele() {
               </section>
             )
           ) : visibleGoals.length === 0 ? (
-            <EmptyState className="h-full" icon={<Target size={18} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo dodaj nowy cel." action={<Button variant="primary" size="sm" onClick={(event) => openGoalForm("new", event.currentTarget)} leadingIcon={<Plus size={13} />}>Dodaj cel</Button>} />
+            <EmptyState className="goals-empty-state" icon={<Target size={18} strokeWidth={1.4} />} title="Brak celów w tym widoku" description="Zmień filtr albo dodaj nowy cel." action={<Button variant="primary" size="sm" onClick={(event) => openGoalForm("new", event.currentTarget)} leadingIcon={<Plus size={13} />}>Dodaj cel</Button>} />
           ) : (
-            <div className="w-full">
+            <div className="goals-card-sections">
               {priorityGoals.length > 0 && (
-                <section className="mb-5">
+                <section className="goals-card-section">
                   <SectionHeader title="Priorytetowe" level={2} variant="label" />
                   <div className={layout === "grid" ? "goals-card-grid" : "goals-card-list"}>
                     {priorityGoals.map((goal) => (
@@ -777,7 +787,7 @@ export default function Cele() {
               )}
 
               {completedGoals.length > 0 && (
-                <CompletedSection label="Ukończone cele" count={completedGoals.length} className="goals-completed-section">
+                <CompletedSection label="Ukończone cele" count={completedGoals.length}>
                   <div className={layout === "grid" ? "goals-card-grid" : "goals-card-list"}>
                     {completedGoals.map((goal) => (
                       <GoalCard
@@ -839,12 +849,12 @@ export default function Cele() {
       {goalFormId && (
         <GoalFormDialog
           goal={goalFormId === "new" ? null : storedGoals.find((goal) => goal.id === goalFormId)}
-          initialTitle={goalFormId === "new" ? quickGoalTitle : undefined}
+          initialValues={goalFormId === "new" ? goalCommandPrefill : undefined}
           categories={categories}
           returnFocusRef={goalFormReturnFocusRef}
           onClose={() => {
             setGoalFormId(null);
-            setQuickGoalTitle("");
+            setGoalCommandPrefill({});
           }}
           onSubmit={submitGoal}
         />
@@ -872,7 +882,8 @@ export default function Cele() {
 
       {deleteGoalId && storedGoals.find((goal) => goal.id === deleteGoalId) && (
         <ConfirmDialog
-          title="Usunąć cel?"
+          title={`Usunąć cel „${storedGoals.find((goal) => goal.id === deleteGoalId)?.title}”?`}
+          confirmLabel="Usuń cel"
           onCancel={() => setDeleteGoalId(null)}
           onConfirm={() => {
             const deleted = deleteGoal(deleteGoalId);
@@ -892,7 +903,8 @@ export default function Cele() {
 
       {deleteCategoryId && categories.find((category) => category.id === deleteCategoryId) && (
         <ConfirmDialog
-          title="Usunąć kategorię?"
+          title={`Usunąć kategorię „${categories.find((category) => category.id === deleteCategoryId)?.label}”?`}
+          confirmLabel="Usuń kategorię"
           onCancel={() => setDeleteCategoryId(null)}
           onConfirm={() => { if (activeFilter === `category:${deleteCategoryId}`) handleFilter("overview"); deleteCategory(deleteCategoryId); setDeleteCategoryId(null); }}
         >
@@ -920,16 +932,16 @@ export default function Cele() {
           size="md"
           footer={(
             <>
-              <Button variant="quiet" onClick={() => setImportCandidate(null)}>Anuluj</Button>
+              <Button variant="ghost" onClick={() => setImportCandidate(null)}>Anuluj</Button>
               <Button variant="primary" onClick={confirmImport}>Pobierz kopię i importuj</Button>
             </>
           )}
         >
-          <div className="space-y-4">
+          <div className="goal-import-dialog-content">
             <p className="goal-import-copy">
               Import zastąpi obecne cele i kategorie. Tuż przed zmianą przeglądarka pobierze pełną kopię aktualnych danych celów.
             </p>
-            <dl className="grid grid-cols-2 gap-2">
+            <dl className="goal-import-stats">
               {[
                 ["Cele", importCandidate.preview.goalCount],
                 ["Aktywne cele", importCandidate.preview.activeCount],
@@ -955,10 +967,10 @@ export default function Cele() {
           size="sm"
           footer={<Button variant="primary" size="sm" onClick={() => setSettingsOpen(false)}>Gotowe</Button>}
         >
-          <div className="space-y-5">
+          <div className="goal-settings-content">
             <fieldset>
               <legend className="goal-settings-legend">Domyślny widok</legend>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="goal-settings-layout-options">
                 <button
                   type="button"
                   aria-pressed={layout === "list"}

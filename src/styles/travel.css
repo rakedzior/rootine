@@ -1,9 +1,9 @@
 .travel-sidebar {
-  background: var(--color-graphite-sidebar);
+  background: var(--color-sidebar-bg);
 }
 
 .travel-sidebar__footer {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -26,7 +26,7 @@
 .travel-sidebar__label {
   margin: 0;
   padding: 0 6px var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -44,7 +44,7 @@
   gap: var(--space-sm);
   margin-top: auto;
   padding: var(--space-md) var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .travel-toolbar {
@@ -79,7 +79,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
@@ -89,7 +89,7 @@
 
 .travel-toolbar__summary span + span {
   padding-left: var(--space-md);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .travel-toolbar__route {
@@ -120,7 +120,7 @@
   flex: 1;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .travel-toolbar__readiness > i > b {
@@ -128,7 +128,7 @@
   width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: var(--color-precision-blue);
+  background: var(--color-primary);
   transform-origin: left center;
   transition: transform var(--motion-normal) var(--ease-out);
 }
@@ -179,7 +179,7 @@
   padding: var(--space-lg) var(--space-xl);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
   color: var(--color-text-secondary);
   text-align: left;
   cursor: pointer;
@@ -188,7 +188,7 @@
 
 .travel-next-departure:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-next-departure__marker {
@@ -197,7 +197,7 @@
   height: 34px;
   place-items: center;
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
 }
 
@@ -220,7 +220,7 @@
 
 .travel-next-departure strong {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -261,7 +261,7 @@
   height: 4px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .travel-next-departure__progress > span > i,
@@ -269,11 +269,11 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--color-precision-blue);
+  background: var(--color-primary);
 }
 
 .travel-next-departure > svg {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-board {
@@ -305,7 +305,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-board__heading {
@@ -320,20 +320,20 @@
   min-width: 0;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-board__heading h2,
 .travel-panel h3,
 .travel-register h2 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .travel-board__heading > span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -349,8 +349,8 @@
 .travel-board__head {
   min-height: 34px;
   padding: 0 var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
 }
@@ -360,7 +360,7 @@
   min-height: 72px;
   padding: var(--space-md) var(--space-lg);
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);
   text-align: left;
@@ -372,7 +372,7 @@
 }
 
 .travel-board__row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-board__trip {
@@ -405,12 +405,12 @@
 }
 
 .travel-board__trip strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
 }
 
 .travel-board__row small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -419,19 +419,19 @@
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: var(--color-text-muted);
+  background: var(--color-text-tertiary);
 }
 
 .travel-board__status--planning {
-  background: var(--color-precision-blue-text);
+  background: var(--color-primary-text);
 }
 
 .travel-board__status--ready {
-  background: var(--color-success-seaglass);
+  background: var(--color-success-text);
 }
 
 .travel-board__status--idea {
-  background: var(--color-warning-ochre);
+  background: var(--color-warning-text);
 }
 
 .travel-board__progress {
@@ -468,9 +468,9 @@
 
 .travel-readiness {
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
 }
 
 .travel-readiness > header {
@@ -485,7 +485,7 @@
 .travel-readiness h2,
 .travel-section-intro h2 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-title);
   font-weight: var(--weight-semibold);
 }
@@ -493,7 +493,7 @@
 .travel-readiness p,
 .travel-section-intro p {
   margin: 4px 0 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -508,14 +508,14 @@
 .travel-readiness__track {
   height: 4px;
   overflow: hidden;
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .travel-readiness__track > span {
   display: block;
   width: 100%;
   height: 100%;
-  background: var(--color-precision-blue);
+  background: var(--color-primary);
   transform-origin: left center;
   transition: transform var(--motion-normal) var(--ease-out);
 }
@@ -535,9 +535,9 @@
   gap: var(--space-sm);
   padding: var(--space-md) var(--space-lg);
   border: 0;
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-align: left;
   cursor: pointer;
 }
@@ -547,7 +547,7 @@
 }
 
 .travel-readiness__parts > button:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-readiness__parts > button > span {
@@ -570,7 +570,7 @@
 }
 
 .travel-readiness__parts small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -581,14 +581,14 @@
   height: 3px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .travel-readiness__parts > button > i > b {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--color-precision-blue);
+  background: var(--color-primary);
 }
 
 .travel-dashboard-grid {
@@ -615,7 +615,7 @@
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
   font-size: var(--text-label);
   cursor: pointer;
 }
@@ -633,7 +633,7 @@
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-lg);
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);
   text-align: left;
@@ -645,7 +645,7 @@
 }
 
 .travel-agenda-row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-agenda-row__date {
@@ -654,14 +654,14 @@
 }
 
 .travel-agenda-row__date strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-body);
   font-weight: var(--weight-medium);
 }
 
 .travel-agenda-row__date small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-transform: uppercase;
 }
@@ -686,7 +686,7 @@
 }
 
 .travel-agenda-row > span:nth-child(2) small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -696,7 +696,7 @@
   place-items: center;
   margin: 0;
   padding: var(--space-xl);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   text-align: center;
 }
@@ -711,11 +711,11 @@
   grid-template-columns: 88px minmax(0, 1fr);
   gap: var(--space-md);
   padding: 9px var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-panel--basics dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -732,7 +732,7 @@
 .travel-panel--basics > p {
   margin: 0;
   padding: var(--space-md) var(--space-lg);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -748,11 +748,11 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-lg);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-booking-summary > div + div {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .travel-booking-summary span {
@@ -762,7 +762,7 @@
 }
 
 .travel-booking-summary strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-body);
   font-weight: var(--weight-medium);
@@ -770,7 +770,7 @@
 
 .travel-booking-summary small {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -788,11 +788,11 @@
 }
 
 .travel-money-summary > span + span {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .travel-money-summary small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -805,7 +805,7 @@
 
 .travel-money-summary strong.is-negative,
 .travel-budget-summary strong.is-negative {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .travel-section-intro {
@@ -830,7 +830,7 @@
 .travel-day {
   overflow: visible;
   border: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
@@ -846,14 +846,14 @@
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-day > header > span:first-child {
   display: grid;
   height: 42px;
   place-content: center;
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   text-align: center;
 }
@@ -865,21 +865,21 @@
 }
 
 .travel-day > header > span:first-child small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
 
 .travel-day > header h3 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .travel-day > header p {
   margin: 3px 0 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -890,7 +890,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-plan-row:last-child {
@@ -898,7 +898,7 @@
 }
 
 .travel-plan-row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-plan-row__time {
@@ -912,23 +912,23 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--color-text-muted);
+  background: var(--color-text-tertiary);
 }
 
 .travel-plan-row__signal--transport {
-  background: var(--color-precision-blue-text);
+  background: var(--color-primary-text);
 }
 
 .travel-plan-row__signal--activity {
-  background: var(--color-accent-violet);
+  background: var(--color-accent);
 }
 
 .travel-plan-row__signal--food {
-  background: var(--color-warning-ochre);
+  background: var(--color-warning-text);
 }
 
 .travel-plan-row__signal--rest {
-  background: var(--color-success-seaglass);
+  background: var(--color-success-text);
 }
 
 .travel-plan-row__copy {
@@ -951,7 +951,7 @@
 }
 
 .travel-plan-row__copy small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -995,7 +995,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-register__heading p {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1011,7 +1011,7 @@ article:focus-within > .travel-row-actions {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-stay-row {
@@ -1029,7 +1029,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-stay-row:hover,
 .travel-transport-row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-reservation-icon {
@@ -1038,8 +1038,8 @@ article:focus-within > .travel-row-actions {
   height: 30px;
   place-items: center;
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
 }
 
 .travel-reservation-copy,
@@ -1062,7 +1062,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-reservation-copy strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
@@ -1070,7 +1070,7 @@ article:focus-within > .travel-row-actions {
 .travel-reservation-copy small,
 .travel-reservation-dates small,
 .travel-transport-route small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1102,9 +1102,9 @@ article:focus-within > .travel-row-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
 }
 
 .travel-budget-summary > div {
@@ -1114,16 +1114,16 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-summary > div + div {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .travel-budget-summary span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .travel-budget-summary strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-medium);
@@ -1134,10 +1134,10 @@ article:focus-within > .travel-row-actions {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
 }
 
 .travel-budget-link-note > span {
@@ -1169,8 +1169,8 @@ article:focus-within > .travel-row-actions {
 .travel-document-register__head {
   min-height: 36px;
   padding: 0 var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
 }
@@ -1178,7 +1178,7 @@ article:focus-within > .travel-row-actions {
 .travel-budget-row {
   min-height: 58px;
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-budget-row:last-child {
@@ -1186,7 +1186,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-budget-row__identity {
@@ -1203,13 +1203,13 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-row__identity strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .travel-budget-row__identity small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1230,18 +1230,18 @@ article:focus-within > .travel-row-actions {
   height: 4px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .travel-budget-row__progress > i > b {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--color-precision-blue);
+  background: var(--color-primary);
 }
 
 .travel-budget-row__progress > strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   font-weight: var(--weight-medium);
@@ -1264,7 +1264,7 @@ article:focus-within > .travel-row-actions {
 .travel-document-row {
   min-height: 62px;
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-document-row:last-child {
@@ -1272,7 +1272,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-document-row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-document-row__identity {
@@ -1280,7 +1280,7 @@ article:focus-within > .travel-row-actions {
   min-width: 0;
   align-items: center;
   gap: var(--space-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-document-row__identity > span {
@@ -1297,13 +1297,13 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-document-row__identity strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .travel-document-row__identity small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1339,7 +1339,7 @@ article:focus-within > .travel-row-actions {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-task-row:last-child {
@@ -1347,7 +1347,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-task-row:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-check {
@@ -1358,18 +1358,18 @@ article:focus-within > .travel-row-actions {
   padding: 0;
   border: 1.5px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
-  background: var(--color-graphite-input);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
 .travel-check:hover {
-  border-color: var(--color-precision-blue-text);
+  border-color: var(--color-primary-text);
 }
 
 .travel-check[aria-pressed="true"] {
-  border-color: var(--color-precision-blue);
-  background: var(--color-precision-blue-strong);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
   color: var(--color-on-accent);
 }
 
@@ -1387,18 +1387,18 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-task-row__copy strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-medium);
 }
 
 .travel-task-row__copy small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .travel-task-row__due {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-label);
   text-align: right;
@@ -1406,11 +1406,11 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-task-row__due.is-overdue {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .travel-task-row.is-completed .travel-task-row__copy strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-decoration: line-through;
 }
 
@@ -1425,34 +1425,36 @@ article:focus-within > .travel-row-actions {
   gap: var(--space-md);
 }
 
-.travel-form__check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-secondary);
-}
-
-.travel-form__check input {
-  margin: 2px 0 0;
-}
-
-.travel-form__check span {
+.travel-form__datetime-field {
   display: grid;
-  gap: 3px;
+  min-width: 0;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-.travel-form__check strong {
+.travel-form__datetime-field > legend {
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
 }
 
-.travel-form__check small {
-  color: var(--color-text-muted);
-  font-size: var(--text-micro);
+.travel-form__datetime-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+
+.travel-form__check {
+  align-items: flex-start;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-secondary);
 }
 
 .travel-textarea {
@@ -1464,7 +1466,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-optional {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-weight: var(--weight-regular);
 }
 
@@ -1472,8 +1474,8 @@ article:focus-within > .travel-row-actions {
   margin: 0;
   padding: var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--color-danger-soft);
-  color: var(--color-danger-coral);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger-text);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -1526,7 +1528,7 @@ article:focus-within > .travel-row-actions {
   }
 
   .travel-readiness__parts > button {
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .travel-readiness__parts > button:nth-child(3) {
@@ -1665,8 +1667,8 @@ article:focus-within > .travel-row-actions {
 
   .travel-readiness__parts > button,
   .travel-readiness__parts > button:nth-child(3) {
-    border-right: 1px solid var(--color-border-subtle);
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .travel-readiness__parts > button:nth-child(even) {
@@ -1694,7 +1696,7 @@ article:focus-within > .travel-row-actions {
   }
 
   .travel-budget-summary > div:nth-child(n + 3) {
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
   }
 
   .travel-toolbar__readiness {
@@ -1815,7 +1817,7 @@ article:focus-within > .travel-row-actions {
   gap: var(--space-xs);
   margin-bottom: var(--space-lg);
   overflow-x: auto;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-preparation-tabs button {
@@ -1824,7 +1826,7 @@ article:focus-within > .travel-row-actions {
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
@@ -1836,23 +1838,23 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-preparation-tabs button.is-active {
-  border-bottom-color: var(--color-precision-blue);
-  color: var(--color-precision-blue-text);
-  background: var(--color-precision-blue-soft);
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary-text);
+  background: var(--color-primary-subtle);
 }
 
 .travel-day__empty {
   margin: 0;
   padding: var(--space-lg) var(--space-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
 .travel-reservation-timeline {
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
 }
 
 .travel-reservation-timeline > header {
@@ -1862,7 +1864,7 @@ article:focus-within > .travel-row-actions {
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-reservation-timeline > header > div {
@@ -1870,7 +1872,7 @@ article:focus-within > .travel-row-actions {
   min-width: 0;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-reservation-timeline h2,
@@ -1879,14 +1881,14 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-reservation-timeline h2 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .travel-reservation-timeline header p {
   margin-top: 2px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1903,7 +1905,7 @@ article:focus-within > .travel-row-actions {
   bottom: 22px;
   left: calc(var(--space-lg) + 15px);
   width: 1px;
-  background: var(--color-border-subtle);
+  background: var(--color-border);
   content: "";
 }
 
@@ -1925,8 +1927,8 @@ article:focus-within > .travel-row-actions {
   place-items: center;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-precision-blue-text);
+  background: var(--color-surface-1);
+  color: var(--color-primary-text);
 }
 
 .travel-reservation-timeline__copy {
@@ -1949,14 +1951,14 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-reservation-timeline__copy small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .travel-reservation-timeline__empty {
   margin: 0;
   padding: var(--space-xl) var(--space-lg);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
@@ -1966,7 +1968,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-budget-summary__hero {
   align-content: center;
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
 }
 
 .travel-budget-summary__hero strong {
@@ -1974,7 +1976,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-summary__hero small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1983,14 +1985,14 @@ article:focus-within > .travel-row-actions {
   height: 4px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .travel-budget-summary__hero > i > b {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--color-precision-blue);
+  background: var(--color-primary);
 }
 
 .travel-budget-summary__stats {
@@ -2007,11 +2009,11 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-summary__stats > span + span {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .travel-budget-summary__stats small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -2027,12 +2029,12 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-document-row__date small {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
   font-size: var(--text-micro);
 }
 
 .travel-document-row__date.is-danger strong {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .travel-trip-header__details {
@@ -2058,9 +2060,9 @@ article:focus-within > .travel-row-actions {
   gap: var(--space-md);
   width: 100%;
   padding: var(--space-lg) var(--space-xl);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
   text-align: left;
   cursor: pointer;
@@ -2068,7 +2070,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-next-step:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .travel-next-step:focus-visible,
@@ -2084,9 +2086,9 @@ article:focus-within > .travel-row-actions {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 1px solid var(--color-precision-blue);
+  border: 1px solid var(--color-primary);
   border-radius: var(--radius-pill);
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .travel-next-step__copy,
@@ -2098,13 +2100,13 @@ article:focus-within > .travel-row-actions {
 
 .travel-next-step__copy small,
 .travel-next-step__pending {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .travel-next-step__copy strong {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
@@ -2115,7 +2117,7 @@ article:focus-within > .travel-row-actions {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
   white-space: nowrap;
 }
 
@@ -2133,13 +2135,13 @@ article:focus-within > .travel-row-actions {
   justify-content: space-between;
   gap: var(--space-md);
   padding: 0 0 var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-trip-overview .travel-panel > header h2,
 .travel-overview-summary h2 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-title);
   font-weight: var(--weight-semibold);
 }
@@ -2149,7 +2151,7 @@ article:focus-within > .travel-row-actions {
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
   font-size: var(--text-label);
   cursor: pointer;
 }
@@ -2208,7 +2210,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-overview-summary:hover .travel-overview-summary__heading h2,
 .travel-overview-summary:hover .travel-overview-summary__heading svg {
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .travel-overview-summary__heading {
@@ -2217,11 +2219,11 @@ article:focus-within > .travel-row-actions {
   justify-content: space-between;
   gap: var(--space-md);
   padding-bottom: var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-overview-summary__heading svg {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-overview-summary dl {
@@ -2239,13 +2241,13 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-overview-summary dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-body);
 }
 
 .travel-overview-summary dd {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-body);
   font-weight: var(--weight-medium);
@@ -2255,7 +2257,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-overview-summary dd.is-negative,
 .travel-detail-panel__facts dd.is-negative {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .travel-trip-menu {
@@ -2281,7 +2283,7 @@ article:focus-within > .travel-row-actions {
   justify-content: space-between;
   gap: var(--space-lg);
   padding: var(--space-xl);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-detail-panel__header h2,
@@ -2293,14 +2295,14 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-detail-panel__header h2 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-title);
   font-weight: var(--weight-semibold);
 }
 
 .travel-detail-panel__header p {
   margin-top: 4px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
@@ -2334,7 +2336,7 @@ article:focus-within > .travel-row-actions {
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .travel-detail-panel__item {
@@ -2369,7 +2371,7 @@ article:focus-within > .travel-row-actions {
 .travel-detail-panel__row small,
 .travel-detail-panel__empty {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2378,14 +2380,14 @@ article:focus-within > .travel-row-actions {
 .travel-detail-panel__status,
 .travel-detail-panel__row em {
   flex: 0 0 auto;
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
   font-size: var(--text-micro);
   font-style: normal;
   white-space: nowrap;
 }
 
 .travel-detail-panel__status.is-ready {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .travel-detail-panel__facts {
@@ -2393,13 +2395,13 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-detail-panel__facts dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
 .travel-detail-panel__facts dd {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
@@ -2408,7 +2410,7 @@ article:focus-within > .travel-row-actions {
 
 .travel-detail-panel__section h3 {
   padding-bottom: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -2421,7 +2423,7 @@ article:focus-within > .travel-row-actions {
   gap: var(--space-sm);
   margin-top: var(--space-xl);
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 @media (max-width: 760px) {
@@ -2471,7 +2473,7 @@ article:focus-within > .travel-row-actions {
 
   .travel-budget-summary__hero {
     border-right: 0;
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .travel-budget-summary__stats {
@@ -2491,7 +2493,7 @@ article:focus-within > .travel-row-actions {
 .travel-next-departure__open {
   display: block;
   margin-top: var(--space-xs);
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
 }
@@ -2507,7 +2509,7 @@ article:focus-within > .travel-row-actions {
 .travel-board__group > h3 {
   margin: 0;
   padding: var(--space-md) var(--space-lg) var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -2515,7 +2517,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-board__row.is-completed {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .travel-board__row.is-completed .travel-board__status {
@@ -2551,7 +2553,7 @@ article:focus-within > .travel-row-actions {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: visible;
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
@@ -2566,7 +2568,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-summary span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
@@ -2587,7 +2589,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-budget-row__value.is-negative {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .travel-packing-groups {
@@ -2603,8 +2605,8 @@ article:focus-within > .travel-row-actions {
 .travel-packing-group > h3 {
   margin: 0;
   padding: 0 0 var(--space-sm);
-  border-bottom: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -2614,7 +2616,7 @@ article:focus-within > .travel-row-actions {
 .travel-packing-group__empty {
   margin: 0;
   padding: var(--space-md) 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
@@ -2712,7 +2714,7 @@ article:focus-within > .travel-row-actions {
   .travel-register__heading
 ) {
   min-height: 60px;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--affairs-accent) 2%, transparent);
 }
 
@@ -2723,7 +2725,7 @@ article:focus-within > .travel-row-actions {
 
 .affairs-module--view-travel .travel-day {
   border: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
@@ -2762,13 +2764,13 @@ article:focus-within > .travel-row-actions {
   .travel-next-departure__marker,
   .travel-reservation-icon
 ) {
-  background: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-graphite-input));
+  background: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-surface-1));
   color: var(--affairs-accent);
 }
 
 .affairs-module--view-travel .travel-budget-link-note {
-  border-color: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-border-subtle));
-  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-graphite-panel));
+  border-color: color-mix(in srgb, var(--affairs-accent) 9%, var(--color-border));
+  background: color-mix(in srgb, var(--affairs-accent) 2.5%, var(--color-surface-1));
 }
 
 @media (max-width: 760px) {

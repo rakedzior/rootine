@@ -148,3 +148,59 @@ This log records material implementation decisions made while applying the desig
 - Affected files: UI barrel, `tokens.ts`, Shell exports, component inventory and design documentation.
 - Visual impact: none.
 - Compatibility impact: proven zero-consumer exports are removed from the internal public barrel.
+
+### D-016 — Make cross-module visual drift a zero-baseline failure
+
+- Classification: governance correction following the cross-module consistency audit.
+- Decision: scan feature CSS for off-scale radii, protected `.ui-*` overrides, global-token shadowing,
+  and literal local control heights; scan primary CTA icons against the 13px/1.7 grammar.
+- Reason: the previous audit could remain green while feature CSS replaced the geometry of shared
+  controls, which was the main blind spot identified in DS-14.
+- Affected files: source audit/parser tests, governance runner, baseline v3, contracts and migration registry.
+- Visual impact: none; this decision measures current code and blocks new drift.
+- Compatibility impact: current exact declarations are visible as expiring migration debt, not
+  hidden in baseline allowances. Stable override hooks remain explicit contracts.
+
+## 2026-08-12
+
+### D-017 — Use one planning and quick-create interaction contract
+
+- Classification: cross-module consistency correction.
+- Decision: Tasks and Work compose quick entry with `QuickComposer` and `PropertyMenu`; date/time surfaces use `DatePicker` and `TimePicker`; anchored menus and nested scheduler layers use `AnchoredPopover`.
+- Priority controls in Tasks, Work, Affairs and Goals use the same `PriorityIcon` grammar in quick menus and full selects.
+- Reason: the previous feature-local pickers, portals, row heights, icon grammar, and collision logic made the same task properties behave differently in each module.
+- Affected areas: Tasks, Calendar, Work, Affairs, Health, Sport, Travel, shared UI and the half-hour time option source.
+- Visual impact: intentional alignment of field density, popup silhouettes, focus behavior, menu rows, date calendars, and time entry.
+- Compatibility impact: existing persisted values remain strings in the same date/time formats; native time entry still accepts any valid minute.
+
+### D-018 — Keep persisted taxonomy colours in one versioned data palette
+
+- Classification: data/design-system boundary correction.
+- Decision: `taxonomyPalette.ts` is the only raw-colour source outside theme tokens. Tasks, Work, Goals and demo data consume its named entries and legacy normalization table.
+- Reason: persisted category colours are data and cannot be replaced with status tokens, but duplicating their hex values across modules created multiple sources of truth.
+- Visual impact: none for current values; old saved palette values normalize deterministically.
+- Compatibility impact: no workspace schema change is required.
+
+### D-019 — Use canonical destructive and binary-setting controls
+
+- Classification: accessibility and interaction correction.
+- Decision: destructive decisions use `ConfirmDialog`; binary settings use `Switch`; form/completion choices use `Checkbox`. Feature code no longer implements its own focus, Escape, native-checkbox, or confirmation shell.
+- Reason: equal decisions must expose equal keyboard, focus-return, role, disabled and copy structure.
+- Visual impact: destructive footers and switches now share their canonical geometry and state styling.
+- Compatibility impact: event handlers and stored boolean values are unchanged.
+
+### D-020 — Make route ownership and command handoff exhaustive
+
+- Classification: product-contract correction.
+- Decision: every routed leaf belongs to exactly one module, including `/travel/...`; the route audit is exhaustive; Command Center passes only capabilities declared by each action and every consumer removes all handoff parameters after use.
+- Reason: route fallbacks and orphaned `godzina` query parameters made global creation and help/navigation context inconsistent.
+- Visual impact: none.
+- Compatibility impact: legacy redirects remain explicit and tested.
+
+### D-021 — Preserve Calendar task detail as a documented contextual variant
+
+- Classification: product layout decision.
+- Decision: Calendar reuses the same task-detail content and controls but keeps its intentionally positioned contextual dialog instead of the docked workspace `DetailPanel` shell.
+- Reason: Calendar needs to retain the visible time grid and selected occurrence context; forcing a 408px workspace track would change that interaction rather than improve token consistency.
+- Visual impact: no layout change; shared content, controls, focus and dialog semantics remain governed.
+- Compatibility impact: none.

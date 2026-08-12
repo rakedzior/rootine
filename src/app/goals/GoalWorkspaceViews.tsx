@@ -27,6 +27,7 @@ import {
   ModuleSidebar,
   Menu,
   MenuItem,
+  PriorityIcon,
   ProgressBar,
 } from "../ui";
 import { AddToTasksButton } from "../ui";
@@ -41,7 +42,6 @@ import {
   Circle,
   Clock3,
   Ellipsis,
-  Flag,
   Pencil,
   Plus,
   Search,
@@ -110,7 +110,7 @@ export function GoalSubSidebar({
   const addCategory = () => {
     const label = newCategory.trim();
     if (!label) return;
-    onCreateCategory({ label, iconKey: "circle", color: C.textSecond });
+    onCreateCategory({ label, iconKey: "circle", color: C.textSecondary });
     setNewCategory("");
     setAdding(false);
   };
@@ -139,7 +139,7 @@ export function GoalSubSidebar({
 
   return (
     <ModuleSidebar label="Widoki i kategorie celów" className="goal-context-sidebar">
-      <div className="goal-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-4">
+      <div className="goal-sidebar-scroll">
         <ContextNavGroup label="Na bieżąco">
           {item("next", "Następne kroki", Clock3)}
           {item("week", "Ten tydzień", CalendarDays)}
@@ -160,18 +160,18 @@ export function GoalSubSidebar({
             onClick={() => setCategoriesOpen((open) => !open)}
             aria-expanded={categoriesOpen}
             aria-controls={categoriesPanelId}
-            className="goal-sidebar-section-toggle flex min-w-0 flex-1 items-center gap-1.5"
+            className="goal-sidebar-section-toggle"
           >
             <ChevronRight className="goal-sidebar-section-chevron" size={11} strokeWidth={2} />
             <span>Kategorie</span>
           </button>
-          <div className="goal-sidebar-section-actions flex items-center gap-1">
+          <div className="goal-sidebar-section-actions">
             <button
               type="button"
               aria-label="Szukaj w kategoriach"
               title="Szukaj w kategoriach"
               onClick={() => { setCategoriesOpen(true); setSearchOpen((open) => !open); }}
-              className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${searchOpen ? "is-active" : ""}`}
+              className={`goal-sidebar-icon-action ${searchOpen ? "is-active" : ""}`}
             >
               <Search size={13} strokeWidth={1.8} />
             </button>
@@ -184,7 +184,7 @@ export function GoalSubSidebar({
                 if (open) setEditingId(null);
                 return !open;
               }); }}
-              className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${editMode ? "is-active" : ""}`}
+              className={`goal-sidebar-icon-action ${editMode ? "is-active" : ""}`}
             >
               <Pencil size={13} strokeWidth={1.8} />
             </button>
@@ -193,7 +193,7 @@ export function GoalSubSidebar({
               aria-label="Dodaj kategorię"
               title="Dodaj kategorię"
               onClick={() => { setCategoriesOpen(true); setAdding(true); }}
-              className={`goal-sidebar-icon-action flex h-6 w-6 items-center justify-center rounded-md ${adding ? "is-active" : ""}`}
+              className={`goal-sidebar-icon-action ${adding ? "is-active" : ""}`}
             >
               <Plus size={13} strokeWidth={1.8} />
             </button>
@@ -201,10 +201,10 @@ export function GoalSubSidebar({
         </div>
 
         {categoriesOpen && (
-          <div id={categoriesPanelId} className="space-y-1">
+          <div id={categoriesPanelId} className="goal-category-list">
             {searchOpen && (
-              <div className="px-1 pb-1">
-                <div className="goal-category-search flex items-center gap-2 rounded-lg border px-2.5 py-2">
+              <div className="goal-category-search-wrap">
+                <div className="goal-category-search">
                   <Search className="goal-category-symbol" size={11} strokeWidth={1.7} />
                   <input
                     autoFocus
@@ -212,7 +212,7 @@ export function GoalSubSidebar({
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Szukaj kategorii"
-                    className="goal-category-input min-w-0 flex-1 bg-transparent outline-none"
+                    className="goal-category-input"
                   />
                   {search && (
                     <button
@@ -231,7 +231,7 @@ export function GoalSubSidebar({
             {adding && (
               <form
                 onSubmit={(event) => { event.preventDefault(); addCategory(); }}
-                className="goal-category-add mx-1 flex items-center gap-1.5 rounded-lg border px-2 py-1.5"
+                className="goal-category-add"
               >
                 <Circle className="goal-category-symbol" size={11} />
                 <input
@@ -241,7 +241,7 @@ export function GoalSubSidebar({
                   onChange={(event) => setNewCategory(event.target.value)}
                   onKeyDown={(event) => { if (event.key === "Escape") setAdding(false); }}
                   placeholder="Nowa kategoria"
-                  className="goal-category-input goal-category-input--primary min-w-0 flex-1 bg-transparent outline-none"
+                  className="goal-category-input goal-category-input--primary"
                 />
                 <button type="submit" aria-label="Zapisz kategorię" className="goal-category-confirm"><Check size={11} strokeWidth={2.2} /></button>
                 <button type="button" aria-label="Anuluj" onClick={() => setAdding(false)} className="goal-category-cancel"><X size={11} /></button>
@@ -252,9 +252,9 @@ export function GoalSubSidebar({
               const active = !scopedGoalId && activeFilter === `category:${category.id}`;
               const count = goals.filter((goal) => goal.categoryId === category.id && goal.status !== "archived").length;
               return (
-                <div key={category.id} className="group flex min-h-8 items-center rounded-lg">
+                <div key={category.id} className="goal-category-row">
                   {editingId === category.id ? (
-                    <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="goal-category-edit flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
+                    <form onSubmit={(event) => { event.preventDefault(); saveCategory(category.id); }} className="goal-category-edit">
                       <span className="goal-category-dot" style={{ "--goal-category-color": category.color } as React.CSSProperties} aria-hidden="true" />
                       <input
                         autoFocus
@@ -263,13 +263,13 @@ export function GoalSubSidebar({
                         onChange={(event) => setEditingValue(event.target.value)}
                         onBlur={() => saveCategory(category.id)}
                         onKeyDown={(event) => { if (event.key === "Escape") setEditingId(null); }}
-                        className="goal-category-edit-input min-w-0 flex-1 rounded border bg-transparent px-1.5 py-1 outline-none"
+                        className="goal-category-edit-input"
                       />
                     </form>
                   ) : (
                     <ContextNavItem
                       onClick={() => onFilter(`category:${category.id}`)}
-                      className="min-w-0 flex-1"
+                      className="goal-category-nav-item"
                       active={active}
                       icon={<span className="goal-category-dot" style={{ "--goal-category-color": category.color } as React.CSSProperties} />}
                       label={category.label}
@@ -277,22 +277,22 @@ export function GoalSubSidebar({
                     />
                   )}
                   {editMode && editingId !== category.id && (
-                    <div className="goal-category-actions is-editing flex flex-shrink-0 items-center pr-1">
+                    <div className="goal-category-actions is-editing">
                       <button
                         type="button"
-                        aria-label={`Edytuj kategorię ${category.label}`}
+                        aria-label={`Edytuj kategorię „${category.label}”`}
                         title="Edytuj"
                         onClick={() => { setEditingId(category.id); setEditingValue(category.label); }}
-                        className="goal-category-action flex h-6 w-6 items-center justify-center rounded-md"
+                        className="goal-category-action"
                       >
                         <Pencil size={11} strokeWidth={1.7} />
                       </button>
                       {category.id !== "personal" && <button
                           type="button"
-                          aria-label={`Usuń kategorię ${category.label}`}
+                          aria-label={`Usuń kategorię „${category.label}”`}
                           title="Usuń"
                           onClick={() => onDeleteCategory(category.id)}
-                          className="goal-category-action is-danger flex h-6 w-6 items-center justify-center rounded-md"
+                          className="goal-category-action is-danger"
                         >
                           <Trash2 size={11} strokeWidth={1.7} />
                         </button>}
@@ -302,7 +302,7 @@ export function GoalSubSidebar({
               );
             })}
             {filteredCategories.length === 0 && (
-              <p className="goal-category-empty px-2.5 py-2">
+              <p className="goal-category-empty">
                 Nie znaleziono kategorii.
               </p>
             )}
@@ -310,7 +310,7 @@ export function GoalSubSidebar({
         )}
       </div>
 
-      <div className="goal-sidebar-footer border-t px-2 pb-4 pt-4">
+      <div className="goal-sidebar-footer">
         <ContextNavGroup label="Zarządzanie">
           <ContextNavItem active={activeFilter === "archived"} onClick={() => onFilter("archived")} icon={<Archive />} label="Archiwum" />
           <ContextNavItem onClick={onSettings} icon={<Settings2 />} label="Ustawienia celów" />
@@ -324,7 +324,7 @@ function StatusPill({ status }: { status: GoalStatus }) {
   const meta = STATUS_META[status];
   const tone = status === "completed" ? "success" : status === "risk" ? "warning" : status === "active" ? "primary" : "neutral";
   return (
-    <Badge tone={tone} className="h-7 rounded-lg">
+    <Badge tone={tone} className="goal-status-pill">
       {meta.label}
       <ChevronDown size={11} strokeWidth={1.7} />
     </Badge>
@@ -367,53 +367,53 @@ export function GoalCard({
 
   return (
     <article
-      className={`goal-card group border ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
+      className={`goal-card ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
       data-status={goal.status}
       style={{
         "--goal-progress": `${goal.progress}%`,
       } as React.CSSProperties}
     >
-      <div className="goal-card-layout grid items-start gap-x-4 gap-y-2 px-4 py-3">
+      <div className="goal-card-layout">
         <button
           type="button"
           onClick={onSelect}
           aria-pressed={selected}
           aria-label={`${selected ? "Ukryj" : "Pokaż"} szczegóły celu ${goal.title}`}
-          className="goal-card-primary flex min-w-0 items-center gap-3 border-0 bg-transparent p-0 text-left"
+          className="goal-card-primary"
         >
           <div
-            className="goal-card-icon flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border"
+            className="goal-card-icon"
           >
             {goal.customIcon
-              ? <img src={goal.customIcon} alt="" className="h-5 w-5 object-contain" />
+              ? <img src={goal.customIcon} alt="" className="goal-card-icon__image" />
               : <Icon size={16} strokeWidth={1.6} aria-hidden="true" />}
           </div>
-          <div className="min-w-0 flex flex-1 flex-col">
-            <h3 className="goal-card-title ui-record-title truncate">
+          <div className="goal-card-copy">
+            <h3 className="goal-card-title ui-record-title">
               {goal.title}
             </h3>
-            <div className="goal-card-meta ui-record-meta order-2 mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-              <span className="flex items-center gap-1 font-medium">
+            <div className="goal-card-meta ui-record-meta">
+              <span className="goal-card-category">
                 <CategoryIcon size={13} strokeWidth={1.7} aria-hidden="true" /> {goal.category}
               </span>
               <span>•</span>
               <span>{goal.progressLabel}</span>
               {goal.nextMilestone.title && <><span>•</span><span className="goal-card-next" title={goal.nextMilestone.title}>Następny: {goal.nextMilestone.title}</span></>}
             </div>
-            <div className="order-1 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="goal-card-summary">
               <div
-                className="goal-card-inline-date inline-flex h-7 items-center gap-1.5 rounded-lg border px-2"
+                className="goal-card-inline-date"
                 data-deadline-tone={deadlineTone}
               >
                 <CalendarDays size={13} strokeWidth={1.7} aria-hidden="true" />
-                <span className="goal-card-inline-date__date font-medium">{goal.due}</span>
+                <span className="goal-card-inline-date__date">{goal.due}</span>
                 <span className="goal-card-inline-date__days">· {goal.daysLeft}</span>
               </div>
-              <div className="goal-card-progress flex flex-1 items-center gap-3">
-                <div className="goal-card-progress-track h-1 flex-1 overflow-hidden rounded-full">
-                  <div className="goal-card-progress-fill h-full rounded-full" />
+              <div className="goal-card-progress">
+                <div className="goal-card-progress-track">
+                  <div className="goal-card-progress-fill" />
                 </div>
-                <span className="goal-card-progress-value w-9 text-right font-semibold tabular-nums">
+                <span className="goal-card-progress-value">
                   {goal.progress}%
                 </span>
               </div>
@@ -422,7 +422,7 @@ export function GoalCard({
         </button>
 
         <div className="goal-card-actions">
-          <div className="goal-card-status relative">
+          <div className="goal-card-status">
             <button
               ref={statusTriggerRef}
               type="button"
@@ -440,10 +440,10 @@ export function GoalCard({
                 triggerRef={statusTriggerRef}
                 onDismiss={() => setStatusOpen(false)}
                 layer="context"
-                className="absolute right-0 top-9 w-40"
+                className="goal-card-status-menu"
               >
                 {(["active", "paused", "completed", "planned", "archived"] as GoalStatus[]).map((status) => (
-                  <MenuItem className="goal-status-menu-item" data-goal-status={status} key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="goal-status-dot h-1.5 w-1.5 rounded-full" />}>
+                  <MenuItem className="goal-status-menu-item" data-goal-status={status} key={status} selected={goal.status === status} onClick={() => { onStatus(status); setStatusOpen(false); }} leadingIcon={<span className="goal-status-dot" />}>
                     {STATUS_META[status].label}
                   </MenuItem>
                 ))}
@@ -451,12 +451,12 @@ export function GoalCard({
             )}
           </div>
 
-          <div className="goal-card-date flex items-center gap-2 font-medium" data-deadline-tone={deadlineTone}>
+          <div className="goal-card-date" data-deadline-tone={deadlineTone}>
             <CalendarDays size={13} strokeWidth={1.7} aria-hidden="true" />
             <span>{goal.due}</span>
           </div>
 
-          <div className="goal-card-more relative">
+          <div className="goal-card-more">
             <button
               ref={menuTriggerRef}
               type="button"
@@ -465,7 +465,7 @@ export function GoalCard({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls={actionsMenuId}
-              className="flex items-center justify-center rounded-lg transition-colors"
+              className="goal-card-more__button"
             >
               <Ellipsis size={16} strokeWidth={1.8} aria-hidden="true" />
             </button>
@@ -475,7 +475,7 @@ export function GoalCard({
                 triggerRef={menuTriggerRef}
                 onDismiss={() => setMenuOpen(false)}
                 layer="context"
-                className="absolute right-0 top-9 w-44"
+                className="goal-card-actions-menu"
               >
                 {[
                   { label: goal.rhythm === "Cel etapowy" ? "Dodaj etap" : goal.rhythm === "Wartość liczbowa" ? "Zaktualizuj wartość" : goal.rhythm === "Regularność" ? "Zapisz wykonanie" : "Zaktualizuj postęp", icon: BarChart3, action: onProgress },
@@ -501,18 +501,18 @@ export function GoalCard({
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="goal-panel-section-title mb-3 font-semibold uppercase">{title}</h3>
+      <h3 className="goal-panel-section-title">{title}</h3>
       {children}
     </section>
   );
 }
 
-function DetailRow({ icon: Icon, label, children, onClick }: { icon: LucideIcon; label: string; children: React.ReactNode; onClick?: () => void }) {
+function DetailRow({ icon: Icon, leading, label, children, onClick }: { icon?: LucideIcon; leading?: React.ReactNode; label: string; children: React.ReactNode; onClick?: () => void }) {
   const content = (
     <>
-      <Icon className="goal-detail-row__icon" size={13} strokeWidth={1.6} aria-hidden="true" />
-      <span className="goal-detail-row__label flex-1">{label}</span>
-      <div className="goal-detail-row__value flex items-center gap-1.5 text-right">{children}</div>
+      {leading ?? (Icon && <Icon className="goal-detail-row__icon" size={13} strokeWidth={1.6} aria-hidden="true" />)}
+      <span className="goal-detail-row__label">{label}</span>
+      <div className="goal-detail-row__value">{children}</div>
       {onClick && <ChevronRight className="goal-detail-row__chevron" size={11} strokeWidth={1.7} aria-hidden="true" />}
     </>
   );
@@ -521,14 +521,14 @@ function DetailRow({ icon: Icon, label, children, onClick }: { icon: LucideIcon;
       <button
         type="button"
         onClick={onClick}
-        className="goal-detail-row flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0"
+        className="goal-detail-row"
       >
         {content}
       </button>
     );
   }
   return (
-    <div className="goal-detail-row flex min-h-10 w-full items-center gap-2.5 border-b py-3 text-left last:border-b-0">
+    <div className="goal-detail-row">
       {content}
     </div>
   );
@@ -573,21 +573,21 @@ export function GoalDetail({
       : rawGoal.progressMode === "manual" ? "Postęp" : "Wartość";
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="goal-detail-scroll flex-1 overflow-y-auto px-5 pb-5 pt-4">
-        <div className="mb-4 flex justify-end">
-          <button type="button" onClick={onClose} aria-label="Zamknij szczegóły celu" className="goal-detail-close flex h-8 w-8 items-center justify-center rounded-lg">
+    <div className="goal-detail-panel-layout">
+      <div className="goal-detail-scroll">
+        <div className="goal-detail-close-row">
+          <button type="button" onClick={onClose} aria-label="Zamknij szczegóły celu" className="goal-detail-close">
             <X size={18} strokeWidth={1.7} />
           </button>
         </div>
 
-        <div className="flex items-start gap-3">
-          <div className="goal-detail-panel-icon flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
-            {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-6 w-6 object-contain" /> : <Icon size={18} strokeWidth={1.55} />}
+        <div className="goal-detail-panel-heading">
+          <div className="goal-detail-panel-icon">
+            {goal.customIcon ? <img src={goal.customIcon} alt="" className="goal-detail-panel-icon__image" /> : <Icon size={18} strokeWidth={1.55} />}
           </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="goal-detail-panel-title font-semibold">{goal.title}</h2>
-            <p className="goal-detail-panel-meta mt-1.5 flex items-center gap-1">
+          <div className="goal-detail-panel-copy">
+            <h2 className="goal-detail-panel-title">{goal.title}</h2>
+            <p className="goal-detail-panel-meta">
               <CategoryIcon size={11} /> {goal.category}
               <span className="goal-detail-panel-separator">•</span>
               <span className="goal-detail-panel-rhythm">{goal.rhythm}</span>
@@ -596,9 +596,9 @@ export function GoalDetail({
           <div className="goal-detail-status-select"><ThemedSelect compact value={rawGoal.status} onChange={(value) => onStatus(value as StoredGoalStatus)} options={[{ value: "planned", label: "Zaplanowany" }, { value: "active", label: "Aktywny" }, { value: "paused", label: "Wstrzymany" }, { value: "completed", label: "Zakończony" }, { value: "archived", label: "Archiwum" }]} ariaLabel="Status celu" /></div>
         </div>
 
-        <div className="goal-detail-progress-section my-5 border-y py-4">
-          <div className="mb-3 flex items-end justify-between">
-            <span className="goal-detail-panel-progress font-semibold">{goal.progress}%</span>
+        <div className="goal-detail-progress-section">
+          <div className="goal-detail-progress-heading">
+            <span className="goal-detail-panel-progress">{goal.progress}%</span>
             <span className="goal-detail-panel-progress-label">{goal.progressLabel}</span>
           </div>
           <ProgressBar
@@ -607,15 +607,14 @@ export function GoalDetail({
             label={`Postęp celu ${goal.title}`}
             valueText={`${goal.progress}%`}
           />
-          <button type="button" onClick={rawGoal.progressMode === "milestones" ? onAddMilestone : onProgress} className="goal-detail-progress-action mt-3 flex items-center gap-1.5 font-medium"><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj etap" : rawGoal.progressMode === "numeric" ? "Zaktualizuj wartość" : rawGoal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</button>
+          <button type="button" onClick={rawGoal.progressMode === "milestones" ? onAddMilestone : onProgress} className="goal-detail-progress-action"><Plus size={11} />{rawGoal.progressMode === "milestones" ? "Dodaj etap" : rawGoal.progressMode === "numeric" ? "Zaktualizuj wartość" : rawGoal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</button>
         </div>
 
-        <div className="mb-5">
+        <div className="goal-detail-facts-block">
           <DetailRow icon={CalendarDays} label="Termin" onClick={onEdit}>
             <span className="goal-deadline-text" data-deadline-tone={deadlineTone}>{goal.due}</span>
           </DetailRow>
-          <DetailRow icon={Flag} label="Priorytet" onClick={onEdit}>
-            <Flag className="goal-detail-priority-icon" size={11} />
+          <DetailRow leading={<PriorityIcon level={goal.priority} />} label="Priorytet" onClick={onEdit}>
             <span>{priorityLabel}</span>
           </DetailRow>
           <DetailRow icon={Target} label="Kategoria" onClick={onEdit}>
@@ -631,20 +630,20 @@ export function GoalDetail({
             <button type="button" onClick={() => {
               const next = [...rawGoal.milestones].filter((item) => !item.done).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
               if (next) onToggleMilestone(next.id, true); else onAddMilestone();
-            }} className="goal-next-milestone w-full rounded-xl border p-3 text-left">
-              <div className="flex items-start gap-2.5">
-                <div className="goal-next-milestone__marker mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full border" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="goal-next-milestone__title font-medium">{goal.nextMilestone.title}</p>
+            }} className="goal-next-milestone">
+              <div className="goal-next-milestone__layout">
+                <div className="goal-next-milestone__marker" />
+                <div className="goal-next-milestone__copy">
+                  <div className="goal-next-milestone__heading">
+                    <p className="goal-next-milestone__title">{goal.nextMilestone.title}</p>
                     <span className="goal-next-milestone__progress">{goal.nextMilestone.progress}%</span>
                   </div>
-                  <p className="goal-next-milestone__meta mt-1">Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
+                  <p className="goal-next-milestone__meta">Plan: {goal.nextMilestone.date} · {goal.nextMilestone.daysLeft}</p>
                 </div>
               </div>
             </button>
           </PanelSection>
-          <div className="goal-detail-divider my-5 border-t" />
+          <div className="goal-detail-divider" />
         </>}
 
         <PanelSection title="Stan celu">
@@ -656,7 +655,7 @@ export function GoalDetail({
           </dl>
         </PanelSection>
 
-        <div className="mt-5">
+        <div className="goal-detail-note-section">
           <PanelSection title="Notatka">
             <GoalNoteTextarea
               key={goal.id}
@@ -664,14 +663,14 @@ export function GoalDetail({
               value={note}
               onCommit={onNoteChange}
               rows={3}
-              className="goal-detail-note-input w-full resize-none rounded-xl border p-3.5 outline-none"
+              className="goal-detail-note-input"
             />
           </PanelSection>
         </div>
       </div>
 
-      <div className="goal-detail-panel-footer border-t p-4">
-        {addToTasksInput && <div className="mb-2"><AddToTasksButton input={addToTasksInput} /></div>}
+      <div className="goal-detail-panel-footer">
+        {addToTasksInput && <div className="goal-detail-panel-add-task"><AddToTasksButton input={addToTasksInput} /></div>}
         <Button type="button" variant="quiet" fullWidth onClick={onOpen}>
           Otwórz pełny widok celu
         </Button>

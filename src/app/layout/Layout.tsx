@@ -64,7 +64,7 @@ import {
 import { prefetchModuleRoutesWhenIdle, prefetchRoute } from "../routePrefetch";
 import { RecoveryCenterButton } from "../recovery/RecoveryCenter";
 import { RouteLoadingState } from "../RouteStates";
-import { Modal } from "../ui";
+import { Modal, Switch } from "../ui";
 import { maxWidthQuery } from "../ui/breakpoints";
 import {
   applyAppTheme,
@@ -336,19 +336,14 @@ function ModuleSettings({
             >
               <ModuleIcon size={13} strokeWidth={1.7} aria-hidden="true" />
               <span className="app-module-settings__label">{item.label}</span>
-              <label
+              <Switch
                 className="app-module-toggle"
                 title={isLastEnabledModule ? "Co najmniej jeden moduł musi pozostać aktywny" : undefined}
-              >
-                <input
-                  type="checkbox"
-                  checked={isEnabled}
-                  disabled={isLastEnabledModule}
-                  aria-label={`${isEnabled ? "Dezaktywuj" : "Aktywuj"} moduł ${item.label}`}
-                  onChange={() => onToggle(item.id)}
-                />
-                <span aria-hidden="true" />
-              </label>
+                checked={isEnabled}
+                disabled={isLastEnabledModule}
+                aria-label={`${isEnabled ? "Dezaktywuj" : "Aktywuj"} moduł ${item.label}`}
+                onChange={() => onToggle(item.id)}
+              />
               <span className="app-module-settings__move">
                 <button
                   type="button"

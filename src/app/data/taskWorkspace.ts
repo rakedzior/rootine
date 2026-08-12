@@ -15,6 +15,7 @@ import {
   shiftLocalDateKey,
 } from "./localDate";
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
+import { TAXONOMY_COLORS } from "./taxonomyPalette";
 
 export const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
 const WORKSPACE_VERSION = 2 as const;
@@ -142,22 +143,21 @@ const DEFAULT_HABITS: WorkspaceHabit[] = [
 
 // Lists and tags are categories, so they take the `category-*` palette. They must not take
 // the semantic colours: blue is the action signal, and ochre/green mean warning/success.
-// These previously carried pre-audit hexes (#4772FA, #70B89F, #D4AA68), which is why demo
-// data painted itself in a palette the app no longer uses.
+// Legacy workspace colours are normalized by the single persisted taxonomy palette.
 const DEFAULT_LISTS: WorkspaceList[] = [
-  { id: "praca", label: "Praca", color: "#7FA6C9" },
-  { id: "dom", label: "Dom", color: "#B9A171" },
-  { id: "hobby", label: "Hobby", color: "#8793A1" },
-  { id: "zdrowie", label: "Zdrowie", color: "#79A8A4" },
+  { id: "praca", label: "Praca", color: TAXONOMY_COLORS.sky },
+  { id: "dom", label: "Dom", color: TAXONOMY_COLORS.sand },
+  { id: "hobby", label: "Hobby", color: TAXONOMY_COLORS.slate },
+  { id: "zdrowie", label: "Zdrowie", color: TAXONOMY_COLORS.teal },
 ];
 
 const DEFAULT_TAGS: WorkspaceTag[] = [
-  { id: "praca", label: "praca", color: "#7FA6C9" },
-  { id: "trening", label: "trening", color: "#79A8A4" },
-  { id: "dom", label: "dom", color: "#B9A171" },
-  { id: "finanse", label: "finanse", color: "#8793A1" },
-  { id: "zdrowie", label: "zdrowie", color: "#79A8A4" },
-  { id: "hobby", label: "hobby", color: "#7D7FA8" },
+  { id: "praca", label: "praca", color: TAXONOMY_COLORS.sky },
+  { id: "trening", label: "trening", color: TAXONOMY_COLORS.teal },
+  { id: "dom", label: "dom", color: TAXONOMY_COLORS.sand },
+  { id: "finanse", label: "finanse", color: TAXONOMY_COLORS.slate },
+  { id: "zdrowie", label: "zdrowie", color: TAXONOMY_COLORS.teal },
+  { id: "hobby", label: "hobby", color: TAXONOMY_COLORS.violet },
 ];
 
 export function createDefaultTaskWorkspace(): TaskWorkspace {

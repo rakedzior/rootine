@@ -1,18 +1,11 @@
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
-  type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   Bell,
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -23,19 +16,15 @@ import {
   Sunrise,
   X,
 } from "lucide-react";
-import { Button, DatePicker, Tabs } from "../../ui";
+import { AnchoredPopover, Button, DatePicker, Menu, MenuItem, Switch, Tabs, TimePicker } from "../../ui";
 import { toCalendarDateKey } from "../../data/taskWorkspace";
+import { HALF_HOUR_TIME_OPTIONS } from "../../data/timeOptions";
 import {
   REMINDER_OPTIONS,
   REPEAT_OPTIONS,
   browserTimezone,
   type DateVal,
 } from "./taskPageModel";
-
-const HALF_HOUR_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const minutes = index * 30;
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-});
 
 const COMMON_TIMEZONES = [
   "Europe/Warsaw",
@@ -78,7 +67,7 @@ type LayerKind =
 function nextHalfHour(now = new Date()) {
   const minutes = now.getHours() * 60 + now.getMinutes();
   const rounded = (Math.floor(minutes / 30) + 1) * 30;
-  return HALF_HOUR_OPTIONS[rounded >= 24 * 60 ? 0 : Math.min(47, rounded / 30)];
+  return HALF_HOUR_TIME_OPTIONS[rounded >= 24 * 60 ? 0 : Math.min(47, rounded / 30)];
 }
 
 function addMinutesToTime(value: string, amount: number) {
@@ -86,13 +75,6 @@ function addMinutesToTime(value: string, amount: number) {
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
   const total = (hours * 60 + minutes + amount + 24 * 60) % (24 * 60);
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-function nearestHalfHourValue(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "";
-  const rounded = Math.ceil((hours * 60 + minutes) / 30) * 30;
-  return HALF_HOUR_OPTIONS[rounded >= 24 * 60 ? 0 : Math.min(47, rounded / 30)];
 }
 
 function dateKey(date: Date | null) {
@@ -129,70 +111,6 @@ function timezoneValues(current: string) {
   }
 }
 
-function ScheduleLayer({
-  anchorEl,
-  parentEl,
-  layerRef,
-  label,
-  width = 304,
-  children,
-}: {
-  anchorEl: HTMLElement;
-  parentEl: HTMLElement;
-  layerRef: RefObject<HTMLDivElement | null>;
-  label: string;
-  width?: number;
-  children: ReactNode;
-}) {
-  const [position, setPosition] = useState({ top: 8, left: 8, width });
-
-  const updatePosition = useCallback(() => {
-    const anchorRect = anchorEl.getBoundingClientRect();
-    const parentRect = parentEl.getBoundingClientRect();
-    const layerHeight = layerRef.current?.getBoundingClientRect().height ?? 300;
-    const viewportGap = 8;
-    const availableWidth = Math.max(0, window.innerWidth - viewportGap * 2);
-    const resolvedWidth = Math.min(width, availableWidth);
-    const preferredLeft = Math.min(anchorRect.left, parentRect.right - resolvedWidth - 8);
-    const left = Math.max(viewportGap, Math.min(preferredLeft, window.innerWidth - resolvedWidth - viewportGap));
-    const belowTop = anchorRect.bottom + 6;
-    const aboveTop = anchorRect.top - layerHeight - 6;
-    const top = belowTop + layerHeight <= window.innerHeight - viewportGap
-      ? belowTop
-      : Math.max(viewportGap, aboveTop);
-    setPosition({ top, left, width: resolvedWidth });
-  }, [anchorEl, layerRef, parentEl, width]);
-
-  useLayoutEffect(() => {
-    updatePosition();
-    const frame = requestAnimationFrame(updatePosition);
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updatePosition);
-    if (layerRef.current) observer?.observe(layerRef.current);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer?.disconnect();
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [layerRef, updatePosition]);
-
-  return createPortal(
-    <div
-      ref={layerRef}
-      role="dialog"
-      aria-modal="false"
-      aria-label={label}
-      className="task-sched__layer task-sched--v2"
-      style={position}
-    >
-      {children}
-    </div>,
-    document.body,
-  );
-}
-
 function OptionLayer({
   label,
   value,
@@ -205,21 +123,19 @@ function OptionLayer({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="task-sched__layer-options" role="listbox" aria-label={label}>
+    <Menu aria-label={label} initialFocus="selected" className="task-sched__layer-options">
       {options.map((option) => (
-        <button
+        <MenuItem
           key={option.value}
-          type="button"
-          role="option"
-          aria-selected={option.value === value}
-          className={option.value === value ? "is-selected" : undefined}
+          role="menuitemradio"
+          aria-checked={option.value === value}
+          selected={option.value === value}
           onClick={() => onChange(option.value)}
         >
-          <span>{option.label}</span>
-          {option.value === value && <Check size={14} strokeWidth={1.7} aria-hidden="true" />}
-        </button>
+          {option.label}
+        </MenuItem>
       ))}
-    </div>
+    </Menu>
   );
 }
 
@@ -256,21 +172,19 @@ function TimezoneLayer({
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
       </label>
-      <div className="task-sched__timezone-options" role="listbox" aria-label="Strefa czasowa">
+      <Menu aria-label="Strefa czasowa" initialFocus="none" className="task-sched__timezone-options">
         {filtered.map((timezone) => (
-          <button
+          <MenuItem
             key={timezone}
-            type="button"
-            role="option"
-            aria-selected={timezone === value}
-            className={timezone === value ? "is-selected" : undefined}
+            role="menuitemradio"
+            aria-checked={timezone === value}
+            selected={timezone === value}
             onClick={() => onChange(timezone)}
           >
-            <span>{timezoneLabel(timezone, date ?? new Date())}</span>
-            {timezone === value && <Check size={14} strokeWidth={1.7} aria-hidden="true" />}
-          </button>
+            {timezoneLabel(timezone, date ?? new Date())}
+          </MenuItem>
         ))}
-      </div>
+      </Menu>
     </div>
   );
 }
@@ -278,63 +192,27 @@ function TimezoneLayer({
 export function DurationTimePicker({
   value,
   label,
-  editMode,
   onChange,
   onClose,
-  onEditModeChange,
 }: {
   value: string;
   label: string;
-  editMode: "options" | "manual";
   onChange: (value: string) => void;
   onClose: () => void;
-  onEditModeChange: (mode: "options" | "manual") => void;
 }) {
-  const selectedOptionRef = useRef<HTMLButtonElement>(null);
-  const selectedOption = HALF_HOUR_OPTIONS.includes(value) ? value : nearestHalfHourValue(value);
-
-  useEffect(() => {
-    if (editMode !== "options") return;
-    const frame = requestAnimationFrame(() => selectedOptionRef.current?.scrollIntoView?.({ block: "start" }));
-    return () => cancelAnimationFrame(frame);
-  }, [editMode, value]);
-
   return (
     <div className="task-sched__time-menu" role="group" aria-label={`${label} — wybór godziny`}>
-      <div className="task-sched__time-menu-input">
-        <Clock size={13} strokeWidth={1.5} aria-hidden="true" />
-        <input
-          type="time"
-          step={60}
-          aria-label={`${label} — wpisz własną godzinę`}
-          value={value}
-          onClick={() => onEditModeChange("manual")}
-          onFocus={() => onEditModeChange("manual")}
-          onChange={(event) => onChange(event.currentTarget.value)}
-          autoFocus={editMode === "manual"}
-        />
-        <button type="button" aria-label={`Wyczyść ${label.toLocaleLowerCase("pl-PL")}`} onClick={() => onChange("")}>
-          <X size={13} strokeWidth={1.6} aria-hidden="true" />
-        </button>
-      </div>
-      {editMode === "options" && (
-        <div className="task-sched__time-options" role="listbox" aria-label={`${label} — co pół godziny`}>
-          {HALF_HOUR_OPTIONS.map((option) => (
-            <button
-              key={option}
-              ref={option === selectedOption ? selectedOptionRef : undefined}
-              type="button"
-              role="option"
-              aria-selected={option === value}
-              className={option === value ? "is-selected" : undefined}
-              onClick={() => { onChange(option); onClose(); }}
-            >
-              {option}
-              {option === value && <Check size={14} strokeWidth={1.7} aria-hidden="true" />}
-            </button>
-          ))}
-        </div>
-      )}
+      <TimePicker
+        aria-label={`${label} — wpisz własną godzinę`}
+        value={value}
+        step={60}
+        density="compact"
+        options={HALF_HOUR_TIME_OPTIONS}
+        optionsPresentation="inline"
+        onChange={onChange}
+        onOptionSelect={() => onClose()}
+      />
+      <Button type="button" variant="ghost" size="sm" leadingIcon={<X size={13} aria-hidden="true" />} onClick={() => onChange("")}>Wyczyść</Button>
     </div>
   );
 }
@@ -371,9 +249,9 @@ export function DatePickerPopup({
   const [allDay, setAllDay] = useState(value.allDay);
   const [timezone, setTimezone] = useState(value.timezone || browserTimezone());
   const [activeLayer, setActiveLayer] = useState<LayerKind>(null);
-  const [timeEditMode, setTimeEditMode] = useState<"options" | "manual">("options");
   const popRef = useRef<HTMLDivElement>(null);
-  const layerRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLElement>(anchorEl);
+  const placementAnchorRef = useRef<HTMLElement>(placementAnchorEl ?? anchorEl);
   const timeRowRef = useRef<HTMLButtonElement>(null);
   const reminderRowRef = useRef<HTMLButtonElement>(null);
   const repeatRowRef = useRef<HTMLButtonElement>(null);
@@ -383,7 +261,6 @@ export function DatePickerPopup({
   const endTimeRef = useRef<HTMLButtonElement>(null);
   const durationTimezoneRef = useRef<HTMLButtonElement>(null);
   const popWidth = tab === "duracja" ? 372 : 328;
-  const [popupPosition, setPopupPosition] = useState({ top: 8, left: 8 });
   const startDateKey = dateKey(selDate);
   const endDateKey = dateKey(endDate);
   const sameDurationDay = Boolean(startDateKey && endDateKey && startDateKey === endDateKey);
@@ -398,88 +275,6 @@ export function DatePickerPopup({
           : !dateOnly && tab === "duracja" && !allDay && sameDurationDay && endTime <= startTime
             ? "Godzina zakończenia musi być późniejsza niż rozpoczęcia."
             : "";
-
-  const positionPopup = useCallback(() => {
-    const target = placementAnchorEl ?? anchorEl;
-    const rect = target.getBoundingClientRect();
-    const popupHeight = popRef.current?.getBoundingClientRect().height ?? (tab === "duracja" ? 500 : 600);
-    let left = placementAnchorEl ? rect.right + 8 : rect.right - popWidth;
-    let top = placementAnchorEl ? rect.top : rect.bottom + 6;
-    if (placementAnchorEl && left + popWidth > window.innerWidth - 8) left = rect.left - popWidth - 8;
-    if (top + popupHeight > window.innerHeight - 8) {
-      top = placementAnchorEl ? rect.bottom - popupHeight : window.innerHeight - popupHeight - 8;
-    }
-    setPopupPosition({
-      left: Math.max(8, Math.min(left, window.innerWidth - popWidth - 8)),
-      top: Math.max(8, Math.min(top, window.innerHeight - popupHeight - 8)),
-    });
-  }, [anchorEl, placementAnchorEl, popWidth, tab]);
-
-  useLayoutEffect(() => {
-    positionPopup();
-    const frame = requestAnimationFrame(positionPopup);
-    return () => cancelAnimationFrame(frame);
-  }, [positionPopup]);
-
-  useEffect(() => {
-    window.addEventListener("resize", positionPopup);
-    window.addEventListener("scroll", positionPopup, true);
-    return () => {
-      window.removeEventListener("resize", positionPopup);
-      window.removeEventListener("scroll", positionPopup, true);
-    };
-  }, [positionPopup]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const selected = popRef.current?.querySelector<HTMLElement>("[aria-pressed='true']");
-      (selected ?? popRef.current)?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const insideAnchor = anchorEl.contains(target) || Boolean(placementAnchorEl?.contains(target));
-      const insideLayerTrigger = [
-        timeRowRef,
-        reminderRowRef,
-        repeatRowRef,
-        startDateRef,
-        endDateRef,
-        startTimeRef,
-        endTimeRef,
-        durationTimezoneRef,
-      ].some((ref) => ref.current?.contains(target));
-      if (layerRef.current?.contains(target)) return;
-      if (popRef.current?.contains(target)) {
-        if (insideLayerTrigger) return;
-        if (activeLayer) setActiveLayer(null);
-        return;
-      }
-      if (!insideAnchor) {
-        onClose();
-        requestAnimationFrame(() => anchorEl.focus());
-      }
-    };
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      if (activeLayer) {
-        setActiveLayer(null);
-        return;
-      }
-      onClose();
-      requestAnimationFrame(() => anchorEl.focus());
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [activeLayer, anchorEl, onClose, placementAnchorEl]);
 
   const setLayer = (layer: LayerKind) => {
     setActiveLayer((current) => current === layer ? null : layer);
@@ -603,7 +398,6 @@ export function DatePickerPopup({
           <DurationTimePicker
             value={time}
             label="Godzina zadania"
-            editMode={timeEditMode}
             onChange={(next) => {
               setTime(next);
               setStartTime(next);
@@ -612,7 +406,6 @@ export function DatePickerPopup({
                 if (!endTime || (sameDurationDay && endTime <= next)) setEndTime(addMinutesToTime(next, 60));
               }
             }}
-            onEditModeChange={setTimeEditMode}
             onClose={() => setActiveLayer(null)}
           />
           <button type="button" className="task-sched__layer-timezone" onClick={() => setActiveLayer("time-timezone")}>
@@ -651,6 +444,7 @@ export function DatePickerPopup({
             setActiveLayer(null);
           }}
           fieldClassName="task-sched__layer-calendar"
+          density="compact"
           inline
           compactWeekdays
         />
@@ -663,7 +457,6 @@ export function DatePickerPopup({
         <DurationTimePicker
           value={allDay ? "" : current}
           label={isStart ? "Godzina startu" : "Godzina zakończenia"}
-          editMode={timeEditMode}
           onChange={(next) => {
             if (isStart) {
               setStartTime(next);
@@ -671,7 +464,6 @@ export function DatePickerPopup({
               if (next && sameDurationDay && (!endTime || endTime <= next)) setEndTime(addMinutesToTime(next, 60));
             } else setEndTime(next);
           }}
-          onEditModeChange={setTimeEditMode}
           onClose={() => setActiveLayer(null)}
         />
       );
@@ -679,21 +471,33 @@ export function DatePickerPopup({
     return null;
   };
 
-  return createPortal(
+  return (
     <>
-      <div
+      <AnchoredPopover
         ref={popRef}
+        open
+        anchorRef={placementAnchorEl ? placementAnchorRef : anchorRef}
+        placement={placementAnchorEl ? "right" : "auto"}
+        align={placementAnchorEl ? "start" : "end"}
+        layer="featurePopup"
+        initialFocus="first"
+        dismissOnFocusOutside={false}
+        minWidth={popWidth}
+        maxHeight={Math.max(240, window.innerHeight - 16)}
+        viewportPadding={8}
+        onDismiss={() => onClose()}
         role="dialog"
         aria-modal="false"
         aria-label="Ustaw termin zadania"
         aria-describedby={scheduleError ? "task-schedule-error" : undefined}
         tabIndex={-1}
         className={`task-sched__popover task-sched--v2 task-sched__popover--${tab}`}
-        style={{ top: popupPosition.top, left: popupPosition.left, width: `${popWidth}px` }}
       >
         {!dateOnly && (
           <Tabs
             className="ui-tabs--segmented task-schedule-tabs"
+            density="compact"
+            fill
             ariaLabel="Sposób planowania terminu"
             activeId={tab}
             onChange={(id) => {
@@ -749,6 +553,7 @@ export function DatePickerPopup({
               value={startDateKey}
               onChange={changeStartDate}
               fieldClassName="task-sched__main-calendar"
+              density="compact"
               inline
               compactWeekdays
             />
@@ -765,7 +570,6 @@ export function DatePickerPopup({
                       aria-expanded={activeLayer === "time" || activeLayer === "time-timezone"}
                       onClick={() => {
                         ensureTimed();
-                        setTimeEditMode("options");
                         setLayer("time");
                       }}
                       className={`task-sched__row-btn${time && !allDay ? " is-set" : ""}`}
@@ -803,16 +607,12 @@ export function DatePickerPopup({
                     </button>
                   </div>
                   <div className="task-sched__row">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={allDay}
-                      onClick={toggleAllDay}
-                      className="task-sched__row-btn task-sched__row-btn--split"
-                    >
-                      <span>Cały dzień</span>
-                      <span className={`task-sched__switch${allDay ? " is-on" : ""}`} aria-hidden="true"><span /></span>
-                    </button>
+                    <Switch
+                      checked={allDay}
+                      onChange={toggleAllDay}
+                      label="Cały dzień"
+                      className="task-sched__all-day-switch"
+                    />
                   </div>
                 </div>
               </>
@@ -840,7 +640,6 @@ export function DatePickerPopup({
                 aria-label={`Godzina startu: ${allDay ? "cały dzień" : startTime}`}
                 aria-expanded={activeLayer === "start-time"}
                 onClick={() => {
-                  setTimeEditMode("options");
                   setLayer("start-time");
                 }}
               >
@@ -866,7 +665,6 @@ export function DatePickerPopup({
                 aria-label={`Godzina zakończenia: ${allDay ? "cały dzień" : endTime}`}
                 aria-expanded={activeLayer === "end-time"}
                 onClick={() => {
-                  setTimeEditMode("options");
                   setLayer("end-time");
                 }}
               >
@@ -876,16 +674,11 @@ export function DatePickerPopup({
 
             <div className="task-sched__dur-row">
               <span>Cały dzień</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={allDay}
+              <Switch
+                checked={allDay}
                 aria-label="Cały dzień"
-                onClick={toggleAllDay}
-                className={`task-sched__switch task-sched__switch--lg${allDay ? " is-on" : ""}`}
-              >
-                <span />
-              </button>
+                onChange={toggleAllDay}
+              />
             </div>
 
             <button
@@ -933,23 +726,31 @@ export function DatePickerPopup({
         {scheduleError && <p id="task-schedule-error" role="alert" className="task-sched__error">{scheduleError}</p>}
 
         <div className="task-sched__footer">
-          <Button type="button" variant="ghost" fullWidth onClick={handleClear}>Wyczyść</Button>
-          <Button type="button" variant="primary" fullWidth onClick={confirmAndClose} disabled={Boolean(scheduleError)}>OK</Button>
+          <Button type="button" variant="ghost" size="sm" fullWidth onClick={handleClear}>Wyczyść</Button>
+          <Button type="button" variant="primary" size="sm" fullWidth onClick={confirmAndClose} disabled={Boolean(scheduleError)}>Zapisz termin</Button>
         </div>
-      </div>
+      </AnchoredPopover>
 
-      {activeLayer && layerAnchor && popRef.current && (
-        <ScheduleLayer
-          anchorEl={layerAnchor}
-          parentEl={popRef.current}
-          layerRef={layerRef}
-          label={activeLayer.includes("timezone") ? "Wybierz strefę czasową" : activeLayer.includes("date") ? "Wybierz datę" : activeLayer === "repeat" ? "Powtarzanie" : activeLayer === "reminder" ? "Przypomnienie" : "Wybierz godzinę"}
-          width={activeLayer.includes("date") ? 304 : activeLayer.includes("timezone") ? 320 : tab === "duracja" ? 332 : 304}
+      {activeLayer && layerAnchor && (
+        <AnchoredPopover
+          open
+          anchorRef={{ current: layerAnchor }}
+          portalRoot={popRef.current}
+          onDismiss={() => setActiveLayer(null)}
+          dismissOnFocusOutside={false}
+          initialFocus="first"
+          layer="nestedPopover"
+          minWidth={activeLayer.includes("date") ? 304 : activeLayer.includes("timezone") ? 320 : tab === "duracja" ? 332 : 304}
+          maxHeight={Math.max(200, window.innerHeight - 16)}
+          viewportPadding={8}
+          role="dialog"
+          aria-modal="false"
+          aria-label={activeLayer.includes("timezone") ? "Wybierz strefę czasową" : activeLayer.includes("date") ? "Wybierz datę" : activeLayer === "repeat" ? "Powtarzanie" : activeLayer === "reminder" ? "Przypomnienie" : "Wybierz godzinę"}
+          className="task-sched__layer task-sched--v2"
         >
           {renderLayerContent()}
-        </ScheduleLayer>
+        </AnchoredPopover>
       )}
-    </>,
-    document.body,
+    </>
   );
 }

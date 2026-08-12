@@ -73,30 +73,7 @@
       "review": "Review with the chart-contract migration."
     }
   ],
-  "rawColors": [
-    {
-      "paths": [
-        "src/app/goals/goalsModel.ts",
-        "src/app/auth/demoWorkspace.ts",
-        "src/app/data/workWorkspace.ts",
-        "src/app/data/taskWorkspace.ts",
-        "src/app/work/workPresentation.tsx"
-      ],
-      "owner": "domain-model",
-      "reason": "Persisted or data-taxonomy colors require a schema-safe semantic mapping decision.",
-      "migration": "Persist semantic taxonomy IDs and resolve display colors through a versioned mapping.",
-      "review": "Review at the next persisted workspace schema migration."
-    },
-    {
-      "paths": [
-        "src/styles/settings.css"
-      ],
-      "owner": "appearance",
-      "reason": "Theme preview swatches duplicate theme presentation values for a bounded preview surface.",
-      "migration": "Derive preview swatches from the application theme registry and semantic CSS roles.",
-      "review": "Review when appearance previews are refactored."
-    }
-  ],
+  "rawColors": [],
   "inlineStyles": [
     {
       "paths": [
@@ -353,21 +330,7 @@
       "review": "Review if AmbientStream markup changes."
     }
   ],
-  "checkboxes": [
-    {
-      "paths": [
-        "src/app/affairs/AffairsEditorFields.tsx",
-        "src/app/experience/preferences.tsx",
-        "src/app/layout/Layout.tsx",
-        "src/app/pages/Jdg.tsx",
-        "src/app/pages/Podroze.tsx"
-      ],
-      "owner": "forms",
-      "reason": "These controls are custom form-card or switch presentations not covered by the shared Checkbox contract.",
-      "migration": "Define shared switch and form-card selection contracts before replacing the native controls.",
-      "review": "Review when shared form-control variants expand."
-    }
-  ],
+  "checkboxes": [],
   "motion": [
     {
       "paths": [

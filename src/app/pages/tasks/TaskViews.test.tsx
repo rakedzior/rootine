@@ -98,7 +98,7 @@ describe("TaskDetail virtual occurrence semantics", () => {
       "sobota, 28 lutego 2026",
     );
 
-    await user.click(screen.getByRole("button", { name: "Przenieś całą serię" }));
+    await user.click(screen.getByRole("button", { name: "Przenieś serię do Kosza" }));
     expect(onDelete).toHaveBeenCalledWith(42);
   });
 });

@@ -57,7 +57,9 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
 
     const detailPanel = page.locator(".task-detail-panel");
     await expect(detailPanel).toBeVisible();
-    await capture(detailPanel, "task-detail-panel.png");
+    // A handful of antialiased icon-edge pixels vary after the shared Lucide
+    // stroke normalization; panel geometry and content remain exact.
+    await capture(detailPanel, "task-detail-panel.png", { maxDiffPixels: 12 });
 
     await page.locator(".task-detail__date").click();
     const datePicker = page.getByRole("dialog", { name: "Ustaw termin zadania" });

@@ -35,6 +35,10 @@
   --color-neutral-subtle: rgba(174, 179, 187, 0.07);
   --color-backdrop: rgba(2, 3, 6, 0.72);
   --color-on-accent: var(--color-on-primary);
+  --color-accent: var(--theme-ambient-focus);
+  --color-accent-subtle: var(--color-primary-subtle);
+  /* Stable neutral for the synthetic "unlisted" taxonomy across appearance themes. */
+  --color-category-unlisted: #8793a1;
   --color-section-surface: var(--color-surface-1);
   --color-object-surface: var(--color-surface-2);
   --color-section-border: var(--color-border);
@@ -119,13 +123,31 @@
   --layer-system: 1000;
   --layer-nested-popover: 10001;
   --layer-system-overlay: 9999;
+}
 
+:root {
   /* Component geometry/state tokens. These do not replace semantic component APIs. */
   --component-menu-min-width: 148px;
   --component-menu-wide-width: 210px;
   --component-menu-row-height: 28px;
+  /* Shared option density. Menus, selects and property pickers choose a named
+     preset instead of inventing feature-local row heights. */
+  --component-option-height-compact: 28px;
+  --component-option-height-standard: 40px;
+  --component-option-height-comfortable: 36px;
+  --component-option-height-touch: 44px;
+  --component-option-padding-inline-compact: 8px;
+  --component-option-padding-inline-standard: 10px;
+  /* Scheduler surfaces keep one outer silhouette and one nested-layer radius. */
+  --component-scheduler-radius: var(--radius-lg);
+  --component-scheduler-layer-radius: var(--radius-md);
   --component-checkbox-size: 18px;
   --component-checkbox-size-sm: 16px;
+  --component-switch-track-width: 30px;
+  --component-switch-track-height: 18px;
+  --component-switch-thumb-size: 10px;
+  --component-switch-thumb-inset: 3px;
+  --component-switch-thumb-travel: 12px;
   --component-progress-height: 4px;
   --component-progress-height-sm: 3px;
   --state-hover-surface: var(--color-surface-hover);
@@ -139,7 +161,7 @@
    * keep geometry local and do not treat the declarations as a shared chart component API.
    */
   --color-chart-axis: var(--color-text-tertiary);
-  --color-chart-grid: var(--color-border-subtle);
+  --color-chart-grid: var(--color-border);
   --color-chart-series-1: var(--color-primary);
   --color-chart-series-2: var(--color-category-teal);
   --color-chart-series-3: var(--color-category-sand);
@@ -201,6 +223,7 @@
 :root {
   --page-width-standard: 1280px;
   --page-width-wide: 1480px;
+  --page-width-focused: 1180px;
   /* AD-2: the Tasks frame stays full width, but the list inside it is capped so rows stay
      scannable instead of stretching a title away from its metadata on a wide monitor. */
   --task-list-measure: 1120px;
@@ -217,6 +240,12 @@
   --color-category-sand: #b9a171;
   --color-category-rose: #bc8ea5;
   --color-category-slate: #8793a1;
+  --theme-preview-warm-canvas: #f2eee6;
+  --theme-preview-warm-surface: #faf8f3;
+  --theme-preview-warm-primary: #4f63a6;
+  --theme-preview-cobalt-canvas: #15181b;
+  --theme-preview-cobalt-surface: #24292f;
+  --theme-preview-cobalt-primary: #657fce;
   --task-checkbox-color: var(--color-border-strong);
 
   --theme-ambient-brand: #657fce;
@@ -344,39 +373,6 @@
 }
 
 /* stylelint-enable projectwallace/max-unique-colors */
-
-/*
- * Compatibility aliases for modules that still use the original visual names.
- * They resolve to semantic roles, so status colors never inherit a theme primary.
- */
-:root {
-  --color-precision-blue: var(--color-primary);
-  --color-precision-blue-text: var(--color-primary-text);
-  --color-precision-blue-strong: var(--color-primary);
-  --color-precision-blue-hover: var(--color-primary-hover);
-  --color-precision-blue-soft: var(--color-primary-subtle);
-  --color-graphite-shell: var(--color-app-bg);
-  --color-graphite-sidebar: var(--color-sidebar-bg);
-  --color-graphite-input: var(--color-surface-1);
-  --color-graphite-canvas: var(--color-app-bg);
-  --color-graphite-panel: var(--color-surface-1);
-  --color-graphite-card: var(--color-surface-2);
-  --color-graphite-hover: var(--color-surface-hover);
-  --color-border-subtle: var(--color-border);
-  --color-chalk-white: var(--color-text-primary);
-  --color-text-muted: var(--color-text-tertiary);
-  --color-text-disabled: var(--color-disabled-text);
-  --color-success-seaglass: var(--color-success-text);
-  --color-success-soft: var(--color-success-subtle);
-  --color-warning-ochre: var(--color-warning-text);
-  --color-warning-soft: var(--color-warning-subtle);
-  --color-danger-coral: var(--color-danger-text);
-  --color-danger-soft: var(--color-danger-subtle);
-  --color-accent-violet: var(--theme-ambient-focus);
-  --color-violet-soft: var(--color-primary-subtle);
-  /* Stable neutral for the synthetic "unlisted" category; preserve its taxonomy color across themes. */
-  --color-category-unlisted: #8793a1;
-}
 
 /*
  * Vertical rhythm, control sizing and layout constants.

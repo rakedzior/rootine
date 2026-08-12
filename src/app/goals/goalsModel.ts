@@ -1,4 +1,9 @@
 import { calendarDaysBetween, isLocalDateKey } from "../data/localDate";
+import {
+  normalizeTaxonomyColor,
+  TAXONOMY_COLORS,
+  TAXONOMY_COLOR_OPTIONS,
+} from "../data/taxonomyPalette";
 
 export type GoalStatus = "planned" | "active" | "paused" | "completed" | "archived";
 export type GoalHealth = "ontrack" | "risk";
@@ -82,35 +87,20 @@ export type GoalDraft = Omit<Goal, "id" | "createdAt" | "updatedAt" | "milestone
 
 export const GOALS_STORE_VERSION = 1;
 
-export const GOAL_ACCENT_OPTIONS = [
-  { value: "#7FA6C9", label: "Błękit" },
-  { value: "#79A8A4", label: "Morskie szkło" },
-  { value: "#B9A171", label: "Piasek" },
-  { value: "#8793A1", label: "Neutralny" },
-] as const;
-
-const GOAL_ACCENT_VALUES = new Set<string>(GOAL_ACCENT_OPTIONS.map((option) => option.value));
-const DEFAULT_GOAL_ACCENT = GOAL_ACCENT_OPTIONS[0].value;
+export const GOAL_ACCENT_OPTIONS = TAXONOMY_COLOR_OPTIONS;
 
 export function normalizeGoalAccentColor(color: string) {
-  const normalized = color.toUpperCase();
-  if (GOAL_ACCENT_VALUES.has(normalized)) return normalized;
-  if (normalized === "#4772FA" || normalized === "#3E63DA" || normalized === "#809AF4") return "#7FA6C9";
-  if (normalized === "#70B89F") return "#79A8A4";
-  if (normalized === "#D4AA68") return "#B9A171";
-  if (normalized === "#C77DBB" || normalized === "#9B8CE8" || normalized === "#CF777C") return "#8793A1";
-  if (normalized === "#A0A0A0") return "#8793A1";
-  return DEFAULT_GOAL_ACCENT;
+  return normalizeTaxonomyColor(color, "sky");
 }
 
 export const INITIAL_CATEGORIES: GoalCategory[] = [
-  { id: "sport", label: "Sport", color: "#79A8A4", iconKey: "dumbbell" },
-  { id: "health", label: "Zdrowie", color: "#7D7FA8", iconKey: "heart" },
-  { id: "work", label: "Praca", color: "#7FA6C9", iconKey: "briefcase" },
-  { id: "finance", label: "Finanse", color: "#B9A171", iconKey: "wallet" },
-  { id: "growth", label: "Rozwój", color: "#7D7FA8", iconKey: "languages" },
-  { id: "relationships", label: "Relacje", color: "#BC8EA5", iconKey: "users" },
-  { id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle" },
+  { id: "sport", label: "Sport", color: TAXONOMY_COLORS.teal, iconKey: "dumbbell" },
+  { id: "health", label: "Zdrowie", color: TAXONOMY_COLORS.violet, iconKey: "heart" },
+  { id: "work", label: "Praca", color: TAXONOMY_COLORS.sky, iconKey: "briefcase" },
+  { id: "finance", label: "Finanse", color: TAXONOMY_COLORS.sand, iconKey: "wallet" },
+  { id: "growth", label: "Rozwój", color: TAXONOMY_COLORS.violet, iconKey: "languages" },
+  { id: "relationships", label: "Relacje", color: TAXONOMY_COLORS.rose, iconKey: "users" },
+  { id: "personal", label: "Sprawy osobiste", color: TAXONOMY_COLORS.slate, iconKey: "circle" },
 ];
 
 const milestone = (id: string, title: string, dueDate: string, done = false, weight = 1): GoalMilestone => ({ id, title, dueDate, done, weight });
@@ -120,7 +110,7 @@ const createdAt = "2026-07-01T09:00:00.000Z";
 const SEED_GOALS: Goal[] = [
   {
     id: "rehab-app", title: "Stworzyć aplikację do rehabilitacji", description: "Zaprojektować i wydać pierwszą wersję aplikacji wspierającej rehabilitację.",
-    categoryId: "work", iconKey: "laptop", color: "#7FA6C9", status: "active", health: "ontrack", priority: "high",
+    categoryId: "work", iconKey: "laptop", color: TAXONOMY_COLORS.sky, status: "active", health: "ontrack", priority: "high",
     startDate: "2026-06-01", dueDate: "2027-03-31", progressMode: "milestones", initialValue: 0, targetValue: 12, unit: "etapów", manualProgress: 0,
     milestones: [
       milestone("m-app-1", "Badanie potrzeb użytkowników", "2026-06-15", true),
@@ -141,7 +131,7 @@ const SEED_GOALS: Goal[] = [
   },
   {
     id: "quit-smoking", title: "Rzucić palenie", description: "Utrzymać 90 dni bez papierosów.",
-    categoryId: "health", iconKey: "no-smoking", color: "#79A8A4", status: "active", health: "ontrack", priority: "high",
+    categoryId: "health", iconKey: "no-smoking", color: TAXONOMY_COLORS.teal, status: "active", health: "ontrack", priority: "high",
     startDate: "2026-06-01", dueDate: "2026-10-15", progressMode: "regularity", regularityMode: "streak", frequencyTarget: 1, frequencyPeriod: "day", initialValue: 0, targetValue: 90, unit: "dni", manualProgress: 0,
     milestones: [milestone("m-smoke-1", "60 dni bez papierosa", "2026-08-20")],
     progressEntries: [entry("p-smoke-1", "2026-07-21", 45, "45 dni bez papierosa")],
@@ -149,7 +139,7 @@ const SEED_GOALS: Goal[] = [
   },
   {
     id: "knee", title: "Wrócić do pełnej sprawności kolana", description: "Odbudować siłę, stabilność i pełny zakres ruchu.",
-    categoryId: "sport", iconKey: "activity", color: "#B9A171", status: "active", health: "risk", priority: "high",
+    categoryId: "sport", iconKey: "activity", color: TAXONOMY_COLORS.sand, status: "active", health: "risk", priority: "high",
     startDate: "2026-04-01", dueDate: "2026-09-30", progressMode: "numeric", initialValue: 0, targetValue: 100, unit: "% sprawności", manualProgress: 0,
     milestones: [milestone("m-knee-1", "Pełny zakres ruchu bez bólu", "2026-08-10")],
     progressEntries: [entry("p-knee-1", "2026-07-21", 72, "Pomiar kontrolny u fizjoterapeuty")],
@@ -157,7 +147,7 @@ const SEED_GOALS: Goal[] = [
   },
   {
     id: "spanish", title: "Nauczyć się hiszpańskiego na poziomie B2", description: "Swobodnie rozmawiać i czytać teksty na poziomie B2.",
-    categoryId: "growth", iconKey: "languages", color: "#7D7FA8", status: "active", health: "ontrack", priority: "medium",
+    categoryId: "growth", iconKey: "languages", color: TAXONOMY_COLORS.violet, status: "active", health: "ontrack", priority: "medium",
     startDate: "2026-05-01", dueDate: "2027-06-30", progressMode: "milestones", initialValue: 0, targetValue: 10, unit: "etapów", manualProgress: 0,
     milestones: [
       milestone("m-es-1", "Poziom A1", "2026-05-31", true), milestone("m-es-2", "Poziom A2", "2026-06-30", true),
@@ -170,7 +160,7 @@ const SEED_GOALS: Goal[] = [
   },
   {
     id: "savings", title: "Zaoszczędzić 50 000 PLN", description: "Zbudować poduszkę finansową i kapitał na rozwój produktu.",
-    categoryId: "finance", iconKey: "piggy-bank", color: "#B9A171", status: "active", health: "ontrack", priority: "medium",
+    categoryId: "finance", iconKey: "piggy-bank", color: TAXONOMY_COLORS.sand, status: "active", health: "ontrack", priority: "medium",
     startDate: "2026-01-01", dueDate: "2026-12-31", progressMode: "numeric", initialValue: 0, targetValue: 50000, unit: "PLN", manualProgress: 0,
     milestones: [milestone("m-save-1", "Przekroczyć próg 25 000 PLN", "2026-08-31")],
     progressEntries: [entry("p-save-1", "2026-07-01", 18320, "Stan oszczędności po czerwcowym przelewie")],
@@ -178,21 +168,21 @@ const SEED_GOALS: Goal[] = [
   },
   {
     id: "half-marathon", title: "Przebiec półmaraton", description: "Przygotować się do pierwszego półmaratonu.",
-    categoryId: "sport", iconKey: "dumbbell", color: "#79A8A4", status: "paused", health: "ontrack", priority: "medium",
+    categoryId: "sport", iconKey: "dumbbell", color: TAXONOMY_COLORS.teal, status: "paused", health: "ontrack", priority: "medium",
     startDate: "2026-06-01", dueDate: "2026-10-18", progressMode: "numeric", initialValue: 0, targetValue: 14, unit: "tygodni planu", manualProgress: 0,
     milestones: [milestone("m-run-1", "Długi bieg 12 km", "2026-08-09")], progressEntries: [entry("p-run-1", "2026-07-01", 4, "Ukończone cztery tygodnie planu")],
     note: "Cel wstrzymany do czasu zgody fizjoterapeuty.", createdAt, updatedAt: createdAt,
   },
   {
     id: "product-course", title: "Ukończyć kurs zarządzania produktem", description: "Ukończyć wszystkie moduły i odebrać certyfikat.",
-    categoryId: "growth", iconKey: "trophy", color: "#79A8A4", status: "completed", health: "ontrack", priority: "low",
+    categoryId: "growth", iconKey: "trophy", color: TAXONOMY_COLORS.teal, status: "completed", health: "ontrack", priority: "low",
     startDate: "2026-03-01", dueDate: "2026-06-30", progressMode: "manual", initialValue: 0, targetValue: 100, unit: "%", manualProgress: 100,
     milestones: [milestone("m-course-1", "Certyfikat ukończenia", "2026-06-30", true)], progressEntries: [],
     note: "Podsumowanie kursu zapisane w notatkach.", createdAt, updatedAt: createdAt,
   },
   {
     id: "portugal", title: "Zorganizować wyjazd do Portugalii", description: "Zaplanować tygodniowy wyjazd do Portugalii.",
-    categoryId: "personal", iconKey: "sparkles", color: "#7FA6C9", status: "planned", health: "ontrack", priority: "low",
+    categoryId: "personal", iconKey: "sparkles", color: TAXONOMY_COLORS.sky, status: "planned", health: "ontrack", priority: "low",
     startDate: "2026-09-01", dueDate: "2027-04-30", progressMode: "milestones", initialValue: 0, targetValue: 6, unit: "kroków", manualProgress: 0,
     milestones: [milestone("m-trip-1", "Wybrać termin i kierunek", "2026-09-15"), milestone("m-trip-2", "Kupić loty", "2026-10-31"), milestone("m-trip-3", "Zarezerwować noclegi", "2026-12-31")],
     progressEntries: [], note: "Rozpocząć planowanie po zamknięciu bieżącego projektu.", createdAt, updatedAt: createdAt,

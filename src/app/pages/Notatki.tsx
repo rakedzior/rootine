@@ -47,6 +47,7 @@ import {
 import {
   Badge,
   Button,
+  ConfirmDialog,
   ContentHeader,
   ContextNavItem,
   ModuleSidebar,
@@ -322,8 +323,7 @@ export default function Notatki() {
   useEffect(() => {
     if (!quickAddRequested) return;
     const url = new URL(window.location.href);
-    url.searchParams.delete("akcja");
-    url.searchParams.delete("tytul");
+    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => url.searchParams.delete(key));
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, [quickAddRequested]);
 
@@ -948,7 +948,7 @@ export default function Notatki() {
                 type="button"
                 className="notes-sidebar__group-action"
                 aria-label="Dodaj listę"
-                title="Utwórz listę"
+                title="Dodaj listę"
                 onClick={() => {
                   setListsExpanded(true);
                   openListEditor();
@@ -984,7 +984,7 @@ export default function Notatki() {
                   {listsEditMode && <span className="notes-sidebar__list-actions">
                     <button
                       type="button"
-                      aria-label={`Zmień nazwę listy ${list.name}`}
+                      aria-label={`Edytuj listę „${list.name}”`}
                       title="Zmień nazwę"
                       onClick={() => openListEditor(list)}
                     >
@@ -992,7 +992,7 @@ export default function Notatki() {
                     </button>
                     <button
                       type="button"
-                      aria-label={`Usuń listę ${list.name}`}
+                      aria-label={`Usuń listę „${list.name}”`}
                       title="Usuń listę"
                       onClick={() => setListDeleteState({ id: list.id, name: list.name })}
                     >
@@ -1089,7 +1089,7 @@ export default function Notatki() {
                     {tagsEditMode && <span className="notes-sidebar__list-actions">
                       <button
                         type="button"
-                        aria-label={`Zmień nazwę tagu ${tagName}`}
+                        aria-label={`Edytuj tag „${tagName}”`}
                         title="Zmień nazwę"
                         onClick={() => openTagEditor(tagName)}
                       >
@@ -1097,7 +1097,7 @@ export default function Notatki() {
                       </button>
                       <button
                         type="button"
-                        aria-label={`Usuń tag ${tagName}`}
+                        aria-label={`Usuń tag „${tagName}”`}
                         title="Usuń tag"
                         onClick={() => setTagDeleteState({
                           name: tagName,
@@ -1184,7 +1184,7 @@ export default function Notatki() {
               variant="ghost"
               size="sm"
               iconOnly
-              aria-label={`Usuń ${note.title}`}
+              aria-label={`Usuń notatkę „${note.title}”`}
               title="Usuń"
               onClick={() => setDeleteState(note)}
             >
@@ -1492,7 +1492,9 @@ export default function Notatki() {
           ) : <span />}
           <div>
             <span>Ctrl + Enter</span>
-            <Button variant="primary" type="submit">Zapisz</Button>
+            <Button variant="primary" type="submit">
+              {editor.mode === "edit" ? "Zapisz notatkę" : "Dodaj notatkę"}
+            </Button>
           </div>
         </footer>
       </form>
@@ -1612,7 +1614,7 @@ export default function Notatki() {
             <>
               <Button variant="ghost" onClick={closeListEditor}>Anuluj</Button>
               <Button variant="primary" type="submit" form="notes-list-form">
-                {listEditor.mode === "edit" ? "Zapisz nazwę" : "Utwórz listę"}
+                {listEditor.mode === "edit" ? "Zapisz listę" : "Dodaj listę"}
               </Button>
             </>
           )}
@@ -1645,7 +1647,7 @@ export default function Notatki() {
             <>
               <Button variant="ghost" onClick={() => { setTagEditor(null); setTagName(""); setTagError(""); }}>Anuluj</Button>
               <Button variant="primary" type="submit" form="notes-tag-form">
-                {tagEditor.mode === "add" ? "Utwórz tag" : "Zapisz nazwę"}
+                {tagEditor.mode === "add" ? "Dodaj tag" : "Zapisz tag"}
               </Button>
             </>
           )}
@@ -1667,56 +1669,43 @@ export default function Notatki() {
       )}
 
       {listDeleteState && (
-        <Modal
+        <ConfirmDialog
           eyebrow="Listy notatek"
           title={`Usunąć listę „${listDeleteState.name}”?`}
           description="Notatki pozostaną w bibliotece i zostaną przeniesione do „Bez listy”."
-          onClose={() => setListDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setListDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmListDelete}>Usuń listę</Button>
-            </>
-          )}
+          confirmLabel="Usuń listę"
+          onCancel={() => setListDeleteState(null)}
+          onConfirm={confirmListDelete}
         >
           <p className="notes-delete-note">
             Dotyczy {workspace.notes.filter((note) => note.listId === listDeleteState.id).length} notatek.
           </p>
-        </Modal>
+        </ConfirmDialog>
       )}
 
       {tagDeleteState && (
-        <Modal
+        <ConfirmDialog
           eyebrow="Tagi notatek"
           title={`Usunąć tag „${tagDeleteState.name}”?`}
           description="Tag zostanie usunięty ze wszystkich przypisanych notatek."
-          onClose={() => setTagDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setTagDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmTagDelete}>Usuń tag</Button>
-            </>
-          )}
+          confirmLabel="Usuń tag"
+          onCancel={() => setTagDeleteState(null)}
+          onConfirm={confirmTagDelete}
         >
           <p className="notes-delete-note">Dotyczy {tagDeleteState.count} notatek.</p>
-        </Modal>
+        </ConfirmDialog>
       )}
 
       {deleteState && (
-        <Modal
-          eyebrow="Potwierdzenie"
-          title={`Usunąć „${deleteState.title}”?`}
+        <ConfirmDialog
+          title={`Usunąć notatkę „${deleteState.title}”?`}
           description="Notatka zostanie trwale usunięta z lokalnej biblioteki."
-          onClose={() => setDeleteState(null)}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmDelete}>Usuń notatkę</Button>
-            </>
-          )}
+          confirmLabel="Usuń notatkę"
+          onCancel={() => setDeleteState(null)}
+          onConfirm={confirmDelete}
         >
           <p className="notes-delete-note">Jeśli chcesz zachować treść poza głównym widokiem, użyj archiwizacji zamiast usuwania.</p>
-        </Modal>
+        </ConfirmDialog>
       )}
 
       {dirtyPromptOpen && (

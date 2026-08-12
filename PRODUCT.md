@@ -67,4 +67,4 @@ Nazwa produktu to Rootine. Interfejs i komunikaty są obecnie tworzone w języku
 
 ## Accessibility & Inclusion
 
-Nie ustalono jeszcze docelowego standardu dostępności ani szczególnych potrzeb użytkowników. Bieżące MVP powinno zachować semantyczne podstawy interfejsu webowego i nie zamykać drogi do późniejszego audytu dostępności.
+Docelowym standardem interfejsu jest WCAG 2.2 na poziomie AA. Każda podstawowa czynność musi być dostępna z klawiatury, zachowywać widoczny fokus i poprawny powrót fokusu po zamknięciu warstwy, a komponenty złożone muszą realizować właściwy wzorzec ARIA. Automatyczne testy axe, kontrakty semantyczne oraz testy focus/Escape są bramką wydania; nie zastępują okresowej weryfikacji z czytnikiem ekranu ani badań z osobami korzystającymi z technologii asystujących.

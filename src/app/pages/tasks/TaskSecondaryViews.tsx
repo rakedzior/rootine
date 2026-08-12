@@ -5,9 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Flame,
-  Flag,
   MoreHorizontal,
   Pause,
   Play,
@@ -31,10 +29,24 @@ import {
   toCalendarDateKey,
 } from "../../data/taskWorkspace";
 import { formatLocalDate, parseLocalDateKey, shiftLocalDateKey } from "../../data/localDate";
-import { Button, ConfirmDialog, DatePicker, EmptyState, ListRow, Menu, MenuItem, Select } from "../../ui";
-import { DurationTimePicker } from "./TaskSchedulePicker";
+import { HALF_HOUR_TIME_OPTIONS } from "../../data/timeOptions";
 import {
-  C,
+  AnchoredPopover,
+  Button,
+  ConfirmDialog,
+  DatePicker,
+  EmptyState,
+  ListRow,
+  Menu,
+  MenuItem,
+  PriorityIcon,
+  PropertyMenu,
+  Select,
+  TimePicker,
+  priorityOptionTone,
+  type SelectOption,
+} from "../../ui";
+import {
   getMiniWeek,
   type Habit,
   type Task,
@@ -300,10 +312,10 @@ export type HabitMetaDraft = {
 };
 
 const HABIT_PRIORITY_OPTIONS = [
-  { value: "high" as TaskPriority, label: "Wysoki", color: C.danger },
-  { value: "medium" as TaskPriority, label: "Średni", color: C.warning },
-  { value: "low" as TaskPriority, label: "Niski", color: C.iceBlue },
-  { value: "", label: "Brak", color: C.textMuted },
+  { value: "high" as TaskPriority, label: "Wysoki", level: "high" as const },
+  { value: "medium" as TaskPriority, label: "Średni", level: "medium" as const },
+  { value: "low" as TaskPriority, label: "Niski", level: "low" as const },
+  { value: "", label: "Brak", level: "none" as const },
 ] as const;
 
 function HabitSelectField({
@@ -317,7 +329,7 @@ function HabitSelectField({
 }: {
   label: string;
   value: string;
-  options: Array<{ value: string; label: string }>;
+  options: SelectOption[];
   icon: React.ReactNode;
   compact?: boolean;
   active?: boolean;
@@ -334,11 +346,10 @@ function HabitSelectField({
         aria-label={label}
         value={value}
         options={options}
-        compact={compact}
+        density="compact"
         fieldClassName={compact ? "task-habit-select-field--icon" : ""}
         className={compact ? "task-habit-select-trigger--icon" : ""}
         menuPlacement={compact ? "end" : "start"}
-        menuClassName={compact ? "task-habit-select-menu" : ""}
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
@@ -350,68 +361,45 @@ function HabitPriorityField({ value, compact = false, onChange }: {
   compact?: boolean;
   onChange: (priority: TaskPriority | undefined) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const currentValue = value ?? "";
-  const currentOption = HABIT_PRIORITY_OPTIONS.find((option) => option.value === currentValue) ?? HABIT_PRIORITY_OPTIONS.at(-1)!;
+  const currentLevel = HABIT_PRIORITY_OPTIONS.find((option) => option.value === currentValue)?.level ?? "none";
+  const options = HABIT_PRIORITY_OPTIONS.map(({ value: priority, label, level }) => ({
+    value: priority,
+    label,
+    leadingIcon: <PriorityIcon level={level} />,
+  }));
 
   if (!compact) {
     return (
       <HabitSelectField
         label="Priorytet nawyku"
         value={currentValue}
-        options={HABIT_PRIORITY_OPTIONS.map(({ value: optionValue, label }) => ({ value: optionValue, label }))}
-        icon={<Flag size={13} strokeWidth={1.6} aria-hidden="true" />}
+        options={HABIT_PRIORITY_OPTIONS.map(({ value: optionValue, label, level }) => ({
+          value: optionValue,
+          label,
+          leadingIcon: <PriorityIcon level={level} />,
+          tone: priorityOptionTone(level),
+        }))}
+        icon={<PriorityIcon level={currentLevel} />}
         active={Boolean(value)}
         onChange={(next) => onChange((next || undefined) as TaskPriority | undefined)}
       />
     );
   }
 
-  const color = currentOption.color;
-
   return (
-    <div
+    <PropertyMenu
       className={`task-habit-setting task-habit-setting--icon${value ? " is-set" : ""}`}
+      triggerClassName="task-habit-select-trigger--icon task-habit-priority-trigger"
+      ariaLabel="Priorytet nawyku"
       title="Priorytet nawyku"
-      style={{ color }}
+      value={currentValue}
+      options={options}
+      layer="drawer"
+      onChange={(priority) => onChange((priority || undefined) as TaskPriority | undefined)}
     >
-      <Flag size={13} strokeWidth={1.6} fill={value ? color : "none"} aria-hidden="true" />
-      <span className="ui-sr-only">Priorytet nawyku</span>
-      <button
-        ref={triggerRef}
-        type="button"
-        className="task-habit-select-trigger--icon task-habit-priority-trigger"
-        aria-label="Priorytet nawyku"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      />
-      {open && (
-        <Menu
-          className="task-habit-priority-menu"
-          triggerRef={triggerRef}
-          onDismiss={() => setOpen(false)}
-          initialFocus="selected"
-          layer="drawer"
-        >
-          {HABIT_PRIORITY_OPTIONS.map(({ value: priority, label, color: priorityColor }) => (
-            <MenuItem
-              key={priority || "none"}
-              selected={currentValue === priority}
-              onClick={() => {
-                onChange((priority || undefined) as TaskPriority | undefined);
-                setOpen(false);
-              }}
-              leadingIcon={<Flag fill={priority ? priorityColor : "none"} style={{ color: priorityColor }} />}
-              trailingIcon={currentValue === priority ? <Check /> : undefined}
-            >
-              {label}
-            </MenuItem>
-          ))}
-        </Menu>
-      )}
-    </div>
+      <PriorityIcon level={currentLevel} />
+    </PropertyMenu>
   );
 }
 
@@ -637,52 +625,16 @@ function HabitTimeField({ value, compact = false, onChange }: {
   compact?: boolean;
   onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [editMode, setEditMode] = useState<"options" | "manual">("options");
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [open]);
-
   return (
-    <div ref={rootRef} className={`task-habit-setting task-habit-time-field${compact ? " task-habit-setting--icon" : ""}${compact && value ? " is-set" : ""}`} title={compact ? "Godzina" : undefined}>
-      <Clock3 size={13} strokeWidth={1.6} aria-hidden="true" />
-      <span className="ui-sr-only">Godzina nawyku</span>
-      <button
-        type="button"
-        className="task-habit-time-trigger"
-        aria-label="Godzina nawyku"
-        aria-expanded={open}
-        onClick={() => {
-          if (!open) {
-            setOpen(true);
-            setEditMode("options");
-          } else {
-            setEditMode((mode) => mode === "options" ? "manual" : "options");
-          }
-        }}
-      >
-        {value || "--:--"}
-      </button>
-      {open && (
-        <div className="task-habit-time-popover">
-          <DurationTimePicker
-            value={value}
-            label="Godzina nawyku"
-            editMode={editMode}
-            onChange={onChange}
-            onClose={() => setOpen(false)}
-            onEditModeChange={setEditMode}
-          />
-        </div>
-      )}
-    </div>
+    <TimePicker
+      aria-label="Godzina nawyku"
+      value={value}
+      density="compact"
+      options={HALF_HOUR_TIME_OPTIONS}
+      fieldClassName={`task-habit-time-field${compact ? " task-habit-setting--icon" : ""}${compact && value ? " is-set" : ""}`}
+      title={compact ? "Godzina" : undefined}
+      onChange={onChange}
+    />
   );
 }
 
@@ -1029,25 +981,25 @@ export function HabitDetail({
 }
 
 // ── Lightweight floating menu for input bar dropdowns ─────
-export function InputFloatMenu({ anchorEl, onClose, children }: {
-  anchorEl: HTMLElement; onClose: () => void; children: React.ReactNode;
+export function InputFloatMenu({ id, anchorEl, onClose, children }: {
+  id?: string; anchorEl: HTMLElement; onClose: () => void; children: React.ReactNode;
 }) {
-  const ref  = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(anchorEl);
   triggerRef.current = anchorEl;
-  const rect = anchorEl.getBoundingClientRect();
-  const viewportGap = 12;
-  const menuWidth = Math.min(190, Math.max(0, window.innerWidth - viewportGap * 2));
-  const left = Math.max(viewportGap, Math.min(rect.left, window.innerWidth - menuWidth - viewportGap));
   return (
-    <Menu className="task-input-float-menu" ref={ref} triggerRef={triggerRef} onDismiss={onClose} initialFocus="selected" layer="systemOverlay" style={{
-      top: rect.bottom + 6,
-      left,
-      width: menuWidth,
-      minWidth: Math.min(170, menuWidth),
-    }}>
-      {children}
-    </Menu>
+    <AnchoredPopover
+      open
+      anchorRef={triggerRef}
+      align="start"
+      layer="systemOverlay"
+      minWidth={190}
+      maxHeight={320}
+      onDismiss={onClose}
+    >
+      <Menu id={id} className="task-input-float-menu" triggerRef={triggerRef} initialFocus="selected">
+        {children}
+      </Menu>
+    </AnchoredPopover>
   );
 }
 

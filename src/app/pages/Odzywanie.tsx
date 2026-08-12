@@ -1140,15 +1140,15 @@ export default function Odzywanie() {
         />
       )}
     >
-      <ModuleMain transitionKey={`${view}:${selectedDate}`} className="nutrition-module-main flex min-w-0 flex-1 flex-col overflow-hidden">
+      <ModuleMain transitionKey={`${view}:${selectedDate}`} className="nutrition-module-main">
       {loadStatus === "corrupt" ? (
-        <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5">
-          <Card as="section" tone="panel" padding="spacious" className="mx-auto max-w-[680px]" role="alert">
+        <div className="nutrition-content">
+          <Card as="section" tone="panel" padding="spacious" className="nutrition-corrupt-card" role="alert">
             <SectionHeader
               title="Nie udało się odczytać lokalnego dziennika"
               description="Nie nadpisaliśmy zapisanych danych. Możesz ponowić odczyt albo świadomie rozpocząć nowy, pusty dziennik."
             />
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <div className="nutrition-corrupt-actions">
               <Button variant="quiet" leadingIcon={<RefreshCw size={13} />} onClick={retryLoad}>
                 Spróbuj ponownie
               </Button>
@@ -1167,7 +1167,7 @@ export default function Odzywanie() {
             description="Porównaj zapisane posiłki, nawodnienie i pomiary masy w wybranym okresie"
             mobileNavigation={mobileNavigation}
           />
-          <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="nutrition-content">
             <NutritionAnalysis
               endDate={analysisEndDate}
               days={workspace.days}
@@ -1200,7 +1200,7 @@ export default function Odzywanie() {
             actions={<>
               <div className="nutrition-date-navigation">
                 <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => selectNutritionDate(shiftDate(selectedDate, -1))}><ChevronLeft size={13} /></Button>
-                <DatePicker value={selectedDate} onChange={(value) => selectNutritionDate(value || today)} aria-label="Wybrany dzień" displayValue={formatDate(selectedDate)} fieldClassName="nutrition-date-input" />
+                <DatePicker value={selectedDate} onChange={(value) => selectNutritionDate(value || today)} aria-label="Wybrany dzień" displayValue={formatDate(selectedDate)} density="compact" fieldClassName="nutrition-date-input" />
                 <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => selectNutritionDate(shiftDate(selectedDate, 1))}><ChevronRight size={13} /></Button>
                 {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => selectNutritionDate(today)}>Dzisiaj</Button>}
               </div>
@@ -1231,7 +1231,7 @@ export default function Odzywanie() {
             </>}
           />
 
-          <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="nutrition-content">
             {dayClosed && (
               <Card tone="input" padding="dense" className="nutrition-closed-notice" role="status">
                 <CheckCircle2 size={13} aria-hidden="true" />
@@ -1239,8 +1239,8 @@ export default function Odzywanie() {
                 <Button variant="quiet" size="sm" onClick={toggleDayClosed}>Otwórz do edycji</Button>
               </Card>
             )}
-            <div className="nutrition-layout w-full">
-              <section className="nutrition-meals-panel min-w-0" aria-label="Posiłki">
+            <div className="nutrition-layout">
+              <section className="nutrition-meals-panel" aria-label="Posiłki">
                 {allEntries.length > 0 && (
                   <div className="nutrition-entry-table-header" aria-hidden="true">
                     <span>Produkt</span>
@@ -1274,7 +1274,7 @@ export default function Odzywanie() {
                             </div>
                           )}
                           {mealEntries.length > 0 && (
-                            <Button variant="ghost" size="sm" leadingIcon={<Plus size={13} />} disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
+                            <Button className="nutrition-meal-card__add-action" variant="ghost" size="sm" leadingIcon={<Plus size={13} />} disabled={dayClosed} aria-label={`Dodaj produkt do: ${label}`} onClick={() => openEntryDialog(id)}>
                               Dodaj
                             </Button>
                           )}
@@ -1297,10 +1297,10 @@ export default function Odzywanie() {
                                   <span className="nutrition-entry-item__calories">{formatNumber(entry.calories)} kcal</span>
                                 </div>
                                 <div className="nutrition-entry-item__actions">
-                                  <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Edytuj ${entry.name}`} onClick={() => openEditDialog(id, entry)}>
+                                  <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Edytuj produkt „${entry.name}”`} onClick={() => openEditDialog(id, entry)}>
                                     <Pencil size={13} />
                                   </Button>
-                                  <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Usuń ${entry.name}`} onClick={() => removeEntry(id, entry.id)}>
+                                  <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label={`Usuń produkt „${entry.name}”`} onClick={() => removeEntry(id, entry.id)}>
                                     <Trash2 size={13} />
                                   </Button>
                                 </div>
@@ -1327,14 +1327,14 @@ export default function Odzywanie() {
                 </div>
 
                 {undoEntry && (
-                  <Card tone="input" padding="dense" className="mt-3 flex items-center justify-between gap-3" role="status">
-                    <span className="nutrition-undo-entry__label truncate">Usunięto: {undoEntry.entry.name}</span>
+                  <Card tone="input" padding="dense" className="nutrition-undo-entry" role="status">
+                    <span className="nutrition-undo-entry__label">Usunięto produkt „{undoEntry.entry.name}”.</span>
                     <Button variant="ghost" size="sm" disabled={dayClosed} onClick={restoreEntry}>Cofnij</Button>
                   </Card>
                 )}
               </section>
 
-              <aside className="nutrition-summary min-w-0">
+              <aside className="nutrition-summary">
                 <SectionSurface elevated padding="default" className="nutrition-summary-card">
                   <SectionHeader
                     title="Bilans dnia"
@@ -1492,7 +1492,7 @@ export default function Odzywanie() {
                         ))}
                       </div>
                       <div className="nutrition-water-custom__form">
-                        <Input ref={waterCustomInputRef} aria-label="Inna ilość wody" type="number" min="1" step="50" placeholder="Własna ilość (ml)" value={waterCustomAmount} onChange={(event) => setWaterCustomAmount(event.target.value)} />
+                        <Input ref={waterCustomInputRef} fieldClassName="nutrition-water-custom__field" aria-label="Inna ilość wody" type="number" min="1" step="50" placeholder="Własna ilość (ml)" value={waterCustomAmount} onChange={(event) => setWaterCustomAmount(event.target.value)} />
                         <Button variant="ghost" size="sm" disabled={dayClosed || !waterCustomAmount} onClick={addCustomWater}>Dodaj</Button>
                       </div>
                     </div>
@@ -1557,12 +1557,12 @@ export default function Odzywanie() {
                 variant="primary"
                 leadingIcon={editingEntry ? <Save size={13} /> : <Plus size={13} />}
               >
-                {editingEntry ? "Zapisz zmiany" : "Dodaj do dziennika"}
+                {editingEntry ? "Zapisz produkt" : "Dodaj do dziennika"}
               </Button>
             </>
           )}
         >
-          <form id="nutrition-entry-form" onSubmit={submitEntry} className="space-y-4">
+          <form id="nutrition-entry-form" onSubmit={submitEntry} className="nutrition-entry-form">
             <Select
               label="Posiłek"
               value={entryDraft.meal}

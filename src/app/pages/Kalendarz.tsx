@@ -34,6 +34,7 @@ import {
   type WorkspaceTask as Task,
 } from "../data/taskWorkspace";
 import {
+  AnchoredPopover,
   Badge,
   Button,
   ContentHeader,
@@ -265,7 +266,7 @@ function CalendarEventBar({ event, mode, dragging, onClick, onToggle, onMoveByDa
           keyboardEvent.stopPropagation();
           onMoveByDay(keyboardEvent.key === "ArrowLeft" ? -1 : 1);
         }}
-        className="calendar-event__trigger flex min-h-6 min-w-0 flex-1 items-center gap-1 border-0 bg-transparent p-0 text-left"
+        className="calendar-event__trigger"
       >
         <span className={`calendar-event__title${event.status.completed ? " is-completed" : ""}`} title={event.title}>{event.title}</span>
         {virtual && <span className="calendar-event__recurrence" aria-hidden="true" title="Wystąpienie cykliczne">↻</span>}
@@ -397,7 +398,6 @@ export default function Kalendarz() {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
   const [agendaDateKey, setAgendaDateKey] = useState<string | null>(null);
-  const [agendaPosition, setAgendaPosition] = useState({ left: 8, top: 8 });
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
   const [calendarWidth, setCalendarWidth] = useState<number | null>(null);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
@@ -413,7 +413,6 @@ export default function Kalendarz() {
   const calendarRootRef = useRef<HTMLDivElement>(null);
   const calendarViewMonthRef = useRef(`${viewDate.getFullYear()}-${viewDate.getMonth()}`);
   const detailRef = useRef<HTMLDivElement>(null);
-  const agendaMenuRef = useRef<HTMLDivElement>(null);
   const agendaTriggerRef = useRef<HTMLButtonElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailInitialFocusIdRef = useRef<string | null>(null);
@@ -586,31 +585,6 @@ export default function Kalendarz() {
   const selectedDetailId = selectedTask
     ? `task:${selectedTask.id}`
     : selectedExternalOccurrence?.key ?? null;
-
-  useLayoutEffect(() => {
-    if (!agendaDateKey) return;
-    const repositionAgenda = () => {
-      const trigger = agendaTriggerRef.current;
-      const menu = agendaMenuRef.current;
-      if (!trigger || !menu) return;
-      const triggerRect = trigger.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      const gap = 4;
-      const left = Math.round(Math.max(8, Math.min(triggerRect.left, window.innerWidth - menuRect.width - 8)));
-      const preferredTop = triggerRect.bottom + gap;
-      const top = Math.round(preferredTop + menuRect.height <= window.innerHeight - 8
-        ? preferredTop
-        : Math.max(8, triggerRect.top - menuRect.height - gap));
-      setAgendaPosition((current) => current.left === left && current.top === top ? current : { left, top });
-    };
-    repositionAgenda();
-    window.addEventListener("resize", repositionAgenda);
-    window.addEventListener("scroll", repositionAgenda, true);
-    return () => {
-      window.removeEventListener("resize", repositionAgenda);
-      window.removeEventListener("scroll", repositionAgenda, true);
-    };
-  }, [agendaDateKey]);
 
   useEffect(() => {
     if (cells.some((cell) => dateKey(cell.year, cell.month, cell.day) === focusedDateKey)) return;
@@ -994,11 +968,11 @@ export default function Kalendarz() {
     >
       <ModuleSidebar
         label="Widoki i listy zadań"
-        className="task-context-sidebar calendar-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="task-context-sidebar calendar-context-sidebar"
       >
-        <div className="px-2 pb-4 pt-4">
-          <SectionHeader title="Główne" level={2} variant="label" className="px-1.5" />
-          <div className="space-y-px">
+        <div className="task-nav__primary-section">
+          <SectionHeader title="Główne" level={2} variant="label" className="task-nav__section-heading" />
+          <div className="task-nav__items">
             {PRIMARY_SMART_VIEWS.map(view => {
               const Icon = view.icon;
               return (
@@ -1016,9 +990,9 @@ export default function Kalendarz() {
         </div>
 
         <div className="task-nav__divider" />
-        <div className="px-2 pb-2 pt-2">
-          <SectionHeader title="Widoki specjalne" level={2} variant="label" className="px-1.5" />
-          <div className="space-y-px">
+        <div className="task-nav__special-section">
+          <SectionHeader title="Widoki specjalne" level={2} variant="label" className="task-nav__section-heading" />
+          <div className="task-nav__items">
             {SPECIAL_SMART_VIEWS.map(view => {
               const Icon = view.icon;
               return (
@@ -1036,14 +1010,14 @@ export default function Kalendarz() {
         </div>
 
         <div className="task-nav__divider" />
-            <div className="px-2 mb-2">
-              <div className="flex items-center justify-between px-1.5 mb-1.5">
+            <div className="task-nav__taxonomy-section">
+              <div className="task-nav__taxonomy-header">
                 <button type="button" className="task-nav__group-toggle" aria-expanded={listyOpen} onClick={() => setListyOpen((open) => { const next = !open; saveTaskSidebarState({ listyOpen: next }); return next; })}>
                   <ChevronRight size={11} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
                   <span className="task-nav__group-label">Listy</span>
                 </button>
               </div>
-              {listyOpen && <div className="space-y-px">
+              {listyOpen && <div className="task-nav__items">
                 {visibleLists.map((list) => {
                   const filter: CalendarFilter = { kind: "list", id: list.id };
                   const count = sidebarTasks.filter((task) => !task.deleted && !task.done && task.list === list.id).length;
@@ -1052,7 +1026,7 @@ export default function Kalendarz() {
                       key={list.id}
                       active={calendarFilterKey(calendarFilter) === calendarFilterKey(filter)}
                       onClick={() => applyCalendarFilter(filter)}
-                      icon={<span className="h-2 w-2 rounded-full" style={{ background: list.color }} />}
+                      icon={<span className="task-nav__dot" style={{ background: list.color }} />}
                       label={list.label}
                       meta={count || undefined}
                     />
@@ -1066,14 +1040,14 @@ export default function Kalendarz() {
               </div>}
             </div>
         <div className="task-nav__divider" />
-            <div className="px-2 mb-2">
-              <div className="flex items-center justify-between px-1.5 mb-1.5">
+            <div className="task-nav__taxonomy-section">
+              <div className="task-nav__taxonomy-header">
                 <button type="button" className="task-nav__group-toggle" aria-expanded={tagiOpen} onClick={() => setTagiOpen((open) => { const next = !open; saveTaskSidebarState({ tagiOpen: next }); return next; })}>
                   <ChevronRight size={11} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
                   <span className="task-nav__group-label">Tagi</span>
                 </button>
               </div>
-              {tagiOpen && <div className="space-y-px">
+              {tagiOpen && <div className="task-nav__items">
                 {visibleTags.map((tag) => {
                   const filter: CalendarFilter = { kind: "tag", id: tag.id };
                   const count = sidebarTasks.filter((task) => !task.deleted && !task.done && task.tags?.includes(tag.id)).length;
@@ -1082,7 +1056,7 @@ export default function Kalendarz() {
                       key={tag.id}
                       active={calendarFilterKey(calendarFilter) === calendarFilterKey(filter)}
                       onClick={() => applyCalendarFilter(filter)}
-                      icon={<span className="h-2 w-2 rounded-full" style={{ background: tag.color }} />}
+                      icon={<span className="task-nav__dot" style={{ background: tag.color }} />}
                       label={`#${tag.label}`}
                       meta={count || undefined}
                     />
@@ -1095,7 +1069,7 @@ export default function Kalendarz() {
                 )}
               </div>}
             </div>
-        <div className="flex-1" />
+        <div className="task-nav__spacer" />
         <div className="task-nav__footer">
           <ContextNavItem label="Ukończone" icon={<RotateCcw />} onClick={() => openTaskView("ukonczone")} />
           <ContextNavItem label="Kosz" icon={<Trash2 />} onClick={() => openTaskView("kosz")} />
@@ -1130,19 +1104,20 @@ export default function Kalendarz() {
               Bez terminu · {openUndatedCount}
             </Button>
           )}
-          <div className="calendar-period-controls flex items-center gap-1">
+          <div className="calendar-period-controls">
             <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni miesiąc" onClick={() => moveMonth(-1)}><ChevronLeft size={16} strokeWidth={1.5} /></Button>
             <Button variant="quiet" size="sm" onClick={goToday}>Dziś</Button>
             <Button variant="ghost" size="sm" iconOnly aria-label="Następny miesiąc" onClick={() => moveMonth(1)}><ChevronRight size={16} strokeWidth={1.5} /></Button>
           </div>
           <div className="task-toolbar-actions">
-            <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
+            <div className="task-priority-filters" aria-label="Filtr priorytetu">
               {CALENDAR_PRIORITIES.map((item) => {
                 const active = calendarFilter.kind === "priority" && calendarFilter.id === item.id;
                 const color = item.id === "high" ? uiColors.danger : item.id === "medium" ? uiColors.warning : C.blueText;
                 return (
                   <Button
                     key={item.id}
+                    className="task-priority-filter"
                     variant="ghost"
                     size="sm"
                     aria-pressed={active}
@@ -1210,7 +1185,7 @@ export default function Kalendarz() {
           aria-label={`Kalendarz: ${formatHeaderDate(viewDate)}`}
           aria-colcount={7}
           aria-rowcount={calendarRows.length + 1}
-          className="calendar-page flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          className="calendar-page"
         >
           <div role="row" aria-rowindex={1} className="calendar-weekdays">
             {WEEKDAYS.map((day) => <div key={day} role="columnheader" className="calendar-weekday">{day}</div>)}
@@ -1325,21 +1300,26 @@ export default function Kalendarz() {
                     >
                       +{dayEvents.length - visibleEventLimit} więcej
                     </button>
-                    {agendaDateKey === key && (
-                      <Menu
-                        ref={agendaMenuRef}
-                        id={`calendar-agenda-${key}`}
-                        className={`calendar-agenda${hideCalendarTime ? " calendar-agenda--compact" : ""}`}
-                        aria-labelledby={`calendar-overflow-trigger-${key}`}
-                        triggerRef={agendaTriggerRef}
-                        initialFocus="first"
+                    {agendaDateKey === key && agendaTriggerRef.current && (
+                      <AnchoredPopover
+                        open
+                        anchorRef={agendaTriggerRef}
+                        align="start"
+                        layer="featurePopup"
+                        minWidth={288}
+                        maxHeight={320}
+                        viewportPadding={8}
                         onDismiss={() => setAgendaDateKey(null)}
-                        style={{
-                          left: agendaPosition.left,
-                          top: agendaPosition.top,
-                        }}
-                        onClick={(menuEvent) => menuEvent.stopPropagation()}
                       >
+                        <Menu
+                          id={`calendar-agenda-${key}`}
+                          className={`calendar-agenda${hideCalendarTime ? " calendar-agenda--compact" : ""}`}
+                          aria-labelledby={`calendar-overflow-trigger-${key}`}
+                          triggerRef={agendaTriggerRef}
+                          density="comfortable"
+                          initialFocus="first"
+                          onClick={(menuEvent) => menuEvent.stopPropagation()}
+                        >
                         {dayEvents.slice(visibleEventLimit).map((hiddenEvent) => {
                           const task = hiddenEvent.kind === "task" ? hiddenEvent.task : null;
                           return (
@@ -1384,7 +1364,8 @@ export default function Kalendarz() {
                             </MenuItem>
                           );
                         })}
-                      </Menu>
+                        </Menu>
+                      </AnchoredPopover>
                     )}
                   </>
                 )}

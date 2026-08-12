@@ -58,7 +58,7 @@
     padding-left: 0;
     padding-top: var(--space-lg);
     border-left: 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
   }
 }
 
@@ -82,7 +82,7 @@
   grid-area: living;
   place-items: center;
   padding-inline: var(--space-sm);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .today-day-balance__living .living-day--foreground {
@@ -110,11 +110,11 @@
 }
 
 .today-day-balance__attention.has-overdue .today-day-balance__attention-eyebrow {
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
 }
 
 .today-day-balance__attention.is-clear .today-day-balance__attention-eyebrow {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .today-day-balance__headline {
@@ -126,7 +126,7 @@
 
 .today-day-balance__headline h2 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: clamp(var(--text-display-compact), 2.5vw, var(--text-display));
   font-feature-settings: "tnum" 1;
   font-variant-numeric: tabular-nums;
@@ -220,7 +220,7 @@
   grid-template-rows: auto auto auto 1fr;
   gap: var(--space-sm);
   padding-left: var(--space-xl);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
   grid-area: attention;
 }
 
@@ -240,11 +240,11 @@
 }
 
 .today-day-balance__attention.has-overdue .today-day-balance__attention-head {
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
 }
 
 .today-day-balance__attention.is-clear .today-day-balance__attention-head {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .today-day-balance__attention-footer {
@@ -288,7 +288,7 @@
 .today-module-list {
   display: grid;
   gap: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .today-module-row {
@@ -306,7 +306,7 @@
   row-gap: var(--space-xs);
   padding: var(--space-sm) 0;
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   outline: 0;
   background: transparent;
@@ -367,7 +367,7 @@
 
 .today-module-row__identity > strong {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -390,7 +390,7 @@
 }
 
 .today-module-row.is-complete .today-module-row__icon {
-  color: color-mix(in srgb, var(--color-success-seaglass) 54%, var(--color-text-muted));
+  color: color-mix(in srgb, var(--color-success-text) 54%, var(--color-text-tertiary));
 }
 
 .today-module-row.is-complete .today-module-row__identity > strong,
@@ -426,11 +426,11 @@
 }
 
 .today-module-row__message.tone-warning {
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
 }
 
 .today-module-row__message.tone-danger {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .today-module-row__overdue {
@@ -441,10 +441,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--color-warning-ochre) 36%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning-text) 36%, transparent);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-warning-ochre) 10%, transparent);
-  color: var(--color-warning-ochre);
+  background: color-mix(in srgb, var(--color-warning-text) 10%, transparent);
+  color: var(--color-warning-text);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   line-height: 1.2;
@@ -459,7 +459,7 @@
 }
 
 .today-module-row.is-complete .today-module-row__message {
-  color: color-mix(in srgb, var(--color-success-seaglass) 54%, var(--color-text-muted));
+  color: color-mix(in srgb, var(--color-success-text) 54%, var(--color-text-tertiary));
 }
 
 .today-module-row__visual {
@@ -507,20 +507,20 @@
 }
 
 .today-module-row__state.is-complete {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .today-module-row.is-complete .today-module-row__state.is-complete {
-  color: color-mix(in srgb, var(--color-success-seaglass) 54%, var(--color-text-muted));
+  color: color-mix(in srgb, var(--color-success-text) 54%, var(--color-text-tertiary));
 }
 
 .today-module-row__state.is-empty {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .today-module-row__arrow {
   grid-area: arrow;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   transition: color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
 }
 
@@ -553,7 +553,7 @@
   .today-day-balance__attention {
     padding-top: var(--space-lg);
     padding-left: 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
     border-left: 0;
   }
 
@@ -602,7 +602,7 @@
 
   .today-day-balance__living {
     padding: var(--space-lg) 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
     border-left: 0;
   }
 
@@ -612,7 +612,7 @@
     gap: var(--space-sm);
     padding-top: var(--space-xl);
     padding-left: 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
     border-left: 0;
   }
 
@@ -668,7 +668,7 @@
   align-content: start;
   gap: var(--space-md);
   padding-right: var(--space-xl);
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
   grid-area: queue;
 }
 
@@ -753,7 +753,7 @@
   align-content: start;
   gap: var(--space-md);
   padding-inline: var(--space-xl);
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
   grid-area: status;
 }
 
@@ -912,7 +912,7 @@
   grid-template-rows: auto auto auto;
   gap: var(--space-md);
   padding-right: var(--space-2xl);
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
 }
 
 .today-day-balance__progress-panel h2,
@@ -968,7 +968,7 @@
   flex-direction: column;
   grid-area: queue;
   padding-inline: var(--space-2xl);
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
 }
 
 .today-day-balance__queue-list {
@@ -1217,7 +1217,7 @@
   .today-day-balance__queue {
     padding: 0 0 var(--space-lg);
     border-right: 0;
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .today-day-balance__donut {

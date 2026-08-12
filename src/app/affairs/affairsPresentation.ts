@@ -317,6 +317,7 @@ export type EditorPresentation = {
   description: string;
   label: string;
   placeholder: string;
+  createLabel: string;
 };
 
 export function getEditorPresentation(editor: EditorState | null): EditorPresentation | null {
@@ -326,42 +327,49 @@ export function getEditorPresentation(editor: EditorState | null): EditorPresent
     description: "Zapisz termin i kontekst, którego nie chcesz później odtwarzać z pamięci.",
     label: "Nazwa sprawy",
     placeholder: "np. Przedłużyć polisę mieszkania",
+    createLabel: "Dodaj sprawę",
   };
   if (editor.kind === "payment") return {
     title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
     description: "Pilnuj kolejnego terminu, kwoty i sposobu opłacania stałego rachunku.",
     label: "Nazwa płatności",
     placeholder: "np. Czynsz za mieszkanie",
+    createLabel: "Dodaj płatność",
   };
   if (editor.kind === "oneTime") return {
     title: editor.mode === "edit" ? "Edytuj płatność" : "Nowa płatność",
     description: "Zapisz kwotę i termin zobowiązania, które pojawia się tylko raz.",
     label: "Nazwa płatności",
     placeholder: "np. Opłata za wydanie paszportu",
+    createLabel: "Dodaj płatność",
   };
   if (editor.kind === "subscription") return {
     title: editor.mode === "edit" ? "Edytuj subskrypcję" : "Nowa subskrypcja",
     description: "Kontroluj koszt, cykl odnowienia oraz ewentualny koniec zobowiązania.",
     label: "Nazwa subskrypcji",
     placeholder: "np. Dysk w chmurze",
+    createLabel: "Dodaj subskrypcję",
   };
   if (editor.kind === "document") return {
     title: editor.mode === "edit" ? "Edytuj dokument" : "Nowy dokument",
     description: "Zapisuj tylko informacje potrzebne do pilnowania ważności — bez pełnych numerów dokumentów.",
     label: "Nazwa dokumentu",
     placeholder: "np. Dowód osobisty",
+    createLabel: "Dodaj dokument",
   };
   if (editor.kind === "vehicle") return {
     title: editor.mode === "edit" ? "Edytuj pojazd" : "Nowy pojazd",
     description: "Aktualny przebieg pozwala poprawnie ostrzegać o serwisach i wymianach.",
     label: "Nazwa pojazdu",
     placeholder: "np. Samochód rodzinny",
+    createLabel: "Dodaj pojazd",
   };
   return {
     title: editor.mode === "edit" ? "Edytuj termin" : "Nowy termin",
     description: "Ustaw datę, przebieg graniczny albo oba warunki jednocześnie.",
     label: "Nazwa terminu",
     placeholder: "np. Wymiana oleju i filtrów",
+    createLabel: "Dodaj termin",
   };
 }
 

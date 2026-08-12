@@ -24,6 +24,7 @@ import {
 } from "../data/nutritionWorkspace";
 import { createDefaultNotesWorkspace, NOTES_STORAGE_KEY, type NoteRecord, type NotesWorkspace } from "../data/notesWorkspace";
 import { createDefaultSummaryNotes, isoWeekKey, SUMMARY_NOTES_STORAGE_KEY } from "../data/summaryNotes";
+import { TAXONOMY_COLORS } from "../data/taxonomyPalette";
 import {
   createDefaultTaskWorkspace,
   taskViewForCalendarDate,
@@ -288,18 +289,18 @@ function createDemoTasks(): TaskWorkspace {
     tasks,
     habits,
     lists: [
-      { id: "praca", label: "Pracownia", color: "#7FA6C9" },
-      { id: "dom", label: "Baza", color: "#B9A171" },
-      { id: "hobby", label: "Eksperymenty", color: "#8793A1" },
-      { id: "zdrowie", label: "Rytm", color: "#79A8A4" },
+      { id: "praca", label: "Pracownia", color: TAXONOMY_COLORS.sky },
+      { id: "dom", label: "Baza", color: TAXONOMY_COLORS.sand },
+      { id: "hobby", label: "Eksperymenty", color: TAXONOMY_COLORS.slate },
+      { id: "zdrowie", label: "Rytm", color: TAXONOMY_COLORS.teal },
     ],
     tags: [
-      { id: "praca", label: "moduł", color: "#7FA6C9" },
-      { id: "trening", label: "ruch", color: "#79A8A4" },
-      { id: "dom", label: "baza", color: "#B9A171" },
-      { id: "finanse", label: "liczby", color: "#8793A1" },
-      { id: "zdrowie", label: "rytm", color: "#79A8A4" },
-      { id: "hobby", label: "eksperyment", color: "#7D7FA8" },
+      { id: "praca", label: "moduł", color: TAXONOMY_COLORS.sky },
+      { id: "trening", label: "ruch", color: TAXONOMY_COLORS.teal },
+      { id: "dom", label: "baza", color: TAXONOMY_COLORS.sand },
+      { id: "finanse", label: "liczby", color: TAXONOMY_COLORS.slate },
+      { id: "zdrowie", label: "rytm", color: TAXONOMY_COLORS.teal },
+      { id: "hobby", label: "eksperyment", color: TAXONOMY_COLORS.violet },
     ],
   };
 }

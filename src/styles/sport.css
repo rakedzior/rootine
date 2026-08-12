@@ -6,16 +6,16 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .sport-planner-toolbar__status:not(.is-dirty) {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .sport-planner-toolbar__status.is-dirty {
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
 }
 
 .sport-planner-toolbar__right {
@@ -59,12 +59,12 @@
   display: grid;
   gap: var(--space-xs);
   padding: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-warning-soft);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-warning-subtle);
 }
 
 .sport-context-sidebar__active > span {
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
 }
@@ -79,7 +79,7 @@
 
 .sport-context-sidebar__active > small {
   margin-bottom: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -91,15 +91,15 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-xs) var(--space-3xl);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-warning-ochre) 25%, transparent);
-  background: var(--color-warning-soft);
-  color: var(--color-warning-ochre);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning-text) 25%, transparent);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning-text);
   font-size: var(--text-label);
 }
 
 .sport-delete-note {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-body);
   line-height: var(--leading-normal);
 }
@@ -115,26 +115,26 @@
 
 .sport-meta-label--strength,
 .sport-meta-label--status-scheduled {
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .sport-meta-label--running,
 .sport-meta-label--status-completed {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .sport-meta-label--rehab,
 .sport-meta-label--status-in_progress,
 .sport-meta-label--status-incomplete {
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
 }
 
 .sport-meta-label--mobility {
-  color: var(--color-accent-violet);
+  color: var(--color-accent);
 }
 
 .sport-meta-label--status-missed {
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
 }
 
 .sport-modal-delete-action {
@@ -195,9 +195,9 @@
   align-items: center;
   gap: var(--space-xl);
   padding: var(--space-lg);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
 }
 
 .sport-cycle-summary__identity {
@@ -205,7 +205,7 @@
   min-width: 0;
   align-items: center;
   gap: var(--space-md);
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .sport-cycle-summary__identity > div {
@@ -222,7 +222,7 @@
 .sport-cycle-summary__title h2 {
   overflow: hidden;
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -231,7 +231,7 @@
 
 .sport-cycle-summary__identity p {
   margin: 3px 0 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -241,14 +241,14 @@
   align-items: center;
   gap: var(--space-lg);
   padding: 0 var(--space-xl);
-  border-right: 1px solid var(--color-border-subtle);
-  border-left: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border);
 }
 
 .sport-cycle-summary__facts span {
   display: grid;
   gap: 2px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-align: center;
   white-space: nowrap;
@@ -275,7 +275,7 @@
   align-items: center;
   gap: var(--space-xs);
   padding-left: var(--space-md);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .sport-cycle-layout {
@@ -301,13 +301,13 @@
 
 .sport-cycle-sidebar__active {
   padding: var(--space-lg);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
 }
 
 .sport-cycle-sidebar__active .sport-cycle-sidebar__section-heading h3 {
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
   font-size: var(--text-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -315,7 +315,7 @@
 
 .sport-cycle-sidebar__plans {
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-sidebar__section-heading {
@@ -332,13 +332,13 @@
 }
 
 .sport-cycle-sidebar__section-heading h3 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .sport-cycle-sidebar__section-heading p {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -348,14 +348,14 @@
   min-width: 0;
   align-items: center;
   gap: var(--space-xs);
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .sport-cycle-plan-card__title-row h2,
 .sport-cycle-plan-card__title-row strong {
   overflow: hidden;
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -369,7 +369,7 @@
 .sport-cycle-plan-card__date,
 .sport-cycle-plan-card__meta {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -386,13 +386,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-xs);
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-plan-card__stats span {
   display: grid;
   gap: 2px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -429,9 +429,9 @@
   width: 100%;
   gap: 4px;
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
   text-align: left;
   transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
@@ -448,15 +448,15 @@ button.sport-cycle-plan-card {
 button.sport-cycle-plan-card:hover,
 button.sport-cycle-plan-card:focus-visible {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
 }
 
 .sport-cycle-sidebar__empty {
   margin: 0;
   padding: var(--space-md);
-  border: 1px dashed var(--color-border-subtle);
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -484,7 +484,7 @@ button.sport-cycle-plan-card:focus-visible {
   min-width: 0;
   gap: var(--space-sm);
   padding: 0 0 var(--space-sm);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-cycle-week-carousel > .sport-cycle-sidebar__section-heading {
@@ -512,14 +512,14 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-week-header h2 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 
 .sport-cycle-week-header p {
   margin-top: 4px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -554,7 +554,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-sidebar {
   align-content: start;
   padding-right: var(--space-xl);
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
 }
 
 .sport-cycle-sidebar__heading {
@@ -569,7 +569,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-sidebar__heading h2 {
   overflow: hidden;
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -640,7 +640,7 @@ button.sport-cycle-plan-card:focus-visible {
   justify-content: flex-start;
   max-width: none;
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-workspace {
@@ -662,14 +662,14 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-workspace__heading h2 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 
 .sport-cycle-workspace__heading > div > p:last-child {
   margin-top: 4px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -697,7 +697,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-plans-module > .sport-cycle-sidebar__heading {
   align-items: center;
   padding: var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-cycle-plans-module > .sport-cycle-sidebar__heading h2 {
@@ -727,7 +727,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-plans-module__settings {
   width: var(--control-height-md);
   height: var(--control-height-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
 }
 
 .sport-cycle-plans-module__settings:hover:not(:disabled) {
@@ -738,7 +738,7 @@ button.sport-cycle-plan-card:focus-visible {
   gap: var(--space-sm);
   padding: var(--space-lg);
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
@@ -749,7 +749,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-sidebar__section-heading h3,
 .sport-cycle-plans-module .sport-cycle-sidebar__plans .sport-cycle-sidebar__section-heading h3 {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -765,17 +765,17 @@ button.sport-cycle-plan-card:focus-visible {
   width: 48px;
   height: 48px;
   padding: 11px;
-  border: 1px solid color-mix(in srgb, var(--color-precision-blue) 28%, var(--color-border-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
   border-radius: var(--radius-lg);
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
 }
 
 .sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__title-row h2 {
   overflow: visible;
   min-width: 0;
   padding-top: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-heading-sm);
   line-height: 1.25;
   text-overflow: clip;
@@ -796,7 +796,7 @@ button.sport-cycle-plan-card:focus-visible {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-xs);
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-plan-card__commit .ui-button {
@@ -829,7 +829,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__stats span + span {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .sport-cycle-plans-module .sport-cycle-sidebar__active .sport-cycle-plan-card__stats strong {
@@ -848,7 +848,7 @@ button.sport-cycle-plan-card:focus-visible {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-xs);
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-plans-module .sport-cycle-sidebar__actions > .ui-button {
@@ -860,7 +860,7 @@ button.sport-cycle-plan-card:focus-visible {
   grid-column: 1 / -1;
   justify-content: flex-end;
   padding: var(--space-sm) 0 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
   border-left: 0;
 }
 
@@ -889,7 +889,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-plans-module--other > .sport-cycle-sidebar__section-heading h2 {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -924,10 +924,10 @@ button.sport-cycle-plan-card:focus-visible {
   width: 36px;
   height: 36px;
   padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--color-precision-blue) 28%, var(--color-border-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
   border-radius: var(--radius-lg);
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
 }
 
 .sport-cycle-plans-module--other .sport-cycle-plan-card__title-row strong {
@@ -935,7 +935,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-plan-card__chevron {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .sport-cycle-plans-module--other .sport-cycle-plan-card__detail {
@@ -949,7 +949,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-plans-module--other .sport-cycle-plan-card__detail svg {
   flex: 0 0 auto;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .sport-cycle-plans-module--other .sport-cycle-sidebar__empty {
@@ -961,9 +961,9 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-workspace .sport-cycle-weeks {
   min-height: 0;
   padding: 0;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
   overflow: hidden;
 }
 
@@ -983,7 +983,7 @@ button.sport-cycle-plan-card:focus-visible {
   min-height: 0;
   grid-template-columns: minmax(164px, 180px) minmax(0, 1fr);
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
@@ -993,11 +993,11 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-workspace .sport-cycle-day.is-today {
-  background: color-mix(in srgb, var(--color-precision-blue-soft) 42%, transparent);
+  background: color-mix(in srgb, var(--color-primary-subtle) 42%, transparent);
 }
 
 .sport-cycle-workspace .sport-cycle-day.is-recovery {
-  background: color-mix(in srgb, var(--color-accent-violet) 7%, var(--color-graphite-panel));
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface-1));
 }
 
 .sport-cycle-workspace .sport-cycle-day__heading {
@@ -1007,7 +1007,7 @@ button.sport-cycle-plan-card:focus-visible {
   gap: var(--space-sm);
   min-height: 58px;
   padding: var(--space-sm) var(--space-md);
-  border-right: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
   background: transparent;
 }
 
@@ -1066,13 +1066,13 @@ button.sport-cycle-plan-card:focus-visible {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .sport-cycle-workspace .sport-cycle-day__empty:hover,
 .sport-cycle-workspace .sport-cycle-day__add:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
   color: var(--color-text-secondary);
 }
 
@@ -1090,7 +1090,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-workspace .sport-cycle-day__add.is-icon {
   width: 38px;
   padding: 0;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
 }
 
 .sport-cycle-workspace .sport-cycle-drag-hint {
@@ -1110,7 +1110,7 @@ button.sport-cycle-plan-card:focus-visible {
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--color-section-border);
-  border-top-color: color-mix(in srgb, var(--color-precision-blue) 20%, var(--color-section-border));
+  border-top-color: color-mix(in srgb, var(--color-primary) 20%, var(--color-section-border));
   border-radius: var(--radius-lg);
   background: var(--color-section-surface);
 }
@@ -1118,7 +1118,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-planner-module > .sport-cycle-week-carousel {
   gap: 0;
   padding: var(--space-xl);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-cycle-planner-module .sport-cycle-week-header {
@@ -1143,7 +1143,7 @@ button.sport-cycle-plan-card:focus-visible {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   white-space: nowrap;
@@ -1165,7 +1165,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-week-tabs-heading small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   font-weight: var(--weight-regular);
@@ -1195,14 +1195,14 @@ button.sport-cycle-plan-card:focus-visible {
   flex-wrap: wrap;
   gap: var(--space-sm);
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .sport-week-navigation p {
   margin: 3px 0 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -1228,10 +1228,10 @@ button.sport-cycle-plan-card:focus-visible {
   place-items: center;
   gap: 1px;
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
@@ -1242,19 +1242,19 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-week-tab.is-current {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
 }
 
 .sport-week-tab[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 45%, transparent);
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
 }
 
 .sport-week-tab.is-drop-target {
-  border-color: var(--color-precision-blue-text);
-  color: var(--color-precision-blue-text);
+  border-color: var(--color-primary-text);
+  color: var(--color-primary-text);
 }
 
 .sport-week-tab span {
@@ -1289,9 +1289,9 @@ button.sport-cycle-plan-card:focus-visible {
   grid-template-columns: minmax(148px, 180px) minmax(0, 1fr);
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .sport-cycle-day:has(.sport-cycle-workout:active) {
@@ -1299,8 +1299,8 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-day.is-drop-target {
-  border-color: var(--color-precision-blue-text);
-  background: var(--color-precision-blue-soft);
+  border-color: var(--color-primary-text);
+  background: var(--color-primary-subtle);
 }
 
 .sport-cycle-day__heading {
@@ -1310,8 +1310,8 @@ button.sport-cycle-plan-card:focus-visible {
   justify-content: space-between;
   gap: var(--space-sm);
   padding: var(--space-md);
-  border-right: 1px solid var(--color-border-subtle);
-  background: var(--color-graphite-panel);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-1);
 }
 
 .sport-cycle-day__heading strong,
@@ -1327,7 +1327,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-day__heading span {
   margin-top: 2px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -1351,9 +1351,9 @@ button.sport-cycle-plan-card:focus-visible {
   flex: 1 1 220px;
   gap: var(--space-xs);
   padding: var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
   text-align: left;
   cursor: grab;
@@ -1364,13 +1364,13 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-workout:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .sport-cycle-workout.is-selected {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 55%, var(--color-border-strong));
-  background: var(--color-precision-blue-soft);
-  color: var(--color-chalk-white);
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border-strong));
+  background: var(--color-primary-subtle);
+  color: var(--color-text-primary);
 }
 
 .sport-cycle-workout:active {
@@ -1381,7 +1381,7 @@ button.sport-cycle-plan-card:focus-visible {
   position: absolute;
   top: var(--space-xs);
   right: var(--space-xs);
-  color: var(--color-text-disabled);
+  color: var(--color-disabled-text);
 }
 
 .sport-cycle-workout > strong {
@@ -1397,7 +1397,7 @@ button.sport-cycle-plan-card:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -1407,10 +1407,10 @@ button.sport-cycle-plan-card:focus-visible {
   max-width: 360px;
   flex: 1 1 220px;
   min-height: 64px;
-  border: 1px dashed var(--color-border-subtle);
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1421,7 +1421,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-cycle-drag-hint {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-align: right;
 }
@@ -1433,10 +1433,10 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-move-workout-form__preview {
   margin: 0;
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
   font-size: var(--text-body);
 }
 
@@ -1446,7 +1446,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-week-navigation__current {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-regular);
 }
@@ -1458,7 +1458,7 @@ button.sport-cycle-plan-card:focus-visible {
   gap: var(--space-2xl);
   padding: var(--space-lg);
   padding-inline: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-week-summary h3,
@@ -1467,14 +1467,14 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-week-summary h3 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
 
 .sport-week-summary p {
   margin-top: 4px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1488,11 +1488,11 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   gap: 4px;
   padding: 0 var(--space-lg);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .sport-week-summary dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1509,7 +1509,7 @@ button.sport-cycle-plan-card:focus-visible {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-sm) var(--space-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1552,13 +1552,13 @@ button.sport-cycle-plan-card:focus-visible {
   z-index: var(--layer-local);
   top: 50%;
   left: var(--space-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   pointer-events: none;
   transform: translateY(-50%);
 }
 
-.sport-template-search .ui-field__control,
-.sport-history-search .ui-field__control {
+.sport-template-search__input,
+.sport-history-search__input {
   padding-left: 36px;
 }
 
@@ -1583,7 +1583,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-template-group__heading span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -1604,8 +1604,8 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-table-head {
   min-height: 38px;
   padding: 0 var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
 }
@@ -1617,9 +1617,9 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-row {
   position: relative;
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-align: left;
 }
@@ -1630,7 +1630,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-template-row:hover,
 .sport-template-row:focus-within {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .sport-template-row__main {
@@ -1661,7 +1661,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-template-row__main p {
   margin-top: 3px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1681,7 +1681,7 @@ button.sport-cycle-plan-card:focus-visible {
   height: 32px;
   place-items: center;
   border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
   list-style: none;
 }
@@ -1692,7 +1692,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-template-actions > summary:hover,
 .sport-template-actions[open] > summary {
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
 }
 
@@ -1706,7 +1706,7 @@ button.sport-cycle-plan-card:focus-visible {
   padding: var(--space-xs);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
   box-shadow: var(--shadow-floating);
 }
 
@@ -1725,7 +1725,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-template-actions > div > button:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .sport-planner-form {
@@ -1763,13 +1763,13 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-planner-form__error {
-  background: var(--color-danger-soft);
-  color: var(--color-danger-coral);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger-text);
 }
 
 .sport-planner-form__warning {
-  background: var(--color-warning-soft);
-  color: var(--color-warning-ochre);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning-text);
 }
 
 .sport-repeat-weeks {
@@ -1777,9 +1777,9 @@ button.sport-cycle-plan-card:focus-visible {
   gap: var(--space-sm);
   margin: 0;
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .sport-repeat-weeks legend {
@@ -1798,10 +1798,10 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-repeat-weeks button {
   min-height: 34px;
   padding: 0 var(--space-xs);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-graphite-panel);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   cursor: pointer;
@@ -1813,9 +1813,9 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-repeat-weeks button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 50%, transparent);
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
 }
 
 .sport-insights {
@@ -1874,13 +1874,13 @@ button.sport-cycle-plan-card:focus-visible {
   justify-content: space-between;
   gap: var(--space-lg);
   padding: 0 var(--space-xl) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: var(--text-body);
 }
 
 .sport-overview-panel__summary > span:last-child {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
@@ -1905,9 +1905,9 @@ button.sport-cycle-plan-card:focus-visible {
   position: relative;
   display: grid;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--color-warning-ochre) 22%, var(--color-border-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-warning-text) 22%, var(--color-border));
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
   overflow: hidden;
 }
 
@@ -1932,14 +1932,14 @@ button.sport-cycle-plan-card:focus-visible {
   grid-column: 1 / -1;
   align-items: center;
   gap: 5px;
-  color: var(--color-warning-ochre);
+  color: var(--color-warning-text);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
 }
 
 .sport-active-strip__header > div > strong {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -1949,7 +1949,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-active-strip__facts {
   display: grid;
   grid-template-columns: 110px minmax(180px, 1fr) 120px 120px;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-active-strip__facts > div {
@@ -1958,7 +1958,7 @@ button.sport-cycle-plan-card:focus-visible {
   align-content: center;
   gap: 4px;
   padding: var(--space-md) var(--space-lg);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
 }
 
 .sport-active-strip__facts > div:first-child {
@@ -1969,7 +1969,7 @@ button.sport-cycle-plan-card:focus-visible {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -1984,7 +1984,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-strip__facts small {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1998,14 +1998,14 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-strip__progress {
   height: 3px;
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .sport-active-strip__progress i {
   display: block;
   width: 100%;
   height: 100%;
-  background: var(--color-warning-ochre);
+  background: var(--color-warning-text);
   transform-origin: left center;
   transition: transform var(--motion-normal) var(--ease-out);
 }
@@ -2017,7 +2017,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-overview-layout__today .sport-active-strip__current {
   grid-column: 1 / -1;
   grid-row: 1;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-left: 0;
 }
 
@@ -2034,7 +2034,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-overview-layout__today .sport-active-strip__facts > div:nth-child(4) {
   grid-column: 1 / -1;
   grid-row: 3;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
   border-left: 0;
 }
 
@@ -2042,7 +2042,7 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   align-content: start;
   gap: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-overview-workout {
@@ -2054,7 +2054,7 @@ button.sport-cycle-plan-card:focus-visible {
   gap: var(--space-md);
   padding: var(--space-md);
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
   color: var(--color-text-secondary);
@@ -2062,12 +2062,12 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-workout:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .sport-overview-workout.is-selected {
-  background: color-mix(in srgb, var(--color-precision-blue-soft) 58%, transparent);
-  box-shadow: inset 2px 0 0 var(--color-precision-blue);
+  background: color-mix(in srgb, var(--color-primary-subtle) 58%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-primary);
 }
 
 .sport-overview-workout.is-completed {
@@ -2075,7 +2075,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-workout.is-active {
-  background: color-mix(in srgb, var(--color-warning-ochre) 4%, transparent);
+  background: color-mix(in srgb, var(--color-warning-text) 4%, transparent);
 }
 
 .sport-overview-workout.is-missed {
@@ -2091,14 +2091,14 @@ button.sport-cycle-plan-card:focus-visible {
   border: 1.5px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
 .sport-overview-workout__checkbox:hover:not(:disabled),
 .sport-overview-workout__checkbox:focus-visible {
-  border-color: var(--color-precision-blue);
-  background: var(--color-precision-blue-soft);
+  border-color: var(--color-primary);
+  background: var(--color-primary-subtle);
 }
 
 .sport-overview-workout__checkbox:focus-visible {
@@ -2107,8 +2107,8 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-workout__checkbox.is-checked {
-  border-color: var(--color-precision-blue);
-  background: var(--color-precision-blue);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
 }
 
 .sport-overview-workout__checkbox:disabled {
@@ -2147,7 +2147,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-workout__copy strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   line-height: 1.2;
@@ -2159,7 +2159,7 @@ button.sport-cycle-plan-card:focus-visible {
   min-width: 0;
   justify-items: start;
   gap: 4px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: 1.35;
 }
@@ -2173,12 +2173,12 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-workout.is-completed .sport-overview-workout__copy strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-decoration: line-through;
 }
 
 .sport-overview-workout.is-completed .sport-overview-workout__meta {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .sport-today-card__rest {
@@ -2188,13 +2188,13 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: start;
   gap: var(--space-lg);
   padding: var(--space-2xl) var(--space-xl) var(--space-xl);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .sport-today-card__rest > svg {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: var(--color-accent-violet);
+  color: var(--color-accent);
 }
 
 .sport-today-card__rest-copy {
@@ -2221,12 +2221,12 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-today-card__rest p.sport-today-card__rest-note {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
 .sport-today-card__rest.is-recovery {
-  background: color-mix(in srgb, var(--color-accent-violet) 7%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
 }
 
 .sport-current-week {
@@ -2318,18 +2318,17 @@ button.sport-cycle-plan-card:focus-visible {
 /* PageShell already owns the horizontal page padding; repeating it here inset Szablony and
    Ćwiczenia 28px further than their own header and every other view. */
 .sport-record-view { display: grid; min-width: 0; gap: var(--space-lg); padding: 0 0 var(--space-3xl); }
-.sport-record-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); background: var(--color-graphite-panel); }
-.sport-record-toolbar .ui-field { min-width: 150px; flex: 0 0 auto; }
-.sport-record-toolbar .sport-record-toolbar__search { min-width: min(340px, 100%); flex: 1 1 260px; }
-.sport-record-toolbar .ui-field__control { height: var(--control-height-sm); }
-.sport-record-toolbar .ui-button { min-height: var(--control-height-sm); }
+.sport-record-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-1); }
+.sport-record-toolbar__field { min-width: 150px; flex: 0 0 auto; }
+.sport-record-toolbar__search-field { min-width: min(340px, 100%); flex: 1 1 260px; }
+.sport-record-toolbar__search-input { height: var(--control-height-sm); }
 .sport-record-table { min-width: 0; overflow: visible; border: 0; background: transparent; }
 .sport-record-module { border: 1px solid var(--color-section-border); border-top-color: color-mix(in srgb, var(--color-border-strong) 68%, var(--color-section-border)); background: var(--color-section-surface); }
-.sport-record-module__header { align-items: center; padding: var(--space-xl); border-bottom: 1px solid var(--color-border-subtle); }
+.sport-record-module__header { align-items: center; padding: var(--space-xl); border-bottom: 1px solid var(--color-border); }
 .sport-record-module__header .ui-section-header__description { max-width: 72ch; }
 .sport-record-module > .sport-record-toolbar { margin: var(--space-lg); }
 .sport-record-module > .sport-record-table__body { min-width: 0; }
-.sport-history-module > .sport-record-module__header { border-bottom: 1px solid var(--color-border-subtle); }
+.sport-history-module > .sport-record-module__header { border-bottom: 1px solid var(--color-border); }
 .sport-history-module > .ui-filter-bar { margin: var(--space-lg); }
 .sport-analysis-header-module { overflow: visible; }
 .sport-analysis-header-module > .sport-record-module__header { border-bottom: 0; }
@@ -2342,95 +2341,95 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-exercise-table__head > span:nth-child(5) { white-space: nowrap; }
 .sport-template-table__head,
 .sport-template-table__row { grid-template-columns: minmax(0, 1fr) 132px 88px 72px 88px 44px; }
-.sport-record-table__head { min-height: 36px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
-.sport-record-table__row { position: relative; min-height: 64px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-secondary); font-size: var(--text-label); }
+.sport-record-table__head { min-height: 36px; border-bottom: 1px solid var(--color-border); color: var(--color-text-tertiary); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+.sport-record-table__row { position: relative; min-height: 64px; border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: var(--text-label); }
 .sport-record-table__row:last-child { border-bottom: 0; }
-.sport-record-table__row:hover { background: var(--color-graphite-hover); }
+.sport-record-table__row:hover { background: var(--color-surface-hover); }
 .sport-record-table__main-cell { min-width: 0; }
 .sport-record-table__main { display: grid; width: 100%; min-width: 0; gap: 3px; padding: var(--space-sm) 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .sport-record-table__main:focus-visible,
 .sport-template-row__main:focus-visible { outline: 0; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
-.sport-record-table__name { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); overflow: hidden; color: var(--color-chalk-white); font-size: var(--text-body-emphasis); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
-.sport-record-table__name svg { flex: 0 0 auto; color: var(--color-precision-blue-text); }
-.sport-record-table__sub { display: flex; align-items: center; gap: var(--space-xs); color: var(--color-text-muted); font-size: var(--text-micro); }
+.sport-record-table__name { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); overflow: hidden; color: var(--color-text-primary); font-size: var(--text-body-emphasis); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.sport-record-table__name svg { flex: 0 0 auto; color: var(--color-primary-text); }
+.sport-record-table__sub { display: flex; align-items: center; gap: var(--space-xs); color: var(--color-text-tertiary); font-size: var(--text-micro); }
 .sport-record-table__actions { position: relative; display: flex; justify-content: flex-end; }
-.sport-icon-button { display: inline-grid; width: var(--control-height-sm); height: var(--control-height-sm); place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); cursor: pointer; }
-.sport-icon-button:hover { border-color: var(--color-border-strong); background: var(--color-graphite-panel); color: var(--color-chalk-white); }
+.sport-icon-button { display: inline-grid; width: var(--control-height-sm); height: var(--control-height-sm); place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-tertiary); cursor: pointer; }
+.sport-icon-button:hover { border-color: var(--color-border-strong); background: var(--color-surface-1); color: var(--color-text-primary); }
 .sport-icon-button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .sport-row-menu { position: absolute; z-index: var(--layer-menu-local); top: calc(100% + 4px); right: 0; min-width: 180px; box-shadow: var(--shadow-floating); }
-.sport-data { color: var(--color-chalk-white); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.sport-data { color: var(--color-text-primary); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .sport-record-detail { display: grid; align-content: start; gap: var(--space-lg); padding: var(--space-xl); overflow-y: auto; }
 .sport-record-detail__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
-.sport-record-detail__header h2 { margin: 4px 0 8px; color: var(--color-chalk-white); font-size: var(--text-title); line-height: var(--leading-snug); }
-.sport-panel-kicker { color: var(--color-text-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+.sport-record-detail__header h2 { margin: 4px 0 8px; color: var(--color-text-primary); font-size: var(--text-title); line-height: var(--leading-snug); }
+.sport-panel-kicker { color: var(--color-text-tertiary); font-size: var(--text-micro); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
 .sport-record-detail__actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .sport-record-detail__lead { margin: 0; color: var(--color-text-secondary); font-size: var(--text-body); line-height: var(--leading-normal); }
 .sport-detail-list { display: grid; gap: var(--space-sm); margin: 0; }
-.sport-detail-list > div { display: grid; grid-template-columns: 1fr 1.2fr; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border-subtle); }
-.sport-detail-list dt { color: var(--color-text-muted); font-size: var(--text-micro); }
+.sport-detail-list > div { display: grid; grid-template-columns: 1fr 1.2fr; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border); }
+.sport-detail-list dt { color: var(--color-text-tertiary); font-size: var(--text-micro); }
 .sport-detail-list dd { margin: 0; color: var(--color-text-secondary); font-size: var(--text-label); }
-.sport-record-detail__section { display: grid; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border-subtle); }
-.sport-record-detail__section h3 { margin: 0; color: var(--color-chalk-white); font-size: var(--text-body-emphasis); font-weight: var(--weight-medium); }
+.sport-record-detail__section { display: grid; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-border); }
+.sport-record-detail__section h3 { margin: 0; color: var(--color-text-primary); font-size: var(--text-body-emphasis); font-weight: var(--weight-medium); }
 .sport-record-detail__section p { margin: 0; color: var(--color-text-secondary); font-size: var(--text-label); line-height: var(--leading-normal); }
 .sport-record-detail__section ul { display: grid; gap: var(--space-xs); margin: 0; padding-left: var(--space-lg); color: var(--color-text-secondary); font-size: var(--text-label); }
 .sport-template-detail__list { display: grid; gap: 2px; margin: 0; padding-left: 20px; color: var(--color-text-secondary); }
-.sport-template-detail__list li { padding: 8px 0 8px 4px; border-bottom: 1px solid var(--color-border-subtle); }
-.sport-template-detail__list li span { display: block; color: var(--color-chalk-white); font-size: var(--text-label); }
-.sport-template-detail__list li small { display: block; margin-top: 2px; color: var(--color-text-muted); font-family: var(--font-data); font-size: var(--text-micro); }
+.sport-template-detail__list li { padding: 8px 0 8px 4px; border-bottom: 1px solid var(--color-border); }
+.sport-template-detail__list li span { display: block; color: var(--color-text-primary); font-size: var(--text-label); }
+.sport-template-detail__list li small { display: block; margin-top: 2px; color: var(--color-text-tertiary); font-family: var(--font-data); font-size: var(--text-micro); }
 .sport-template-group { display: grid; gap: var(--space-sm); }
-.sport-template-group__heading { display: flex; align-items: center; gap: var(--space-sm); color: var(--color-text-muted); }
+.sport-template-group__heading { display: flex; align-items: center; gap: var(--space-sm); color: var(--color-text-tertiary); }
 .sport-template-group__heading h3 { margin: 0; font-size: var(--text-label); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
-.sport-template-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 44px; min-height: 72px; border-bottom: 1px solid var(--color-border-subtle); }
+.sport-template-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 44px; min-height: 72px; border-bottom: 1px solid var(--color-border); }
 .sport-template-row:last-child { border-bottom: 0; }
-.sport-template-row:hover { background: var(--color-graphite-hover); }
-.sport-template-row.is-selected { background: var(--color-precision-blue-soft); box-shadow: inset 2px 0 0 var(--color-precision-blue); }
+.sport-template-row:hover { background: var(--color-surface-hover); }
+.sport-template-row.is-selected { background: var(--color-primary-subtle); box-shadow: inset 2px 0 0 var(--color-primary); }
 .sport-template-row__main { display: grid; grid-template-columns: minmax(180px, 1.05fr) minmax(220px, 2fr) 150px 100px; align-items: center; gap: var(--space-md); min-width: 0; padding: var(--space-sm) var(--space-lg); border: 0; background: transparent; color: var(--color-text-secondary); font: inherit; text-align: left; cursor: pointer; }
-.sport-template-row__title { display: grid; min-width: 0; gap: 3px; color: var(--color-chalk-white); font-size: var(--text-body-emphasis); font-weight: var(--weight-medium); }
-.sport-template-row__title small { overflow: hidden; color: var(--color-text-muted); font-size: var(--text-micro); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.sport-template-row__title { display: grid; min-width: 0; gap: 3px; color: var(--color-text-primary); font-size: var(--text-body-emphasis); font-weight: var(--weight-medium); }
+.sport-template-row__title small { overflow: hidden; color: var(--color-text-tertiary); font-size: var(--text-micro); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .sport-template-row__content { overflow: hidden; color: var(--color-text-secondary); font-size: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
-.sport-template-table__row.is-selected { background: var(--color-precision-blue-soft); box-shadow: inset 2px 0 0 var(--color-precision-blue); }
+.sport-template-table__row.is-selected { background: var(--color-primary-subtle); box-shadow: inset 2px 0 0 var(--color-primary); }
 .sport-template-editor { display: grid; gap: var(--space-lg); }
-.sport-template-editor__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, auto); align-items: end; gap: var(--space-lg); padding: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-graphite-panel); }
+.sport-template-editor__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, auto); align-items: end; gap: var(--space-lg); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-1); }
 .sport-template-editor__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
 .sport-template-editor__section-create { display: flex; min-width: 0; align-items: end; gap: var(--space-sm); }
 .sport-template-editor__section-create .ui-field { min-width: 190px; flex: 1 1 auto; }
 .sport-template-editor__section-create .ui-button { flex: 0 0 auto; }
-.sport-template-editor__section { display: grid; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-graphite-panel); }
-.sport-template-editor__section > header { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border-subtle); }
-.sport-template-editor__section > header strong { display: block; color: var(--color-chalk-white); font-size: var(--text-body-emphasis); }
-.sport-template-editor__section > header small { display: block; margin-top: 2px; color: var(--color-text-muted); font-size: var(--text-micro); }
+.sport-template-editor__section { display: grid; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-1); }
+.sport-template-editor__section > header { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border); }
+.sport-template-editor__section > header strong { display: block; color: var(--color-text-primary); font-size: var(--text-body-emphasis); }
+.sport-template-editor__section > header small { display: block; margin-top: 2px; color: var(--color-text-tertiary); font-size: var(--text-micro); }
 .sport-template-editor__section-heading-actions,
 .sport-template-editor__section-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
-.sport-template-editor__section-actions { padding-top: var(--space-sm); border-top: 1px solid var(--color-border-subtle); }
+.sport-template-editor__section-actions { padding-top: var(--space-sm); border-top: 1px solid var(--color-border); }
 .sport-template-editor__section-edit { display: flex; min-width: min(100%, 420px); align-items: end; gap: var(--space-xs); }
 .sport-template-editor__section-edit .ui-field { flex: 1 1 auto; }
-.sport-template-editor__item-wrap { border-bottom: 1px solid color-mix(in srgb, var(--color-border-subtle) 72%, transparent); }
+.sport-template-editor__item-wrap { border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent); }
 .sport-template-editor__item-wrap:last-of-type { border-bottom: 0; }
-.sport-template-editor__item { display: flex; min-height: 48px; align-items: center; gap: var(--space-xs); padding: 6px var(--space-xs); border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--color-text-muted); }
+.sport-template-editor__item { display: flex; min-height: 48px; align-items: center; gap: var(--space-xs); padding: 6px var(--space-xs); border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--color-text-tertiary); }
 .sport-template-editor__item:hover,
-.sport-template-editor__item-wrap.is-expanded > .sport-template-editor__item { border-color: var(--color-border-subtle); background: var(--color-graphite-hover); }
-.sport-template-editor__drag-handle { display: inline-grid; width: 26px; min-width: 26px; height: 30px; place-items: center; color: var(--color-text-muted); cursor: grab; }
+.sport-template-editor__item-wrap.is-expanded > .sport-template-editor__item { border-color: var(--color-border); background: var(--color-surface-hover); }
+.sport-template-editor__drag-handle { display: inline-grid; width: 26px; min-width: 26px; height: 30px; place-items: center; color: var(--color-text-tertiary); cursor: grab; }
 .sport-template-editor__drag-handle:active { cursor: grabbing; }
 .sport-template-editor__item-toggle { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--space-sm); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .sport-template-editor__item-toggle:focus-visible { outline: 0; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 .sport-template-editor__item-copy { display: grid; min-width: 0; flex: 1; gap: 2px; }
-.sport-template-editor__item-copy strong { overflow: hidden; color: var(--color-chalk-white); font-size: var(--text-label); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
-.sport-template-editor__item-copy small { color: var(--color-text-muted); font-family: var(--font-data); font-size: var(--text-micro); }
-.sport-template-editor__item-details { display: grid; gap: var(--space-md); padding: var(--space-md) var(--space-md) var(--space-md) calc(26px + var(--space-md)); border-top: 1px solid var(--color-border-subtle); }
+.sport-template-editor__item-copy strong { overflow: hidden; color: var(--color-text-primary); font-size: var(--text-label); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.sport-template-editor__item-copy small { color: var(--color-text-tertiary); font-family: var(--font-data); font-size: var(--text-micro); }
+.sport-template-editor__item-details { display: grid; gap: var(--space-md); padding: var(--space-md) var(--space-md) var(--space-md) calc(26px + var(--space-md)); border-top: 1px solid var(--color-border); }
 .sport-template-editor__item-details .sport-planner-form__grid { align-items: end; }
 .sport-template-editor__section { position: relative; transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out); }
-.sport-template-editor__section.is-drop-target { border-color: var(--color-precision-blue); background: color-mix(in srgb, var(--color-precision-blue-soft) 46%, var(--color-graphite-panel)); }
-.sport-template-editor__section.is-drop-target::before { position: absolute; top: -3px; right: var(--space-md); left: var(--space-md); height: 3px; border-radius: var(--radius-pill); background: var(--color-precision-blue); content: ""; }
+.sport-template-editor__section.is-drop-target { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary-subtle) 46%, var(--color-surface-1)); }
+.sport-template-editor__section.is-drop-target::before { position: absolute; top: -3px; right: var(--space-md); left: var(--space-md); height: 3px; border-radius: var(--radius-pill); background: var(--color-primary); content: ""; }
 .sport-template-editor__section.is-dragging { opacity: .58; }
 .sport-template-editor__section-heading { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
 .sport-template-editor__section-heading > div { min-width: 0; }
-.sport-template-editor__section-drag-handle { display: inline-grid; width: 26px; height: 30px; flex: 0 0 auto; place-items: center; color: var(--color-text-muted); cursor: grab; }
+.sport-template-editor__section-drag-handle { display: inline-grid; width: 26px; height: 30px; flex: 0 0 auto; place-items: center; color: var(--color-text-tertiary); cursor: grab; }
 .sport-template-editor__section-drag-handle:active { cursor: grabbing; }
 .sport-template-editor__section-heading-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
 .sport-template-editor__section-position { display: grid; gap: 1px; justify-items: center; }
-.sport-template-editor__section-position > span { color: var(--color-text-muted); font-size: var(--text-micro); line-height: 1; }
+.sport-template-editor__section-position > span { color: var(--color-text-tertiary); font-size: var(--text-micro); line-height: 1; }
 .sport-template-editor__section-position > div { display: flex; gap: 1px; }
-.sport-template-editor__item-columns { display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 66px 64px; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs) 3px; color: var(--color-text-muted); font-size: var(--text-micro); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+.sport-template-editor__item-columns { display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 66px 64px; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs) 3px; color: var(--color-text-tertiary); font-size: var(--text-micro); letter-spacing: var(--tracking-label); text-transform: uppercase; }
 .sport-template-editor__item-columns span:nth-child(4),
 .sport-template-editor__item-columns span:nth-child(5) { text-align: center; }
 .sport-template-editor__item { display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 66px 64px; min-height: 48px; align-items: center; gap: var(--space-xs); }
@@ -2438,12 +2437,12 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-editor__item-toggle { min-width: 0; }
 .sport-template-editor__item-order-actions,
 .sport-template-editor__item-actions { display: flex; align-items: center; justify-content: center; gap: 1px; }
-.sport-template-editor__item-wrap.is-drop-target { position: relative; border-radius: var(--radius-sm); background: var(--color-precision-blue-soft); }
-.sport-template-editor__item-wrap.is-drop-target::before { position: absolute; top: -4px; right: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-precision-blue); content: ""; }
+.sport-template-editor__item-wrap.is-drop-target { position: relative; border-radius: var(--radius-sm); background: var(--color-primary-subtle); }
+.sport-template-editor__item-wrap.is-drop-target::before { position: absolute; top: -4px; right: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-primary); content: ""; }
 .sport-template-editor__item-wrap.is-dragging { opacity: .46; }
-.sport-template-editor__series-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border-subtle); }
-.sport-template-editor__series-toolbar strong { display: block; color: var(--color-chalk-white); font-size: var(--text-label); font-weight: var(--weight-semibold); }
-.sport-template-editor__series-toolbar small { display: block; margin-top: 2px; color: var(--color-text-muted); font-size: var(--text-micro); }
+.sport-template-editor__series-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-border); }
+.sport-template-editor__series-toolbar strong { display: block; color: var(--color-text-primary); font-size: var(--text-label); font-weight: var(--weight-semibold); }
+.sport-template-editor__series-toolbar small { display: block; margin-top: 2px; color: var(--color-text-tertiary); font-size: var(--text-micro); }
 .sport-template-editor__series-toolbar-actions { display: flex; align-items: end; gap: var(--space-sm); }
 .sport-template-editor__series-toolbar-actions .ui-field { min-width: 228px; }
 .sport-template-editor__series-scroll { max-width: 100%; overflow-x: auto; padding-bottom: 2px; }
@@ -2452,38 +2451,38 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-template-editor__series-list[data-metric-mode="distance"] { min-width: 500px; }
 .sport-template-editor__series-list[data-metric-mode="time-distance"] { min-width: 620px; }
 .sport-template-editor__series-list[data-metric-mode="all"] { min-width: 940px; }
-.sport-template-editor__series-row { display: grid; grid-template-columns: 28px repeat(auto-fit, minmax(92px, 1fr)) 30px; align-items: end; gap: var(--space-xs); padding: var(--space-xs); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-graphite-input); }
+.sport-template-editor__series-row { display: grid; grid-template-columns: 28px repeat(auto-fit, minmax(92px, 1fr)) 30px; align-items: end; gap: var(--space-xs); padding: var(--space-xs); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-1); }
 .sport-template-editor__series-row .ui-field { min-width: 0; }
 .sport-template-editor__series-row .ui-field__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sport-template-editor__series-index { display: inline-grid; width: 28px; height: 32px; place-items: center; align-self: center; color: var(--color-text-muted); font-family: var(--font-data); font-size: var(--text-micro); }
+.sport-template-editor__series-index { display: inline-grid; width: 28px; height: 32px; place-items: center; align-self: center; color: var(--color-text-tertiary); font-family: var(--font-data); font-size: var(--text-micro); }
 .sport-template-editor__exercise-settings { display: grid; grid-template-columns: minmax(250px, .75fr) minmax(0, 1.25fr); align-items: start; gap: var(--space-md); }
-.sport-superset-picker { min-width: 0; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-graphite-input); }
+.sport-superset-picker { min-width: 0; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface-1); }
 .sport-superset-picker summary { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: 0 12px; color: var(--color-text-secondary); font-size: var(--text-label); cursor: pointer; list-style: none; }
 .sport-superset-picker summary::-webkit-details-marker { display: none; }
-.sport-superset-picker summary::after { content: "⌄"; color: var(--color-text-muted); }
-.sport-superset-picker[open] summary { border-bottom: 1px solid var(--color-border-subtle); }
+.sport-superset-picker summary::after { content: "⌄"; color: var(--color-text-tertiary); }
+.sport-superset-picker[open] summary { border-bottom: 1px solid var(--color-border); }
 .sport-superset-picker summary:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .sport-superset-picker summary span { color: var(--color-text-secondary); }
-.sport-superset-picker summary small { overflow: hidden; color: var(--color-text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.sport-superset-picker summary small { overflow: hidden; color: var(--color-text-tertiary); text-overflow: ellipsis; white-space: nowrap; }
 .sport-superset-picker__body { display: grid; gap: var(--space-xs); max-height: 180px; overflow-y: auto; padding: var(--space-sm) 12px 12px; }
-.sport-superset-picker__body p { margin: 0 0 2px; color: var(--color-text-muted); font-size: var(--text-micro); line-height: var(--leading-normal); }
-.sport-superset-picker__body > small { color: var(--color-text-muted); font-size: var(--text-micro); }
-.sport-template-editor__empty { margin: 0; color: var(--color-text-muted); font-size: var(--text-label); }
-.sport-disclosure { display: inline-flex; width: fit-content; align-items: center; gap: var(--space-sm); padding: 0; border: 0; background: transparent; color: var(--color-precision-blue-text); font: inherit; font-size: var(--text-label); cursor: pointer; }
-.sport-disclosure:hover { color: var(--color-chalk-white); }
+.sport-superset-picker__body p { margin: 0 0 2px; color: var(--color-text-tertiary); font-size: var(--text-micro); line-height: var(--leading-normal); }
+.sport-superset-picker__body > small { color: var(--color-text-tertiary); font-size: var(--text-micro); }
+.sport-template-editor__empty { margin: 0; color: var(--color-text-tertiary); font-size: var(--text-label); }
+.sport-disclosure { display: inline-flex; width: fit-content; align-items: center; gap: var(--space-sm); padding: 0; border: 0; background: transparent; color: var(--color-primary-text); font: inherit; font-size: var(--text-label); cursor: pointer; }
+.sport-disclosure:hover { color: var(--color-text-primary); }
 .sport-disclosure:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .sport-field { display: grid; gap: 6px; color: var(--color-text-secondary); font-size: var(--text-label); }
-.sport-field textarea { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); outline: 0; background: var(--color-graphite-input); color: var(--color-chalk-white); font: inherit; line-height: var(--leading-normal); }
+.sport-field textarea { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); outline: 0; background: var(--color-surface-1); color: var(--color-text-primary); font: inherit; line-height: var(--leading-normal); }
 .sport-field textarea:focus { border-color: var(--color-field-focus); box-shadow: none; }
-.sport-exercise-picker { display: grid; max-height: 380px; overflow-y: auto; margin-top: var(--space-md); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); }
-.sport-exercise-picker button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: 12px; border: 0; border-bottom: 1px solid var(--color-border-subtle); background: transparent; color: var(--color-text-secondary); font: inherit; text-align: left; cursor: pointer; }
+.sport-exercise-picker { display: grid; max-height: 380px; overflow-y: auto; margin-top: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.sport-exercise-picker button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: 12px; border: 0; border-bottom: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); font: inherit; text-align: left; cursor: pointer; }
 .sport-exercise-picker button:last-child { border-bottom: 0; }
-.sport-exercise-picker button:hover { background: var(--color-graphite-hover); color: var(--color-chalk-white); }
+.sport-exercise-picker button:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
 .sport-exercise-picker button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 .sport-exercise-picker button span { display: grid; gap: 3px; }
-.sport-exercise-picker button strong { color: var(--color-chalk-white); font-size: var(--text-body); font-weight: var(--weight-medium); }
-.sport-exercise-picker button small { color: var(--color-text-muted); font-size: var(--text-micro); }
-.sport-cycle-workout__preview { display: block; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-micro); text-overflow: ellipsis; white-space: nowrap; }
+.sport-exercise-picker button strong { color: var(--color-text-primary); font-size: var(--text-body); font-weight: var(--weight-medium); }
+.sport-exercise-picker button small { color: var(--color-text-tertiary); font-size: var(--text-micro); }
+.sport-cycle-workout__preview { display: block; overflow: hidden; color: var(--color-text-tertiary); font-size: var(--text-micro); text-overflow: ellipsis; white-space: nowrap; }
 .sport-history-detail__items { grid-column: 1 / -1; }
 .sport-history-detail__items ul { margin: 4px 0 0; padding-left: 16px; color: var(--color-text-secondary); font-size: var(--text-micro); }
 .sport-today-card__rest-actions {
@@ -2498,10 +2497,10 @@ button.sport-cycle-plan-card:focus-visible {
   justify-content: center;
 }
 .sport-analysis-secondary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
-.sport-analysis-secondary-metrics .ui-card { display: grid; gap: 4px; padding: var(--space-md); border-color: var(--color-border-subtle); background: var(--color-graphite-panel); }
+.sport-analysis-secondary-metrics .ui-card { display: grid; gap: 4px; padding: var(--space-md); border-color: var(--color-border); background: var(--color-surface-1); }
 .sport-analysis-secondary-metrics span { color: var(--color-text-secondary); font-size: var(--text-label); }
-.sport-analysis-secondary-metrics strong { color: var(--color-chalk-white); font-family: var(--font-data); font-size: var(--text-title); font-weight: var(--weight-medium); }
-.sport-analysis-secondary-metrics small { color: var(--color-text-muted); font-size: var(--text-micro); }
+.sport-analysis-secondary-metrics strong { color: var(--color-text-primary); font-family: var(--font-data); font-size: var(--text-title); font-weight: var(--weight-medium); }
+.sport-analysis-secondary-metrics small { color: var(--color-text-tertiary); font-size: var(--text-micro); }
 @media (max-width: 760px) { .sport-analysis-secondary-metrics { grid-template-columns: 1fr; } }
 
 @media (max-width: 1100px) {
@@ -2527,8 +2526,8 @@ button.sport-cycle-plan-card:focus-visible {
   .sport-overview-panel > .ui-section-header { padding: var(--space-lg) var(--space-lg) var(--space-md); }
   .sport-overview-panel__summary { align-items: flex-start; flex-direction: column; gap: var(--space-xs); padding: 0 var(--space-lg) var(--space-md); }
   .sport-record-toolbar { align-items: stretch; }
-  .sport-record-toolbar .ui-field,
-  .sport-record-toolbar .sport-record-toolbar__search { min-width: 100%; flex: 1 1 100%; }
+  .sport-record-toolbar__field,
+  .sport-record-toolbar__search-field { min-width: 100%; flex: 1 1 100%; }
   .sport-record-table__row { grid-template-columns: minmax(0, 1fr) 38px; min-height: 68px; padding-inline: var(--space-md); }
   .sport-record-table__row > span:nth-child(2),
   .sport-record-table__row > span:nth-child(4),
@@ -2550,7 +2549,6 @@ button.sport-cycle-plan-card:focus-visible {
   .sport-template-editor__item-columns { display: none; }
   .sport-template-editor__section > header { align-items: stretch; flex-direction: column; }
   .sport-template-editor__section-heading-actions { justify-content: flex-start; }
-  .sport-template-editor__section-heading-actions .ui-button { min-height: 30px; }
   .sport-template-editor__series-toolbar,
   .sport-template-editor__series-toolbar-actions { align-items: stretch; flex-direction: column; }
   .sport-template-editor__series-toolbar-actions .ui-field { min-width: 0; }
@@ -2568,7 +2566,7 @@ button.sport-cycle-plan-card:focus-visible {
   min-height: 0;
   grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
   align-items: stretch;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
   transition:
     background var(--motion-fast) var(--ease-out),
     box-shadow var(--motion-fast) var(--ease-out);
@@ -2580,20 +2578,20 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-overview-day.is-today {
   background: var(--color-surface-veil-soft);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-precision-blue-text) 48%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-primary-text) 48%, transparent);
 }
 
 .sport-overview-day.is-recovery {
-  background: color-mix(in srgb, var(--color-accent-violet) 7%, var(--color-graphite-panel));
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface-1));
 }
 
 .sport-overview-day.is-today .sport-overview-day__heading strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
 }
 
 .sport-overview-day.is-drop-target {
-  background: color-mix(in srgb, var(--color-precision-blue-soft) 76%, var(--color-graphite-panel));
-  box-shadow: inset 0 0 0 1px var(--color-precision-blue-text);
+  background: color-mix(in srgb, var(--color-primary-subtle) 76%, var(--color-surface-1));
+  box-shadow: inset 0 0 0 1px var(--color-primary-text);
 }
 
 .sport-overview-day__heading {
@@ -2601,8 +2599,8 @@ button.sport-cycle-plan-card:focus-visible {
   min-height: 78px;
   grid-template-columns: minmax(0, 1fr) 38px;
   align-items: center;
-  border-right: 1px solid var(--color-border-subtle);
-  background: var(--color-graphite-panel);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-1);
 }
 
 .sport-overview-day__heading > div {
@@ -2622,7 +2620,7 @@ button.sport-cycle-plan-card:focus-visible {
   min-height: 0;
   padding: 0;
   border-left: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -2633,7 +2631,7 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  color: var(--color-accent-violet);
+  color: var(--color-accent);
   font-size: var(--text-micro);
   font-weight: var(--weight-medium);
 }
@@ -2641,15 +2639,15 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-overview-day__add,
 .sport-cycle-day__add-button {
   display: inline-grid;
-  width: 32px;
-  height: 32px;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
   place-items: center;
   justify-self: center;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
@@ -2658,8 +2656,8 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-day__add-button:hover,
 .sport-cycle-day__add-button:focus-visible {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
 .sport-overview-day__add:focus-visible,
@@ -2691,9 +2689,9 @@ button.sport-cycle-plan-card:focus-visible {
   align-content: center;
   gap: var(--space-xs);
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
   text-align: left;
 }
@@ -2715,7 +2713,7 @@ button.sport-cycle-plan-card:focus-visible {
   width: 14px;
   height: 18px;
   place-items: center;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .sport-overview-day__workouts > button.is-movable > strong {
@@ -2731,14 +2729,14 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-overview-day__workouts > button:hover,
 .sport-overview-day__workouts > button.is-selected {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 48%, var(--color-border-strong));
-  background: var(--color-precision-blue-soft);
+  border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border-strong));
+  background: var(--color-primary-subtle);
 }
 
 .sport-overview-day__workouts > button strong {
   overflow: hidden;
   padding-right: var(--space-lg);
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -2765,7 +2763,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-overview-day__workouts > button span:not(.ui-badge),
 .sport-overview-day__empty {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -2775,22 +2773,22 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-overview-day__workouts > button.is-completed {
-  border-color: var(--color-border-subtle);
-  background: var(--color-graphite-input);
+  border-color: var(--color-border);
+  background: var(--color-surface-1);
 }
 
 .sport-overview-day__workouts > button.is-completed strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-decoration: line-through;
 }
 
 .sport-overview-day__workouts > button.is-completed span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .sport-overview-day__workouts > button.is-completed.is-selected {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 48%, var(--color-border-strong));
-  background: var(--color-precision-blue-soft);
+  border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border-strong));
+  background: var(--color-primary-subtle);
 }
 
 @media (max-width: 760px) {
@@ -2803,7 +2801,7 @@ button.sport-cycle-plan-card:focus-visible {
   .sport-overview-day__heading {
     min-height: 54px;
     border-right: 0;
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .sport-cycle-workout,
@@ -2819,7 +2817,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-history-row__date,
 .sport-history-row__duration {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
@@ -2845,16 +2843,16 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-analysis-metrics svg {
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .sport-analysis-metrics span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
 .sport-analysis-metrics strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-title);
   font-variant-numeric: tabular-nums;
@@ -2893,7 +2891,7 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md) 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-analysis-disciplines > div:last-child {
@@ -2902,7 +2900,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-analysis-disciplines span,
 .sport-analysis-disciplines strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
@@ -2916,7 +2914,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-analysis-empty {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -2946,13 +2944,13 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-history-head {
   min-height: 40px;
   border-bottom: 1px solid var(--color-border-strong);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
 }
 
 .sport-history-entry {
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-history-entry:last-child {
@@ -2960,7 +2958,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-history-entry.is-expanded {
-  background: color-mix(in srgb, var(--color-graphite-hover) 72%, transparent);
+  background: color-mix(in srgb, var(--color-surface-hover) 72%, transparent);
 }
 
 .sport-history-row {
@@ -2975,12 +2973,12 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-history-row:hover,
 .sport-history-row:focus-visible {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .sport-history-row__date,
 .sport-history-row__result {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -3022,7 +3020,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-history-row__duration small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -3046,7 +3044,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-history-detail span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -3095,7 +3093,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-analysis-metrics small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -3113,7 +3111,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-analysis-card-heading > span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -3130,7 +3128,7 @@ button.sport-cycle-plan-card:focus-visible {
   flex-direction: column;
   justify-content: space-between;
   padding-bottom: 26px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   text-align: right;
@@ -3149,7 +3147,7 @@ button.sport-cycle-plan-card:focus-visible {
   left: 0;
   display: block;
   height: 1px;
-  border-top: 1px dashed color-mix(in srgb, var(--color-warning-ochre) 62%, transparent);
+  border-top: 1px dashed color-mix(in srgb, var(--color-warning-text) 62%, transparent);
   pointer-events: none;
 }
 
@@ -3173,7 +3171,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-analysis-bars span,
 .sport-analysis-bars small {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   text-overflow: ellipsis;
@@ -3184,8 +3182,8 @@ button.sport-cycle-plan-card:focus-visible {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: linear-gradient(to top, var(--color-border-subtle) 1px, transparent 1px);
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(to top, var(--color-border) 1px, transparent 1px);
   background-size: 100% 50%;
 }
 
@@ -3194,7 +3192,7 @@ button.sport-cycle-plan-card:focus-visible {
   width: min(30px, 66%);
   height: 100%;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: var(--color-precision-blue-text);
+  background: var(--color-primary-text);
   opacity: 0.82;
   transform-origin: center bottom;
   transition: transform var(--motion-normal) var(--ease-out);
@@ -3228,7 +3226,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-analysis-discipline-bar {
   height: 7px;
   border-radius: var(--radius-pill);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
   overflow: hidden;
 }
 
@@ -3239,7 +3237,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-analysis-disciplines > div > span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -3256,7 +3254,7 @@ button.sport-cycle-plan-card:focus-visible {
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-lg) var(--space-xl);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-workout-detail__header-copy {
@@ -3267,7 +3265,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-workout-detail__header h2 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -3305,7 +3303,7 @@ button.sport-cycle-plan-card:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -3320,7 +3318,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-workout-detail__facts small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   line-height: var(--leading-normal);
 }
@@ -3329,12 +3327,12 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   gap: var(--space-xs);
   padding: var(--space-md) 0;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-workout-detail__note span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
@@ -3349,7 +3347,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-workout-detail__disclosures {
   display: grid;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-workout-detail__status-editor,
@@ -3357,7 +3355,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-workout-detail__exercises {
   padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-workout-detail__disclosure-summary {
@@ -3391,13 +3389,13 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-workout-detail__disclosure-label > svg {
   flex: 0 0 auto;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   transition: transform var(--motion-disclosure) var(--ease-out);
 }
 
 .sport-workout-detail__disclosure-summary:hover,
 .sport-workout-detail__disclosure-summary:focus-visible {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
 }
 
 .sport-workout-detail__exercises[open] > .sport-workout-detail__disclosure-summary > .sport-workout-detail__disclosure-label > svg,
@@ -3411,7 +3409,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-workout-detail__exercises summary small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-regular);
   text-align: right;
@@ -3429,14 +3427,14 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .sport-workout-detail__exercise.is-done {
-  border-color: color-mix(in srgb, var(--color-success-seaglass) 32%, transparent);
-  background: var(--color-success-soft);
+  border-color: color-mix(in srgb, var(--color-success-text) 32%, transparent);
+  background: var(--color-success-subtle);
 }
 
 .sport-workout-detail__exercise-index {
@@ -3446,14 +3444,14 @@ button.sport-cycle-plan-card:focus-visible {
   place-items: center;
   border: 1px solid var(--color-border-strong);
   border-radius: 50%;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
 
 .sport-workout-detail__exercise.is-done .sport-workout-detail__exercise-index {
-  border-color: var(--color-success-seaglass);
-  color: var(--color-success-seaglass);
+  border-color: var(--color-success-text);
+  color: var(--color-success-text);
 }
 
 .sport-workout-detail__exercise-copy {
@@ -3473,7 +3471,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-workout-detail__exercise-copy small {
   overflow: hidden;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   text-overflow: ellipsis;
@@ -3483,7 +3481,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-workout-detail__exercise-empty {
   margin: 0;
   padding: 0 0 var(--space-md) var(--space-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -3491,7 +3489,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-workout-detail__actions {
   display: grid;
   padding: var(--space-lg) var(--space-xl);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-workout-detail__actions .ui-button {
@@ -3512,7 +3510,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-workout-detail__status-hint {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   line-height: var(--leading-normal);
 }
@@ -3525,7 +3523,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-workout-detail__more .ui-button--ghost {
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
 }
 
 .sport-workout-detail__more .ui-button {
@@ -3542,8 +3540,8 @@ button.sport-cycle-plan-card:focus-visible {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: var(--color-graphite-canvas);
-  color: var(--color-chalk-white);
+  background: var(--color-app-bg);
+  color: var(--color-text-primary);
   isolation: isolate;
 }
 
@@ -3559,8 +3557,8 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: var(--space-lg);
   padding: var(--space-sm) var(--space-xl);
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: color-mix(in srgb, var(--color-graphite-sidebar) 92%, transparent);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-sidebar-bg) 92%, transparent);
 }
 
 .sport-active-session__header > .ui-button:last-child {
@@ -3576,7 +3574,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-session__identity > strong {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -3588,7 +3586,7 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -3596,14 +3594,14 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-active-session__progress {
   height: 3px;
   flex: 0 0 auto;
-  background: var(--color-border-subtle);
+  background: var(--color-border);
 }
 
 .sport-active-session__progress i {
   display: block;
   width: 100%;
   height: 100%;
-  background: var(--color-success-seaglass);
+  background: var(--color-success-text);
   transform-origin: left center;
   transition: transform var(--motion-normal) var(--ease-out);
 }
@@ -3612,7 +3610,7 @@ button.sport-cycle-plan-card:focus-visible {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  background: color-mix(in srgb, var(--color-graphite-canvas) 94%, transparent);
+  background: color-mix(in srgb, var(--color-app-bg) 94%, transparent);
   scrollbar-width: none;
 }
 
@@ -3636,7 +3634,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-strength-session__heading > div > span,
 .sport-active-section-heading span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -3645,7 +3643,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-strength-session__heading h2 {
   margin: var(--space-xs) 0 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -3653,7 +3651,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-strength-session__heading p {
   margin: 4px 0 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -3662,22 +3660,22 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   gap: var(--space-xl);
   padding: var(--space-xl);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
 }
 
 .sport-current-set__plan {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-current-set__plan > div {
   display: grid;
   gap: 5px;
   padding: 0 var(--space-lg) var(--space-lg);
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border);
   text-align: center;
 }
 
@@ -3686,7 +3684,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-current-set__plan span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -3723,13 +3721,13 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-session-number__control input {
   width: 100%;
-  height: 48px;
+  height: var(--control-height-lg);
   padding: 0 42px 0 var(--space-md);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   outline: 0;
-  background: var(--color-graphite-input);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-body-emphasis);
   font-variant-numeric: tabular-nums;
@@ -3745,7 +3743,7 @@ button.sport-cycle-plan-card:focus-visible {
   position: absolute;
   top: 50%;
   right: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   transform: translateY(-50%);
 }
@@ -3777,7 +3775,7 @@ button.sport-cycle-plan-card:focus-visible {
   padding: var(--space-xs);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
   box-shadow: var(--shadow-floating);
   transform: translateX(-50%);
 }
@@ -3790,12 +3788,12 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-rest-timer > div span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
 .sport-rest-timer > div strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-family: var(--font-data);
   font-size: var(--text-title);
   font-variant-numeric: tabular-nums;
@@ -3803,11 +3801,11 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-rest-timer.is-finished {
-  border-color: color-mix(in srgb, var(--color-success-seaglass) 45%, transparent);
+  border-color: color-mix(in srgb, var(--color-success-text) 45%, transparent);
 }
 
 .sport-rest-timer.is-finished > div strong {
-  color: var(--color-success-seaglass);
+  color: var(--color-success-text);
 }
 
 .sport-active-plan {
@@ -3817,8 +3815,8 @@ button.sport-cycle-plan-card:focus-visible {
   display: flex;
   width: min(370px, 100%);
   flex-direction: column;
-  border-left: 1px solid var(--color-border-subtle);
-  background: var(--color-graphite-sidebar);
+  border-left: 1px solid var(--color-border);
+  background: var(--color-sidebar-bg);
   box-shadow: var(--shadow-floating);
 }
 
@@ -3828,11 +3826,11 @@ button.sport-cycle-plan-card:focus-visible {
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-active-plan > header span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -3841,7 +3839,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-plan > header h2 {
   margin: 4px 0 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
@@ -3861,14 +3859,14 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .sport-active-plan__list > div.is-current {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 45%, transparent);
-  background: var(--color-precision-blue-soft);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  background: var(--color-primary-subtle);
 }
 
 .sport-active-plan__list > div > button {
@@ -3891,7 +3889,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-active-plan__list > div > button span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -3905,7 +3903,7 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-active-session__empty {
@@ -3921,7 +3919,7 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-session__empty > svg {
   margin-bottom: var(--space-md);
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .sport-active-session__empty h2 {
@@ -3933,7 +3931,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-active-session__empty p {
   max-width: 48ch;
   margin: var(--space-sm) 0 var(--space-lg);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -3964,13 +3962,13 @@ button.sport-cycle-plan-card:focus-visible {
 
 .sport-active-section-heading h2 {
   margin: 4px 0 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
 }
 
 .sport-active-section-heading > strong {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
@@ -3985,7 +3983,7 @@ button.sport-cycle-plan-card:focus-visible {
   padding: var(--space-xl);
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-lg);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -3997,9 +3995,9 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
   color: var(--color-text-secondary);
   text-align: left;
 }
@@ -4011,7 +4009,7 @@ button.sport-cycle-plan-card:focus-visible {
   place-items: center;
   border: 1px solid var(--color-border-strong);
   border-radius: 50%;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -4028,25 +4026,25 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-running-stages > button small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
 .sport-running-stages > button.is-done {
-  border-color: color-mix(in srgb, var(--color-success-seaglass) 30%, transparent);
-  background: var(--color-success-soft);
+  border-color: color-mix(in srgb, var(--color-success-text) 30%, transparent);
+  background: var(--color-success-subtle);
 }
 
 .sport-running-stages > button.is-done > span {
-  border-color: var(--color-success-seaglass);
-  color: var(--color-success-seaglass);
+  border-color: var(--color-success-text);
+  color: var(--color-success-text);
 }
 
 .sport-running-metrics {
   padding: var(--space-lg);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
 }
 
 .sport-running-metrics > div:last-child {
@@ -4059,9 +4057,9 @@ button.sport-cycle-plan-card:focus-visible {
   display: grid;
   gap: var(--space-sm);
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .sport-session-finish-summary {
@@ -4076,7 +4074,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-session-finish-summary span,
 .sport-session-conflict span,
 .sport-session-conflict small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -4102,7 +4100,7 @@ button.sport-cycle-plan-card:focus-visible {
     max-width: none;
     justify-content: flex-start;
     padding-top: var(--space-md);
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
   }
 
   .sport-cycle-layout {
@@ -4177,7 +4175,7 @@ button.sport-cycle-plan-card:focus-visible {
     grid-row: 2;
     justify-content: space-around;
     padding: var(--space-md) 0 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
     border-right: 0;
     border-left: 0;
   }
@@ -4372,7 +4370,7 @@ button.sport-cycle-plan-card:focus-visible {
   .sport-cycle-summary__commit {
     flex-basis: 100%;
     padding: var(--space-sm) 0 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
     border-left: 0;
   }
 
@@ -4389,7 +4387,7 @@ button.sport-cycle-plan-card:focus-visible {
     align-items: center;
     justify-content: space-between;
     padding: var(--space-sm) 0;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
     border-left: 0;
   }
 
@@ -4422,19 +4420,19 @@ button.sport-cycle-plan-card:focus-visible {
   .sport-active-strip__current {
     grid-column: 1 / -1;
     grid-row: 1;
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .sport-active-strip__facts > div:nth-child(3) {
     grid-column: 2;
     grid-row: 2;
-    border-left: 1px solid var(--color-border-subtle);
+    border-left: 1px solid var(--color-border);
   }
 
   .sport-active-strip__facts > div:nth-child(4) {
     grid-column: 1 / -1;
     grid-row: 3;
-    border-top: 1px solid var(--color-border-subtle);
+    border-top: 1px solid var(--color-border);
   }
 
   .sport-overview-workout {
@@ -4472,28 +4470,28 @@ button.sport-cycle-plan-card:focus-visible {
   }
 
   .sport-mobile-upcoming__heading > div > span {
-    color: var(--color-text-muted);
+    color: var(--color-text-tertiary);
     font-size: var(--text-micro);
   }
 
   .sport-mobile-upcoming__heading h2 {
     margin: 0;
-    color: var(--color-chalk-white);
+    color: var(--color-text-primary);
     font-size: var(--text-title);
     font-weight: var(--weight-semibold);
   }
 
   .sport-mobile-upcoming__heading > span {
-    color: var(--color-text-muted);
+    color: var(--color-text-tertiary);
     font-family: var(--font-data);
     font-size: var(--text-micro);
   }
 
   .sport-mobile-upcoming__list {
     display: grid;
-    border: 1px solid var(--color-border-subtle);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    background: var(--color-graphite-input);
+    background: var(--color-surface-1);
     overflow: hidden;
   }
 
@@ -4505,7 +4503,7 @@ button.sport-cycle-plan-card:focus-visible {
     gap: var(--space-md);
     padding: var(--space-md);
     border: 0;
-    border-bottom: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border);
     background: transparent;
     color: var(--color-text-secondary);
     text-align: left;
@@ -4516,7 +4514,7 @@ button.sport-cycle-plan-card:focus-visible {
   }
 
   .sport-mobile-upcoming__list > button.is-selected {
-    background: var(--color-precision-blue-soft);
+    background: var(--color-primary-subtle);
   }
 
   .sport-mobile-upcoming__icon {
@@ -4546,16 +4544,16 @@ button.sport-cycle-plan-card:focus-visible {
   }
 
   .sport-mobile-upcoming__list small {
-    color: var(--color-text-muted);
+    color: var(--color-text-tertiary);
     font-size: var(--text-micro);
   }
 
   .sport-mobile-upcoming__empty {
     margin: 0;
     padding: var(--space-lg);
-    border: 1px dashed var(--color-border-subtle);
+    border: 1px dashed var(--color-border);
     border-radius: var(--radius-lg);
-    color: var(--color-text-muted);
+    color: var(--color-text-tertiary);
     font-size: var(--text-label);
     text-align: center;
   }
@@ -4716,7 +4714,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-plans-module--other {
   gap: var(--space-sm);
   padding: var(--space-lg) 0 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-plans-module--other > .sport-cycle-sidebar__section-heading {
@@ -4733,13 +4731,13 @@ button.sport-cycle-plan-card:focus-visible {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md) var(--space-sm) var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
   border-radius: 0;
 }
 
 .sport-cycle-plan-card__name {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -4753,15 +4751,11 @@ button.sport-cycle-plan-card:focus-visible {
   gap: var(--space-xs);
 }
 
-.sport-cycle-plan-card__actions .ui-button {
-  width: var(--control-height-sm);
-  min-width: var(--control-height-sm);
-  height: var(--control-height-sm);
-  padding: 0;
-  border: 1px solid var(--color-border-subtle);
+.sport-cycle-plan-card__action {
+  border: 1px solid var(--color-border);
 }
 
-.sport-cycle-plan-card__actions .ui-button:hover:not(:disabled) {
+.sport-cycle-plan-card__action:hover:not(:disabled) {
   border-color: var(--color-border-strong);
 }
 
@@ -4828,7 +4822,7 @@ button.sport-cycle-plan-card:focus-visible {
 }
 
 .sport-cycle-workspace .sport-cycle-day.is-today {
-  border-left: 1px solid var(--color-precision-blue);
+  border-left: 1px solid var(--color-primary);
 }
 
 .sport-cycle-workspace .sport-cycle-day__heading {
@@ -4850,12 +4844,12 @@ button.sport-cycle-plan-card:focus-visible {
   align-content: center;
   gap: var(--space-xs);
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
 }
 
 .sport-cycle-workspace .sport-cycle-workout > strong {
   padding-right: var(--space-lg);
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
 }
 
@@ -4876,7 +4870,7 @@ button.sport-cycle-plan-card:focus-visible {
 .sport-cycle-plan-preview {
   display: grid;
   margin: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .sport-cycle-plan-preview > div {
@@ -4884,11 +4878,11 @@ button.sport-cycle-plan-card:focus-visible {
   grid-template-columns: 112px minmax(0, 1fr);
   gap: var(--space-lg);
   padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sport-cycle-plan-preview dt {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
 }
 
@@ -4934,3 +4928,4 @@ button.sport-cycle-plan-card:focus-visible {
     flex-basis: 100%;
   }
 }
+.sport-modal-body { padding: 0; }

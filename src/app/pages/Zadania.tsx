@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from "react-router";
 import {
   Plus, Check, Trash2, RotateCcw,
   ChevronDown, ChevronRight,
-  Calendar, X, Circle,
-  Flag, Search,
+  CalendarDays, X, Circle,
+  CornerDownLeft,
+  Search,
   PenLine, Hash, List, Printer,
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
@@ -37,6 +38,7 @@ import {
 import {
   Badge,
   Button,
+  ConfirmDialog,
   ContentHeader,
   ContextNavItem,
   ModuleSidebar,
@@ -46,6 +48,9 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
+  PropertyMenu,
+  PriorityIcon,
+  QuickComposer,
   SectionHeader,
   Select,
   Toast,
@@ -314,8 +319,6 @@ export default function Zadania() {
 
   const inputRef        = useRef<HTMLInputElement>(null);
   const dateButtonRef   = useRef<HTMLButtonElement>(null);
-  const flagBtnInputRef = useRef<HTMLButtonElement>(null);
-  const listBtnInputRef = useRef<HTMLButtonElement>(null);
   const hashBtnInputRef = useRef<HTMLButtonElement>(null);
 
   const setTaskViewWithDefault = useCallback((view: string) => {
@@ -821,7 +824,6 @@ export default function Zadania() {
   const canAddTaskInView = taskView !== "kosz" && taskView !== "ukonczone";
 
   const dateLabel = formatDateLabel(newDateVal);
-  const flagColor = newPriority === "high" ? C.danger : newPriority === "medium" ? C.warning : newPriority === "low" ? C.iceBlue : null;
 
   const startNewTask = () => {
     if (taskView === "podsumowanie" || taskView === "nawyki" || taskView === "ukonczone" || taskView === "kosz") {
@@ -871,12 +873,12 @@ export default function Zadania() {
     >
 
       {/* ── Sub-sidebar ── */}
-      <ModuleSidebar label="Widoki i listy zadań" className="task-context-sidebar overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ModuleSidebar label="Widoki i listy zadań" className="task-context-sidebar">
 
         {/* Smart views */}
-        <div className="px-2 pb-4 pt-4">
-          <SectionHeader title="Główne" level={2} variant="label" className="px-1.5" />
-          <div className="space-y-px">
+        <div className="task-nav__primary-section">
+          <SectionHeader title="Główne" level={2} variant="label" className="task-nav__section-heading" />
+          <div className="task-nav__items">
             {PRIMARY_SMART_VIEWS.map(v => {
             const Icon = v.icon;
             const active = taskView === v.id && !listFilter && !tagFilter;
@@ -897,9 +899,9 @@ export default function Zadania() {
 
         <div className="task-nav__divider" />
 
-        <div className="px-2 pb-2 pt-2">
-          <SectionHeader title="Widoki specjalne" level={2} variant="label" className="px-1.5" />
-          <div className="space-y-px">
+        <div className="task-nav__special-section">
+          <SectionHeader title="Widoki specjalne" level={2} variant="label" className="task-nav__section-heading" />
+          <div className="task-nav__items">
             {SPECIAL_SMART_VIEWS.map(v => {
               const Icon = v.icon;
               const active = taskView === v.id && !listFilter && !tagFilter;
@@ -921,8 +923,8 @@ export default function Zadania() {
         <div className="task-nav__divider" />
 
         {/* Listy */}
-        <div className="px-2 mb-2">
-          <div className="flex items-center justify-between px-1.5 mb-1.5">
+        <div className="task-nav__taxonomy-section">
+          <div className="task-nav__taxonomy-header">
             <button type="button" onClick={() => setListyOpen(v => !v)}
               aria-expanded={listyOpen}
               aria-controls="tasks-lists-panel"
@@ -930,7 +932,7 @@ export default function Zadania() {
               <ChevronRight size={11} strokeWidth={2} className={listyOpen ? "is-open" : undefined} />
               <span className="task-nav__group-label">Listy</span>
             </button>
-            <div className="task-taxonomy-header-actions flex items-center gap-1">
+            <div className="task-taxonomy-header-actions">
                 <button
                   type="button"
                   onClick={() => { setListyOpen(true); setListSearchOpen(open => !open); setListSearch(""); }}
@@ -961,7 +963,7 @@ export default function Zadania() {
                 </button>
             </div>
           </div>
-          {listyOpen && <div id="tasks-lists-panel" className="space-y-px">
+          {listyOpen && <div id="tasks-lists-panel" className="task-nav__items">
             {listSearchOpen && (
               <div className="task-nav__search">
                 <Search size={11} strokeWidth={1.7} />
@@ -971,7 +973,7 @@ export default function Zadania() {
                   onChange={e => setListSearch(e.target.value)}
                   placeholder="Szukaj listy"
                   aria-label="Szukaj listy"
-                  className="tag-search-input flex-1 min-w-0 bg-transparent outline-none"
+                  className="tag-search-input"
 
                 />
               </div>
@@ -997,6 +999,7 @@ export default function Zadania() {
                     </div>
                   ) : (
                     <ContextNavItem
+                      className={`task-nav__taxonomy-item${listEditMode ? " task-nav__taxonomy-item--editing" : ""}`}
                       active={active}
                       onClick={() => {
                         openTaskFilter("list", active ? null : l.id);
@@ -1008,12 +1011,12 @@ export default function Zadania() {
                   )}
                   {/* Hover actions */}
                   {listEditMode && editingListId !== l.id && (
-                    <div className="task-taxonomy-actions absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
-                      <button type="button" aria-label={`Edytuj listę ${l.label}`} onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
+                    <div className="task-taxonomy-actions">
+                      <button type="button" aria-label={`Edytuj listę „${l.label}”`} onClick={e => { e.stopPropagation(); setEditingListId(l.id); setEditListLabel(l.label); }}
                         className="task-nav__row-action">
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
-                      <button type="button" aria-label={`Usuń listę ${l.label}`} onClick={e => { e.stopPropagation(); deleteList(l.id); }}
+                      <button type="button" aria-label={`Usuń listę „${l.label}”`} onClick={e => { e.stopPropagation(); deleteList(l.id); }}
                         className="task-nav__row-action task-nav__row-action--danger">
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
@@ -1046,8 +1049,8 @@ export default function Zadania() {
         <div className="task-nav__divider" />
 
         {/* Tagi */}
-        <div className="px-2 mb-2">
-          <div className="flex items-center justify-between px-1.5 mb-1.5">
+        <div className="task-nav__taxonomy-section">
+          <div className="task-nav__taxonomy-header">
             <button type="button" onClick={() => setTagiOpen(v => !v)}
               aria-expanded={tagiOpen}
               aria-controls="tasks-tags-panel"
@@ -1055,7 +1058,7 @@ export default function Zadania() {
               <ChevronRight size={11} strokeWidth={2} className={tagiOpen ? "is-open" : undefined} />
               <span className="task-nav__group-label">Tagi</span>
             </button>
-            <div className="task-taxonomy-header-actions flex items-center gap-1">
+            <div className="task-taxonomy-header-actions">
                 <button
                   type="button"
                   onClick={() => { setTagiOpen(true); setTagSearchOpen(open => !open); setTagSearch(""); }}
@@ -1086,7 +1089,7 @@ export default function Zadania() {
                 </button>
             </div>
           </div>
-          {tagiOpen && <div id="tasks-tags-panel" className="space-y-px">
+          {tagiOpen && <div id="tasks-tags-panel" className="task-nav__items">
             {tagSearchOpen && (
               <div className="task-nav__search">
                 <Search size={11} strokeWidth={1.7} />
@@ -1096,7 +1099,7 @@ export default function Zadania() {
                   onChange={e => setTagSearch(e.target.value)}
                   placeholder="Szukaj tagu"
                   aria-label="Szukaj tagu"
-                  className="tag-search-input flex-1 min-w-0 bg-transparent outline-none"
+                  className="tag-search-input"
 
                 />
               </div>
@@ -1121,6 +1124,7 @@ export default function Zadania() {
                     </div>
                   ) : (
                     <ContextNavItem
+                      className={`task-nav__taxonomy-item${tagEditMode ? " task-nav__taxonomy-item--editing" : ""}`}
                       active={active}
                       onClick={() => {
                         openTaskFilter("tag", active ? null : t.id);
@@ -1131,12 +1135,12 @@ export default function Zadania() {
                     />
                   )}
                   {tagEditMode && editingTagId !== t.id && (
-                    <div className="task-taxonomy-actions absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-70 transition-opacity hover:opacity-100 focus-within:opacity-100">
-                      <button type="button" aria-label={`Edytuj tag #${t.label}`} onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
+                    <div className="task-taxonomy-actions">
+                      <button type="button" aria-label={`Edytuj tag „#${t.label}”`} onClick={e => { e.stopPropagation(); setEditingTagId(t.id); setEditTagLabel(t.label); }}
                         className="task-nav__row-action">
                         <PenLine size={9} strokeWidth={1.5} />
                       </button>
-                      <button type="button" aria-label={`Usuń tag #${t.label}`} onClick={e => { e.stopPropagation(); deleteTag(t.id); }}
+                      <button type="button" aria-label={`Usuń tag „#${t.label}”`} onClick={e => { e.stopPropagation(); deleteTag(t.id); }}
                         className="task-nav__row-action task-nav__row-action--danger">
                         <Trash2 size={9} strokeWidth={1.5} />
                       </button>
@@ -1166,7 +1170,7 @@ export default function Zadania() {
           </div>}
         </div>
 
-        <div className="flex-1" />
+        <div className="task-nav__spacer" />
         <div className="task-nav__footer">
           {([
             { icon: RotateCcw, label: "Ukończone", view: "ukonczone" },
@@ -1263,7 +1267,7 @@ export default function Zadania() {
               onChange={(event) => { setTaskViewWithDefault(event.target.value); setListFilter(null); setTagFilter(null); }}
             />}
           meta={(storageFailed || listFilter || tagFilter) ? (
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="task-header-meta">
               {storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}
               {listFilter && (
                 <Button variant="quiet" size="sm" onClick={() => setListFilter(null)}
@@ -1281,7 +1285,7 @@ export default function Zadania() {
           ) : undefined}
           actions={<>
             {taskViewSupportsCalendar(taskView) && (
-              <div className="task-list-navigation flex items-center gap-1" aria-label="Szybka nawigacja zadań">
+              <div className="task-list-navigation" aria-label="Szybka nawigacja zadań">
                 <Button variant={taskView === "dzis" ? "quiet" : "ghost"} size="sm" onClick={() => openTaskView("dzis")}>
                   Dziś
                 </Button>
@@ -1293,7 +1297,7 @@ export default function Zadania() {
               </div>
             )}
             <div className="task-toolbar-actions">
-              <div className="task-priority-filters flex items-center gap-1" aria-label="Filtr priorytetu">
+              <div className="task-priority-filters" aria-label="Filtr priorytetu">
                 {([
                   { id: "high" as Priority, label: "Wysoki", color: C.danger },
                   { id: "medium" as Priority, label: "Średni", color: C.warning },
@@ -1301,6 +1305,7 @@ export default function Zadania() {
                 ]).map((item) => (
                   <Button
                     key={item.id}
+                    className="task-priority-filter"
                     variant="ghost"
                     size="sm"
                     aria-pressed={priorityFilter === item.id}
@@ -1346,7 +1351,7 @@ export default function Zadania() {
                     title="Kalendarz"
                     onClick={() => switchTasksViewMode("calendar")}
                   >
-                    <Calendar size={13} strokeWidth={1.7} />
+                    <CalendarDays size={13} aria-hidden="true" />
                   </Button>
                 </div>
               )}
@@ -1399,26 +1404,28 @@ export default function Zadania() {
           </ToastViewport>
         )}
 
-        <div className="task-content flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="task-content">
           <div className="task-content__inner">
           {/* Add task input */}
           {canAddTaskInView && (
-          <form
+          <QuickComposer
             className="task-entry"
+            density="compact"
             aria-label="Dodaj zadanie"
             onSubmit={(event) => {
               event.preventDefault();
               addTask();
-            }}>
-            <div className="task-entry__row">
+            }}
+            leadingAction={(
               <button
-                type="button"
+                type="submit"
                 className="task-entry__lead"
                 aria-label="Dodaj zadanie"
-                onClick={addTask}
               >
                 <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
               </button>
+            )}
+            editor={(
               <div className="task-entry__field">
               {/* Tag chips in input */}
               {newTaskTags.map(tagId => {
@@ -1444,85 +1451,84 @@ export default function Zadania() {
                 value={newTask}
                 onChange={handleTaskInput}
                 onKeyDown={handleTaskKeyDown}
-                className="task-entry-input task-entry__input flex-1 bg-transparent outline-none min-w-0"
+                className="task-entry-input task-entry__input"
               />
 
               </div>
-
-              {/* Controls */}
-              <div className="task-entry-controls flex items-center gap-0.5 flex-shrink-0">
-                {/* Flag — priority */}
-                <button
-                  ref={flagBtnInputRef}
-                  type="button"
-                  aria-label="Ustaw priorytet nowego zadania"
-                  aria-expanded={inputDropdown === "priority"}
-                  onClick={() => setInputDropdown(d => d === "priority" ? null : "priority")}
-                  className="task-entry-control"
-                  title="Priorytet"
-                  style={{
-                    background: flagColor ? flagColor + "18" : inputDropdown === "priority" ? C.elevated : undefined,
-                    color: flagColor ?? C.textMuted,
-                    border: flagColor ? `1px solid ${flagColor + "40"}` : undefined,
-                  }}>
-                  <Flag size={13} strokeWidth={1.5} fill={flagColor ?? "none"} />
-                </button>
+            )}
+            controlsLabel="Właściwości nowego zadania"
+            propertyControls={(
+              <>
+                {/* Priority */}
+                <PropertyMenu
+                  value={newPriority ?? ""}
+                  ariaLabel="Ustaw priorytet nowego zadania"
+                  options={[
+                    { value: "high", label: "Wysoki", tone: "danger", className: "task-entry-priority-option--high", leadingIcon: <PriorityIcon level="high" /> },
+                    { value: "medium", label: "Średni", className: "task-entry-priority-option--medium", leadingIcon: <PriorityIcon level="medium" /> },
+                    { value: "low", label: "Niski", tone: "primary", className: "task-entry-priority-option--low", leadingIcon: <PriorityIcon level="low" /> },
+                    { value: "", label: "Brak", leadingIcon: <PriorityIcon level="none" /> },
+                  ]}
+                  onChange={(value) => setNewPriority(value ? value as Priority : null)}
+                  triggerClassName={`task-entry-control${newPriority ? ` task-entry-control--priority-${newPriority}` : ""}`}
+                  title="Priorytet">
+                  <PriorityIcon level={newPriority ?? "none"} />
+                </PropertyMenu>
 
                 {/* List */}
-                <button
-                  ref={listBtnInputRef}
-                  type="button"
-                  aria-label="Wybierz listę nowego zadania"
-                  aria-expanded={inputDropdown === "list"}
-                  onClick={() => setInputDropdown(d => d === "list" ? null : "list")}
-                  className="task-entry-control"
-                  title="Lista"
-                  style={{
-                    background: newTaskList ? listy.find(l => l.id === newTaskList)?.color + "18" : inputDropdown === "list" ? C.elevated : undefined,
-                    color: newTaskList ? listy.find(l => l.id === newTaskList)?.color : C.textMuted,
-                    border: newTaskList ? `1px solid ${(listy.find(l => l.id === newTaskList)?.color ?? C.iceBlue) + "40"}` : undefined,
-                  }}>
+                <PropertyMenu
+                  value={newTaskList ?? ""}
+                  ariaLabel="Wybierz listę nowego zadania"
+                  options={[
+                    { value: "", label: "Bez listy", leadingIcon: <span className="task-entry__option-dot task-entry__option-dot--muted" /> },
+                    ...listy.map((list) => ({ value: list.id, label: list.label, leadingIcon: <span className="task-entry__option-dot" style={{ background: list.color }} /> })),
+                  ]}
+                  onChange={(value) => setNewTaskList(value || null)}
+                  triggerClassName={`task-entry-control${newTaskList ? " is-active" : ""}`}
+                  title="Lista">
                   <List size={13} strokeWidth={1.5} />
-                </button>
+                </PropertyMenu>
 
                 {/* Hash — tags */}
                 <button
                   ref={hashBtnInputRef}
                   type="button"
                   aria-label="Dodaj tagi do nowego zadania"
+                  aria-haspopup="menu"
                   aria-expanded={inputDropdown === "tags"}
+                  aria-controls={inputDropdown === "tags" ? "task-entry-tags-menu" : undefined}
                   onClick={() => setInputDropdown(d => d === "tags" ? null : "tags")}
                   className={`task-entry-control${newTaskTags.length > 0 ? " is-active" : ""}${inputDropdown === "tags" ? " is-open" : ""}`}
                   title="Tagi"
                 >
                   <Hash size={13} strokeWidth={1.5} />
                 </button>
-
-                {/* Date */}
-                <button
+              </>
+            )}
+            scheduleControl={(
+              <button
                   ref={dateButtonRef}
                   type="button"
                   aria-label="Ustaw termin nowego zadania"
+                  aria-haspopup="dialog"
                   aria-expanded={datePickerOpen}
                   onClick={() => { setDatePickerOpen(o => !o); setInputDropdown(null); }}
                   className={`task-entry-control task-entry-control--date${dateLabel ? " is-active" : ""}`}>
-                  <Calendar size={13} strokeWidth={1.5} />
+                  <CalendarDays size={13} aria-hidden="true" />
                   {dateLabel && (
                     <span className="task-entry-control__label">{dateLabel}</span>
                   )}
-                </button>
-
-                {(newTask || newTaskTags.length > 0 || newPriority || newTaskList) && (
-                  <button
-                    type="submit"
-                    aria-label="Dodaj zadanie"
-                    className="task-entry__submit">
-                    ↵
-                  </button>
-                )}
-              </div>
-            </div>
-          </form>
+              </button>
+            )}
+            submitAction={(newTask || newTaskTags.length > 0 || newPriority || newTaskList) ? (
+              <button
+                type="submit"
+                aria-label="Dodaj zadanie"
+                className="task-entry__submit">
+                <CornerDownLeft size={13} aria-hidden="true" />
+              </button>
+            ) : undefined}
+          />
           )}
 
           {taskView === "kosz" ? (
@@ -1535,8 +1541,8 @@ export default function Zadania() {
                   description="Usunięte zadania pozostaną tutaj do czasu przywrócenia albo trwałego usunięcia."
                 />
               ) : visible.map(t => (
-                <div key={t.id} className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
+                <div key={t.id} className="task-trash-row">
+                  <div className="task-trash-row__content">
                     <TaskRow task={t} tagi={tagi} listy={listy}
                       selected={selectedId === t.id}
                       onToggle={() => restoreTaskFromTrash(t.id)}
@@ -1558,7 +1564,7 @@ export default function Zadania() {
                     variant="danger"
                     size="sm"
                     iconOnly
-                    aria-label={`Usuń trwale zadanie ${t.text}`}
+                    aria-label={`Usuń zadanie „${t.text}” trwale`}
                     onClick={() => setPurgeTaskId(t.id)}
                   >
                     <Trash2 size={13} />
@@ -1689,7 +1695,7 @@ export default function Zadania() {
           size="sm"
           footer={(
             <>
-              <Button variant="quiet" onClick={() => setRescheduleOpen(false)}>Anuluj</Button>
+              <Button variant="ghost" onClick={() => setRescheduleOpen(false)}>Anuluj</Button>
               <Button variant="primary" onClick={rescheduleOverdue}>Przełóż na dziś</Button>
             </>
           )}
@@ -1702,114 +1708,57 @@ export default function Zadania() {
       )}
 
       {taxonomyDelete && (
-        <Modal
+        <ConfirmDialog
           title={`Usunąć ${taxonomyDelete.kind === "list" ? "listę" : "tag"} „${taxonomyDelete.label}”?`}
           description={taxonomyDelete.affected > 0
             ? `${taxonomyDelete.affected} ${taxonomyDelete.affected === 1 ? "zadanie korzysta" : "zadań korzysta"} z tej klasyfikacji. Zadania pozostaną, a odwołania zostaną bezpiecznie usunięte.`
             : "Ta klasyfikacja nie jest używana przez żadne zadanie."}
-          onClose={() => setTaxonomyDelete(null)}
-          footer={(
-            <>
-              <Button variant="quiet" onClick={() => setTaxonomyDelete(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={confirmTaxonomyDelete}>Usuń i uporządkuj zadania</Button>
-            </>
-          )}
+          confirmLabel={taxonomyDelete.kind === "list" ? "Usuń listę" : "Usuń tag"}
+          onCancel={() => setTaxonomyDelete(null)}
+          onConfirm={confirmTaxonomyDelete}
         >
           <p className="task-confirm-copy">
             Tej operacji nie można cofnąć, dlatego zależności zostaną zaktualizowane w tym samym zapisie.
           </p>
-        </Modal>
+        </ConfirmDialog>
       )}
 
       {purgeTaskId !== null && (
-        <Modal
-          title="Usunąć zadanie trwale?"
+        <ConfirmDialog
+          title={`Usunąć zadanie „${tasks.find((task) => task.id === purgeTaskId)?.text}” trwale?`}
           description="Zadanie zniknie z Kosza i nie będzie można go przywrócić."
-          onClose={() => setPurgeTaskId(null)}
-          footer={(
-            <>
-              <Button variant="quiet" onClick={() => setPurgeTaskId(null)}>Anuluj</Button>
-              <Button variant="danger" onClick={() => permanentlyDeleteTask(purgeTaskId)}>Usuń trwale</Button>
-            </>
-          )}
+          confirmLabel="Usuń zadanie trwale"
+          onCancel={() => setPurgeTaskId(null)}
+          onConfirm={() => permanentlyDeleteTask(purgeTaskId)}
         >
-          <p className="task-confirm-copy">
-            {tasks.find((task) => task.id === purgeTaskId)?.text}
-          </p>
-        </Modal>
+          <p className="task-confirm-copy">Tej operacji nie można cofnąć.</p>
+        </ConfirmDialog>
       )}
 
       {emptyTrashOpen && (
-        <Modal
+        <ConfirmDialog
           title="Opróżnić Kosz?"
           description={`${tasks.filter((task) => task.deleted).length} zadań zostanie usuniętych trwale.`}
-          onClose={() => setEmptyTrashOpen(false)}
-          footer={(
-            <>
-              <Button variant="quiet" onClick={() => setEmptyTrashOpen(false)}>Anuluj</Button>
-              <Button variant="danger" onClick={emptyTrash}>Opróżnij Kosz</Button>
-            </>
-          )}
+          confirmLabel="Opróżnij Kosz"
+          onCancel={() => setEmptyTrashOpen(false)}
+          onConfirm={emptyTrash}
         >
           <p className="task-confirm-copy">
             Jeśli chcesz zachować wybrane pozycje, przywróć je przed opróżnieniem.
           </p>
-        </Modal>
-      )}
-
-      {/* ── Input priority dropdown ── */}
-      {inputDropdown === "priority" && flagBtnInputRef.current && (
-        <InputFloatMenu anchorEl={flagBtnInputRef.current} onClose={() => setInputDropdown(null)}>
-          {([
-            { p: "high"   as Priority, label: "Wysoki", color: C.danger  },
-            { p: "medium" as Priority, label: "Średni", color: C.warning },
-            { p: "low"    as Priority, label: "Niski",  color: C.iceBlue },
-            { p: null,                 label: "Brak",   color: C.textMuted },
-          ] as const).map(({ p, label, color }) => (
-            <MenuItem key={String(p)}
-              selected={newPriority === p}
-              onClick={() => {
-                setNewPriority(p as Priority | null);
-                setInputDropdown(null);
-                requestAnimationFrame(() => flagBtnInputRef.current?.focus());
-              }}
-              leadingIcon={<Flag fill={p ? color : "none"} style={{ color }} />}
-              trailingIcon={newPriority === p ? <Check /> : undefined}>
-              {label}
-            </MenuItem>
-          ))}
-        </InputFloatMenu>
-      )}
-
-      {/* ── Input list dropdown ── */}
-      {inputDropdown === "list" && listBtnInputRef.current && (
-        <InputFloatMenu anchorEl={listBtnInputRef.current} onClose={() => setInputDropdown(null)}>
-          {[{ id: null as string | null, label: "Bez listy", color: C.textMuted }, ...listy.map(l => ({ ...l, id: l.id as string | null }))].map(l => (
-            <MenuItem key={String(l.id)}
-              selected={newTaskList === l.id}
-              onClick={() => {
-                setNewTaskList(l.id);
-                setInputDropdown(null);
-                requestAnimationFrame(() => listBtnInputRef.current?.focus());
-              }}
-              leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: l.color }} />}
-              trailingIcon={newTaskList === l.id ? <Check /> : undefined}>
-              {l.label}
-            </MenuItem>
-          ))}
-        </InputFloatMenu>
+        </ConfirmDialog>
       )}
 
       {/* ── Input tags dropdown ── */}
       {inputDropdown === "tags" && hashBtnInputRef.current && (
-        <InputFloatMenu anchorEl={hashBtnInputRef.current} onClose={() => setInputDropdown(null)}>
+        <InputFloatMenu id="task-entry-tags-menu" anchorEl={hashBtnInputRef.current} onClose={() => setInputDropdown(null)}>
           {tagi.map(t => {
             const active = newTaskTags.includes(t.id);
             return (
               <MenuItem key={t.id}
                 selected={active}
                 onClick={() => setNewTaskTags(p => active ? p.filter(id => id !== t.id) : [...p, t.id])}
-                leadingIcon={<span className="h-2 w-2 rounded-full" style={{ background: t.color }} />}
+                leadingIcon={<span className="task-nav__dot" style={{ background: t.color }} />}
                 trailingIcon={active ? <Check /> : undefined}>
                 #{t.label}
               </MenuItem>

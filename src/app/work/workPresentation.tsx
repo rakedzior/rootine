@@ -7,19 +7,14 @@ import type {
   WorkTaskPriority,
   WorkTaskStatus,
 } from "../data/workWorkspace";
+import { normalizeTaxonomyColor, TAXONOMY_COLORS } from "../data/taxonomyPalette";
+import { PriorityIcon, priorityOptionTone, type PropertyMenuOption, type SelectOption } from "../ui";
 
-export const COMPANY_COLORS = ["#7FA6C9", "#79A8A4", "#8793A1"];
-
-const LEGACY_COMPANY_COLOR_MAP: Record<string, string> = {
-  "#B9A171": "#79A8A4",
-  "#7D7FA8": "#8793A1",
-  "#BC8EA5": "#8793A1",
-};
+export const COMPANY_COLORS: readonly string[] = [TAXONOMY_COLORS.sky, TAXONOMY_COLORS.teal, TAXONOMY_COLORS.slate];
 
 export function normalizeCompanyColor(color: string): string {
-  const normalized = color.toUpperCase();
-  if (COMPANY_COLORS.includes(normalized)) return normalized;
-  return LEGACY_COMPANY_COLOR_MAP[normalized] ?? COMPANY_COLORS[0];
+  const normalized = normalizeTaxonomyColor(color);
+  return COMPANY_COLORS.includes(normalized) ? normalized : COMPANY_COLORS[0];
 }
 
 export const PROJECT_STATUS_LABELS: Record<WorkProjectStatus, string> = {
@@ -40,6 +35,23 @@ export const TASK_STATUS_LABELS: Record<WorkTaskStatus, string> = {
 
 export const TASK_STATUS_ORDER: WorkTaskStatus[] = ["todo", "in_progress", "blocked", "waiting", "completed"];
 
+export function workTaskStatusSelectOptions(): SelectOption[] {
+  return TASK_STATUS_ORDER.map((status) => ({
+    value: status,
+    label: TASK_STATUS_LABELS[status],
+    leadingIcon: taskStatusIcon(status),
+    tone: status === "blocked"
+      ? "danger"
+      : status === "waiting"
+        ? "warning"
+        : status === "completed"
+          ? "success"
+          : status === "in_progress"
+            ? "primary"
+            : "default",
+  }));
+}
+
 export const PRIORITY_LABELS: Record<WorkTaskPriority, string> = {
   none: "Bez priorytetu",
   low: "Niski",
@@ -48,6 +60,24 @@ export const PRIORITY_LABELS: Record<WorkTaskPriority, string> = {
 };
 
 export const PRIORITY_ORDER: WorkTaskPriority[] = ["none", "low", "medium", "high"];
+
+export function workPrioritySelectOptions(): SelectOption[] {
+  return PRIORITY_ORDER.map((priority) => ({
+    value: priority,
+    label: PRIORITY_LABELS[priority],
+    leadingIcon: <PriorityIcon level={priority} />,
+    tone: priorityOptionTone(priority),
+  }));
+}
+
+export function workPriorityMenuOptions(): PropertyMenuOption[] {
+  return PRIORITY_ORDER.map((priority) => ({
+    value: priority,
+    label: PRIORITY_LABELS[priority],
+    leadingIcon: <PriorityIcon level={priority} />,
+    className: `work-inline-menu__item--${priority}`,
+  }));
+}
 
 export type WorkView = "today" | "tomorrow" | "week" | "active" | "untimed" | "unassigned" | "archive" | "company" | "project";
 export type TaskStatusFilter = WorkTaskStatus | "all";
@@ -87,6 +117,7 @@ export type EditorDraft = {
   priority: WorkTaskPriority;
   startDate: string;
   endDate: string;
+  dueTime: string;
 };
 
 export const EMPTY_DRAFT: EditorDraft = {
@@ -102,6 +133,7 @@ export const EMPTY_DRAFT: EditorDraft = {
   priority: "none",
   startDate: "",
   endDate: "",
+  dueTime: "",
 };
 
 export function formatProjectCount(count: number): string {

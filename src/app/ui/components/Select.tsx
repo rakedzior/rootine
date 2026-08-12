@@ -9,15 +9,22 @@ import {
   useState,
   type FocusEvent,
   type KeyboardEvent,
+  type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
+export type SelectOptionTone = "default" | "primary" | "success" | "warning" | "danger" | "violet";
+export type SelectDensity = "compact" | "standard";
+
 export interface SelectOption {
   value: string;
   label: string;
   description?: string;
+  leadingIcon?: ReactNode;
+  meta?: ReactNode;
+  tone?: SelectOptionTone;
   disabled?: boolean;
 }
 
@@ -26,6 +33,8 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
   hint?: string;
   error?: string;
   options: SelectOption[];
+  density?: SelectDensity;
+  /** @deprecated Use density="compact". */
   compact?: boolean;
   fieldClassName?: string;
   menuPlacement?: "start" | "end";
@@ -56,6 +65,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     hint,
     error,
     options,
+    density: densityProp,
     compact = false,
     fieldClassName = "",
     menuPlacement = "start",
@@ -77,6 +87,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   forwardedRef,
 ) {
   const generatedId = useId();
+  const density = densityProp ?? (compact ? "compact" : "standard");
   const controlId = id ?? generatedId;
   const triggerId = `${controlId}-trigger`;
   const labelId = `${controlId}-label`;
@@ -167,9 +178,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   useEffect(() => {
     if (!open || highlightedIndex < 0) return;
     const frame = requestAnimationFrame(() => {
-      menuRef.current
-        ?.querySelector<HTMLElement>(`[data-option-index="${highlightedIndex}"]`)
-        ?.scrollIntoView({ block: "nearest" });
+      const option = menuRef.current
+        ?.querySelector<HTMLElement>(`[data-option-index="${highlightedIndex}"]`);
+      option?.scrollIntoView?.({ block: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
   }, [highlightedIndex, open]);
@@ -309,7 +320,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         aria-required={triggerRequired}
         aria-describedby={descriptionIds}
         disabled={disabled || !options.length}
-        className={`ui-field__control ui-select-trigger ${compact ? "ui-select-trigger--compact" : ""} ${open ? "is-open" : ""} ${className}`.trim()}
+        className={`ui-field__control ui-select-trigger ui-select-trigger--${density} ${open ? "is-open" : ""} ${className}`.trim()}
         onClick={() => open ? close() : openMenu()}
         onKeyDown={handleKeyDown}
         onBlur={(event) => {
@@ -317,9 +328,15 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           onBlur?.(event as unknown as FocusEvent<HTMLSelectElement>);
         }}
       >
-        <span id={valueId} className="ui-select-trigger__value">
-          {selectedOption?.label ?? (options.length ? "Wybierz" : "Brak opcji")}
+        <span className="ui-select-trigger__content">
+          {selectedOption?.leadingIcon && (
+            <span className="ui-select-option__icon" aria-hidden="true">{selectedOption.leadingIcon}</span>
+          )}
+          <span id={valueId} className="ui-select-trigger__value">
+            {selectedOption?.label ?? (options.length ? "Wybierz" : "Brak opcji")}
+          </span>
         </span>
+        {selectedOption?.meta && <span className="ui-select-trigger__meta">{selectedOption.meta}</span>}
         <ChevronDown className="ui-select-trigger__chevron" size={13} aria-hidden="true" />
       </button>
       {hint && <p id={hintId} className="ui-field__hint">{hint}</p>}
@@ -331,7 +348,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           id={listboxId}
           role="listbox"
           aria-labelledby={purposeLabelId}
-          className={`ui-select-menu ${position.above ? "ui-select-menu--above" : ""} ${menuClassName}`.trim()}
+          className={`ui-select-menu ui-select-menu--${density} ${position.above ? "ui-select-menu--above" : ""} ${menuClassName}`.trim()}
           style={{
             left: position.left,
             top: position.top,
@@ -349,16 +366,22 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
                 aria-selected={selected}
                 aria-disabled={option.disabled || undefined}
                 data-option-index={index}
-                className={`ui-select-option ${highlightedIndex === index ? "is-highlighted" : ""} ${selected ? "is-selected" : ""}`.trim()}
+                className={`ui-select-option ui-select-option--${option.tone ?? "default"} ${highlightedIndex === index ? "is-highlighted" : ""} ${selected ? "is-selected" : ""}`.trim()}
                 onPointerMove={() => !option.disabled && setHighlightedIndex(index)}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => choose(option)}
               >
+                {option.leadingIcon && (
+                  <span className="ui-select-option__icon" aria-hidden="true">{option.leadingIcon}</span>
+                )}
                 <span className="ui-select-option__copy">
                   <strong>{option.label}</strong>
                   {option.description && <small>{option.description}</small>}
                 </span>
-                {selected && <Check size={13} aria-hidden="true" />}
+                <span className="ui-select-option__trailing">
+                  {option.meta && <span className="ui-select-option__meta">{option.meta}</span>}
+                  {selected && <Check size={13} aria-hidden="true" />}
+                </span>
               </div>
             );
           })}

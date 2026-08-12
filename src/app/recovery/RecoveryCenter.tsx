@@ -33,6 +33,7 @@ import {
   type PersistentStorageStatus,
 } from "../data/localRepository";
 import { Badge, Button, Modal } from "../ui";
+import "../../styles/recovery.css";
 
 type PendingImport = {
   fileName: string;
@@ -272,7 +273,7 @@ export function RecoveryCenterButton({
             setOpen(false);
           }}
           footer={(
-            <div className="flex w-full flex-wrap justify-end gap-2">
+            <div className="recovery-dialog-footer">
               <Button variant="quiet" onClick={() => window.location.reload()} leadingIcon={<RefreshCw size={13} />}>
                 Odśwież aplikację
               </Button>
@@ -280,33 +281,33 @@ export function RecoveryCenterButton({
             </div>
           )}
         >
-          <div className="flex flex-col gap-5">
+          <div className="recovery-center">
             {issues.length > 0 && (
               <section
                 aria-labelledby="persistence-issues-title"
-                className="rounded-xl border border-[var(--color-danger-coral)] bg-[var(--color-danger-soft)] p-4"
+                className="recovery-section recovery-section--danger"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="recovery-section__header">
                   <div>
-                    <h3 id="persistence-issues-title" className="flex items-center gap-2 text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
+                    <h3 id="persistence-issues-title" className="recovery-heading recovery-heading--inline">
                       <AlertTriangle size={13} aria-hidden="true" />
                       Zmiany wymagające uwagi
                     </h3>
-                    <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                    <p className="recovery-description recovery-description--secondary">
                       Rootine zatrzymał ryzykowny zapis. Trwała wersja nie została po cichu nadpisana; szkic możesz pobrać przed ponowieniem.
                     </p>
                   </div>
                   <Badge tone="danger">{issues.length} {issues.length === 1 ? "problem" : "problemy"}</Badge>
                 </div>
-                <ul className="mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto" aria-label="Problemy trwałego zapisu">
+                <ul className="recovery-list recovery-list--issues" aria-label="Problemy trwałego zapisu">
                   {issues.map((issue) => (
-                    <li key={issue.id} className="rounded-lg bg-[var(--color-graphite-input)] p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <strong className="block truncate text-[var(--text-meta)] font-medium text-[var(--color-chalk-white)]">
+                    <li key={issue.id} className="recovery-record recovery-record--issue">
+                      <div className="recovery-record__header recovery-record__header--compact">
+                        <div className="recovery-record__content">
+                          <strong className="recovery-record__title">
                             {issue.key}
                           </strong>
-                          <p className="mt-1 max-w-[60ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                          <p className="recovery-record__description recovery-record__description--issue">
                             {issue.message}
                           </p>
                         </div>
@@ -314,7 +315,7 @@ export function RecoveryCenterButton({
                           {issueLabel(issue.kind)}
                         </Badge>
                       </div>
-                      <div className="mt-3 flex flex-wrap justify-end gap-1">
+                      <div className="recovery-actions recovery-actions--record">
                         {issue.hasDraft && (
                           <Button
                             variant="ghost"
@@ -357,14 +358,14 @@ export function RecoveryCenterButton({
               </section>
             )}
 
-            <section aria-labelledby="backup-actions-title" className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-graphite-panel)] p-4">
-              <h3 id="backup-actions-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
+            <section aria-labelledby="backup-actions-title" className="recovery-section">
+              <h3 id="backup-actions-title" className="recovery-heading">
                 Pełna kopia urządzenia
               </h3>
-              <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
+              <p className="recovery-description">
                 Plik zawiera dane wszystkich modułów zapisane w tej przeglądarce. Przechowuj go jak prywatny dokument.
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="recovery-actions">
                 <Button
                   variant="quiet"
                   leadingIcon={<Download size={13} />}
@@ -390,14 +391,14 @@ export function RecoveryCenterButton({
             <section
               aria-labelledby="storage-estimate-title"
               aria-busy={storageEstimate.status === "loading" || persistentStorage.status === "loading"}
-              className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-graphite-panel)] p-4"
+              className="recovery-section"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 id="storage-estimate-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
+              <div className="recovery-section__header">
+                <div className="recovery-record__content">
+                  <h3 id="storage-estimate-title" className="recovery-heading">
                     Pamięć tej witryny
                   </h3>
-                  <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-muted)]">
+                  <p className="recovery-description">
                     Szacunek przeglądarki obejmuje lokalne dane Rootine oraz inne zasoby tej witryny, na przykład pamięć podręczną.
                   </p>
                 </div>
@@ -412,7 +413,7 @@ export function RecoveryCenterButton({
               </div>
 
               {storageEstimate.status === "ready" ? (
-                <div className="mt-3">
+                <div className="recovery-storage-meter">
                   <div
                     role="meter"
                     aria-label="Wykorzystanie pamięci tej witryny"
@@ -420,53 +421,53 @@ export function RecoveryCenterButton({
                     aria-valuemax={100}
                     aria-valuenow={Math.min(100, Math.round(storageEstimate.ratio * 100))}
                     aria-valuetext={`${formatBytes(storageEstimate.usage)} z ${formatBytes(storageEstimate.quota)}`}
-                    className="h-2 overflow-hidden rounded-full bg-[var(--color-graphite-input)]"
+                    className="recovery-meter"
                   >
                     <div
-                      className={`h-full rounded-full ${
+                      className={`recovery-meter__fill ${
                         storageEstimate.ratio >= 0.9
-                          ? "bg-[var(--color-danger-coral)]"
+                          ? "is-danger"
                           : storageEstimate.ratio >= 0.75
-                            ? "bg-[var(--color-warning-ochre)]"
-                            : "bg-[var(--color-precision-blue)]"
+                            ? "is-warning"
+                            : "is-primary"
                       }`}
                       style={{ width: `${Math.min(100, storageEstimate.ratio * 100)}%` }}
                     />
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[var(--text-label)] text-[var(--color-text-muted)]">
+                  <div className="recovery-meter__legend">
                     <span>{formatBytes(storageEstimate.usage)} zajęte</span>
                     <span>Limit: {formatBytes(storageEstimate.quota)}</span>
                   </div>
                   {storageEstimate.ratio >= 0.75 && (
-                    <p className="mt-2 text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-warning-ochre)]">
+                    <p className="recovery-message recovery-message--warning">
                       Zbliżasz się do limitu przeglądarki. Wyeksportuj kopię przed dodaniem większej ilości danych.
                     </p>
                   )}
                 </div>
               ) : storageEstimate.status === "unsupported" || storageEstimate.status === "error" ? (
-                <p className="mt-3 text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                <p className="recovery-message recovery-message--secondary">
                   {storageEstimate.message}
                 </p>
               ) : (
-                <p className="mt-3 text-[var(--text-label)] text-[var(--color-text-muted)]" role="status">
+                <p className="recovery-message" role="status">
                   Sprawdzanie wykorzystania i limitu…
                 </p>
               )}
 
-              <div className="mt-3">
+              <div className="recovery-actions">
                 <Button variant="ghost" size="sm" onClick={refreshStorageEstimate} disabled={storageEstimate.status === "loading"}>
                   Odśwież pomiar
                 </Button>
               </div>
 
-              <div className="mt-4 border-t border-[var(--color-border-subtle)] pt-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="flex items-center gap-2 text-[var(--text-meta)] font-semibold text-[var(--color-chalk-white)]">
+              <div className="recovery-protection">
+                <div className="recovery-section__header">
+                  <div className="recovery-record__content">
+                    <h4 className="recovery-subheading">
                       <Database size={13} aria-hidden="true" />
                       Trwałość danych
                     </h4>
-                    <p className="mt-1 max-w-[70ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                    <p className="recovery-description recovery-description--secondary">
                       {storageTier.message}
                     </p>
                   </div>
@@ -476,8 +477,8 @@ export function RecoveryCenterButton({
                 </div>
 
                 {persistentStorage.status === "ready" ? (
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                    <p className="max-w-[56ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                  <div className="recovery-protection__status">
+                    <p className="recovery-protection__description">
                       {persistentStorage.message} Ochrona nie zwiększa limitu i nie zastępuje własnej kopii.
                     </p>
                     {persistentStorage.persisted ? (
@@ -495,11 +496,11 @@ export function RecoveryCenterButton({
                     )}
                   </div>
                 ) : persistentStorage.status === "unsupported" || persistentStorage.status === "error" ? (
-                  <p className="mt-3 text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                  <p className="recovery-message recovery-message--secondary">
                     {persistentStorage.message}
                   </p>
                 ) : (
-                  <p className="mt-3 text-[var(--text-label)] text-[var(--color-text-muted)]" role="status">
+                  <p className="recovery-message" role="status">
                     Sprawdzanie ochrony danych…
                   </p>
                 )}
@@ -507,19 +508,19 @@ export function RecoveryCenterButton({
             </section>
 
             {pendingImport && (
-              <section aria-labelledby="pending-import-title" className="rounded-xl border border-[var(--color-warning-ochre)] bg-[var(--color-warning-soft)] p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <section aria-labelledby="pending-import-title" className="recovery-section recovery-section--warning">
+                <div className="recovery-section__header">
                   <div>
-                    <h3 id="pending-import-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
+                    <h3 id="pending-import-title" className="recovery-heading">
                       Potwierdź przywrócenie
                     </h3>
-                    <p className="mt-1 text-[var(--text-label)] text-[var(--color-text-muted)]">
+                    <p className="recovery-description recovery-description--compact">
                       {pendingImport.fileName} · {Object.keys(pendingImport.backup.workspaces).length} obszarów · {formatDate(pendingImport.backup.exportedAt)}
                     </p>
                   </div>
                   <Badge tone="warning">Zastąpi bieżące dane</Badge>
                 </div>
-                <div className="mt-3 flex justify-end gap-2">
+                <div className="recovery-actions recovery-actions--end">
                   <Button variant="ghost" onClick={() => setPendingImport(null)}>Anuluj</Button>
                   <Button
                     variant="primary"
@@ -533,12 +534,12 @@ export function RecoveryCenterButton({
             )}
 
             <section aria-labelledby="recovery-records-title">
-              <div className="flex items-center justify-between gap-3">
+              <div className="recovery-section__header recovery-section__header--center">
                 <div>
-                  <h3 id="recovery-records-title" className="text-[var(--text-body)] font-semibold text-[var(--color-chalk-white)]">
+                  <h3 id="recovery-records-title" className="recovery-heading">
                     Zabezpieczone zapisy
                   </h3>
-                  <p className="mt-1 text-[var(--text-label)] text-[var(--color-text-muted)]">
+                  <p className="recovery-description recovery-description--compact">
                     Powstają automatycznie, gdy format danych jest uszkodzony albo przed przywróceniem kopii.
                   </p>
                 </div>
@@ -548,25 +549,25 @@ export function RecoveryCenterButton({
               </div>
 
               {records.length === 0 ? (
-                <div className="mt-3 rounded-xl border border-dashed border-[var(--color-border-subtle)] p-5 text-center text-[var(--text-label)] text-[var(--color-text-muted)]">
+                <div className="recovery-empty">
                   Nie ma zapisów wymagających odzyskiwania.
                 </div>
               ) : (
-                <ul className="mt-3 flex max-h-60 flex-col gap-2 overflow-y-auto" aria-label="Zabezpieczone zapisy danych">
+                <ul className="recovery-list recovery-list--records" aria-label="Zabezpieczone zapisy danych">
                   {records.map((record) => (
-                    <li key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-graphite-input)] p-3">
-                      <div className="min-w-0">
-                        <strong className="block truncate text-[var(--text-meta)] font-medium text-[var(--color-chalk-white)]">
+                    <li key={record.id} className="recovery-record recovery-record--saved">
+                      <div className="recovery-record__content">
+                        <strong className="recovery-record__title">
                           {record.storageKey}
                         </strong>
-                        <span className="mt-0.5 block text-[var(--text-label)] text-[var(--color-text-muted)]">
+                        <span className="recovery-record__meta">
                           {formatDate(record.createdAt)} · {Math.max(1, Math.round(record.byteLength / 1024))} KB
                         </span>
-                        <span className="mt-1 block max-w-[46ch] text-[var(--text-label)] leading-[var(--leading-normal)] text-[var(--color-text-secondary)]">
+                        <span className="recovery-record__description recovery-record__description--saved">
                           {record.reason}
                         </span>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="recovery-record__actions">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -599,7 +600,7 @@ export function RecoveryCenterButton({
               )}
             </section>
 
-            <p className="min-h-5 text-[var(--text-label)] text-[var(--color-text-secondary)]" role="status" aria-live="polite">
+            <p className="recovery-status" role="status" aria-live="polite">
               {message}
             </p>
           </div>

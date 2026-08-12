@@ -55,7 +55,7 @@
     linear-gradient(14deg, transparent 0 62%, var(--theme-material-fiber) 62.12%, transparent 62.42%),
     linear-gradient(168deg, transparent 0 78%, var(--theme-material-fiber) 78.08%, transparent 78.38%),
     radial-gradient(ellipse 42% 30% at 88% 18%, var(--theme-material-fiber), transparent 72%);
-  mask-image: linear-gradient(90deg, transparent 8%, var(--color-chalk-white) 34%, var(--color-chalk-white) 100%);
+  mask-image: linear-gradient(90deg, transparent 8%, var(--color-text-primary) 34%, var(--color-text-primary) 100%);
   opacity: var(--theme-paper-opacity);
 }
 
@@ -65,7 +65,7 @@
     radial-gradient(ellipse 34% 52% at 94% 16%, var(--theme-material-vein), transparent 72%),
     radial-gradient(ellipse 28% 44% at 78% 82%, var(--theme-material-fiber), transparent 76%),
     linear-gradient(128deg, transparent 0 67%, var(--theme-material-vein) 67.12%, transparent 67.48%);
-  mask-image: linear-gradient(90deg, transparent 26%, var(--color-chalk-white) 56%, var(--color-chalk-white) 100%);
+  mask-image: linear-gradient(90deg, transparent 26%, var(--color-text-primary) 56%, var(--color-text-primary) 100%);
   opacity: var(--theme-stone-opacity);
 }
 
@@ -83,7 +83,7 @@
   right: -7%;
   bottom: 3%;
   left: 28%;
-  mask-image: linear-gradient(90deg, transparent 0%, var(--color-chalk-white) 24%, var(--color-chalk-white) 86%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, var(--color-text-primary) 24%, var(--color-text-primary) 86%, transparent 100%);
   transform: rotate(-7deg);
   --ambient-sport-duration: 24s;
 }

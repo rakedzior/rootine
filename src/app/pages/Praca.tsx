@@ -17,7 +17,6 @@ import {
   CircleAlert,
   CircleDot,
   Clock3,
-  Flag,
   FolderKanban,
   Inbox,
   LayoutDashboard,
@@ -32,6 +31,7 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { flushLocalWorkspaceWrites, subscribeToLocalWorkspace } from "../data/localRepository";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import { recordActivity } from "../experience/activityLog";
 import {
   createWorkId,
@@ -44,6 +44,7 @@ import {
   type WorkTask,
   type WorkTaskPriority,
   type WorkTaskStatus,
+  withCanonicalWorkTime,
 } from "../data/workWorkspace";
 import {
   Badge,
@@ -64,9 +65,11 @@ import {
   Modal,
   ModuleMain,
   ModuleShell,
+  PriorityIcon,
   SectionSurface,
   Select,
   Textarea,
+  TimePicker,
   Toast,
   ToastViewport,
 } from "../ui";
@@ -105,6 +108,9 @@ import {
   taskDepth,
   taskStatusIcon,
   taskStatusTone,
+  workTaskStatusSelectOptions,
+  workPriorityMenuOptions,
+  workPrioritySelectOptions,
   type CompanyProjectSort,
   type CompanyProjectStatusFilter,
   type CompletionUndo,
@@ -507,7 +513,8 @@ export default function Praca() {
           parentId: task.parentId ?? "",
           taskStatus: getTaskStatus(task),
           priority: task.priority,
-           endDate: task.dueDate,
+          endDate: task.dueDate,
+          dueTime: task.dueTime ?? task.linkedTask?.schedule?.startTime ?? task.linkedTask?.time ?? "",
         }
       : {
           ...EMPTY_DRAFT,
@@ -535,6 +542,7 @@ export default function Praca() {
         status: values.status,
         priority: values.priority,
         dueDate: values.dueDate,
+        dueTime: values.dueTime,
         note: "",
         createdAt: now,
         updatedAt: now,
@@ -547,12 +555,13 @@ export default function Praca() {
   useEffect(() => {
     if (commandParams.get("akcja") !== "nowe-zadanie") return;
     const next = new URLSearchParams(commandParams);
-    ["akcja", "tytul", "data", "priorytet"].forEach((key) => next.delete(key));
+    ["akcja", "tytul", "data", "godzina", "priorytet"].forEach((key) => next.delete(key));
     const nextDraft = {
       ...EMPTY_DRAFT,
       name: commandParams.get("tytul")?.trim() ?? "",
       projectId: selectedProjectId,
       endDate: commandParams.get("data") ?? "",
+      dueTime: commandParams.get("godzina") ?? "",
       priority: ["low", "medium", "high"].includes(commandParams.get("priorytet") ?? "")
         ? commandParams.get("priorytet") as WorkTaskPriority
         : "none",
@@ -659,8 +668,10 @@ export default function Praca() {
       if (editor.mode === "edit" && editor.id) {
         setWorkspace((current) => ({
           ...current,
-          tasks: current.tasks.map((task) => task.id === editor.id
-            ? {
+          tasks: current.tasks.map((task) => {
+            if (task.id !== editor.id) return task;
+            const dueTime = draft.endDate ? draft.dueTime : "";
+            return {
                 ...task,
                 title: name,
                 projectId,
@@ -670,9 +681,11 @@ export default function Praca() {
                 completed,
                 priority: draft.priority,
                 dueDate: draft.endDate,
+                dueTime,
+                linkedTask: withCanonicalWorkTime(task.linkedTask, dueTime),
                 updatedAt: new Date().toISOString(),
-              }
-            : task),
+              };
+          }),
         }));
         recordActivity({ moduleId: "work", kind: "save", title: name, detail: "Zaktualizowano zadanie pracy" });
       } else {
@@ -688,6 +701,7 @@ export default function Praca() {
             status: draft.taskStatus,
             priority: draft.priority,
             dueDate: draft.endDate,
+            dueTime: draft.endDate ? draft.dueTime : "",
             note: draft.note.trim(),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -770,10 +784,17 @@ export default function Praca() {
     });
   };
 
-  const updateTaskValues = (taskId: string, patch: Partial<Pick<WorkTask, "companyId" | "priority" | "dueDate" | "projectId" | "parentId">>) => {
+  const updateTaskValues = (taskId: string, patch: Partial<Pick<WorkTask, "companyId" | "priority" | "dueDate" | "dueTime" | "projectId" | "parentId">>) => {
     setWorkspace((current) => ({
       ...current,
-      tasks: current.tasks.map((task) => task.id === taskId ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task),
+      tasks: current.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+        const dueTime = patch.dueTime;
+        const linkedTask = dueTime === undefined
+          ? task.linkedTask
+          : withCanonicalWorkTime(task.linkedTask, dueTime);
+        return { ...task, ...patch, linkedTask, updatedAt: new Date().toISOString() };
+      }),
     }));
     showSaveNotice();
   };
@@ -904,6 +925,18 @@ export default function Praca() {
       ? "Projekt dostaje status, zakres dat i prostą notatkę."
       : "Zadanie może zostać przypisane do projektu albo pozostać nieprzypisane.";
 
+  const editorSubmitLabel = editor?.mode === "edit"
+    ? editor.kind === "company"
+      ? "Zapisz firmę"
+      : editor.kind === "project"
+        ? "Zapisz projekt"
+        : "Zapisz zadanie"
+    : editor?.kind === "company"
+      ? "Dodaj firmę"
+      : editor?.kind === "project"
+        ? "Dodaj projekt"
+        : "Dodaj zadanie";
+
   const editorProjectTasks = draft.projectId
     ? workspace.tasks.filter((task) => task.projectId === draft.projectId && task.id !== editor?.id)
     : [];
@@ -971,7 +1004,7 @@ export default function Praca() {
       "--work-company-accent": normalizeCompanyColor(context.company?.color ?? ""),
     } as CSSProperties;
     const isProjectTreeTask = view === "project" && task.projectId === selectedProject?.id;
-    const scheduledTime = task.linkedTask?.schedule?.startTime ?? task.linkedTask?.time;
+    const scheduledTime = task.dueTime ?? task.linkedTask?.schedule?.startTime ?? task.linkedTask?.time;
     const dateLabel = task.dueDate
       ? task.dueDate < today
         ? relativeDateLabel(task.dueDate, today)
@@ -996,8 +1029,10 @@ export default function Praca() {
         displayValue={dateLabel}
         aria-label={`Zmień termin zadania „${task.title}”`}
         fieldClassName="work-task-inline-date work-task-inline-date--compact"
+        triggerClassName="work-task-date-trigger work-task-date-trigger--compact"
+        density="compact"
         portalLayer="featurePopup"
-        onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
+        onChange={(value) => updateTaskValues(task.id, { dueDate: value, ...(!value ? { dueTime: "" } : {}) })}
       />
     ) : null;
     return (
@@ -1022,8 +1057,10 @@ export default function Praca() {
             displayValue={dateLabel}
             aria-label={`Zmień termin zadania „${task.title}”`}
             fieldClassName="work-task-inline-date"
+            triggerClassName="work-task-date-trigger work-task-date-trigger--rail"
+            density="compact"
             portalLayer="featurePopup"
-            onChange={(value) => updateTaskValues(task.id, { dueDate: value })}
+            onChange={(value) => updateTaskValues(task.id, { dueDate: value, ...(!value ? { dueTime: "" } : {}) })}
           />
         ) : undefined}
         leading={taskCheck}
@@ -1048,16 +1085,10 @@ export default function Praca() {
               value={task.priority}
               ariaLabel={`Zmień priorytet zadania „${task.title}”`}
               triggerClassName={`work-task-priority work-task-priority--${task.priority}`}
-              options={PRIORITY_ORDER.map((priority) => ({
-                value: priority,
-                label: PRIORITY_LABELS[priority],
-                leadingIcon: <Flag size={11} aria-hidden="true" />,
-                selected: priority === task.priority,
-                className: `work-inline-menu__item--${priority}`,
-              }))}
+              options={workPriorityMenuOptions()}
               onChange={(value) => updateTaskValues(task.id, { priority: value as WorkTaskPriority })}
             >
-              <Flag size={11} aria-hidden="true" />
+              <PriorityIcon level={task.priority} />
             </TaskInlineMenu>
             <TaskInlineMenu
               value={status}
@@ -1148,7 +1179,7 @@ export default function Praca() {
         ) : emptyText ? (
           <div className={`work-task-section__empty ${emptyAction ? "work-task-section__empty--compact" : ""}`}>
             <span>{emptyText}</span>
-            {emptyAction}
+            {emptyAction && <span className="work-task-section__empty-action">{emptyAction}</span>}
           </div>
         ) : null)}
       </SectionSurface>
@@ -1394,6 +1425,7 @@ export default function Praca() {
             <div className="work-section-heading__actions">
               <div className="work-project-list__bulk-actions" aria-label="Sterowanie rozwinięciem projektów">
                 <Button
+                  className="work-project-list__bulk-button"
                   variant="ghost"
                   size="sm"
                   leadingIcon={projects.length && projects.every((project) => expandedCompanyProjectIds.has(project.id)) ? <ChevronsUp size={13} /> : <ChevronsDown size={13} />}
@@ -1475,6 +1507,8 @@ export default function Praca() {
                         min={project.startDate || undefined}
                         aria-label={`Zmień termin projektu „${project.name}”`}
                         fieldClassName="work-project-inline-date"
+                        triggerClassName="work-project-date-trigger"
+                        density="compact"
                         portalLayer="featurePopup"
                         onChange={(value) => updateProjectValues(project.id, { endDate: value })}
                       />
@@ -1641,7 +1675,7 @@ export default function Praca() {
             : undefined}
         controls={showTaskFilters && advancedFiltersOpen ? (
           <div className="work-toolbar__advanced-filters">
-            <Select compact aria-label="Filtruj po priorytecie" value={priorityFilter} options={[{ value: "all", label: "Wszystkie priorytety" }, ...PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))]} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} />
+            <Select compact aria-label="Filtruj po priorytecie" value={priorityFilter} options={[{ value: "all", label: "Wszystkie priorytety" }, ...workPrioritySelectOptions()]} onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)} />
             {view === "active" && <>
               <Select compact aria-label="Filtruj po firmie" value={companyFilter} options={[{ value: "all", label: "Wszystkie firmy" }, ...workspace.companies.filter((company) => !company.archived).map((company) => ({ value: company.id, label: company.name }))]} onChange={(event) => { setCompanyFilter(event.target.value); if (projectFilter !== "all" && projectById.get(projectFilter)?.companyId !== event.target.value) setProjectFilter("all"); }} />
               <Select compact aria-label="Filtruj po projekcie" value={projectFilter} options={[{ value: "all", label: "Wszystkie projekty" }, ...projectFilterOptions]} onChange={(event) => setProjectFilter(event.target.value)} />
@@ -1654,7 +1688,7 @@ export default function Praca() {
           {showTaskFilters && (
           <div className="work-toolbar__controls">
             <label className="work-search"><Search size={13} aria-hidden="true" /><span className="ui-sr-only">{searchPlaceholder}</span><input value={search} placeholder={searchPlaceholder} onChange={(event) => setSearch(event.target.value)} /></label>
-            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...TASK_STATUS_ORDER.filter((status) => status !== "completed").map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
+            <Select compact aria-label="Filtruj po statusie" value={statusFilter} options={[{ value: "all", label: "Wszystkie statusy" }, ...workTaskStatusSelectOptions().filter((option) => option.value !== "completed")]} onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)} />
             <Button
               variant="ghost"
               size="sm"
@@ -1713,11 +1747,11 @@ export default function Praca() {
     <ModuleSidebar label="Widoki pracy" className="work-context-sidebar">
       <nav className="work-sidebar-nav" aria-label="Widoki pracy">
         <ContextNavGroup label="Przegląd">
-          <ContextNavItem active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today || !taskAnchorDate(task)).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
-          <ContextNavItem active={view === "tomorrow"} icon={<CalendarDays />} label="Jutro" meta={relevantOpenTasks.filter((task) => taskAnchorDate(task) === addDays(today, 1)).length || undefined} onClick={() => navigate("tomorrow")} />
-          <ContextNavItem active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
-          <ContextNavItem active={view === "untimed"} icon={<Circle />} label="Bez terminu" meta={relevantOpenTasks.filter((task) => !taskAnchorDate(task)).length || undefined} onClick={() => navigate("untimed")} />
-          <ContextNavItem active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "today"} icon={<Clock3 />} label="Dzisiaj" meta={<><span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) === today || !taskAnchorDate(task)).length}</span>{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length > 0 && <><span className="work-sidebar-counts__dot" aria-hidden="true">·</span><span className="work-sidebar-overdue" title="Zadania po terminie">{relevantOpenTasks.filter((task) => taskAnchorDate(task) && taskAnchorDate(task) < today).length}</span></>}</>} onClick={() => navigate("today")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "tomorrow"} icon={<CalendarDays />} label="Jutro" meta={relevantOpenTasks.filter((task) => taskAnchorDate(task) === addDays(today, 1)).length || undefined} onClick={() => navigate("tomorrow")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "week"} icon={<CalendarDays />} label="Ten tydzień" meta={relevantOpenTasks.filter((task) => Boolean(taskAnchorDate(task)) && (taskAnchorDate(task) < today || weekDates.includes(taskAnchorDate(task)))).length} onClick={() => navigate("week")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "untimed"} icon={<Circle />} label="Bez terminu" meta={relevantOpenTasks.filter((task) => !taskAnchorDate(task)).length || undefined} onClick={() => navigate("untimed")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "active"} icon={<LayoutDashboard />} label="Wszystkie" meta={relevantOpenTasks.length} onClick={() => navigate("active")} />
         </ContextNavGroup>
 
         <ContextNavGroup label="Firmy i projekty">
@@ -1726,6 +1760,7 @@ export default function Praca() {
             return (
               <Fragment key={company.id}>
                 <ContextNavItem
+                  className="work-sidebar-nav-item"
                   active={view === "company" && selectedCompanyId === company.id}
                   icon={<span className="work-company-dot" style={{ background: normalizeCompanyColor(company.color) }} />}
                   label={company.name}
@@ -1734,6 +1769,7 @@ export default function Praca() {
                 />
                 {projects.map((project) => (
                   <ContextNavItem
+                    className="work-sidebar-nav-item"
                     key={project.id}
                     depth={1}
                     active={view === "project" && selectedProjectId === project.id}
@@ -1750,8 +1786,8 @@ export default function Praca() {
         </ContextNavGroup>
 
         <ContextNavGroup label="Pozostałe" className="work-sidebar-nav__other">
-          <ContextNavItem active={view === "unassigned"} icon={<Inbox />} label="Nieprzypisane" meta={workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length || undefined} onClick={() => navigate("unassigned")} />
-          <ContextNavItem active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length + workspace.companies.filter((company) => company.archived).length || undefined} onClick={() => navigate("archive")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "unassigned"} icon={<Inbox />} label="Nieprzypisane" meta={workspace.tasks.filter((task) => !task.projectId && isTaskOpen(task)).length || undefined} onClick={() => navigate("unassigned")} />
+          <ContextNavItem className="work-sidebar-nav-item" active={view === "archive"} icon={<Archive />} label="Archiwum" meta={workspace.projects.filter((project) => project.status === "completed").length + workspace.companies.filter((company) => company.archived).length || undefined} onClick={() => navigate("archive")} />
         </ContextNavGroup>
       </nav>
       <div className="work-sidebar-footer"><CircleDot size={13} aria-hidden="true" /><span>Dane zapisują się lokalnie</span></div>
@@ -1789,7 +1825,7 @@ export default function Praca() {
       </ModuleMain>
 
       {editor && (
-        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} onClose={editorDraftProtection.requestClose} footer={<><Button variant="ghost" onClick={editorDraftProtection.requestClose}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editor.mode === "edit" ? "Zapisz zmiany" : "Dodaj"}</Button></>}>
+        <Modal size={editor.kind === "company" ? "sm" : editor.kind === "project" ? "lg" : "md"} bodyClassName="work-editor-modal-body" title={editorTitle} description={editorDescription} onClose={editorDraftProtection.requestClose} footer={<><Button variant="ghost" onClick={editorDraftProtection.requestClose}>Anuluj</Button><Button variant="primary" type="submit" form="work-editor-form" disabled={Boolean(editor.mode === "edit" && JSON.stringify(draft) === JSON.stringify(editorInitialDraft))}>{editorSubmitLabel}</Button></>}>
           <form id="work-editor-form" className="work-editor-form" onSubmit={submitEditor}>
             <Input label={editor.kind === "task" ? "Nazwa zadania" : "Nazwa"} value={draft.name} error={editorError} autoFocus placeholder={editor.kind === "company" ? "np. Studio North" : editor.kind === "project" ? "np. Nowa strona" : "Co trzeba zrobić?"} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); if (editorError) setEditorError(""); }} />
 
@@ -1821,8 +1857,8 @@ export default function Praca() {
                 </div>
                 <div className="work-editor-section"><h3>Harmonogram</h3>
                 <div className="work-editor-grid work-editor-grid--dates">
-                  <DatePicker  label="Start" value={draft.startDate} max={draft.endDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
-                  <DatePicker  label="Termin końcowy" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
+                  <DatePicker label="Data rozpoczęcia" value={draft.startDate} max={draft.endDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
+                  <DatePicker label="Data zakończenia" value={draft.endDate} min={draft.startDate || undefined} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
                 </div>
                 </div>
                 <div className="work-editor-section"><h3>Szczegóły</h3>
@@ -1838,14 +1874,14 @@ export default function Praca() {
               </>
             )}
 
-            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={TASK_STATUS_ORDER.map((status) => ({ value: status, label: TASK_STATUS_LABELS[status] }))} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={PRIORITY_ORDER.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><DatePicker  label="Termin" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} /></div><Textarea label="Notatka (opcjonalnie)" className="work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></>}
+            {editor.kind === "task" && <><Select label="Projekt" value={draft.projectId} options={projectOptions} onChange={(event) => setDraft((current) => ({ ...current, projectId: event.target.value, parentId: "" }))} /><Select label="Podzadanie" value={draft.parentId} options={parentOptions} disabled={!draft.projectId} onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))} /><div className="work-editor-grid"><Select label="Status" value={draft.taskStatus} options={workTaskStatusSelectOptions()} onChange={(event) => setDraft((current) => ({ ...current, taskStatus: event.target.value as WorkTaskStatus }))} /><Select label="Priorytet" value={draft.priority} options={workPrioritySelectOptions()} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as WorkTaskPriority }))} /><DatePicker label="Termin" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value, ...(!value ? { dueTime: "" } : {}) }))} /><TimePicker label="Godzina" value={draft.dueTime} options={HALF_HOUR_TIME_OPTIONS} disabled={!draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, dueTime: value }))} /></div><Textarea label="Notatka (opcjonalnie)" className="work-textarea" value={draft.note} placeholder="Zwykła notatka do zadania" onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} /></>}
           </form>
         </Modal>
       )}
 
       {editorDraftProtection.promptOpen && <ConfirmDialog title="Odrzucić niezapisane zmiany?" confirmLabel="Odrzuć zmiany" cancelLabel="Kontynuuj edycję" onCancel={editorDraftProtection.keepEditing} onConfirm={editorDraftProtection.confirmDiscard}><p className="work-delete-note">Szkic pozostaje w tej karcie, dopóki go nie zapiszesz albo świadomie odrzucisz.</p></ConfirmDialog>}
 
-      {deleteState && <Modal title={`Usuń ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"}?`} description={deleteState.kind === "company" ? `Firma „${deleteState.name}” ma ${workspace.projects.filter((project) => project.companyId === deleteState.id).length} projektów i ${workspace.tasks.filter((task) => workspace.projects.some((project) => project.id === task.projectId && project.companyId === deleteState.id)).length} zadań. Wszystkie zostaną usunięte.` : deleteState.kind === "project" ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.` : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`} onClose={() => setDeleteState(null)} footer={<><Button variant="ghost" onClick={() => setDeleteState(null)}>Anuluj</Button><Button variant="danger" onClick={confirmDelete}>Usuń</Button></>}><p className="work-delete-note">Archiwizacja jest bezpieczniejsza, jeśli chcesz zachować historię.</p></Modal>}
+      {deleteState && <ConfirmDialog title={`Usunąć ${deleteState.kind === "company" ? "firmę" : deleteState.kind === "project" ? "projekt" : "zadanie"} „${deleteState.name}”?`} description={deleteState.kind === "company" ? `Firma „${deleteState.name}” ma ${workspace.projects.filter((project) => project.companyId === deleteState.id).length} projektów i ${workspace.tasks.filter((task) => workspace.projects.some((project) => project.id === task.projectId && project.companyId === deleteState.id)).length} zadań. Wszystkie zostaną usunięte.` : deleteState.kind === "project" ? `Projekt „${deleteState.name}” zostanie usunięty razem ze wszystkimi zadaniami.` : `Zadanie „${deleteState.name}” zostanie usunięte razem ze wszystkimi podzadaniami.`} confirmLabel={deleteState.kind === "company" ? "Usuń firmę" : deleteState.kind === "project" ? "Usuń projekt" : "Usuń zadanie"} onCancel={() => setDeleteState(null)} onConfirm={confirmDelete}><p className="work-delete-note">Archiwizacja jest bezpieczniejsza, jeśli chcesz zachować historię.</p></ConfirmDialog>}
 
       {toast && <ToastViewport><Toast durationMs={6_000} actionLabel={toast.undo ? "Cofnij" : undefined} onAction={toast.undo} onDismiss={dismissToast}>{toast.message}</Toast></ToastViewport>}
     </ModuleShell>

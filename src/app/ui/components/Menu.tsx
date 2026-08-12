@@ -27,6 +27,7 @@ function normalizeForSearch(value: string) {
 export type MenuInitialFocus = "none" | "first" | "last" | "selected";
 export type MenuLayer = keyof typeof uiLayers;
 export type MenuSize = "standard" | "wide";
+export type MenuDensity = "compact" | "standard" | "comfortable";
 
 export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   triggerRef?: RefObject<HTMLElement | null>;
@@ -38,6 +39,14 @@ export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   layer?: MenuLayer;
   /** Reusable width variant for menus with longer labels. */
   size?: MenuSize;
+  /** Named row-height preset; compact preserves the historical 28px menu. */
+  density?: MenuDensity;
+}
+
+function isTextEntryTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest(
+    "input, textarea, select, [contenteditable]:not([contenteditable='false'])",
+  ));
 }
 
 const ManagedMenuContext = createContext(false);
@@ -55,6 +64,7 @@ export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
     dismissOnFocusOut = true,
     layer,
     size = "standard",
+    density = "compact",
     style,
     ...props
   },
@@ -119,7 +129,7 @@ export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
         ref={menuRef}
         role="menu"
         aria-orientation="vertical"
-        className={cx("ui-menu", `ui-menu--${size}`, className)}
+        className={cx("ui-menu", `ui-menu--${size}`, `ui-menu--density-${density}`, className)}
         style={{
           ...style,
           ...(layer ? { zIndex: uiLayers[layer] as CSSProperties["zIndex"] } : {}),
@@ -149,6 +159,10 @@ export const Menu = forwardRef<HTMLDivElement, MenuProps>(function Menu(
             dismiss(false);
             return;
           }
+          // Search fields and other editable controls may be composed into a menu.
+          // Their cursor, native select and text-entry keys take precedence over
+          // menu roving focus and typeahead; Escape above still dismisses the layer.
+          if (isTextEntryTarget(event.target)) return;
 
           const items = getItems();
           if (!items.length) return;

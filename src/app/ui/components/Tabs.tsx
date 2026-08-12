@@ -17,6 +17,8 @@ export interface TabsProps {
   className?: string;
   orientation?: "horizontal" | "vertical";
   activationMode?: "automatic" | "manual";
+  density?: "compact" | "standard";
+  fill?: boolean;
 }
 
 export function Tabs({
@@ -28,6 +30,8 @@ export function Tabs({
   className = "",
   orientation = "horizontal",
   activationMode = "automatic",
+  density = "standard",
+  fill = false,
 }: TabsProps) {
   const generatedId = useId();
   const tabsId = id ?? generatedId;
@@ -61,7 +65,7 @@ export function Tabs({
   return (
     <div
       id={tabsId}
-      className={`ui-tabs ${className}`.trim()}
+      className={`ui-tabs ui-tabs--${density} ${fill ? "ui-tabs--fill" : ""} ${className}`.trim()}
       role="tablist"
       aria-label={ariaLabel}
       aria-orientation={orientation}

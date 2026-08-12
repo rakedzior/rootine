@@ -242,4 +242,25 @@ describe("Praca persistence lifecycle", () => {
     const atlasContext = encodeURIComponent(JSON.stringify(["company-atlas"]));
     expect(window.sessionStorage.getItem(`rootine.work-editor-draft.project.add.new.${atlasContext}`)).toContain("Projekt Atlas");
   });
+
+  it("consumes supported Command Center fields and removes every command parameter", async () => {
+    const router = createMemoryRouter([
+      { path: "/praca", element: <Praca /> },
+    ], {
+      initialEntries: ["/praca?akcja=nowe-zadanie&tytul=Raport&data=2099-08-13&priorytet=high&godzina=16%3A00"],
+    });
+    render(<RouterProvider router={router} />);
+    await act(async () => undefined);
+
+    const dialog = screen.getByRole("dialog", { name: "Nowe zadanie" });
+    expect(within(dialog).getByLabelText("Nazwa zadania")).toHaveValue("Raport");
+    expect(within(dialog).getByRole("combobox", { name: /Priorytet.*Wysoki/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Termin.*13 sierpnia 2099/ })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Godzina")).toHaveValue("16:00");
+
+    const params = new URLSearchParams(router.state.location.search);
+    for (const key of ["akcja", "tytul", "data", "godzina", "priorytet"]) {
+      expect(params.has(key)).toBe(false);
+    }
+  });
 });

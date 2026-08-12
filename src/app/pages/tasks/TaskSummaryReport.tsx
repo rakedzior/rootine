@@ -218,7 +218,7 @@ export function TaskSummaryReport({ tasks, listy }: { tasks: Task[]; listy: List
     const list = listy.find((item) => item.id === task.list);
     return (
       <li key={`${task.id}-${date}`} className="task-report__row">
-        <span className="task-report__row-dot" style={{ background: list?.color ?? "var(--color-text-muted)" }} aria-hidden="true" />
+        <span className="task-report__row-dot" style={{ background: list?.color ?? "var(--color-text-tertiary)" }} aria-hidden="true" />
         <span className="task-report__row-text">{task.text}</span>
         {task.priority && (
           <span

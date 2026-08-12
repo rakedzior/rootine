@@ -1,9 +1,9 @@
 .notes-sidebar {
-  background: var(--color-graphite-sidebar);
+  background: var(--color-sidebar-bg);
 }
 
 .notes-sidebar__footer {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -19,7 +19,7 @@
 .notes-sidebar__label {
   margin: 0;
   padding: 0 6px var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-label);
@@ -64,13 +64,13 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-align: left;
   cursor: pointer;
 }
 
 .notes-sidebar__group-toggle:hover {
-  background: var(--color-graphite-panel);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
 }
 
@@ -103,13 +103,13 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
 .notes-sidebar__group-action:hover {
-  background: var(--color-graphite-panel);
-  color: var(--color-precision-blue-text);
+  background: var(--color-surface-1);
+  color: var(--color-primary-text);
 }
 
 .notes-sidebar__group-items {
@@ -142,14 +142,14 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
 .notes-sidebar__list-actions button:hover,
 .notes-sidebar__list-actions button:focus-visible {
-  background: var(--color-graphite-panel);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
 }
 
 .notes-sidebar__filter {
@@ -159,10 +159,10 @@
   gap: var(--space-xs);
   margin: 2px var(--space-xs) var(--space-xs);
   padding: 0 var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
 }
 
 .notes-sidebar__filter:focus-within {
@@ -175,14 +175,14 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font: inherit;
   font-size: var(--text-meta);
 }
 
 .notes-sidebar__tag-empty {
   margin: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
 }
 
@@ -192,7 +192,7 @@
   gap: var(--space-sm);
   margin-top: auto;
   padding: var(--space-md) var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .notes-toolbar {
@@ -210,10 +210,10 @@
   align-items: center;
   gap: var(--space-sm);
   padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
 }
 
 .notes-search:focus-within {
@@ -227,12 +227,12 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-label);
 }
 
 .notes-search input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .notes-search > button {
@@ -245,18 +245,18 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
 .notes-search > button:hover {
-  background: var(--color-graphite-hover);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
 .notes-toolbar__count {
   margin-right: auto;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   white-space: nowrap;
@@ -282,7 +282,7 @@
 /* Section titles stay compact and subordinate to the current-view toolbar. */
 .notes-canvas__heading h2 {
   margin: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-section);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -291,7 +291,7 @@
 
 .notes-canvas__heading p {
   margin: 5px 0 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
 }
 
@@ -323,7 +323,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .notes-shelf__heading h2 {
@@ -334,7 +334,7 @@
 }
 
 .notes-shelf__heading > span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -359,14 +359,14 @@
 .notes-grid--list .notes-card {
   height: auto;
   min-height: 116px;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--note-accent) 2%, var(--color-graphite-card));
+  background: color-mix(in srgb, var(--note-accent) 2%, var(--color-surface-2));
 }
 
 .notes-grid--list .notes-card:hover,
 .notes-grid--list .notes-card:focus-within {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
 }
 
 .notes-grid--list .notes-card__color {
@@ -405,8 +405,8 @@
 }
 
 .notes-card {
-  --note-accent: var(--color-text-muted);
-  --note-soft: var(--color-graphite-input);
+  --note-accent: var(--color-text-tertiary);
+  --note-soft: var(--color-surface-1);
 
   position: relative;
   display: flex;
@@ -415,9 +415,9 @@
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--note-accent) 2%, var(--color-graphite-card));
+  background: color-mix(in srgb, var(--note-accent) 2%, var(--color-surface-2));
   color: var(--color-text-secondary);
   transition:
     background-color var(--motion-fast) var(--ease-out),
@@ -426,12 +426,12 @@
 
 .notes-card:hover,
 .notes-card:focus-within {
-  background: color-mix(in srgb, var(--note-accent) 5%, var(--color-graphite-hover));
+  background: color-mix(in srgb, var(--note-accent) 5%, var(--color-surface-hover));
 }
 
 .notes-card--graphite,
 .notes-color--graphite {
-  --note-accent: var(--color-text-muted);
+  --note-accent: var(--color-text-tertiary);
 }
 
 .notes-card--blue,
@@ -485,7 +485,7 @@
   padding: 2px 0;
   border: 0;
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -496,7 +496,7 @@
 }
 
 .notes-card__title:hover {
-  color: color-mix(in srgb, var(--note-accent) 72%, var(--color-chalk-white));
+  color: color-mix(in srgb, var(--note-accent) 72%, var(--color-text-primary));
 }
 
 .notes-card__actions {
@@ -553,7 +553,7 @@
 }
 
 .notes-card__body:hover {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
 }
 
 .notes-card__body p {
@@ -599,8 +599,8 @@
   place-items: center;
   border: 1.5px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
-  background: var(--color-graphite-input);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
 }
 
 .notes-card__checklist > button:hover > span {
@@ -609,7 +609,7 @@
 
 .notes-card__checklist > button.is-checked > span {
   border-color: var(--note-accent);
-  background: color-mix(in srgb, var(--note-accent) 32%, var(--color-graphite-input));
+  background: color-mix(in srgb, var(--note-accent) 32%, var(--color-surface-1));
 }
 
 .notes-card__checklist > button > strong {
@@ -627,7 +627,7 @@
 
 .notes-card__checklist > small {
   margin-left: 22px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -636,7 +636,7 @@
   gap: var(--space-sm);
   margin-top: auto;
   padding: var(--space-sm) var(--space-lg) var(--space-md);
-  border-top: 1px solid color-mix(in srgb, var(--note-accent) 10%, var(--color-border-subtle));
+  border-top: 1px solid color-mix(in srgb, var(--note-accent) 10%, var(--color-border));
 }
 
 .notes-card__tags {
@@ -650,9 +650,9 @@
   max-width: 100px;
   overflow: hidden;
   padding: 2px 6px;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
   box-shadow: inset 2px 0 0 var(--note-accent);
   color: var(--color-text-secondary);
   font-size: var(--text-label);
@@ -662,7 +662,7 @@
 }
 
 .notes-card__tags > button:hover {
-  background: color-mix(in srgb, var(--note-accent) 17%, var(--color-graphite-input));
+  background: color-mix(in srgb, var(--note-accent) 17%, var(--color-surface-1));
 }
 
 .notes-card__meta {
@@ -682,7 +682,7 @@
 
 .notes-card__meta > * + *::before {
   margin-right: 6px;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   content: "·";
 }
 
@@ -706,7 +706,7 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: 0 var(--space-md) 0 var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .notes-editor__header > div:first-child {
@@ -718,7 +718,7 @@
 
 .notes-editor__header > div:first-child > span {
   overflow: hidden;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
@@ -748,16 +748,16 @@
   width: 100%;
   padding: 0 0 var(--space-sm);
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   outline: 0;
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-title);
   font-weight: var(--weight-semibold);
 }
 
 .notes-editor__title-field input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .notes-editor__title-field input:focus {
@@ -766,7 +766,7 @@
 
 .notes-editor__error {
   margin: -8px 0 0;
-  color: var(--color-danger-coral);
+  color: var(--color-danger-text);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -776,9 +776,9 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-xs);
   padding: var(--space-xs);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .notes-editor__kind > button {
@@ -791,7 +791,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   cursor: pointer;
 }
@@ -801,8 +801,8 @@
 }
 
 .notes-editor__kind > button.is-active {
-  background: var(--color-precision-blue-soft);
-  color: var(--color-precision-blue-text);
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
 }
 
 .notes-editor__body {
@@ -816,7 +816,7 @@
 .notes-editor__bullet-action {
   width: max-content;
   margin-top: -10px;
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .notes-editor__items {
@@ -840,7 +840,7 @@
 }
 
 .notes-editor__section-heading span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -848,9 +848,9 @@
 .notes-editor__items > div:nth-child(2) {
   display: grid;
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .notes-editor__item {
@@ -860,7 +860,7 @@
   align-items: center;
   gap: var(--space-sm);
   padding: 4px var(--space-sm) 4px var(--space-md);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .notes-editor__item:last-child {
@@ -876,17 +876,17 @@
   border: 1.5px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
 .notes-editor__item > button:first-child:hover {
-  border-color: var(--color-precision-blue-text);
+  border-color: var(--color-primary-text);
 }
 
 .notes-editor__item > button:first-child.is-checked {
-  border-color: var(--color-precision-blue);
-  background: var(--color-precision-blue-strong);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
   color: var(--color-on-accent);
 }
 
@@ -897,12 +897,12 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-label);
 }
 
 .notes-editor__item > input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .notes-editor__meta-grid {
@@ -918,7 +918,7 @@
 }
 
 .notes-editor__tag-suggestions > span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -930,17 +930,17 @@
 
 .notes-editor__tag-suggestions button {
   padding: 3px 7px;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   cursor: pointer;
 }
 
 .notes-editor__tag-suggestions button:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
   color: var(--color-text-secondary);
 }
 
@@ -958,7 +958,7 @@
 }
 
 .notes-color {
-  --note-accent: var(--color-text-muted);
+  --note-accent: var(--color-text-tertiary);
 
   display: grid;
   width: 28px;
@@ -968,17 +968,17 @@
   border: 2px solid transparent;
   border-radius: 50%;
   background: var(--note-accent);
-  color: var(--color-graphite-shell);
+  color: var(--color-app-bg);
   cursor: pointer;
 }
 
 .notes-color:hover {
-  border-color: color-mix(in srgb, var(--note-accent) 60%, var(--color-chalk-white));
+  border-color: color-mix(in srgb, var(--note-accent) 60%, var(--color-text-primary));
 }
 
 .notes-color.is-selected {
-  border-color: var(--color-chalk-white);
-  box-shadow: 0 0 0 2px var(--color-graphite-sidebar);
+  border-color: var(--color-text-primary);
+  box-shadow: 0 0 0 2px var(--color-sidebar-bg);
 }
 
 .notes-editor__footer {
@@ -989,8 +989,8 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-graphite-sidebar);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-sidebar-bg);
 }
 
 .notes-editor__footer > div {
@@ -1000,7 +1000,7 @@
 }
 
 .notes-editor__footer > div > span {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -1009,8 +1009,8 @@
   margin: 0;
   padding: var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--color-warning-soft);
-  color: var(--color-warning-ochre);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning-text);
   font-size: var(--text-label);
   line-height: var(--leading-normal);
 }
@@ -1105,12 +1105,6 @@
 
   .notes-card__actions {
     opacity: 1;
-  }
-
-  .notes-card__actions .ui-button,
-  .notes-editor__item .ui-button {
-    min-width: 44px;
-    min-height: 44px;
   }
 }
 

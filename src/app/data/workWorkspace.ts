@@ -1,4 +1,5 @@
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "./localRepository";
+import { normalizeTaxonomyColor, TAXONOMY_COLORS } from "./taxonomyPalette";
 
 export const WORK_STORAGE_KEY = "rootine.work-workspace.v1";
 const WORKSPACE_VERSION = 3 as const;
@@ -50,6 +51,28 @@ export type WorkLinkedTaskDetails = {
   schedule?: WorkLinkedTaskSchedule;
 };
 
+export function withCanonicalWorkTime(
+  linkedTask: WorkLinkedTaskDetails | undefined,
+  dueTime: string,
+): WorkLinkedTaskDetails | undefined {
+  if (!linkedTask) return undefined;
+  return {
+    ...linkedTask,
+    time: dueTime || undefined,
+    endTime: dueTime && linkedTask.endTime && linkedTask.endTime > dueTime ? linkedTask.endTime : undefined,
+    schedule: linkedTask.schedule
+      ? {
+          ...linkedTask.schedule,
+          allDay: !dueTime,
+          startTime: dueTime,
+          endTime: dueTime && linkedTask.schedule.endTime && linkedTask.schedule.endTime > dueTime
+            ? linkedTask.schedule.endTime
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
 export type WorkTask = {
   id: string;
   companyId?: string;
@@ -61,6 +84,8 @@ export type WorkTask = {
   priority: WorkTaskPriority;
   startDate?: string;
   dueDate: string;
+  /** Optional local wall-clock time for a dated Work task. */
+  dueTime?: string;
   note?: string;
   createdAt: string;
   updatedAt?: string;
@@ -95,13 +120,13 @@ const DEFAULT_WORKSPACE: WorkWorkspace = {
       id: "company-studio",
       name: "Studio North",
       description: "Projekty produktowe i komunikacja",
-      color: "#7FA6C9",
+      color: TAXONOMY_COLORS.sky,
     },
     {
       id: "company-atlas",
       name: "Atlas",
       description: "Stała współpraca",
-      color: "#79A8A4",
+      color: TAXONOMY_COLORS.teal,
     },
   ],
   projects: [
@@ -307,6 +332,7 @@ function isTask(value: unknown): value is WorkTask {
     && (value.status === undefined || ["todo", "in_progress", "blocked", "waiting", "completed"].includes(String(value.status)))
     && ["none", "low", "medium", "high"].includes(String(value.priority))
     && (value.dueDate === undefined || typeof value.dueDate === "string")
+    && (value.dueTime === undefined || (typeof value.dueTime === "string" && (value.dueTime === "" || isClockTime(value.dueTime))))
     && (value.startDate === undefined || typeof value.startDate === "string")
     && (value.deadline === undefined || typeof value.deadline === "string")
     && (value.note === undefined || typeof value.note === "string")
@@ -360,17 +386,6 @@ export function createDefaultWorkWorkspace(): WorkWorkspace {
   };
 }
 
-function normalizeCompanyColor(color: string): string {
-  const normalized = color.toUpperCase();
-  if (normalized === "#4772FA" || normalized === "#809AF4") return "#7FA6C9";
-  if (normalized === "#70B89F") return "#79A8A4";
-  if (normalized === "#D4AA68") return "#B9A171";
-  if (normalized === "#CF777C") return "#BC8EA5";
-  if (normalized === "#9B8CE8") return "#7D7FA8";
-  if (normalized === "#A0A0A0") return "#8793A1";
-  return color;
-}
-
 export function createWorkId(prefix: "company" | "project" | "task"): string {
   const suffix = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -405,7 +420,7 @@ export function loadWorkWorkspaceResult(): LocalLoadResult<WorkWorkspace> {
       ...result.workspace,
       companies: result.workspace.companies.map((company) => ({
         ...company,
-        color: normalizeCompanyColor(company.color),
+        color: normalizeTaxonomyColor(company.color),
       })),
     },
   };

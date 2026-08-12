@@ -141,20 +141,21 @@ export function SportExercises({
         <div className="sport-record-toolbar" role="toolbar" aria-label="Filtry ćwiczeń">
           <Input
             aria-label="Szukaj ćwiczeń"
-            className="sport-record-toolbar__search"
+            fieldClassName="sport-record-toolbar__search-field"
+            className="sport-record-toolbar__search-input"
             placeholder="Szukaj ćwiczeń…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <Select compact aria-label="Kategoria sportu" value={discipline} options={[{ value: "all", label: "Każdy sport" }, ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} />
-          <Select compact aria-label="Partia główna" value={muscle} options={MUSCLES.map((value) => ({ value, label: value }))} onChange={(event) => setMuscle(event.target.value)} />
-          <Select compact aria-label="Sprzęt" value={equipment} options={EQUIPMENT.map((value) => ({ value, label: value }))} onChange={(event) => setEquipment(event.target.value)} />
-          <Select compact aria-label="Typ ćwiczenia" value={type} options={TYPES.map((item) => ({ value: item.value, label: item.label }))} onChange={(event) => setType(event.target.value as ExerciseType | "all")} />
+          <Select compact fieldClassName="sport-record-toolbar__field" aria-label="Kategoria sportu" value={discipline} options={[{ value: "all", label: "Każdy sport" }, ...Object.entries(DISCIPLINE_META).map(([value, meta]) => ({ value, label: meta.label }))]} onChange={(event) => setDiscipline(event.target.value as Discipline | "all")} />
+          <Select compact fieldClassName="sport-record-toolbar__field" aria-label="Partia główna" value={muscle} options={MUSCLES.map((value) => ({ value, label: value }))} onChange={(event) => setMuscle(event.target.value)} />
+          <Select compact fieldClassName="sport-record-toolbar__field" aria-label="Sprzęt" value={equipment} options={EQUIPMENT.map((value) => ({ value, label: value }))} onChange={(event) => setEquipment(event.target.value)} />
+          <Select compact fieldClassName="sport-record-toolbar__field" aria-label="Typ ćwiczenia" value={type} options={TYPES.map((item) => ({ value: item.value, label: item.label }))} onChange={(event) => setType(event.target.value as ExerciseType | "all")} />
           <Button variant={favoriteOnly ? "quiet" : "ghost"} size="sm" leadingIcon={<Heart size={13} fill={favoriteOnly ? "currentColor" : "none"} />} aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((current) => !current)}>
             Ulubione
           </Button>
-          <Select compact aria-label="Status biblioteki" value={status} options={[{ value: "active", label: "Aktywne" }, { value: "archived", label: "Zarchiwizowane" }]} onChange={(event) => setStatus(event.target.value as "active" | "archived")} />
-          <Select compact aria-label="Sortowanie" value={sort} options={[{ value: "name", label: "Nazwa A–Z" }, { value: "updated", label: "Ostatnio zmienione" }]} onChange={(event) => setSort(event.target.value as "name" | "updated")} />
+          <Select compact fieldClassName="sport-record-toolbar__field" aria-label="Status biblioteki" value={status} options={[{ value: "active", label: "Aktywne" }, { value: "archived", label: "Zarchiwizowane" }]} onChange={(event) => setStatus(event.target.value as "active" | "archived")} />
+          <Select compact fieldClassName="sport-record-toolbar__field" aria-label="Sortowanie" value={sort} options={[{ value: "name", label: "Nazwa A–Z" }, { value: "updated", label: "Ostatnio zmienione" }]} onChange={(event) => setSort(event.target.value as "name" | "updated")} />
         </div>
         {filtered.length === 0 ? (
           <EmptyState title="Brak ćwiczeń" description="Zmień filtry albo użyj przycisku Dodaj ćwiczenie w nagłówku modułu." />
@@ -227,7 +228,7 @@ function ExerciseEditor({ exercise, onClose, onSubmit }: { exercise: Exercise; o
     onSubmit({ ...draft, name: draft.name.trim(), description: draft.description.trim(), instructions: draft.instructions.trim() });
   };
   return (
-    <Modal title={exercise.name ? "Edytuj ćwiczenie" : "Nowe ćwiczenie"} eyebrow="Biblioteka ćwiczeń" description="Podstawowe pola wystarczą, a zaawansowane ustawienia możesz rozwinąć później." size="lg" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Anuluj</Button><Button variant="primary" type="submit" form="exercise-editor-form">Zapisz ćwiczenie</Button></>}>
+    <Modal title={exercise.name ? "Edytuj ćwiczenie" : "Nowe ćwiczenie"} eyebrow="Biblioteka ćwiczeń" description="Podstawowe pola wystarczą, a zaawansowane ustawienia możesz rozwinąć później." size="lg" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Anuluj</Button><Button variant="primary" type="submit" form="exercise-editor-form">{exercise.name ? "Zapisz ćwiczenie" : "Dodaj ćwiczenie"}</Button></>}>
       <form id="exercise-editor-form" className="sport-exercise-editor" onSubmit={submit}>
         <div className="sport-planner-form__grid">
           <Input label="Nazwa" value={draft.name} data-autofocus onChange={(event) => set("name", event.target.value)} />

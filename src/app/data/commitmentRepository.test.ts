@@ -467,6 +467,7 @@ describe("commitment projection", () => {
       projectId: "project-active",
       title: "Spotkanie z klientem",
       dueDate: "2026-07-28",
+      dueTime: "09:00",
       linkedTask: {
         originTaskId: 501,
         notes: "Omówić zakres",
@@ -482,8 +483,10 @@ describe("commitment projection", () => {
       tasks: reloaded.tasks.map((task) => task.source?.originTaskId === 501
         ? {
             ...task,
+            time: "11:30",
+            endTime: "12:30",
             schedule: task.schedule
-              ? { ...task.schedule, completedDates: ["2026-08-28"] }
+              ? { ...task.schedule, startTime: "11:30", endTime: "12:30", completedDates: ["2026-08-28"] }
               : undefined,
           }
         : task),
@@ -498,6 +501,8 @@ describe("commitment projection", () => {
     ) as WorkWorkspace;
     expect(storedWorkAfterTaskEdit.tasks.find((task) => task.linkedTask?.originTaskId === 501)
       ?.linkedTask?.schedule?.completedDates).toEqual(["2026-08-28"]);
+    expect(storedWorkAfterTaskEdit.tasks.find((task) => task.linkedTask?.originTaskId === 501)
+      ?.dueTime).toBe("11:30");
     expect(loadTaskWorkspace().tasks.filter((task) => task.source?.originTaskId === 501)).toHaveLength(1);
   });
 

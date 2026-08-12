@@ -17,7 +17,8 @@ import type {
   SubscriptionRenewal,
   VehicleItemType,
 } from "../data/affairsWorkspace";
-import { DatePicker, Input, Select, Textarea } from "../ui";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
+import { Checkbox, DatePicker, Input, PriorityIcon, Select, Textarea, TimePicker, priorityOptionTone } from "../ui";
 
 export interface AffairsEditorFieldsProps {
   editor: EditorState;
@@ -67,7 +68,12 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
       <div className="affairs-form__grid">
         <DatePicker label={draft.matterKind === "appointment" ? "Data wizyty" : "Termin (opcjonalnie)"} value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
         {draft.matterKind === "appointment" && (
-          <Input type="time" label="Godzina" value={draft.time} onChange={(event) => setDraft((current) => ({ ...current, time: event.target.value }))} />
+          <TimePicker
+            label="Godzina"
+            value={draft.time}
+            options={HALF_HOUR_TIME_OPTIONS}
+            onChange={(value) => setDraft((current) => ({ ...current, time: value }))}
+          />
         )}
       </div>
       {draft.matterKind === "appointment" && (
@@ -86,8 +92,8 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
           label="Priorytet"
           value={draft.priority}
           options={[
-            { value: "normal", label: "Normalny" },
-            { value: "high", label: "Ważny" },
+            { value: "normal", label: "Normalny", leadingIcon: <PriorityIcon level="normal" />, tone: priorityOptionTone("normal") },
+            { value: "high", label: "Ważny", leadingIcon: <PriorityIcon level="high" />, tone: priorityOptionTone("high") },
           ]}
           onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value as MatterPriority }))}
         />
@@ -116,10 +122,14 @@ export function AffairsEditorFields({ editor, draft, setDraft, workspace }: Affa
         />
         <DatePicker label="Następna płatność" value={draft.dueDate} onChange={(value) => setDraft((current) => ({ ...current, dueDate: value }))} />
       </div>
-      <label className="affairs-form__check">
-        <input type="checkbox" checked={draft.automatic} onChange={(event) => setDraft((current) => ({ ...current, automatic: event.target.checked }))} />
-        <span><strong>Płatność automatyczna</strong><small>Nie będzie wymagała ręcznego oznaczania jako opłacona.</small></span>
-      </label>
+      <Checkbox
+        className="affairs-form__check"
+        size="sm"
+        checked={draft.automatic}
+        label="Płatność automatyczna"
+        description="Nie będzie wymagała ręcznego oznaczania jako opłacona."
+        onChange={(event) => setDraft((current) => ({ ...current, automatic: event.target.checked }))}
+      />
     </>
   )}
 

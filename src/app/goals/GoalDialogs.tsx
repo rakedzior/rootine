@@ -6,7 +6,19 @@ import {
   normalizeGoalAccentColor,
 } from "./goalsModel";
 import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
-import { Button, ConfirmDialog as UiConfirmDialog, DatePicker, Input, Modal, Select, Textarea, type ModalSize } from "../ui";
+import {
+  Button,
+  ConfirmDialog as UiConfirmDialog,
+  DatePicker,
+  Input,
+  Modal,
+  PriorityIcon,
+  Select,
+  Textarea,
+  priorityOptionTone,
+  type ModalSize,
+  type SelectOption,
+} from "../ui";
 import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import type {
   Goal,
@@ -21,8 +33,6 @@ import type {
   GoalRegularityPeriod,
   GoalStatus,
 } from "./goalsModel";
-
-type SelectOption = { value: string; label: string; description?: string };
 
 export function ThemedSelect({
   value,
@@ -123,7 +133,7 @@ function DialogShell({
       description={subtitle}
       onClose={onClose}
       size={size}
-      bodyClassName="p-0"
+      bodyClassName="goal-dialog-body"
       footer={footer}
       returnFocusRef={returnFocusRef}
     >
@@ -162,8 +172,8 @@ function TextareaField({
       maxLength={maxLength}
       hint={hint}
       error={error}
-      fieldClassName={wide ? "col-span-2" : undefined}
-      className={`resize-none${rows === 2 ? " goal-dialog-textarea--compact" : ""}`}
+      fieldClassName={wide ? "goal-dialog-field--wide" : undefined}
+      className={`goal-dialog-textarea${rows === 2 ? " goal-dialog-textarea--compact" : ""}`}
     />
   );
 }
@@ -189,6 +199,11 @@ export type GoalEditorData = {
   note: string;
 };
 
+export type GoalEditorInitialValues = Partial<Pick<
+  GoalEditorData,
+  "title" | "dueDate" | "priority"
+>>;
+
 const ICONS: { value: GoalIconKey; label: string }[] = [
   { value: "target", label: "Cel" },
   { value: "laptop", label: "Komputer" },
@@ -203,13 +218,13 @@ const ICONS: { value: GoalIconKey; label: string }[] = [
 
 function createGoalEditorData(
   goal: Goal | null | undefined,
-  initialTitle: string | undefined,
+  initialValues: GoalEditorInitialValues | undefined,
   categories: GoalCategory[],
 ): GoalEditorData {
   const defaultCategory = categories[0];
   const today = todayLocalDateKey();
   return {
-    title: goal?.title ?? initialTitle ?? "",
+    title: goal?.title ?? initialValues?.title ?? "",
     description: goal?.description ?? "",
     categoryId: goal?.categoryId ?? defaultCategory?.id ?? "personal",
     iconKey: goal?.iconKey ?? "target",
@@ -217,9 +232,9 @@ function createGoalEditorData(
     color: normalizeGoalAccentColor(goal?.color ?? defaultCategory?.color ?? GOAL_ACCENT_OPTIONS[0].value),
     status: goal?.status ?? "active",
     health: goal?.health ?? "ontrack",
-    priority: goal?.priority ?? "medium",
+    priority: goal?.priority ?? initialValues?.priority ?? "medium",
     startDate: goal?.startDate ?? today,
-    dueDate: goal?.dueDate ?? shiftLocalDateKey(today, 90),
+    dueDate: goal?.dueDate ?? initialValues?.dueDate ?? shiftLocalDateKey(today, 90),
     progressMode: goal?.progressMode ?? "milestones",
     regularityMode: goal?.regularityMode ?? "streak",
     frequencyTarget: goal?.frequencyTarget ?? 3,
@@ -234,14 +249,14 @@ function createGoalEditorData(
 // End of goal dialog contracts.
 export function GoalFormDialog({
   goal,
-  initialTitle,
+  initialValues,
   categories,
   onClose,
   onSubmit,
   returnFocusRef,
 }: {
   goal?: Goal | null;
-  initialTitle?: string;
+  initialValues?: GoalEditorInitialValues;
   categories: GoalCategory[];
   onClose: () => void;
   onSubmit: (data: GoalEditorData) => void;
@@ -250,7 +265,7 @@ export function GoalFormDialog({
   const uploadId = useId();
   const advancedId = useId();
   const formId = useId();
-  const [initialForm] = useState<GoalEditorData>(() => createGoalEditorData(goal, initialTitle, categories));
+  const [initialForm] = useState<GoalEditorData>(() => createGoalEditorData(goal, initialValues, categories));
   const draftStorageKey = `rootine.goal-form-draft.${goal?.id ?? "new"}`;
   const [form, setForm] = useState<GoalEditorData>(() => {
     const recovered = readSessionDraft<Partial<GoalEditorData>>(draftStorageKey);
@@ -320,8 +335,8 @@ export function GoalFormDialog({
         size="lg"
         footer={(
           <>
-            <Button variant="quiet" onClick={draftProtection.requestClose}>Anuluj</Button>
-            <Button variant="primary" type="submit" form={formId}>{goal ? "Zapisz zmiany" : "Dodaj cel"}</Button>
+            <Button variant="ghost" onClick={draftProtection.requestClose}>Anuluj</Button>
+            <Button variant="primary" type="submit" form={formId}>{goal ? "Zapisz cel" : "Dodaj cel"}</Button>
           </>
         )}
       >
@@ -332,9 +347,8 @@ export function GoalFormDialog({
           event.preventDefault();
           submit();
         }}
-        className="goal-dialog-form"
       >
-        <div className="goal-dialog-grid grid grid-cols-2 gap-4 px-6 py-5">
+        <div className="goal-dialog-grid">
           <Input
             autoFocus
             label="Nazwa celu"
@@ -343,7 +357,7 @@ export function GoalFormDialog({
             placeholder="Co chcesz osiągnąć?"
             maxLength={240}
             error={submitted ? titleError : undefined}
-            fieldClassName="col-span-2"
+            fieldClassName="goal-dialog-field--wide"
           />
           <ThemedSelect
             label="Kategoria"
@@ -370,24 +384,24 @@ export function GoalFormDialog({
             ariaLabel="Ikona celu"
           />
 
-          <fieldset className="col-span-2">
+          <fieldset className="goal-dialog-field--wide">
             <legend className="ui-field__label">Własna ikona</legend>
             <div
-              className={`goal-icon-upload flex items-center gap-3 rounded-xl border p-3 ${iconError ? "has-error" : ""}`}
+              className={`goal-icon-upload ${iconError ? "has-error" : ""}`}
             >
               <div
-                className="goal-icon-upload__preview flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border"
+                className="goal-icon-upload__preview"
                 style={{ "--goal-icon-accent": form.color } as CSSProperties}
               >
                 {form.customIcon
-                  ? <img src={form.customIcon} alt="" className="h-7 w-7 object-contain" />
+                  ? <img src={form.customIcon} alt="" className="goal-icon-upload__image" />
                   : <ImageIcon size={16} aria-hidden="true" />}
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="goal-icon-upload__copy">
                 <p className="goal-icon-upload__description">PNG lub WebP z przezroczystym tłem</p>
                 <p
                   id={`${uploadId}-help`}
-                  className={`goal-icon-upload__help mt-0.5 ${iconError ? "has-error" : ""}`}
+                  className={`goal-icon-upload__help ${iconError ? "has-error" : ""}`}
                 >
                   {iconError || "Maks. 2 MB · zapis do 128×128 px"}
                 </p>
@@ -413,7 +427,7 @@ export function GoalFormDialog({
               />
               <label
                 htmlFor={uploadId}
-                className="file-upload-trigger goal-icon-upload__trigger flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2"
+                className="file-upload-trigger goal-icon-upload__trigger"
               >
                 <Upload size={11} aria-hidden="true" />
                 Wgraj
@@ -438,9 +452,9 @@ export function GoalFormDialog({
             value={form.priority}
             onChange={(value) => set("priority", value as GoalPriority)}
             options={[
-              { value: "high", label: "Wysoki" },
-              { value: "medium", label: "Średni" },
-              { value: "low", label: "Niski" },
+              { value: "high", label: "Wysoki", leadingIcon: <PriorityIcon level="high" />, tone: priorityOptionTone("high") },
+              { value: "medium", label: "Średni", leadingIcon: <PriorityIcon level="medium" />, tone: priorityOptionTone("medium") },
+              { value: "low", label: "Niski", leadingIcon: <PriorityIcon level="low" />, tone: priorityOptionTone("low") },
             ]}
             ariaLabel="Priorytet celu"
           />
@@ -549,7 +563,7 @@ export function GoalFormDialog({
             />
           )}
 
-          <div className="col-span-2">
+          <div className="goal-dialog-field--wide">
             <Button
               variant="quiet"
               fullWidth
@@ -569,7 +583,7 @@ export function GoalFormDialog({
           </div>
 
           {advancedOpen && (
-            <div id={advancedId} className="goal-dialog-advanced-fields col-span-2 grid grid-cols-2 gap-4">
+            <div id={advancedId} className="goal-dialog-advanced-fields goal-dialog-field--wide">
               <ThemedSelect
                 label="Status"
                 value={form.status}
@@ -593,9 +607,9 @@ export function GoalFormDialog({
                 ]}
                 ariaLabel="Kondycja celu"
               />
-              <fieldset className="col-span-2">
+              <fieldset className="goal-dialog-field--wide">
                 <legend className="ui-field__label">Kolor akcentu</legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <div className="goal-accent-options">
                   {GOAL_ACCENT_OPTIONS.map((option) => {
                     const selected = form.color === option.value;
                     return (
@@ -604,12 +618,12 @@ export function GoalFormDialog({
                         type="button"
                         aria-pressed={selected}
                         onClick={() => set("color", option.value)}
-                        className={`goal-accent-option flex min-h-11 items-center gap-2 rounded-lg border px-2.5 text-left ${selected ? "is-selected" : ""}`}
+                        className={`goal-accent-option ${selected ? "is-selected" : ""}`}
                         style={{ "--goal-accent-option": option.value } as CSSProperties}
                       >
                         <span
                           aria-hidden="true"
-                          className="goal-accent-option__swatch h-3 w-3 flex-none rounded-full"
+                          className="goal-accent-option__swatch"
                         />
                         {option.label}
                       </button>
@@ -718,7 +732,7 @@ export function ProgressDialog({
           });
         }}
       >
-        <div className="grid grid-cols-2 gap-4 px-6 py-5">
+        <div className="goal-dialog-grid">
           <Input
             autoFocus
             label={isManual ? "Postęp (%)" : isFrequency ? "Liczba wykonań" : isStreak ? "Aktualna seria (dni)" : "Wartość"}
@@ -738,9 +752,9 @@ export function ProgressDialog({
             error={submitted ? dateError : undefined}
           />
           {!isManual && !isFrequency && !isStreak && (
-            <fieldset className="col-span-2">
+            <fieldset className="goal-dialog-field--wide">
               <legend className="ui-field__label">Rodzaj zmiany</legend>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="goal-dialog-choice-grid">
                 {([
                   { value: "absolute", label: "Ustaw wartość" },
                   { value: "delta", label: "Dodaj / odejmij" },
@@ -750,7 +764,7 @@ export function ProgressDialog({
                     type="button"
                     aria-pressed={kind === option.value}
                     onClick={() => setKind(option.value)}
-                    className={`goal-choice-button rounded-lg border px-3 py-2.5 ${kind === option.value ? "is-selected" : ""}`}
+                    className={`goal-choice-button ${kind === option.value ? "is-selected" : ""}`}
                   >
                     {option.label}
                   </button>
@@ -768,9 +782,9 @@ export function ProgressDialog({
             wide
           />
         </div>
-        <div className="goal-dialog-footer flex justify-end gap-2 border-t px-6 py-4">
-          <Button variant="quiet" onClick={draftProtection.requestClose}>Anuluj</Button>
-          <Button variant="primary" type="submit">Zapisz zmianę</Button>
+        <div className="goal-dialog-footer">
+          <Button variant="ghost" onClick={draftProtection.requestClose}>Anuluj</Button>
+          <Button variant="primary" type="submit">Zapisz aktualizację</Button>
         </div>
       </form>
       </DialogShell>
@@ -843,7 +857,7 @@ export function MilestoneDialog({
           onSubmit({ title: title.trim(), note: note.trim(), dueDate, weight, done });
         }}
       >
-        <div className="grid grid-cols-2 gap-4 px-6 py-5">
+        <div className="goal-dialog-grid">
           <Input
             autoFocus
             label="Nazwa etapu"
@@ -851,7 +865,7 @@ export function MilestoneDialog({
             onChange={(event) => setTitle(event.target.value)}
             maxLength={200}
             error={submitted ? titleError : undefined}
-            fieldClassName="col-span-2"
+            fieldClassName="goal-dialog-field--wide"
           />
           <DatePicker
             label="Termin"
@@ -872,16 +886,16 @@ export function MilestoneDialog({
             hint="Większa waga mocniej wpływa na postęp."
             error={submitted ? weightError : undefined}
           />
-          <fieldset className="col-span-2">
+          <fieldset className="goal-dialog-field--wide">
             <legend className="ui-field__label">Stan</legend>
             <button
               type="button"
               aria-pressed={done}
               onClick={() => setDone((value) => !value)}
-              className={`goal-choice-button goal-milestone-state flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 ${done ? "is-selected" : ""}`}
+              className={`goal-choice-button goal-milestone-state ${done ? "is-selected" : ""}`}
             >
               <span
-                className="goal-milestone-state__indicator flex h-4 w-4 items-center justify-center rounded-full border"
+                className="goal-milestone-state__indicator"
                 aria-hidden="true"
               >
                 {done && <Check size={9} />}
@@ -890,14 +904,14 @@ export function MilestoneDialog({
             </button>
           </fieldset>
         </div>
-        <div className="goal-dialog-footer flex justify-end gap-2 border-t px-6 py-4">
-          <Button variant="quiet" onClick={draftProtection.requestClose}>Anuluj</Button>
+        <div className="goal-dialog-footer">
+          <Button variant="ghost" onClick={draftProtection.requestClose}>Anuluj</Button>
           <Button
             variant="primary"
             type="submit"
             leadingIcon={current ? <Check size={13} aria-hidden="true" /> : <Plus size={13} aria-hidden="true" />}
           >
-            {current ? "Zapisz zmiany" : "Dodaj etap"}
+            {current ? "Zapisz etap" : "Dodaj etap"}
           </Button>
         </div>
       </form>

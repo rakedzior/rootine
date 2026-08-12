@@ -8,7 +8,6 @@ import {
   Check,
   CircleDot,
   Ellipsis,
-  Flag,
   Pencil,
   Plus,
   RotateCcw,
@@ -26,7 +25,7 @@ import { formatLocalDate } from "../data/localDate";
 import { GoalFormDialog, MilestoneDialog, ProgressDialog } from "../goals/GoalDialogs";
 import type { GoalEditorData } from "../goals/GoalDialogs";
 import { GoalNoteTextarea } from "../goals/GoalNoteTextarea";
-import { AddToTasksButton, Badge, Button, ConfirmDialog, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell } from "../ui";
+import { AddToTasksButton, Badge, Button, ConfirmDialog, ContentHeader, EmptyState as UiEmptyState, Menu, MenuItem, ModuleMain, ModuleShell, PriorityIcon } from "../ui";
 import type { ExternalTaskInput } from "../data/taskLinks";
 import { loadTaskWorkspace } from "../data/taskWorkspace";
 import "../../styles/goals.css";
@@ -129,16 +128,16 @@ export default function CelSzczegoly() {
     <section className="goal-detail-facts" aria-labelledby="goal-facts-heading">
       <SectionHeading title="Parametry celu" />
       <button type="button" onClick={(event) => openEdit(event.currentTarget)}><CalendarDays size={13} /><span>Termin</span><strong>{fmtDate(goal.dueDate)}</strong><Pencil size={11} /></button>
-      <button type="button" onClick={(event) => openEdit(event.currentTarget)}><Flag size={13} /><span>Priorytet</span><strong>{priorityLabels[goal.priority]}</strong><Pencil size={11} /></button>
+      <button type="button" onClick={(event) => openEdit(event.currentTarget)}><PriorityIcon level={goal.priority} /><span>Priorytet</span><strong>{priorityLabels[goal.priority]}</strong><Pencil size={11} /></button>
       <button type="button" onClick={(event) => openEdit(event.currentTarget)}><Target size={13} /><span>Kategoria</span><strong>{category?.label ?? "Bez kategorii"}</strong><Pencil size={11} /></button>
       <button type="button" onClick={(event) => openEdit(event.currentTarget)}><BarChart3 size={13} /><span>Metoda pomiaru</span><strong>{measurementLabel}</strong><Pencil size={11} /></button>
     </section>
   );
 
-  const renderNextStep = (compact = false) => (
-    <section className={`goal-detail-next ${compact ? "goal-detail-next--compact" : ""}`} aria-labelledby="goal-next-step-heading">
+  const renderNextStep = () => (
+    <section className="goal-detail-next" aria-labelledby="goal-next-step-heading">
       <div className="goal-detail-next-icon" style={{ "--goal-accent": goal.color } as CSSProperties}><CircleDot size={16} /></div>
-      <div className="min-w-0 flex-1">
+      <div className="goal-detail-next-copy">
         <h2 id="goal-next-step-heading">Następny krok</h2>
         {goal.progressMode === "milestones" ? (
           nextMilestone ? <><p className="goal-detail-next-title">{nextMilestone.title}</p><p>Termin: {fmtDate(nextMilestone.dueDate)} · {nextMilestone.note || "Najbliższy etap do wykonania"}</p></> : <><p className="goal-detail-next-title">Wszystkie etapy ukończone</p><p>Dodaj kolejny etap, jeśli cel ma być kontynuowany.</p></>
@@ -195,7 +194,7 @@ export default function CelSzczegoly() {
               </div>
               <div className="goal-detail-timeline-actions">
                 <button type="button" aria-label={`Opcje etapu ${item.title}`} aria-expanded={stageMenuId === item.id} onClick={() => setStageMenuId(stageMenuId === item.id ? null : item.id)}><Ellipsis size={13} /></button>
-                {stageMenuId === item.id && <Menu id={`stage-menu-${item.id}`} onDismiss={() => setStageMenuId(null)} layer="context" className="absolute right-2 top-10 w-44">
+                {stageMenuId === item.id && <Menu id={`stage-menu-${item.id}`} onDismiss={() => setStageMenuId(null)} layer="context" className="goal-stage-actions-menu">
                   <MenuItem onClick={() => { openMilestone(item.id); setStageMenuId(null); }} leadingIcon={<Pencil />}>Edytuj etap</MenuItem>
                   <MenuItem onClick={() => { store.updateMilestone(goal.id, item.id, { isNext: true }); setStageMenuId(null); }} leadingIcon={<Target />}>Oznacz jako następny</MenuItem>
                   <MenuItem tone="danger" onClick={() => { setDeleteMilestoneId(item.id); setStageMenuId(null); }} leadingIcon={<Trash2 />}>Usuń etap</MenuItem>
@@ -235,11 +234,11 @@ export default function CelSzczegoly() {
           leading={<Button variant="ghost" iconOnly aria-label="Wróć do celów" onClick={() => navigate(returnTo)}><ArrowLeft size={16} /></Button>}
           title={goal.title}
           description={`${category?.label ?? "Cel"} · Termin: ${fmtDate(goal.dueDate)} · ${getGoalMetric(goal)}`}
-          meta={<div className="flex items-center gap-2"><Badge appearance="plain" dot tone={goal.status === "completed" ? "success" : goal.status === "active" ? goal.health === "risk" ? "warning" : "primary" : "neutral"}>{statusLabels[goal.status]}</Badge><Badge appearance="plain" dot tone={goal.health === "risk" ? "warning" : "success"}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
+          meta={<div className="goal-detail-header-meta"><Badge appearance="plain" dot tone={goal.status === "completed" ? "success" : goal.status === "active" ? goal.health === "risk" ? "warning" : "primary" : "neutral"}>{statusLabels[goal.status]}</Badge><Badge appearance="plain" dot tone={goal.health === "risk" ? "warning" : "success"}>{goal.health === "risk" ? "Zagrożony" : "Na planie"}</Badge>{store.storageFailed && <Badge tone="danger">Brak zapisu lokalnego</Badge>}</div>}
           actions={<>
             <Button className="ui-button--icon-mobile" variant="primary" onClick={openProgress} leadingIcon={<Plus size={13} />}><span className="header-action-label">{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</span></Button>
             <Button variant="quiet" onClick={(event) => openEdit(event.currentTarget)} leadingIcon={<Pencil size={13} />}><span className="header-action-label">Edytuj</span></Button>
-            <div className="relative"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={16} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} layer="context" className="absolute right-0 top-11 w-48">
+            <div className="goal-detail-header-menu"><Button ref={menuTriggerRef} variant="ghost" iconOnly aria-label="Więcej opcji" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><Ellipsis size={16} /></Button>{menuOpen && <Menu id={menuId} triggerRef={menuTriggerRef} onDismiss={() => setMenuOpen(false)} layer="context" className="goal-detail-actions-menu">
               <MenuItem onClick={() => { openProgress(); setMenuOpen(false); }} leadingIcon={<BarChart3 />}>{goal.progressMode === "milestones" ? "Dodaj etap" : goal.progressMode === "numeric" ? "Zaktualizuj wartość" : goal.progressMode === "regularity" ? "Zapisz wykonanie" : "Zaktualizuj postęp"}</MenuItem>
               <MenuItem onClick={() => { openEdit(menuTriggerRef.current); setMenuOpen(false); }} leadingIcon={<Pencil />}>Edytuj cel</MenuItem>
               <MenuItem onClick={() => { store.duplicateGoal(goal.id); setMenuOpen(false); }} leadingIcon={<Plus />}>Duplikuj</MenuItem>
@@ -252,15 +251,15 @@ export default function CelSzczegoly() {
           </>}
         />
 
-        <div className="goals-content flex-1 overflow-y-auto px-7 py-5">
-          <div className="goal-detail-page mx-auto max-w-[1180px]">
+        <div className="goals-content">
+          <div className="goal-detail-page">
             <section className="goal-detail-hero" aria-labelledby="goal-progress-heading">
               <div className="goal-detail-hero-content">
                 <div className="goal-detail-hero-main">
                   <div className="goal-detail-hero-icon" style={{ "--goal-accent": goal.color, "--goal-accent-soft": `${goal.color}18`, "--goal-accent-border": `${goal.color}55` } as CSSProperties}>
-                    {goal.customIcon ? <img src={goal.customIcon} alt="" className="h-7 w-7 object-contain" /> : <Target size={22} strokeWidth={1.5} />}
+                    {goal.customIcon ? <img src={goal.customIcon} alt="" className="goal-detail-hero-icon__image" /> : <Target size={22} strokeWidth={1.5} />}
                   </div>
-                  <div className="min-w-0">
+                  <div className="goal-detail-hero-copy">
                     <h2 id="goal-progress-heading">Realizacja celu</h2>
                     <p>{getGoalMetric(goal)} · {statusLabels[goal.status]}</p>
                   </div>
@@ -282,7 +281,7 @@ export default function CelSzczegoly() {
             </section>
 
             <div className="goal-detail-overview-grid">
-              <div className="space-y-5">
+              <div className="goal-detail-primary-column">
                 {renderNextStep()}
                 <section id="etapy" className="goal-detail-timeline-panel">
                   <SectionHeading
@@ -320,9 +319,9 @@ export default function CelSzczegoly() {
         {editOpen && <GoalFormDialog goal={goal} categories={store.categories} returnFocusRef={editReturnFocusRef} onClose={() => setEditOpen(false)} onSubmit={submitEdit} />}
         {progressOpen && <ProgressDialog goal={goal} progress={goal.progressEntries.find((item) => item.id === editingProgressId)} onClose={() => { setProgressOpen(false); setEditingProgressId(null); }} onSubmit={(draft) => { const nextDraft = { ...draft, value: goal.progressMode === "manual" ? Math.max(0, Math.min(100, draft.value)) : draft.value }; if (editingProgressId) store.updateProgress(goal.id, editingProgressId, nextDraft); else store.addProgress(goal.id, nextDraft); setProgressOpen(false); setEditingProgressId(null); }} />}
         {milestoneOpen && <MilestoneDialog draftKey={`goal-${goal.id}`} milestone={goal.milestones.find((item) => item.id === editingMilestoneId)} onClose={() => { setMilestoneOpen(false); setEditingMilestoneId(null); }} onSubmit={(draft) => { if (editingMilestoneId) store.updateMilestone(goal.id, editingMilestoneId, draft); else store.addMilestone(goal.id, draft); setMilestoneOpen(false); setEditingMilestoneId(null); }} />}
-        {deleteProgressId && <ConfirmDialog title="Usuń aktualizację?" onCancel={() => setDeleteProgressId(null)} onConfirm={() => { store.deleteProgress(goal.id, deleteProgressId); setDeleteProgressId(null); }}><p className="ui-confirm-dialog__note">Aktualna wartość i procent celu zostaną ponownie przeliczone na podstawie pozostałych wpisów.</p></ConfirmDialog>}
-        {deleteMilestoneId && <ConfirmDialog title="Usuń etap?" onCancel={() => setDeleteMilestoneId(null)} onConfirm={() => { store.deleteMilestone(goal.id, deleteMilestoneId); setDeleteMilestoneId(null); }}><p className="ui-confirm-dialog__note">Postęp celu zostanie automatycznie przeliczony po usunięciu tego etapu.</p></ConfirmDialog>}
-        {deleteGoalOpen && <ConfirmDialog title="Usuń cel?" onCancel={() => setDeleteGoalOpen(false)} onConfirm={() => { store.deleteGoal(goal.id); navigate(returnTo); }}><p className="ui-confirm-dialog__note">Cel wraz z całą historią postępu i kamieniami milowymi zostanie usunięty.</p></ConfirmDialog>}
+        {deleteProgressId && <ConfirmDialog title="Usunąć aktualizację postępu?" confirmLabel="Usuń aktualizację" onCancel={() => setDeleteProgressId(null)} onConfirm={() => { store.deleteProgress(goal.id, deleteProgressId); setDeleteProgressId(null); }}><p className="ui-confirm-dialog__note">Aktualna wartość i procent celu zostaną ponownie przeliczone na podstawie pozostałych wpisów.</p></ConfirmDialog>}
+        {deleteMilestoneId && <ConfirmDialog title={`Usunąć etap „${goal.milestones.find((item) => item.id === deleteMilestoneId)?.title}”?`} confirmLabel="Usuń etap" onCancel={() => setDeleteMilestoneId(null)} onConfirm={() => { store.deleteMilestone(goal.id, deleteMilestoneId); setDeleteMilestoneId(null); }}><p className="ui-confirm-dialog__note">Postęp celu zostanie automatycznie przeliczony po usunięciu tego etapu.</p></ConfirmDialog>}
+        {deleteGoalOpen && <ConfirmDialog title={`Usunąć cel „${goal.title}”?`} confirmLabel="Usuń cel" onCancel={() => setDeleteGoalOpen(false)} onConfirm={() => { store.deleteGoal(goal.id); navigate(returnTo); }}><p className="ui-confirm-dialog__note">Cel wraz z całą historią postępu i kamieniami milowymi zostanie usunięty.</p></ConfirmDialog>}
       </ModuleMain>
     </ModuleShell>
   );

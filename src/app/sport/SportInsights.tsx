@@ -296,7 +296,7 @@ function PlannedWorkoutRow({
       </button>
       {active ? (
         <div className="sport-overview-workout__actions">
-          <Button variant="primary" size="sm" leadingIcon={<Play size={11} />} onClick={onStart}>Wznów</Button>
+          <Button variant="primary" size="sm" leadingIcon={<Play size={13} />} onClick={onStart}>Wznów</Button>
         </div>
       ) : outcome ? (
         <div className="sport-overview-workout__actions">
@@ -304,7 +304,7 @@ function PlannedWorkoutRow({
         </div>
       ) : (
         <div className="sport-overview-workout__actions">
-          <Button variant="primary" size="sm" leadingIcon={<Play size={11} />} onClick={onStart}>Rozpocznij</Button>
+          <Button variant="primary" size="sm" leadingIcon={<Play size={13} />} onClick={onStart}>Rozpocznij</Button>
         </div>
       )}
     </article>
@@ -728,6 +728,7 @@ export function SportHistory({ history, sessions = [], templates = [], exercises
             <Input
               type="search"
               aria-label="Szukaj treningu w historii"
+              className="sport-history-search__input"
               placeholder="Szukaj po nazwie"
               value={search}
               onChange={(event) => setSearch(event.target.value)}

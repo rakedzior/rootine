@@ -51,7 +51,7 @@
 
 .app-brand-label {
   min-width: 0;
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-normal);
@@ -69,7 +69,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease-out),
@@ -87,11 +87,11 @@
   top: var(--space-sm);
   left: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-precision-blue);
+  border: 1px solid var(--color-primary);
   border-radius: var(--radius-md);
   outline: none;
-  background: var(--color-graphite-card);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
   text-decoration: none;
@@ -137,8 +137,8 @@
 
 .app-brand-collapsed-toggle:hover,
 .app-brand-collapsed-toggle:focus-visible {
-  background: var(--color-graphite-panel);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
 }
 
 .app-brand-collapsed-toggle:hover .app-brand__mark,
@@ -233,7 +233,7 @@
   gap: var(--space-sm);
   margin-top: auto;
   padding: var(--space-md) var(--space-sm) var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-sidebar-utility,
@@ -370,7 +370,7 @@
   height: calc(var(--text-title) + var(--space-xs));
   flex: 0 0 calc(var(--text-title) + var(--space-xs));
   place-items: center;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-secondary);
@@ -452,7 +452,7 @@
   padding: var(--space-xs);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-card);
+  background: var(--color-surface-2);
   box-shadow: var(--shadow-floating);
 }
 
@@ -499,14 +499,14 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-align: left;
   cursor: pointer;
 }
 
 .app-sidebar-popover > button:hover,
 .app-settings-dialog > button:hover {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
   color: var(--color-text-secondary);
 }
 
@@ -550,7 +550,7 @@
   gap: var(--space-sm);
   margin-top: var(--space-xs);
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-module-settings__heading {
@@ -573,7 +573,7 @@
 }
 
 .app-module-settings__heading small {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
 }
 
@@ -596,7 +596,7 @@
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   transition:
     background-color var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
@@ -604,7 +604,7 @@
 
 .app-module-settings__row:hover,
 .app-module-settings__row:focus-within {
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
   color: var(--color-text-secondary);
 }
 
@@ -622,66 +622,7 @@
 }
 
 .app-module-toggle {
-  position: relative;
-  display: block;
-  width: 30px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.app-module-toggle input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.app-module-toggle > span {
-  position: relative;
-  display: block;
-  width: 30px;
-  height: 18px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--color-graphite-input);
-  transition:
-    border-color var(--motion-fast) var(--ease-out),
-    background-color var(--motion-fast) var(--ease-out);
-}
-
-.app-module-toggle > span::after {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-text-muted);
-  content: "";
-  transition:
-    background-color var(--motion-fast) var(--ease-out),
-    transform var(--motion-fast) var(--ease-out);
-}
-
-.app-module-toggle input:checked + span {
-  border-color: color-mix(in srgb, var(--color-precision-blue) 55%, var(--color-border-strong));
-  background: var(--color-precision-blue-soft);
-}
-
-.app-module-toggle input:checked + span::after {
-  background: var(--color-precision-blue-text);
-  transform: translateX(12px);
-}
-
-.app-module-toggle input:focus-visible + span {
-  outline: 2px solid var(--color-precision-blue);
-  outline-offset: 2px;
-}
-
-.app-module-toggle:has(input:disabled) {
-  cursor: not-allowed;
-  opacity: 0.45;
+  justify-self: end;
 }
 
 .app-module-settings__move {
@@ -698,17 +639,17 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   cursor: pointer;
 }
 
 .app-module-settings__move button:hover:not(:disabled) {
-  background: var(--color-graphite-panel);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
 }
 
 .app-module-settings__move button:disabled {
-  color: var(--color-text-disabled);
+  color: var(--color-disabled-text);
   cursor: default;
 }
 
@@ -719,17 +660,17 @@
   justify-content: center;
   gap: var(--space-sm);
   padding: 0 var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   cursor: pointer;
 }
 
 .app-module-settings__reset:hover {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
+  background: var(--color-surface-hover);
   color: var(--color-text-secondary);
 }
 
@@ -747,8 +688,8 @@
 .app-profile-dialog p {
   margin: var(--space-sm) 0 0;
   padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   line-height: var(--leading-normal);
 }
@@ -758,7 +699,7 @@
   gap: var(--space-xs);
   margin-top: var(--space-lg);
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-profile-dialog__actions button {
@@ -770,14 +711,14 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   text-align: left;
   cursor: pointer;
 }
 
 .app-profile-dialog__actions button:hover,
 .app-profile-dialog__actions button:focus-visible {
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
@@ -815,7 +756,7 @@
 
 .app-help-dialog__heading > svg {
   margin-top: 2px;
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
 }
 
 .app-help-dialog__heading h3,
@@ -825,7 +766,7 @@
 }
 
 .app-help-dialog__heading h3 {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body-emphasis);
   font-weight: var(--weight-semibold);
 }
@@ -860,7 +801,7 @@
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .app-help-dialog__steps li > span {
@@ -868,9 +809,9 @@
   width: 22px;
   height: 22px;
   place-items: center;
-  border: 1px solid var(--color-precision-blue-strong);
+  border: 1px solid var(--color-primary);
   border-radius: 50%;
-  color: var(--color-precision-blue-text);
+  color: var(--color-primary-text);
   font-family: var(--font-data);
   font-size: var(--text-micro);
 }
@@ -883,26 +824,26 @@
   align-items: center;
   gap: var(--space-sm);
   padding: 0 var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
 }
 
 .app-help-dialog__search:focus-within { border-color: var(--color-field-focus); }
-.app-help-dialog__search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-chalk-white); font: inherit; }
+.app-help-dialog__search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text-primary); font: inherit; }
 .app-help-dialog__guide-list { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .app-help-dialog__guide-list button {
   min-height: 30px;
   padding: 0 var(--space-sm);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-label);
   cursor: pointer;
 }
-.app-help-dialog__guide-list button:hover, .app-help-dialog__guide-list button.is-active { border-color: var(--color-precision-blue-strong); background: var(--color-precision-blue-soft); color: var(--color-precision-blue-text); }
+.app-help-dialog__guide-list button:hover, .app-help-dialog__guide-list button.is-active { border-color: var(--color-primary); background: var(--color-primary-subtle); color: var(--color-primary-text); }
 
 .app-help-dialog__modules button {
   display: grid;
@@ -913,7 +854,7 @@
   padding: var(--space-sm) var(--space-md);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
   color: var(--color-text-secondary);
   text-align: left;
   cursor: pointer;
@@ -922,16 +863,16 @@
 .app-help-dialog__modules button:hover,
 .app-help-dialog__modules button:focus-visible {
   border-color: var(--color-border-strong);
-  background: var(--color-graphite-hover);
-  color: var(--color-chalk-white);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
 .app-help-dialog kbd {
   padding: 2px 6px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
-  background: var(--color-graphite-panel);
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
+  color: var(--color-text-tertiary);
   font-family: var(--font-data);
   font-size: var(--text-micro);
   white-space: nowrap;
@@ -943,9 +884,9 @@
   justify-content: space-between;
   gap: var(--space-xl);
   padding: var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-graphite-input);
+  background: var(--color-surface-1);
 }
 
 .app-help-dialog__recovery p {
@@ -958,7 +899,7 @@
 
 .app-sidebar-popover__source {
   padding: var(--space-xs) var(--space-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-decoration: none;
 }
@@ -989,7 +930,7 @@
   display: grid;
   gap: 2px;
   padding-bottom: var(--space-lg);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .app-settings-dialog__quick-actions > button {
@@ -1019,7 +960,7 @@
 
 .app-settings-dialog__quick-actions > button:hover,
 .app-settings-dialog__quick-actions > button:focus-visible {
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
@@ -1088,8 +1029,8 @@
   display: grid;
   gap: 4px;
   padding: var(--space-md) 0;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .app-profile-dialog__storage > strong {
@@ -1121,7 +1062,7 @@
   min-height: 48px;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-1);
 }
@@ -1140,7 +1081,7 @@
 .app-account-panel__status-icon {
   width: 30px;
   height: 30px;
-  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border-subtle));
+  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-border));
 }
 
 .app-profile-dialog__privacy-section {
@@ -1152,7 +1093,7 @@
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-1);
 }
@@ -1187,24 +1128,11 @@
   display: grid;
   gap: var(--space-xs);
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-profile-dialog__tools .app-recovery-entry {
   margin-top: 0;
-}
-
-.app-profile-dialog__tools .app-recovery-entry .ui-button {
-  min-height: 42px;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-1);
-  color: var(--color-text-secondary);
-}
-
-.app-profile-dialog__tools .app-recovery-entry .ui-button:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
 }
 
 .app-profile-dialog__actions {
@@ -1221,7 +1149,7 @@
 
 .app-profile-dialog__actions button:hover,
 .app-profile-dialog__actions button:focus-visible {
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
@@ -1229,7 +1157,7 @@
 .app-settings-dialog > .app-recovery-entry {
   margin-top: var(--space-lg);
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-settings-dialog > .app-sidebar-popover__source {
@@ -1301,7 +1229,7 @@
   align-items: center;
   gap: var(--space-lg);
   padding: var(--space-sm) 0 var(--space-xl);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .app-profile-dialog__identity > span:last-child {
@@ -1367,7 +1295,7 @@
   gap: var(--space-lg);
   padding: var(--space-xl) 0;
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
@@ -1375,7 +1303,7 @@
 .app-profile-privacy:hover,
 .app-profile-privacy:focus-visible,
 .app-profile-privacy.is-active {
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
   background: transparent;
 }
 
@@ -1464,7 +1392,7 @@
 .app-profile-dialog__nav-button {
   display: grid !important;
   width: 100%;
-  min-height: 60px;
+  min-height: calc(var(--control-height-lg) + var(--space-md));
   height: auto;
   grid-template-columns: 40px minmax(0, 1fr) 20px;
   align-items: center;
@@ -1502,7 +1430,7 @@
 
 .app-profile-dialog__nav-button:hover,
 .app-profile-dialog__nav-button:focus-visible {
-  border-color: var(--color-border-subtle);
+  border-color: var(--color-border);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
@@ -1514,7 +1442,7 @@
 
 .app-profile-dialog__account {
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-profile-dialog__account .app-account-panel {
@@ -1577,7 +1505,7 @@
 }
 
 /* Compact account scale: keep the reference's structure, but use Rootine's dense UI rhythm. */
-.ui-modal__body.app-profile-dialog {
+.app-profile-dialog {
   padding: var(--space-lg);
 }
 
@@ -1655,7 +1583,7 @@
 }
 
 .app-profile-dialog__nav-button {
-  min-height: 44px;
+  min-height: calc(var(--control-height-md) + var(--space-xs));
   grid-template-columns: 32px minmax(0, 1fr) 16px;
   gap: var(--space-sm);
   padding: var(--space-xs) 0;
@@ -1752,13 +1680,13 @@
 
 .app-settings-accordion__section {
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-1);
 }
 
 .app-settings-accordion__section.is-open {
-  border-color: color-mix(in srgb, var(--theme-signature) 34%, var(--color-border-subtle));
+  border-color: color-mix(in srgb, var(--theme-signature) 34%, var(--color-border));
 }
 
 .app-settings-accordion__heading {
@@ -1768,7 +1696,7 @@
 .app-settings-accordion__trigger {
   display: grid;
   width: 100%;
-  min-height: 76px;
+  min-height: calc(var(--row-height-comfortable) + var(--space-xl));
   grid-template-columns: 40px minmax(0, 1fr) 24px;
   align-items: center;
   gap: var(--space-lg);
@@ -1796,7 +1724,7 @@
   width: 40px;
   height: 40px;
   place-items: center;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   transition: color var(--motion-feedback) var(--ease-out);
 }
 
@@ -1866,7 +1794,7 @@
 
 .app-settings-accordion__rows {
   display: grid;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-settings-accordion__row {
@@ -1878,7 +1806,7 @@
   gap: var(--space-md);
   padding: var(--space-sm) 0;
   border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
   color: var(--color-text-secondary);
@@ -1913,7 +1841,7 @@ button.app-settings-accordion__row:disabled {
   display: grid;
   width: 28px;
   place-items: center;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .app-settings-accordion__row-copy {
@@ -1942,7 +1870,7 @@ button.app-settings-accordion__row:disabled {
 
 .app-settings-accordion__row-trailing,
 .app-settings-accordion__row-refresh {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .app-settings-accordion__row-refresh.is-spinning {
@@ -1952,7 +1880,7 @@ button.app-settings-accordion__row:disabled {
 .app-settings-accordion__source {
   display: inline-flex;
   padding-top: var(--space-md);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   font-size: var(--text-micro);
   text-decoration: none;
 }
@@ -1985,7 +1913,7 @@ button.app-settings-accordion__row:disabled {
   width: 16px;
   height: 16px;
   border-radius: var(--radius-pill);
-  background: var(--color-text-muted);
+  background: var(--color-text-tertiary);
   transition: background-color var(--motion-toggle) var(--ease-out), transform var(--motion-toggle) var(--ease-out);
 }
 
@@ -2000,13 +1928,13 @@ button.app-settings-accordion__row:disabled {
 }
 
 .app-settings-accordion__action {
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.app-settings-accordion__action .ui-button {
+.app-settings-accordion__action-button {
   display: grid;
   width: 100%;
-  min-height: 60px;
+  min-height: calc(var(--control-height-lg) + var(--space-md));
   grid-template-columns: 28px minmax(0, 1fr) 20px;
   align-items: center;
   justify-content: initial;
@@ -2019,24 +1947,24 @@ button.app-settings-accordion__row:disabled {
   text-align: left;
 }
 
-.app-settings-accordion__action .ui-button:hover,
-.app-settings-accordion__action .ui-button:focus-visible {
+.app-settings-accordion__action-button:hover,
+.app-settings-accordion__action-button:focus-visible {
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
 
-.app-settings-accordion__action .ui-button:focus-visible {
+.app-settings-accordion__action-button:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: -3px;
 }
 
-.app-settings-accordion__action .ui-button > svg:first-child {
-  width: 28px;
-  height: 28px;
-  color: var(--color-text-muted);
+.app-settings-accordion__action-button > svg:first-child {
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  color: var(--color-text-tertiary);
 }
 
-.app-settings-accordion__action .ui-button > span {
+.app-settings-accordion__action-button > span {
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--text-body);
@@ -2045,9 +1973,9 @@ button.app-settings-accordion__row:disabled {
   white-space: nowrap;
 }
 
-.app-settings-accordion__action .ui-button > svg:last-child {
+.app-settings-accordion__action-button > svg:last-child {
   justify-self: end;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 /* Embedded settings components lose their old standalone section framing. */
@@ -2064,7 +1992,7 @@ button.app-settings-accordion__row:disabled {
 }
 
 .app-settings-accordion .app-theme-option {
-  min-height: 70px;
+  min-height: calc(var(--row-height-comfortable) + var(--space-md));
 }
 
 .app-settings-accordion .experience-settings {
@@ -2074,7 +2002,7 @@ button.app-settings-accordion__row:disabled {
 .app-settings-accordion .experience-settings__field {
   min-height: 58px;
   padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .app-settings-accordion .experience-settings__field:last-child {
@@ -2100,12 +2028,12 @@ button.app-settings-accordion__row:disabled {
 
 .app-settings-accordion .app-module-settings__list {
   gap: 0;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-settings-accordion .app-module-settings__row {
   min-height: 46px;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
 }
 

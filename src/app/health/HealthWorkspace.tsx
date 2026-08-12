@@ -23,6 +23,7 @@ import {
   type HealthWorkspace,
 } from "../data/healthWorkspace";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import { formatDate, pluralize } from "../formatters";
 import {
   Badge,
@@ -39,6 +40,7 @@ import {
   Select,
   SummaryStrip,
   Textarea,
+  TimePicker,
 } from "../ui";
 import "../../styles/health.css";
 
@@ -572,11 +574,11 @@ export function HealthWorkspace({ mobileNavigation, onWorkspaceChange }: HealthW
               />
               {editorCopy.showTimeAndLocation && (
                 <>
-                  <Input
+                  <TimePicker
                     label="Godzina"
-                    type="time"
                     value={draft.time}
-                    onChange={(event) => setDraft((current) => ({ ...current, time: event.target.value }))}
+                    options={HALF_HOUR_TIME_OPTIONS}
+                    onChange={(value) => setDraft((current) => ({ ...current, time: value }))}
                   />
                   <Input
                     label="Miejsce"

@@ -159,7 +159,7 @@ export function NutritionCustomMeals({
         actions={addButton}
       />
 
-      <div className="nutrition-content min-h-0 flex-1 overflow-y-auto px-7 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="nutrition-content">
         {notice && (
           <Card tone="input" padding="dense" className="nutrition-library-notice" role="status">
             <span>{notice}</span>
@@ -220,7 +220,7 @@ export function NutritionCustomMeals({
       {pendingDelete && (
         <ConfirmDialog
           eyebrow="Własne posiłki"
-          title={`Usunąć „${pendingDelete.name}”?`}
+          title={`Usunąć posiłek „${pendingDelete.name}”?`}
           description="Posiłek zniknie z biblioteki. Wpisy już dodane do dziennika pozostaną bez zmian."
           confirmLabel="Usuń posiłek"
           onCancel={() => setPendingDelete(null)}

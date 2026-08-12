@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { inspectGoalsImport } from "./goalsModel";
+import { TAXONOMY_COLORS, TAXONOMY_COLOR_OPTIONS } from "../data/taxonomyPalette";
+import {
+  GOAL_ACCENT_OPTIONS,
+  inspectGoalsImport,
+  normalizeGoalAccentColor,
+} from "./goalsModel";
 
 const validWorkspace = {
   version: 1,
@@ -42,6 +47,12 @@ function mutableWorkspace() {
 }
 
 describe("inspectGoalsImport", () => {
+  it("uses the central taxonomy palette for options and persisted legacy colours", () => {
+    expect(GOAL_ACCENT_OPTIONS).toBe(TAXONOMY_COLOR_OPTIONS);
+    expect(normalizeGoalAccentColor(" #9b8ce8 ")).toBe(TAXONOMY_COLORS.violet);
+    expect(normalizeGoalAccentColor("not-a-colour")).toBe(TAXONOMY_COLORS.sky);
+  });
+
   it("returns a preview only after validating the full workspace", () => {
     expect(inspectGoalsImport(JSON.stringify(validWorkspace))).toEqual({
       ok: true,

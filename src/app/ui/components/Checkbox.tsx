@@ -13,13 +13,11 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
 }
 
 /**
- * The single checkbox in the app. Replaces four independent implementations
- * (.affairs-check, .jdg-check, the notes checklist button and the raw input in Layout).
+ * The single checkbox in the app. Replaces independent form and completion implementations.
  *
  * Always renders a real <input type="checkbox">, so keyboard, form semantics and
- * assistive technology work without extra ARIA. Feature-specific switch and form-card
- * presentations remain registered exceptions until they can use this contract without
- * changing their intentional geometry.
+ * assistive technology work without extra ARIA. Binary settings use the separate
+ * shared `Switch` contract.
  */
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
   { label, description, size = "md", shape = "square", indeterminate = false, className = "", id, ...props },

@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "primaryCtaIcon": {
+    "size": 13,
+    "strokeWidth": 1.7,
+    "scope": "A lucide icon rendered by a primary Button or a primary-styled MenuTrigger/button. Omit strokeWidth to inherit the shared SVG rule, or use the shared 1.7 value explicitly."
+  },
+  "rawColorSources": [
+    {
+      "path": "src/styles/tokens.css",
+      "owner": "design-system",
+      "reason": "Theme values are defined once as semantic CSS tokens; feature styles consume variables instead of repeating literals."
+    },
+    {
+      "path": "src/app/data/taxonomyPalette.ts",
+      "owner": "taxonomy-data",
+      "reason": "Persisted taxonomy colours and their legacy normalization table are versioned data; feature models consume this central palette instead of duplicating hex values."
+    }
+  ],
+  "nativeCheckboxPrimitives": [
+    {
+      "path": "src/app/ui/components/Checkbox.tsx",
+      "role": "form-and-completion-control"
+    },
+    {
+      "path": "src/app/ui/components/Switch.tsx",
+      "role": "binary-setting-control"
+    }
+  ],
+  "nativeFormPrimitives": [
+    {
+      "path": "src/app/ui/components/Select.tsx",
+      "kind": "select"
+    },
+    {
+      "path": "src/app/ui/components/Textarea.tsx",
+      "kind": "textarea"
+    },
+    {
+      "path": "src/app/ui/components/TimePicker.tsx",
+      "kind": "time-input"
+    }
+  ],
+  "priorityIconPrimitive": {
+    "path": "src/app/ui/components/PriorityIcon.tsx",
+    "owner": "design-system"
+  },
+  "tokenOverrideContracts": [
+    {
+      "paths": [
+        "src/styles/experience.css"
+      ],
+      "selectors": [
+        ":root[data-motion=\"reduced\"]"
+      ],
+      "properties": [
+        "--motion-instant",
+        "--motion-fast",
+        "--motion-normal",
+        "--motion-slow",
+        "--motion-page",
+        "--motion-ritual",
+        "--motion-value-duration",
+        "--motion-progress-slow",
+        "--motion-toggle",
+        "--motion-disclosure",
+        "--motion-feedback",
+        "--motion-spatial",
+        "--motion-decorative",
+        "--motion-spinner"
+      ],
+      "owner": "experience-motion",
+      "reason": "The reduced-motion preference intentionally rebinds every named motion role to the reduced duration token."
+    },
+    {
+      "paths": [
+        "src/styles/tasks.css"
+      ],
+      "selectors": [
+        ".task-module-main",
+        ".task-module-main .task-item-row"
+      ],
+      "properties": [
+        "--list-rail-width"
+      ],
+      "owner": "list-row",
+      "reason": "ListRow exposes --list-rail-width as a consumer-owned layout hook; Tasks configures it at module and compact-row scope."
+    },
+    {
+      "paths": [
+        "src/styles/work.css"
+      ],
+      "selectors": [
+        ".work-task-board",
+        ".work-screen--table"
+      ],
+      "properties": [
+        "--list-rail-width"
+      ],
+      "owner": "list-row",
+      "reason": "ListRow exposes --list-rail-width as a consumer-owned layout hook; Work configures it for table and responsive task-board contexts."
+    }
+  ]
+}

@@ -178,15 +178,26 @@ function workContext(
 function linkedTaskProjectionFields(task: WorkTask): Partial<WorkspaceTask> {
   const linked = task.linkedTask;
   if (!linked) return {};
+  const hasCanonicalTime = task.dueTime !== undefined;
+  const time = hasCanonicalTime ? task.dueTime || undefined : linked.time;
   return {
-    time: linked.time,
-    endTime: linked.endTime,
+    time,
+    endTime: time && linked.endTime && linked.endTime > time ? linked.endTime : undefined,
     notes: linked.notes,
     subtasks: linked.subtasks?.map((subtask) => ({ ...subtask })),
     comments: linked.comments?.map((comment) => ({ ...comment })),
     schedule: linked.schedule
       ? {
           ...linked.schedule,
+          ...(hasCanonicalTime
+            ? {
+                allDay: !time,
+                startTime: time ?? "",
+                endTime: time && linked.schedule.endTime && linked.schedule.endTime > time
+                  ? linked.schedule.endTime
+                  : undefined,
+              }
+            : {}),
           completedDates: linked.schedule.completedDates
             ? [...linked.schedule.completedDates]
             : undefined,
@@ -404,6 +415,7 @@ export function assignTaskToWorkProject(
     completed: task.done,
     priority: taskPriorityForWork(task.priority),
     dueDate: task.calendarDate ?? "",
+    dueTime: task.schedule?.startTime ?? task.time ?? "",
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     linkedTask: existing?.linkedTask
       ? updateLinkedDetailsFromTask(existing.linkedTask, task)
@@ -451,6 +463,7 @@ function applyWorkEdits(
     const completed = candidate.done !== baseline.done ? candidate.done : task.completed;
     const priority = candidatePriority !== baselinePriority ? candidatePriority : task.priority;
     const dueDate = projectedDueDate !== baseline.dueDate ? projectedDueDate : task.dueDate;
+    const dueTime = candidate.schedule?.startTime ?? candidate.time ?? "";
     const linkedTask = task.linkedTask
       ? updateLinkedDetailsFromTask(task.linkedTask, candidate)
       : undefined;
@@ -459,6 +472,7 @@ function applyWorkEdits(
       && task.completed === completed
       && task.priority === priority
       && task.dueDate === dueDate
+      && (task.dueTime ?? "") === dueTime
       && JSON.stringify(task.linkedTask) === JSON.stringify(linkedTask)
     ) {
       return task;
@@ -470,6 +484,7 @@ function applyWorkEdits(
       completed,
       priority,
       dueDate,
+      dueTime,
       ...(linkedTask ? { linkedTask } : {}),
     };
   });

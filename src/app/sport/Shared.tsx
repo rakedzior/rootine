@@ -34,7 +34,7 @@ export function StatusLabel({ status, compact = false }: { status: SessionStatus
 }
 
 export function Modal({ title, eyebrow, children, onClose, size = "md" }: { title: string; eyebrow?: string; children: ReactNode; onClose: () => void; size?: ModalSize }) {
-  return <UiModal title={title} eyebrow={eyebrow} onClose={onClose} size={size} bodyClassName="p-0">{children}</UiModal>;
+  return <UiModal title={title} eyebrow={eyebrow} onClose={onClose} size={size} bodyClassName="sport-modal-body">{children}</UiModal>;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {

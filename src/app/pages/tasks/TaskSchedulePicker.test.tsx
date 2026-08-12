@@ -67,10 +67,12 @@ describe("TaskSchedulePicker layered interactions", () => {
     expect(screen.queryByRole("dialog", { name: "Wybierz godzinę" })).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Przypomnienie" })).toBeVisible();
     expect(parent.style.width).toBe(initialWidth);
+    expect(onClose).not.toHaveBeenCalled();
 
     await user.click(within(parent).getByText(/sierpień 2026/i));
     expect(screen.queryByRole("dialog", { name: "Przypomnienie" })).not.toBeInTheDocument();
     expect(parent).toBeVisible();
+    expect(onClose).not.toHaveBeenCalled();
 
     await user.click(document.body);
     expect(onClose).toHaveBeenCalledOnce();
@@ -96,18 +98,20 @@ describe("TaskSchedulePicker layered interactions", () => {
     await user.click(timezoneButton);
     const timezoneLayer = screen.getByRole("dialog", { name: "Wybierz strefę czasową" });
     await user.type(within(timezoneLayer).getByRole("searchbox"), "London");
-    await user.click(within(timezoneLayer).getByRole("option", { name: /London, GMT/i }));
+    await user.click(within(timezoneLayer).getByRole("menuitemradio", { name: /London, GMT/i }));
     expect(within(parent).getByRole("button", { name: /London, GMT/i })).toBeVisible();
 
     const durationAllDay = within(parent).getByRole("switch", { name: "Cały dzień" });
+    expect(durationAllDay).toHaveClass("ui-switch__input");
     await user.click(durationAllDay);
-    expect(durationAllDay).toHaveAttribute("aria-checked", "true");
+    expect(durationAllDay).toBeChecked();
     expect(parent.querySelectorAll<HTMLButtonElement>(".task-sched__duration-control--time")[0]).toBeDisabled();
 
     await user.click(within(parent).getByRole("tab", { name: "Data" }));
     const dateAllDay = within(parent).getByRole("switch", { name: "Cały dzień" });
-    expect(dateAllDay).toHaveAttribute("aria-checked", "true");
+    expect(dateAllDay).toHaveClass("ui-switch__input");
+    expect(dateAllDay).toBeChecked();
     await user.click(dateAllDay);
-    expect(dateAllDay).toHaveAttribute("aria-checked", "false");
+    expect(dateAllDay).not.toBeChecked();
   });
 });

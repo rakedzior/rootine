@@ -3,7 +3,7 @@
   gap: var(--space-md);
   margin-top: var(--space-xs);
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
 }
 
 .app-theme-settings__heading {
@@ -20,7 +20,7 @@
 }
 
 .app-theme-settings__heading strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-body);
   font-weight: var(--weight-semibold);
 }
@@ -45,7 +45,7 @@
 .app-theme-option {
   display: grid;
   min-width: 0;
-  min-height: 76px;
+  min-height: calc(var(--row-height-comfortable) + var(--space-xl));
   grid-template-columns: 54px minmax(0, 1fr) 18px;
   align-items: center;
   gap: var(--space-sm);
@@ -112,8 +112,8 @@
 .app-theme-option__swatches > span:nth-child(3) { background: var(--preview-primary); }
 
 /* stylelint-disable projectwallace/max-unique-colors -- Static palette previews document the two selectable themes. */
-.app-theme-option[data-theme-option="rootine-warm-linen"] { --preview-canvas: #f2eee6; --preview-surface: #faf8f3; --preview-primary: #76583e; }
-.app-theme-option[data-theme-option="rootine-cobalt"] { --preview-canvas: #15181b; --preview-surface: #24292f; --preview-primary: #657fce; }
+.app-theme-option[data-theme-option="rootine-warm-linen"] { --preview-canvas: var(--theme-preview-warm-canvas); --preview-surface: var(--theme-preview-warm-surface); --preview-primary: var(--theme-preview-warm-primary); }
+.app-theme-option[data-theme-option="rootine-cobalt"] { --preview-canvas: var(--theme-preview-cobalt-canvas); --preview-surface: var(--theme-preview-cobalt-surface); --preview-primary: var(--theme-preview-cobalt-primary); }
 /* stylelint-enable projectwallace/max-unique-colors */
 
 .app-theme-option__copy {
@@ -123,7 +123,7 @@
 }
 
 .app-theme-option__copy strong {
-  color: var(--color-chalk-white);
+  color: var(--color-text-primary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
@@ -178,8 +178,8 @@
   display: grid;
   gap: var(--space-md);
   padding: var(--space-lg) 0;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .experience-settings__heading {
@@ -265,7 +265,7 @@
 }
 
 .app-settings-dialog .app-theme-option {
-  min-height: 82px;
+  min-height: calc(var(--row-height-comfortable) + var(--space-2xl));
   grid-template-columns: 56px minmax(0, 1fr) 20px;
   gap: var(--space-md);
   padding: var(--space-md);

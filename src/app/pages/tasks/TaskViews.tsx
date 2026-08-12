@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type React from "react";
 import { Link } from "react-router";
 import {
-  Calendar,
+  CalendarDays,
   Check,
-  Flag,
   Inbox,
   ListPlus,
   MessageSquare,
@@ -22,7 +21,7 @@ import {
   type TaskComment,
 } from "../../data/taskWorkspace";
 import { commitmentSourceLabel } from "../../data/commitmentRepository";
-import { Button, ListRow, Menu, MenuItem, Modal, Textarea } from "../../ui";
+import { AnchoredPopover, ConfirmDialog, ListRow, Menu, MenuItem, PriorityIcon, Textarea } from "../../ui";
 import { DatePickerPopup } from "./TaskSchedulePicker";
 import {
   C,
@@ -163,7 +162,7 @@ export function TaskRow({
             <Link
               to={task.source.href}
               aria-label={`Otwórz zadanie w module ${sourceLabel}: ${task.source.context}`}
-              className="task-source-link rounded-md px-1.5 text-[var(--text-label)] no-underline"
+              className="task-source-link"
             >
               {sourceLabel}
             </Link>
@@ -176,60 +175,55 @@ export function TaskRow({
 
 // ── Priority dropdown ─────────────────────────────────────
 const PRIORITY_FLAGS = [
-  { p: "high"   as Priority, label: "Wysoki", color: C.danger  },
-  { p: "medium" as Priority, label: "Średni", color: C.warning },
-  { p: "low"    as Priority, label: "Niski",  color: C.iceBlue },
-  { p: null,                 label: "Brak",   color: C.textMuted },
+  { p: "high"   as Priority, label: "Wysoki" },
+  { p: "medium" as Priority, label: "Średni" },
+  { p: "low"    as Priority, label: "Niski" },
+  { p: null,                 label: "Brak" },
 ] as const;
 
-function PriorityDropdown({ current, anchorEl, onSelect, onClose }: {
+function PriorityDropdown({ id, current, anchorEl, onSelect, onClose }: {
+  id: string;
   current: Priority | null; anchorEl: HTMLElement;
   onSelect: (p: Priority | null) => void; onClose: () => void;
 }) {
-  const ref  = useRef<HTMLDivElement>(null);
-  const rect = anchorEl.getBoundingClientRect();
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [anchorEl, onClose]);
+  const triggerRef = useRef<HTMLElement | null>(anchorEl);
+  triggerRef.current = anchorEl;
   return (
-    <Menu ref={ref} layer="systemOverlay" className="task-menu--fixed" style={{
-      top: rect.bottom + 4, right: window.innerWidth - rect.right,
-    }}>
-      {PRIORITY_FLAGS.map(({ p, label, color }) => (
-        <MenuItem
-          key={String(p)}
-          selected={current === p}
-          onClick={() => onSelect(p as Priority | null)}
-          leadingIcon={<Flag fill={p ? color : "none"} style={{ color }} />}
-          trailingIcon={current === p ? <Check /> : undefined}
-        >
-          {label}
-        </MenuItem>
-      ))}
-    </Menu>
+    <AnchoredPopover
+      open
+      anchorRef={triggerRef}
+      align="end"
+      layer="systemOverlay"
+      minWidth={190}
+      onDismiss={onClose}
+    >
+      <Menu id={id} triggerRef={triggerRef} initialFocus="selected">
+        {PRIORITY_FLAGS.map(({ p, label }) => (
+          <MenuItem
+            key={String(p)}
+            selected={current === p}
+            onClick={() => onSelect(p as Priority | null)}
+            leadingIcon={<PriorityIcon level={p ?? "none"} />}
+            trailingIcon={current === p ? <Check /> : undefined}
+          >
+            {label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </AnchoredPopover>
   );
 }
 
 // ── List picker dropdown ───────────────────────────────────
-function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
+function ListPicker({ id, current, anchorEl, onSelect, onClose, listy }: {
+  id: string;
   current: string | null; anchorEl: HTMLElement;
   onSelect: (id: string | null) => void; onClose: () => void;
   listy: ListItem[];
 }) {
-  const ref  = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(anchorEl);
+  triggerRef.current = anchorEl;
   const [q, setQ] = useState("");
-  const rect = anchorEl.getBoundingClientRect();
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [anchorEl, onClose]);
 
   const all = [
     { id: null as string | null, label: "Bez listy", color: C.textMuted },
@@ -239,32 +233,41 @@ function ListPicker({ current, anchorEl, onSelect, onClose, listy }: {
   const currentLabel = listy.find(l => l.id === current)?.label ?? "Bez listy";
 
   return (
-    <Menu ref={ref} layer="systemOverlay" size="wide" className="task-menu--fixed" style={{
-      bottom: window.innerHeight - rect.top + 4, left: rect.left,
-    }}>
-      <div className="task-menu__search">
-        <div>
-          <Search size={11} strokeWidth={1.5} />
-          <input autoFocus placeholder="Szukaj" value={q} onChange={e => setQ(e.target.value)} />
+    <AnchoredPopover
+      open
+      anchorRef={triggerRef}
+      placement="top"
+      align="start"
+      layer="systemOverlay"
+      minWidth={240}
+      maxHeight={356}
+      onDismiss={onClose}
+    >
+      <Menu id={id} triggerRef={triggerRef} initialFocus="none" size="wide">
+        <div className="task-menu__search">
+          <div>
+            <Search size={11} strokeWidth={1.5} />
+            <input autoFocus placeholder="Szukaj" value={q} onChange={e => setQ(e.target.value)} />
+          </div>
         </div>
-      </div>
-      {all.map(l => (
-        <MenuItem
-          key={String(l.id)}
-          selected={current === l.id}
-          onClick={() => onSelect(l.id)}
-          // The dot carries each list's own colour, so it stays inline.
-          leadingIcon={<span className="task-menu__dot" style={{ background: l.color }} />}
-          trailingIcon={current === l.id ? <Check /> : undefined}
-        >
-          {l.label}
-        </MenuItem>
-      ))}
-      <div className="task-menu__footer">
-        <Inbox size={11} strokeWidth={1.5} />
-        <span>{currentLabel}</span>
-      </div>
-    </Menu>
+        {all.map(l => (
+          <MenuItem
+            key={String(l.id)}
+            selected={current === l.id}
+            onClick={() => onSelect(l.id)}
+            // The dot carries each list's own colour, so it stays inline.
+            leadingIcon={<span className="task-menu__dot" style={{ background: l.color }} />}
+            trailingIcon={current === l.id ? <Check /> : undefined}
+          >
+            {l.label}
+          </MenuItem>
+        ))}
+        <div className="task-menu__footer">
+          <Inbox size={11} strokeWidth={1.5} />
+          <span>{currentLabel}</span>
+        </div>
+      </Menu>
+    </AnchoredPopover>
   );
 }
 
@@ -286,46 +289,37 @@ const moreItems = (seriesScoped: boolean): ({
   },
 ];
 
-function MoreMenu({ anchorEl, onAction, onClose, seriesScoped = false }: {
+function MoreMenu({ id, anchorEl, onAction, onClose, seriesScoped = false }: {
+  id: string;
   anchorEl: HTMLElement;
   onAction: (action: string) => void;
   onClose: () => void;
   seriesScoped?: boolean;
 }) {
-  const ref  = useRef<HTMLDivElement>(null);
-  const rect = anchorEl.getBoundingClientRect();
-  useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node) && !anchorEl.contains(e.target as Node)) onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
-      anchorEl.focus();
-    };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", h);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [anchorEl, onClose]);
+  const triggerRef = useRef<HTMLElement | null>(anchorEl);
+  triggerRef.current = anchorEl;
   return (
-    <Menu ref={ref} aria-label={seriesScoped ? "Akcje całej serii" : "Akcje zadania"} layer="systemOverlay" size="wide" className="task-menu--fixed" style={{
-      bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right,
-    }}>
-      {moreItems(seriesScoped).map((item, i) =>
-        item === null
-          ? <div key={i} className="task-menu__separator" />
-          : (
-            <MenuItem key={item.action} tone={item.danger ? "danger" : "default"} onClick={() => onAction(item.action)} leadingIcon={<item.icon />}>
-              {item.label}
-            </MenuItem>
-          )
-      )}
-    </Menu>
+    <AnchoredPopover
+      open
+      anchorRef={triggerRef}
+      placement="top"
+      align="end"
+      layer="systemOverlay"
+      minWidth={240}
+      onDismiss={onClose}
+    >
+      <Menu id={id} triggerRef={triggerRef} initialFocus="first" aria-label={seriesScoped ? "Akcje całej serii" : "Akcje zadania"} size="wide">
+        {moreItems(seriesScoped).map((item, i) =>
+          item === null
+            ? <div key={i} className="task-menu__separator" />
+            : (
+              <MenuItem key={item.action} tone={item.danger ? "danger" : "default"} onClick={() => onAction(item.action)} leadingIcon={<item.icon />}>
+                {item.label}
+              </MenuItem>
+            )
+        )}
+      </Menu>
+    </AnchoredPopover>
   );
 }
 
@@ -366,6 +360,10 @@ export function TaskDetail({
   listy: ListItem[];
   tagi: TagItem[];
 }) {
+  const detailId = useId();
+  const priorityMenuId = `${detailId}-priority-menu`;
+  const listMenuId = `${detailId}-list-menu`;
+  const moreMenuId = `${detailId}-more-menu`;
   const [showPriority,  setShowPriority]  = useState(false);
   const [showListPick,  setShowListPick]  = useState(false);
   const [showMore,      setShowMore]      = useState(false);
@@ -433,7 +431,6 @@ export function TaskDetail({
   const [tagInput, setTagInput] = useState("");
   const [showTagInput, setShowTagInput] = useState(false);
 
-  const flagColor = task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : task.priority === "low" ? C.iceBlue : C.textMuted;
   const listLabel = listy.find(l => l.id === task.list)?.label ?? "Bez listy";
   const listColor = listy.find(l => l.id === task.list)?.color ?? C.textMuted;
   const taskTagDefs = (task.tags ?? []).map(id => tagi.find(t => t.id === id)).filter(Boolean) as TagItem[];
@@ -485,12 +482,14 @@ export function TaskDetail({
           ref={flagBtnRef}
           type="button"
           aria-label={task.source?.kind === "travel" ? "Priorytet jest zarządzany w module źródłowym" : "Zmień priorytet zadania"}
+          aria-haspopup="menu"
+          aria-expanded={showPriority}
+          aria-controls={showPriority ? priorityMenuId : undefined}
           disabled={task.source?.kind === "travel"}
           onClick={() => { setShowPriority(v => !v); setShowListPick(false); setShowMore(false); }}
           className="task-detail__icon-btn"
         >
-          {/* Priority colour is data, so it stays inline. */}
-          <Flag size={16} strokeWidth={1.5} fill={task.priority ? flagColor : "none"} style={{ color: flagColor }} />
+          <PriorityIcon level={task.priority ?? "none"} />
         </button>
 
         {/* Divider */}
@@ -504,7 +503,7 @@ export function TaskDetail({
           onClick={() => { setShowDatePicker(v => !v); closeAll(); }}
           className="task-detail__date"
         >
-          <Calendar size={13} strokeWidth={1.5} />
+          <CalendarDays size={13} aria-hidden="true" />
           <span>{occurrence ? `Harmonogram serii: ${dateStr}${timeStr}` : `${dateStr}${timeStr}`}</span>
         </button>
 
@@ -521,7 +520,7 @@ export function TaskDetail({
       {occurrenceDateLabel && (
         <section id="task-occurrence-scope" className="task-occurrence-context" aria-label="Wybrane wystąpienie cykliczne">
           <div className="task-occurrence-context__heading">
-            <Calendar size={13} strokeWidth={1.6} aria-hidden="true" />
+            <CalendarDays size={13} aria-hidden="true" />
             <div>
               <span>Wystąpienie cykliczne</span>
               <strong>{occurrenceDateLabel}</strong>
@@ -714,6 +713,10 @@ export function TaskDetail({
       <div className={`task-detail__footer${task.source ? " is-hidden" : ""}`}>
         {/* List picker */}
         <button ref={listBtnRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={showListPick}
+          aria-controls={showListPick ? listMenuId : undefined}
           onClick={() => { setShowListPick(v => !v); setShowMore(false); setShowPriority(false); }}
           className="task-detail__list-btn"
         >
@@ -734,7 +737,9 @@ export function TaskDetail({
             ref={moreBtnRef}
             type="button"
             aria-label={occurrence ? "Więcej akcji całej serii" : "Więcej akcji zadania"}
+            aria-haspopup="menu"
             aria-expanded={showMore}
+            aria-controls={showMore ? moreMenuId : undefined}
             onClick={() => { setShowMore(v => !v); setShowListPick(false); setShowPriority(false); }}
             className="task-detail__toggle task-detail__toggle--plain">
             <MoreHorizontal size={16} strokeWidth={1.5} />
@@ -784,6 +789,7 @@ export function TaskDetail({
       )}
       {showPriority && task.source?.kind !== "travel" && flagBtnRef.current && (
         <PriorityDropdown
+          id={priorityMenuId}
           current={task.priority ?? null}
           anchorEl={flagBtnRef.current}
           onSelect={p => { onUpdate(task.id, { priority: p ?? undefined }); setShowPriority(false); }}
@@ -792,6 +798,7 @@ export function TaskDetail({
       )}
       {showListPick && !task.source && listBtnRef.current && (
         <ListPicker
+          id={listMenuId}
           current={task.list ?? null}
           anchorEl={listBtnRef.current}
           onSelect={id => { onUpdate(task.id, { list: id ?? undefined }); setShowListPick(false); }}
@@ -801,6 +808,7 @@ export function TaskDetail({
       )}
       {showMore && !task.source && moreBtnRef.current && (
         <MoreMenu
+          id={moreMenuId}
           anchorEl={moreBtnRef.current}
           seriesScoped={Boolean(occurrence)}
           onAction={action => {
@@ -819,31 +827,21 @@ export function TaskDetail({
         />
       )}
       {confirmSeriesDelete && occurrenceDateLabel && (
-        <Modal
+        <ConfirmDialog
           eyebrow="Zadanie cykliczne"
           title="Przenieść całą serię do Kosza?"
           description={`Wybrane wystąpienie przypada na ${occurrenceDateLabel}. Nie zostanie usunięte osobno.`}
-          onClose={() => setConfirmSeriesDelete(false)}
-          size="sm"
-          footer={(
-            <>
-              <Button variant="quiet" onClick={() => setConfirmSeriesDelete(false)}>Anuluj</Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setConfirmSeriesDelete(false);
-                  onDelete(task.id);
-                }}
-              >
-                Przenieś całą serię
-              </Button>
-            </>
-          )}
+          confirmLabel="Przenieś serię do Kosza"
+          onCancel={() => setConfirmSeriesDelete(false)}
+          onConfirm={() => {
+            setConfirmSeriesDelete(false);
+            onDelete(task.id);
+          }}
         >
           <p className="task-series-delete-copy">
             Do Kosza trafi zadanie źródłowe wraz ze wszystkimi wystąpieniami. Operację można później cofnąć w module Zadania.
           </p>
-        </Modal>
+        </ConfirmDialog>
       )}
     </div>
   );

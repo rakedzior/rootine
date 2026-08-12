@@ -28,8 +28,10 @@ import {
   Modal,
   SectionHeader,
   Select,
+  TimePicker,
 } from "../ui";
 import { AddToTasksButton } from "../ui";
+import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import {
   DAY_LABELS,
   createPlannerId,
@@ -145,6 +147,7 @@ export function TemplateLibrary({
           <Search size={13} aria-hidden="true" />
           <Input
             aria-label="Szukaj szablonu"
+            className="sport-template-search__input"
             type="search"
             placeholder="Szukaj po nazwie lub opisie"
             value={search}
@@ -669,7 +672,7 @@ function CyclePlannerLayout({
           <div className="sport-cycle-sidebar__heading">
             <h2 id="sport-cycle-plans-module-heading">Twoje plany</h2>
             <div className="sport-cycle-plans-module__header-actions">
-              <Button className="sport-cycle-plans-module__add" variant="primary" leadingIcon={<Plus size={18} />} onClick={onCreateNewCycle}>
+              <Button className="sport-cycle-plans-module__add" variant="primary" leadingIcon={<Plus size={13} />} onClick={onCreateNewCycle}>
                 Dodaj plan
               </Button>
               <Button
@@ -723,6 +726,7 @@ function CyclePlannerLayout({
                 <span className="sport-cycle-plan-card__name">{item.name}</span>
                 <span className="sport-cycle-plan-card__actions">
                   <Button
+                    className="sport-cycle-plan-card__action"
                     variant="ghost"
                     size="sm"
                     iconOnly
@@ -733,6 +737,7 @@ function CyclePlannerLayout({
                     <CircleCheckBig size={15} aria-hidden="true" />
                   </Button>
                   <Button
+                    className="sport-cycle-plan-card__action"
                     variant="ghost"
                     size="sm"
                     iconOnly
@@ -965,7 +970,7 @@ export function TemplateDialog({
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>Anuluj</Button>
-          <Button type="submit" form="sport-template-form" variant="primary">Zapisz szablon</Button>
+          <Button type="submit" form="sport-template-form" variant="primary">{template ? "Zapisz szablon" : "Dodaj szablon"}</Button>
         </>
       )}
     >
@@ -1074,7 +1079,7 @@ export function CycleDialog({
         <>
           <Button variant="ghost" onClick={onClose}>Anuluj</Button>
           <Button type="submit" form="sport-cycle-form" variant="primary">
-            {cycle ? "Zapisz ustawienia" : "Utwórz plan"}
+            {cycle ? "Zapisz plan" : "Dodaj plan"}
           </Button>
         </>
       )}
@@ -1089,7 +1094,7 @@ export function CycleDialog({
         />
         <div className="sport-planner-form__grid">
           <DatePicker
-            label="Start"
+            label="Data rozpoczęcia"
             value={startDate}
             hint="Plan zacznie się w poniedziałek tego tygodnia."
             onChange={(nextValue) => { setStartDate(nextValue); setError(""); }}
@@ -1370,11 +1375,11 @@ export function WorkoutDialog({
             options={DAY_LABELS.map((item, index) => ({ value: String(index), label: item.full }))}
             onChange={(event) => setDay(event.target.value)}
           />
-          <Input
-            label="Godzina opcjonalnie"
-            type="time"
+          <TimePicker
+            label="Godzina (opcjonalnie)"
             value={time}
-            onChange={(event) => setTime(event.target.value)}
+            options={HALF_HOUR_TIME_OPTIONS}
+            onChange={setTime}
           />
         </div>
 
