@@ -15,12 +15,14 @@ import { APP_MODULES, type AppModulePath } from "./moduleRegistry";
  */
 type RouteLoader = () => Promise<{ default: ComponentType }>;
 
-/** Dev-only deterministic seam used to exercise the real route error boundary. */
+/** Deterministic seam used only by development and the isolated E2E build. */
 export const DEV_ROUTE_FAILURE_KEY = "rootine.dev.fail-route";
+
+const routeFailureInjectionEnabled = import.meta.env.DEV || import.meta.env.MODE === "e2e";
 
 function guardedRouteLoader(path: string, loader: RouteLoader): RouteLoader {
   return () => {
-    if (import.meta.env.DEV && typeof window !== "undefined") {
+    if (routeFailureInjectionEnabled && typeof window !== "undefined") {
       try {
         if (window.sessionStorage.getItem(DEV_ROUTE_FAILURE_KEY) === path) {
           return Promise.reject(new Error(`Controlled route load failure: ${path}`));

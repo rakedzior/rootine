@@ -596,11 +596,11 @@ export default function Kalendarz() {
       const triggerRect = trigger.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
       const gap = 4;
-      const left = Math.max(8, Math.min(triggerRect.left, window.innerWidth - menuRect.width - 8));
+      const left = Math.round(Math.max(8, Math.min(triggerRect.left, window.innerWidth - menuRect.width - 8)));
       const preferredTop = triggerRect.bottom + gap;
-      const top = preferredTop + menuRect.height <= window.innerHeight - 8
+      const top = Math.round(preferredTop + menuRect.height <= window.innerHeight - 8
         ? preferredTop
-        : Math.max(8, triggerRect.top - menuRect.height - gap);
+        : Math.max(8, triggerRect.top - menuRect.height - gap));
       setAgendaPosition((current) => current.left === left && current.top === top ? current : { left, top });
     };
     repositionAgenda();
