@@ -13,6 +13,7 @@ const testState = vi.hoisted(() => ({
     session: null as { user: { id: string } } | null,
   },
   startSync: vi.fn(),
+  resolveConflicts: vi.fn(),
 }));
 
 vi.mock("./auth", () => ({
@@ -24,6 +25,7 @@ vi.mock("./client", () => ({
 }));
 
 vi.mock("./workspaceSync", () => ({
+  resolveRemoteWorkspaceConflicts: testState.resolveConflicts,
   startRemoteWorkspaceSync: testState.startSync,
 }));
 
@@ -32,6 +34,7 @@ function RemoteStateProbe() {
   return (
     <>
       <div>Rootine app</div>
+      <button type="button" onClick={() => void remote.resolveConflict("keep-local")}>Rozwiąż konflikt</button>
       <output data-testid="remote-state">
         {remote.status}|{remote.message ?? ""}|{remote.initialSyncAttempt}|{remote.initialSyncElapsedMs ?? ""}|{String(remote.initialSyncTimedOut)}
       </output>
@@ -44,6 +47,7 @@ describe("RemotePersistenceProvider", () => {
     testState.auth.loading = true;
     testState.auth.session = null;
     testState.startSync.mockReset();
+    testState.resolveConflicts.mockReset();
   });
 
   afterEach(() => {
@@ -197,5 +201,42 @@ describe("RemotePersistenceProvider", () => {
     });
 
     expect(screen.getByTestId("remote-state")).toHaveTextContent("synced||2|");
+  });
+
+  it("resolves reported conflicts and starts a fresh synchronization baseline", async () => {
+    const key = "rootine.tasks.workspace.v2";
+    testState.auth.loading = false;
+    testState.auth.session = { user: { id: "user-1" } };
+    testState.startSync
+      .mockImplementationOnce(async (_userId, onResult) => {
+        onResult({
+          status: "conflict",
+          uploaded: 0,
+          downloaded: 0,
+          conflictKeys: [key],
+        });
+        return () => undefined;
+      })
+      .mockResolvedValueOnce(() => undefined);
+    testState.resolveConflicts.mockResolvedValue({
+      status: "synced",
+      uploaded: 1,
+      downloaded: 0,
+    });
+
+    render(
+      <RemotePersistenceProvider>
+        <RemoteStateProbe />
+      </RemotePersistenceProvider>,
+    );
+
+    expect(await screen.findByText("Rootine app")).toBeInTheDocument();
+    expect(screen.getByTestId("remote-state")).toHaveTextContent("conflict|");
+    fireEvent.click(screen.getByRole("button", { name: "Rozwiąż konflikt" }));
+
+    await vi.waitFor(() => {
+      expect(testState.resolveConflicts).toHaveBeenCalledWith("user-1", [key], "keep-local");
+      expect(testState.startSync).toHaveBeenCalledTimes(2);
+    });
   });
 });

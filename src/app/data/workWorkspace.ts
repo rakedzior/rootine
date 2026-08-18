@@ -386,6 +386,16 @@ export function createDefaultWorkWorkspace(): WorkWorkspace {
   };
 }
 
+export function createEmptyWorkWorkspace(): WorkWorkspace {
+  return {
+    version: WORKSPACE_VERSION,
+    updatedAt: new Date(0).toISOString(),
+    companies: [],
+    projects: [],
+    tasks: [],
+  };
+}
+
 export function createWorkId(prefix: "company" | "project" | "task"): string {
   const suffix = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -410,7 +420,7 @@ export function setWorkTasksCompletionState(
 export function loadWorkWorkspaceResult(): LocalLoadResult<WorkWorkspace> {
   const result = readLocalWorkspace({
     key: WORK_STORAGE_KEY,
-    fallback: createDefaultWorkWorkspace,
+    fallback: createEmptyWorkWorkspace,
     validate: isWorkspace,
     migrate: migrateLegacyWorkspace,
   });

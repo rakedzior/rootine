@@ -1,7 +1,6 @@
-import { Building2, FolderKanban, Plus } from "lucide-react";
+import { Building2, Clock3, FolderKanban, Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import type { WorkCompany, WorkProject, WorkTaskPriority, WorkTaskStatus } from "../data/workWorkspace";
-import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import { formatShortDate } from "../formatters";
 import { TaskInlineMenu } from "../pages/PracaMenus";
 import {
@@ -12,7 +11,7 @@ import {
   taskStatusTone,
   workPriorityMenuOptions,
 } from "./workPresentation";
-import { Button, DatePicker, PriorityIcon, QuickComposer, TimePicker } from "../ui";
+import { DatePicker, PriorityIcon, QuickComposer, TimePicker } from "../ui";
 
 export type WorkQuickEntryValues = {
   companyId: string;
@@ -65,6 +64,7 @@ export function WorkQuickEntry({
     : selectedDueDate
       ? formatShortDate(selectedDueDate)
       : "Bez terminu";
+  const dateDisplayValue = selectedDueTime ? `${dueDateLabel} / ${selectedDueTime}` : dueDateLabel;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -187,31 +187,39 @@ export function WorkQuickEntry({
           <PriorityIcon level={priority} />
         </TaskInlineMenu>
       </>}
-      scheduleControl={<div className="work-quick-entry__schedule">
+      scheduleControl={(
         <DatePicker
           value={selectedDueDate}
-          displayValue={dueDateLabel}
+          displayValue={dateDisplayValue}
           aria-label="Termin zadania"
           fieldClassName="work-quick-entry__date"
           triggerClassName="work-quick-date-trigger"
           density="compact"
           portalLayer="featurePopup"
+          closeOnSelect={false}
+          footerContent={(
+            <div className="work-quick-entry__date-time">
+              <div className="work-quick-entry__date-time-label">
+                <Clock3 size={13} aria-hidden="true" />
+                <span>Godzina</span>
+              </div>
+              <TimePicker
+                value={selectedDueTime}
+                aria-label="Godzina zadania"
+                fieldClassName="work-quick-entry__time"
+                density="compact"
+                disabled={!selectedDueDate}
+                options={[]}
+                onChange={setSelectedDueTime}
+              />
+            </div>
+          )}
           onChange={(value) => {
             setSelectedDueDate(value);
             if (!value) setSelectedDueTime("");
           }}
         />
-        <TimePicker
-          value={selectedDueTime}
-          aria-label="Godzina zadania"
-          fieldClassName="work-quick-entry__time"
-          density="compact"
-          options={HALF_HOUR_TIME_OPTIONS}
-          disabled={!selectedDueDate}
-          onChange={setSelectedDueTime}
-        />
-      </div>}
-      submitAction={<Button variant="quiet" size="sm" type="submit" disabled={!normalizedTitle}>Dodaj zadanie</Button>}
+      )}
     />
   );
 }

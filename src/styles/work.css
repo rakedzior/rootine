@@ -1604,20 +1604,38 @@
 
 .work-quick-entry__input::placeholder { color: var(--color-text-tertiary); }
 
+.work-quick-entry .ui-quick-composer__actions { margin-left: auto; }
+
 .work-quick-entry__date {
   display: block;
-  width: 112px;
-  min-width: 88px;
+  width: auto;
+  min-width: 112px;
 }
 
-.work-quick-entry__schedule {
-  display: flex;
+.work-quick-entry__date-time {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
+}
+
+.work-quick-entry__date-time-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-label);
+}
+
+.work-quick-entry__date-time-label > svg {
+  flex: 0 0 auto;
+  color: var(--color-primary-text);
 }
 
 .work-quick-entry__time {
-  width: 104px;
+  width: 116px;
+  min-width: 0;
 }
 
 .work-detail-schedule {
@@ -1963,6 +1981,8 @@
 }
 
 @media (max-width: 760px) {
+  .work-quick-entry .ui-quick-composer__actions { margin-left: 0; }
+
   .work-task-board,
   .work-screen--table {
     --list-rail-width: 92px;
@@ -2117,6 +2137,8 @@
 }
 
 @container workspace (max-width: 760px) {
+  .work-quick-entry .ui-quick-composer__actions { margin-left: 0; }
+
   .work-task-board,
   .work-screen--table {
     --list-rail-width: 92px;

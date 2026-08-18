@@ -128,10 +128,18 @@ export function createDefaultHealthWorkspace(): HealthWorkspace {
   };
 }
 
+export function createEmptyHealthWorkspace(): HealthWorkspace {
+  return {
+    version: 1,
+    entries: [],
+    updatedAt: new Date(0).toISOString(),
+  };
+}
+
 export function loadHealthWorkspaceResult(): LocalLoadResult<HealthWorkspace> {
   return readLocalWorkspace({
     key: HEALTH_STORAGE_KEY,
-    fallback: createDefaultHealthWorkspace,
+    fallback: createEmptyHealthWorkspace,
     validate: isHealthWorkspace,
   });
 }

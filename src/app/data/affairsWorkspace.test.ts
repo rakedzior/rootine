@@ -35,7 +35,7 @@ describe("affairs shared completion mutations", () => {
     payments: [], subscriptions: [], documents: [], vehicles: [], vehicleItems: [], budgets: [],
   };
 
-  it("uses one matter completion transition for UI and assistant services", () => {
+  it("uses one matter completion transition across all consumers", () => {
     const next = setMatterCompletionState(workspace, "matter-1", true);
     expect(next.matters[0].status).toBe("done");
     expect(workspace.matters[0].status).toBe("waiting");

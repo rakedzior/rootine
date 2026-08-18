@@ -315,6 +315,22 @@
 .app-account-panel__error { color: var(--color-danger-text); }
 .app-account-panel__message { color: var(--color-success-text); }
 
+.app-account-panel__conflict {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--color-warning-text) 32%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-warning-subtle);
+}
+
+.app-account-panel__conflict p {
+  margin: 0;
+  color: var(--color-warning-text);
+  font-size: var(--text-meta);
+  line-height: var(--leading-normal);
+}
+
 .app-account-panel__status-row {
   display: flex;
   align-items: center;

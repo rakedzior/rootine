@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Rootine jest przeznaczone dla małej liczby użytkowników, którzy chcą zarządzać najważniejszymi obszarami codziennego życia w jednym miejscu. „Mateusz” i widoczne obecnie dane są przykładową personą oraz treścią demonstracyjną, a nie założeniem produktu dla jednej konkretnej osoby.
+Rootine jest przeznaczone dla małej liczby użytkowników, którzy chcą zarządzać najważniejszymi obszarami codziennego życia w jednym miejscu. Prawdziwy profil zaczyna od pustych danych. Przykładowa persona i treści demonstracyjne istnieją wyłącznie w izolowanym koncie testowym, a nie w finalnym przepływie użytkownika.
 
 ## Product Purpose
 
@@ -25,8 +25,9 @@ Obecny interfejs ma dziewięć głównych obszarów: Dzisiaj, Zadania, Odżywian
 ## Capabilities and Constraints
 
 - MVP jest tworzone jako aplikacja webowa o architekturze local-first.
-- Bez konfiguracji Supabase lub bez zalogowanej sesji aplikacja działa lokalnie. Po skonfigurowaniu browser-safe URL i publishable/anon key panel profilu udostępnia konto, a workspace snapshots mogą synchronizować się z Supabase pod ochroną RLS.
+- Bez konfiguracji Supabase lub bez zalogowanej sesji aplikacja działa lokalnie. Po skonfigurowaniu browser-safe URL i publishable/anon key panel profilu udostępnia konto. Snapshoty synchronizują się pod ochroną RLS i atomowej kontroli rewizji; bezpośrednie mutacje tabeli są zamknięte dla klienta.
 - Dane lokalne korzystają z repozytoriów przeglądarkowych (`localStorage` i IndexedDB zależnie od obszaru); opcjonalna synchronizacja nie zastępuje lokalnej ścieżki działania.
+- Kalendarz agreguje kanoniczne zadania oraz datowane zobowiązania Sportu i Pozostałych. Wpisy domenowe są w Kalendarzu tylko do odczytu i prowadzą do modułu źródłowego, dzięki czemu nie powstają równoległe kopie tego samego rekordu.
 - Aktualny zakres funkcjonalny obejmuje przede wszystkim zadania, kalendarz, cele, sport i dziennik odżywiania oraz prostsze wersje pozostałych modułów.
 - Pozostałe są centrum prywatnych zobowiązań: Przegląd łączy wspólny radar z osobnymi torami Spraw, Finansów, Rejestrów i Pozostałych obszarów. Zakres obejmuje sprawy w trzech horyzontach czasu, płatności jednorazowe, cykliczne i subskrypcje, ważność dokumentów, pojazdy z terminami datowymi i przebiegowymi oraz administracyjne przypomnienia zdrowotne. Zdrowie przechowuje wizyty, badania, recepty i szczepienia, bez porad medycznych. Osobny moduł budżetu nie należy obecnie do zakresu produktu.
 - Podróże łączą ogólny przegląd wyjazdów z osobną teczką każdej podróży: planem dzień po dniu, noclegami, transportem, budżetem plan-versus-actual, wymaganymi dokumentami oraz listą przygotowań. Dane i stan gotowości pozostają lokalne.
@@ -36,8 +37,8 @@ Obecny interfejs ma dziewięć głównych obszarów: Dzisiaj, Zadania, Odżywian
 - Dziennik odżywiania łączy lokalny katalog podstawowych produktów USDA z odczytem publicznego katalogu Open Food Facts; zapisane posiłki nadal pozostają wyłącznie lokalne.
 - Cele kalorii i nawodnienia mogą być ustawione ręcznie albo oszacowane z lokalnego profilu obejmującego dane ciała, charakter pracy, listę tygodniowych aktywności i procentową lub kaloryczną korektę celu diety. Makroskładniki można ustawić przez profil automatyczny, procenty albo twarde wartości; wynik kalkulatora pozostaje edytowalny i nie jest poradą medyczną.
 - Moduł odżywiania przechowuje lokalne pomiary masy ciała i zestawia ich trend z zapisanymi kaloriami oraz makroskładnikami w zakresach 7, 30 i 90 dni.
-- Obecna integracja serwerowa jest ograniczona do opcjonalnego Supabase auth i synchronizacji workspace snapshots. Dalsze integracje, pełniejsza polityka prywatności i eksport danych pozostają pracą przyszłą.
-- Wersja mobilna jest planowana na końcu tej sekwencji i nie jest częścią bieżącego MVP.
+- Obecna integracja serwerowa obejmuje opcjonalne Supabase Auth, wersjonowane snapshoty workspace’ów, zapis compare-and-swap, odbiór zmian przez Realtime i jawne rozwiązywanie konfliktów. Lokalny eksport, import oraz kopie odzyskiwania są częścią produktu. Pełniejsza polityka prywatności i dalsze integracje pozostają pracą przyszłą.
+- Natywny klient iOS jest kolejnym strumieniem produktu po ustaleniu fundamentów w wywiadzie. Nie jest jeszcze zaimplementowany, ale musi korzystać z tego samego kontraktu danych i backendu opisanego w `docs/data-sync-contract.md`, a nie tworzyć osobnej bazy.
 - Architektura interfejsu nie powinna zakładać, że przykładowy użytkownik „Mateusz” jest jedynym użytkownikiem produktu.
 
 ## Brand Commitments
@@ -53,8 +54,8 @@ Nazwa produktu to Rootine. Interfejs i komunikaty są obecnie tworzone w języku
 - Lokalne przechowywanie stanu jest widoczne m.in. w `src/app/goals/goalsStore.tsx`, `src/app/data/taskCompletion.ts`, `src/app/pages/Sport.tsx` i `src/app/data/nutritionWorkspace.ts`.
 - Katalog produktów i reguły podpowiedzi dla odżywiania znajdują się w `src/app/data/nutritionCatalog.ts`.
 - Jawne wzory estymacji kalorii i nawodnienia znajdują się w `src/app/data/nutritionCalculator.ts`.
-- README opisuje obecną aplikację jako rekonstrukcję dostarczonego pliku Figma Make.
-- Opcjonalne konto i synchronizacja: `src/infrastructure/supabase/`, `supabase/migrations/20260806120000_rootine_workspace_snapshots.sql` oraz sekcja „Supabase persistence” w README.
+- README opisuje bieżący produkt, tryby danych, uruchomienie i operacyjny kontrakt backendu.
+- Opcjonalne konto i synchronizacja: `src/infrastructure/supabase/`, obie migracje w `supabase/migrations/`, `docs/data-sync-contract.md` oraz sekcja „Supabase: auth i synchronizacja” w README.
 - Brak potwierdzonych referencji klientów, benchmarków, danych o użyciu lub innych dowodów rynkowych; przyszłe prace nie powinny ich fabrykować.
 
 ## Product Principles

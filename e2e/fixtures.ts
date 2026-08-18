@@ -19,8 +19,8 @@ type RootineFixtures = {
 
 export const test = base.extend<RootineFixtures>({
   rootinePage: async ({ page }, provide) => {
-    // Keep demo data and visual states deterministic. The default work, goals,
-    // and sport fixtures are anchored around this Wednesday, and relying on the
+    // Keep QA fixtures and visual states deterministic. The default work, goals,
+    // and sport records are anchored around this Wednesday, and relying on the
     // runner's wall clock made Today assertions drift when the suite crossed a
     // calendar day.
     await page.clock.install({ time: new Date("2026-08-05T10:00:00.000Z") });

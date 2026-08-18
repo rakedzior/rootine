@@ -696,6 +696,23 @@ export function createDefaultJdgWorkspace(date = new Date()): JdgWorkspace {
   };
 }
 
+export function createEmptyJdgWorkspace(date = new Date()): JdgWorkspace {
+  const timestamp = date.toISOString();
+  const taxProfile: JdgTaxProfile = {
+    ...DEFAULT_JDG_TAX_PROFILE,
+    updatedAt: timestamp,
+  };
+  const profileTemplate = buildJdgProfileTemplate(taxProfile, timestamp);
+  return {
+    version: 2,
+    months: [],
+    taxProfile,
+    templates: [profileTemplate],
+    defaultTemplateId: profileTemplate.id,
+    history: [],
+  };
+}
+
 function cloneMonth(month: JdgMonth): JdgMonth {
   return {
     ...month,
@@ -1153,7 +1170,7 @@ export function undoJdgAuditEvent(
 export function loadJdgWorkspaceResult(): LocalLoadResult<JdgWorkspace> {
   return readLocalWorkspace({
     key: JDG_STORAGE_KEY,
-    fallback: createDefaultJdgWorkspace,
+    fallback: createEmptyJdgWorkspace,
     validate: isJdgWorkspace,
     migrate: migrateJdgWorkspace,
   });

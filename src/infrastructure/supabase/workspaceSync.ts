@@ -19,6 +19,7 @@ export type RemoteWorkspaceSyncStatus =
   | "signed-out"
   | "syncing"
   | "synced"
+  | "conflict"
   | "schema-missing"
   | "error";
 
@@ -27,12 +28,15 @@ export type RemoteWorkspaceSyncResult = {
   uploaded: number;
   downloaded: number;
   message?: string;
+  conflictKeys?: string[];
 };
 
 type RemoteWorkspaceSyncOutcome = {
   result: RemoteWorkspaceSyncResult;
-  /** Hashes of the exact payloads confirmed on the remote side. */
-  knownRemoteHashes: Map<string, string>;
+  /** Exact revisions confirmed on the remote side. */
+  knownRemoteRows: Map<string, RemoteWorkspaceRow>;
+  /** Hashes of the exact local values represented by those revisions. */
+  knownLocalHashes: Map<string, string>;
 };
 
 type ReconciliationControl = {
@@ -45,6 +49,16 @@ type RemoteWorkspaceRow = {
   content_hash: string;
   revision: number;
   updated_at: string;
+};
+
+type RemoteWorkspaceRpcRow = RemoteWorkspaceRow & {
+  applied: boolean;
+};
+
+type WorkspaceUploadResult = {
+  confirmed: RemoteWorkspaceRow[];
+  conflicts: RemoteWorkspaceRow[];
+  error: { code?: string; message: string } | null;
 };
 
 type WorkspaceChangeDetail = {
@@ -86,37 +100,39 @@ function equivalentWorkspaceContent(leftRaw: string, rightRaw: string) {
     if (!left || !right || Array.isArray(left) || Array.isArray(right)) return false;
     const { updatedAt: _leftUpdatedAt, ...leftContent } = left;
     const { updatedAt: _rightUpdatedAt, ...rightContent } = right;
-    return JSON.stringify(leftContent) === JSON.stringify(rightContent);
+    return canonicalJson(leftContent) === canonicalJson(rightContent);
   } catch {
     return false;
   }
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`)
+    .join(",")}}`;
+}
+
 function hashRaw(raw: string) {
+  let normalized = raw;
+  try {
+    normalized = canonicalJson(JSON.parse(raw) as unknown);
+  } catch {
+    // Invalid JSON is never uploaded, but hashing the raw value keeps the
+    // scanner deterministic while a repository recovery issue is visible.
+  }
   let first = 0x811c9dc5;
   let second = 0x9e3779b9;
-  for (let index = 0; index < raw.length; index += 1) {
-    const code = raw.charCodeAt(index);
+  for (let index = 0; index < normalized.length; index += 1) {
+    const code = normalized.charCodeAt(index);
     first ^= code;
     first = Math.imul(first, 0x01000193);
     second ^= code + index;
     second = Math.imul(second, 0x85ebca6b);
   }
-  return `${raw.length.toString(36)}-${(first >>> 0).toString(36)}-${(second >>> 0).toString(36)}`;
-}
-
-function localUpdatedAt(raw: string | undefined) {
-  if (!raw) return 0;
-  const value = rawPayload(raw);
-  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
-  const updatedAt = (value as { updatedAt?: unknown }).updatedAt;
-  const timestamp = typeof updatedAt === "string" ? Date.parse(updatedAt) : Number.NaN;
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function remoteUpdatedAt(row: RemoteWorkspaceRow) {
-  const timestamp = Date.parse(row.updated_at);
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return `${normalized.length.toString(36)}-${(first >>> 0).toString(36)}-${(second >>> 0).toString(36)}`;
 }
 
 function notifyRemoteHydration() {
@@ -140,35 +156,55 @@ async function readRemoteRows(userId: string) {
   };
 }
 
-async function uploadWorkspaces(userId: string, entries: Array<[string, string]>) {
-  if (!supabase || entries.length === 0) return null;
-  const rows = entries.flatMap(([storageKey, raw]) => {
+async function uploadWorkspaces(
+  entries: Array<[string, string]>,
+  expectedRemoteRows: ReadonlyMap<string, RemoteWorkspaceRow>,
+): Promise<WorkspaceUploadResult> {
+  const result: WorkspaceUploadResult = { confirmed: [], conflicts: [], error: null };
+  if (!supabase || entries.length === 0) return result;
+
+  for (const [storageKey, raw] of entries) {
     const payload = rawPayload(raw);
-    if (payload === null) return [];
-    return [{
-      user_id: userId,
-      storage_key: storageKey,
-      payload,
-      content_hash: hashRaw(raw),
-      updated_at: new Date(localUpdatedAt(raw) || Date.now()).toISOString(),
-    }];
-  });
-  if (rows.length === 0) return null;
-  const { error } = await supabase
-    .from(ROOTINE_WORKSPACE_TABLE)
-    .upsert(rows, { onConflict: "user_id,storage_key" });
-  return error;
+    if (payload === null) continue;
+    const expectedRevision = expectedRemoteRows.get(storageKey)?.revision ?? 0;
+    const { data, error } = await supabase.rpc("rootine_apply_workspace_snapshot", {
+      p_storage_key: storageKey,
+      p_payload: payload,
+      p_content_hash: hashRaw(raw),
+      p_expected_revision: expectedRevision,
+    });
+    if (error) {
+      result.error = error;
+      return result;
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as RemoteWorkspaceRpcRow | null;
+    if (!row) {
+      result.error = { message: "Serwer nie zwrócił wyniku zapisu workspace’u." };
+      return result;
+    }
+    const remoteRow: RemoteWorkspaceRow = {
+      storage_key: row.storage_key,
+      payload: row.payload,
+      content_hash: row.content_hash,
+      revision: row.revision,
+      updated_at: row.updated_at,
+    };
+    if (row.applied) result.confirmed.push(remoteRow);
+    else result.conflicts.push(remoteRow);
+  }
+
+  return result;
 }
 
 async function reconcileRemoteWorkspaces(
   userId: string,
   control: ReconciliationControl = {},
 ): Promise<RemoteWorkspaceSyncOutcome> {
-  const emptyHashes = new Map<string, string>();
   if (!supabase) {
     return {
       result: { status: "error", uploaded: 0, downloaded: 0, message: "Supabase nie jest skonfigurowane." },
-      knownRemoteHashes: emptyHashes,
+      knownRemoteRows: new Map(),
+      knownLocalHashes: new Map(),
     };
   }
 
@@ -183,12 +219,14 @@ async function reconcileRemoteWorkspaces(
           downloaded: 0,
           message: `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`,
         },
-        knownRemoteHashes: emptyHashes,
+        knownRemoteRows: new Map(),
+        knownLocalHashes: new Map(),
       };
     }
     return {
       result: { status: "error", uploaded: 0, downloaded: 0, message: error.message },
-      knownRemoteHashes: emptyHashes,
+      knownRemoteRows: new Map(),
+      knownLocalHashes: new Map(),
     };
   }
 
@@ -200,12 +238,16 @@ async function reconcileRemoteWorkspaces(
   const remoteByKey = new Map(rows.map((row) => [row.storage_key, row]));
   const restoreEntries: Array<[string, string]> = [];
   const uploadEntries = new Map<string, string>();
-  const knownRemoteHashes = new Map<string, string>();
+  const reconciliationConflictKeys = new Set<string>();
+  const knownRemoteRows = new Map<string, RemoteWorkspaceRow>();
   const localEntries = Object.entries(localBackup.workspaces);
+  const knownLocalHashes = new Map(
+    localEntries.map(([storageKey, raw]) => [storageKey, hashRaw(raw)] as const),
+  );
 
   rows.forEach((row) => {
     const remoteRaw = payloadRaw(row.payload);
-    if (remoteRaw !== null) knownRemoteHashes.set(row.storage_key, hashRaw(remoteRaw));
+    if (remoteRaw !== null) knownRemoteRows.set(row.storage_key, row);
   });
 
   for (const [storageKey, raw] of localEntries) {
@@ -226,14 +268,11 @@ async function reconcileRemoteWorkspaces(
       continue;
     }
 
-    // A fresh account imports the current local browser data. Once a remote
-    // snapshot exists, the newer top-level workspace timestamp wins; seeded
-    // local defaults have timestamp zero and therefore never overwrite remote data.
-    if (localUpdatedAt(raw) >= remoteUpdatedAt(remote) && localUpdatedAt(raw) > 0) {
-      uploadEntries.set(storageKey, raw);
-    } else if (remoteRaw !== null) {
-      restoreEntries.push([storageKey, remoteRaw]);
-    }
+    // Without a persisted common base there is no safe, cross-domain way to
+    // decide which existing document is newer. Some workspaces intentionally
+    // have no top-level updatedAt. Preserve both and ask the user instead of
+    // turning a timestamp heuristic into silent data loss.
+    reconciliationConflictKeys.add(storageKey);
   }
 
   for (const remote of rows) {
@@ -279,10 +318,15 @@ async function reconcileRemoteWorkspaces(
     if (!restored.ok) {
       return {
         result: { status: "error", uploaded: 0, downloaded: 0, message: restored.error },
-        knownRemoteHashes,
+        knownRemoteRows,
+        knownLocalHashes,
       };
     }
     downloaded = restored.restored;
+    const skippedKeys = new Set(restored.skipped ?? []);
+    safeRestoreEntries.forEach(([storageKey, remoteRaw]) => {
+      if (!skippedKeys.has(storageKey)) knownLocalHashes.set(storageKey, hashRaw(remoteRaw));
+    });
     if (downloaded > 0) notifyRemoteHydration();
     if (restored.skipped?.length) {
       const afterConflictBackup = await exportAllLocalWorkspaces();
@@ -294,38 +338,177 @@ async function reconcileRemoteWorkspaces(
   }
 
   const finalUploadEntries = [...uploadEntries.entries()];
-  const uploadError = await uploadWorkspaces(userId, finalUploadEntries);
-  if (uploadError) {
-    if (isMissingSchemaError(uploadError)) {
+  const finalUploadRawByKey = new Map(finalUploadEntries);
+  const uploadResult = await uploadWorkspaces(finalUploadEntries, remoteByKey);
+  uploadResult.confirmed.forEach((row) => {
+    knownRemoteRows.set(row.storage_key, row);
+    const raw = finalUploadRawByKey.get(row.storage_key);
+    if (raw !== undefined) knownLocalHashes.set(row.storage_key, hashRaw(raw));
+  });
+  if (uploadResult.error) {
+    if (uploadResult.conflicts.length > 0 || reconciliationConflictKeys.size > 0) {
+      uploadResult.conflicts.forEach((row) => knownRemoteRows.set(row.storage_key, row));
+      const conflictKeys = [
+        ...reconciliationConflictKeys,
+        ...uploadResult.conflicts.map((row) => row.storage_key),
+      ];
+      return {
+        result: {
+          status: "conflict",
+          uploaded: uploadResult.confirmed.length,
+          downloaded,
+          conflictKeys: [...new Set(conflictKeys)],
+          message: "Wykryto konflikt danych; pozostałe zapisy zostaną ponowione po wybraniu wersji.",
+        },
+        knownRemoteRows,
+        knownLocalHashes,
+      };
+    }
+    if (isMissingSchemaError(uploadResult.error) || isMissingSyncContractError(uploadResult.error)) {
       return {
         result: {
           status: "schema-missing",
           uploaded: 0,
           downloaded,
-          message: `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`,
+          message: "Brakuje aktualnego kontraktu synchronizacji Supabase. Zastosuj wszystkie migracje.",
         },
-        knownRemoteHashes,
+        knownRemoteRows,
+        knownLocalHashes,
       };
     }
     return {
-      result: { status: "error", uploaded: 0, downloaded, message: uploadError.message },
-      knownRemoteHashes,
+      result: {
+        status: "error",
+        uploaded: uploadResult.confirmed.length,
+        downloaded,
+        message: uploadResult.error.message,
+      },
+      knownRemoteRows,
+      knownLocalHashes,
     };
   }
 
-  finalUploadEntries.forEach(([storageKey, raw]) => {
-    knownRemoteHashes.set(storageKey, hashRaw(raw));
-  });
+  if (uploadResult.conflicts.length > 0 || reconciliationConflictKeys.size > 0) {
+    uploadResult.conflicts.forEach((row) => knownRemoteRows.set(row.storage_key, row));
+    const conflictKeys = [...new Set([
+      ...reconciliationConflictKeys,
+      ...uploadResult.conflicts.map((row) => row.storage_key),
+    ])];
+    return {
+      result: {
+        status: "conflict",
+        uploaded: uploadResult.confirmed.length,
+        downloaded,
+        conflictKeys,
+        message: "Dane zmieniły się na innym urządzeniu. Żadna wersja nie została nadpisana.",
+      },
+      knownRemoteRows,
+      knownLocalHashes,
+    };
+  }
   return {
-    result: { status: "synced", uploaded: finalUploadEntries.length, downloaded },
-    knownRemoteHashes,
+    result: { status: "synced", uploaded: uploadResult.confirmed.length, downloaded },
+    knownRemoteRows,
+    knownLocalHashes,
   };
+}
+
+function isMissingSyncContractError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  return candidate.code === "PGRST202"
+    || candidate.code === "42883"
+    || (typeof candidate.message === "string"
+      && candidate.message.includes("rootine_apply_workspace_snapshot"));
 }
 
 export async function syncRemoteWorkspaces(
   userId: string,
 ): Promise<RemoteWorkspaceSyncResult> {
   return (await reconcileRemoteWorkspaces(userId)).result;
+}
+
+export type RemoteConflictResolution = "keep-local" | "use-remote";
+
+export async function resolveRemoteWorkspaceConflicts(
+  userId: string,
+  storageKeys: readonly string[],
+  resolution: RemoteConflictResolution,
+): Promise<RemoteWorkspaceSyncResult> {
+  const uniqueKeys = [...new Set(storageKeys)];
+  if (uniqueKeys.length === 0) {
+    return { status: "synced", uploaded: 0, downloaded: 0 };
+  }
+
+  const { rows, error } = await readRemoteRows(userId);
+  if (error) {
+    return {
+      status: isMissingSchemaError(error) ? "schema-missing" : "error",
+      uploaded: 0,
+      downloaded: 0,
+      message: error.message,
+    };
+  }
+  const remoteByKey = new Map(rows.map((row) => [row.storage_key, row]));
+  const localBackup = await exportAllLocalWorkspaces();
+
+  if (resolution === "keep-local") {
+    const entries = uniqueKeys
+      .map((key) => [key, localBackup.workspaces[key]] as const)
+      .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string")
+      .map(([key, raw]) => [key, raw] as [string, string]);
+    const uploadResult = await uploadWorkspaces(entries, remoteByKey);
+    if (uploadResult.error) {
+      return {
+        status: isMissingSchemaError(uploadResult.error) || isMissingSyncContractError(uploadResult.error)
+          ? "schema-missing"
+          : "error",
+        uploaded: uploadResult.confirmed.length,
+        downloaded: 0,
+        message: uploadResult.error.message,
+      };
+    }
+    if (uploadResult.conflicts.length > 0) {
+      return {
+        status: "conflict",
+        uploaded: uploadResult.confirmed.length,
+        downloaded: 0,
+        conflictKeys: uploadResult.conflicts.map((row) => row.storage_key),
+        message: "Dane na koncie zmieniły się ponownie. Wybierz rozwiązanie jeszcze raz.",
+      };
+    }
+    return { status: "synced", uploaded: uploadResult.confirmed.length, downloaded: 0 };
+  }
+
+  const restoreEntries = uniqueKeys.flatMap((key) => {
+    const row = remoteByKey.get(key);
+    const raw = row ? payloadRaw(row.payload) : null;
+    return raw === null ? [] : [[key, raw] as [string, string]];
+  });
+  const restored = await importAllLocalWorkspaces({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    workspaces: Object.fromEntries(restoreEntries),
+  }, {
+    expectedWorkspaces: Object.fromEntries(restoreEntries.map(([key]) => [
+      key,
+      localBackup.workspaces[key] ?? null,
+    ])),
+  });
+  if (!restored.ok) {
+    return { status: "error", uploaded: 0, downloaded: 0, message: restored.error };
+  }
+  if (restored.skipped?.length) {
+    return {
+      status: "conflict",
+      uploaded: 0,
+      downloaded: restored.restored,
+      conflictKeys: restored.skipped,
+      message: "Lokalne dane zmieniły się podczas rozwiązywania konfliktu. Żadna zmiana nie została utracona.",
+    };
+  }
+  if (restored.restored > 0) notifyRemoteHydration();
+  return { status: "synced", uploaded: 0, downloaded: restored.restored };
 }
 
 export async function startRemoteWorkspaceSync(
@@ -368,15 +551,19 @@ export async function startRemoteWorkspaceSync(
     }
     return () => undefined;
   }
+  const realtimeClient = supabase;
 
   const pendingKeys = new Set(changedDuringInitialSync);
-  const knownHashes = new Map<string, string>();
+  const conflictedKeys = new Set<string>();
+  const knownRemoteRows = new Map<string, RemoteWorkspaceRow>();
+  const knownLocalHashes = new Map<string, string>();
   let flushTimer: number | null = null;
   let retryTimer: number | null = null;
   let activeFlush: Promise<void> | null = null;
   let activeScan: Promise<void> | null = null;
 
-  outcome.knownRemoteHashes.forEach((hash, key) => knownHashes.set(key, hash));
+  outcome.knownRemoteRows.forEach((row, key) => knownRemoteRows.set(key, row));
+  outcome.knownLocalHashes.forEach((hash, key) => knownLocalHashes.set(key, hash));
 
   const flush = async () => {
     if (activeFlush || pendingKeys.size === 0) return activeFlush;
@@ -388,26 +575,69 @@ export async function startRemoteWorkspaceSync(
         .map((key) => [key, backup.workspaces[key]] as const)
         .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string")
         .map(([key, raw]) => [key, raw] as [string, string]);
-      const error = await uploadWorkspaces(userId, entries);
-      if (error) {
-        keys.forEach((key) => pendingKeys.add(key));
-        onResult({
-          status: isMissingSchemaError(error) ? "schema-missing" : "error",
-          uploaded: 0,
-          downloaded: 0,
-          message: isMissingSchemaError(error)
-            ? `Brakuje tabeli ${ROOTINE_WORKSPACE_TABLE}. Zastosuj migrację Supabase.`
-            : error.message,
+      const rawByKey = new Map(entries);
+      const uploadResult = await uploadWorkspaces(entries, knownRemoteRows);
+      uploadResult.confirmed.forEach((row) => {
+        knownRemoteRows.set(row.storage_key, row);
+        const raw = rawByKey.get(row.storage_key);
+        if (raw !== undefined) knownLocalHashes.set(row.storage_key, hashRaw(raw));
+      });
+      if (uploadResult.error) {
+        uploadResult.conflicts.forEach((row) => {
+          knownRemoteRows.set(row.storage_key, row);
+          conflictedKeys.add(row.storage_key);
         });
+        const confirmedKeys = new Set(uploadResult.confirmed.map((row) => row.storage_key));
+        const conflictKeys = new Set(uploadResult.conflicts.map((row) => row.storage_key));
+        keys.forEach((key) => {
+          if (!confirmedKeys.has(key) && !conflictKeys.has(key)) pendingKeys.add(key);
+        });
+        onResult(uploadResult.conflicts.length > 0
+          ? {
+            status: "conflict",
+            uploaded: uploadResult.confirmed.length,
+            downloaded: 0,
+            conflictKeys: [...conflictedKeys],
+            message: "Wykryto konflikt danych; pozostałe zapisy zostaną ponowione automatycznie.",
+          }
+          : {
+            status: isMissingSchemaError(uploadResult.error) || isMissingSyncContractError(uploadResult.error)
+              ? "schema-missing"
+              : "error",
+            uploaded: uploadResult.confirmed.length,
+            downloaded: 0,
+            message: isMissingSchemaError(uploadResult.error) || isMissingSyncContractError(uploadResult.error)
+              ? "Brakuje aktualnego kontraktu synchronizacji Supabase. Zastosuj wszystkie migracje."
+              : uploadResult.error.message,
+          });
         if (retryTimer === null) {
           retryTimer = window.setTimeout(() => {
             retryTimer = null;
             void flush();
           }, 2_000);
         }
+      } else if (uploadResult.conflicts.length > 0) {
+        uploadResult.conflicts.forEach((row) => {
+          knownRemoteRows.set(row.storage_key, row);
+          conflictedKeys.add(row.storage_key);
+        });
+        onResult({
+          status: "conflict",
+          uploaded: uploadResult.confirmed.length,
+          downloaded: 0,
+          conflictKeys: uploadResult.conflicts.map((row) => row.storage_key),
+          message: "Dane zmieniły się na innym urządzeniu. Żadna wersja nie została nadpisana.",
+        });
       } else if (entries.length > 0) {
-        entries.forEach(([key, raw]) => knownHashes.set(key, hashRaw(raw)));
-        onResult({ status: "synced", uploaded: entries.length, downloaded: 0 });
+        onResult(conflictedKeys.size > 0
+          ? {
+            status: "conflict",
+            uploaded: uploadResult.confirmed.length,
+            downloaded: 0,
+            conflictKeys: [...conflictedKeys],
+            message: "Dane zmieniły się na innym urządzeniu. Żadna wersja nie została nadpisana.",
+          }
+          : { status: "synced", uploaded: uploadResult.confirmed.length, downloaded: 0 });
       }
     })().finally(() => {
       activeFlush = null;
@@ -429,7 +659,8 @@ export async function startRemoteWorkspaceSync(
     activeScan = exportAllLocalWorkspaces()
       .then((backup) => {
         Object.entries(backup.workspaces).forEach(([key, raw]) => {
-          if (knownHashes.get(key) !== hashRaw(raw)) pendingKeys.add(key);
+          if (conflictedKeys.has(key)) return;
+          if (knownLocalHashes.get(key) !== hashRaw(raw)) pendingKeys.add(key);
         });
         if (pendingKeys.size > 0) scheduleFlush();
       })
@@ -444,12 +675,15 @@ export async function startRemoteWorkspaceSync(
     if (detail?.origin === REMOTE_HYDRATION_ORIGIN) return;
     if (detail?.key === "*") {
       void exportAllLocalWorkspaces().then((backup) => {
-        Object.keys(backup.workspaces).forEach((key) => pendingKeys.add(key));
+        Object.keys(backup.workspaces).forEach((key) => {
+          if (!conflictedKeys.has(key)) pendingKeys.add(key);
+        });
         scheduleFlush();
       });
       return;
     }
     if (!detail?.key) return;
+    if (conflictedKeys.has(detail.key)) return;
     pendingKeys.add(detail.key);
     scheduleFlush();
   };
@@ -490,6 +724,108 @@ export async function startRemoteWorkspaceSync(
   window.removeEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
   window.addEventListener("pagehide", flushOnPageHide);
   document.addEventListener("visibilitychange", scanWhenHidden);
+
+  const reportRemoteConflict = (row: RemoteWorkspaceRow) => {
+    knownRemoteRows.set(row.storage_key, row);
+    conflictedKeys.add(row.storage_key);
+    pendingKeys.delete(row.storage_key);
+    onResult({
+      status: "conflict",
+      uploaded: 0,
+      downloaded: 0,
+      conflictKeys: [...conflictedKeys],
+      message: "Dane zmieniły się równocześnie na kilku urządzeniach. Żadna wersja nie została nadpisana.",
+    });
+  };
+
+  const applyRealtimeRow = async (row: RemoteWorkspaceRow) => {
+    const remoteRaw = payloadRaw(row.payload);
+    if (remoteRaw === null) return;
+    const backup = await exportAllLocalWorkspaces();
+    const localRaw = backup.workspaces[row.storage_key];
+    const localHash = localRaw === undefined ? null : hashRaw(localRaw);
+    const knownLocalHash = knownLocalHashes.get(row.storage_key);
+
+    // This is either our own confirmed write or an equivalent write from
+    // another client. Only the server revision baseline needs updating.
+    if (
+      localHash === row.content_hash
+      || (localRaw !== undefined && equivalentWorkspaceContent(localRaw, remoteRaw))
+    ) {
+      knownRemoteRows.set(row.storage_key, row);
+      if (localHash !== null) knownLocalHashes.set(row.storage_key, localHash);
+      return;
+    }
+
+    const localIsUnchanged = localRaw === undefined
+      || (knownLocalHash !== undefined && localHash === knownLocalHash);
+    if (!localIsUnchanged) {
+      reportRemoteConflict(row);
+      return;
+    }
+
+    const restored = await importAllLocalWorkspaces({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      workspaces: { [row.storage_key]: remoteRaw },
+    }, {
+      expectedWorkspaces: { [row.storage_key]: localRaw ?? null },
+    });
+    if (!restored.ok || restored.skipped?.length) {
+      reportRemoteConflict(row);
+      return;
+    }
+    knownRemoteRows.set(row.storage_key, row);
+    knownLocalHashes.set(row.storage_key, hashRaw(remoteRaw));
+    if (restored.restored > 0) {
+      notifyRemoteHydration();
+      onResult({ status: "synced", uploaded: 0, downloaded: restored.restored });
+    }
+  };
+
+  let remoteChangeQueue = Promise.resolve();
+  const realtimeChannel = realtimeClient
+    .channel(`rootine-workspaces:${userId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: ROOTINE_WORKSPACE_TABLE,
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload) => {
+        const candidate = payload.new as Partial<RemoteWorkspaceRow>;
+        if (
+          typeof candidate.storage_key !== "string"
+          || typeof candidate.content_hash !== "string"
+          || typeof candidate.revision !== "number"
+          || typeof candidate.updated_at !== "string"
+          || candidate.payload === undefined
+        ) return;
+        const row = candidate as RemoteWorkspaceRow;
+        remoteChangeQueue = remoteChangeQueue
+          .then(() => applyRealtimeRow(row))
+          .catch(() => {
+            onResult({
+              status: "error",
+              uploaded: 0,
+              downloaded: 0,
+              message: "Nie udało się zastosować zmiany z innego urządzenia. Dane lokalne pozostały bez zmian.",
+            });
+          });
+      },
+    )
+    .subscribe((status) => {
+      if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
+      onResult({
+        status: "error",
+        uploaded: 0,
+        downloaded: 0,
+        message: "Synchronizacja na żywo została przerwana. Zmiany lokalne pozostają bezpieczne; spróbuj ponownie.",
+      });
+    });
+
   // This scan is deliberately unconditional. It compares against the exact
   // remote payloads from reconciliation, so a write made while an upload was
   // hanging cannot be mistaken for an already-synced current snapshot.
@@ -503,6 +839,7 @@ export async function startRemoteWorkspaceSync(
     window.removeEventListener("rootine:workspace-change", onWorkspaceChange);
     window.removeEventListener("pagehide", flushOnPageHide);
     document.removeEventListener("visibilitychange", scanWhenHidden);
+    void realtimeClient.removeChannel(realtimeChannel);
     void flush();
   };
 }

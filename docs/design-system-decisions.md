@@ -99,7 +99,7 @@ This log records material implementation decisions made while applying the desig
 
 - Classification: governance correction.
 - Decision: `breakpoints.ts` is the canonical numeric manifest; CSS `--bp-*` values and path-scoped exceptions are mirrors validated by the audit.
-- Reason: a new 600px threshold, stale 1040px assistant registration, and an unscoped 1280px entry showed that four hand-maintained registries could drift silently.
+- Reason: a new 600px threshold, a stale registration for a removed stylesheet, and an unscoped 1280px entry showed that four hand-maintained registries could drift silently.
 - Affected files: breakpoint manifest/tests, token mirrors, exception registry, governance audit and responsive documentation.
 - Visual impact: none; existing thresholds are classified without moving them.
 - Compatibility impact: stale exception paths and missing owner/migration/review metadata now fail governance.

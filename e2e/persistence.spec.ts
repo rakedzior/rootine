@@ -21,6 +21,30 @@ async function readPersistedTaskDate(page: Parameters<typeof openRootineRoute>[0
 }
 
 test.describe("task persistence", { tag: "@desktop" }, () => {
+  test("returns to the task input after confirming a schedule", async ({ rootinePage: page }) => {
+    await openRootineRoute(page, "/zadania");
+
+    const taskTitle = "E2E zadanie z terminem";
+    const taskInput = page.getByRole("textbox", { name: "Nazwa nowego zadania" });
+    await taskInput.fill(taskTitle);
+    await page.getByRole("button", { name: "Ustaw termin nowego zadania" }).click();
+
+    const schedule = page.getByRole("dialog", { name: "Ustaw termin zadania" });
+    await schedule.getByRole("button", { name: "Czas" }).click();
+    const timePicker = page.getByRole("dialog", { name: "Wybierz godzinÄ™" });
+    await page.locator('input[type="time"]:visible').fill("12:00");
+    await page.keyboard.press("Escape");
+    await expect(timePicker).toHaveCount(0);
+    await schedule.getByRole("button", { name: "Zapisz termin" }).click();
+
+    await expect(taskInput).toBeFocused();
+    await expect(schedule).toHaveCount(0);
+
+    await taskInput.press("Enter");
+    await expect(page.getByText(taskTitle, { exact: true })).toBeVisible();
+    await expect(schedule).toHaveCount(0);
+  });
+
   test("uses the active task view for the default date without opening details", async ({ rootinePage: page }) => {
     const cases = [
       ["dzis", "2026-08-05"],

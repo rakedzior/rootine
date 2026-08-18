@@ -586,10 +586,25 @@ function migrateLegacyWorkspace(workspace: LegacyAffairsWorkspace): AffairsWorks
   };
 }
 
+export function createEmptyAffairsWorkspace(): AffairsWorkspace {
+  return {
+    version: 2,
+    matters: [],
+    oneTimePayments: [],
+    payments: [],
+    subscriptions: [],
+    documents: [],
+    vehicles: [],
+    vehicleItems: [],
+    budgets: [],
+    attentionStates: [],
+  };
+}
+
 export function loadAffairsWorkspaceResult(): LocalLoadResult<AffairsWorkspace> {
   return readLocalWorkspace({
     key: AFFAIRS_STORAGE_KEY,
-    fallback: createDefaultAffairsWorkspace,
+    fallback: createEmptyAffairsWorkspace,
     validate: isWorkspace,
     migrate: (value) => hasLegacyCollections(value) ? migrateLegacyWorkspace(value) : null,
   });

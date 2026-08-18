@@ -50,8 +50,13 @@ domain taxonomy remain the maintained inventory categories. Rootine is Polish-fi
 ## Capability inventory
 
 `PRODUCT.md` describes current capabilities. The persistence contract is local-first with optional
-Supabase authentication and workspace-snapshot synchronization; without configuration or a session,
-the application continues locally.
+Supabase authentication and workspace-snapshot synchronization. Remote writes use revision-based
+compare-and-swap, Realtime applies only changes whose local base is still current, and concurrent
+edits require an explicit user choice. Without configuration, a session, or a working network, the
+application continues locally. `docs/data-sync-contract.md` is the cross-platform source of truth.
+
+A missing workspace is a valid empty user state. Generated sample data belongs only to the isolated
+test account and must never become a repository fallback or a synchronized payload for a real user.
 
 Quick-capture handoff is defined by `src/app/experience/commandCenterActions.ts`. Every Command
 Center action declares whether its target consumes `title`, `date`, `time`, and `priority`; the

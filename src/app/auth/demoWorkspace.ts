@@ -35,7 +35,7 @@ import {
   type WorkspaceTask,
 } from "../data/taskWorkspace";
 import { TASK_COMPLETION_STORAGE_KEY } from "../data/taskCompletion";
-import { loadTravelWorkspace, TRAVEL_STORAGE_KEY, type TravelWorkspace } from "../data/travelWorkspace";
+import { createDefaultTravelWorkspace, TRAVEL_STORAGE_KEY, type TravelWorkspace } from "../data/travelWorkspace";
 import { createDefaultWorkWorkspace, WORK_STORAGE_KEY, type WorkProject, type WorkTask, type WorkWorkspace } from "../data/workWorkspace";
 import { createSeedGoalsWorkspace, type Goal, type GoalsWorkspace } from "../goals/goalsModel";
 import { GOALS_STORAGE_KEY } from "../goals/goalsRepository";
@@ -530,7 +530,7 @@ function createDemoWork(): WorkWorkspace {
 }
 
 function createDemoTravel(): TravelWorkspace {
-  const workspace = rewriteDemoData(loadTravelWorkspace(), "travel");
+  const workspace = rewriteDemoData(createDefaultTravelWorkspace(), "travel");
   const tripNames = ["Trasa Aurora", "Kierunek Vega", "Wyprawa Sigma"];
   return {
     ...workspace,
@@ -731,5 +731,24 @@ export function createGeneratedDemoEntries(): DemoWorkspaceEntry[] {
     [MODULE_PREFERENCES_STORAGE_KEY, { ...createDefaultModulePreferences(), updatedAt: timestampAt(0) }],
     [SUMMARY_NOTES_STORAGE_KEY, createDemoSummary()],
     [ACTIVITY_LOG_STORAGE_KEY, createDemoActivity()],
+  ];
+}
+
+/**
+ * Stable fixtures for browser contracts written before the generated product
+ * demo existed. This is used only by the QA-auth build and never by a real or
+ * test-account session.
+ */
+export function createQaFixtureEntries(): DemoWorkspaceEntry[] {
+  return [
+    [TASK_STORAGE_KEY, createDefaultTaskWorkspace()],
+    [GOALS_STORAGE_KEY, createSeedGoalsWorkspace()],
+    [SPORT_PLANNER_STORAGE_KEY, createDefaultSportPlannerState()],
+    [WORK_STORAGE_KEY, createDefaultWorkWorkspace()],
+    [TRAVEL_STORAGE_KEY, createDefaultTravelWorkspace()],
+    [NOTES_STORAGE_KEY, createDefaultNotesWorkspace()],
+    [AFFAIRS_STORAGE_KEY, createDefaultAffairsWorkspace()],
+    [HEALTH_STORAGE_KEY, createDefaultHealthWorkspace()],
+    [JDG_STORAGE_KEY, createDefaultJdgWorkspace()],
   ];
 }

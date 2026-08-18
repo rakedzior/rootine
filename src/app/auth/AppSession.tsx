@@ -11,6 +11,7 @@ import {
   activateEphemeralTestWorkspace,
   isEphemeralTestWorkspaceActive,
 } from "./ephemeralWorkspace";
+import { createQaFixtureEntries } from "./demoWorkspace";
 
 type AppSessionContextValue = {
   isTestAccount: boolean;
@@ -47,6 +48,20 @@ function authScreenRequested() {
   return new URL(window.location.href).searchParams.get(TEST_ACCOUNT_QUERY_KEY) === AUTH_SCREEN_QUERY_VALUE;
 }
 
+function seedQaWorkspace() {
+  if (!qaAuthBypassEnabled || typeof window === "undefined") return;
+  createQaFixtureEntries().forEach(([key, value]) => {
+    try {
+      if (window.localStorage.getItem(key) === null) {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch {
+      // Persistence failure scenarios deliberately block individual keys.
+      // The QA bootstrap must not hide or prevent those tests.
+    }
+  });
+}
+
 export function AppSessionProvider({ children }: { children: ReactNode }) {
   const [isTestAccount, setIsTestAccount] = useState(() => {
     if (testAccountRequested()) activateEphemeralTestWorkspace();
@@ -54,7 +69,11 @@ export function AppSessionProvider({ children }: { children: ReactNode }) {
   });
   const [isLocalAccount, setIsLocalAccount] = useState(localAccountRequested);
   const [authenticationBypassed, setAuthenticationBypassed] = useState(
-    () => qaAuthBypassEnabled && !authScreenRequested(),
+    () => {
+      const bypassed = qaAuthBypassEnabled && !authScreenRequested();
+      if (bypassed) seedQaWorkspace();
+      return bypassed;
+    },
   );
 
   const enterTestAccount = useCallback(() => {

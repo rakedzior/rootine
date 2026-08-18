@@ -52,42 +52,52 @@ jobs:
             os: windows-latest
             args: --project=desktop-1440 --project=mobile-390
             shard: 1/4
+            artifact_shard: 1-4
           - name: core
             os: windows-latest
             args: --project=desktop-1440 --project=mobile-390
             shard: 2/4
+            artifact_shard: 2-4
           - name: core
             os: windows-latest
             args: --project=desktop-1440 --project=mobile-390
             shard: 3/4
+            artifact_shard: 3-4
           - name: core
             os: windows-latest
             args: --project=desktop-1440 --project=mobile-390
             shard: 4/4
+            artifact_shard: 4-4
           - name: viewport
             os: ubuntu-latest
             args: --grep @viewport-matrix
             shard: 1/4
+            artifact_shard: 1-4
           - name: viewport
             os: ubuntu-latest
             args: --grep @viewport-matrix
             shard: 2/4
+            artifact_shard: 2-4
           - name: viewport
             os: ubuntu-latest
             args: --grep @viewport-matrix
             shard: 3/4
+            artifact_shard: 3-4
           - name: viewport
             os: ubuntu-latest
             args: --grep @viewport-matrix
             shard: 4/4
+            artifact_shard: 4-4
           - name: zoom
             os: ubuntu-latest
             args: --grep @zoom-matrix
             shard: 1/2
+            artifact_shard: 1-2
           - name: zoom
             os: ubuntu-latest
             args: --grep @zoom-matrix
             shard: 2/2
+            artifact_shard: 2-2
 
     steps:
       - name: Check out repository
@@ -114,9 +124,9 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: playwright-${{ matrix.suite.name }}-${{ matrix.suite.shard }}-${{ runner.os }}
+          name: playwright-${{ matrix.suite.name }}-${{ matrix.suite.artifact_shard }}-${{ runner.os }}
           path: |
             test-results/
             playwright-report/

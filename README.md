@@ -1,63 +1,118 @@
-# Rootine dashboard
+# Rootine
 
-A calm, graphite-first personal operating system with routed workspaces for today, tasks, calendar, nutrition, sport, work, goals, affairs, notes, and travel.
+Rootine to polskojęzyczny, local-first system do zarządzania codziennymi obszarami życia. Aplikacja działa bez konta i bez backendu, a opcjonalne konto Supabase dodaje trwałą synchronizację między urządzeniami bez odbierania użytkownikowi lokalnej ciągłości pracy.
 
-The canonical navigation contains nine modules: `Dzisiaj`, `Zadania`, `Odżywianie`, `Sport`, `Praca`, `Cele`, `Podróże`, `Pozostałe`, and `Notatki`. Calendar and Habits live under Tasks. Travel is a standalone module: `/podroze` is its canonical entry, while existing detail links under `/travel/...` belong to the same module. The retired `Biuro`, `Finanse`, and `JDG` tabs are not exposed in the app shell. Existing bookmarks remain safe through compatibility redirects: `/biuro` → `/praca`, `/finanse` → `/sprawy?widok=finances`, and `/jdg` → `/sprawy?widok=jdg`.
+## Zakres produktu
 
-## Run locally
+Kanoniczna nawigacja zawiera dziewięć modułów:
+
+- `Dzisiaj` — bieżące zobowiązania i szybkie akcje;
+- `Zadania` — zadania, Kalendarz i Nawyki;
+- `Odżywianie` — dziennik, cele, pomiary i katalog produktów;
+- `Sport` — plany, sesje, historia i analiza;
+- `Praca` — firmy, projekty i zadania zawodowe;
+- `Cele` — cele, kamienie milowe i historia postępu;
+- `Podróże` — wyjazdy, plan, rezerwacje, budżet i dokumenty;
+- `Pozostałe` — sprawy, finanse, rejestry, zdrowie i JDG;
+- `Notatki` — notatki tekstowe i checklisty.
+
+`/podroze` jest wejściem do Podróży, a istniejące adresy `/travel/...` należą do tego samego modułu. Stare zakładki nie wracają do globalnej nawigacji: `/biuro` przekierowuje do `/praca`, `/finanse` do `/sprawy?widok=finances`, a `/jdg` do `/sprawy?widok=jdg`.
+
+Nowy profil zaczyna od pustych danych użytkownika. Pełne dane przykładowe są dostępne wyłącznie przez jawne konto testowe na ekranie startowym; działają w izolowanej pamięci i znikają po zakończeniu demo lub twardym odświeżeniu.
+
+## Uruchomienie lokalne
+
+Wymagany jest Node.js 24 i npm.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Create and verify a production build with:
+Skopiuj `.env.example` do `.env.local` tylko wtedy, gdy potrzebujesz integracji. Bez zmiennych Supabase można wybrać lokalny tryb pracy.
+
+Najważniejsze komendy:
 
 ```bash
-npm run check
-npm run build
+npm run check       # lint, CSS, audyty, testy, typy i build
+npm run test:e2e    # regresje przeglądarkowe Playwright
+npm run build       # typecheck i produkcyjny bundle
+npm run preview     # podgląd buildu
 ```
 
-## Open Food Facts in production
+## Dane i tryby sesji
 
-Nutrition search calls the same-origin `/api/openfoodfacts/search` endpoint only after the user chooses **Szukaj online**. The repository includes a Vercel-compatible Edge Function at `api/openfoodfacts/search.ts`; it validates the method and query, limits result size, applies a per-IP request allowance, forwards upstream failures safely, and sets explicit success/error cache headers.
+Lokalne repozytoria domenowe są podstawową ścieżką zapisu. Małe manifesty i preferencje korzystają z `localStorage`, większe payloady z IndexedDB. Każdy odczyt przechodzi walidację i migrację wersji. Uszkodzony zapis jest zabezpieczany jako kopia odzyskiwania, a moduł otwiera bezpieczny pusty stan zamiast przykrywać problem danymi demo.
 
-For Vercel:
+Aplikacja udostępnia trzy rozłączne tryby:
 
-1. Import the repository and keep the detected Vite framework settings. `vercel.json` pins the build/output contract and rewrites browser routes without rewriting `/api`.
-2. Set `OPEN_FOOD_FACTS_CONTACT` for Preview and Production to a real, monitored maintainer email address or project URL. It is server-only and becomes the contact portion of the Open Food Facts `User-Agent`; it is not a credential and must not use a fabricated identity.
-3. Deploy, then verify a browser route and the function:
+- lokalny — prawdziwe dane pozostają w tej przeglądarce;
+- konto Supabase — te same lokalne workspace’y są dodatkowo synchronizowane;
+- konto testowe — wygenerowane dane demonstracyjne w pamięci efemerycznej, bez dostępu do prawdziwego storage’u i konta.
 
-   ```sh
-   npm run smoke:production -- https://your-deployment.example
-   ```
+Eksport, import i kopie odzyskiwania są dostępne w ustawieniach. Import oraz zdalne pobranie najpierw zabezpieczają zastępowaną wersję.
 
-   The smoke test checks SPA routing plus successful, invalid-query, and invalid-method proxy responses. Successful responses are cacheable; validation, throttling, and upstream errors are `no-store`. Repeated valid requests from one IP return `429` with `Retry-After`.
+## Supabase: auth i synchronizacja
 
-Before deployment, run `npm run check`, `npm run test:api`, and `npm run test:e2e`. The in-memory allowance protects a warm function instance and keeps normal UI traffic below the public search allowance; a high-traffic public deployment should also configure a durable edge/WAF rate limit because serverless instances do not share memory.
-
-On another host, deploy an equivalent same-origin proxy and set `VITE_OPEN_FOOD_FACTS_PROXY_URL` at build time. See `.env.example`. Do not put the server contact variable or any secrets in a `VITE_` variable.
-
-## Supabase persistence
-
-Supabase is optional for local development. Configure the browser-safe project URL and publishable key in `.env.local`:
+Frontend nie zawiera zapasowego adresu ani klucza projektu. Aby włączyć konto, ustaw browser-safe URL i publishable key w `.env.local`:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-The legacy `VITE_SUPABASE_ANON_KEY` name is also supported. Never put a secret or service-role key in a `VITE_` variable.
+Starsza nazwa `VITE_SUPABASE_ANON_KEY` jest wspierana przejściowo. Nigdy nie umieszczaj service-role key ani innego sekretu w zmiennej `VITE_`.
 
-The database migration in `supabase/migrations/20260806120000_rootine_workspace_snapshots.sql` creates the per-user JSON workspace table and its RLS policies. After signing in from the profile panel, Rootine uploads the existing local workspaces to the account and continues syncing later local changes. Without a session, the app keeps using local browser storage.
+Zastosuj migracje w kolejności:
 
-### Google sign-in
+1. `supabase/migrations/20260806120000_rootine_workspace_snapshots.sql` — tabela snapshotów, indeks, RLS i rewizje;
+2. `supabase/migrations/20260819090000_rootine_workspace_sync_v2.sql` — atomowy zapis compare-and-swap, zamknięcie bezpośrednich mutacji i publikacja Realtime.
 
-Google OAuth also requires provider configuration outside the frontend:
+Synchronizacja zachowuje granice domenowych dokumentów JSON:
 
-1. Create a Google OAuth client of type **Web application**. Add every application origin, for example `http://127.0.0.1:5173`, under **Authorized JavaScript origins**.
-2. Add `https://<project-ref>.supabase.co/auth/v1/callback` under the Google client's **Authorized redirect URIs**.
-3. In Supabase, open **Authentication → Providers → Google**, enable the provider, and enter the Google Client ID and Client Secret.
-4. In **Authentication → URL Configuration**, set the production Site URL and allow the exact post-login URLs used by Rootine, including `http://127.0.0.1:5173/dzisiaj` locally and `https://<production-origin>/dzisiaj` in production.
+- klient odczytuje ostatnią `revision` każdego workspace’u;
+- zapis przechodzi wyłącznie przez `rootine_apply_workspace_snapshot(...)` z oczekiwaną rewizją;
+- równoległa zmiana daje jawny konflikt zamiast last-write-wins;
+- Realtime pobiera zdalną zmianę tylko wtedy, gdy lokalny workspace nie zmienił się od wspólnej wersji;
+- przy konflikcie użytkownik wybiera dane z urządzenia albo z konta; żadna wersja nie jest po cichu nadpisywana;
+- błąd sieci lub przekroczony czas synchronizacji nie blokuje pracy lokalnej.
 
-The Google Client Secret belongs only in Google/Supabase configuration. Never store it in a `VITE_` variable or commit it to this repository. The callback registered in Google and the application redirect allowlisted in Supabase are different URLs.
+Pełny, niezależny od UI kontrakt dla kolejnych klientów znajduje się w [`docs/data-sync-contract.md`](docs/data-sync-contract.md).
+
+### Logowanie przez Google
+
+1. Utwórz w Google OAuth klienta typu **Web application** i dodaj origin aplikacji, np. `http://127.0.0.1:5173`.
+2. Dodaj `https://<project-ref>.supabase.co/auth/v1/callback` jako authorized redirect URI.
+3. W Supabase włącz **Authentication → Providers → Google** i ustaw Client ID oraz Client Secret.
+4. W **Authentication → URL Configuration** ustaw produkcyjny Site URL i dokładne dozwolone powroty, m.in. lokalne `http://127.0.0.1:5173/dzisiaj`.
+
+Google Client Secret należy wyłącznie do konfiguracji Google/Supabase, nigdy do repozytorium lub zmiennych `VITE_`.
+
+## Open Food Facts
+
+Wyszukiwanie online w Odżywianiu korzysta z endpointu same-origin `/api/openfoodfacts/search`. Implementacja dla Vercel znajduje się w `api/openfoodfacts/search.ts` i waliduje metodę oraz zapytanie, ogranicza wynik, kontroluje częstotliwość żądań i ustawia jawne zasady cache.
+
+W produkcji ustaw serwerową zmienną:
+
+```env
+OPEN_FOOD_FACTS_CONTACT=real-maintainer@example.com
+```
+
+Na innym hoście można wskazać równoważny proxy przez `VITE_OPEN_FOOD_FACTS_PROXY_URL`. Kontakt serwerowy nie może trafić do zmiennej `VITE_`. Po wdrożeniu uruchom:
+
+```bash
+npm run smoke:production -- https://your-deployment.example
+```
+
+Limit w pamięci chroni pojedynczą ciepłą instancję funkcji. Publiczne wdrożenie o większym ruchu powinno dodatkowo używać trwałego limitu na warstwie edge/WAF.
+
+## Mapa repozytorium
+
+- `src/app/` — moduły, routing, UI i repozytoria domenowe;
+- `src/infrastructure/supabase/` — auth, synchronizacja i panel konta;
+- `supabase/migrations/` — wersjonowany kontrakt bazy;
+- `api/`, `functions/`, `worker/` — warianty proxy Open Food Facts;
+- `e2e/` — testy Playwright;
+- `docs/` — inwentarz produktu, system projektu i kontrakty danych.
+
+Źródłem prawdy dla globalnych modułów jest `src/app/moduleRegistry.ts`, dla ekranów `ROUTE_LAYOUT_AUDIT` w `src/app/routes.ts`, a dla wspólnych komponentów `src/app/ui/index.ts`.

@@ -26,14 +26,8 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { calendarDaysBetween, todayLocalDateKey, toLocalDateKey } from "../data/localDate";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { recordActivity } from "../experience/activityLog";
-import {
-  POLISH_TIME_ZONE,
-  formatDate,
-  formatTime,
-} from "../formatters";
 import {
   createNotesId,
   loadNotesWorkspace,
@@ -63,6 +57,13 @@ import {
   ToastViewport,
   AddToTasksButton,
 } from "../ui";
+import { NotesQuickCapture } from "../notes/NotesQuickCapture";
+import {
+  formatNoteUpdatedAt,
+  normalizeNoteTags,
+  NOTE_COLOR_OPTIONS,
+  noteTextPreviewLines,
+} from "../notes/notesPageModel";
 import "../../styles/notes.css";
 
 type NotesView = "all" | "pinned" | "archive" | `list:${string}` | `tag:${string}`;
@@ -131,7 +132,7 @@ function loadNotesTags(): string[] {
     return Array.isArray(value)
       ? Array.from(new Set(value
         .filter((tag): tag is string => typeof tag === "string")
-        .map((tag) => normalizedTags(tag)[0])
+        .map((tag) => normalizeNoteTags(tag)[0])
         .filter((tag): tag is string => Boolean(tag))))
       : [];
   } catch {
@@ -199,50 +200,6 @@ function getInitialNotesUrlState(): { view: NotesView; search: string; sort: Not
   return { view, search: params.get("q") ?? "", sort };
 }
 
-const COLOR_OPTIONS: Array<{ value: NoteColor; label: string }> = [
-  { value: "graphite", label: "Grafitowa" },
-  { value: "blue", label: "Niebieska" },
-  { value: "green", label: "Zielona" },
-  { value: "amber", label: "Bursztynowa" },
-  { value: "violet", label: "Fioletowa" },
-  { value: "coral", label: "Koralowa" },
-];
-
-function formatUpdatedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Nieznana data";
-  const dayDiff = calendarDaysBetween(toLocalDateKey(date), todayLocalDateKey()) ?? 0;
-  if (dayDiff === 0) return `Dziś, ${formatTime(date)}`;
-  if (dayDiff === 1) return "Wczoraj";
-  if (dayDiff < 7) {
-    return new Intl.DateTimeFormat("pl-PL", {
-      weekday: "long",
-      timeZone: POLISH_TIME_ZONE,
-    }).format(date);
-  }
-  return formatDate(date);
-}
-
-function normalizedTags(value: string): string[] {
-  return Array.from(new Set(
-    value
-      .split(",")
-      .map((tagName) => tagName.trim().replace(/^#/, "").toLocaleLowerCase("pl-PL"))
-      .filter(Boolean),
-  ));
-}
-
-function textPreviewLines(body: string): Array<{ text: string; bullet: boolean }> {
-  return body
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => ({
-      text: line.replace(/^(?:•|-)\s*/, ""),
-      bullet: /^(?:•|-)\s+/.test(line),
-    }));
-}
-
 export default function Notatki() {
   const [initialUrlState] = useState(getInitialNotesUrlState);
   const [initialSidebarState] = useState(loadNotesSidebarState);
@@ -273,6 +230,11 @@ export default function Notatki() {
   const [draft, setDraft] = useState<NoteDraft>(storedDraftSession?.draft ?? (quickAddRequested ? quickAddDraft : EMPTY_DRAFT));
   const [draftBaseline, setDraftBaseline] = useState(storedDraftSession?.baseline ?? serializeDraft(quickAddRequested ? quickAddDraft : EMPTY_DRAFT));
   const [editorError, setEditorError] = useState("");
+  const [quickNoteText, setQuickNoteText] = useState("");
+  const [quickListId, setQuickListId] = useState(workspace.lists[0]?.id ?? "");
+  const [quickColor, setQuickColor] = useState<NoteColor>("graphite");
+  const [quickPinned, setQuickPinned] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [deleteState, setDeleteState] = useState<NoteRecord | null>(null);
   const [deletedNoteUndo, setDeletedNoteUndo] = useState<{ note: NoteRecord; index: number } | null>(null);
   const [listEditor, setListEditor] = useState<ListEditorState | null>(null);
@@ -311,6 +273,13 @@ export default function Notatki() {
     if (view.startsWith("list:")) setListsExpanded(true);
     if (view.startsWith("tag:")) setTagsExpanded(true);
   }, [view]);
+
+  useEffect(() => {
+    setQuickListId((current) => {
+      if (view.startsWith("list:")) return view.slice(5);
+      return workspace.lists.some((list) => list.id === current) ? current : workspace.lists[0]?.id ?? "";
+    });
+  }, [view, workspace.lists]);
 
   useEffect(() => {
     try {
@@ -529,11 +498,29 @@ export default function Notatki() {
     setDraft(nextDraft);
     setDraftBaseline(serializeDraft(nextDraft));
     setEditorError("");
+    setDetailsOpen(false);
     setEditor({ mode: "add" });
   };
 
   const openNewNote = (kind: NoteKind = "text") => {
     runWithEditorGuard(() => openNewNoteDirectly(kind));
+  };
+
+  const openQuickEditor = (section: "content" | "tags" = "content") => {
+    runWithEditorGuard(() => {
+      const nextDraft: NoteDraft = {
+        ...EMPTY_DRAFT,
+        title: quickNoteText.trim(),
+        listId: quickListId,
+        color: quickColor,
+        pinned: quickPinned,
+      };
+      setDraft(nextDraft);
+      setDraftBaseline(serializeDraft(nextDraft));
+      setEditorError("");
+      setDetailsOpen(section === "tags");
+      setEditor({ mode: "add" });
+    });
   };
 
   const openNoteDirectly = (note: NoteRecord) => {
@@ -551,6 +538,7 @@ export default function Notatki() {
     setDraft(nextDraft);
     setDraftBaseline(serializeDraft(nextDraft));
     setEditorError("");
+    setDetailsOpen(false);
     setEditor({ mode: "edit", id: note.id });
   };
 
@@ -576,19 +564,13 @@ export default function Notatki() {
     const cleanedItems = draft.items
       .map((item) => ({ ...item, text: item.text.trim() }))
       .filter((item) => item.text);
-    const hasContent = draft.body.trim() || (draft.kind === "checklist" && cleanedItems.length > 0);
-
     if (!title) {
       setEditorError("Wpisz tytuł notatki.");
       return false;
     }
-    if (!hasContent) {
-      setEditorError("Dodaj treść albo przynajmniej jeden punkt listy.");
-      return false;
-    }
 
     const now = new Date().toISOString();
-    const tags = normalizedTags(draft.tags);
+    const tags = normalizeNoteTags(draft.tags);
     if (tags.length > 0) {
       setKnownTags((current) => Array.from(new Set([...current, ...tags])));
     }
@@ -642,6 +624,34 @@ export default function Notatki() {
     clearDraftSession();
     setEditorError("");
     return true;
+  };
+
+  const addQuickNote = () => {
+    const value = quickNoteText.trim();
+    if (!value) return;
+
+    const now = new Date().toISOString();
+    const id = createNotesId("note");
+
+    setWorkspace((current) => ({
+      ...current,
+      notes: [{
+        id,
+        title: value,
+        body: "",
+        kind: "text",
+        items: [],
+        tags: [],
+        listId: quickListId,
+        color: quickColor,
+        pinned: quickPinned,
+        archived: false,
+        createdAt: now,
+        updatedAt: now,
+      }, ...current.notes],
+    }));
+    setQuickNoteText("");
+    recordActivity({ moduleId: "notes", kind: "create", title: value, detail: "Utworzono szybką notatkę" });
   };
 
   const onEditorKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -758,7 +768,7 @@ export default function Notatki() {
   const saveTag = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!tagEditor) return;
-    const name = normalizedTags(tagName)[0] ?? "";
+    const name = normalizeNoteTags(tagName)[0] ?? "";
     if (!name) {
       setTagError("Wpisz nazwę tagu.");
       return;
@@ -785,7 +795,7 @@ export default function Notatki() {
       }));
       setDraft((current) => ({
         ...current,
-        tags: normalizedTags(current.tags).map((tag) => tag === tagEditor.name ? name : tag).join(", "),
+        tags: normalizeNoteTags(current.tags).map((tag) => tag === tagEditor.name ? name : tag).join(", "),
       }));
       if (view === `tag:${tagEditor.name}`) setView(`tag:${name}`);
     }
@@ -828,7 +838,7 @@ export default function Notatki() {
     }));
     setDraft((current) => ({
       ...current,
-      tags: normalizedTags(current.tags).filter((tag) => tag !== name).join(", "),
+      tags: normalizeNoteTags(current.tags).filter((tag) => tag !== name).join(", "),
     }));
     if (view === `tag:${name}`) setView("all");
     setTagDeleteState(null);
@@ -1128,7 +1138,7 @@ export default function Notatki() {
   const renderNoteCard = (note: NoteRecord) => {
     const list = workspace.lists.find((candidate) => candidate.id === note.listId);
     const checkedCount = note.items.filter((item) => item.checked).length;
-    const previewLines = textPreviewLines(note.body);
+    const previewLines = noteTextPreviewLines(note.body);
     const visibleChecklistItems = layout === "cards" ? note.items : note.items.slice(0, 2);
 
     return (
@@ -1136,7 +1146,7 @@ export default function Notatki() {
         <span
           className="notes-card__color"
           role="img"
-          aria-label={`Kolor: ${COLOR_OPTIONS.find((option) => option.value === note.color)?.label}`}
+          aria-label={`Kolor: ${NOTE_COLOR_OPTIONS.find((option) => option.value === note.color)?.label}`}
         />
         <header className="notes-card__header">
           <button type="button" className="notes-card__title" onClick={() => openNote(note)}>
@@ -1199,7 +1209,7 @@ export default function Notatki() {
           role={layout === "cards" ? "group" : undefined}
           aria-label={layout === "cards" ? `Treść notatki ${note.title}` : undefined}
         >
-          {note.body && (
+          {note.body && note.body !== note.title && (
             <button type="button" className="notes-card__body" onClick={() => openNote(note)}>
               {note.kind === "text" && previewLines.some((line) => line.bullet) ? (
                 <ul>
@@ -1241,7 +1251,7 @@ export default function Notatki() {
           <div className="notes-card__meta">
             {note.kind === "checklist" && <span>{checkedCount}/{note.items.length}</span>}
             {list && <span>{list.name}</span>}
-            <time dateTime={note.updatedAt}>{formatUpdatedAt(note.updatedAt)}</time>
+            <time dateTime={note.updatedAt}>{formatNoteUpdatedAt(note.updatedAt)}</time>
           </div>
         </footer>
       </article>
@@ -1266,6 +1276,16 @@ export default function Notatki() {
 
   const selectedNote = editor?.id ? workspace.notes.find((note) => note.id === editor.id) : undefined;
 
+  const quickListOptions = [
+    { value: "", label: "Bez listy", leadingIcon: <Folder size={13} /> },
+    ...workspace.lists.map((list) => ({ value: list.id, label: list.name, leadingIcon: <Folder size={13} /> })),
+  ];
+  const quickColorOptions = NOTE_COLOR_OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.label,
+    leadingIcon: <span className={`notes-quick-capture__color-dot notes-color--${option.value}`} aria-hidden="true" />,
+  }));
+
   const detailPanel = editor ? (
     <DetailPanel
       label={editor.mode === "add" ? "Nowa notatka" : `Edytuj ${selectedNote?.title ?? "notatkę"}`}
@@ -1282,7 +1302,7 @@ export default function Notatki() {
           <div>
             <span>{editor.mode === "add" ? "Nowa notatka" : "Edycja notatki"}</span>
             <Badge tone={draft.kind === "checklist" ? "violet" : "neutral"}>
-              {draft.kind === "checklist" ? "Lista" : "Tekst"}
+              {draft.kind === "checklist" ? "Checklista" : "Tekst"}
             </Badge>
           </div>
           <div>
@@ -1351,12 +1371,13 @@ export default function Notatki() {
                 items: current.items.length ? current.items : [{ id: createNotesId("item"), text: "", checked: false }],
               }))}
             >
-              <ListChecks size={13} /> Lista punktowana
+              <ListChecks size={13} /> Checklista
             </button>
           </div>
 
           <Textarea
             label={draft.kind === "checklist" ? "Wprowadzenie" : "Treść"}
+            hint="Opcjonalnie — możesz dodać ją później."
             className="notes-editor__body"
             value={draft.body}
             placeholder={draft.kind === "checklist" ? "Krótki kontekst listy — opcjonalnie" : "Zapisz myśl, szczegóły albo wnioski…"}
@@ -1381,7 +1402,7 @@ export default function Notatki() {
           {draft.kind === "checklist" && (
             <section className="notes-editor__items" aria-labelledby="notes-editor-items-title">
               <div className="notes-editor__section-heading">
-                <h3 id="notes-editor-items-title">Punkty listy</h3>
+                <h3 id="notes-editor-items-title">Elementy checklisty</h3>
                 <span>{draft.items.filter((item) => item.checked).length}/{draft.items.length}</span>
               </div>
               <div>
@@ -1424,6 +1445,21 @@ export default function Notatki() {
             </section>
           )}
 
+          <section className={`notes-editor__details ${detailsOpen ? "is-open" : ""}`}>
+            <button
+              type="button"
+              className="notes-editor__details-toggle"
+              aria-expanded={detailsOpen}
+              onClick={() => setDetailsOpen((current) => !current)}
+            >
+              <span>
+                <Tag size={13} aria-hidden="true" />
+                Szczegóły notatki
+              </span>
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+
+            <div className="notes-editor__details-content">
           <div className="notes-editor__meta-grid">
             <Select
               label="Lista"
@@ -1452,7 +1488,7 @@ export default function Notatki() {
                     key={tagName}
                     type="button"
                     onClick={() => {
-                      const currentTags = normalizedTags(draft.tags);
+                      const currentTags = normalizeNoteTags(draft.tags);
                       if (!currentTags.includes(tagName)) currentTags.push(tagName);
                       setDraft((current) => ({ ...current, tags: currentTags.join(", ") }));
                     }}
@@ -1467,7 +1503,7 @@ export default function Notatki() {
           <fieldset className="notes-editor__colors">
             <legend>Kolor notatki</legend>
             <div>
-              {COLOR_OPTIONS.map((option) => (
+              {NOTE_COLOR_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -1482,6 +1518,8 @@ export default function Notatki() {
               ))}
             </div>
           </fieldset>
+            </div>
+          </section>
         </div>
 
         <footer className="notes-editor__footer">
@@ -1560,14 +1598,6 @@ export default function Notatki() {
               <LayoutGrid size={13} />
             </Button>
           </div>
-          {view.startsWith("list:") && (
-            <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
-              Dodaj do listy
-            </Button>
-          )}
-          <Button variant="primary" leadingIcon={<Plus size={13} />} onClick={() => openNewNote()}>
-            Dodaj notatkę
-          </Button>
           </>}
         />
 
@@ -1580,6 +1610,23 @@ export default function Notatki() {
         )}
 
         <div className="notes-canvas">
+          {(view === "all" || view.startsWith("list:")) && (
+            <NotesQuickCapture
+              value={quickNoteText}
+              onChange={setQuickNoteText}
+              onSubmit={addQuickNote}
+              onOpenFullEditor={openQuickEditor}
+              listId={quickListId}
+              listOptions={quickListOptions}
+              onListChange={setQuickListId}
+              color={quickColor}
+              colorOptions={quickColorOptions}
+              onColorChange={setQuickColor}
+              pinned={quickPinned}
+              onPinnedChange={setQuickPinned}
+            />
+          )}
+
           {visibleNotes.length === 0 ? (
             <EmptyState
               icon={search ? <Search size={18} /> : view === "archive" ? <Archive size={18} /> : <NotebookPen size={18} />}

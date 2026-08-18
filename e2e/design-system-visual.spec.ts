@@ -33,6 +33,32 @@ async function seedCalendarOverflow(page: Page) {
       lists: [],
       tags: [],
     }));
+    window.localStorage.setItem("rootine.affairs.workspace.v1", JSON.stringify({
+      version: 2,
+      matters: [],
+      oneTimePayments: [],
+      payments: [],
+      subscriptions: [],
+      documents: [],
+      vehicles: [],
+      vehicleItems: [],
+      budgets: [],
+      attentionStates: [],
+    }));
+    window.localStorage.setItem("rootine-sport-planner-v1", JSON.stringify({
+      version: 5,
+      storageSchemaVersion: 5,
+      templates: [],
+      activeCycle: null,
+      cycles: [],
+      activeCycleId: null,
+      history: [],
+      sessions: [],
+      workoutOutcomes: {},
+      exercises: [],
+      scheduledWorkouts: [],
+      executions: [],
+    }));
   }, CALENDAR_DATE);
 }
 

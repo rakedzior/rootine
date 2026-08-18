@@ -101,7 +101,7 @@ describe("selectCalendarOccurrences", () => {
     });
   });
 
-  it("does not project Affairs items unless explicitly added to Tasks", () => {
+  it("projects dated Affairs commitments without duplicating them as Tasks", () => {
     const affairs: AffairsWorkspace = {
       ...emptyAffairs(),
       oneTimePayments: [{
@@ -125,18 +125,94 @@ describe("selectCalendarOccurrences", () => {
         active: true,
         note: "",
       }],
+      subscriptions: [{
+        id: "music",
+        name: "Muzyka",
+        category: "Rozrywka",
+        amount: 29.99,
+        cadence: "monthly",
+        nextBillingDate: "2026-08-20",
+        renewal: "automatic",
+        commitmentEndDate: "",
+        active: true,
+        note: "",
+      }],
     };
 
     const result = selectCalendarOccurrences(
       sources({ affairs }),
-      "2026-08-01",
+      "2026-07-28",
       "2026-09-30",
     );
 
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(3);
+    expect(result[0]).toMatchObject({
+      kind: "affair",
+      subtype: "recurring_payment",
+      calendarDate: "2026-07-31",
+      title: "Czynsz",
+      source: { kind: "affairs", label: "Pozostałe" },
+      status: { key: "automatic", completed: false },
+      amount: 1_000,
+    });
+    expect(result[1]).toMatchObject({
+      kind: "affair",
+      subtype: "one_time_payment",
+      calendarDate: "2026-08-12",
+      title: "Dopłata za energię",
+      status: { key: "scheduled", completed: false },
+      amount: 431.99,
+    });
+    expect(result[2]).toMatchObject({
+      kind: "affair",
+      subtype: "subscription",
+      calendarDate: "2026-08-20",
+      title: "Muzyka",
+      status: { key: "automatic", completed: false },
+      amount: 29.99,
+    });
   });
 
-  it("does not project Sport workouts unless explicitly added to Tasks", () => {
+  it("deduplicates an Affairs payment explicitly projected into Tasks", () => {
+    const paymentTask: WorkspaceTask = {
+      id: 44,
+      text: "Czynsz",
+      done: false,
+      view: "7dni",
+      calendarDate: "2026-07-31",
+      source: {
+        kind: "affairs",
+        entity: "rent/recurring",
+        context: "Finanse",
+        href: "/sprawy?widok=finance-recurring",
+      },
+    };
+    const affairs: AffairsWorkspace = {
+      ...emptyAffairs(),
+      payments: [{
+        id: "rent",
+        name: "Czynsz",
+        category: "Mieszkanie",
+        amount: 1_000,
+        cadence: "monthly",
+        nextDueDate: "2026-07-31",
+        automatic: true,
+        active: true,
+        note: "",
+      }],
+    };
+
+    const result = selectCalendarOccurrences(
+      sources({ tasks: [paymentTask], affairs }),
+      "2026-07-31",
+      "2026-07-31",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ kind: "task", title: "Czynsz" });
+  });
+
+  it("projects workouts from the active Sport cycle with their outcome", () => {
     const sport: SportPlannerState = {
       ...emptySport(),
       activeCycle: {
@@ -190,7 +266,16 @@ describe("selectCalendarOccurrences", () => {
       "2026-07-29",
     );
 
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      kind: "sport",
+      calendarDate: "2026-07-29",
+      title: "Spokojny bieg",
+      time: "07:30",
+      source: { kind: "sport", label: "Sport", context: "Budowanie bazy" },
+      status: { key: "completed", completed: true },
+      entityId: "workout-a",
+    });
   });
 
   it("returns an empty list for an invalid range", () => {

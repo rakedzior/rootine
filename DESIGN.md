@@ -306,7 +306,7 @@ There is no global page header on application routes, and no component for one: 
 
 `PageShell` and `ModuleShell` accept **no** `title`, `subtitle`, `leading`, `meta`, `actions` or `header` prop. They used to accept and silently discard them, which turned every stale call site into invisible content instead of a build error — that is how a back button, an entire route error message and nine write-failure indicators went missing at once. Do not reintroduce those props.
 
-Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera osiem obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Sprawy i Notatki. Kalendarz oraz Nawyki należą do Zadań, a Podróże do Spraw. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `Finanse` są grupą podwidoków Spraw, a JDG pozostaje podwidokiem Spraw, nie osobnym modułem globalnym. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Bieżący inwentarz tras w `ROUTE_LAYOUT_AUDIT` pokazuje sidebar modułowy w Zadaniach, Kalendarzu, Notatkach, Celach, Sporcie, Odżywianiu, Pracy, Sprawach i Podróżach; Dzisiaj i osobna trasa szczegółu celu pozostają bez niego.
+Aplikacja używa jednego `AppLayout` ze stałą globalną nawigacją o szerokości 204px. Jeden rejestr modułów jest źródłem kolejności, etykiet, ikon i adresów dla sidebara, ustawień, nawigacji mobilnej oraz odsyłaczy z Dzisiaj. Globalna nawigacja zawiera dziewięć obszarów: Dzisiaj, Zadania, Odżywianie, Sport, Pracę, Cele, Podróże, Pozostałe i Notatki. Kalendarz oraz Nawyki należą do Zadań. Podróże są samodzielnym modułem, a Sprawy, Finanse, Rejestry, Zdrowie i JDG są podwidokami Pozostałych. `Praca` obejmuje obowiązki zawodowe i historyczną nazwę „Biuro”. `WorkspaceLayout` ma jedną opcjonalną kolumnę `ModuleSidebar` oraz przewijany `MainContent`; żaden ekran nie kompensuje tych kolumn lokalnym offsetem. Bieżący inwentarz tras w `ROUTE_LAYOUT_AUDIT` pokazuje sidebar modułowy w Zadaniach, Kalendarzu, Notatkach, Celach, Sporcie, Odżywianiu, Pracy, Pozostałych i Podróżach; Dzisiaj i osobna trasa szczegółu celu pozostają bez niego.
 
 Sidebar kontekstowy odpowiada za strukturę modułu, nie za chwilowe filtry. Zaczyna się bez powtórzonego nagłówka modułu; pierwszym elementem są grupy widoków. `ContentHeader` nazywa aktualny widok i mieści jego lokalne akcje, filtry oraz sortowanie — jest jedynym nagłówkiem ekranu. Ta sama funkcja nie może być jednocześnie powielona w sidebarze i nagłówku. Panel prawy ma zawsze 408px i oznacza szczegóły aktualnie wybranego rekordu; przy braku wyboru nie zajmuje miejsca roboczego.
 
@@ -464,7 +464,7 @@ Komponenty są kompaktowe, rzeczowe i cicho responsywne. Stany hover, focus, act
 ### Modal
 
 - **Shape:** promień 16px, bez dodatkowej linii, z cieniem modalnym i maksymalną wysokością 88vh (92vh jako mobilny bottom sheet).
-- **Backdrop:** semantyczny `--color-backdrop`; w domyślnym Cobalt ma 72%, a w sześciu motywach dopasowuje kontrast do powierzchni. Brak dekoracyjnego bluru.
+- **Backdrop:** semantyczny `--color-backdrop`; w domyślnym Atramencie ma 72%, a w obu motywach dopasowuje kontrast do powierzchni. Brak dekoracyjnego bluru.
 - **Header:** oddzielony subtelną linią; tytuł, opcjonalny eyebrow i przycisk zamknięcia.
 - **Width:** nazwane kroki `sm=500`, `md=680` (domyślny), `lg=780`, `xl=960`; `width` jest pojedynczym escape hatchem dla dialogu zachowującego się jak pełna strona.
 - **Behavior:** Escape, kliknięcie backdropu, `role="dialog"` i `aria-modal="true"`.
@@ -558,11 +558,13 @@ Nowa zakładka nie definiuje własnego obiektu palety ani lokalnego odpowiednika
 ### Ciągłość danych lokalnego MVP
 
 - Zadania i Kalendarz korzystają z jednego rekordu zadania. Nadanie terminu tworzy `calendarDate`, usunięcie terminu usuwa rekord z Kalendarza bez usuwania zadania, a przesunięcie w Kalendarzu aktualizuje jego widok w Zadaniach.
-- Dane odczytywane z `localStorage` muszą przejść walidację minimalnego kształtu. Uszkodzony lub niezgodny zapis wraca do bezpiecznego stanu demonstracyjnego zamiast blokować moduł.
+- Datowane treningi i zobowiązania z Pozostałych są odczytywane przez Kalendarz z kanonicznego rekordu modułu źródłowego. Szczegóły są tylko do odczytu i prowadzą do właściwego modułu; Kalendarz nie tworzy ich kopii.
+- Dane odczytywane z `localStorage` i IndexedDB muszą przejść walidację minimalnego kształtu. Uszkodzony lub niezgodny zapis jest zabezpieczany jako kopia odzyskiwania, a moduł wraca do bezpiecznego pustego stanu zamiast blokować interfejs lub maskować problem danymi demo.
+- Zdalne pobranie może zastąpić lokalny dokument wyłącznie wtedy, gdy lokalna wersja nie zmieniła się od wspólnej bazy. Konflikt wymaga jawnego wyboru użytkownika, a zastępowana wersja otrzymuje kopię odzyskiwania.
 - Błąd zapisu lokalnego jest komunikowany przez `Badge tone="danger"` w slocie `meta` komponentu `ContentHeader` — w module, w którym użytkownik pracuje, a nie tylko globalnym toastem.
 - Główne moduły są ładowane jako osobne fragmenty tras; wspólny shell i tokeny pozostają w paczce bazowej.
 
-`text-muted` jest jaśniejszy od pozostałych szarości, ponieważ tekst pomocniczy 10–11px musi zachować co najmniej kontrast 4.5:1 także na powierzchni karty (`graphite-card`). Wartości normatywne są w `tokens.css`; frontmatter jest snapshotem domyślnego motywu i nie zastępuje sześciu theme scopes. `text-disabled` pozostaje przeznaczony wyłącznie dla faktycznie nieaktywnych kontrolek.
+`text-muted` jest jaśniejszy od pozostałych szarości, ponieważ tekst pomocniczy 10–11px musi zachować co najmniej kontrast 4.5:1 także na powierzchni karty (`graphite-card`). Wartości normatywne są w `tokens.css`; frontmatter jest snapshotem domyślnego motywu i nie zastępuje dwóch theme scopes: Atramentu i Pergaminu. `text-disabled` pozostaje przeznaczony wyłącznie dla faktycznie nieaktywnych kontrolek.
 
 Akcent ma trzy role kontrastowe: `primary` pozostaje sygnałem marki i fokusu, `primary-text` służy małemu tekstowi na powierzchni, a `primary` jako tło przycisku jest zawsze parowane z `on-primary`. Aliasy `precision-*` zachowują kompatybilność, ale nie należy zamieniać tych ról miejscami ani zakładać jednego koloru tekstu we wszystkich motywach.
 

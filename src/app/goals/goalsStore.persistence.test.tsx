@@ -1,9 +1,13 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGoalsStore } from "./goalsContext";
+import { createSeedGoalsWorkspace } from "./goalsModel";
+import { GOALS_STORAGE_KEY, saveGoalsWorkspace } from "./goalsRepository";
 import { GoalsProvider } from "./goalsStore";
+import { createBrowserWorkspacePayloadStore } from "../data/indexedDbWorkspaceStore";
+import { setWorkspacePayloadStoreForTests } from "../data/localRepository";
 
-const STORAGE_KEY = "rootine.goals.v1";
+const STORAGE_KEY = GOALS_STORAGE_KEY;
 const GOAL_ID = "rehab-app";
 
 function StoreHarness() {
@@ -38,7 +42,9 @@ function readStoredGoals() {
 
 describe("GoalsProvider persistence", () => {
   beforeEach(() => {
+    setWorkspacePayloadStoreForTests(createBrowserWorkspacePayloadStore(undefined));
     localStorage.clear();
+    expect(saveGoalsWorkspace(createSeedGoalsWorkspace())).toBe(true);
     vi.useFakeTimers();
   });
 
@@ -52,9 +58,9 @@ describe("GoalsProvider persistence", () => {
     renderStore();
     fireEvent.click(screen.getByRole("button", { name: "Zmień notatkę" }));
 
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(readStoredGoals()?.goals.find((goal) => goal.id === GOAL_ID)?.note).not.toBe("Wersja robocza");
     act(() => vi.advanceTimersByTime(249));
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(readStoredGoals()?.goals.find((goal) => goal.id === GOAL_ID)?.note).not.toBe("Wersja robocza");
     act(() => vi.advanceTimersByTime(1));
     expect(readStoredGoals()?.goals.find((goal) => goal.id === GOAL_ID)?.note).toBe("Wersja robocza");
   });

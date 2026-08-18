@@ -1289,7 +1289,7 @@ export default function Praca() {
     }).sort((a, b) => taskAnchorDate(a).localeCompare(taskAnchorDate(b)) || a.createdAt.localeCompare(b.createdAt)).slice(0, 3);
     return (
       <div className="work-screen work-screen--focus">
-        {renderQuickEntry(today, "Dzisiaj", "Dzisiaj")}
+        {renderQuickEntry(today, "Dziś", "Dzisiaj")}
         <div className="work-task-board">
           {renderTaskSection("Po terminie", overdue, undefined, undefined, { collapseKey: "today:overdue", collapsible: true })}
           {renderTaskSection("Dzisiaj", todayTasks, undefined, undefined, { collapseKey: "today:today", collapsible: true, today: true })}
@@ -1341,7 +1341,7 @@ export default function Praca() {
     });
     return (
       <div className="work-screen work-screen--table">
-        {renderQuickEntry(today, "Dzisiaj", "Wszystkie")}
+        {renderQuickEntry(today, "Dziś", "Wszystkie")}
         <section className="work-task-section" aria-label="Wszystkie aktywne zadania">
           {sorted.length ? <><div className="work-task-columns" aria-hidden="true"><span>Termin</span><span>Zadanie</span><span>Firma</span><span>Projekt</span><span>Priorytet</span><span>Status</span></div><div className="work-task-list">{sorted.map((task) => renderTaskRow(task))}</div></> : <EmptyState icon={<Check size={18} />} title="Brak aktywnych zadań" description="Wszystko jest zamknięte albo nie ma jeszcze zadań." />}
         </section>

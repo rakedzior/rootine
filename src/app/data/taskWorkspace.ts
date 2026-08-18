@@ -192,6 +192,17 @@ function isClockTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
+export function createEmptyTaskWorkspace(): TaskWorkspace {
+  return {
+    version: WORKSPACE_VERSION,
+    updatedAt: new Date(0).toISOString(),
+    tasks: [],
+    habits: [],
+    lists: [],
+    tags: [],
+  };
+}
+
 function isTimestamp(value: unknown): value is string {
   return typeof value === "string" && Number.isFinite(new Date(value).getTime());
 }
@@ -383,7 +394,7 @@ function stripRuntimeTaskOccurrences(tasks: readonly WorkspaceTask[]): Workspace
 export function loadTaskWorkspaceResult(): LocalLoadResult<TaskWorkspace> {
   const result = readLocalWorkspace({
     key: TASK_STORAGE_KEY,
-    fallback: createDefaultTaskWorkspace,
+    fallback: createEmptyTaskWorkspace,
     validate: isWorkspace,
     migrate: migrateLegacyWorkspace,
   });

@@ -12,7 +12,9 @@ import { Toast, ToastViewport } from "../../app/ui";
 import { useSupabaseAuth } from "./auth";
 import { isSupabaseConfigured } from "./client";
 import {
+  resolveRemoteWorkspaceConflicts,
   startRemoteWorkspaceSync,
+  type RemoteConflictResolution,
   type RemoteWorkspaceSyncResult,
   type RemoteWorkspaceSyncStatus,
 } from "./workspaceSync";
@@ -23,13 +25,15 @@ export type RemoteSyncContextValue = {
   message?: string;
   uploaded: number;
   downloaded: number;
+  conflictKeys?: string[];
   initialSyncAttempt: number;
   initialSyncElapsedMs?: number;
   initialSyncTimedOut: boolean;
   retry: () => void;
+  resolveConflict: (resolution: RemoteConflictResolution) => Promise<void>;
 };
 
-type RemoteSyncState = Omit<RemoteSyncContextValue, "retry">;
+type RemoteSyncState = Omit<RemoteSyncContextValue, "retry" | "resolveConflict">;
 
 const RemoteSyncContext = createContext<RemoteSyncContextValue | null>(null);
 
@@ -56,6 +60,26 @@ export function RemotePersistenceProvider({ children }: { children: ReactNode })
     setDismissedNoticeAttempt(null);
     setRetryGeneration((current) => current + 1);
   }, []);
+  const resolveConflict = useCallback(async (resolution: RemoteConflictResolution) => {
+    const conflictKeys = state.conflictKeys ?? [];
+    if (!userId || conflictKeys.length === 0) return;
+    setState((current) => ({ ...current, status: "syncing", message: undefined }));
+    try {
+      const result = await resolveRemoteWorkspaceConflicts(userId, conflictKeys, resolution);
+      setState((current) => ({ ...current, ...result, message: result.message }));
+      if (result.status === "synced") {
+        setRetryGeneration((current) => current + 1);
+      }
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        status: "error",
+        message: error instanceof Error
+          ? error.message
+          : "Nie udało się rozwiązać konfliktu. Obie wersje danych pozostały bez zmian.",
+      }));
+    }
+  }, [state.conflictKeys, userId]);
 
   useEffect(() => {
     let active = true;
@@ -174,7 +198,10 @@ export function RemotePersistenceProvider({ children }: { children: ReactNode })
     };
   }, [authLoading, retryGeneration, userId]);
 
-  const value = useMemo(() => ({ ...state, retry }), [retry, state]);
+  const value = useMemo(
+    () => ({ ...state, retry, resolveConflict }),
+    [resolveConflict, retry, state],
+  );
   const waitingForAuth = isSupabaseConfigured && authLoading;
   const waitingForInitialSync = Boolean(userId && readyUserId !== userId);
 

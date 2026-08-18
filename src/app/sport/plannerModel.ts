@@ -968,8 +968,30 @@ export function createDefaultSportPlannerState(): SportPlannerState {
   };
 }
 
+export function createEmptySportPlannerState(): SportPlannerState {
+  const templates = INITIAL_TEMPLATES.map((template) => ({
+    ...template,
+    exercises: cloneExercises(template.exercises, `template-${template.id}`),
+    stages: template.stages?.map((stage) => ({ ...stage })),
+  }));
+  return {
+    version: 5,
+    storageSchemaVersion: 5,
+    templates,
+    activeCycle: null,
+    cycles: [],
+    activeCycleId: null,
+    history: [],
+    sessions: [],
+    workoutOutcomes: {},
+    exercises: createInitialExercises(),
+    scheduledWorkouts: [],
+    executions: [],
+  };
+}
+
 function loadLegacySportFallback(): SportPlannerState {
-  if (typeof window === "undefined") return createDefaultSportPlannerState();
+  if (typeof window === "undefined") return createEmptySportPlannerState();
   try {
     const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyStored) {
@@ -977,9 +999,9 @@ function loadLegacySportFallback(): SportPlannerState {
       if (isLegacySportState(legacy)) return migrateLegacyState(legacy);
     }
   } catch {
-    // A malformed local draft falls back to a safe editable example.
+    // A malformed legacy draft falls back to a safe empty planner.
   }
-  return createDefaultSportPlannerState();
+  return createEmptySportPlannerState();
 }
 
 function migratePlannerState(value: unknown): SportPlannerState | null {

@@ -469,8 +469,16 @@ function isWorkspace(value: unknown): value is TravelWorkspace {
     && value.trips.every(isTrip);
 }
 
-function cloneDefaultWorkspace(): TravelWorkspace {
+export function createDefaultTravelWorkspace(): TravelWorkspace {
   return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as TravelWorkspace;
+}
+
+export function createEmptyTravelWorkspace(): TravelWorkspace {
+  return {
+    version: WORKSPACE_VERSION,
+    updatedAt: new Date(0).toISOString(),
+    trips: [],
+  };
 }
 
 function migrateLegacyWorkspace(value: unknown): TravelWorkspace | null {
@@ -599,7 +607,7 @@ export function setTravelTaskCompletionState(
 export function loadTravelWorkspaceResult(): LocalLoadResult<TravelWorkspace> {
   return readLocalWorkspace({
     key: TRAVEL_STORAGE_KEY,
-    fallback: cloneDefaultWorkspace,
+    fallback: createEmptyTravelWorkspace,
     validate: isWorkspace,
     migrate: migrateLegacyWorkspace,
   });

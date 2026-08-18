@@ -1,16 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// These are browser-safe Supabase values. Environment variables still win when
-// a host provides them, but a static build can authenticate without a local
-// `.env.local` file being present on the machine that serves it.
-const defaultSupabaseUrl = "https://jtyyephltdmnohcfcler.supabase.co";
-const defaultSupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0eXllcGhsdGRtbm9oY2ZjbGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMDM4MDQsImV4cCI6MjEwMTU3OTgwNH0.CnyT4GOsIPfBn7FTiFa5eQPI9U69ZoN2kcokL8g8IJg";
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || defaultSupabaseUrl;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseKey = (
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
   ?? import.meta.env.VITE_SUPABASE_ANON_KEY
-)?.trim() || defaultSupabaseAnonKey;
+)?.trim();
 const isSecretKey = supabaseKey?.startsWith("sb_secret_") ?? false;
 const usesPublishableKey = supabaseKey?.startsWith("sb_publishable_") ?? false;
 

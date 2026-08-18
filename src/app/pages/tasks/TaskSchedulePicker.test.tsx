@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatePickerPopup } from "./TaskSchedulePicker";
@@ -39,12 +39,48 @@ function renderPicker(value: DateVal = baseValue) {
   return { anchor, onClose, onConfirm };
 }
 
+function renderPickerWithFocusTarget(focusAfterConfirm: HTMLElement) {
+  const anchor = document.createElement("button");
+  anchor.textContent = "Termin";
+  document.body.append(anchor);
+  anchors.push(anchor);
+  const onClose = vi.fn();
+  const onConfirm = vi.fn();
+
+  render(
+    <DatePickerPopup
+      value={baseValue}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      anchorEl={anchor}
+      focusAfterConfirm={focusAfterConfirm}
+    />,
+  );
+
+  return { anchor, onClose, onConfirm };
+}
+
 afterEach(() => {
   cleanup();
   anchors.splice(0).forEach((anchor) => anchor.remove());
 });
 
 describe("TaskSchedulePicker layered interactions", () => {
+  it("returns focus to the composer after confirming a new task date", async () => {
+    const user = userEvent.setup();
+    const input = document.createElement("input");
+    document.body.append(input);
+    anchors.push(input);
+    const { anchor, onClose, onConfirm } = renderPickerWithFocusTarget(input);
+
+    await user.click(screen.getByRole("button", { name: "Zapisz termin" }));
+
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(anchor).not.toHaveFocus();
+  });
+
   it("opens time and reminder in one child layer without replacing the parent", async () => {
     const user = userEvent.setup();
     const { onClose } = renderPicker();

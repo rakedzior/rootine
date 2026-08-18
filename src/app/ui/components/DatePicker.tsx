@@ -28,6 +28,10 @@ export interface DatePickerProps {
   density?: DatePickerDensity;
   /** Render the calendar as part of its parent surface instead of a trigger + floating popover. */
   inline?: boolean;
+  /** Keep the calendar open after selecting a date so a caller can complete a related field. */
+  closeOnSelect?: boolean;
+  /** Optional content rendered between the calendar and its built-in footer actions. */
+  footerContent?: ReactNode;
   /** Use one-letter weekday headers for dense calendar surfaces. */
   compactWeekdays?: boolean;
   "aria-label"?: string;
@@ -121,6 +125,8 @@ export function DatePicker({
   triggerClassName = "",
   density = "standard",
   inline = false,
+  closeOnSelect = true,
+  footerContent,
   compactWeekdays = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
@@ -258,7 +264,7 @@ export function DatePicker({
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onChange(toDateKey(date));
-      close(true);
+      if (closeOnSelect) close(true);
       return;
     }
     if (!candidate) return;
@@ -362,7 +368,7 @@ export function DatePicker({
                     onKeyDown={(event) => handleDayKeyDown(event, date)}
                     onClick={() => {
                       onChange(dateKey);
-                      if (!inline) close(true);
+                      if (!inline && closeOnSelect) close(true);
                     }}
                   >
                     {date.getDate()}
@@ -373,6 +379,7 @@ export function DatePicker({
           </div>
         ))}
       </div>
+      {footerContent && <div className="ui-date-picker__footer-content">{footerContent}</div>}
       {!inline && (
         <div className="ui-date-picker__footer">
           <button type="button" disabled={!value} onClick={() => { onChange(""); close(true); }}>Wyczyść</button>

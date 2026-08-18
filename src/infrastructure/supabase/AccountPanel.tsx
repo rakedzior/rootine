@@ -24,6 +24,7 @@ export function AccountPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resolvingConflict, setResolvingConflict] = useState<"keep-local" | "use-remote" | null>(null);
 
   const signOut = async () => {
     const result = await auth.signOut();
@@ -81,12 +82,45 @@ export function AccountPanel() {
   if (auth.user) {
     return (
       <div className="app-account-panel">
-        {remote.message && <p className="app-account-panel__error">{remote.message}</p>}
+        {remote.message && remote.status !== "conflict" && (
+          <p className="app-account-panel__error">{remote.message}</p>
+        )}
         {remote.initialSyncElapsedMs !== undefined && (
           <p className="app-account-panel__telemetry">
             Próba {remote.initialSyncAttempt} · {elapsedLabel(remote.initialSyncElapsedMs)}
             {remote.initialSyncTimedOut ? " · przekroczono limit czasu" : ""}
           </p>
+        )}
+        {remote.status === "conflict" && (
+          <div className="app-account-panel__conflict" role="alert">
+            <p>
+              Wybierz wersję dla {remote.conflictKeys?.length ?? 0} obszarów. Przed pobraniem danych z konta Rootine utworzy lokalną kopię odzyskiwania.
+            </p>
+            <Button
+              variant="quiet"
+              size="sm"
+              fullWidth
+              disabled={resolvingConflict !== null}
+              onClick={() => {
+                setResolvingConflict("keep-local");
+                void remote.resolveConflict("keep-local").finally(() => setResolvingConflict(null));
+              }}
+            >
+              {resolvingConflict === "keep-local" ? "Zapisuję…" : "Zachowaj dane z tego urządzenia"}
+            </Button>
+            <Button
+              variant="quiet"
+              size="sm"
+              fullWidth
+              disabled={resolvingConflict !== null}
+              onClick={() => {
+                setResolvingConflict("use-remote");
+                void remote.resolveConflict("use-remote").finally(() => setResolvingConflict(null));
+              }}
+            >
+              {resolvingConflict === "use-remote" ? "Pobieram…" : "Użyj danych zapisanych na koncie"}
+            </Button>
+          </div>
         )}
         {(remote.status === "error" || remote.status === "schema-missing") && (
           <Button

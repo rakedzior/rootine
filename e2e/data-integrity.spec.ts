@@ -35,14 +35,14 @@ test.describe("integralność prezentowanych danych", () => {
 
     const trigger = page.locator("#calendar-overflow-trigger-2026-08-05");
     await expect(trigger).toBeVisible();
-    await expect(trigger).toContainText("+1");
+    await expect(trigger).toContainText(/^\+\d+ więcej$/);
 
     await trigger.click();
     const menu = page.locator("#calendar-agenda-2026-08-05");
     await expect(menu).toBeVisible();
-    await expect(menu.locator(".calendar-agenda-item__title")).toHaveText(
-      ["Wpis w menu nadmiarowym"],
-    );
+    await expect(menu.locator(".calendar-agenda-item__title", {
+      hasText: "Wpis w menu nadmiarowym",
+    })).toBeVisible();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
 
     await page.keyboard.press("Escape");

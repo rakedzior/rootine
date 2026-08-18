@@ -294,18 +294,26 @@ test.describe("cross-module creation primitives", { tag: "@shared" }, () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("the Work quick composer exposes compact canonical scheduling controls", async ({ rootinePage: page, isMobile }) => {
+  test("the Work quick composer keeps optional time inside the date picker", async ({ rootinePage: page, isMobile }) => {
     await openRootineRoute(page, "/praca");
     const form = page.getByRole("form", { name: "Szybkie dodawanie zadania do pracy" });
     const dateTrigger = form.locator(".ui-date-trigger--compact");
-    const timePicker = form.locator(".ui-time-picker--compact");
 
     await expect(dateTrigger).toHaveAttribute("aria-haspopup", "dialog");
-    await expect(timePicker).toBeVisible();
+    await expect(form.locator(".ui-time-picker--compact")).toHaveCount(0);
+    await expect(form.getByText("Dodaj zadanie", { exact: true })).toHaveCount(0);
     const expectedHeight = isMobile ? "--component-option-height-touch" : "--control-height-sm";
     await expectTokenHeight(dateTrigger, expectedHeight);
-    await expectTokenHeight(timePicker.locator(".ui-time-picker__input"), expectedHeight);
-    await expectTokenHeight(timePicker.locator(".ui-time-picker__list-trigger"), expectedHeight);
+    await expect(dateTrigger).toContainText("Dziś");
+    await dateTrigger.click();
+
+    const datePicker = page.getByRole("dialog", { name: /Termin zadania/ });
+    const timePicker = datePicker.locator(".ui-time-picker--compact");
+    await expect(datePicker).toBeVisible();
+    await expect(datePicker.getByText(/Godzina/)).toBeVisible();
+    await expect(datePicker.getByText("opcjonalnie", { exact: true })).toHaveCount(0);
+    await expectTokenHeight(datePicker.locator(".ui-time-picker__input"), expectedHeight);
+    await expect(timePicker.locator(".ui-time-picker__list-trigger")).toHaveCount(0);
   });
 });
 

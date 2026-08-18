@@ -195,6 +195,15 @@ export function createDefaultNotesWorkspace(): NotesWorkspace {
   return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as NotesWorkspace;
 }
 
+export function createEmptyNotesWorkspace(): NotesWorkspace {
+  return {
+    version: WORKSPACE_VERSION,
+    updatedAt: new Date(0).toISOString(),
+    lists: [],
+    notes: [],
+  };
+}
+
 export function createNotesId(prefix: "note" | "list" | "item"): string {
   const suffix = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -205,7 +214,7 @@ export function createNotesId(prefix: "note" | "list" | "item"): string {
 export function loadNotesWorkspaceResult(): LocalLoadResult<NotesWorkspace> {
   return readLocalWorkspace({
     key: NOTES_STORAGE_KEY,
-    fallback: createDefaultNotesWorkspace,
+    fallback: createEmptyNotesWorkspace,
     validate: isWorkspace,
   });
 }

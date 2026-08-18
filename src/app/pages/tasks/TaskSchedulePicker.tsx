@@ -223,6 +223,7 @@ export function DatePickerPopup({
   onClose,
   anchorEl,
   placementAnchorEl,
+  focusAfterConfirm,
   dateOnly = false,
 }: {
   value: DateVal;
@@ -230,6 +231,7 @@ export function DatePickerPopup({
   onClose: () => void;
   anchorEl: HTMLElement;
   placementAnchorEl?: HTMLElement | null;
+  focusAfterConfirm?: HTMLElement | null;
   dateOnly?: boolean;
 }) {
   const [tab, setTab] = useState<"data" | "duracja">(!dateOnly && value.duration ? "duracja" : "data");
@@ -330,7 +332,7 @@ export function DatePickerPopup({
       timezone,
     });
     onClose();
-    requestAnimationFrame(() => anchorEl.focus());
+    requestAnimationFrame(() => (focusAfterConfirm ?? anchorEl).focus());
   };
 
   const handleClear = () => {

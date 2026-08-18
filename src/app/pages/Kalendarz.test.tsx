@@ -112,16 +112,15 @@ describe("Kalendarz canonical occurrences integration", () => {
     vi.useRealTimers();
   });
 
-  it("does not show direct Sport or Affairs projections", () => {
+  it("shows read-only Sport and Affairs projections with canonical source links", () => {
     render(<Kalendarz />);
-    expect(screen.queryByRole("button", { name: /Trening poranny/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Op.*ata urz.*dowa/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Czynsz/ })).not.toBeInTheDocument();
-    return;
+    expect(screen.getByRole("button", { name: /Trening poranny/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Opłata urzędowa/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Czynsz/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Otwórz szczegóły: Trening poranny" }));
     const workoutDetail = screen.getByRole("dialog", { name: "Szczegóły: Trening poranny" });
-    expect(workoutDetail).toHaveTextContent("Zaplanowany");
+    expect(workoutDetail).toHaveTextContent("Zaplanowane");
     expect(workoutDetail).toHaveTextContent("Siłownia");
     expect(workoutDetail).toHaveTextContent("Edycja jest dostępna w module Sport");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -133,19 +132,18 @@ describe("Kalendarz canonical occurrences integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Zamknij szczegóły" }));
     fireEvent.click(screen.getByRole("button", { name: "Otwórz szczegóły: Opłata urzędowa" }));
     expect(screen.getByRole("dialog", { name: "Szczegóły: Opłata urzędowa" })).toHaveTextContent("431,99");
-    expect(screen.getByRole("link", { name: "Otwórz w module Sprawy" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Otwórz w module Pozostałe" })).toHaveAttribute(
       "href",
-      "/sprawy?widok=oneTime",
+      "/sprawy?widok=finance-one-time",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Zamknij szczegóły" }));
     fireEvent.click(screen.getByRole("button", { name: "Otwórz szczegóły: Czynsz" }));
     const recurringDetail = screen.getByRole("dialog", { name: "Szczegóły: Czynsz" });
-    expect(recurringDetail).toHaveTextContent("Automatyczna");
-    expect(recurringDetail).toHaveTextContent("Co miesiąc");
-    expect(screen.getByRole("link", { name: "Otwórz w module Sprawy" })).toHaveAttribute(
+    expect(recurringDetail).toHaveTextContent("Automatyczne");
+    expect(screen.getByRole("link", { name: "Otwórz w module Pozostałe" })).toHaveAttribute(
       "href",
-      "/sprawy?widok=payments",
+      "/sprawy?widok=finance-recurring",
     );
   });
 

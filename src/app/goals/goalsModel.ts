@@ -290,6 +290,14 @@ export function createSeedGoalsWorkspace(): GoalsWorkspace {
   })) as GoalsWorkspace;
 }
 
+export function createEmptyGoalsWorkspace(): GoalsWorkspace {
+  return {
+    version: GOALS_STORE_VERSION,
+    goals: [],
+    categories: INITIAL_CATEGORIES.map((category) => ({ ...category })),
+  };
+}
+
 export function normalizeGoalsWorkspace(workspace: GoalsWorkspace): GoalsWorkspace {
   return {
     version: GOALS_STORE_VERSION,

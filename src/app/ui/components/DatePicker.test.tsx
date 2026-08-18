@@ -53,6 +53,26 @@ describe("DatePicker", () => {
     expect(onChange).toHaveBeenCalledWith("2026-07-30");
   });
 
+  it("can keep the calendar open for a related footer field", async () => {
+    const user = userEvent.setup();
+    render(
+      <DatePicker
+        aria-label="Termin zadania"
+        value="2026-07-28"
+        closeOnSelect={false}
+        footerContent={<input aria-label="Opcjonalna godzina" />}
+        onChange={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Termin zadania.*28 lipca 2026/i }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "30 lipca 2026" }));
+
+    expect(dialog).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Opcjonalna godzina" })).toBeVisible();
+  });
+
   it("applies compact density to both the trigger and inline calendar", async () => {
     const user = userEvent.setup();
     const view = render(

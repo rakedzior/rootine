@@ -1685,6 +1685,7 @@ export default function Zadania() {
           onConfirm={v => { setNewDateVal(v); }}
           onClose={closeDatePicker}
           anchorEl={dateButtonRef.current}
+          focusAfterConfirm={inputRef.current}
         />
       )}
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createBrowserWorkspacePayloadStore } from "./indexedDbWorkspaceStore";
 import { setWorkspacePayloadStoreForTests } from "./localRepository";
 import {
+  createDefaultWorkWorkspace,
   loadWorkWorkspaceResult,
   saveWorkWorkspace,
   setWorkTasksCompletionState,
@@ -55,7 +56,7 @@ describe("work workspace", () => {
   });
 
   it("shares one immutable completion mutation for single and cascaded work tasks", () => {
-    const loaded = loadWorkWorkspaceResult().workspace;
+    const loaded = createDefaultWorkWorkspace();
     const workspace = {
       ...loaded,
       tasks: loaded.tasks.map((task) => ({ ...task, completed: false })),
