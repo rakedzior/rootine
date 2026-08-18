@@ -43,7 +43,9 @@ jobs:
     env:
       VITE_ROOTINE_QA_AUTH: "1"
     strategy:
-      fail-fast: true
+      # Let the other shards finish so one transient runner failure does not
+      # hide the complete matrix result and its diagnostics.
+      fail-fast: false
       matrix:
         suite:
           - name: core
@@ -109,3 +111,14 @@ jobs:
 
       - name: Run ${{ matrix.suite.name }} browser regressions
         run: npx playwright test ${{ matrix.suite.args }} --shard=${{ matrix.suite.shard }}
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.suite.name }}-${{ matrix.suite.shard }}-${{ runner.os }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

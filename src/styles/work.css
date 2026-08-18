@@ -982,6 +982,7 @@
 }
 
 .work-project-record__main {
+  position: relative;
   min-height: 76px;
   padding: var(--space-md) var(--space-lg);
   border: 0;

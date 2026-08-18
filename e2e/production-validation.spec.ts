@@ -3,6 +3,7 @@ import { test, expect, openRootineRoute } from "./fixtures";
 const NUTRITION_STORAGE_KEY = "rootine.nutrition-workspace.v1";
 const RECOVERY_INDEX_KEY = "rootine.recovery.index.v1";
 const TASK_STORAGE_KEY = "rootine.task-workspace.v1";
+const TASK_VOLUME_SEED_BASE_TIME = Date.parse("2026-08-05T10:00:00.000Z");
 
 async function expectNoDocumentOverflow(page: Parameters<typeof openRootineRoute>[0]) {
   await expect.poll(
@@ -53,9 +54,14 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
   test("task workspace remains usable for 0, 1, 5, 20 and 100 long records", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/zadania");
 
-    for (const count of [0, 1, 5, 20, 100]) {
+    for (const [iteration, count] of [0, 1, 5, 20, 100].entries()) {
       await test.step(`${count} records`, async () => {
-        await page.evaluate(({ key, recordCount }) => {
+        // The app mirrors workspace data into IndexedDB. Each seed must be a
+        // newer external write than the previous iteration; otherwise the
+        // persistence conflict guard is allowed to keep the older (empty)
+        // workspace on a slower CI runner.
+        const updatedAt = new Date(TASK_VOLUME_SEED_BASE_TIME + iteration * 1_000).toISOString();
+        await page.evaluate(({ key, recordCount, seedUpdatedAt }) => {
           const tasks = Array.from({ length: recordCount }, (_, index) => ({
             id: 900_000 + index,
             text: `Wolumen ${String(index + 1).padStart(3, "0")} · ${"bardzo-długi-tytuł-zadania-".repeat(index === recordCount - 1 ? 5 : 1)}`,
@@ -69,13 +75,13 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
           }));
           window.localStorage.setItem(key, JSON.stringify({
             version: 2,
-            updatedAt: new Date().toISOString(),
+            updatedAt: seedUpdatedAt,
             tasks,
             habits: [],
             lists: [],
             tags: [{ id: "wolumen-testowy-z-bardzo-długą-nazwą", label: "wolumen-testowy-z-bardzo-długą-nazwą", color: "#A0A0A0" }],
           }));
-        }, { key: TASK_STORAGE_KEY, recordCount: count });
+        }, { key: TASK_STORAGE_KEY, recordCount: count, seedUpdatedAt: updatedAt });
         await page.reload();
         await expect(page.locator(".ui-content-header__title")).toBeVisible();
         await expect(page.getByRole("button", { name: /^Otwórz szczegóły zadania: Wolumen/ })).toHaveCount(count);

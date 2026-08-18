@@ -1530,15 +1530,15 @@ export default function Praca() {
                   >
                     {isExpanded ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
                   </button>
-                </div>
-                <div className="work-project-record__actions">
-                  <WorkProjectActionsMenu
-                    projectId={project.id}
-                    projectName={project.name}
-                    onOpenDetails={() => navigate("project", project.companyId, project.id)}
-                    onEdit={() => openProjectEditor(project)}
-                    onDelete={() => setDeleteState({ kind: "project", id: project.id, name: project.name })}
-                  />
+                  <div className="work-project-record__actions">
+                    <WorkProjectActionsMenu
+                      projectId={project.id}
+                      projectName={project.name}
+                      onOpenDetails={() => navigate("project", project.companyId, project.id)}
+                      onEdit={() => openProjectEditor(project)}
+                      onDelete={() => setDeleteState({ kind: "project", id: project.id, name: project.name })}
+                    />
+                  </div>
                 </div>
                 {project.note && <p className="work-project-record__note">{project.note}</p>}
                 {isExpanded && (

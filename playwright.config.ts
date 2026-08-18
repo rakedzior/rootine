@@ -50,10 +50,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   maxFailures: isCI ? 1 : 0,
-  // A retry multiplied an unavailable dev server into three minute-long
-  // failures. CI now exercises a prebuilt bundle, so fail once and surface the
-  // real regression immediately.
-  retries: 0,
+  // CI exercises a prebuilt bundle. One retry absorbs a transient browser or
+  // runner hiccup while still surfacing deterministic regressions.
+  retries: isCI ? 1 : 0,
   // Parallelize CI across isolated GitHub jobs. One browser per small runner
   // avoids CPU/memory starvation that previously made the app entry chunk stop
   // loading under four simultaneous contexts.

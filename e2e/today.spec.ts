@@ -24,7 +24,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
     await expect(page.locator(".today-module-row__overdue").first()).toBeVisible();
   });
 
-  test("keeps one aggregate progress donut with contextual module telemetry", async ({
+  test("keeps one overdue donut with contextual module telemetry", async ({
     rootinePage: page,
   }) => {
     await openRootineRoute(page, "/dzisiaj");
@@ -36,15 +36,15 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
 
     await expect(donut).toBeVisible();
     await expect(donut).toHaveAttribute("role", "img");
-    await expect(donut).toHaveAttribute("aria-label", /^\d+% planu dnia ukończone$/);
+    await expect(donut).toHaveAttribute("aria-label", /^\d+% zaległości$/);
     await expect(donut.locator("circle")).toHaveCount(2);
     await expect(page.locator(".living-day--foreground")).toHaveCount(0);
     await expect(taskTelemetry.locator(".telemetry-bar__track")).toHaveAttribute("role", "group");
     await expect(taskTelemetry.locator('[role="progressbar"]')).toHaveCount(3);
 
     await expect(page.locator(".today-day-balance__overdue-summary")).toHaveCount(0);
-    await expect(page.locator(".today-day-balance__attention-eyebrow")).toHaveText("Zaległości");
-    await expect(page.locator(".today-day-balance__attention-head strong")).toHaveText(/^\d+ zadań$/);
+    await expect(page.locator("#today-day-balance-attention-title")).toHaveText("Zaległości");
+    await expect(page.locator(".today-day-balance__attention-count")).toHaveText(/^\d+ zadań$/);
   });
 
   test("keeps completed modules legible without hiding their state", async ({

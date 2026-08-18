@@ -13,12 +13,14 @@ import {
 } from "react";
 import { Link } from "react-router";
 import {
-  AlertTriangle,
+  CalendarDays,
+  ChartNoAxesCombined,
   CheckCircle2,
   ChevronRight,
+  Circle,
   CircleMinus,
+  Clock3,
   Flame,
-  LayoutGrid,
   Plus,
 } from "lucide-react";
 import {
@@ -112,12 +114,12 @@ type TodayQueueItem = {
   title: string;
 };
 
-function TodayProgressDonut({ value }: { value: number }) {
+function TodayOverdueDonut({ value }: { value: number }) {
   return (
     <div
-      className="today-day-balance__donut"
+      className={`today-day-balance__donut ${value > 0 ? "has-overdue" : "is-clear"}`}
       role="img"
-      aria-label={`${value}% planu dnia ukończone`}
+      aria-label={`${value}% zaległości`}
     >
       <svg viewBox="0 0 144 144" aria-hidden="true" focusable="false">
         <circle className="today-day-balance__donut-track" cx="72" cy="72" r="55" pathLength="100" />
@@ -131,7 +133,7 @@ function TodayProgressDonut({ value }: { value: number }) {
           strokeDashoffset={100 - value}
         />
         <text className="today-day-balance__donut-value" x="72" y="70" textAnchor="middle">{value}%</text>
-        <text className="today-day-balance__donut-label" x="72" y="91" textAnchor="middle">ukończone</text>
+        <text className="today-day-balance__donut-label" x="72" y="91" textAnchor="middle">zaległości</text>
       </svg>
     </div>
   );
@@ -573,6 +575,19 @@ export default function Dzisiaj() {
     + (visibleModuleIds.has("work") ? overdueWorkTasks.length : 0)
     + (visibleModuleIds.has("goals") ? overdueGoals.length : 0)
     + (visibleModuleIds.has("affairs") ? overdueAffairs.length : 0);
+  const priorityItems = (visibleModuleIds.has("tasks")
+    ? todayTasks.filter((task) => Boolean(task.priority)).length
+      + habitsForToday.filter((habit) => Boolean(habit.priority)).length
+    : 0)
+    + (visibleModuleIds.has("work") ? workTasksDueToday.filter((task) => task.priority !== "none").length : 0);
+  const completedPriorityItems = (visibleModuleIds.has("tasks")
+    ? todayTasks.filter((task) => Boolean(task.priority) && task.done).length
+      + habitsForToday.filter((habit) => Boolean(habit.priority) && habitDoneToday(habit)).length
+    : 0)
+    + (visibleModuleIds.has("work") ? workTasksDueToday.filter((task) => task.priority !== "none" && task.completed).length : 0);
+  const overdueRate = totalDailyItems > 0
+    ? Math.min(100, Math.round((overdueItems / totalDailyItems) * 100))
+    : 0;
   const dayComplete = remainingDailyItems === 0;
 
   const nutritionMetric = nutritionOverTarget
@@ -819,10 +834,13 @@ export default function Dzisiaj() {
               aria-labelledby="today-day-balance-title"
             >
               <div className="today-day-balance__progress-panel">
-                <h2 id="today-day-balance-title">Postęp dnia</h2>
-                <div className="today-day-balance__remaining-value">
-                  <strong>{remainingDailyItems}</strong>
-                  <span>z {totalDailyItems} pozostało</span>
+                <div className="today-day-balance__panel-header">
+                  <span className="today-day-balance__panel-icon" aria-hidden="true"><ChartNoAxesCombined size={21} /></span>
+                  <h2 id="today-day-balance-title">Postęp dnia</h2>
+                </div>
+                <div className="today-day-balance__completed-value">
+                  <strong>{completedDailyItems}</strong>
+                  <span>z {totalDailyItems} wykonano</span>
                 </div>
                 <div className="today-day-balance__progress-row">
                   <span
@@ -835,14 +853,22 @@ export default function Dzisiaj() {
                   >
                     <i style={{ transform: `scaleX(${dailyProgress / 100})` }} />
                   </span>
-                  <span className="today-day-balance__progress-copy">
-                    {completedDailyItems} z {totalDailyItems} wykonane dzisiaj
-                  </span>
+                </div>
+                <div className="today-day-balance__priority">
+                  <span className="today-day-balance__priority-icon" aria-hidden="true"><CheckCircle2 size={18} /></span>
+                  <span>{completedPriorityItems} z {priorityItems} priorytetów ukończone</span>
+                </div>
+                <div className="today-day-balance__remaining-summary">
+                  <Circle size={21} aria-hidden="true" />
+                  <span>{counted(remainingDailyItems, "zadanie", "zadania", "zadań")} pozostało</span>
                 </div>
               </div>
 
               <div className="today-day-balance__queue">
-                <h2 id="today-day-balance-queue-title">Następne w kolejce</h2>
+                <div className="today-day-balance__panel-header">
+                  <span className="today-day-balance__panel-icon" aria-hidden="true"><CalendarDays size={21} /></span>
+                  <h2 id="today-day-balance-queue-title">Następne w kolejce</h2>
+                </div>
                 {nextScheduledItems.length > 0 ? (
                   <ol className="today-day-balance__queue-list">
                     {nextScheduledItems.map((item) => (
@@ -860,32 +886,32 @@ export default function Dzisiaj() {
                 </Link>
               </div>
 
-              <TodayProgressDonut value={dailyProgress} />
-
-              <aside className={`today-day-balance__attention ${overdueItems ? "has-overdue" : "is-clear"}`}>
-                <div className="today-day-balance__attention-eyebrow">
-                  {overdueItems ? (
-                    <AlertTriangle size={18} aria-hidden="true" />
-                  ) : (
-                    <CheckCircle2 size={18} aria-hidden="true" />
-                  )}
-                  <span>Zaległości</span>
+              <aside
+                className={`today-day-balance__attention ${overdueItems ? "has-overdue" : "is-clear"}`}
+                aria-labelledby="today-day-balance-attention-title"
+              >
+                <div className="today-day-balance__panel-header">
+                  <span className="today-day-balance__panel-icon" aria-hidden="true"><Clock3 size={21} /></span>
+                  <h2 id="today-day-balance-attention-title">Zaległości</h2>
                 </div>
-                <div className="today-day-balance__attention-head">
-                  <strong>
-                    {overdueItems
-                      ? counted(overdueItems, "zadanie", "zadania", "zadań")
-                      : "Brak zaległości"}
-                  </strong>
-                </div>
-                {overdueAreaIds.size > 0 && (
-                  <div className="today-day-balance__attention-footer">
-                    <LayoutGrid size={16} aria-hidden="true" />
-                    <span>
-                      w {overdueAreaIds.size} {overdueAreaIds.size === 1 ? "obszarze" : "obszarach"}
+                <div className="today-day-balance__attention-content">
+                  <TodayOverdueDonut value={overdueRate} />
+                  <div className="today-day-balance__attention-summary">
+                    <div className="today-day-balance__attention-head">
+                      <strong>
+                        {overdueItems ? "Zaległe zadania" : "Brak zaległości"}
+                      </strong>
+                    </div>
+                    <span className="today-day-balance__attention-count">
+                      {counted(overdueItems, "zadanie", "zadania", "zadań")}
                     </span>
+                    <p className="today-day-balance__attention-footer">
+                      {overdueItems
+                        ? `w ${overdueAreaIds.size} ${overdueAreaIds.size === 1 ? "obszarze" : "obszarach"}`
+                        : "Świetna robota! Wszystkie zadania są na bieżąco."}
+                    </p>
                   </div>
-                )}
+                </div>
               </aside>
             </section>
 
