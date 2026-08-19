@@ -4928,4 +4928,28 @@ button.sport-cycle-plan-card:focus-visible {
     flex-basis: 100%;
   }
 }
+
+@container workspace (max-width: 320px) {
+  .sport-cycle-plans-module > .sport-cycle-sidebar__heading {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .sport-cycle-plans-module > .sport-cycle-sidebar__heading h2 {
+    width: 100%;
+    flex: 1 1 100%;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .sport-cycle-plans-module__header-actions {
+    width: 100%;
+  }
+
+  .sport-cycle-plans-module__add {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
 .sport-modal-body { padding: 0; }

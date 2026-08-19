@@ -11,6 +11,15 @@ import { AppSessionProvider, useAppSession } from "./auth/AppSession";
 import { Button } from "./ui";
 import { FlaskConical } from "lucide-react";
 import { useSupabaseAuth } from "../infrastructure/supabase/auth";
+import { LegalPage, type LegalDocument } from "./pages/LegalPage";
+
+function publicLegalDocument(): LegalDocument | null {
+  if (typeof window === "undefined") return null;
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (pathname === "/terms") return "terms";
+  if (pathname === "/privacy") return "privacy";
+  return null;
+}
 
 function TestAccountNotice() {
   const session = useAppSession();
@@ -50,6 +59,9 @@ function SessionGate() {
 }
 
 export default function App() {
+  const legalDocument = publicLegalDocument();
+  if (legalDocument) return <LegalPage document={legalDocument} />;
+
   return (
     <SupabaseAuthProvider>
       <AppSessionProvider>

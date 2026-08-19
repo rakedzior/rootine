@@ -20,6 +20,8 @@
     { "source": "/podroze/:tripId", "destination": "/index.html" },
     { "source": "/biuro", "destination": "/index.html" },
     { "source": "/finanse", "destination": "/index.html" },
-    { "source": "/jdg", "destination": "/index.html" }
+    { "source": "/jdg", "destination": "/index.html" },
+    { "source": "/terms", "destination": "/index.html" },
+    { "source": "/privacy", "destination": "/index.html" }
   ]
 }

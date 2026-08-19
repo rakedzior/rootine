@@ -1587,3 +1587,38 @@
     flex-wrap: nowrap;
   }
 }
+
+/* Preserve the full title field on the narrowest phones. Note properties move
+   to a second, still touch-friendly row instead of squeezing the editor. */
+@container workspace (max-width: 320px) {
+  .notes-quick-capture {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2px var(--space-xs);
+  }
+
+  .notes-quick-capture .ui-quick-composer__leading {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .notes-quick-capture .ui-quick-composer__editor {
+    min-width: 0;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .notes-quick-capture .ui-quick-composer__actions {
+    width: 100%;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-end;
+    padding-top: 2px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .notes-quick-capture .ui-quick-composer__properties {
+    min-width: 0;
+    justify-content: flex-end;
+  }
+}
