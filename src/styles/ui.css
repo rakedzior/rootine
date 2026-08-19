@@ -1227,7 +1227,8 @@
 
   .ui-quick-composer--compact .ui-property-menu__trigger,
   .ui-quick-composer--compact .ui-date-trigger--compact,
-  .ui-quick-composer--compact .ui-time-picker--compact .ui-time-picker__input {
+  .ui-quick-composer--compact .ui-time-picker--compact .ui-time-picker__input,
+  .ui-date-picker__footer-content .ui-time-picker--compact .ui-time-picker__input {
     height: var(--component-option-height-touch);
   }
 

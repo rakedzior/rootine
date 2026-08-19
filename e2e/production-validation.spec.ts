@@ -61,7 +61,7 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
         // persistence conflict guard is allowed to keep the older (empty)
         // workspace on a slower CI runner.
         const updatedAt = new Date(TASK_VOLUME_SEED_BASE_TIME + iteration * 1_000).toISOString();
-        await page.evaluate(({ key, recordCount, seedUpdatedAt }) => {
+        await page.evaluate(async ({ key, recordCount, seedUpdatedAt }) => {
           const tasks = Array.from({ length: recordCount }, (_, index) => ({
             id: 900_000 + index,
             text: `Wolumen ${String(index + 1).padStart(3, "0")} · ${"bardzo-długi-tytuł-zadania-".repeat(index === recordCount - 1 ? 5 : 1)}`,
@@ -73,13 +73,62 @@ test.describe("browser runtime validation", { tag: "@desktop" }, () => {
             tags: index % 2 === 0 ? ["wolumen-testowy-z-bardzo-długą-nazwą"] : [],
             notes: index === recordCount - 1 ? "Długi opis ".repeat(20) : "",
           }));
-          window.localStorage.setItem(key, JSON.stringify({
+          const raw = JSON.stringify({
             version: 2,
             updatedAt: seedUpdatedAt,
             tasks,
             habits: [],
             lists: [],
             tags: [{ id: "wolumen-testowy-z-bardzo-długą-nazwą", label: "wolumen-testowy-z-bardzo-długą-nazwą", color: "#A0A0A0" }],
+          });
+          const hashRaw = (value: string) => {
+            let first = 0x811c9dc5;
+            let second = 0x9e3779b9;
+            for (let index = 0; index < value.length; index += 1) {
+              const code = value.charCodeAt(index);
+              first ^= code;
+              first = Math.imul(first, 0x01000193);
+              second ^= code + index;
+              second = Math.imul(second, 0x85ebca6b);
+            }
+            return `${value.length.toString(36)}-${(first >>> 0).toString(36)}-${(second >>> 0).toString(36)}`;
+          };
+          const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open("rootine-workspaces");
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          const current = await new Promise<{ revision?: number } | null>((resolve, reject) => {
+            const request = database.transaction("workspaces", "readonly").objectStore("workspaces").get(key);
+            request.onsuccess = () => resolve((request.result as { revision?: number } | undefined) ?? null);
+            request.onerror = () => reject(request.error);
+          });
+          const contentHash = hashRaw(raw);
+          const revision = (current?.revision ?? 0) + 1;
+          await new Promise<void>((resolve, reject) => {
+            const transaction = database.transaction("workspaces", "readwrite");
+            transaction.objectStore("workspaces").put({
+              key,
+              raw,
+              revision,
+              contentHash,
+              updatedAt: seedUpdatedAt,
+              writtenAt: new Date().toISOString(),
+              byteLength: new TextEncoder().encode(raw).byteLength,
+            });
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error);
+          });
+          database.close();
+          window.localStorage.setItem(key, JSON.stringify({
+            __rootineWorkspaceManifest: 1,
+            key,
+            storage: "indexeddb",
+            revision,
+            contentHash,
+            updatedAt: seedUpdatedAt,
+            byteLength: new TextEncoder().encode(raw).byteLength,
           }));
         }, { key: TASK_STORAGE_KEY, recordCount: count, seedUpdatedAt: updatedAt });
         await page.reload();
