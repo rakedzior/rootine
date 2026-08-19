@@ -35,6 +35,7 @@ Najważniejsze komendy:
 
 ```bash
 npm run check       # lint, CSS, audyty, testy, typy i build
+npm run ios:audit   # spójność projektu Xcode 14.2 i kontraktów iOS
 npm run test:e2e    # regresje przeglądarkowe Playwright
 npm run build       # typecheck i produkcyjny bundle
 npm run preview     # podgląd buildu
@@ -90,12 +91,14 @@ Google Client Secret należy wyłącznie do konfiguracji Google/Supabase, nigdy 
 
 ## Open Food Facts
 
-Wyszukiwanie online w Odżywianiu korzysta z endpointu same-origin `/api/openfoodfacts/search`. Implementacja dla Vercel znajduje się w `api/openfoodfacts/search.ts` i waliduje metodę oraz zapytanie, ogranicza wynik, kontroluje częstotliwość żądań i ustawia jawne zasady cache.
+Wyszukiwanie online w Odżywianiu korzysta z endpointu same-origin `/api/openfoodfacts/search`, a skanowanie EAN/UPC z `/api/openfoodfacts/barcode`. Oba endpointy wymagają access tokenu konta Supabase, weryfikują go po stronie serwera i zwracają znormalizowany kontrakt produktu wspólny dla web i iOS. Lokalny katalog podstawowych produktów nadal działa offline.
 
 W produkcji ustaw serwerową zmienną:
 
 ```env
 OPEN_FOOD_FACTS_CONTACT=real-maintainer@example.com
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 Na innym hoście można wskazać równoważny proxy przez `VITE_OPEN_FOOD_FACTS_PROXY_URL`. Kontakt serwerowy nie może trafić do zmiennej `VITE_`. Po wdrożeniu uruchom:
@@ -106,12 +109,23 @@ npm run smoke:production -- https://your-deployment.example
 
 Limit w pamięci chroni pojedynczą ciepłą instancję funkcji. Publiczne wdrożenie o większym ruchu powinno dodatkowo używać trwałego limitu na warstwie edge/WAF.
 
+## Aplikacja iOS
+
+Projekt SwiftUI znajduje się w `ios/Rootine/Rootine.xcodeproj`. Celuje w iOS 16 i Swift 5.7, dzięki czemu można go edytować i uruchamiać w symulatorze Xcode 14.2. Build dla współczesnego fizycznego iPhone'a jest wykonywany oszczędnie przez ręcznie uruchamiany workflow `iOS foundation` i później dostarczany przez TestFlight.
+
+Konfiguracja i instrukcja uruchomienia znajdują się w [`ios/README.md`](ios/README.md), fundamenty produktu w [`docs/ios-foundations.md`](docs/ios-foundations.md), a kroki wdrożenia usług w [`docs/ios-backend-setup.md`](docs/ios-backend-setup.md). Wspólne schematy i fixtures są w `contracts/`; testy webowe walidują je produkcyjnymi walidatorami domen, a testy XCTest dekodują te same pliki przez modele `Codable`.
+
+Usuwanie konta realizuje chroniona funkcja `supabase/functions/delete-account`. Wymaga jawnego potwierdzenia i usuwa wyłącznie konto wynikające z access tokenu; snapshoty użytkownika znikają kaskadowo. Service-role key pozostaje wyłącznie w środowisku funkcji Supabase.
+
 ## Mapa repozytorium
 
 - `src/app/` — moduły, routing, UI i repozytoria domenowe;
 - `src/infrastructure/supabase/` — auth, synchronizacja i panel konta;
 - `supabase/migrations/` — wersjonowany kontrakt bazy;
+- `supabase/functions/` — serwerowe operacje wymagające uprawnień administracyjnych;
 - `api/`, `functions/`, `worker/` — warianty proxy Open Food Facts;
+- `contracts/` — schematy i fixtures współdzielone przez TypeScript i Swift;
+- `ios/` — projekt SwiftUI, XCTest i konfiguracja Xcode 14.2;
 - `e2e/` — testy Playwright;
 - `docs/` — inwentarz produktu, system projektu i kontrakty danych.
 

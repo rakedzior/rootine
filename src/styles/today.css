@@ -1712,3 +1712,360 @@
     padding-block: 6px;
   }
 }
+
+/* Canonical daily-balance alignment: one shared header axis and three equal reading zones. */
+.today-day-balance {
+  min-height: 248px;
+  grid-template-areas: "progress queue attention";
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: var(--space-xl);
+}
+
+.today-day-balance__progress-panel,
+.today-day-balance__queue,
+.today-day-balance__attention {
+  min-width: 0;
+  min-height: 216px;
+}
+
+.today-day-balance__progress-panel,
+.today-day-balance__queue,
+.today-day-balance__attention {
+  display: flex;
+  flex-direction: column;
+}
+
+.today-day-balance__progress-panel {
+  grid-area: progress;
+  padding-right: var(--space-2xl);
+  border-right: 1px solid var(--color-border);
+}
+
+.today-day-balance__queue {
+  grid-area: queue;
+  padding-inline: var(--space-2xl);
+  border-right: 1px solid var(--color-border);
+}
+
+.today-day-balance__attention {
+  grid-area: attention;
+  padding-left: var(--space-2xl);
+}
+
+.today-day-balance__panel-header {
+  display: flex;
+  min-height: 44px;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.today-day-balance__panel-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-border-strong) 66%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface-1) 84%, transparent);
+  color: var(--color-primary-text);
+}
+
+.today-day-balance__panel-header h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-title);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
+  line-height: var(--leading-snug);
+}
+
+.today-day-balance__completed-value {
+  display: flex;
+  min-height: 30px;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-top: var(--space-2xl);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+}
+
+.today-day-balance__completed-value strong {
+  min-width: 2ch;
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-headline);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  text-align: right;
+}
+
+.today-day-balance__progress-panel .today-day-balance__progress-row {
+  display: block;
+  margin-top: var(--space-md);
+}
+
+.today-day-balance__progress-panel .today-day-balance__progress {
+  width: 100%;
+  max-width: none;
+  height: 8px;
+}
+
+.today-day-balance__priority,
+.today-day-balance__remaining-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+}
+
+.today-day-balance__priority {
+  margin-top: var(--space-xl);
+}
+
+.today-day-balance__priority-icon,
+.today-day-balance__remaining-summary > svg {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+}
+
+.today-day-balance__priority-icon {
+  display: grid;
+  place-items: center;
+  color: var(--color-primary-text);
+}
+
+.today-day-balance__remaining-summary {
+  margin-top: auto;
+}
+
+.today-day-balance__remaining-summary > svg {
+  color: var(--color-text-tertiary);
+}
+
+.today-day-balance__queue-list {
+  display: grid;
+  gap: 0;
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.today-day-balance__queue-list li {
+  display: grid;
+  min-height: 48px;
+  min-width: 0;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-lg);
+  padding-block: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.today-day-balance__queue-list li:last-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.today-day-balance__queue-list time {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-data);
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+
+.today-day-balance__queue-list strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-day-balance__queue-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: auto;
+  color: var(--color-primary-text);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+.today-day-balance__queue-link:hover {
+  color: var(--color-primary-hover);
+}
+
+.today-day-balance__attention-content {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-lg);
+  margin-top: var(--space-2xl);
+}
+
+.today-day-balance__donut {
+  display: grid;
+  width: 128px;
+  aspect-ratio: 1;
+  flex: 0 0 128px;
+  place-items: center;
+  align-self: center;
+  justify-self: start;
+}
+
+.today-day-balance__donut-value {
+  font-size: var(--text-title);
+}
+
+.today-day-balance__donut-label {
+  font-size: var(--text-micro);
+}
+
+.today-day-balance__attention-summary {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: var(--space-xs);
+}
+
+.today-day-balance__attention-head {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  grid-row: auto;
+}
+
+.today-day-balance__attention.has-overdue .today-day-balance__attention-head {
+  color: var(--color-text-primary);
+}
+
+.today-day-balance__attention-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-warning-text);
+  font-size: var(--text-body-emphasis);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-day-balance__attention.has-overdue .today-day-balance__attention-head::before {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-right: var(--space-md);
+  border-radius: 50%;
+  background: var(--color-warning);
+  content: "";
+}
+
+.today-day-balance__attention.is-clear .today-day-balance__attention-head strong {
+  color: var(--color-success-text);
+}
+
+.today-day-balance__attention-count {
+  display: block;
+  grid-row: auto;
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+}
+
+.today-day-balance__attention-summary p {
+  grid-row: auto;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+}
+
+@media (max-width: 1180px) {
+  .today-day-balance {
+    grid-template-areas:
+      "progress queue"
+      "attention attention";
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: var(--space-2xl);
+  }
+
+  .today-day-balance__progress-panel {
+    padding-right: var(--space-xl);
+  }
+
+  .today-day-balance__queue {
+    padding-inline: var(--space-xl) 0;
+    border-right: 0;
+  }
+
+  .today-day-balance__attention {
+    min-height: 0;
+    padding: var(--space-2xl) 0 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .today-day-balance__attention-content {
+    max-width: 520px;
+  }
+}
+
+@media (max-width: 760px) {
+  .today-day-balance {
+    grid-template-areas:
+      "progress"
+      "queue"
+      "attention";
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+
+  .today-day-balance__progress-panel,
+  .today-day-balance__queue {
+    min-height: 0;
+    padding: 0 0 var(--space-xl);
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .today-day-balance__queue,
+  .today-day-balance__attention {
+    padding-top: var(--space-xl);
+  }
+
+  .today-day-balance__attention {
+    border-top: 0;
+  }
+
+  .today-day-balance__attention-content {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: var(--space-lg);
+    margin-top: var(--space-2xl);
+  }
+
+  .today-day-balance__donut {
+    width: 132px;
+    flex-basis: 132px;
+  }
+}

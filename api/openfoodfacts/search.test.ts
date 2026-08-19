@@ -1,10 +1,9 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import handler, {
-  handleOpenFoodFactsSearch,
-  resetProxyRateLimitForTests,
-} from "./search";
+import { handleOpenFoodFactsSearch, resetProxyRateLimitForTests } from "./search";
+
+const authorize = vi.fn(async () => ({ ok: true, userId: "user-123" } as const));
 
 function request(path: string, init: RequestInit = {}) {
   return new Request(`https://rootine.example${path}`, {
@@ -13,9 +12,14 @@ function request(path: string, init: RequestInit = {}) {
   });
 }
 
+function handler(candidate: Request) {
+  return handleOpenFoodFactsSearch(candidate, { authorize });
+}
+
 describe("Open Food Facts proxy", () => {
   beforeEach(() => {
     resetProxyRateLimitForTests();
+    authorize.mockClear();
     vi.unstubAllEnvs();
   });
 
@@ -45,7 +49,13 @@ describe("Open Food Facts proxy", () => {
   it("forwards only supported parameters, clamps page size, and identifies the application", async () => {
     vi.stubEnv("OPEN_FOOD_FACTS_CONTACT", "maintainer@example.test");
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(
-      JSON.stringify({ hits: [{ code: "1" }] }),
+      JSON.stringify({
+        hits: [{
+          code: "5901234123457",
+          product_name: "Green tea",
+          nutriments: { "energy-kcal_100g": 1 },
+        }],
+      }),
       { status: 200, headers: { "content-type": "application/json" } },
     ));
     vi.stubGlobal("fetch", fetchMock);
@@ -55,9 +65,15 @@ describe("Open Food Facts proxy", () => {
     ));
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toContain("s-maxage=3600");
+    expect(response.headers.get("cache-control")).toBe("private, max-age=300");
     expect(response.headers.get("x-ratelimit-remaining")).toBe("7");
-    expect(await response.json()).toEqual({ hits: [{ code: "1" }] });
+    expect(await response.json()).toEqual({
+      products: [expect.objectContaining({
+        id: "off-5901234123457",
+        barcode: "5901234123457",
+        name: "Green tea",
+      })],
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     const upstream = new URL(String(url));
@@ -95,13 +111,14 @@ describe("Open Food Facts proxy", () => {
       {
         contact: "pages-maintainer@example.test",
         clientIp: "198.51.100.24",
+        authorize,
       },
     );
 
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
     expect(response.status).toBe(200);
     expect(headers.get("user-agent")).toBe("Rootine/1.0 (pages-maintainer@example.test)");
-    expect(await response.json()).toEqual({ hits: [] });
+    expect(await response.json()).toEqual({ products: [] });
   });
 
   it("preserves an upstream error and prevents it from being cached", async () => {

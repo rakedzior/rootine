@@ -8,6 +8,7 @@ import {
   type FoodSuggestion,
 } from "../data/nutritionCatalog";
 import { formatNumber } from "./nutritionPresentationModel";
+import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
 
 /**
  * Product lookup for one ingredient. It talks to the same two sources as the daily
@@ -29,6 +30,7 @@ export function NutritionProductField({
   onChange: (value: string) => void;
   onPick: (food: FoodSuggestion) => void;
 }) {
+  const { session } = useSupabaseAuth();
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<FoodSuggestion[]>([]);
   const [pending, setPending] = useState(false);
@@ -74,7 +76,7 @@ export function NutritionProductField({
     setResults([]);
     setSearchError("");
 
-    searchOpenFoodFacts(query, controller.signal)
+    searchOpenFoodFacts(query, controller.signal, session?.access_token)
       .then((found) => {
         if (requestRef.current !== controller) return;
         setResults(found);

@@ -27,28 +27,26 @@ describe("nutrition catalog suggestions", () => {
   it("keeps multiple Polish branded Open Food Facts results for filet", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(
       JSON.stringify({
-        hits: [
+        products: [
           {
-            code: "5900000000001",
-            product_name: "Filet gotowany",
-            brands: ["Olewnik"],
-            nutriments: {
-              "energy-kcal_100g": 120,
-              proteins_100g: 19,
-              carbohydrates_100g: 2,
-              fat_100g: 3,
-            },
+            id: "off-5900000000001",
+            barcode: "5900000000001",
+            name: "Filet gotowany",
+            brand: "Olewnik",
+            source: "openfoodfacts",
+            defaultAmount: 100,
+            unit: "g",
+            per100g: { calories: 120, protein: 19, carbs: 2, fat: 3 },
           },
           {
-            code: "5900000000002",
-            product_name: "Filet de moureau",
-            brands: ["Lisner"],
-            nutriments: {
-              "energy-kcal_100g": 98,
-              proteins_100g: 17,
-              carbohydrates_100g: 0,
-              fat_100g: 3,
-            },
+            id: "off-5900000000002",
+            barcode: "5900000000002",
+            name: "Filet de moureau",
+            brand: "Lisner",
+            source: "openfoodfacts",
+            defaultAmount: 100,
+            unit: "g",
+            per100g: { calories: 98, protein: 17, carbs: 0, fat: 3 },
           },
         ],
       }),
@@ -57,10 +55,12 @@ describe("nutrition catalog suggestions", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     try {
-      const results = await searchOpenFoodFacts("filet");
+      const results = await searchOpenFoodFacts("filet", undefined, "access-token");
       const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]), "https://rootine.test");
+      const requestHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
 
       expect(requestUrl.searchParams.get("q")).toBe('countries_tags:"en:poland" filet');
+      expect(requestHeaders.get("authorization")).toBe("Bearer access-token");
       expect(results.map((food) => food.brand)).toEqual(["Lisner", "Olewnik"]);
     } finally {
       vi.unstubAllGlobals();

@@ -422,7 +422,7 @@ function isMacroConfiguration(value: unknown): value is MacroConfiguration {
     && value.fatPercent === normalized.fatPercent;
 }
 
-function isNutritionWorkspace(value: unknown): value is NutritionWorkspace {
+export function isNutritionWorkspace(value: unknown): value is NutritionWorkspace {
   return isRecord(value)
     && value.version === WORKSPACE_VERSION
     && typeof value.updatedAt === "string"

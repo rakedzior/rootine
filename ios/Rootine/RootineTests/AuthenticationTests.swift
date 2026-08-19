@@ -1,0 +1,46 @@
+import XCTest
+@testable import Rootine
+
+final class AuthenticationTests: XCTestCase {
+    func testEmailValidationNormalizesAndRejectsIncompleteAddresses() {
+        XCTAssertEqual(AuthInputValidator.normalizedEmail("  OLA@Example.COM "), "ola@example.com")
+        XCTAssertTrue(AuthInputValidator.isValidEmail("ola@example.com"))
+        XCTAssertFalse(AuthInputValidator.isValidEmail("ola@example"))
+        XCTAssertFalse(AuthInputValidator.isValidEmail("ola example.com"))
+    }
+
+    func testPasswordRequiresAtLeastEightCharacters() {
+        XCTAssertNotNil(AuthInputValidator.passwordError("1234567"))
+        XCTAssertNil(AuthInputValidator.passwordError("12345678"))
+    }
+
+    func testOAuthCallbackParsesSessionAndRecoveryStateFromFragment() throws {
+        let url = try XCTUnwrap(URL(string: "rootine://auth-callback#access_token=access&refresh_token=refresh&expires_in=3600&expires_at=2000000000&token_type=bearer&type=recovery"))
+        let callback = try SupabaseAuthCallback.parse(url)
+
+        XCTAssertEqual(callback.accessToken, "access")
+        XCTAssertEqual(callback.refreshToken, "refresh")
+        XCTAssertEqual(callback.expiresIn, 3_600)
+        XCTAssertEqual(callback.expiresAt, 2_000_000_000)
+        XCTAssertTrue(callback.isPasswordRecovery)
+    }
+
+    func testOAuthCancellationMapsToRecoverableUserFacingError() throws {
+        let url = try XCTUnwrap(URL(string: "rootine://auth-callback?error=access_denied&error_description=cancelled"))
+        XCTAssertThrowsError(try SupabaseAuthCallback.parse(url)) { error in
+            XCTAssertEqual(error as? RootineAPIError, .cancelled)
+        }
+    }
+
+    func testStoredSessionRefreshesShortlyBeforeExpiry() {
+        let session = SupabaseSession(
+            accessToken: "access",
+            refreshToken: "refresh",
+            expiresIn: 3_600,
+            expiresAt: Int(Date().timeIntervalSince1970) + 30,
+            tokenType: "bearer",
+            user: SupabaseUser(id: "user", email: "ola@example.com")
+        )
+        XCTAssertTrue(session.shouldRefresh)
+    }
+}

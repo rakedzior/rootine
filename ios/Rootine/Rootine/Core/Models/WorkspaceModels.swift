@@ -1,0 +1,370 @@
+import Foundation
+
+enum RootineStorageKey: String, CaseIterable, Codable {
+    case tasks = "rootine.task-workspace.v1"
+    case nutrition = "rootine.nutrition-workspace.v1"
+    case notes = "rootine.notes-workspace.v1"
+}
+
+enum TaskPriority: String, Codable, CaseIterable {
+    case high
+    case medium
+    case low
+}
+
+struct WorkspaceTaxonomy: Codable, Equatable {
+    var id: String
+    var label: String
+    var color: String
+}
+
+struct WorkspaceTaskSchedule: Codable, Equatable {
+    var allDay: Bool
+    var startTime: String
+    var endTime: String? = nil
+    var endDate: String? = nil
+    var reminderMinutes: Int? = nil
+    var recurrence: String? = nil
+    var completedDates: [String]? = nil
+    var completedAtByDate: [String: String]? = nil
+    var timezone: String
+}
+
+struct WorkspaceTaskSubtask: Codable, Equatable, Identifiable {
+    var id: Int
+    var text: String
+    var done: Bool
+}
+
+struct WorkspaceTaskComment: Codable, Equatable, Identifiable {
+    var id: Int
+    var author: String
+    var text: String
+    var time: String
+}
+
+struct CommitmentTaskSource: Codable, Equatable {
+    var kind: String
+    var entity: String
+    var context: String
+    var href: String
+    var originTaskId: Int? = nil
+    var managed: String? = nil
+}
+
+struct WorkspaceTask: Codable, Equatable, Identifiable {
+    var id: Int
+    var text: String
+    var done: Bool
+    var completedAt: String? = nil
+    var time: String? = nil
+    var endTime: String? = nil
+    var tags: [String]? = nil
+    var list: String? = nil
+    var view: String
+    var priority: TaskPriority? = nil
+    var notes: String? = nil
+    var deleted: Bool? = nil
+    var calendarDate: String? = nil
+    var date: String? = nil
+    var subtasks: [WorkspaceTaskSubtask]? = nil
+    var comments: [WorkspaceTaskComment]? = nil
+    var schedule: WorkspaceTaskSchedule? = nil
+    var source: CommitmentTaskSource? = nil
+}
+
+struct WorkspaceHabitSchedule: Codable, Equatable {
+    var type: String
+    var weekdays: [Int]? = nil
+    var interval: Int? = nil
+    var startDate: String
+    var endDate: String? = nil
+}
+
+struct WorkspaceHabitPause: Codable, Equatable {
+    var startDate: String
+    var endDate: String? = nil
+}
+
+struct WorkspaceHabit: Codable, Equatable, Identifiable {
+    var id: Int
+    var name: String
+    var streak: Int
+    var done: Bool
+    var completedDates: [String]? = nil
+    var schedule: WorkspaceHabitSchedule? = nil
+    var priority: TaskPriority? = nil
+    var time: String? = nil
+    var timeOfDay: String? = nil
+    var reminderMinutes: Int? = nil
+    var color: String? = nil
+    var pausePeriods: [WorkspaceHabitPause]? = nil
+}
+
+struct TaskWorkspace: Codable, Equatable {
+    var version: Int
+    var updatedAt: String
+    var tasks: [WorkspaceTask]
+    var habits: [WorkspaceHabit]
+    var lists: [WorkspaceTaxonomy]
+    var tags: [WorkspaceTaxonomy]
+
+    static let empty = TaskWorkspace(
+        version: 2,
+        updatedAt: RootineDate.isoTimestamp(),
+        tasks: [],
+        habits: [],
+        lists: [],
+        tags: []
+    )
+}
+
+struct NutritionValues: Codable, Equatable {
+    var calories: Double
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+}
+
+struct NutritionEntry: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var portion: String
+    var amount: Double? = nil
+    var unit: String? = nil
+    var calories: Double
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+    var brand: String? = nil
+    var catalogId: String? = nil
+    var catalogSource: String? = nil
+    var per100g: NutritionValues? = nil
+    var createdAt: String
+    var updatedAt: String? = nil
+}
+
+struct NutritionMealEntries: Codable, Equatable {
+    var breakfast: [NutritionEntry]
+    var lunch: [NutritionEntry]
+    var snack: [NutritionEntry]
+    var dinner: [NutritionEntry]
+}
+
+struct NutritionDay: Codable, Equatable {
+    var date: String
+    var waterMl: Double
+    var source: String
+    var closedAt: String? = nil
+    var entries: NutritionMealEntries
+
+    static func empty(date: String) -> NutritionDay {
+        NutritionDay(
+            date: date,
+            waterMl: 0,
+            source: "user",
+            entries: NutritionMealEntries(breakfast: [], lunch: [], snack: [], dinner: [])
+        )
+    }
+}
+
+struct NutritionGoals: Codable, Equatable {
+    var calories: Double
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+    var waterMl: Double
+}
+
+struct NutritionActivity: Codable, Equatable, Identifiable {
+    var id: String
+    var type: String
+    var intensity: String
+    var timesPerWeek: Double
+    var minutesPerSession: Double
+}
+
+struct NutritionCalculatorProfile: Codable, Equatable {
+    var equationVariant: String
+    var age: Double
+    var weightKg: Double
+    var heightCm: Double
+    var workActivity: String
+    var activities: [NutritionActivity]
+    var dietAdjustmentMode: String
+    var dietAdjustmentValue: Double
+}
+
+struct MacroConfiguration: Codable, Equatable {
+    var mode: String
+    var preset: String
+    var proteinPercent: Double
+    var carbsPercent: Double
+    var fatPercent: Double
+}
+
+struct WeightMeasurement: Codable, Equatable {
+    var date: String
+    var weightKg: Double
+    var note: String? = nil
+    var createdAt: String
+    var updatedAt: String? = nil
+}
+
+struct BodyMeasurement: Codable, Equatable, Identifiable {
+    var id: String
+    var date: String
+    var type: String
+    var valueCm: Double
+    var note: String? = nil
+    var createdAt: String
+}
+
+struct CustomMealIngredient: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var brand: String? = nil
+    var amount: Double
+    var unit: String
+    var per100g: NutritionValues
+    var catalogId: String? = nil
+    var catalogSource: String? = nil
+}
+
+struct CustomMeal: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var ingredients: [CustomMealIngredient]
+    var totalWeightG: Double? = nil
+    var servings: Double? = nil
+    var createdAt: String
+    var updatedAt: String? = nil
+}
+
+struct NutritionWorkspace: Codable, Equatable {
+    var version: Int
+    var updatedAt: String
+    var goals: NutritionGoals
+    var calculatorProfile: NutritionCalculatorProfile? = nil
+    var macroConfiguration: MacroConfiguration
+    var weightMeasurements: [String: WeightMeasurement]
+    var bodyMeasurements: [String: [BodyMeasurement]]? = nil
+    var customMeals: [CustomMeal]? = nil
+    var days: [String: NutritionDay]
+
+    static let empty = NutritionWorkspace(
+        version: 6,
+        updatedAt: RootineDate.isoTimestamp(),
+        goals: NutritionGoals(calories: 2300, protein: 150, carbs: 270, fat: 75, waterMl: 2000),
+        macroConfiguration: MacroConfiguration(mode: "grams", preset: "balanced", proteinPercent: 25, carbsPercent: 45, fatPercent: 30),
+        weightMeasurements: [:],
+        bodyMeasurements: [:],
+        customMeals: [],
+        days: [:]
+    )
+}
+
+enum NoteColor: String, Codable, CaseIterable {
+    case graphite
+    case blue
+    case green
+    case amber
+    case violet
+    case coral
+}
+
+struct NoteChecklistItem: Codable, Equatable, Identifiable {
+    var id: String
+    var text: String
+    var checked: Bool
+}
+
+struct NoteList: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var createdAt: String
+}
+
+struct NoteRecord: Codable, Equatable, Identifiable {
+    var id: String
+    var title: String
+    var body: String
+    var kind: String
+    var items: [NoteChecklistItem]
+    var tags: [String]
+    var listId: String
+    var color: NoteColor
+    var pinned: Bool
+    var archived: Bool
+    var createdAt: String
+    var updatedAt: String
+}
+
+struct NotesWorkspace: Codable, Equatable {
+    var version: Int
+    var updatedAt: String
+    var lists: [NoteList]
+    var notes: [NoteRecord]
+
+    static let empty = NotesWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), lists: [], notes: [])
+}
+
+struct NutritionProduct: Codable, Equatable, Identifiable {
+    var id: String
+    var barcode: String
+    var name: String
+    var brand: String? = nil
+    var source: String
+    var defaultAmount: Double
+    var unit: String
+    var packageLabel: String? = nil
+    var per100g: NutritionValues
+}
+
+enum JSONValue: Codable, Equatable {
+    case null
+    case bool(Bool)
+    case number(Double)
+    case string(String)
+    case array([JSONValue])
+    case object([String: JSONValue])
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() { self = .null }
+        else if let value = try? container.decode(Bool.self) { self = .bool(value) }
+        else if let value = try? container.decode(Double.self) { self = .number(value) }
+        else if let value = try? container.decode(String.self) { self = .string(value) }
+        else if let value = try? container.decode([JSONValue].self) { self = .array(value) }
+        else { self = .object(try container.decode([String: JSONValue].self)) }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
+    }
+}
+
+enum RootineDate {
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static func isoTimestamp(_ date: Date = Date()) -> String {
+        isoFormatter.string(from: date)
+    }
+
+    static func localDate(_ date: Date = Date(), calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+}

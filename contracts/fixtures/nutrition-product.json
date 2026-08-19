@@ -1,0 +1,16 @@
+{
+  "id": "off-5901234123457",
+  "barcode": "5901234123457",
+  "name": "Skyr naturalny",
+  "brand": "Przykładowa marka",
+  "source": "openfoodfacts",
+  "defaultAmount": 150,
+  "unit": "g",
+  "packageLabel": "150 g",
+  "per100g": {
+    "calories": 64,
+    "protein": 12,
+    "carbs": 4,
+    "fat": 0.2
+  }
+}

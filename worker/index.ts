@@ -1,8 +1,13 @@
+import { authorizeRootineRequest } from "../api/_shared/auth";
+import { handleOpenFoodFactsBarcode } from "../api/openfoodfacts/barcode";
 import { handleOpenFoodFactsSearch } from "../api/openfoodfacts/search";
 
 interface Env {
   ASSETS: Fetcher;
   OPEN_FOOD_FACTS_CONTACT?: string;
+  SUPABASE_URL?: string;
+  SUPABASE_PUBLISHABLE_KEY?: string;
+  SUPABASE_ANON_KEY?: string;
 }
 
 const worker: ExportedHandler<Env> = {
@@ -13,6 +18,21 @@ const worker: ExportedHandler<Env> = {
       return handleOpenFoodFactsSearch(request, {
         contact: env.OPEN_FOOD_FACTS_CONTACT,
         clientIp: request.headers.get("CF-Connecting-IP") ?? undefined,
+        authorize: (candidate) => authorizeRootineRequest(candidate, {
+          supabaseUrl: env.SUPABASE_URL,
+          publishableKey: env.SUPABASE_PUBLISHABLE_KEY ?? env.SUPABASE_ANON_KEY,
+        }),
+      });
+    }
+
+    if (url.pathname === "/api/openfoodfacts/barcode") {
+      return handleOpenFoodFactsBarcode(request, {
+        contact: env.OPEN_FOOD_FACTS_CONTACT,
+        clientIp: request.headers.get("CF-Connecting-IP") ?? undefined,
+        authorize: (candidate) => authorizeRootineRequest(candidate, {
+          supabaseUrl: env.SUPABASE_URL,
+          publishableKey: env.SUPABASE_PUBLISHABLE_KEY ?? env.SUPABASE_ANON_KEY,
+        }),
       });
     }
 

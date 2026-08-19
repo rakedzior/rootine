@@ -44,7 +44,7 @@ test.describe("Today dashboard", { tag: "@shared" }, () => {
 
     await expect(page.locator(".today-day-balance__overdue-summary")).toHaveCount(0);
     await expect(page.locator("#today-day-balance-attention-title")).toHaveText("Zaległości");
-    await expect(page.locator(".today-day-balance__attention-count")).toHaveText(/^\d+ zadań$/);
+    await expect(page.locator(".today-day-balance__attention-count")).toHaveText(/^\d+ elementów$/);
   });
 
   test("keeps completed modules legible without hiding their state", async ({

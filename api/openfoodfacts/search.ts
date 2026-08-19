@@ -1,3 +1,10 @@
+import { authorizeRootineRequest, type RootineAuthorizer } from "../_shared/auth";
+import {
+  normalizeOpenFoodFactsProduct,
+  openFoodFactsUserAgent,
+  type NormalizedNutritionProduct,
+} from "./product";
+
 export const config = { runtime: "edge" };
 
 const UPSTREAM = "https://search.openfoodfacts.org/search";
@@ -9,6 +16,7 @@ const rateWindows = new Map<string, { count: number; resetAt: number }>();
 export interface OpenFoodFactsHandlerOptions {
   contact?: string;
   clientIp?: string;
+  authorize?: RootineAuthorizer;
 }
 
 function jsonResponse(
@@ -26,19 +34,11 @@ function jsonResponse(
   });
 }
 
-function runtimeEnv(name: string) {
+function runtimeContact() {
   const runtime = globalThis as typeof globalThis & {
     process?: { env?: Record<string, string | undefined> };
   };
-  return runtime.process?.env?.[name]?.trim();
-}
-
-function userAgent(contactOverride?: string) {
-  const contact = (contactOverride ?? runtimeEnv("OPEN_FOOD_FACTS_CONTACT"))
-    ?.replace(/[\r\n]+/g, " ")
-    .replace(/\s+/g, " ")
-    .slice(0, 160);
-  return contact ? `Rootine/1.0 (${contact})` : "Rootine/1.0";
+  return runtime.process?.env?.OPEN_FOOD_FACTS_CONTACT?.trim();
 }
 
 function requestIp(request: Request, override?: string) {
@@ -92,6 +92,9 @@ export async function handleOpenFoodFactsSearch(
     return jsonResponse({ error: "Method not allowed" }, 405, { allow: "GET" });
   }
 
+  const authorization = await (options.authorize ?? authorizeRootineRequest)(request);
+  if (!authorization.ok) return authorization.response;
+
   const incoming = new URL(request.url);
   const query = incoming.searchParams.get("q")?.trim() ?? "";
   if (query.length < 2 || query.length > 180) {
@@ -126,21 +129,35 @@ export async function handleOpenFoodFactsSearch(
     const response = await fetch(upstream, {
       headers: {
         accept: "application/json",
-        "user-agent": userAgent(options.contact),
+        "user-agent": openFoodFactsUserAgent(options.contact ?? runtimeContact()),
       },
     });
-    const body = await response.arrayBuffer();
-    return new Response(body, {
-      status: response.status,
-      headers: {
-        "content-type": response.headers.get("content-type") ?? "application/json; charset=utf-8",
-        "cache-control": response.ok
-          ? "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
-          : "no-store",
+    if (!response.ok) {
+      const body = await response.arrayBuffer();
+      return new Response(body, {
+        status: response.status,
+        headers: {
+          "content-type": response.headers.get("content-type") ?? "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "x-ratelimit-limit": String(RATE_LIMIT),
+          "x-ratelimit-remaining": String(rateLimit.remaining),
+        },
+      });
+    }
+
+    const payload = await response.json() as { hits?: unknown[] };
+    const products = (payload.hits ?? [])
+      .map(normalizeOpenFoodFactsProduct)
+      .filter((product): product is NormalizedNutritionProduct => Boolean(product));
+    return jsonResponse(
+      { products },
+      200,
+      {
+        "cache-control": "private, max-age=300",
         "x-ratelimit-limit": String(RATE_LIMIT),
         "x-ratelimit-remaining": String(rateLimit.remaining),
       },
-    });
+    );
   } catch {
     return jsonResponse({ error: "Open Food Facts is temporarily unavailable" }, 502, {
       "x-ratelimit-limit": String(RATE_LIMIT),

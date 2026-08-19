@@ -62,6 +62,7 @@ import {
   type NutritionProtectedDraft,
   type WeightDraftState,
 } from "../nutrition/useNutritionPageState";
+import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
 import "../../styles/nutrition.css";
 
 import {
@@ -101,6 +102,8 @@ const VIEW_PATHS: Record<NutritionSidebarItem, string> = {
 };
 
 export default function Odzywanie() {
+  const { session } = useSupabaseAuth();
+  const accessToken = session?.access_token;
   const [initialCommand] = useState(readInitialNutritionCommand);
   const quickAddRequested = initialCommand.action === "dodaj-posilek";
   const [initialLoad] = useState(loadNutritionWorkspace);
@@ -601,7 +604,7 @@ export default function Odzywanie() {
     setCatalogPending(true);
     setCatalogError("");
 
-    searchOpenFoodFacts(query, controller.signal)
+    searchOpenFoodFacts(query, controller.signal, accessToken)
       .then((results) => {
         if (catalogRequestRef.current !== controller) return;
         setCatalogResults((current) => {
@@ -632,7 +635,7 @@ export default function Odzywanie() {
           setCatalogPending(false);
         }
       });
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
     if (!entryDialogOpen) return;

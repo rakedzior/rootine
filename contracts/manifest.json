@@ -1,0 +1,36 @@
+{
+  "contractVersion": 1,
+  "sync": {
+    "table": "rootine_workspace_snapshots",
+    "applyRpc": "rootine_apply_workspace_snapshot",
+    "conflictStrategy": "compare-and-swap",
+    "createExpectedRevision": 0
+  },
+  "workspaces": [
+    {
+      "storageKey": "rootine.task-workspace.v1",
+      "domainVersion": 2,
+      "schema": "schemas/task-workspace-v2.schema.json",
+      "fixture": "fixtures/task-workspace-v2.json"
+    },
+    {
+      "storageKey": "rootine.nutrition-workspace.v1",
+      "domainVersion": 6,
+      "schema": "schemas/nutrition-workspace-v6.schema.json",
+      "fixture": "fixtures/nutrition-workspace-v6.json"
+    },
+    {
+      "storageKey": "rootine.notes-workspace.v1",
+      "domainVersion": 1,
+      "schema": "schemas/notes-workspace-v1.schema.json",
+      "fixture": "fixtures/notes-workspace-v1.json"
+    }
+  ],
+  "nutritionProductApi": {
+    "searchPath": "/api/openfoodfacts/search",
+    "barcodePath": "/api/openfoodfacts/barcode",
+    "authentication": "bearer-access-token",
+    "schema": "schemas/nutrition-product.schema.json",
+    "fixture": "fixtures/nutrition-product.json"
+  }
+}

@@ -1,0 +1,33 @@
+name: iOS foundation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-for-testing:
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Show selected toolchain
+        run: xcodebuild -version
+
+      - name: Compile app and contract tests
+        run: >-
+          xcodebuild build-for-testing
+          -project ios/Rootine/Rootine.xcodeproj
+          -scheme Rootine
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/RootineDerivedData"
+          CODE_SIGNING_ALLOWED=NO

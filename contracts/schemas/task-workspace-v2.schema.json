@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/task-workspace-v2.schema.json",
+  "title": "Rootine task workspace v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "updatedAt", "tasks", "habits", "lists", "tags"],
+  "properties": {
+    "version": { "const": 2 },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" } },
+    "habits": { "type": "array", "items": { "$ref": "#/$defs/habit" } },
+    "lists": { "type": "array", "items": { "$ref": "#/$defs/taxonomy" } },
+    "tags": { "type": "array", "items": { "$ref": "#/$defs/taxonomy" } }
+  },
+  "$defs": {
+    "localDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "clockTime": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+    "priority": { "enum": ["high", "medium", "low"] },
+    "taxonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "color"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "color": { "type": "string" }
+      }
+    },
+    "subtask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "done"],
+      "properties": {
+        "id": { "type": "integer" },
+        "text": { "type": "string" },
+        "done": { "type": "boolean" }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "author", "text", "time"],
+      "properties": {
+        "id": { "type": "integer" },
+        "author": { "type": "string" },
+        "text": { "type": "string" },
+        "time": { "type": "string" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entity", "context", "href"],
+      "properties": {
+        "kind": { "enum": ["work", "travel", "sport", "goals", "affairs", "notes"] },
+        "entity": { "type": "string" },
+        "context": { "type": "string" },
+        "href": { "type": "string" },
+        "originTaskId": { "type": "integer" },
+        "managed": { "enum": ["projection", "native"] }
+      }
+    },
+    "taskSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allDay", "startTime", "timezone"],
+      "properties": {
+        "allDay": { "type": "boolean" },
+        "startTime": { "type": "string" },
+        "endTime": { "$ref": "#/$defs/clockTime" },
+        "endDate": { "$ref": "#/$defs/localDate" },
+        "reminderMinutes": { "type": "integer", "minimum": 0 },
+        "recurrence": { "enum": ["daily", "weekly", "monthly", "yearly"] },
+        "completedDates": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/localDate" } },
+        "completedAtByDate": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "format": "date-time" }
+        },
+        "timezone": { "type": "string", "minLength": 1 }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "done", "view"],
+      "properties": {
+        "id": { "type": "integer" },
+        "text": { "type": "string" },
+        "done": { "type": "boolean" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "time": { "type": "string" },
+        "endTime": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "list": { "type": "string" },
+        "view": { "type": "string" },
+        "priority": { "$ref": "#/$defs/priority" },
+        "notes": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "calendarDate": { "type": "string" },
+        "date": { "type": "string" },
+        "subtasks": { "type": "array", "items": { "$ref": "#/$defs/subtask" } },
+        "comments": { "type": "array", "items": { "$ref": "#/$defs/comment" } },
+        "schedule": { "$ref": "#/$defs/taskSchedule" },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "habitSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "startDate"],
+      "properties": {
+        "type": { "enum": ["daily", "weekly", "interval"] },
+        "weekdays": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1, "maximum": 7 } },
+        "interval": { "type": "integer", "minimum": 1 },
+        "startDate": { "$ref": "#/$defs/localDate" },
+        "endDate": { "$ref": "#/$defs/localDate" }
+      }
+    },
+    "habitPause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startDate"],
+      "properties": {
+        "startDate": { "$ref": "#/$defs/localDate" },
+        "endDate": { "$ref": "#/$defs/localDate" }
+      }
+    },
+    "habit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "streak", "done"],
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": "string" },
+        "streak": { "type": "integer", "minimum": 0 },
+        "done": { "type": "boolean" },
+        "completedDates": { "type": "array", "items": { "$ref": "#/$defs/localDate" } },
+        "schedule": { "$ref": "#/$defs/habitSchedule" },
+        "priority": { "$ref": "#/$defs/priority" },
+        "time": { "$ref": "#/$defs/clockTime" },
+        "timeOfDay": { "enum": ["morning", "afternoon", "evening"] },
+        "reminderMinutes": { "type": "integer", "minimum": 0 },
+        "color": { "type": "string" },
+        "pausePeriods": { "type": "array", "items": { "$ref": "#/$defs/habitPause" } }
+      }
+    }
+  }
+}
