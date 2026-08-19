@@ -1,5 +1,5 @@
 # Copy to .dev.vars for local Cloudflare development. Never commit .dev.vars.
-OPEN_FOOD_FACTS_CONTACT=
-SUPABASE_URL=
-SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_ANON_KEY=
+OPEN_FOOD_FACTS_CONTACT=ra.kedzior@gmail.com
+SUPABASE_URL=https://jtyyephltdmnohcfcler.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_91ak0HftK0mds6mzTd_DTA_6Um7pQd3
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0eXllcGhsdGRtbm9oY2ZjbGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMDM4MDQsImV4cCI6MjEwMTU3OTgwNH0.CnyT4GOsIPfBn7FTiFa5eQPI9U69ZoN2kcokL8g8IJg

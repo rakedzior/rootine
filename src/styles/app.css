@@ -6,6 +6,7 @@
 @import "./experience.css";
 @import "./ambient.css";
 @import "./auth.css";
+@import "./legal.css";
 @import "tailwindcss" source(none);
 @source "../**/*.{js,ts,jsx,tsx}";
 
