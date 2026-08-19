@@ -62,6 +62,7 @@ import {
   type NutritionProtectedDraft,
   type WeightDraftState,
 } from "../nutrition/useNutritionPageState";
+import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
 import "../../styles/nutrition.css";
 
 import {
@@ -101,6 +102,8 @@ const VIEW_PATHS: Record<NutritionSidebarItem, string> = {
 };
 
 export default function Odzywanie() {
+  const { session } = useSupabaseAuth();
+  const accessToken = session?.access_token;
   const [initialCommand] = useState(readInitialNutritionCommand);
   const quickAddRequested = initialCommand.action === "dodaj-posilek";
   const [initialLoad] = useState(loadNutritionWorkspace);
@@ -601,7 +604,7 @@ export default function Odzywanie() {
     setCatalogPending(true);
     setCatalogError("");
 
-    searchOpenFoodFacts(query, controller.signal)
+    searchOpenFoodFacts(query, controller.signal, accessToken)
       .then((results) => {
         if (catalogRequestRef.current !== controller) return;
         setCatalogResults((current) => {
@@ -632,7 +635,7 @@ export default function Odzywanie() {
           setCatalogPending(false);
         }
       });
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
     if (!entryDialogOpen) return;
@@ -1285,8 +1288,13 @@ export default function Odzywanie() {
                             {mealEntries.map((entry) => (
                               <div key={entry.id} className="nutrition-entry-item">
                                 <div className="nutrition-entry-item__main">
-                                  <span className="nutrition-entry-item__name" title={entry.name}>{entry.name}</span>
-                                  {entry.brand && <span className="nutrition-product-brand">{entry.brand}</span>}
+                                  <span
+                                    className="nutrition-entry-item__name"
+                                    title={entry.brand ? `${entry.name} (${entry.brand})` : entry.name}
+                                  >
+                                    {entry.name}
+                                    {entry.brand && <span className="nutrition-entry-item__brand"> ({entry.brand})</span>}
+                                  </span>
                                   <p>{entry.portion} · Białko {formatNumber(entry.protein)} g · Węglowodany {formatNumber(entry.carbs)} g · Tłuszcze {formatNumber(entry.fat)} g</p>
                                 </div>
                                 <div className="nutrition-entry-item__nutrition" aria-label={`Wartości odżywcze: ${entry.portion}, białko ${formatNumber(entry.protein)} gramów, węglowodany ${formatNumber(entry.carbs)} gramów, tłuszcz ${formatNumber(entry.fat)} gramów, ${formatNumber(entry.calories)} kilokalorii`}>

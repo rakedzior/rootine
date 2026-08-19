@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/nutrition-workspace-v6.schema.json",
+  "title": "Rootine nutrition workspace v6",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "updatedAt", "goals", "macroConfiguration", "weightMeasurements", "days"],
+  "properties": {
+    "version": { "const": 6 },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "goals": { "$ref": "#/$defs/goals" },
+    "calculatorProfile": { "$ref": "#/$defs/calculatorProfile" },
+    "macroConfiguration": { "$ref": "#/$defs/macroConfiguration" },
+    "weightMeasurements": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/weightMeasurement" }
+    },
+    "bodyMeasurements": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/bodyMeasurement" }
+      }
+    },
+    "customMeals": { "type": "array", "items": { "$ref": "#/$defs/customMeal" } },
+    "days": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/day" }
+    }
+  },
+  "$defs": {
+    "localDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "nutritionValues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calories", "protein", "carbs", "fat"],
+      "properties": {
+        "calories": { "type": "number", "minimum": 0 },
+        "protein": { "type": "number", "minimum": 0 },
+        "carbs": { "type": "number", "minimum": 0 },
+        "fat": { "type": "number", "minimum": 0 }
+      }
+    },
+    "goals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calories", "protein", "carbs", "fat", "waterMl"],
+      "properties": {
+        "calories": { "type": "number", "exclusiveMinimum": 0 },
+        "protein": { "type": "number", "exclusiveMinimum": 0 },
+        "carbs": { "type": "number", "exclusiveMinimum": 0 },
+        "fat": { "type": "number", "exclusiveMinimum": 0 },
+        "waterMl": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "intensity", "timesPerWeek", "minutesPerSession"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "enum": ["strength", "running", "cycling", "swimming", "walking", "team", "yoga", "martial-arts", "other"] },
+        "intensity": { "enum": ["light", "moderate", "intense"] },
+        "timesPerWeek": { "type": "number", "minimum": 1, "maximum": 14 },
+        "minutesPerSession": { "type": "number", "minimum": 5, "maximum": 360 }
+      }
+    },
+    "calculatorProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["equationVariant", "age", "weightKg", "heightCm", "workActivity", "activities", "dietAdjustmentMode", "dietAdjustmentValue"],
+      "properties": {
+        "equationVariant": { "enum": ["female", "male"] },
+        "age": { "type": "number", "minimum": 18, "maximum": 100 },
+        "weightKg": { "type": "number", "minimum": 30, "maximum": 300 },
+        "heightCm": { "type": "number", "minimum": 120, "maximum": 230 },
+        "workActivity": { "enum": ["desk", "light", "standing", "physical", "heavy"] },
+        "activities": { "type": "array", "items": { "$ref": "#/$defs/activity" } },
+        "dietAdjustmentMode": { "enum": ["percent", "kcal"] },
+        "dietAdjustmentValue": { "type": "number", "minimum": -2000, "maximum": 2000 }
+      }
+    },
+    "macroConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "preset", "proteinPercent", "carbsPercent", "fatPercent"],
+      "properties": {
+        "mode": { "enum": ["auto", "percent", "grams"] },
+        "preset": { "enum": ["balanced", "strength", "cut", "endurance"] },
+        "proteinPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "carbsPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "fatPercent": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "weightMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "weightKg", "createdAt"],
+      "properties": {
+        "date": { "$ref": "#/$defs/localDate" },
+        "weightKg": { "type": "number", "minimum": 20, "maximum": 500 },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "bodyMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "date", "type", "valueCm", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "$ref": "#/$defs/localDate" },
+        "type": { "type": "string" },
+        "valueCm": { "type": "number", "exclusiveMinimum": 0, "maximum": 300 },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "portion", "calories", "protein", "carbs", "fat", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "portion": { "type": "string" },
+        "amount": { "type": "number", "minimum": 0 },
+        "unit": { "enum": ["g", "ml"] },
+        "calories": { "type": "number", "minimum": 0 },
+        "protein": { "type": "number", "minimum": 0 },
+        "carbs": { "type": "number", "minimum": 0 },
+        "fat": { "type": "number", "minimum": 0 },
+        "brand": { "type": "string" },
+        "catalogId": { "type": "string" },
+        "catalogSource": { "enum": ["usda", "openfoodfacts"] },
+        "per100g": { "$ref": "#/$defs/nutritionValues" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "day": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "waterMl", "source", "entries"],
+      "properties": {
+        "date": { "$ref": "#/$defs/localDate" },
+        "waterMl": { "type": "number", "minimum": 0 },
+        "source": { "enum": ["user", "demo"] },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "entries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["breakfast", "lunch", "snack", "dinner"],
+          "properties": {
+            "breakfast": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+            "lunch": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+            "snack": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+            "dinner": { "type": "array", "items": { "$ref": "#/$defs/entry" } }
+          }
+        }
+      }
+    },
+    "customMealIngredient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "amount", "unit", "per100g"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": "string" },
+        "amount": { "type": "number", "minimum": 0 },
+        "unit": { "enum": ["g", "ml"] },
+        "per100g": { "$ref": "#/$defs/nutritionValues" },
+        "catalogId": { "type": "string" },
+        "catalogSource": { "enum": ["usda", "openfoodfacts"] }
+      }
+    },
+    "customMeal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "ingredients", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ingredients": { "type": "array", "items": { "$ref": "#/$defs/customMealIngredient" } },
+        "totalWeightG": { "type": "number", "minimum": 0 },
+        "servings": { "type": "number", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

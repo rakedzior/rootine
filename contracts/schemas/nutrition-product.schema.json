@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/nutrition-product.schema.json",
+  "title": "Rootine normalized nutrition product",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "barcode", "name", "source", "defaultAmount", "unit", "per100g"],
+  "properties": {
+    "id": { "type": "string" },
+    "barcode": { "type": "string", "pattern": "^[0-9]{8,14}$" },
+    "name": { "type": "string", "minLength": 1 },
+    "brand": { "type": "string" },
+    "source": { "const": "openfoodfacts" },
+    "defaultAmount": { "type": "number", "exclusiveMinimum": 0 },
+    "unit": { "enum": ["g", "ml"] },
+    "packageLabel": { "type": "string" },
+    "per100g": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calories", "protein", "carbs", "fat"],
+      "properties": {
+        "calories": { "type": "number", "minimum": 0 },
+        "protein": { "type": "number", "minimum": 0 },
+        "carbs": { "type": "number", "minimum": 0 },
+        "fat": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,2 +1,5 @@
 # Copy to .dev.vars for local Cloudflare development. Never commit .dev.vars.
 OPEN_FOOD_FACTS_CONTACT=
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_ANON_KEY=

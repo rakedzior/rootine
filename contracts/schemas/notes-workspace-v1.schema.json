@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/notes-workspace-v1.schema.json",
+  "title": "Rootine notes workspace v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "updatedAt", "lists", "notes"],
+  "properties": {
+    "version": { "const": 1 },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "lists": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "body", "kind", "items", "tags", "listId", "color", "pinned", "archived", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "kind": { "enum": ["text", "checklist"] },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "text", "checked"],
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "checked": { "type": "boolean" }
+              }
+            }
+          },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "listId": { "type": "string" },
+          "color": { "enum": ["graphite", "blue", "green", "amber", "violet", "coral"] },
+          "pinned": { "type": "boolean" },
+          "archived": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

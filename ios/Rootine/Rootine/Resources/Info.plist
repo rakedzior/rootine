@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Rootine</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(ROOTINE_AUTH_CALLBACK_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Rootine używa aparatu wyłącznie do skanowania kodów produktów.</string>
+	<key>ROOTINE_AUTH_CALLBACK_SCHEME</key>
+	<string>$(ROOTINE_AUTH_CALLBACK_SCHEME)</string>
+	<key>ROOTINE_BACKEND_URL</key>
+	<string>$(ROOTINE_BACKEND_URL)</string>
+	<key>ROOTINE_PRIVACY_URL</key>
+	<string>$(ROOTINE_PRIVACY_URL)</string>
+	<key>ROOTINE_SUPABASE_PUBLISHABLE_KEY</key>
+	<string>$(ROOTINE_SUPABASE_PUBLISHABLE_KEY)</string>
+	<key>ROOTINE_SUPABASE_URL</key>
+	<string>$(ROOTINE_SUPABASE_URL)</string>
+	<key>ROOTINE_TERMS_URL</key>
+	<string>$(ROOTINE_TERMS_URL)</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+</dict>
+</plist>

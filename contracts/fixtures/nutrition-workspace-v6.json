@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "updatedAt": "2026-08-19T10:05:00.000Z",
+  "goals": {
+    "calories": 2300,
+    "protein": 150,
+    "carbs": 270,
+    "fat": 75,
+    "waterMl": 2500
+  },
+  "calculatorProfile": {
+    "equationVariant": "male",
+    "age": 31,
+    "weightKg": 81.5,
+    "heightCm": 180,
+    "workActivity": "desk",
+    "activities": [
+      {
+        "id": "activity-strength",
+        "type": "strength",
+        "intensity": "moderate",
+        "timesPerWeek": 3,
+        "minutesPerSession": 50
+      }
+    ],
+    "dietAdjustmentMode": "percent",
+    "dietAdjustmentValue": 0
+  },
+  "macroConfiguration": {
+    "mode": "grams",
+    "preset": "balanced",
+    "proteinPercent": 25,
+    "carbsPercent": 45,
+    "fatPercent": 30
+  },
+  "weightMeasurements": {
+    "2026-08-19": {
+      "date": "2026-08-19",
+      "weightKg": 81.5,
+      "note": "Pomiar rano",
+      "createdAt": "2026-08-19T05:45:00.000Z"
+    }
+  },
+  "bodyMeasurements": {},
+  "customMeals": [],
+  "days": {
+    "2026-08-19": {
+      "date": "2026-08-19",
+      "waterMl": 750,
+      "source": "user",
+      "entries": {
+        "breakfast": [
+          {
+            "id": "entry-skyr-20260819",
+            "name": "Skyr naturalny",
+            "portion": "150 g",
+            "amount": 150,
+            "unit": "g",
+            "calories": 96,
+            "protein": 18,
+            "carbs": 6,
+            "fat": 0.3,
+            "brand": "Przykładowa marka",
+            "catalogId": "off-5901234123457",
+            "catalogSource": "openfoodfacts",
+            "per100g": {
+              "calories": 64,
+              "protein": 12,
+              "carbs": 4,
+              "fat": 0.2
+            },
+            "createdAt": "2026-08-19T06:30:00.000Z"
+          }
+        ],
+        "lunch": [],
+        "snack": [],
+        "dinner": []
+      }
+    }
+  }
+}

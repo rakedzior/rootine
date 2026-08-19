@@ -287,7 +287,7 @@ function isWorkspaceList(value: unknown): value is WorkspaceList {
     && typeof value.color === "string";
 }
 
-function isWorkspace(value: unknown): value is TaskWorkspace {
+export function isTaskWorkspace(value: unknown): value is TaskWorkspace {
   return isRecord(value)
     && value.version === WORKSPACE_VERSION
     && typeof value.updatedAt === "string"
@@ -395,7 +395,7 @@ export function loadTaskWorkspaceResult(): LocalLoadResult<TaskWorkspace> {
   const result = readLocalWorkspace({
     key: TASK_STORAGE_KEY,
     fallback: createEmptyTaskWorkspace,
-    validate: isWorkspace,
+    validate: isTaskWorkspace,
     migrate: migrateLegacyWorkspace,
   });
   return {

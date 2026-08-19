@@ -20,7 +20,7 @@ export interface FoodSuggestion {
 }
 
 interface SearchPayload {
-  hits?: unknown[];
+  products?: unknown[];
 }
 
 export class OpenFoodFactsSearchError extends Error {
@@ -118,53 +118,31 @@ function escapeLuceneText(value: string) {
     .replace(/([+\-!(){}[\]^"~*?:\\/])/g, "\\$1");
 }
 
-function normalizePackageAmount(value: unknown, unitValue: unknown, quantityLabel: string) {
-  let amount = numberValue(value);
-  let unit = textValue(unitValue).toLocaleLowerCase();
-  if (!amount && quantityLabel) {
-    const match = quantityLabel
-      .replace(",", ".")
-      .match(/(\d+(?:\.\d+)?)\s*(kilograms?|kilogramy?|kg|grams?|gramy?|g|millilit(?:er|re)s?|mililitry?|ml|centilit(?:er|re)s?|cl|lit(?:er|re)s?|litry?|l)\b/i);
-    if (match) {
-      amount = Number(match[1]);
-      unit = match[2].toLocaleLowerCase();
-    }
-  }
-  if (!amount || amount <= 0) return { amount: 100, unit: "g" as const };
-  if (/^(kilograms?|kilogramy?|kg)$/.test(unit) && amount * 1000 <= 20_000) return { amount: amount * 1000, unit: "g" as const };
-  if (/^(lit(?:er|re)s?|litry?|l)$/.test(unit) && amount * 1000 <= 20_000) return { amount: amount * 1000, unit: "ml" as const };
-  if (/^(centilit(?:er|re)s?|cl)$/.test(unit) && amount * 10 <= 20_000) return { amount: amount * 10, unit: "ml" as const };
-  if (/^(millilit(?:er|re)s?|mililitry?|ml)$/.test(unit) && amount <= 20_000) return { amount, unit: "ml" as const };
-  if (/^(grams?|gramy?|g)$/.test(unit) && amount <= 20_000) return { amount, unit: "g" as const };
-  return { amount: 100, unit: "g" as const };
-}
-
 function mapOpenFoodFactsHit(value: unknown): FoodSuggestion | null {
   if (!isRecord(value)) return null;
-  const nutriments = isRecord(value.nutriments) ? value.nutriments : {};
-  const calories = numberValue(nutriments["energy-kcal_100g"]);
-  if (calories === undefined || calories <= 0) return null;
-  const name = textValue(value.product_name_pl) || textValue(value.product_name) || textValue(value.product_name_en);
-  const code = textValue(value.code);
-  if (!name || !code) return null;
-  const brand = textValue(value.brands) || undefined;
-  const packageLabel = textValue(value.quantity) || undefined;
-  const packageAmount = brand
-    ? normalizePackageAmount(value.product_quantity, value.product_quantity_unit, packageLabel ?? "")
-    : { amount: 100, unit: "g" as const };
+  const per100g = isRecord(value.per100g) ? value.per100g : {};
+  const calories = numberValue(per100g.calories);
+  if (value.source !== "openfoodfacts" || calories === undefined || calories < 0) return null;
+  const name = textValue(value.name);
+  const id = textValue(value.id);
+  if (!name || !id) return null;
+  const brand = textValue(value.brand) || undefined;
+  const packageLabel = textValue(value.packageLabel) || undefined;
+  const defaultAmount = numberValue(value.defaultAmount);
+  const unit = value.unit === "ml" ? "ml" as const : "g" as const;
   return {
-    id: `off-${code}`,
+    id,
     name,
     brand,
     source: "openfoodfacts",
-    defaultAmount: packageAmount.amount,
-    unit: packageAmount.unit,
-    packageLabel: brand ? packageLabel : undefined,
+    defaultAmount: defaultAmount && defaultAmount > 0 ? defaultAmount : 100,
+    unit,
+    packageLabel,
     per100g: {
       calories,
-      protein: numberValue(nutriments.proteins_100g) ?? 0,
-      carbs: numberValue(nutriments.carbohydrates_100g) ?? 0,
-      fat: numberValue(nutriments.fat_100g) ?? 0,
+      protein: numberValue(per100g.protein) ?? 0,
+      carbs: numberValue(per100g.carbs) ?? 0,
+      fat: numberValue(per100g.fat) ?? 0,
     },
   };
 }
@@ -188,7 +166,7 @@ export function searchGenericFoods(query: string, limit = 8) {
     .map((candidate) => candidate.food);
 }
 
-export async function searchOpenFoodFacts(query: string, signal?: AbortSignal) {
+export async function searchOpenFoodFacts(query: string, signal?: AbortSignal, accessToken?: string) {
   const normalizedQuery = query.trim();
   if (normalizedQuery.length < 2) return [];
   const cacheKey = normalizedText(normalizedQuery);
@@ -215,7 +193,10 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal) {
   });
   const response = await fetch(`${SEARCH_ENDPOINT}?${params}`, {
     signal,
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
   });
   if (!response.ok) {
     const retryAfter = response.headers.get("retry-after");
@@ -226,7 +207,7 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal) {
   }
   const payload = await response.json() as SearchPayload;
   const queryTerms = normalizedText(normalizedQuery).split(/\s+/).filter(Boolean);
-  const mapped = (payload.hits ?? [])
+  const mapped = (payload.products ?? [])
     .map(mapOpenFoodFactsHit)
     .filter((item): item is FoodSuggestion => Boolean(item))
     .filter((item) => queryTerms.every((term) => normalizedText([item.name, item.brand ?? ""].join(" ")).includes(term)));

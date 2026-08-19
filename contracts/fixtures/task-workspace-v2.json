@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "updatedAt": "2026-08-19T08:30:00.000Z",
+  "tasks": [
+    {
+      "id": 101,
+      "text": "Umówić badanie kontrolne",
+      "done": false,
+      "view": "dzis",
+      "calendarDate": "2026-08-19",
+      "tags": ["zdrowie"],
+      "list": "osobiste",
+      "priority": "high",
+      "notes": "Zabrać poprzednie wyniki.",
+      "schedule": {
+        "allDay": false,
+        "startTime": "16:30",
+        "endTime": "17:00",
+        "reminderMinutes": 30,
+        "timezone": "Europe/Warsaw"
+      }
+    },
+    {
+      "id": 102,
+      "text": "Cotygodniowy przegląd",
+      "done": true,
+      "completedAt": "2026-08-19T07:15:00.000Z",
+      "view": "dzis",
+      "calendarDate": "2026-08-19",
+      "priority": "medium",
+      "schedule": {
+        "allDay": true,
+        "startTime": "",
+        "recurrence": "weekly",
+        "completedDates": ["2026-08-19"],
+        "completedAtByDate": {
+          "2026-08-19": "2026-08-19T07:15:00.000Z"
+        },
+        "timezone": "Europe/Warsaw"
+      }
+    }
+  ],
+  "habits": [
+    {
+      "id": 201,
+      "name": "Spacer 20 minut",
+      "streak": 3,
+      "done": true,
+      "completedDates": ["2026-08-17", "2026-08-18", "2026-08-19"],
+      "priority": "medium",
+      "timeOfDay": "afternoon",
+      "color": "#3F8CFF",
+      "schedule": {
+        "type": "daily",
+        "startDate": "2026-08-01"
+      }
+    }
+  ],
+  "lists": [
+    { "id": "osobiste", "label": "Osobiste", "color": "#6D7A8C" }
+  ],
+  "tags": [
+    { "id": "zdrowie", "label": "zdrowie", "color": "#3F8CFF" }
+  ]
+}

@@ -9,6 +9,11 @@ export default defineConfig({
       "api/**/*.{test,spec}.ts",
     ],
     environment: "jsdom",
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost/",
+      },
+    },
     setupFiles: ["src/test/setup.ts"],
     css: true,
     restoreMocks: true,

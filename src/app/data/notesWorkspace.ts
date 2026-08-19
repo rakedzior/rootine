@@ -181,7 +181,7 @@ function isNote(value: unknown): value is NoteRecord {
     && typeof value.updatedAt === "string";
 }
 
-function isWorkspace(value: unknown): value is NotesWorkspace {
+export function isNotesWorkspace(value: unknown): value is NotesWorkspace {
   return isRecord(value)
     && value.version === WORKSPACE_VERSION
     && typeof value.updatedAt === "string"
@@ -215,7 +215,7 @@ export function loadNotesWorkspaceResult(): LocalLoadResult<NotesWorkspace> {
   return readLocalWorkspace({
     key: NOTES_STORAGE_KEY,
     fallback: createEmptyNotesWorkspace,
-    validate: isWorkspace,
+    validate: isNotesWorkspace,
   });
 }
 

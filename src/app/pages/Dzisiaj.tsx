@@ -199,10 +199,13 @@ function shiftDateKey(dateKey: string, days: number) {
   return toCalendarDateKey(date);
 }
 
+function goalHasDueMilestone(goal: Goal, todayKey: string) {
+  return goal.milestones.some((item) => !item.done && item.dueDate <= todayKey);
+}
+
 function goalHasAttentionSignal(goal: Goal, todayKey: string) {
   if (goal.status !== "active") return false;
-  const hasDueMilestone = goal.milestones.some((item) => !item.done && item.dueDate <= todayKey);
-  return goal.health === "risk" || hasDueMilestone;
+  return goal.health === "risk" || goalHasDueMilestone(goal, todayKey);
 }
 
 function isDailyRegularGoal(goal: Goal, todayKey: string) {
@@ -498,6 +501,7 @@ export default function Dzisiaj() {
   const overdueGoals = todayGoals.filter((goal) => (
     goal.milestones.some((milestone) => !milestone.done && milestone.dueDate < todayKey)
   ));
+  const goalsWithDueMilestones = todayGoals.filter((goal) => goalHasDueMilestone(goal, todayKey));
   const overdueGoalIds = new Set(overdueGoals.map((goal) => goal.id));
   const atRiskGoals = todayGoals.filter((goal) => goal.health === "risk" && !overdueGoalIds.has(goal.id));
   const goalsAttentionCount = overdueGoals.length + atRiskGoals.length;
@@ -561,20 +565,22 @@ export default function Dzisiaj() {
     + (visibleModuleIds.has("work") ? workTasksForToday.length : 0)
     + (visibleModuleIds.has("goals") ? todayGoals.length : 0)
     + (visibleModuleIds.has("sport") ? todayWorkouts.length : 0)
-    + (visibleModuleIds.has("affairs") ? todayAffairs.length : 0)
-    + (visibleModuleIds.has("nutrition") ? 1 : 0);
+    + (visibleModuleIds.has("affairs") ? todayAffairs.length : 0);
   const completedDailyItems = (visibleModuleIds.has("tasks")
     ? completedTodayTasks + completedHabits
     : 0)
     + (visibleModuleIds.has("work") ? completedWorkTasks : 0)
     + (visibleModuleIds.has("goals") ? completedTodayGoals : 0)
-    + (visibleModuleIds.has("sport") ? completedWorkouts : 0)
-    + (visibleModuleIds.has("nutrition") && nutritionClosed ? 1 : 0);
+    + (visibleModuleIds.has("sport") ? completedWorkouts : 0);
   const remainingDailyItems = Math.max(0, totalDailyItems - completedDailyItems);
   const overdueItems = (visibleModuleIds.has("tasks") ? overdueTasks.length : 0)
     + (visibleModuleIds.has("work") ? overdueWorkTasks.length : 0)
     + (visibleModuleIds.has("goals") ? overdueGoals.length : 0)
     + (visibleModuleIds.has("affairs") ? overdueAffairs.length : 0);
+  const overdueEligibleItems = (visibleModuleIds.has("tasks") ? taskModuleTotal : 0)
+    + (visibleModuleIds.has("work") ? workTasksForToday.length : 0)
+    + (visibleModuleIds.has("goals") ? goalsWithDueMilestones.length : 0)
+    + (visibleModuleIds.has("affairs") ? todayAffairs.length : 0);
   const priorityItems = (visibleModuleIds.has("tasks")
     ? todayTasks.filter((task) => Boolean(task.priority)).length
       + habitsForToday.filter((habit) => Boolean(habit.priority)).length
@@ -585,8 +591,8 @@ export default function Dzisiaj() {
       + habitsForToday.filter((habit) => Boolean(habit.priority) && habitDoneToday(habit)).length
     : 0)
     + (visibleModuleIds.has("work") ? workTasksDueToday.filter((task) => task.priority !== "none" && task.completed).length : 0);
-  const overdueRate = totalDailyItems > 0
-    ? Math.min(100, Math.round((overdueItems / totalDailyItems) * 100))
+  const overdueRate = overdueEligibleItems > 0
+    ? Math.min(100, Math.round((overdueItems / overdueEligibleItems) * 100))
     : 0;
   const dayComplete = remainingDailyItems === 0;
 
@@ -860,7 +866,7 @@ export default function Dzisiaj() {
                 </div>
                 <div className="today-day-balance__remaining-summary">
                   <Circle size={21} aria-hidden="true" />
-                  <span>{counted(remainingDailyItems, "zadanie", "zadania", "zadań")} pozostało</span>
+                  <span>{counted(remainingDailyItems, "element", "elementy", "elementów")} pozostało</span>
                 </div>
               </div>
 
@@ -899,16 +905,16 @@ export default function Dzisiaj() {
                   <div className="today-day-balance__attention-summary">
                     <div className="today-day-balance__attention-head">
                       <strong>
-                        {overdueItems ? "Zaległe zadania" : "Brak zaległości"}
+                        {overdueItems ? "Zaległe elementy" : "Brak zaległości"}
                       </strong>
                     </div>
                     <span className="today-day-balance__attention-count">
-                      {counted(overdueItems, "zadanie", "zadania", "zadań")}
+                      {counted(overdueItems, "element", "elementy", "elementów")}
                     </span>
                     <p className="today-day-balance__attention-footer">
                       {overdueItems
                         ? `w ${overdueAreaIds.size} ${overdueAreaIds.size === 1 ? "obszarze" : "obszarach"}`
-                        : "Świetna robota! Wszystkie zadania są na bieżąco."}
+                        : "Świetna robota! Wszystkie elementy są na bieżąco."}
                     </p>
                   </div>
                 </div>
