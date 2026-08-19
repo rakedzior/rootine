@@ -2,9 +2,9 @@
 
 .nutrition-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  grid-template-columns: minmax(0, 1fr) minmax(268px, 0.42fr);
   align-items: start;
-  gap: 24px;
+  gap: var(--space-xl);
   max-width: 1440px;
   margin: 0 auto;
   width: 100%;
@@ -20,6 +20,7 @@
   padding: var(--space-xl) var(--space-3xl);
   overflow-y: auto;
   scrollbar-width: none;
+  container: nutrition-workspace / inline-size;
 }
 
 .nutrition-content::-webkit-scrollbar { display: none; }
@@ -111,8 +112,17 @@
 
 /* The meal rows respond to the width of this panel; see the @container rule at the end. */
 .nutrition-meals-panel {
-  --nutrition-ledger-column-width: 72px;
-  --nutrition-meal-columns: minmax(0, 1fr) repeat(5, var(--nutrition-ledger-column-width)) 70px;
+  --nutrition-ledger-gap: var(--space-sm);
+  --nutrition-ledger-portion-width: 68px;
+  --nutrition-ledger-macro-width: 56px;
+  --nutrition-ledger-calories-width: 64px;
+  --nutrition-ledger-actions-width: 64px;
+  --nutrition-meal-columns:
+    minmax(0, 1fr)
+    var(--nutrition-ledger-portion-width)
+    repeat(3, var(--nutrition-ledger-macro-width))
+    var(--nutrition-ledger-calories-width)
+    var(--nutrition-ledger-actions-width);
 
   container: nutrition-meals / inline-size;
 }
@@ -126,7 +136,7 @@
   display: grid;
   grid-template-columns: var(--nutrition-meal-columns);
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--nutrition-ledger-gap);
   padding: 0 var(--space-md) var(--space-sm);
   color: var(--color-text-tertiary);
   font-size: var(--text-micro);
@@ -157,7 +167,7 @@
   display: grid;
   grid-template-columns: var(--nutrition-meal-columns);
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--nutrition-ledger-gap);
   min-height: 48px;
   padding: 0 var(--space-md);
 }
@@ -244,7 +254,7 @@
   display: grid;
   grid-template-columns: var(--nutrition-meal-columns);
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--nutrition-ledger-gap);
   min-height: 62px;
   padding: var(--space-sm) var(--space-md);
   transition: background-color var(--motion-fast) var(--ease-out);
@@ -297,6 +307,11 @@
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.nutrition-entry-item__brand {
+  color: var(--color-text-tertiary);
+  font-weight: var(--weight-regular);
 }
 
 .nutrition-entry-item__main p {
@@ -2170,7 +2185,7 @@
 
 @media (min-width: 1121px) and (max-width: 1280px) {
   .nutrition-layout {
-    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+    grid-template-columns: minmax(0, 1fr) minmax(268px, 0.42fr);
     gap: var(--space-lg);
   }
 
@@ -2226,51 +2241,6 @@
 
   .nutrition-budget-card__content {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .nutrition-meal-card__header {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    min-height: 68px;
-  }
-
-  .nutrition-meal-card__identity {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .nutrition-meal-card__add-action {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .nutrition-meal-summary {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    width: 100%;
-    gap: 4px;
-  }
-
-  .nutrition-meal-summary__metric.is-protein,
-  .nutrition-meal-summary__metric.is-carbs,
-  .nutrition-meal-summary__metric.is-fat,
-  .nutrition-meal-summary__metric.is-calories {
-    grid-column: auto;
-    font-size: var(--text-micro);
-  }
-
-  .nutrition-meal-summary__metric.is-portion {
-    display: none;
-  }
-
-  .nutrition-entry-list {
-    overflow-x: auto;
-  }
-
-  .nutrition-entry-item {
-    min-width: 520px;
   }
 
   .nutrition-calculator-profile-grid {
@@ -3680,115 +3650,69 @@
 }
 
 /*
- * The meal list packs a title, four macros and actions into one row. Whether that fits
- * depends on the width the list actually has - which the local sidebar changed - so the
- * narrow layout is driven by the panel, not by the viewport.
+ * The nutrition workspace gives the ledger priority in four deliberate stages:
+ * a fluidly narrower summary, summary cards below the meals, tighter ledger columns,
+ * and finally a name-only row. Every visible ledger stage remains a single aligned row.
  */
-@container nutrition-meals (max-width: 660px) {
+@container nutrition-workspace (max-width: 840px) {
+  .nutrition-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nutrition-summary {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container nutrition-workspace (max-width: 620px) {
+  .nutrition-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container nutrition-meals (max-width: 720px) {
+  .nutrition-entry-table-header,
   .nutrition-meal-card {
-    --nutrition-meal-columns: minmax(0, 1fr) auto;
+    --nutrition-ledger-gap: var(--space-xs);
+    --nutrition-ledger-portion-width: 58px;
+    --nutrition-ledger-macro-width: 45px;
+    --nutrition-ledger-calories-width: 55px;
+    --nutrition-ledger-actions-width: 56px;
   }
 
   .nutrition-entry-table-header {
+    letter-spacing: 0.04em;
+  }
+}
+
+@container nutrition-meals (max-width: 560px) {
+  .nutrition-meal-card {
+    --nutrition-meal-columns: minmax(0, 1fr) var(--nutrition-ledger-actions-width);
+  }
+
+  .nutrition-entry-table-header,
+  .nutrition-meal-summary,
+  .nutrition-entry-item__nutrition {
     display: none;
   }
 
-  .nutrition-entry-list {
-    overflow-x: visible;
-  }
-
-  .nutrition-meal-card__header {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
-  }
-
-  .nutrition-meal-summary {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-sm);
-    padding-top: var(--space-xs);
-    border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
-  }
-
-  .nutrition-meal-summary__metric,
-  .nutrition-meal-summary__metric.is-protein,
-  .nutrition-meal-summary__metric.is-carbs,
-  .nutrition-meal-summary__metric.is-fat,
-  .nutrition-meal-summary__metric.is-calories {
-    flex-direction: column;
-    grid-column: auto;
-    gap: 2px;
-  }
-
-  .nutrition-meal-summary__metric small {
-    display: block;
-  }
-
-  .nutrition-meal-summary__metric.is-portion {
-    display: none;
-  }
-
-  .nutrition-meal-card__add-action {
+  .nutrition-meal-card__add-action,
+  .nutrition-entry-item__actions {
     grid-column: 2;
-    grid-row: 1;
   }
 
   .nutrition-entry-item {
-    min-width: 0;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-sm) var(--space-md);
-    padding: var(--space-md);
-  }
-
-  .nutrition-entry-item__main {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .nutrition-entry-item__nutrition {
-    display: flex;
-    min-width: 0;
-    grid-column: 1 / -1;
-    grid-row: 2;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-xs) var(--space-md);
-  }
-
-  .nutrition-entry-item__portion,
-  .nutrition-entry-item__metric,
-  .nutrition-entry-item__calories {
-    width: auto;
-    text-align: left;
-  }
-
-  .nutrition-entry-item__portion {
-    flex-basis: 100%;
-  }
-
-  .nutrition-entry-item__metric {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 3px;
-  }
-
-  .nutrition-entry-item__metric small {
-    display: inline;
-    color: var(--color-text-tertiary);
-    font-family: var(--font-sans);
-    font-size: var(--text-micro);
-  }
-
-  .nutrition-entry-item__calories {
-    margin-left: auto;
-    color: var(--color-text-primary);
+    min-height: 52px;
   }
 
   .nutrition-entry-item__actions {
-    grid-column: 2;
-    grid-row: 1;
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .nutrition-entry-item__actions {
     opacity: 1;
   }
 }

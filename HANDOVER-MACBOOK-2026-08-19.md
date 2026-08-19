@@ -156,6 +156,18 @@ Przed publikacją tej gałęzi uruchomiono:
 
 Wynik kompilacji i testów Swift musi zostać dopisany po uruchomieniu na MacBooku.
 
+### Wynik uruchomienia na MacBooku — 2026-08-19
+
+- macOS Sequoia 15.7.9;
+- Xcode 26.3 z runtime'em iOS 26.3; Xcode 14.2 i runtime iOS 16.2 nie są zainstalowane;
+- projekt zbudowany dla `generic/platform=iOS Simulator` z `CODE_SIGNING_ALLOWED=NO` — **BUILD SUCCEEDED**;
+- testy scheme `Rootine` na symulatorze iPhone 17 Pro (iOS 26.3) — **10/10 passed** (`AuthenticationTests` 5, `ContractFixtureTests` 5);
+- `npm run ios:audit` — **passed**;
+- `npm run check` — **411/411 testów webowych passed**, lint, CSS lint, audyty, typecheck i build — **passed**;
+- podczas weryfikacji Node 26 wymagał testowego fallbacku Web Storage w `src/test/setup.ts`; nie zmienia to kodu produkcyjnego.
+
+Konfiguracja `Secrets.xcconfig`, zdalny Supabase oraz CLI wdrożeniowe nie były dostępne na tym komputerze, więc prawdziwe logowanie, OAuth, deployment migracji/funkcji i smoke testy produkcyjne pozostają do wykonania po dostarczeniu konfiguracji i dostępu.
+
 ## 8. Prompt do nowej sesji Codex na MacBooku
 
 ```text
