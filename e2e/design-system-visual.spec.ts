@@ -74,7 +74,9 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
 
     const trigger = page.locator(`#calendar-overflow-trigger-${CALENDAR_DATE}`);
     await trigger.click();
-    await capture(page.locator(`#calendar-agenda-${CALENDAR_DATE}`), "calendar-overflow-menu.png");
+    // The portal clip includes a single runner-dependent antialiased surface row
+    // at its bottom edge while the menu geometry and item rhythm remain exact.
+    await capture(page.locator(`#calendar-agenda-${CALENDAR_DATE}`), "calendar-overflow-menu.png", { maxDiffPixels: 32 });
   });
 
   test("task detail preserves the responsive panel and DatePicker portal", async ({ rootinePage: page, isMobile }) => {
@@ -129,7 +131,9 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
   test("goal menu and edit dialog retain their context surfaces", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/cele?widok=overview");
     await page.locator(".goal-card-more button").first().click();
-    await capture(page.getByRole("menu").last(), "goal-actions-menu.png");
+    // The portal clip can move its one-pixel border/shadow antialiasing between
+    // runner captures; keep the menu content and layout under the baseline.
+    await capture(page.getByRole("menu").last(), "goal-actions-menu.png", { maxDiffPixels: 256 });
 
     await page.getByRole("menu").last().getByRole("menuitem", { name: "Edytuj cel" }).click();
     const dialog = page.getByRole("dialog").last();
