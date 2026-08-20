@@ -64,7 +64,8 @@ describe("AuthScreen", () => {
 
     expect(screen.getByRole("heading", { name: "Codzienność nie mieści się w jednej liście." })).toBeInTheDocument();
     expect(screen.getByText("Rootine łączy zadania, cele, rutyny i ważne sprawy w jeden osobisty system.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Ułóż codzienność po swojemu." })).toBeInTheDocument();
+    expect(screen.queryByText("Ułóż codzienność po swojemu.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zadania, plany i sprawy, które masz na głowie w jednym miejscu.")).not.toBeInTheDocument();
     expect(screen.getByText("Finanse i podróże")).toBeInTheDocument();
     expect(screen.getByText("Notatki i rzeczy do zapamiętania")).toBeInTheDocument();
     expect(screen.queryByText("Twoje dane pozostają dostępne lokalnie, a konto włącza synchronizację między sesjami.")).not.toBeInTheDocument();

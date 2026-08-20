@@ -2486,6 +2486,7 @@ article:focus-within > .travel-row-actions {
 }
 
 .travel-sidebar {
+  --context-sidebar-expanded-width: calc(var(--context-sidebar-width) + var(--space-3xl) + var(--space-xl));
   width: calc(var(--context-sidebar-width) + var(--space-3xl) + var(--space-xl));
   min-width: calc(var(--context-sidebar-width) + var(--space-3xl) + var(--space-xl));
 }

@@ -104,11 +104,11 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
       expect(contentHeaderInnerBox!.x + contentHeaderInnerBox!.width)
         .toBeLessThanOrEqual(pageContentBox!.x + pageContentBox!.width + 1);
 
-      // The context sidebar collapses at or below the `context` breakpoint (1180px, see
-      // src/app/ui/breakpoints.ts) and the in-header select takes over navigation. Below it
-      // there is no sidebar to attach to the navigation edge, so the invariant does not apply.
+      // The primary sidebar compacts at `context` (1180px), then the module sidebar becomes a
+      // hover/focus rail at `columns` (980px). On mobile the bottom navigation and in-header
+      // selects take over, so there is no sidebar to attach to the navigation edge.
       const sidebarRoute = ["/zadania", "/kalendarz", "/praca", "/notatki"].includes(route.path);
-      if (sidebarRoute && viewport!.width > 1180) {
+      if (sidebarRoute && viewport!.width > 760) {
         const contextSidebar = moduleShell.locator(":scope > .ui-module-shell__body > .ui-module-sidebar");
         await expect(contextSidebar).toBeVisible();
         const sidebarBox = await contextSidebar.boundingBox();
@@ -117,11 +117,41 @@ test.describe("responsive shell and module invariants", { tag: "@viewport-matrix
           Math.abs(sidebarBox!.x - shellBox!.x),
           `${route.name}: context sidebar must attach to the global navigation edge`,
         ).toBeLessThanOrEqual(1);
+        expect(
+          Math.round(sidebarBox!.width),
+          `${route.name}: context sidebar width at ${viewport!.width}px`,
+        ).toBe(viewport!.width <= 980 ? 56 : 220);
       }
 
       await expectNoGlobalHorizontalOverflow(page, route.name);
     });
   }
+
+  test("collapses the rails in order and expands the module rail on hover", async ({
+    rootinePage: page,
+  }) => {
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await openRootineRoute(page, "/praca?konto=testowe");
+    await expect.poll(async () => page.locator(".app-primary-sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().width))).toBe(68);
+    await expect.poll(async () => page.locator(".ui-context-sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().width))).toBe(220);
+
+    await page.setViewportSize({ width: 900, height: 800 });
+    await openRootineRoute(page, "/praca?konto=testowe");
+    await page.mouse.move(700, 700);
+    const contextSidebar = page.locator(".ui-context-sidebar");
+    await expect.poll(async () => contextSidebar.evaluate((element) => Math.round(element.getBoundingClientRect().width))).toBe(56);
+    await expect(contextSidebar.locator(".context-nav-item__label").first()).toBeHidden();
+
+    await contextSidebar.hover();
+    await expect.poll(async () => contextSidebar.evaluate((element) => Math.round(element.getBoundingClientRect().width))).toBe(220);
+    await expect(contextSidebar.locator(".context-nav-item__label").first()).toBeVisible();
+
+    await page.setViewportSize({ width: 760, height: 800 });
+    await openRootineRoute(page, "/praca?konto=testowe");
+    await expect(page.locator(".app-primary-sidebar")).toBeHidden();
+    await expect(page.locator(".ui-context-sidebar")).toBeHidden();
+    await expect(page.locator(".app-mobile-nav")).toBeVisible();
+  });
 
   test("skip link bypasses navigation and moves keyboard focus to the workspace", async ({
     rootinePage: page,

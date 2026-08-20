@@ -22,8 +22,8 @@
 }
 
 .app-sidebar.is-collapsed {
-  width: 68px;
-  min-width: 68px;
+  width: var(--app-sidebar-collapsed-width);
+  min-width: var(--app-sidebar-collapsed-width);
 }
 
 .app-brand {

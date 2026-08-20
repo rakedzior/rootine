@@ -1,3 +1,225 @@
+/* The global rail compacts first. The module rail remains readable beside it
+ * until the next breakpoint. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .app-sidebar {
+    width: var(--app-sidebar-collapsed-width);
+    min-width: var(--app-sidebar-collapsed-width);
+  }
+
+  .app-brand-label,
+  .app-nav-label,
+  .app-sidebar-glance__copy,
+  .app-sidebar-profile__copy {
+    display: none;
+  }
+
+  .app-brand,
+  .app-nav-item,
+  .app-sidebar-utility,
+  .app-sidebar-profile {
+    justify-content: center;
+  }
+
+  .app-brand,
+  .app-sidebar-utility,
+  .app-sidebar-profile {
+    gap: 0;
+    padding-right: var(--space-sm);
+    padding-left: var(--space-sm);
+  }
+
+  .app-sidebar-replay > svg,
+  .app-sidebar-toggle {
+    display: none;
+  }
+
+  .app-sidebar-glance__time-stack {
+    display: grid;
+    gap: 1px;
+    place-items: center;
+  }
+
+  .app-sidebar-glance__time-stack strong {
+    color: var(--color-text-primary);
+    font-family: var(--font-data);
+    font-size: var(--text-label);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--weight-medium);
+    line-height: var(--leading-tight);
+  }
+
+  .app-sidebar-weather {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .app-sidebar-weather__compact-copy {
+    display: block;
+    color: var(--color-text-primary);
+    font-family: var(--font-data);
+    font-size: var(--text-micro);
+    font-variant-numeric: tabular-nums;
+    line-height: var(--leading-tight);
+  }
+
+  .app-nav-item {
+    padding: 0;
+  }
+}
+
+/* The second rail becomes an icon strip only after the primary rail is already
+ * compact. Hover and keyboard focus expand it over the workspace without
+ * changing the grid column, so the content does not jump under the pointer. */
+@media (min-width: 761px) and (max-width: 980px) {
+  .ui-module-shell__body.is-with-module-sidebar {
+    grid-template-columns: var(--context-sidebar-collapsed-width) minmax(0, 1fr) auto;
+  }
+
+  .ui-context-sidebar.ui-context-sidebar--collapsible {
+    position: relative;
+    z-index: var(--layer-context);
+    width: var(--context-sidebar-collapsed-width);
+    min-width: var(--context-sidebar-collapsed-width);
+    overflow: hidden;
+    transition:
+      width var(--motion-normal) var(--ease-out),
+      box-shadow var(--motion-normal) var(--ease-out);
+  }
+
+  .ui-context-sidebar--collapsible .context-nav-item__label,
+  .ui-context-sidebar--collapsible .context-nav-item__meta,
+  .ui-context-sidebar--collapsible .context-nav-group__label,
+  .ui-context-sidebar--collapsible [class*="__description"],
+  .ui-context-sidebar--collapsible [class*="__empty"],
+  .ui-context-sidebar--collapsible [class*="__label"],
+  .ui-context-sidebar--collapsible [class*="__meta"] {
+    display: none;
+  }
+
+  .ui-context-sidebar--collapsible .ui-section-header,
+  .ui-context-sidebar--collapsible .goal-category-search-wrap,
+  .ui-context-sidebar--collapsible .goal-category-add,
+  .ui-context-sidebar--collapsible .notes-sidebar__filter,
+  .ui-context-sidebar--collapsible .sport-context-sidebar__active,
+  .ui-context-sidebar--collapsible .task-nav__edit-row,
+  .ui-context-sidebar--collapsible .task-nav__search,
+  .ui-context-sidebar--collapsible .task-nav__show-all {
+    display: none;
+  }
+
+  .ui-context-sidebar--collapsible .context-nav-item--no-icon,
+  .ui-context-sidebar--collapsible .work-sidebar-footer > span,
+  .ui-context-sidebar--collapsible .affairs-sidebar__footer > span,
+  .ui-context-sidebar--collapsible .travel-sidebar__footer > span {
+    display: none;
+  }
+
+  .ui-context-sidebar--collapsible .context-nav-item {
+    justify-content: center;
+    gap: 0;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .ui-context-sidebar--collapsible .task-nav__group-toggle > span,
+  .ui-context-sidebar--collapsible .goal-sidebar-section-toggle > span {
+    display: none;
+  }
+
+  .ui-context-sidebar--collapsible .task-nav__taxonomy-header,
+  .ui-context-sidebar--collapsible .goal-sidebar-section-heading,
+  .ui-context-sidebar--collapsible .notes-sidebar__group-heading {
+    justify-content: center;
+  }
+
+  .ui-context-sidebar--collapsible .task-taxonomy-header-actions,
+  .ui-context-sidebar--collapsible .goal-sidebar-section-actions,
+  .ui-context-sidebar--collapsible .notes-sidebar__group-actions {
+    margin-right: 0;
+  }
+
+  .ui-context-sidebar--collapsible .task-nav__divider,
+  .ui-context-sidebar--collapsible .context-nav-group + .context-nav-group {
+    margin-right: var(--space-sm);
+    margin-left: var(--space-sm);
+  }
+
+  .ui-context-sidebar--collapsible .work-sidebar-footer,
+  .ui-context-sidebar--collapsible .affairs-sidebar__footer,
+  .ui-context-sidebar--collapsible .travel-sidebar__footer,
+  .ui-context-sidebar--collapsible .goal-sidebar-footer {
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .ui-context-sidebar.ui-context-sidebar--collapsible:is(:hover, :focus-within) {
+    width: var(--context-sidebar-expanded-width);
+    min-width: var(--context-sidebar-expanded-width);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: var(--shadow-floating);
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-item__label,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-item__meta,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-group__label,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) [class*="__description"],
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) [class*="__empty"],
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) [class*="__label"],
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) [class*="__meta"] {
+    display: revert;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .ui-section-header,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .goal-category-search-wrap,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .goal-category-add,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .notes-sidebar__filter,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .task-nav__show-all {
+    display: revert;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .sport-context-sidebar__active {
+    display: grid;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .task-nav__edit-row,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .task-nav__search {
+    display: flex;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-item--no-icon {
+    display: flex;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-item {
+    justify-content: initial;
+    gap: var(--space-sm);
+    padding-right: var(--space-md);
+    padding-left: var(--space-md);
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .task-nav__group-toggle > span,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .goal-sidebar-section-toggle > span {
+    display: inline;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .task-nav__taxonomy-header,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .goal-sidebar-section-heading,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .notes-sidebar__group-heading {
+    justify-content: space-between;
+  }
+
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .work-sidebar-footer,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .affairs-sidebar__footer,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .travel-sidebar__footer,
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .goal-sidebar-footer {
+    justify-content: initial;
+    padding-right: var(--space-lg);
+    padding-left: var(--space-lg);
+  }
+}
+
 @media (max-width: 980px) {
   .auth-shell {
     grid-template-columns: minmax(300px, 0.82fr) minmax(420px, 1.18fr);
@@ -29,8 +251,8 @@
   }
 
   .app-sidebar {
-    width: 68px;
-    min-width: 68px;
+    width: var(--app-sidebar-collapsed-width);
+    min-width: var(--app-sidebar-collapsed-width);
   }
 
   .app-brand-label,

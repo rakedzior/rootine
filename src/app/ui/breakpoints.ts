@@ -9,9 +9,9 @@
 export const BREAKPOINTS = {
   /** Detail panel is docked above this width and becomes a modal drawer at or below it. */
   detail: 1380,
-  /** Context sidebar collapses. */
+  /** Primary sidebar becomes icon-only; the module sidebar stays expanded. */
   context: 1180,
-  /** Multi-column layouts fold into a single column. */
+  /** The module sidebar becomes a hover/focus rail. */
   columns: 980,
   /** Mobile: primary navigation moves to the bottom bar. */
   mobile: 760,

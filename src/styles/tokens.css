@@ -76,7 +76,10 @@
 
   --page-header-height: 70px;
   --app-sidebar-width: 204px;
+  --app-sidebar-collapsed-width: 68px;
   --context-sidebar-width: 220px;
+  --context-sidebar-collapsed-width: 56px;
+  --context-sidebar-expanded-width: var(--context-sidebar-width);
   --detail-panel-width: 408px;
 
   --shadow-floating: 0 12px 30px rgba(0, 0, 0, 0.42);

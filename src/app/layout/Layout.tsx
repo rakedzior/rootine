@@ -183,8 +183,8 @@ function getInitialSidebarState() {
   }
 }
 
-function getInitialCompactViewport() {
-  return window.matchMedia(maxWidthQuery("columns")).matches;
+function getInitialPrimarySidebarCompactViewport() {
+  return window.matchMedia(maxWidthQuery("context")).matches;
 }
 
 function getWeatherIcon(code = -1, isLoading = false): LucideIcon {
@@ -458,7 +458,7 @@ export default function Layout() {
   const auth = useSupabaseAuth();
   const profileIdentity = getProfileIdentity(auth.user);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
-  const [isCompactViewport, setIsCompactViewport] = useState(getInitialCompactViewport);
+  const [isPrimarySidebarCompactViewport, setIsPrimarySidebarCompactViewport] = useState(getInitialPrimarySidebarCompactViewport);
   const [modulePreferences, setModulePreferences] = useState(loadModulePreferences);
   const [appTheme, setAppTheme] = useState(loadAppTheme);
   const [now, setNow] = useState(() => new Date());
@@ -480,8 +480,8 @@ export default function Layout() {
   const mobileMenuRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia(maxWidthQuery("columns"));
-    const updateViewport = () => setIsCompactViewport(mediaQuery.matches);
+    const mediaQuery = window.matchMedia(maxWidthQuery("context"));
+    const updateViewport = () => setIsPrimarySidebarCompactViewport(mediaQuery.matches);
     mediaQuery.addEventListener("change", updateViewport);
     return () => mediaQuery.removeEventListener("change", updateViewport);
   }, []);
@@ -675,7 +675,7 @@ export default function Layout() {
   const moreIsActive = Boolean(
     currentModule && !mobilePrimaryNav.some((item) => item.id === currentModule.id),
   );
-  const showCollapsedBrandControl = isSidebarCollapsed && !isCompactViewport;
+  const showCollapsedBrandControl = isSidebarCollapsed && !isPrimarySidebarCompactViewport;
   const timeLabel = TIME_FORMATTER.format(now);
   const dateLabel = DATE_FORMATTER.format(now);
   const WeatherIcon = getWeatherIcon(

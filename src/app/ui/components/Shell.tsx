@@ -236,7 +236,7 @@ export function ModuleSidebar({
   return (
     <aside
       aria-label={label}
-      className={cx("ui-context-sidebar", "ui-module-sidebar", className)}
+      className={cx("ui-context-sidebar", "ui-module-sidebar", "ui-context-sidebar--collapsible", className)}
       {...props}
     >
       {children}
@@ -257,7 +257,12 @@ export function ContextNavItem({ active = false, depth = 0, icon, label, meta, c
     <button
       type={type}
       aria-current={active ? "page" : undefined}
-      className={cx("context-nav-item", depth === 1 && "context-nav-item--nested", className)}
+      className={cx(
+        "context-nav-item",
+        depth === 1 && "context-nav-item--nested",
+        !icon && "context-nav-item--no-icon",
+        className,
+      )}
       {...props}
     >
       {icon && <span className="context-nav-item__icon" aria-hidden="true">{icon}</span>}

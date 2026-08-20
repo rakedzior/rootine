@@ -203,8 +203,10 @@ test.describe("shell invariants", { tag: "@viewport-matrix" }, () => {
       });
 
       const viewport = page.viewportSize()!;
-      if (viewport.width > 980) {
+      if (viewport.width > 1180) {
         expect(box.sidebarWidth, `${route}: --app-sidebar-width`).toBe(204);
+      } else if (viewport.width > 760) {
+        expect(box.sidebarWidth, `${route}: --app-sidebar-collapsed-width`).toBe(68);
       }
       expect(box.pageHeaderCount, `${route}: global page header must be removed`).toBe(0);
     }

@@ -45,10 +45,6 @@ function AuthContextPanel() {
       <div className="auth-context__body">
         <h1>Codzienność nie mieści się w jednej liście.</h1>
         <p>Rootine łączy zadania, cele, rutyny i ważne sprawy w jeden osobisty system.</p>
-        <div className="auth-context__lead">
-          <h2>Ułóż codzienność po swojemu.</h2>
-          <p>Zadania, plany i sprawy, które masz na głowie w jednym miejscu.</p>
-        </div>
         <ul className="auth-context__areas">
           <li><CalendarCheck2 aria-hidden="true" /><span><strong>Dzień i zadania</strong><small>Zobacz, co czeka dziś, co może poczekać i jaki jest następny krok.</small></span></li>
           <li><Target aria-hidden="true" /><span><strong>Cele i postęp</strong><small>Zamień większe plany na konkretne kroki i obserwuj, jak nabierają kształtu.</small></span></li>
@@ -241,11 +237,6 @@ export function AuthScreen() {
                 />
                 <div className="auth-password-row">
                   <span>Hasło</span>
-                  {view === "sign-in" && (
-                    <button type="button" disabled={!auth.configured || pending !== null} onClick={() => { void requestPasswordReset(); }}>
-                      {pending === "reset" ? "Wysyłam…" : "Nie pamiętasz hasła?"}
-                    </button>
-                  )}
                 </div>
                 <Input
                   aria-label="Hasło"
@@ -258,6 +249,16 @@ export function AuthScreen() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                 />
+                {view === "sign-in" && (
+                  <button
+                    className="auth-password-reset"
+                    type="button"
+                    disabled={!auth.configured || pending !== null}
+                    onClick={() => { void requestPasswordReset(); }}
+                  >
+                    {pending === "reset" ? "Wysyłam…" : "Nie pamiętasz hasła?"}
+                  </button>
+                )}
 
                 {!auth.configured && <p className="auth-feedback is-warning" role="status">{unavailableMessage}</p>}
                 {(error ?? auth.authError) && <p className="auth-feedback is-error" role="alert">{error ?? auth.authError}</p>}
@@ -284,7 +285,7 @@ export function AuthScreen() {
                     <strong>Dane lokalne</strong>
                     <p>Otwórz workspace zapisany w tej przeglądarce. Bez konta i bez synchronizacji.</p>
                   </div>
-                  <Button variant="quiet" fullWidth onClick={appSession.enterLocalAccount}>
+                  <Button className="auth-entry-option__button" variant="quiet" onClick={appSession.enterLocalAccount}>
                     Wejdź do danych lokalnych
                   </Button>
                 </div>
@@ -294,7 +295,7 @@ export function AuthScreen() {
                     <strong>Konto testowe</strong>
                     <p>Przykładowe dane do obejrzenia aplikacji. Zmiany znikną po wyjściu z trybu testowego.</p>
                   </div>
-                  <Button variant="quiet" fullWidth onClick={appSession.enterTestAccount}>
+                  <Button className="auth-entry-option__button" variant="quiet" onClick={appSession.enterTestAccount}>
                     Wejdź do konta testowego
                   </Button>
                 </div>
