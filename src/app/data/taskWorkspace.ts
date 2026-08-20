@@ -570,10 +570,22 @@ export function isCalendarTask(task: WorkspaceTask): task is WorkspaceTask & { c
   return typeof task.calendarDate === "string" && task.calendarDate.length > 0;
 }
 
+/**
+ * The Tasks calendar owns only tasks created in the Tasks module. Records with
+ * source metadata belong to another module and are kept there as the canonical
+ * record, even when they are linked into the shared task workspace.
+ */
+export function isTaskOwnedByTasksModule(task: Pick<WorkspaceTask, "source">): boolean {
+  return task.source === undefined;
+}
+
 export function replaceCalendarTasks(workspace: TaskWorkspace, calendarTasks: WorkspaceTask[]): TaskWorkspace {
   return {
     ...workspace,
-    tasks: [...workspace.tasks.filter((task) => !isCalendarTask(task)), ...calendarTasks],
+    tasks: [
+      ...workspace.tasks.filter((task) => !isCalendarTask(task) || !isTaskOwnedByTasksModule(task)),
+      ...calendarTasks,
+    ],
   };
 }
 

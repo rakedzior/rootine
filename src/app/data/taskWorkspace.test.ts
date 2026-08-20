@@ -9,6 +9,7 @@ import {
   isHabitScheduledOnDate,
   loadTaskWorkspaceResult,
   purgeTask,
+  replaceCalendarTasks,
   restoreTask,
   saveTaskWorkspace,
   setTaskDoneState,
@@ -123,6 +124,42 @@ describe("task workspace", () => {
     expect(persisted.tasks).toHaveLength(1);
     expect(persisted.tasks[0]).toMatchObject({ id: 88, calendarDate: "2026-07-31" });
     expect(persisted.tasks[0]).not.toHaveProperty("occurrence");
+  });
+
+  it("keeps source-module tasks when replacing the Tasks calendar", () => {
+    const sourceModuleTask = {
+      id: -1,
+      text: "Sprawy",
+      done: false,
+      view: "dzis",
+      calendarDate: "2026-07-29",
+      source: {
+        kind: "affairs" as const,
+        entity: "payment/one-time",
+        context: "Sprawy",
+        href: "/sprawy?widok=finance-one-time",
+        managed: "native" as const,
+      },
+    };
+    const nativeTask = {
+      id: 2,
+      text: "Zadanie",
+      done: false,
+      view: "dzis",
+      calendarDate: "2026-07-29",
+    };
+    const workspace = {
+      version: 2,
+      updatedAt: "",
+      tasks: [sourceModuleTask, nativeTask],
+      habits: [],
+      lists: [],
+      tags: [],
+    } satisfies TaskWorkspace;
+
+    const next = replaceCalendarTasks(workspace, [nativeTask]);
+
+    expect(next.tasks).toEqual([sourceModuleTask, nativeTask]);
   });
 
   it("quarantines impossible same-day duration ranges", () => {

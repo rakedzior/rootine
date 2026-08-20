@@ -558,7 +558,7 @@ Nowa zakładka nie definiuje własnego obiektu palety ani lokalnego odpowiednika
 ### Ciągłość danych lokalnego MVP
 
 - Zadania i Kalendarz korzystają z jednego rekordu zadania. Nadanie terminu tworzy `calendarDate`, usunięcie terminu usuwa rekord z Kalendarza bez usuwania zadania, a przesunięcie w Kalendarzu aktualizuje jego widok w Zadaniach.
-- Datowane treningi i zobowiązania z Pozostałych są odczytywane przez Kalendarz z kanonicznego rekordu modułu źródłowego. Szczegóły są tylko do odczytu i prowadzą do właściwego modułu; Kalendarz nie tworzy ich kopii.
+- Kalendarz w module Zadań pokazuje wyłącznie rekordy należące do Zadań. Datowane treningi i zobowiązania z Pozostałych nie są mieszane do tego widoku; pozostają w swoich modułach źródłowych.
 - Dane odczytywane z `localStorage` i IndexedDB muszą przejść walidację minimalnego kształtu. Uszkodzony lub niezgodny zapis jest zabezpieczany jako kopia odzyskiwania, a moduł wraca do bezpiecznego pustego stanu zamiast blokować interfejs lub maskować problem danymi demo.
 - Zdalne pobranie może zastąpić lokalny dokument wyłącznie wtedy, gdy lokalna wersja nie zmieniła się od wspólnej bazy. Konflikt wymaga jawnego wyboru użytkownika, a zastępowana wersja otrzymuje kopię odzyskiwania.
 - Błąd zapisu lokalnego jest komunikowany przez `Badge tone="danger"` w slocie `meta` komponentu `ContentHeader` — w module, w którym użytkownik pracuje, a nie tylko globalnym toastem.

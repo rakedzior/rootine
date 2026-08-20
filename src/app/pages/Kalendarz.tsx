@@ -21,6 +21,7 @@ import {
   isHabitDoneOnDate,
   isHabitScheduledOnDate,
   loadTaskWorkspace,
+  isTaskOwnedByTasksModule,
   replaceCalendarTasks,
   restoreTask,
   saveTaskWorkspace,
@@ -97,6 +98,10 @@ type CalendarFilter =
   | { kind: "list"; id: string }
   | { kind: "tag"; id: string }
   | { kind: "priority"; id: CalendarPriority };
+
+function isTasksCalendarEvent(task: Task): task is CalendarEvent {
+  return isCalendarTask(task) && isTaskOwnedByTasksModule(task);
+}
 
 const CALENDAR_PRIORITIES: Array<{ id: CalendarPriority; label: string }> = [
   { id: "high", label: "Wysoki" },
@@ -368,8 +373,10 @@ export default function Kalendarz() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
   const activeTaskView = "wszystkie";
+  // Kalendarz is intentionally a fresh current-month view. The selected day
+  // is today so the first useful context is visible immediately after entry.
   const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
-  const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isCalendarTask));
+  const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isTasksCalendarEvent));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
   const [listyOpen, setListyOpen] = useState(initialSidebarState.listyOpen);
@@ -388,7 +395,7 @@ export default function Kalendarz() {
   const [agendaDateKey, setAgendaDateKey] = useState<string | null>(null);
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
   const [calendarWidth, setCalendarWidth] = useState<number | null>(null);
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(todayKey);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(() => todayKey());
 
   const [trashedTask, setTrashedTask] = useState<CalendarEvent | null>(null);
   const calendarRootRef = useRef<HTMLDivElement>(null);
@@ -402,7 +409,7 @@ export default function Kalendarz() {
   const suppressCellClickRef = useRef(false);
   const [storageFailed, setStorageFailed] = useState(false);
   const [focusedDateKey, setFocusedDateKey] = useState(todayKey);
-  const sidebarTasks = workspaceRef.current.tasks;
+  const sidebarTasks = workspaceRef.current.tasks.filter(isTaskOwnedByTasksModule);
   const calendarMode: CalendarMode = calendarWidth === null ? "full" : getCalendarMode(calendarWidth);
   const visibleEventLimit = 3;
   const hideCalendarTime = calendarMode !== "full";
@@ -441,7 +448,7 @@ export default function Kalendarz() {
     const syncWorkspace = () => {
       const nextWorkspace = loadTaskWorkspace();
       workspaceRef.current = nextWorkspace;
-      setEvents(nextWorkspace.tasks.filter(isCalendarTask));
+      setEvents(nextWorkspace.tasks.filter(isTasksCalendarEvent));
       setLists(nextWorkspace.lists);
       setTags(nextWorkspace.tags);
       setSelectedId((current) => current !== null && nextWorkspace.tasks.some((task) => task.id === current && isCalendarTask(task)) ? current : null);

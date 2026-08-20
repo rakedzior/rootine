@@ -113,13 +113,57 @@ describe("Kalendarz canonical occurrences integration", () => {
   });
 
   it("shows only task records and excludes Sport and Affairs projections", () => {
-    fixtures.taskWorkspace.tasks = [{
-      id: 99,
-      text: "Zadanie na dziś",
-      done: false,
-      view: "dzis",
-      calendarDate: "2026-07-29",
-    }];
+    fixtures.taskWorkspace.tasks = [
+      {
+        id: 99,
+        text: "Zadanie na dziś",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+      },
+      {
+        id: -1,
+        text: "Sprawy",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+        source: {
+          kind: "affairs",
+          entity: "payment/one-time",
+          context: "Sprawy",
+          href: "/sprawy?widok=finance-one-time",
+          managed: "native",
+        },
+      },
+      {
+        id: -2,
+        text: "Praca",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+        source: {
+          kind: "work",
+          entity: "project/task",
+          context: "Praca",
+          href: "/praca",
+          managed: "projection",
+        },
+      },
+      {
+        id: -3,
+        text: "Trening",
+        done: false,
+        view: "dzis",
+        calendarDate: "2026-07-29",
+        source: {
+          kind: "sport",
+          entity: "cycle/workout",
+          context: "Trening",
+          href: "/sport",
+          managed: "native",
+        },
+      },
+    ];
 
     render(<Kalendarz />);
     expect(screen.getByRole("button", { name: /Zadanie na dziś/ })).toBeInTheDocument();
