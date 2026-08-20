@@ -114,7 +114,7 @@
     display: none;
   }
 
-  .ui-context-sidebar--collapsible .context-nav-item {
+  .ui-context-sidebar--collapsible .context-nav-item--rail {
     justify-content: center;
     gap: 0;
     padding-right: 0;
@@ -154,8 +154,8 @@
   }
 
   .ui-context-sidebar.ui-context-sidebar--collapsible:is(:hover, :focus-within) {
-    width: var(--context-sidebar-expanded-width);
-    min-width: var(--context-sidebar-expanded-width);
+    width: var(--context-sidebar-expanded-width, var(--context-sidebar-width));
+    min-width: var(--context-sidebar-expanded-width, var(--context-sidebar-width));
     overflow-y: auto;
     overflow-x: hidden;
     box-shadow: var(--shadow-floating);
@@ -192,7 +192,7 @@
     display: flex;
   }
 
-  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-item {
+  .ui-context-sidebar--collapsible:is(:hover, :focus-within) .context-nav-item--rail {
     justify-content: initial;
     gap: var(--space-sm);
     padding-right: var(--space-md);
@@ -424,8 +424,8 @@
     }
 
     .auth-google-button,
-    .auth-form .ui-field__control,
-    .auth-form > .ui-button {
+    .auth-form__control,
+    .auth-form__submit {
       height: var(--control-height-sm);
     }
 
@@ -473,7 +473,7 @@
 
     .auth-entry-option strong,
     .auth-entry-option p,
-    .auth-entry-option .ui-button {
+    .auth-entry-option__button {
       font-size: var(--text-micro);
     }
 
@@ -481,7 +481,7 @@
       line-height: var(--leading-snug);
     }
 
-    .auth-entry-option .ui-button {
+    .auth-entry-option__button {
       min-height: var(--control-height-sm);
       padding: var(--space-xs);
     }

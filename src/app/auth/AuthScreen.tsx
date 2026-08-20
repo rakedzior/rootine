@@ -177,6 +177,7 @@ export function AuthScreen() {
               </div>
               <form className="auth-form" onSubmit={updatePassword}>
                 <Input
+                  className="auth-form__control"
                   label="Nowe hasło"
                   type="password"
                   autoComplete="new-password"
@@ -187,6 +188,7 @@ export function AuthScreen() {
                   required
                 />
                 <Input
+                  className="auth-form__control"
                   label="Powtórz nowe hasło"
                   type="password"
                   autoComplete="new-password"
@@ -196,7 +198,7 @@ export function AuthScreen() {
                   required
                 />
                 {(error ?? auth.authError) && <p className="auth-feedback is-error" role="alert">{error ?? auth.authError}</p>}
-                <Button type="submit" variant="primary" fullWidth disabled={pending !== null}>
+                <Button className="auth-form__submit" type="submit" variant="primary" fullWidth disabled={pending !== null}>
                   {pending === "password" ? <><RefreshCw className="is-spinning" size={13} aria-hidden="true" />Zapisuję…</> : "Zapisz nowe hasło"}
                 </Button>
               </form>
@@ -224,6 +226,7 @@ export function AuthScreen() {
 
               <form className="auth-form" onSubmit={submitCredentials}>
                 <Input
+                  className="auth-form__control"
                   ref={emailRef}
                   label="Adres e-mail"
                   type="email"
@@ -239,6 +242,7 @@ export function AuthScreen() {
                   <span>Hasło</span>
                 </div>
                 <Input
+                  className="auth-form__control"
                   aria-label="Hasło"
                   type="password"
                   autoComplete={view === "sign-in" ? "current-password" : "new-password"}
@@ -264,7 +268,7 @@ export function AuthScreen() {
                 {(error ?? auth.authError) && <p className="auth-feedback is-error" role="alert">{error ?? auth.authError}</p>}
                 {message && <p className="auth-feedback is-success" role="status">{message}</p>}
 
-                <Button type="submit" variant="primary" fullWidth disabled={!auth.configured || pending !== null}>
+                <Button className="auth-form__submit" type="submit" variant="primary" fullWidth disabled={!auth.configured || pending !== null}>
                   {pending === "credentials"
                     ? <><RefreshCw className="is-spinning" size={13} aria-hidden="true" />{view === "sign-in" ? "Loguję…" : "Tworzę konto…"}</>
                     : <>{view === "sign-in" ? "Zaloguj się" : "Utwórz konto"}<ArrowRight size={13} aria-hidden="true" /></>}

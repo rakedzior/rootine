@@ -259,6 +259,7 @@ export function ContextNavItem({ active = false, depth = 0, icon, label, meta, c
       aria-current={active ? "page" : undefined}
       className={cx(
         "context-nav-item",
+        "context-nav-item--rail",
         depth === 1 && "context-nav-item--nested",
         !icon && "context-nav-item--no-icon",
         className,

@@ -339,6 +339,7 @@ export function NutritionAnalysis({
                 max={customEndDate}
                 displayValue={formatDateShort(customStartDate)}
                 fieldClassName="nutrition-analysis-v2__date-picker"
+                triggerClassName="nutrition-analysis-v2__date-trigger"
                 onChange={setCustomStartDate}
               />
               <span>Do</span>
@@ -349,6 +350,7 @@ export function NutritionAnalysis({
                 max={endDate}
                 displayValue={formatDateShort(customEndDate)}
                 fieldClassName="nutrition-analysis-v2__date-picker"
+                triggerClassName="nutrition-analysis-v2__date-trigger"
                 onChange={setCustomEndDate}
               />
             </div>

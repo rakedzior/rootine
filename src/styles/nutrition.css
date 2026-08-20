@@ -2598,8 +2598,8 @@
   min-width: 0;
 }
 
-.nutrition-analysis-v2__date-picker .ui-date-trigger {
-  min-height: 30px;
+.nutrition-analysis-v2__date-trigger {
+  min-height: var(--control-height-sm);
   gap: 6px;
   padding: 0 8px;
   border-color: var(--color-border-strong);

@@ -99,6 +99,19 @@
       ],
       "owner": "list-row",
       "reason": "ListRow exposes --list-rail-width as a consumer-owned layout hook; Work configures it for table and responsive task-board contexts."
+    },
+    {
+      "paths": [
+        "src/styles/travel.css"
+      ],
+      "selectors": [
+        ".travel-sidebar"
+      ],
+      "properties": [
+        "--context-sidebar-expanded-width"
+      ],
+      "owner": "travel-layout",
+      "reason": "Travel's context rail is wider than the shared module rail and keeps that width when the hover rail expands."
     }
   ]
 }
