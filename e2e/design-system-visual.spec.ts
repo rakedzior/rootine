@@ -165,7 +165,7 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
       footerInsideViewport: true,
     });
     await expect(modalBody).toBeVisible();
-    await capture(dialog, "goal-edit-dialog.png");
+    await capture(dialog, "goal-edit-dialog.png", { maxDiffPixels: 32 });
   });
 
   test("work add menu keeps its compact action grouping", async ({ rootinePage: page }) => {

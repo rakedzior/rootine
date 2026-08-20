@@ -1575,7 +1575,7 @@
   font: inherit;
   text-align: left;
 }
-@media (max-width: 1180px) {
+@media (min-width: 761px) and (max-width: 1180px) {
   .ui-module-shell__body.is-with-module-sidebar {
     grid-template-columns: var(--context-sidebar-width) minmax(0, 1fr) auto;
   }
