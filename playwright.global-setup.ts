@@ -7,8 +7,29 @@ import path from "node:path";
 const ROOT_DIR = process.cwd();
 const HOST = "127.0.0.1";
 const PORT = 4174;
-const STARTUP_TIMEOUT_MS = process.env.CI ? 30_000 : 120_000;
+const STARTUP_TIMEOUT_MS = 30_000;
 export const SERVER_PID_FILE = path.join(os.tmpdir(), "rootine-playwright-vite.json");
+
+function runE2eBuild() {
+  return new Promise<void>((resolve, reject) => {
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const build = spawn(npmCommand, ["run", "build:e2e"], {
+      cwd: ROOT_DIR,
+      env: { ...process.env, VITE_ROOTINE_QA_AUTH: "1" },
+      stdio: "inherit",
+      windowsHide: true,
+    });
+
+    build.once("error", reject);
+    build.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`The Playwright E2E build failed${signal ? ` with signal ${signal}` : ` with code ${code ?? "unknown"}`}`));
+    });
+  });
+}
 
 function probeServer() {
   return new Promise<boolean>((resolve) => {
@@ -48,12 +69,13 @@ async function waitForPortRelease() {
 export default async function globalSetup() {
   if (process.env.PLAYWRIGHT_EXTERNAL_SERVER === "1") return;
 
+  await runE2eBuild();
   await waitForPortRelease();
   await fs.rm(SERVER_PID_FILE, { force: true });
 
   const viteArguments = [
     path.join(ROOT_DIR, "node_modules/vite/bin/vite.js"),
-    ...(process.env.CI ? ["preview"] : []),
+    "preview",
     "--host",
     HOST,
     "--port",

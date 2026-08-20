@@ -53,10 +53,10 @@ export default defineConfig({
   // CI exercises a prebuilt bundle. One retry absorbs a transient browser or
   // runner hiccup while still surfacing deterministic regressions.
   retries: isCI ? 1 : 0,
-  // Parallelize CI across isolated GitHub jobs. One browser per small runner
-  // avoids CPU/memory starvation that previously made the app entry chunk stop
-  // loading under four simultaneous contexts.
-  workers: isCI ? 1 : 4,
+  // Keep a small amount of parallelism locally, but avoid saturating the
+  // browser and preview server with four simultaneous contexts. CI remains
+  // serial because its runner is intentionally the smallest environment.
+  workers: isCI ? 1 : 2,
   reporter: isCI ? "github" : [["list"], ["html", { open: "never" }]],
   globalSetup: "./playwright.global-setup.ts",
   globalTeardown: "./playwright.global-teardown.ts",

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
-    "build:e2e": "vite build --mode e2e",
+    "build:e2e": "node scripts/build-e2e.mjs",
     "preview": "vite preview",
     "lint": "eslint src api functions worker e2e scripts playwright.config.ts playwright.global-setup.ts playwright.global-teardown.ts vite.config.ts vitest.config.ts --max-warnings=0",
     "typecheck": "npm run typecheck:app && npm run typecheck:api",

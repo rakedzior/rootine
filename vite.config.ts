@@ -19,6 +19,15 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const normalizedId = id.replaceAll("\\", "/");
+          if (
+            normalizedId.includes("/node_modules/react/")
+            || normalizedId.includes("/node_modules/react-dom/")
+            || normalizedId.includes("/node_modules/react-router/")
+            || normalizedId.includes("/node_modules/@remix-run/router/")
+            || normalizedId.includes("/node_modules/scheduler/")
+          ) return "vendor-react";
+          if (normalizedId.includes("/node_modules/lucide-react/")) return "vendor-icons";
+          if (normalizedId.includes("/node_modules/@supabase/")) return "vendor-supabase";
           if (normalizedId.includes("/node_modules/zod/")) return "vendor-zod";
           if (normalizedId.includes("/node_modules/")) return "vendor";
           if (normalizedId.includes("/src/infrastructure/")) return "rootine-infrastructure";
