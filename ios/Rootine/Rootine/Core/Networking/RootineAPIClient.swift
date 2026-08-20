@@ -1,6 +1,6 @@
 import Foundation
 
-struct RootineConfiguration: Equatable {
+struct RootineConfiguration: Equatable, Sendable {
     var supabaseURL: URL?
     var supabasePublishableKey: String
     var backendURL: URL?
@@ -48,12 +48,12 @@ struct RootineConfiguration: Equatable {
     }
 }
 
-struct SupabaseUser: Codable, Equatable {
+struct SupabaseUser: Codable, Equatable, Sendable {
     var id: String
     var email: String?
 }
 
-struct SupabaseSession: Codable, Equatable {
+struct SupabaseSession: Codable, Equatable, Sendable {
     var accessToken: String
     var refreshToken: String
     var expiresIn: Int
@@ -76,17 +76,17 @@ struct SupabaseSession: Codable, Equatable {
     }
 }
 
-enum EmailRegistrationResult: Equatable {
+enum EmailRegistrationResult: Equatable, Sendable {
     case session(SupabaseSession)
     case needsEmailConfirmation
 }
 
-struct AuthCallbackResult: Equatable {
+struct AuthCallbackResult: Equatable, Sendable {
     var session: SupabaseSession
     var isPasswordRecovery: Bool
 }
 
-struct SupabaseAuthCallback: Equatable {
+struct SupabaseAuthCallback: Equatable, Sendable {
     var accessToken: String
     var refreshToken: String
     var expiresIn: Int
@@ -129,7 +129,7 @@ struct SupabaseAuthCallback: Equatable {
     }
 }
 
-struct RemoteWorkspaceSnapshot: Codable, Equatable {
+struct RemoteWorkspaceSnapshot: Codable, Equatable, Sendable {
     var storageKey: String
     var payload: JSONValue
     var contentHash: String
@@ -159,7 +159,7 @@ struct ApplySnapshotRequest: Codable {
     }
 }
 
-struct ApplySnapshotResponse: Codable, Equatable {
+struct ApplySnapshotResponse: Codable, Equatable, Sendable {
     var applied: Bool
     var storageKey: String
     var payload: JSONValue
@@ -177,7 +177,7 @@ struct ApplySnapshotResponse: Codable, Equatable {
     }
 }
 
-enum RootineAPIError: LocalizedError, Equatable {
+enum RootineAPIError: LocalizedError, Equatable, Sendable {
     case missingConfiguration
     case invalidResponse
     case unauthorized
@@ -224,15 +224,13 @@ enum RootineAPIError: LocalizedError, Equatable {
     }
 }
 
-protocol WorkspaceRemoteClient {
+protocol WorkspaceRemoteClient: Sendable {
     func apply(_ mutation: PendingWorkspaceMutation, accessToken: String) async throws -> ApplySnapshotResponse
 }
 
-final class RootineAPIClient: WorkspaceRemoteClient {
+final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
     private let configuration: RootineConfiguration
     private let session: URLSession
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
 
     init(configuration: RootineConfiguration, session: URLSession = .shared) {
         self.configuration = configuration
@@ -260,11 +258,11 @@ final class RootineAPIClient: WorkspaceRemoteClient {
             body: ["email": email, "password": password]
         )
         let data = try await sendRaw(request)
-        if let session = try? decoder.decode(SupabaseSession.self, from: data) {
+        if let session = try? JSONDecoder().decode(SupabaseSession.self, from: data) {
             return .session(session)
         }
         struct SignUpEnvelope: Decodable { var session: SupabaseSession? }
-        if let session = try? decoder.decode(SignUpEnvelope.self, from: data).session {
+        if let session = try? JSONDecoder().decode(SignUpEnvelope.self, from: data).session {
             return .session(session)
         }
         return .needsEmailConfirmation
@@ -305,7 +303,7 @@ final class RootineAPIClient: WorkspaceRemoteClient {
             accessToken: accessToken
         )
         request.httpMethod = "PUT"
-        request.httpBody = try encoder.encode(["password": password])
+        request.httpBody = try JSONEncoder().encode(["password": password])
         _ = try await sendRaw(request)
     }
 
@@ -376,7 +374,7 @@ final class RootineAPIClient: WorkspaceRemoteClient {
         let url = baseURL.appendingPathComponent("rest/v1/rpc/rootine_apply_workspace_snapshot")
         var request = authorizedRequest(url: url, accessToken: accessToken)
         request.httpMethod = "POST"
-        request.httpBody = try encoder.encode(ApplySnapshotRequest(
+        request.httpBody = try JSONEncoder().encode(ApplySnapshotRequest(
             storageKey: mutation.storageKey,
             payload: mutation.payload,
             contentHash: mutation.contentHash,
@@ -414,7 +412,7 @@ final class RootineAPIClient: WorkspaceRemoteClient {
         let url = baseURL.appendingPathComponent("functions/v1/delete-account")
         var request = authorizedRequest(url: url, accessToken: accessToken)
         request.httpMethod = "POST"
-        request.httpBody = try encoder.encode(["confirmation": "DELETE"])
+        request.httpBody = try JSONEncoder().encode(["confirmation": "DELETE"])
         _ = try await sendRaw(request)
     }
 
@@ -439,7 +437,7 @@ final class RootineAPIClient: WorkspaceRemoteClient {
         guard let url = components?.url else { throw RootineAPIError.missingConfiguration }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.httpBody = try encoder.encode(body)
+        request.httpBody = try JSONEncoder().encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(configuration.supabasePublishableKey, forHTTPHeaderField: "apikey")
@@ -459,7 +457,7 @@ final class RootineAPIClient: WorkspaceRemoteClient {
 
     private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
         let data = try await sendRaw(request)
-        do { return try decoder.decode(T.self, from: data) }
+        do { return try JSONDecoder().decode(T.self, from: data) }
         catch { throw RootineAPIError.invalidResponse }
     }
 
@@ -497,7 +495,7 @@ final class RootineAPIClient: WorkspaceRemoteClient {
             }
         }
 
-        let payload = try? decoder.decode(ErrorPayload.self, from: data)
+        let payload = try? JSONDecoder().decode(ErrorPayload.self, from: data)
         let details = [payload?.error, payload?.errorDescription, payload?.message, payload?.msg, payload?.code]
             .compactMap { $0 }
             .joined(separator: " ")

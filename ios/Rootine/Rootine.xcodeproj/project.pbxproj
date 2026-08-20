@@ -2,7 +2,7 @@
 {
 	archiveVersion = 1;
 	classes = {};
-	objectVersion = 56;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -123,15 +123,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1420;
-				LastUpgradeCheck = 1420;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					T000000000000000000000001 = {CreatedOnToolsVersion = 14.2; };
-					T000000000000000000000002 = {CreatedOnToolsVersion = 14.2; TestTargetID = T000000000000000000000001; };
+					T000000000000000000000001 = {CreatedOnToolsVersion = 26.3; };
+					T000000000000000000000002 = {CreatedOnToolsVersion = 26.3; TestTargetID = T000000000000000000000001; };
 				};
 			};
 			buildConfigurationList = C000000000000000000000001 /* Build configuration list for PBXProject "Rootine" */;
-			compatibilityVersion = "Xcode 14.0";
+			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = pl;
 			hasScannedForEncodings = 0;
 			knownRegions = (pl, en, Base);
@@ -162,8 +162,8 @@
 		C000000000000000000000012 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; GCC_C_LANGUAGE_STANDARD = gnu17; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; VALIDATE_PRODUCT = YES; }; name = Release; };
 		C000000000000000000000021 /* Debug */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Rootine/Resources/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Debug; };
 		C000000000000000000000022 /* Release */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Rootine/Resources/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Release; };
-		C000000000000000000000031 /* Debug */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 16.0; PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.7; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine"; }; name = Debug; };
-		C000000000000000000000032 /* Release */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 16.0; PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.7; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine"; }; name = Release; };
+		C000000000000000000000031 /* Debug */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine"; }; name = Debug; };
+		C000000000000000000000032 /* Release */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine"; }; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */

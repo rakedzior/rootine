@@ -1,6 +1,6 @@
 import Foundation
 
-struct PendingWorkspaceMutation: Codable, Equatable, Identifiable {
+struct PendingWorkspaceMutation: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var storageKey: String
     var payload: JSONValue
@@ -31,14 +31,14 @@ actor WorkspaceFileStore {
         decoder = JSONDecoder()
     }
 
-    func load<T: Decodable>(_ type: T.Type, key: RootineStorageKey) throws -> T? {
+    func load<T: Decodable & Sendable>(_ type: T.Type, key: RootineStorageKey) throws -> T? {
         try ensureDirectories()
         let url = workspaceURL(for: key)
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         return try decoder.decode(T.self, from: Data(contentsOf: url))
     }
 
-    func save<T: Encodable>(_ value: T, key: RootineStorageKey) throws {
+    func save<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) throws {
         try ensureDirectories()
         let url = workspaceURL(for: key)
         if fileManager.fileExists(atPath: url.path) {

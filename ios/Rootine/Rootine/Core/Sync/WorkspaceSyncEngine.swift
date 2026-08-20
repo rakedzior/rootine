@@ -20,7 +20,7 @@ actor WorkspaceSyncEngine {
         encoder.outputFormatting = [.sortedKeys]
     }
 
-    func enqueue<T: Encodable>(_ value: T, key: RootineStorageKey) async throws {
+    func enqueue<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) async throws {
         let data = try encoder.encode(value)
         let payload = try decoder.decode(JSONValue.self, from: data)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()

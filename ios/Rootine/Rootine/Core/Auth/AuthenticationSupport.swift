@@ -92,9 +92,9 @@ final class OAuthWebSession: NSObject, ObservableObject, ASWebAuthenticationPres
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        if let keyWindow = scenes.flatMap(\.windows).first(where: \.isKeyWindow) {
-            return keyWindow
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else {
+            preconditionFailure("Rootine requires an active window scene for OAuth presentation.")
         }
-        return ASPresentationAnchor()
+        return ASPresentationAnchor(windowScene: scene)
     }
 }

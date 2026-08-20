@@ -226,15 +226,15 @@ Przed zastąpieniem lokalnego dokumentu powstaje kopia odzyskiwania. MVP nie wyk
 
 ### 10.1 Założenia narzędziowe
 
-- lokalnie: MacBook Pro Retina Mid 2015, macOS Monterey 12.7.6 i Xcode 14.2;
-- urządzenie: iPhone 15 Pro Max z iOS 27;
-- deployment target: iOS 16.0;
-- lokalne uruchamianie: symulator iOS 16.2;
+- lokalnie: macOS Sequoia 15.6+ i Xcode 26.3;
+- urządzenie: ten sam iPhone 15 Pro Max z iOS 27;
+- deployment target: iOS 26.0;
+- lokalne uruchamianie: symulator iOS 26.3, zweryfikowany na iPhone 17 Pro;
 - fizyczny iPhone: build chmurowy i TestFlight;
-- język: Swift 5 w trybie zgodnym z Xcode 14.2;
-- brak SwiftData, Observation i API wymagających iOS 17+.
+- język: Swift 6.2 w trybie zgodnym z Xcode 26.3;
+- brak SwiftData i Observation pozostaje decyzją architektoniczną MVP, nie ograniczeniem wersji Xcode.
 
-Buildy TestFlight powstają ręcznie w GitHub Actions na nowoczesnym macOS/Xcode. Workflow nie uruchamia kosztownego buildu macOS po każdym commicie. Xcode Cloud może zostać rozważony później po jednorazowej konfiguracji w Xcode 15+.
+Buildy TestFlight powstają ręcznie w GitHub Actions na macOS/Xcode 26.3. Workflow nie uruchamia kosztownego buildu macOS po każdym commicie. Xcode Cloud może zostać rozważony później po jednorazowej konfiguracji.
 
 ### 10.2 Styl architektury
 
@@ -247,7 +247,7 @@ Preferowana jest prosta architektura feature-first z protokołami na granicach s
 - repozytoria domenowe — walidacja, migracja i operacje na workspace'ach;
 - `AppEnvironment` — jawne dependency injection przez protokoły.
 
-Nie wprowadzamy TCA, globalnego Redux ani rozbudowanego frameworka DI. Najnowszy Supabase Swift nie jest zależnością MVP, ponieważ nie kompiluje się w Xcode 14.2. Warstwa backendu korzysta z `URLSession`, a szczegóły transportu są ukryte za protokołami, aby można było później wymienić implementację.
+Nie wprowadzamy TCA, globalnego Redux ani rozbudowanego frameworka DI. Supabase Swift pozostaje poza zależnościami MVP, a warstwa backendu korzysta z `URLSession`; szczegóły transportu są ukryte za protokołami, aby można było później wymienić implementację.
 
 ### 10.3 Proponowana struktura projektu
 
@@ -400,10 +400,10 @@ Po każdym ekranie następuje osobna akceptacja przed rozpoczęciem kolejnego.
 
 ### Lokalne
 
-- kompilacja w Xcode 14.2;
+- kompilacja w Xcode 26.3;
 - testy jednostkowe modeli, migracji, repozytoriów i synchronizacji;
 - SwiftUI Preview, jeśli nie zwiększa złożoności produkcyjnej;
-- symulator iOS 16.2 w małym i dużym rozmiarze;
+- symulator iOS 26.3 w małym i dużym rozmiarze;
 - Dynamic Type, VoiceOver, klawiatura i zmiana orientacji tam, gdzie ma sens.
 
 ### Chmurowe i urządzenie
@@ -411,7 +411,7 @@ Po każdym ekranie następuje osobna akceptacja przed rozpoczęciem kolejnego.
 - build oraz testy w aktualnym wymaganym Xcode;
 - archiwizacja i podpisanie;
 - ręczne wysłanie do TestFlight;
-- iPhone 15 Pro Max z iOS 27;
+- ten sam iPhone 15 Pro Max z iOS 27;
 - logowanie e-mail, Google i Apple;
 - praca offline, restart, odzyskanie sieci i synchronizacja;
 - zmiana na webie widoczna na iPhonie i odwrotnie;
@@ -441,8 +441,8 @@ Po każdym ekranie następuje osobna akceptacja przed rozpoczęciem kolejnego.
 
 | Ryzyko | Konsekwencja | Ograniczenie |
 | --- | --- | --- |
-| Xcode 14.2 nie obsłuży iOS 27 | Brak lokalnego debugowania na fizycznym telefonie | Symulator lokalnie, ręczny CI i TestFlight na kamieniach milowych |
-| Nowoczesne SDK Supabase nie działa w Xcode 14.2 | Blokada kompilacji lub stara zależność | Cienki klient `URLSession` za protokołem |
+| Xcode 26.3 i Swift 6.2 ujawniają błędy izolacji współbieżności | Build może zatrzymać się na ostrzeżeniach traktowanych jako błędy | Naprawiać izolację na granicach aktorów i zachować testy kontraktów |
+| Zależność SDK Supabase zwiększa koszt i zakres migracji | Niepotrzebne sprzężenie warstwy transportu z dostawcą | Cienki klient `URLSession` za protokołem |
 | TypeScript i Swift mogą różnie interpretować JSON | Utrata lub odrzucenie danych | Wspólne fixture'y i testy round-trip przed ekranami |
 | Snapshot całej domeny daje gruby konflikt | Równoległe edycje web/iPhone wymagają decyzji | CAS v2, jawny konflikt, kopia odzyskiwania; drobniejsze dokumenty dopiero w kontrakcie v3 |
 | Open Food Facts ma braki i duplikaty | Nieudane skanowanie produktu | Backendowy lookup, walidacja, cache i ręczny wpis jako późniejszy fallback |
@@ -459,7 +459,7 @@ Akceptacja dokumentu zatwierdza łącznie:
 3. Dzisiaj bez Kalendarza i bez obszarów prowadzących do nieistniejących ekranów;
 4. tylko ciemny Atrament w MVP;
 5. e-mail/hasło, Google i Sign in with Apple;
-6. iOS 16.0, Swift 5 i zgodność projektu z Xcode 14.2;
+6. iOS 26.0, Swift 6.2 i zgodność projektu z Xcode 26.3;
 7. GitHub Actions/TestFlight jako ścieżkę testów fizycznego urządzenia;
 8. `URLSession` zamiast niewspieranego SDK Supabase w MVP;
 9. pliki JSON + Keychain + kolejkę offline jako lokalną warstwę danych;

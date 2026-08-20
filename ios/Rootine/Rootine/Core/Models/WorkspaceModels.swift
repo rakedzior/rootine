@@ -1,24 +1,24 @@
 import Foundation
 
-enum RootineStorageKey: String, CaseIterable, Codable {
+enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case tasks = "rootine.task-workspace.v1"
     case nutrition = "rootine.nutrition-workspace.v1"
     case notes = "rootine.notes-workspace.v1"
 }
 
-enum TaskPriority: String, Codable, CaseIterable {
+enum TaskPriority: String, Codable, CaseIterable, Sendable {
     case high
     case medium
     case low
 }
 
-struct WorkspaceTaxonomy: Codable, Equatable {
+struct WorkspaceTaxonomy: Codable, Equatable, Sendable {
     var id: String
     var label: String
     var color: String
 }
 
-struct WorkspaceTaskSchedule: Codable, Equatable {
+struct WorkspaceTaskSchedule: Codable, Equatable, Sendable {
     var allDay: Bool
     var startTime: String
     var endTime: String? = nil
@@ -30,20 +30,20 @@ struct WorkspaceTaskSchedule: Codable, Equatable {
     var timezone: String
 }
 
-struct WorkspaceTaskSubtask: Codable, Equatable, Identifiable {
+struct WorkspaceTaskSubtask: Codable, Equatable, Identifiable, Sendable {
     var id: Int
     var text: String
     var done: Bool
 }
 
-struct WorkspaceTaskComment: Codable, Equatable, Identifiable {
+struct WorkspaceTaskComment: Codable, Equatable, Identifiable, Sendable {
     var id: Int
     var author: String
     var text: String
     var time: String
 }
 
-struct CommitmentTaskSource: Codable, Equatable {
+struct CommitmentTaskSource: Codable, Equatable, Sendable {
     var kind: String
     var entity: String
     var context: String
@@ -52,7 +52,7 @@ struct CommitmentTaskSource: Codable, Equatable {
     var managed: String? = nil
 }
 
-struct WorkspaceTask: Codable, Equatable, Identifiable {
+struct WorkspaceTask: Codable, Equatable, Identifiable, Sendable {
     var id: Int
     var text: String
     var done: Bool
@@ -73,7 +73,7 @@ struct WorkspaceTask: Codable, Equatable, Identifiable {
     var source: CommitmentTaskSource? = nil
 }
 
-struct WorkspaceHabitSchedule: Codable, Equatable {
+struct WorkspaceHabitSchedule: Codable, Equatable, Sendable {
     var type: String
     var weekdays: [Int]? = nil
     var interval: Int? = nil
@@ -81,12 +81,12 @@ struct WorkspaceHabitSchedule: Codable, Equatable {
     var endDate: String? = nil
 }
 
-struct WorkspaceHabitPause: Codable, Equatable {
+struct WorkspaceHabitPause: Codable, Equatable, Sendable {
     var startDate: String
     var endDate: String? = nil
 }
 
-struct WorkspaceHabit: Codable, Equatable, Identifiable {
+struct WorkspaceHabit: Codable, Equatable, Identifiable, Sendable {
     var id: Int
     var name: String
     var streak: Int
@@ -101,7 +101,7 @@ struct WorkspaceHabit: Codable, Equatable, Identifiable {
     var pausePeriods: [WorkspaceHabitPause]? = nil
 }
 
-struct TaskWorkspace: Codable, Equatable {
+struct TaskWorkspace: Codable, Equatable, Sendable {
     var version: Int
     var updatedAt: String
     var tasks: [WorkspaceTask]
@@ -119,14 +119,14 @@ struct TaskWorkspace: Codable, Equatable {
     )
 }
 
-struct NutritionValues: Codable, Equatable {
+struct NutritionValues: Codable, Equatable, Sendable {
     var calories: Double
     var protein: Double
     var carbs: Double
     var fat: Double
 }
 
-struct NutritionEntry: Codable, Equatable, Identifiable {
+struct NutritionEntry: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var portion: String
@@ -144,14 +144,14 @@ struct NutritionEntry: Codable, Equatable, Identifiable {
     var updatedAt: String? = nil
 }
 
-struct NutritionMealEntries: Codable, Equatable {
+struct NutritionMealEntries: Codable, Equatable, Sendable {
     var breakfast: [NutritionEntry]
     var lunch: [NutritionEntry]
     var snack: [NutritionEntry]
     var dinner: [NutritionEntry]
 }
 
-struct NutritionDay: Codable, Equatable {
+struct NutritionDay: Codable, Equatable, Sendable {
     var date: String
     var waterMl: Double
     var source: String
@@ -168,7 +168,7 @@ struct NutritionDay: Codable, Equatable {
     }
 }
 
-struct NutritionGoals: Codable, Equatable {
+struct NutritionGoals: Codable, Equatable, Sendable {
     var calories: Double
     var protein: Double
     var carbs: Double
@@ -176,7 +176,7 @@ struct NutritionGoals: Codable, Equatable {
     var waterMl: Double
 }
 
-struct NutritionActivity: Codable, Equatable, Identifiable {
+struct NutritionActivity: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var type: String
     var intensity: String
@@ -184,7 +184,7 @@ struct NutritionActivity: Codable, Equatable, Identifiable {
     var minutesPerSession: Double
 }
 
-struct NutritionCalculatorProfile: Codable, Equatable {
+struct NutritionCalculatorProfile: Codable, Equatable, Sendable {
     var equationVariant: String
     var age: Double
     var weightKg: Double
@@ -195,7 +195,7 @@ struct NutritionCalculatorProfile: Codable, Equatable {
     var dietAdjustmentValue: Double
 }
 
-struct MacroConfiguration: Codable, Equatable {
+struct MacroConfiguration: Codable, Equatable, Sendable {
     var mode: String
     var preset: String
     var proteinPercent: Double
@@ -203,7 +203,7 @@ struct MacroConfiguration: Codable, Equatable {
     var fatPercent: Double
 }
 
-struct WeightMeasurement: Codable, Equatable {
+struct WeightMeasurement: Codable, Equatable, Sendable {
     var date: String
     var weightKg: Double
     var note: String? = nil
@@ -211,7 +211,7 @@ struct WeightMeasurement: Codable, Equatable {
     var updatedAt: String? = nil
 }
 
-struct BodyMeasurement: Codable, Equatable, Identifiable {
+struct BodyMeasurement: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var date: String
     var type: String
@@ -220,7 +220,7 @@ struct BodyMeasurement: Codable, Equatable, Identifiable {
     var createdAt: String
 }
 
-struct CustomMealIngredient: Codable, Equatable, Identifiable {
+struct CustomMealIngredient: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var brand: String? = nil
@@ -231,7 +231,7 @@ struct CustomMealIngredient: Codable, Equatable, Identifiable {
     var catalogSource: String? = nil
 }
 
-struct CustomMeal: Codable, Equatable, Identifiable {
+struct CustomMeal: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var ingredients: [CustomMealIngredient]
@@ -241,7 +241,7 @@ struct CustomMeal: Codable, Equatable, Identifiable {
     var updatedAt: String? = nil
 }
 
-struct NutritionWorkspace: Codable, Equatable {
+struct NutritionWorkspace: Codable, Equatable, Sendable {
     var version: Int
     var updatedAt: String
     var goals: NutritionGoals
@@ -264,7 +264,7 @@ struct NutritionWorkspace: Codable, Equatable {
     )
 }
 
-enum NoteColor: String, Codable, CaseIterable {
+enum NoteColor: String, Codable, CaseIterable, Sendable {
     case graphite
     case blue
     case green
@@ -273,19 +273,19 @@ enum NoteColor: String, Codable, CaseIterable {
     case coral
 }
 
-struct NoteChecklistItem: Codable, Equatable, Identifiable {
+struct NoteChecklistItem: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var text: String
     var checked: Bool
 }
 
-struct NoteList: Codable, Equatable, Identifiable {
+struct NoteList: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var createdAt: String
 }
 
-struct NoteRecord: Codable, Equatable, Identifiable {
+struct NoteRecord: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var title: String
     var body: String
@@ -300,7 +300,7 @@ struct NoteRecord: Codable, Equatable, Identifiable {
     var updatedAt: String
 }
 
-struct NotesWorkspace: Codable, Equatable {
+struct NotesWorkspace: Codable, Equatable, Sendable {
     var version: Int
     var updatedAt: String
     var lists: [NoteList]
@@ -309,7 +309,7 @@ struct NotesWorkspace: Codable, Equatable {
     static let empty = NotesWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), lists: [], notes: [])
 }
 
-struct NutritionProduct: Codable, Equatable, Identifiable {
+struct NutritionProduct: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var barcode: String
     var name: String
@@ -321,7 +321,7 @@ struct NutritionProduct: Codable, Equatable, Identifiable {
     var per100g: NutritionValues
 }
 
-enum JSONValue: Codable, Equatable {
+enum JSONValue: Codable, Equatable, Sendable {
     case null
     case bool(Bool)
     case number(Double)
@@ -353,14 +353,10 @@ enum JSONValue: Codable, Equatable {
 }
 
 enum RootineDate {
-    private static let isoFormatter: ISO8601DateFormatter = {
+    static func isoTimestamp(_ date: Date = Date()) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    static func isoTimestamp(_ date: Date = Date()) -> String {
-        isoFormatter.string(from: date)
+        return formatter.string(from: date)
     }
 
     static func localDate(_ date: Date = Date(), calendar: Calendar = .current) -> String {

@@ -11,7 +11,7 @@ Pierwsza wersja iOS jest przeznaczona dla właściciela Rootine i kilku znajomyc
 
 Najważniejsze decyzje:
 
-- natywna aplikacja SwiftUI, iOS 16.0+, Swift 5.7, zgodna z Xcode 14.2;
+- natywna aplikacja SwiftUI, iOS 26.0+, Swift 6.2, zgodna z Xcode 26.3;
 - jeden wspólny projekt Supabase i te same dane dla webu oraz iPhone'a;
 - pierwsze logowanie wymaga internetu, później aplikacja ma korzystać z trwałej kopii offline;
 - tylko ciemny motyw Atrament w MVP;
@@ -65,7 +65,7 @@ Szczegóły uruchomienia projektu znajdują się też w `ios/README.md`.
 
 ## 3. Czego świadomie jeszcze nie wykonano
 
-- Projekt i testy Swift nie były kompilowane na Windows. Pierwszym zadaniem na MacBooku jest build oraz testy w Xcode 14.2.
+- Projekt i testy Swift nie były kompilowane na Windows. Na MacBooku wykonano build oraz testy w Xcode 26.3; po migracji ustawień należy powtórzyć je po zmianie Swift language mode.
 - Nie zweryfikowano zdalnego wdrożenia migracji Supabase, endpointów backendu ani funkcji `delete-account`. Pliki wdrożeniowe są gotowe, ale stan produkcji trzeba potwierdzić.
 - Nie skonfigurowano produkcyjnych danych Google/Apple, callbacków iOS ani prawdziwych adresów Regulaminu i Polityki prywatności.
 - Nie wykonano pełnego smoke testu Auth → snapshot → CAS → Realtime → konflikt.
@@ -110,13 +110,13 @@ Nie wolno umieszczać `SUPABASE_SERVICE_ROLE_KEY` w aplikacji ani commitować `S
 
 W Xcode:
 
-1. Otworzyć scheme `Rootine` i wybrać symulator iOS 16.2.
+1. Otworzyć scheme `Rootine` i wybrać symulator iOS 26.3, najlepiej iPhone 17 Pro.
 2. Ustawić własny zespół w Signing & Capabilities oraz zweryfikować bundle identifier.
 3. Włączyć capability Sign in with Apple dla właściwego App ID.
 4. Wykonać build (`Cmd+B`) i testy (`Cmd+U`).
-5. Naprawić wyłącznie rzeczy wymagane przez Xcode 14.2/iOS 16, bez podnoszenia deployment targetu i bez wprowadzania SwiftData/Observation.
+5. Naprawiać rzeczy wymagane przez Xcode 26.3/Swift 6.2; nie wprowadzać SwiftData/Observation bez osobnej decyzji architektonicznej.
 
-Xcode 14.2 nie obsłuży lokalnego uruchomienia na iPhonie z iOS 27. Lokalnie używać symulatora iOS 16.2, a build na fizyczny iPhone wykonywać oszczędnie przez ręczny workflow i TestFlight.
+Xcode 26.3 i runtime iOS 26.3 są dostępne lokalnie. iPhone 17 Pro był użyty jako simulator destination; fizyczny iPhone 15 Pro Max pozostaje tym samym urządzeniem testowym. Build na fizyczny telefon wykonujemy przez lokalny signing albo ręczny workflow/TestFlight.
 
 ## 5. Konfiguracja Supabase i backendu
 
@@ -136,7 +136,7 @@ Do aplikacji trafia wyłącznie publiczny klucz i JWT użytkownika. Endpointy pr
 
 ## 6. Kolejność dalszej pracy
 
-1. Skompilować projekt i uruchomić testy w Xcode 14.2.
+1. Skompilować projekt i uruchomić testy w Xcode 26.3 z Swift 6.2.
 2. Skonfigurować środowisko testowe Supabase i sprawdzić e-mail/hasło oraz deep link.
 3. Sprawdzić Google i Apple na rzeczywistych konfiguracjach.
 4. Zweryfikować offline bootstrap, odświeżanie sesji i wylogowanie.
@@ -173,8 +173,8 @@ Konfiguracja `Secrets.xcconfig`, zdalny Supabase oraz CLI wdrożeniowe nie były
 ```text
 Przeczytaj w całości HANDOVER-MACBOOK-2026-08-19.md, docs/ios-foundations.md,
 docs/ios-authentication.md, docs/ios-backend-setup.md i ios/README.md. Kontynuuj
-od kompilacji oraz testów uwierzytelniania w Xcode 14.2. Zachowaj iOS 16.0,
-Swift 5.7, wspólny backend Supabase i brak martwych przejść. Nie implementuj
+od kompilacji oraz testów uwierzytelniania w Xcode 26.3. Zachowaj iOS 26.0,
+Swift 6.2, wspólny backend Supabase i brak martwych przejść. Nie implementuj
 ekranu Dzisiaj bez osobnej specyfikacji i mojej akceptacji.
 ```
 

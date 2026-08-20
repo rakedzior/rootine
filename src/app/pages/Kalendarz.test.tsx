@@ -112,39 +112,26 @@ describe("Kalendarz canonical occurrences integration", () => {
     vi.useRealTimers();
   });
 
-  it("shows read-only Sport and Affairs projections with canonical source links", () => {
+  it("shows only task records and excludes Sport and Affairs projections", () => {
+    fixtures.taskWorkspace.tasks = [{
+      id: 99,
+      text: "Zadanie na dziś",
+      done: false,
+      view: "dzis",
+      calendarDate: "2026-07-29",
+    }];
+
     render(<Kalendarz />);
-    expect(screen.getByRole("button", { name: /Trening poranny/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Opłata urzędowa/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Czynsz/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Zadanie na dziś/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Trening poranny/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Opłata urzędowa/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Czynsz/ })).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Otwórz szczegóły: Trening poranny" }));
-    const workoutDetail = screen.getByRole("dialog", { name: "Szczegóły: Trening poranny" });
-    expect(workoutDetail).toHaveTextContent("Zaplanowane");
-    expect(workoutDetail).toHaveTextContent("Siłownia");
-    expect(workoutDetail).toHaveTextContent("Edycja jest dostępna w module Sport");
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Otwórz w module Sport" })).toHaveAttribute(
-      "href",
-      "/sport?widok=cycle&tydzien=1",
-    );
+  it("selects today when the calendar opens", () => {
+    render(<Kalendarz />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Zamknij szczegóły" }));
-    fireEvent.click(screen.getByRole("button", { name: "Otwórz szczegóły: Opłata urzędowa" }));
-    expect(screen.getByRole("dialog", { name: "Szczegóły: Opłata urzędowa" })).toHaveTextContent("431,99");
-    expect(screen.getByRole("link", { name: "Otwórz w module Pozostałe" })).toHaveAttribute(
-      "href",
-      "/sprawy?widok=finance-one-time",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Zamknij szczegóły" }));
-    fireEvent.click(screen.getByRole("button", { name: "Otwórz szczegóły: Czynsz" }));
-    const recurringDetail = screen.getByRole("dialog", { name: "Szczegóły: Czynsz" });
-    expect(recurringDetail).toHaveTextContent("Automatyczne");
-    expect(screen.getByRole("link", { name: "Otwórz w module Pozostałe" })).toHaveAttribute(
-      "href",
-      "/sprawy?widok=finance-recurring",
-    );
+    expect(screen.getByRole("gridcell", { name: /29 lipiec 2026/ })).toHaveClass("is-selected");
   });
 
   it("filters calendar tasks from the context sidebar", () => {

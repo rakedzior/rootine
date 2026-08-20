@@ -154,6 +154,20 @@ function selectTaskOccurrences(
     }));
 }
 
+export function selectTaskCalendarOccurrences(
+  tasks: readonly WorkspaceTask[],
+  rangeStart: string,
+  rangeEnd: string,
+): TaskCalendarOccurrence[] {
+  if (
+    !isLocalDateKey(rangeStart)
+    || !isLocalDateKey(rangeEnd)
+    || rangeEnd < rangeStart
+  ) return [];
+
+  return selectTaskOccurrences(tasks, rangeStart, rangeEnd);
+}
+
 function sportStatus(
   state: SportPlannerState,
   workoutId: string,
@@ -308,7 +322,7 @@ export function selectCalendarOccurrences(
 
   const deduplicated = new Map<string, CalendarOccurrence>();
   [
-    ...selectTaskOccurrences(sources.tasks, rangeStart, rangeEnd),
+    ...selectTaskCalendarOccurrences(sources.tasks, rangeStart, rangeEnd),
     ...selectSportOccurrences(sources.sport, rangeStart, rangeEnd),
     ...selectAffairOccurrences(sources.affairs, rangeStart, rangeEnd),
   ].forEach((occurrence) => {

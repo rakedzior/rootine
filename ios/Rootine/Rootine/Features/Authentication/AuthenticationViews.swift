@@ -32,7 +32,7 @@ struct AuthenticationFlowView: View {
                 }
         }
         .onAppear { showRecoveryIfNeeded() }
-        .onChange(of: environment.isPasswordRecovery) { _ in showRecoveryIfNeeded() }
+        .onChange(of: environment.isPasswordRecovery) { _, _ in showRecoveryIfNeeded() }
     }
 
     private func showRecoveryIfNeeded() {

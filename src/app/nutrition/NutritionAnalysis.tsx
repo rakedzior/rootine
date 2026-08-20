@@ -34,6 +34,16 @@ interface AnalysisPoint {
   weightKg?: number;
 }
 
+interface ChartPoint {
+  startDate: string;
+  endDate: string;
+  calories: number | null;
+  hasDietEntry: boolean;
+  dietSamples: number;
+  weightKg?: number;
+  weightSamples: number;
+}
+
 type InsightTone = "info" | "warning" | "danger" | "positive" | "neutral";
 
 const RANGE_OPTIONS = [
@@ -88,6 +98,35 @@ function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
+function chartBucketDays(totalDays: number) {
+  if (totalDays <= 14) return 1;
+  if (totalDays <= 45) return 3;
+  return 7;
+}
+
+function chartFrequencyLabel(bucketDays: number) {
+  if (bucketDays === 1) return "Dziennie";
+  if (bucketDays === 3) return "Średnia 3-dniowa";
+  return "Średnia tygodniowa";
+}
+
+function aggregateChartPoints(points: AnalysisPoint[], bucketDays: number): ChartPoint[] {
+  return Array.from({ length: Math.ceil(points.length / bucketDays) }, (_, index) => {
+    const bucket = points.slice(index * bucketDays, (index + 1) * bucketDays);
+    const dietPoints = bucket.filter((point) => point.hasDietEntry);
+    const weights = bucket.flatMap((point) => point.weightKg === undefined ? [] : [point.weightKg]);
+    return {
+      startDate: bucket[0].date,
+      endDate: bucket.at(-1)!.date,
+      calories: dietPoints.length ? average(dietPoints.map((point) => point.calories)) : null,
+      hasDietEntry: dietPoints.length > 0,
+      dietSamples: dietPoints.length,
+      weightKg: weights.length ? average(weights) : undefined,
+      weightSamples: weights.length,
+    };
+  });
+}
+
 function formatNumber(value: number, maximumFractionDigits = 1) {
   return value.toLocaleString("pl-PL", { maximumFractionDigits });
 }
@@ -110,6 +149,12 @@ function formatChartDate(dateKey: string) {
     date: new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "short" }).format(date).replace(".", ""),
     weekday: new Intl.DateTimeFormat("pl-PL", { weekday: "short" }).format(date).replace(".", ""),
   };
+}
+
+function formatChartRange(point: Pick<ChartPoint, "startDate" | "endDate">) {
+  return point.startDate === point.endDate
+    ? formatDateShort(point.startDate)
+    : `${formatDateShort(point.startDate)}–${formatDateShort(point.endDate)}`;
 }
 
 function signed(value: number, unit: string) {
@@ -243,27 +288,38 @@ export function NutritionAnalysis({
     return result;
   }, [calorieShare, dietPoints.length, fatOverDays, goals.calories, goals.protein, points.length, privacyMode, proteinBelowDays, waterPoints.length, weightChange]);
 
-  const chartHeight = points.length <= 3 ? 190 : 280;
-  const chartBottom = points.length <= 3 ? 150 : 230;
+  const bucketDays = chartBucketDays(points.length);
+  const chartFrequency = chartFrequencyLabel(bucketDays);
+  const chartPoints = aggregateChartPoints(points, bucketDays);
+  const chartDietPoints = chartPoints.filter((point) => point.hasDietEntry && point.calories !== null);
+  const chartWeightPoints = chartPoints.filter((point): point is ChartPoint & { weightKg: number } => point.weightKg !== undefined);
+  const chartHeight = chartPoints.length <= 3 ? 190 : 280;
+  const chartBottom = chartPoints.length <= 3 ? 150 : 230;
   const plotWidth = CHART.width - CHART.left - CHART.right;
   const plotHeight = chartBottom - CHART.top;
-  const pointX = (index: number) => CHART.left + (points.length <= 1 ? plotWidth / 2 : index / (points.length - 1) * plotWidth);
+  const pointX = (index: number) => CHART.left + (chartPoints.length <= 1 ? plotWidth / 2 : index / (chartPoints.length - 1) * plotWidth);
   const tickIndexes = [...new Set([0, 0.25, 0.5, 0.75, 1]
-    .map((ratio) => Math.max(0, Math.round((points.length - 1) * ratio))))]
-    .filter((index) => Boolean(points[index]));
-  const calorieMax = Math.max(goals.calories, ...dietPoints.map((point) => point.calories), 1);
+    .map((ratio) => Math.max(0, Math.round((chartPoints.length - 1) * ratio))))]
+    .filter((index) => Boolean(chartPoints[index]));
+  const calorieMax = Math.max(goals.calories, ...chartDietPoints.flatMap((point) => point.calories === null ? [] : [point.calories]), 1);
   const calorieY = (value: number) => chartBottom - value / calorieMax * plotHeight;
-  const calorieBarWidth = Math.max(8, Math.min(28, plotWidth / Math.max(points.length, 1) * 0.58));
-  const weightValues = weightPoints.map((point) => point.weightKg);
+  const calorieBarWidth = Math.max(8, Math.min(28, plotWidth / Math.max(chartPoints.length, 1) * 0.58));
+  const weightValues = chartWeightPoints.map((point) => point.weightKg);
   const weightMin = weightValues.length ? Math.min(...weightValues) - Math.max(0.5, (Math.max(...weightValues) - Math.min(...weightValues)) * 0.2) : 0;
   const weightMax = weightValues.length ? Math.max(...weightValues) + Math.max(0.5, (Math.max(...weightValues) - Math.min(...weightValues)) * 0.2) : 1;
   const weightY = (value: number) => chartBottom - (value - weightMin) / Math.max(0.1, weightMax - weightMin) * plotHeight;
-  const weightPolyline = weightPoints.map((point) => {
-    const index = points.findIndex((candidate) => candidate.date === point.date);
+  const weightPolyline = chartWeightPoints.map((point) => {
+    const index = chartPoints.findIndex((candidate) => candidate.startDate === point.startDate);
     return `${pointX(index)},${weightY(point.weightKg)}`;
   }).join(" ");
-  const weightArea = weightPoints.length
-    ? `${CHART.left},${chartBottom} ${weightPolyline} ${pointX(points.findIndex((point) => point.date === weightPoints.at(-1)!.date))},${chartBottom}`
+  const firstWeightIndex = chartWeightPoints.length
+    ? chartPoints.findIndex((point) => point.startDate === chartWeightPoints[0].startDate)
+    : -1;
+  const lastWeightIndex = chartWeightPoints.length
+    ? chartPoints.findIndex((point) => point.startDate === chartWeightPoints.at(-1)!.startDate)
+    : -1;
+  const weightArea = chartWeightPoints.length
+    ? `${pointX(firstWeightIndex)},${chartBottom} ${weightPolyline} ${pointX(lastWeightIndex)},${chartBottom}`
     : "";
   const weightTicks = weightValues.length
     ? [0, 0.5, 1].map((ratio) => weightMin + (weightMax - weightMin) * ratio)
@@ -272,10 +328,35 @@ export function NutritionAnalysis({
   return (
     <div className="nutrition-analysis-v2">
       <div className="nutrition-analysis-v2__toolbar">
-        <div className="nutrition-analysis-v2__date-summary">
+        <div className={`nutrition-analysis-v2__date-summary ${range === "custom" ? "is-custom" : ""}`.trim()}>
           <span>Zakres:</span>
-          <strong>{formatDateRange(activeStartDate, activeEndDate)}</strong>
-          <CalendarDays size={16} strokeWidth={1.6} aria-hidden="true" />
+          {range === "custom" ? (
+            <div className="nutrition-analysis-v2__date-edit">
+              <span>Od</span>
+              <DatePicker
+                aria-label="Data początkowa zakresu"
+                value={customStartDate}
+                max={customEndDate}
+                displayValue={formatDateShort(customStartDate)}
+                fieldClassName="nutrition-analysis-v2__date-picker"
+                onChange={setCustomStartDate}
+              />
+              <span>Do</span>
+              <DatePicker
+                aria-label="Data końcowa zakresu"
+                value={customEndDate}
+                min={customStartDate}
+                max={endDate}
+                displayValue={formatDateShort(customEndDate)}
+                fieldClassName="nutrition-analysis-v2__date-picker"
+                onChange={setCustomEndDate}
+              />
+            </div>
+          ) : (
+            <strong>{formatDateRange(activeStartDate, activeEndDate)}</strong>
+          )}
+          {range !== "custom" && <CalendarDays size={16} strokeWidth={1.6} aria-hidden="true" />}
+          {customRangeInvalid && <span className="nutrition-analysis-v2__range-error" role="alert">Nieprawidłowy zakres</span>}
         </div>
         <fieldset className="nutrition-analysis-v2__range">
           <legend className="ui-sr-only">Zakres analizy</legend>
@@ -294,31 +375,6 @@ export function NutritionAnalysis({
           ))}
         </fieldset>
       </div>
-
-      {range === "custom" && (
-        <div className="nutrition-analysis-v2__custom-range">
-          <div className="nutrition-analysis-v2__custom-range-field">
-            <span id="nutrition-range-from">Od</span>
-            <DatePicker
-              aria-labelledby="nutrition-range-from"
-              value={customStartDate}
-              max={customEndDate}
-              onChange={setCustomStartDate}
-            />
-          </div>
-          <div className="nutrition-analysis-v2__custom-range-field">
-            <span id="nutrition-range-to">Do</span>
-            <DatePicker
-              aria-labelledby="nutrition-range-to"
-              value={customEndDate}
-              min={customStartDate}
-              max={endDate}
-              onChange={setCustomEndDate}
-            />
-          </div>
-          {customRangeInvalid && <p role="alert">Data początkowa musi być wcześniejsza od końcowej.</p>}
-        </div>
-      )}
 
       <div className="nutrition-analysis-v2__overview">
         <div className="nutrition-analysis-v2__kpis" aria-label="Podsumowanie wybranego okresu">
@@ -405,15 +461,15 @@ export function NutritionAnalysis({
       <div className="nutrition-analysis-v2__charts">
         <section className="nutrition-analysis-v2__chart-panel" aria-labelledby="nutrition-analysis-v2-calories-title">
           <div className="nutrition-analysis-v2__chart-heading">
-            <h3 id="nutrition-analysis-v2-calories-title">Kalorie w czasie <InfoButton label="Dni bez wpisu nie są liczone do średniej." /></h3>
-            <span className="nutrition-analysis-v2__chart-frequency">Dziennie</span>
+            <h3 id="nutrition-analysis-v2-calories-title">Kalorie w czasie <InfoButton label="Dni bez wpisu nie są liczone do średniej. Przy dłuższych zakresach wykres pokazuje średnie z kilku dni." /></h3>
+            <span className="nutrition-analysis-v2__chart-frequency">{chartFrequency}</span>
           </div>
           <div className="nutrition-analysis-v2__legend">
             <span><i className="is-goal" /> Cel {formatNumber(goals.calories, 0)} kcal</span>
             <span><i className="is-average" /> Średnia {formatNumber(averageCalories, 0)} kcal</span>
           </div>
-          {dietPoints.length ? (
-            <svg className="nutrition-analysis-v2__chart" viewBox={`0 0 ${CHART.width} ${chartHeight}`} role="img" aria-label="Kalorie w czasie">
+          {chartDietPoints.length ? (
+            <svg className="nutrition-analysis-v2__chart" viewBox={`0 0 ${CHART.width} ${chartHeight}`} role="img" aria-label={`Kalorie w czasie, ${chartFrequency.toLowerCase()}`}>
               {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
                 const value = calorieMax * ratio;
                 const y = calorieY(value);
@@ -426,11 +482,11 @@ export function NutritionAnalysis({
               })}
               <line className="nutrition-analysis-v2__goal-line" x1={CHART.left} y1={calorieY(goals.calories)} x2={CHART.width - CHART.right} y2={calorieY(goals.calories)} />
               <line className="nutrition-analysis-v2__average-line" x1={CHART.left} y1={calorieY(averageCalories)} x2={CHART.width - CHART.right} y2={calorieY(averageCalories)} />
-              {points.map((point, index) => {
+              {chartPoints.map((point, index) => {
                 const x = pointX(index);
-                const barHeight = point.hasDietEntry ? chartBottom - calorieY(point.calories) : 0;
-                return point.hasDietEntry ? (
-                  <g key={point.date}>
+                const barHeight = point.calories === null ? 0 : chartBottom - calorieY(point.calories);
+                return point.calories !== null ? (
+                  <g key={point.startDate}>
                     <rect
                       className={point.calories > goals.calories ? "nutrition-analysis-v2__bar is-over" : "nutrition-analysis-v2__bar"}
                       x={x - calorieBarWidth / 2}
@@ -440,27 +496,28 @@ export function NutritionAnalysis({
                       rx={3}
                       tabIndex={0}
                     >
-                      <title>{formatDateShort(point.date)}: {formatNumber(point.calories, 0)} kcal</title>
+                      <title>{formatChartRange(point)}: {bucketDays === 1 ? "" : "średnia "}{formatNumber(point.calories, 0)} kcal{bucketDays === 1 ? "" : ` (z ${point.dietSamples} dni z wpisem)`}</title>
                     </rect>
                     <text className="nutrition-analysis-v2__value-label" x={x} y={Math.max(CHART.top + 12, calorieY(point.calories) - 8)} textAnchor="middle">{formatNumber(point.calories, 0)}</text>
                   </g>
                 ) : (
-                  <text key={point.date} className="nutrition-analysis-v2__missing-label" x={x} y={chartBottom - 6} textAnchor="middle">—</text>
+                  <text key={point.startDate} className="nutrition-analysis-v2__missing-label" x={x} y={chartBottom - 6} textAnchor="middle">—</text>
                 );
               })}
               {tickIndexes.map((index) => {
-                const label = formatChartDate(points[index].date);
+                const point = chartPoints[index];
+                const label = bucketDays === 1 ? formatChartDate(point.startDate) : { date: formatChartRange(point), weekday: "" };
                 return (
-                  <text key={points[index].date} className="nutrition-analysis-v2__date-label" x={pointX(index)} y={chartBottom + 24} textAnchor="middle">
+                  <text key={point.startDate} className="nutrition-analysis-v2__date-label" x={pointX(index)} y={chartBottom + 24} textAnchor="middle">
                     <tspan x={pointX(index)}>{label.date}</tspan>
-                    <tspan x={pointX(index)} dy="14">{label.weekday}</tspan>
+                    {label.weekday && <tspan x={pointX(index)} dy="14">{label.weekday}</tspan>}
                   </text>
                 );
               })}
             </svg>
           ) : <div className="nutrition-analysis-v2__empty">Brak wpisów kalorii w wybranym okresie.</div>}
           <div className="nutrition-analysis-v2__chart-footer">
-            <span><i className="is-in-range" /> W normie (≤ {formatNumber(goals.calories, 0)} kcal)</span>
+            <span><i className="is-in-range" /> {bucketDays === 1 ? "W normie" : "Średnia w normie"} (≤ {formatNumber(goals.calories, 0)} kcal)</span>
             <span><i className="is-over" /> Powyżej celu (&gt; {formatNumber(goals.calories, 0)} kcal)</span>
             <span><i className="is-missing" /> Brak wpisu</span>
           </div>
@@ -468,14 +525,14 @@ export function NutritionAnalysis({
 
         <section className="nutrition-analysis-v2__chart-panel" aria-labelledby="nutrition-analysis-v2-weight-title">
           <div className="nutrition-analysis-v2__chart-heading">
-            <h3 id="nutrition-analysis-v2-weight-title">Masa ciała w czasie <InfoButton label="Wykres pokazuje zapisane pomiary masy." /></h3>
-            <span className="nutrition-analysis-v2__chart-frequency">Dziennie</span>
+            <h3 id="nutrition-analysis-v2-weight-title">Masa ciała w czasie <InfoButton label="Wykres pokazuje zapisane pomiary masy. Przy dłuższych zakresach punkty są uśredniane w kilku dniach." /></h3>
+            <span className="nutrition-analysis-v2__chart-frequency">{chartFrequency}</span>
           </div>
           <div className="nutrition-analysis-v2__chart-axis-caption">kg</div>
           {privacyMode ? (
             <div className="nutrition-analysis-v2__empty" role="status">Wartości masy ciała są ukryte w Privacy Mode.</div>
           ) : weightPoints.length ? (
-            <svg className="nutrition-analysis-v2__chart" viewBox={`0 0 ${CHART.width} ${chartHeight}`} role="img" aria-label="Masa ciała w czasie">
+            <svg className="nutrition-analysis-v2__chart" viewBox={`0 0 ${CHART.width} ${chartHeight}`} role="img" aria-label={`Masa ciała w czasie, ${chartFrequency.toLowerCase()}`}>
               {weightTicks.map((value) => {
                 const y = weightY(value);
                 return (
@@ -487,24 +544,25 @@ export function NutritionAnalysis({
               })}
               <polygon className="nutrition-analysis-v2__weight-area" points={weightArea} />
               <polyline className="nutrition-analysis-v2__weight-line" points={weightPolyline} />
-              {weightPoints.map((point) => {
-                const index = points.findIndex((candidate) => candidate.date === point.date);
+              {chartWeightPoints.map((point) => {
+                const index = chartPoints.findIndex((candidate) => candidate.startDate === point.startDate);
                 const x = pointX(index);
                 return (
-                  <g key={point.date}>
+                  <g key={point.startDate}>
                     <circle className="nutrition-analysis-v2__weight-point" cx={x} cy={weightY(point.weightKg)} r={4} tabIndex={0}>
-                      <title>{formatDateShort(point.date)}: {formatNumber(point.weightKg)} kg</title>
+                      <title>{formatChartRange(point)}: {bucketDays === 1 ? "" : "średnia "}{formatNumber(point.weightKg)} kg{bucketDays === 1 ? "" : ` (z ${point.weightSamples} pomiarów)`}</title>
                     </circle>
                     <text className="nutrition-analysis-v2__value-label is-weight" x={x} y={weightY(point.weightKg) - 10} textAnchor="middle">{formatNumber(point.weightKg)}</text>
                   </g>
                 );
               })}
               {tickIndexes.map((index) => {
-                const label = formatChartDate(points[index].date);
+                const point = chartPoints[index];
+                const label = bucketDays === 1 ? formatChartDate(point.startDate) : { date: formatChartRange(point), weekday: "" };
                 return (
-                  <text key={points[index].date} className="nutrition-analysis-v2__date-label" x={pointX(index)} y={chartBottom + 24} textAnchor="middle">
+                  <text key={point.startDate} className="nutrition-analysis-v2__date-label" x={pointX(index)} y={chartBottom + 24} textAnchor="middle">
                     <tspan x={pointX(index)}>{label.date}</tspan>
-                    <tspan x={pointX(index)} dy="14">{label.weekday}</tspan>
+                    {label.weekday && <tspan x={pointX(index)} dy="14">{label.weekday}</tspan>}
                   </text>
                 );
               })}

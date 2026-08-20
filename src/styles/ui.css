@@ -540,6 +540,7 @@
   width: 100%;
   min-width: 0;
   flex: 0 0 auto;
+  container: content-header / inline-size;
   border-bottom: 1px solid var(--color-border);
   background: transparent;
 }
@@ -554,11 +555,11 @@
 }
 
 .ui-content-header__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 36px;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
+  align-items: start;
   gap: var(--space-lg);
 }
 
@@ -572,10 +573,10 @@
   align-items: center;
 }
 
-.ui-content-header__identity { flex: 1 1 auto; gap: var(--space-md); }
+.ui-content-header__identity { gap: var(--space-md); align-items: flex-start; }
 .ui-content-header__leading { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-xs); }
 .ui-content-header__mobile-nav { display: none; }
-.ui-content-header__copy { min-width: 0; }
+.ui-content-header__copy { min-width: 0; flex: 1 1 auto; }
 .ui-content-header__heading { flex-wrap: wrap; gap: var(--space-sm); }
 .ui-content-header__title {
   overflow: hidden;
@@ -597,7 +598,14 @@
   white-space: nowrap;
 }
 .ui-content-header__meta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-xs); color: var(--color-text-secondary); font-size: var(--text-meta); }
-.ui-content-header__actions { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-sm); }
+.ui-content-header__actions {
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-self: start;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
 .ui-content-header__actions > * { max-width: 100%; }
 .ui-content-header__controls,
 .ui-content-header__below { width: 100%; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
@@ -609,20 +617,43 @@
  * The header has to react to the width of the column it sits in, not to the width of the window.
  * Opening a 408px detail panel narrows that column without changing the viewport, so a media
  * query left the toolbar at its wide layout and the filters were clipped by the panel edge.
+ * The 1100px threshold is the registered dense-workspace adjustment: the title owns the first
+ * row, while controls get a full-width action rail instead of wrapping inside a cramped corner.
  */
 .ui-main-content {
   container: workspace / inline-size;
 }
 
-@container workspace (max-width: 860px) {
-  .ui-content-header__row { flex-wrap: wrap; }
+@container content-header (max-width: 1100px) {
+  .ui-content-header__row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-sm);
+  }
+  .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
+}
+
+/* The test-account notice is a global utility toast. On the one-row header mode it must not
+ * sit on top of a primary action; the header temporarily reserves its own right-side lane. */
+@container content-header (min-width: 1101px) {
+  body:has(.test-account-notice) .ui-content-header__row {
+    padding-inline-end: min(380px, 34%);
+  }
+}
+
+/* The workspace query remains for the quick composer, but the header itself is governed by the
+ * header container above so a route-specific max-width cannot leave it in the wrong mode. */
+@container workspace (max-width: 760px) {
+  .ui-content-header__row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-sm);
+  }
   .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
 }
 
 /* Fallback for engines without container queries: keep the previous viewport behaviour. */
 @supports not (container-type: inline-size) {
   @media (max-width: 1100px) {
-    .ui-content-header__row { flex-wrap: wrap; }
+    .ui-content-header__row { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-sm); }
     .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
   }
 }
@@ -1036,7 +1067,7 @@
 
 @media (max-width: 760px) {
   .ui-content-header__inner { padding: var(--space-md) var(--space-lg); }
-  .ui-content-header__row { min-height: 36px; flex-wrap: wrap; align-items: flex-start; row-gap: var(--space-sm); }
+  .ui-content-header__row { min-height: 36px; grid-template-columns: minmax(0, 1fr); align-items: start; row-gap: var(--space-sm); }
   .ui-content-header__identity { width: 100%; }
   .ui-content-header__mobile-nav { display: flex; min-width: 0; flex: 0 1 180px; }
   .ui-content-header__mobile-nav .ui-field { width: 100%; min-width: 0; }

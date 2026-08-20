@@ -1,10 +1,14 @@
 @media (max-width: 980px) {
   .auth-shell {
-    grid-template-columns: minmax(320px, 0.82fr) minmax(430px, 1.18fr);
+    grid-template-columns: minmax(300px, 0.82fr) minmax(420px, 1.18fr);
+  }
+
+  .auth-context {
+    padding-inline: var(--space-xl);
   }
 
   .auth-context__areas {
-    display: none;
+    column-gap: var(--space-lg);
   }
 
   .app-route-loading__workspace {
@@ -120,10 +124,12 @@
   }
 
   .auth-panel {
+    height: 100dvh;
     min-height: 100dvh;
     grid-template-rows: auto 1fr;
     align-content: start;
-    padding: var(--space-xl) var(--space-md);
+    gap: var(--space-lg);
+    padding: var(--space-xl) var(--space-md) max(var(--space-xl), env(safe-area-inset-bottom));
   }
 
   .auth-panel__mobile-brand {
@@ -132,9 +138,17 @@
   }
 
   .auth-card {
-    align-self: center;
+    align-self: start;
     gap: var(--space-lg);
-    padding-block: var(--space-3xl);
+    padding-block: 0 var(--space-lg);
+  }
+
+  .auth-entry-options {
+    column-gap: var(--space-lg);
+  }
+
+  .auth-entry-option + .auth-entry-option {
+    padding-left: var(--space-lg);
   }
 
   .auth-test-account {
@@ -151,6 +165,104 @@
 
   .test-account-notice small {
     display: none;
+  }
+
+  /* Keep the complete local/test entry surface available on short phones as well. */
+  @media (max-height: 650px) {
+    .auth-panel {
+      gap: var(--space-sm);
+      padding-top: var(--space-md);
+    }
+
+    .auth-panel__mobile-brand .auth-brand__mark {
+      width: 28px;
+      height: 28px;
+    }
+
+    .auth-panel__mobile-brand .auth-brand strong {
+      font-size: var(--text-body);
+    }
+
+    .auth-card {
+      gap: var(--space-sm);
+    }
+
+    .auth-card__heading {
+      gap: 2px;
+    }
+
+    .auth-card__heading h2 {
+      font-size: var(--text-title);
+    }
+
+    .auth-card__heading p,
+    .auth-password-row,
+    .auth-switch {
+      font-size: var(--text-label);
+    }
+
+    .auth-google-button,
+    .auth-form .ui-field__control,
+    .auth-form > .ui-button {
+      height: var(--control-height-sm);
+    }
+
+    .auth-form {
+      gap: var(--space-sm);
+    }
+
+    .auth-form .ui-field {
+      gap: var(--space-xs);
+    }
+
+    .auth-password-row {
+      margin-bottom: calc(-1 * var(--space-xs));
+    }
+
+    .auth-feedback {
+      padding: var(--space-xs) var(--space-sm);
+      font-size: var(--text-micro);
+    }
+
+    .auth-entry-options {
+      column-gap: var(--space-sm);
+      padding-top: var(--space-sm);
+    }
+
+    .auth-entry-option {
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: var(--space-xs);
+      padding-top: var(--space-xs);
+    }
+
+    .auth-entry-option + .auth-entry-option {
+      padding-left: var(--space-sm);
+    }
+
+    .auth-entry-option__icon {
+      width: 22px;
+      height: 22px;
+    }
+
+    .auth-entry-option__icon svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .auth-entry-option strong,
+    .auth-entry-option p,
+    .auth-entry-option .ui-button {
+      font-size: var(--text-micro);
+    }
+
+    .auth-entry-option p {
+      line-height: var(--leading-snug);
+    }
+
+    .auth-entry-option .ui-button {
+      min-height: var(--control-height-sm);
+      padding: var(--space-xs);
+    }
   }
 
   .app-route-loading__header {

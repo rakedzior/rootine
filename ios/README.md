@@ -1,13 +1,13 @@
 # Rootine iOS
 
-Native SwiftUI foundation for the Rootine MVP. The project deliberately targets iOS 16 and Swift 5.7 so it remains editable with Xcode 14.2 on macOS Monterey.
+Native SwiftUI foundation for the Rootine MVP. The project targets iOS 26.0+ and Swift 6.2 for Xcode 26.3.
 
 ## Open on the Mac
 
 1. Copy `Rootine/Config/Secrets.xcconfig.example` to `Rootine/Config/Secrets.xcconfig`.
 2. Fill in the production Supabase URL, publishable key, and deployed web backend URL.
-3. Open `Rootine/Rootine.xcodeproj` in Xcode 14.2.
-4. Select the `Rootine` scheme and an iOS 16.2 simulator.
+3. Open `Rootine/Rootine.xcodeproj` in Xcode 26.3.
+4. Select the `Rootine` scheme and the installed iOS 26.x simulator runtime. The current verified simulator destination is iPhone 17 Pro on iOS 26.3; the physical iPhone target remains unchanged.
 
 `Secrets.xcconfig` is ignored by Git. Never put a service-role key in an iOS build.
 

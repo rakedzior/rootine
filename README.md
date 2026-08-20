@@ -35,7 +35,7 @@ Najważniejsze komendy:
 
 ```bash
 npm run check       # lint, CSS, audyty, testy, typy i build
-npm run ios:audit   # spójność projektu Xcode 14.2 i kontraktów iOS
+  npm run ios:audit   # spójność projektu Xcode 26.3 i kontraktów iOS
 npm run test:e2e    # regresje przeglądarkowe Playwright
 npm run build       # typecheck i produkcyjny bundle
 npm run preview     # podgląd buildu
@@ -111,7 +111,7 @@ Limit w pamięci chroni pojedynczą ciepłą instancję funkcji. Publiczne wdro�
 
 ## Aplikacja iOS
 
-Projekt SwiftUI znajduje się w `ios/Rootine/Rootine.xcodeproj`. Celuje w iOS 16 i Swift 5.7, dzięki czemu można go edytować i uruchamiać w symulatorze Xcode 14.2. Build dla współczesnego fizycznego iPhone'a jest wykonywany oszczędnie przez ręcznie uruchamiany workflow `iOS foundation` i później dostarczany przez TestFlight.
+Projekt SwiftUI znajduje się w `ios/Rootine/Rootine.xcodeproj`. Celuje w iOS 26.0+ i Swift 6.2, a lokalne buildy i podglądy są przygotowane pod Xcode 26.3 oraz runtime iOS 26.x. Fizyczny iPhone pozostaje urządzeniem testowym; build urządzeniowy jest wykonywany oszczędnie przez ręcznie uruchamiany workflow `iOS foundation` i później dostarczany przez TestFlight.
 
 Konfiguracja i instrukcja uruchomienia znajdują się w [`ios/README.md`](ios/README.md), fundamenty produktu w [`docs/ios-foundations.md`](docs/ios-foundations.md), a kroki wdrożenia usług w [`docs/ios-backend-setup.md`](docs/ios-backend-setup.md). Wspólne schematy i fixtures są w `contracts/`; testy webowe walidują je produkcyjnymi walidatorami domen, a testy XCTest dekodują te same pliki przez modele `Codable`.
 
@@ -125,7 +125,7 @@ Usuwanie konta realizuje chroniona funkcja `supabase/functions/delete-account`. 
 - `supabase/functions/` — serwerowe operacje wymagające uprawnień administracyjnych;
 - `api/`, `functions/`, `worker/` — warianty proxy Open Food Facts;
 - `contracts/` — schematy i fixtures współdzielone przez TypeScript i Swift;
-- `ios/` — projekt SwiftUI, XCTest i konfiguracja Xcode 14.2;
+- `ios/` — projekt SwiftUI, XCTest i konfiguracja Xcode 26.3;
 - `e2e/` — testy Playwright;
 - `docs/` — inwentarz produktu, system projektu i kontrakty danych.
 

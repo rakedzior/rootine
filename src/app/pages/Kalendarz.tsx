@@ -5,9 +5,7 @@ import {
 } from "lucide-react";
 import { TaskDetail } from "./tasks/TaskViews";
 import {
-  CALENDAR_SOURCE_STORAGE_KEYS,
-  loadCalendarOccurrenceSources,
-  selectCalendarOccurrences,
+  selectTaskCalendarOccurrences,
   type CalendarOccurrence,
   type CalendarOccurrenceStatusKey,
 } from "../data/calendarOccurrences";
@@ -28,6 +26,7 @@ import {
   saveTaskWorkspace,
   setTaskDoneState,
   taskViewForCalendarDate,
+  TASK_STORAGE_KEY,
   trashTask,
   type WorkspaceList as ListItem,
   type WorkspaceTag as TagItem,
@@ -65,7 +64,6 @@ import {
   tasksForSmartDateView,
 } from "./tasks/taskPageModel";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
-import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
 import "../../styles/calendar.css";
 import "../../styles/tasks.css";
 
@@ -370,17 +368,7 @@ export default function Kalendarz() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
   const activeTaskView = "wszystkie";
-  const [occurrenceSources, setOccurrenceSources] = useState(loadCalendarOccurrenceSources);
-  const [viewDate, setViewDate] = useState(() => {
-    const saved = readModuleMemoryValue(
-      "tasks.calendar",
-      "month",
-      (value): value is string => typeof value === "string" && /^\d{4}-\d{2}$/.test(value),
-    );
-    if (!saved) return new Date(now.getFullYear(), now.getMonth(), 1);
-    const [year, month] = saved.split("-").map(Number);
-    return new Date(year, month - 1, 1);
-  });
+  const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isCalendarTask));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
@@ -400,15 +388,8 @@ export default function Kalendarz() {
   const [agendaDateKey, setAgendaDateKey] = useState<string | null>(null);
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
   const [calendarWidth, setCalendarWidth] = useState<number | null>(null);
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(todayKey);
 
-  useEffect(() => {
-    writeModuleMemoryValue(
-      "tasks.calendar",
-      "month",
-      `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}`,
-    );
-  }, [viewDate]);
   const [trashedTask, setTrashedTask] = useState<CalendarEvent | null>(null);
   const calendarRootRef = useRef<HTMLDivElement>(null);
   const calendarViewMonthRef = useRef(`${viewDate.getFullYear()}-${viewDate.getMonth()}`);
@@ -459,17 +440,14 @@ export default function Kalendarz() {
   useEffect(() => {
     const syncWorkspace = () => {
       const nextWorkspace = loadTaskWorkspace();
-      setOccurrenceSources(loadCalendarOccurrenceSources());
       workspaceRef.current = nextWorkspace;
       setEvents(nextWorkspace.tasks.filter(isCalendarTask));
       setLists(nextWorkspace.lists);
       setTags(nextWorkspace.tags);
       setSelectedId((current) => current !== null && nextWorkspace.tasks.some((task) => task.id === current && isCalendarTask(task)) ? current : null);
     };
-    const unsubscribers = CALENDAR_SOURCE_STORAGE_KEYS.map((key) => (
-      subscribeToLocalWorkspace(key, syncWorkspace)
-    ));
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+    const unsubscribe = subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace);
+    return unsubscribe;
   }, []);
 
   const cells = useMemo(() => getCalendarCells(viewDate.getFullYear(), viewDate.getMonth()), [viewDate]);
@@ -558,12 +536,12 @@ export default function Kalendarz() {
     const first = cells[0];
     const last = cells.at(-1);
     if (!first || !last) return [] as CalendarOccurrence[];
-    return selectCalendarOccurrences(
-      { ...occurrenceSources, tasks: filteredEvents },
+    return selectTaskCalendarOccurrences(
+      filteredEvents,
       dateKey(first.year, first.month, first.day),
       dateKey(last.year, last.month, last.day),
-    ).filter((occurrence) => occurrence.kind !== "task" || !occurrence.status.completed);
-  }, [cells, filteredEvents, occurrenceSources]);
+    ).filter((occurrence) => !occurrence.status.completed);
+  }, [cells, filteredEvents]);
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarOccurrence[]>();
     visibleOccurrences.forEach((event) => grouped.set(event.calendarDate, [...(grouped.get(event.calendarDate) ?? []), event]));
@@ -713,6 +691,13 @@ export default function Kalendarz() {
   const openTaskView = (view: string, resetFilters = true) => {
     if (view === "wszystkie") {
       if (resetFilters) setCalendarFilter({ kind: "all" });
+      const current = new Date();
+      const currentKey = dateKey(current.getFullYear(), current.getMonth(), current.getDate());
+      setViewDate(new Date(current.getFullYear(), current.getMonth(), 1));
+      setFocusedDateKey(currentKey);
+      setSelectedCalendarDate(currentKey);
+      setAgendaDateKey(null);
+      closeTaskDetail(false);
       saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
       return;
     }
@@ -809,7 +794,10 @@ export default function Kalendarz() {
   };
   const goToday = () => {
     const current = new Date();
+    const currentKey = dateKey(current.getFullYear(), current.getMonth(), current.getDate());
     setViewDate(new Date(current.getFullYear(), current.getMonth(), 1));
+    setFocusedDateKey(currentKey);
+    setSelectedCalendarDate(currentKey);
     setAgendaDateKey(null);
     closeTaskDetail();
   };

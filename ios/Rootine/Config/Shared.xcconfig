@@ -1,5 +1,8 @@
-IPHONEOS_DEPLOYMENT_TARGET = 16.0
-SWIFT_VERSION = 5.7
+// Xcode 26.3 ships Swift 6.2.x and the iOS 26.2 SDK.
+// Keep the deployment target on the major iOS release so the same app can
+// run on the current physical iPhone and the matching simulator runtime.
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+SWIFT_VERSION = 6.2
 PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1

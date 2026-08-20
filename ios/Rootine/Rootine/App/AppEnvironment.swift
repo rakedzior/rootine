@@ -230,7 +230,7 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    private func reconcile<T: Codable & Equatable>(
+    private func reconcile<T: Codable & Equatable & Sendable>(
         _ local: T?,
         fallback: T,
         key: RootineStorageKey,

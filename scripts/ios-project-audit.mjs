@@ -45,9 +45,10 @@ if (failures.length === 0) {
     if (!project.includes(fixture)) failures.push(`Contract fixture is not bundled in RootineTests: ${fixture}`);
   }
 
-  if (!config.includes("IPHONEOS_DEPLOYMENT_TARGET = 16.0")) failures.push("iOS deployment target must stay at 16.0 for Xcode 14.2");
-  if (!config.includes("SWIFT_VERSION = 5.7")) failures.push("Swift language mode must stay at 5.7");
-  if (!project.includes("objectVersion = 56")) failures.push("Xcode project format is newer than the Xcode 14-compatible format");
+  if (!config.includes("IPHONEOS_DEPLOYMENT_TARGET = 26.0")) failures.push("iOS deployment target must stay at 26.0 for the Xcode 26.3 toolchain");
+  if (!config.includes("SWIFT_VERSION = 6.2")) failures.push("Swift language mode must stay at 6.2 for Xcode 26.3");
+  if (!project.includes("objectVersion = 77")) failures.push("Xcode project format must use the Xcode 26 project format");
+  if (!project.includes("LastUpgradeCheck = 2630")) failures.push("Xcode project metadata is not aligned with Xcode 26.3");
   if (!plist.includes("$(ROOTINE_AUTH_CALLBACK_SCHEME)")) failures.push("Info.plist is missing the configurable native auth URL scheme");
   if (!config.includes("ROOTINE_AUTH_CALLBACK_SCHEME = rootine")) failures.push("Native auth callback scheme must remain aligned with Supabase setup");
   if (!capabilities.includes("com.apple.developer.applesignin")) failures.push("Sign in with Apple entitlement is missing");
@@ -57,7 +58,7 @@ if (failures.length === 0) {
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
   for (const banned of ["SwiftData", "@Observable", "Observation", "NavigationSplitViewColumn"]) {
-    if (source.includes(banned)) failures.push(`Unsupported new-toolchain API found in iOS source: ${banned}`);
+    if (source.includes(banned)) failures.push(`API outside the approved Rootine iOS architecture found in source: ${banned}`);
   }
   for (const required of [
     "Codzienność nie mieści się w jednej liście",
@@ -75,4 +76,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("iOS project audit passed: Xcode 14.2 format, Swift 5.7 sources, shared contract fixtures, and iOS 16 target are aligned.");
+console.log("iOS project audit passed: Xcode 26.3 metadata, Swift 6.2 sources, shared contract fixtures, and iOS 26 target are aligned.");
