@@ -44,6 +44,10 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function authRedirectUrl() {
+  return new URL("/dzisiaj", window.location.origin).toString();
+}
+
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) {
     const message = error.message.trim();
@@ -169,7 +173,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: new URL("/dzisiaj", window.location.origin).toString() },
+        options: { redirectTo: authRedirectUrl() },
       });
       return { error: error ? errorMessage(error) : null };
     } catch (error) {
@@ -193,6 +197,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email: normalizeEmail(email),
       password,
+      options: { emailRedirectTo: authRedirectUrl() },
     });
     if (error) return { error: errorMessage(error) };
     setSession(data.session);
@@ -202,7 +207,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   const requestPasswordReset = useCallback(async (email: string): Promise<AuthActionResult> => {
     if (!supabase) return { error: "Odzyskiwanie hasła nie jest dostępne w tym środowisku." };
     const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-      redirectTo: new URL("/dzisiaj", window.location.origin).toString(),
+      redirectTo: authRedirectUrl(),
     });
     return { error: error ? errorMessage(error) : null };
   }, []);

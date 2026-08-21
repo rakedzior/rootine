@@ -121,7 +121,7 @@ describe("Open Food Facts proxy", () => {
     expect(await response.json()).toEqual({ products: [] });
   });
 
-  it("preserves an upstream error and prevents it from being cached", async () => {
+  it("hides upstream failures and prevents them from being cached", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(
       JSON.stringify({ error: "unavailable" }),
       { status: 503, headers: { "content-type": "application/json" } },
@@ -129,9 +129,30 @@ describe("Open Food Facts proxy", () => {
 
     const response = await handler(request("/api/openfoodfacts/search?q=apple"));
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(502);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ error: "unavailable" });
+    expect(await response.json()).toEqual({ error: "Open Food Facts is temporarily unavailable" });
+  });
+
+  it("falls back to the legacy catalog when the primary search service is unavailable", async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("upstream down", { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ products: [{
+        code: "5901234123457",
+        product_name: "Produkt awaryjny",
+        nutriments: { "energy-kcal_100g": 20 },
+      }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handler(request("/api/openfoodfacts/search?q=produkt"));
+
+    expect(response.status).toBe(200);
+    const payload = await response.json() as { products?: unknown[] };
+    expect(payload.products).toEqual([
+      expect.objectContaining({ barcode: "5901234123457", name: "Produkt awaryjny" }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).pathname).toBe("/api/v2/search");
   });
 
   it("returns a non-cacheable gateway error when the upstream request fails", async () => {

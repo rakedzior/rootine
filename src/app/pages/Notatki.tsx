@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import { recordActivity } from "../experience/activityLog";
 import {
   createNotesId,
@@ -112,7 +113,7 @@ function loadNotesSidebarState(): NotesSidebarState {
   const fallback: NotesSidebarState = { listsExpanded: false, tagsExpanded: false };
   if (typeof window === "undefined") return fallback;
   try {
-    const raw = window.localStorage.getItem(NOTES_SIDEBAR_STATE_KEY);
+    const raw = getRootineStorageItem(NOTES_SIDEBAR_STATE_KEY);
     if (!raw) return fallback;
     const value = JSON.parse(raw) as Partial<NotesSidebarState>;
     return {
@@ -127,7 +128,7 @@ function loadNotesSidebarState(): NotesSidebarState {
 function loadNotesTags(): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(NOTES_TAGS_STORAGE_KEY);
+    const raw = getRootineStorageItem(NOTES_TAGS_STORAGE_KEY);
     const value = raw ? JSON.parse(raw) : [];
     return Array.isArray(value)
       ? Array.from(new Set(value
@@ -221,7 +222,7 @@ export default function Notatki() {
   const [sort, setSort] = useState<NotesSort>(initialUrlState.sort);
   const [layout, setLayout] = useState<NotesLayout>(() => {
     try {
-      return window.localStorage.getItem("rootine.notes.layout") === "list" ? "list" : "cards";
+      return getRootineStorageItem("rootine.notes.layout") === "list" ? "list" : "cards";
     } catch {
       return "cards";
     }
@@ -263,7 +264,7 @@ export default function Notatki() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(NOTES_SIDEBAR_STATE_KEY, JSON.stringify({ listsExpanded, tagsExpanded }));
+      setRootineStorageItem(NOTES_SIDEBAR_STATE_KEY, JSON.stringify({ listsExpanded, tagsExpanded }));
     } catch {
       // A sidebar preference is optional and must not block notes.
     }
@@ -283,7 +284,7 @@ export default function Notatki() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(NOTES_TAGS_STORAGE_KEY, JSON.stringify(knownTags));
+      setRootineStorageItem(NOTES_TAGS_STORAGE_KEY, JSON.stringify(knownTags));
     } catch {
       // A tag registry is optional; note content remains authoritative.
     }
@@ -396,7 +397,7 @@ export default function Notatki() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("rootine.notes.layout", layout);
+      setRootineStorageItem("rootine.notes.layout", layout);
     } catch {
       // The layout preference is optional.
     }

@@ -12,6 +12,7 @@ import {
   isEphemeralTestWorkspaceActive,
 } from "./ephemeralWorkspace";
 import { createQaFixtureEntries } from "./demoWorkspace";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 
 type AppSessionContextValue = {
   isTestAccount: boolean;
@@ -52,8 +53,8 @@ function seedQaWorkspace() {
   if (!qaAuthBypassEnabled || typeof window === "undefined") return;
   createQaFixtureEntries().forEach(([key, value]) => {
     try {
-      if (window.localStorage.getItem(key) === null) {
-        window.localStorage.setItem(key, JSON.stringify(value));
+      if (getRootineStorageItem(key) === null) {
+        setRootineStorageItem(key, JSON.stringify(value));
       }
     } catch {
       // Persistence failure scenarios deliberately block individual keys.

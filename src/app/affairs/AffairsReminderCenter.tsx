@@ -8,6 +8,7 @@ import {
 import { JDG_STORAGE_KEY, loadJdgWorkspace } from "../data/jdgWorkspace";
 import { HEALTH_STORAGE_KEY, loadHealthWorkspace } from "../data/healthWorkspace";
 import { todayLocalDateKey } from "../data/localDate";
+import { getRootineStorageItem, removeRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { TRAVEL_STORAGE_KEY, loadTravelWorkspace } from "../data/travelWorkspace";
 import { Toast, ToastViewport } from "../ui";
@@ -83,7 +84,7 @@ function writeReminderDismissals(entries: ReminderDismissal[]) {
     entries: entries.slice(-MAX_REMINDER_DISMISSALS),
   };
   try {
-    window.localStorage.setItem(AFFAIRS_REMINDER_DISMISS_KEY, JSON.stringify(payload));
+    setRootineStorageItem(AFFAIRS_REMINDER_DISMISS_KEY, JSON.stringify(payload));
   } catch {
     // A storage failure must not prevent dismissing the current in-app toast.
   }
@@ -92,7 +93,7 @@ function writeReminderDismissals(entries: ReminderDismissal[]) {
 function readReminderDismissals(day = todayLocalDateKey()): ReminderDismissal[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(AFFAIRS_REMINDER_DISMISS_KEY);
+    const raw = getRootineStorageItem(AFFAIRS_REMINDER_DISMISS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Partial<ReminderDismissalStore>;
     const entries = parsed.version === REMINDER_DISMISS_VERSION && Array.isArray(parsed.entries)
@@ -101,7 +102,7 @@ function readReminderDismissals(day = todayLocalDateKey()): ReminderDismissal[] 
     const normalized = JSON.stringify({ version: REMINDER_DISMISS_VERSION, entries });
     if (normalized !== raw) {
       try {
-        window.localStorage.setItem(AFFAIRS_REMINDER_DISMISS_KEY, normalized);
+      setRootineStorageItem(AFFAIRS_REMINDER_DISMISS_KEY, normalized);
       } catch {
         // Keep valid current-day entries active even when pruning cannot persist.
       }
@@ -109,7 +110,7 @@ function readReminderDismissals(day = todayLocalDateKey()): ReminderDismissal[] 
     return entries;
   } catch {
     try {
-      window.localStorage.removeItem(AFFAIRS_REMINDER_DISMISS_KEY);
+      removeRootineStorageItem(AFFAIRS_REMINDER_DISMISS_KEY);
     } catch {
       // Storage is optional; malformed data is ignored in memory as well.
     }

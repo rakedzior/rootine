@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- The external-store API and its provider form one versioned persistence boundary. */
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { loadTaskWorkspace } from "../data/taskWorkspace";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import type { AppModuleId } from "../moduleRegistry";
 
 const ACTIVITY_STORAGE_KEY = "rootine.activity-log.v1";
@@ -44,7 +45,7 @@ function loadEvents() {
   if (cache) return cache;
   if (typeof window === "undefined") return [];
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(ACTIVITY_STORAGE_KEY) ?? "[]");
+    const parsed: unknown = JSON.parse(getRootineStorageItem(ACTIVITY_STORAGE_KEY) ?? "[]");
     cache = Array.isArray(parsed)
       ? parsed.filter(isActivityEvent).filter((event) => Date.parse(event.occurredAt) >= retentionCutoff()).slice(0, MAX_EVENTS)
       : [];
@@ -57,7 +58,7 @@ function loadEvents() {
 function persist(events: ActivityEvent[]) {
   cache = events;
   try {
-    window.localStorage.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify(events));
+    setRootineStorageItem(ACTIVITY_STORAGE_KEY, JSON.stringify(events));
   } catch {
     // Activity history is optional and must never block the primary action.
   }

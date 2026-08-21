@@ -9,6 +9,11 @@ if (!baseInput) {
     throw new Error("The deployment URL must use HTTP or HTTPS.");
   }
 
+  const accessToken = process.env.ROOTINE_SMOKE_ACCESS_TOKEN?.trim();
+  const authorizedInit = accessToken
+    ? { headers: { authorization: `Bearer ${accessToken}` } }
+    : null;
+
   const checks = [
     {
       label: "SPA route: Nutrition diary",
@@ -32,27 +37,39 @@ if (!baseInput) {
       expectedType: "text/html",
     },
     {
-      label: "Open Food Facts proxy",
+      label: "Open Food Facts proxy rejects signed-out access",
       path: "/api/openfoodfacts/search?q=apple&page_size=1",
       init: {},
-      expectedStatus: 200,
-      expectedType: "application/json",
-    },
-    {
-      label: "Proxy query validation",
-      path: "/api/openfoodfacts/search?q=a",
-      init: {},
-      expectedStatus: 400,
+      expectedStatus: 401,
       expectedType: "application/json",
     },
     {
       label: "Proxy method validation",
-      path: "/api/openfoodfacts/search?q=apple",
+      path: "/api/openfoodfacts/search?q=a",
       init: { method: "POST" },
       expectedStatus: 405,
       expectedType: "application/json",
     },
   ];
+
+  if (authorizedInit) {
+    checks.push(
+      {
+        label: "Open Food Facts authenticated search",
+        path: "/api/openfoodfacts/search?q=apple&page_size=1",
+        init: authorizedInit,
+        expectedStatus: 200,
+        expectedType: "application/json",
+      },
+      {
+        label: "Proxy query validation",
+        path: "/api/openfoodfacts/search?q=a",
+        init: authorizedInit,
+        expectedStatus: 400,
+        expectedType: "application/json",
+      },
+    );
+  }
 
   let failed = false;
   for (const check of checks) {

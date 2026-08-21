@@ -31,6 +31,7 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { flushLocalWorkspaceWrites, subscribeToLocalWorkspace } from "../data/localRepository";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
 import { recordActivity } from "../experience/activityLog";
 import {
@@ -160,7 +161,7 @@ export default function Praca() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set(["today:completed", "week:completed", "untimed:completed"]);
     try {
-      const raw = window.localStorage.getItem("rootine.work-sections.v1");
+      const raw = getRootineStorageItem("rootine.work-sections.v1");
       if (raw === null) return new Set(["today:completed", "week:completed", "untimed:completed"]);
       const saved = JSON.parse(raw);
       return Array.isArray(saved) ? new Set(saved.filter((value): value is string => typeof value === "string")) : new Set();
@@ -236,7 +237,7 @@ export default function Praca() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("rootine.work-sections.v1", JSON.stringify([...collapsedSections]));
+      setRootineStorageItem("rootine.work-sections.v1", JSON.stringify([...collapsedSections]));
     } catch {
       // Section preferences are optional; workspace data remains authoritative.
     }

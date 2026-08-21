@@ -179,3 +179,18 @@ ekranu Dzisiaj bez osobnej specyfikacji i mojej akceptacji.
 ```
 
 Jeśli GitHub CLI na nowym komputerze nie jest zalogowany, wykonać `gh auth login -h github.com` dopiero wtedy, gdy będzie potrzebne utworzenie lub obsługa pull requestu.
+
+## 9. Kontynuacja handoveru — 2026-08-21
+
+Zrealizowano webowy etap izolacji danych, synchronizacji/backupów, e-mail auth i proxy Open Food Facts:
+
+- local storage i IndexedDB używają namespace’ów `local` oraz `account:<user_id>`; zmiana sesji przygotowuje zakres przed montażem aplikacji i czyści cache runtime;
+- pierwsze konto może jednorazowo przejąć anonimowe dane, a późniejsze konta nie dziedziczą ich; pełny backup zapisuje zakres i odrzuca import z innego konta;
+- synchronizacja CAS v2, Realtime, kopie odzyskiwania i lokalny fallback pozostają obowiązującym kontraktem;
+- e-mail/hasło używa normalizowanego adresu, bezpiecznego redirectu i jawnego resetu hasła;
+- wyszukiwanie OFF ma timeout, limit odpowiedzi, kontrolowany fallback `/api/v2/search`, allowlistę pól, deduplikację i limit wyników; klient ma timeout i krótki cache;
+- konfiguracja workera została zaktualizowana, typy wygenerowane przez Wrangler, a `wrangler deploy --dry-run` przechodzi.
+
+Walidacja po zmianach: `npm run check` — 86 plików testowych i 423 testy, lint, CSS lint, audyty, typecheck i build — **passed**. Wspólna desktopowa macierz Playwright dała 72/76 w pierwszym równoległym przebiegu; dwa przypadki powtórzone osobno przeszły 2/2, bez pozostawionej deterministycznej regresji.
+
+Pozostaje wykonać po uzyskaniu dostępu do środowiska: wdrożenie migracji/backendu, prawdziwy smoke test Auth → snapshot → CAS → Realtime oraz smoke test OAuth/Apple. Do testu OFF po wdrożeniu można przekazać token wyłącznie przez `ROOTINE_SMOKE_ACCESS_TOKEN`; nie zapisywać go w repozytorium.

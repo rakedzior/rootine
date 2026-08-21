@@ -88,6 +88,70 @@ describe("local repository", () => {
     expect(repository.listLocalRecoveryRecords()).toEqual([]);
   });
 
+  it("claims anonymous data once and keeps later accounts physically isolated", async () => {
+    const repository = await import("./localRepository");
+    const storage = await import("./accountStorage");
+    const key = "rootine.fixture.account-isolation.v1";
+    const localValue = { version: 1 as const, items: ["anonymous"] };
+    const accountAValue = { version: 1 as const, items: ["account-a"] };
+    const accountBValue = { version: 1 as const, items: ["account-b"] };
+
+    expect(repository.writeLocalWorkspace(key, localValue)).toBe(true);
+    await repository.flushLocalWorkspaceWrites();
+    await repository.prepareWorkspaceScopeForAccount("user-a");
+
+    expect(repository.getActiveWorkspaceScope()).toBe(storage.accountDataScope("user-a"));
+    await expect(repository.exportAllLocalWorkspaces()).resolves.toMatchObject({
+      workspaces: { [key]: JSON.stringify(localValue) },
+    });
+    expect(window.localStorage.getItem(key)).toBeNull();
+    expect(window.localStorage.getItem(storage.scopedRootineStorageKey(key))).toBe(JSON.stringify(localValue));
+
+    await repository.switchWorkspaceScope(storage.accountDataScope("user-b"));
+    await expect(repository.exportAllLocalWorkspaces()).resolves.toMatchObject({ workspaces: {} });
+    expect(repository.writeLocalWorkspace(key, accountBValue)).toBe(true);
+    await repository.flushLocalWorkspaceWrites();
+
+    await repository.switchWorkspaceScope(storage.accountDataScope("user-a"));
+    await expect(repository.exportAllLocalWorkspaces()).resolves.toMatchObject({
+      workspaces: { [key]: JSON.stringify(localValue) },
+    });
+    expect(repository.writeLocalWorkspace(key, accountAValue)).toBe(true);
+    await repository.flushLocalWorkspaceWrites();
+    const accountABackup = await repository.exportAllLocalWorkspaces();
+
+    await repository.switchWorkspaceScope(storage.accountDataScope("user-b"));
+    await expect(repository.exportAllLocalWorkspaces()).resolves.toMatchObject({
+      workspaces: { [key]: JSON.stringify(accountBValue) },
+    });
+    await expect(repository.importAllLocalWorkspaces(accountABackup)).resolves.toMatchObject({
+      ok: false,
+      error: "Ta kopia pochodzi z innego konta. Otwórz właściwe konto przed importem.",
+    });
+    await repository.switchWorkspaceScope("local");
+    await expect(repository.exportAllLocalWorkspaces()).resolves.toMatchObject({ workspaces: {} });
+  });
+
+  it("claims text preferences without treating the global theme as a corrupt workspace", async () => {
+    const repository = await import("./localRepository");
+    const storage = await import("./accountStorage");
+    window.localStorage.setItem("rootine.appearance.theme", "rootine-cobalt");
+    window.localStorage.setItem("rootine.notes.layout", "list");
+    window.localStorage.setItem("rootine.tasks.view-mode.v1", "calendar");
+
+    await expect(repository.prepareWorkspaceScopeForAccount("user-preferences")).resolves.toBeUndefined();
+    await expect(repository.exportAllLocalWorkspaces()).resolves.toMatchObject({
+      workspaces: {
+        "rootine.notes.layout": "list",
+        "rootine.tasks.view-mode.v1": "calendar",
+      },
+    });
+    expect(window.localStorage.getItem("rootine.appearance.theme")).toBe("rootine-cobalt");
+    expect(window.localStorage.getItem("rootine.notes.layout")).toBeNull();
+    expect(window.localStorage.getItem(storage.scopedRootineStorageKey("rootine.notes.layout"))).toBe("list");
+    await repository.switchWorkspaceScope("local");
+  });
+
   it("quarantines corrupt data and blocks the mount autosave", async () => {
     const repository = await import("./localRepository");
     const key = "rootine.fixture.v1";

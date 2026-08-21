@@ -48,10 +48,10 @@ Lokalne repozytoria domenowe są podstawową ścieżką zapisu. Małe manifesty 
 Aplikacja udostępnia trzy rozłączne tryby:
 
 - lokalny — prawdziwe dane pozostają w tej przeglądarce;
-- konto Supabase — te same lokalne workspace’y są dodatkowo synchronizowane;
+- konto Supabase — dane są trzymane w namespace `account:<user_id>` i synchronizowane wyłącznie z rekordami tego użytkownika;
 - konto testowe — wygenerowane dane demonstracyjne w pamięci efemerycznej, bez dostępu do prawdziwego storage’u i konta.
 
-Eksport, import i kopie odzyskiwania są dostępne w ustawieniach. Import oraz zdalne pobranie najpierw zabezpieczają zastępowaną wersję.
+Pierwsze zalogowanie z istniejącymi danymi lokalnymi może jednorazowo przejąć je do właściwego konta. Po przełączeniu namespace’u dane lokalne, IndexedDB, cache i kopie odzyskiwania nie są współdzielone między kontami. Eksport, import i kopie odzyskiwania są dostępne w ustawieniach; backup zawiera zakres danych i nie można zaimportować backupu jednego konta do innego.
 
 ## Supabase: auth i synchronizacja
 
@@ -105,9 +105,11 @@ Na innym hoście można wskazać równoważny proxy przez `VITE_OPEN_FOOD_FACTS_
 
 ```bash
 npm run smoke:production -- https://your-deployment.example
+# opcjonalnie: sprawdź także uwierzytelnioną ścieżkę OFF
+ROOTINE_SMOKE_ACCESS_TOKEN=... npm run smoke:production -- https://your-deployment.example
 ```
 
-Limit w pamięci chroni pojedynczą ciepłą instancję funkcji. Publiczne wdrożenie o większym ruchu powinno dodatkowo używać trwałego limitu na warstwie edge/WAF.
+Smoke bez tokenu sprawdza, że endpointy OFF odrzucają niezalogowane żądania. Z tokenem sprawdza także poprawne wyszukiwanie i walidację wejścia. Limit w pamięci chroni pojedynczą ciepłą instancję funkcji. Publiczne wdrożenie o większym ruchu powinno dodatkowo używać trwałego limitu na warstwie edge/WAF.
 
 ## Aplikacja iOS
 

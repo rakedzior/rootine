@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from "react";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 
 const MODULE_MEMORY_STORAGE_KEY = "rootine.module-memory.v1";
 const VERSION = 1 as const;
@@ -12,7 +13,7 @@ const EMPTY_STORE: MemoryStore = { version: VERSION, modules: {} };
 
 function loadStore(): MemoryStore {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(MODULE_MEMORY_STORAGE_KEY) ?? "null") as Partial<MemoryStore> | null;
+    const parsed = JSON.parse(getRootineStorageItem(MODULE_MEMORY_STORAGE_KEY) ?? "null") as Partial<MemoryStore> | null;
     if (parsed?.version !== VERSION || !parsed.modules || typeof parsed.modules !== "object") return EMPTY_STORE;
     return { version: VERSION, modules: parsed.modules };
   } catch {
@@ -22,7 +23,7 @@ function loadStore(): MemoryStore {
 
 function saveStore(store: MemoryStore) {
   try {
-    window.localStorage.setItem(MODULE_MEMORY_STORAGE_KEY, JSON.stringify(store));
+    setRootineStorageItem(MODULE_MEMORY_STORAGE_KEY, JSON.stringify(store));
   } catch {
     // Scroll restoration remains an enhancement when storage is unavailable.
   }

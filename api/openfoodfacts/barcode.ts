@@ -1,8 +1,10 @@
 import { authorizeRootineRequest, type RootineAuthorizer } from "../_shared/auth";
 import {
   OPEN_FOOD_FACTS_FIELDS,
+  fetchOpenFoodFacts,
   normalizeOpenFoodFactsProduct,
   openFoodFactsUserAgent,
+  readOpenFoodFactsJson,
 } from "./product";
 
 export const config = { runtime: "edge" };
@@ -95,7 +97,7 @@ export async function handleOpenFoodFactsBarcode(
   try {
     const upstream = new URL(`${UPSTREAM}/${encodeURIComponent(code)}`);
     upstream.searchParams.set("fields", OPEN_FOOD_FACTS_FIELDS);
-    const response = await fetch(upstream, {
+    const response = await fetchOpenFoodFacts(upstream, {
       headers: {
         accept: "application/json",
         "user-agent": openFoodFactsUserAgent(options.contact ?? runtimeContact()),
@@ -105,8 +107,9 @@ export async function handleOpenFoodFactsBarcode(
       return jsonResponse({ error: "Open Food Facts is temporarily unavailable" }, 502);
     }
 
-    const payload = await response.json() as { status?: unknown; product?: unknown };
-    const product = payload.status === 1 ? normalizeOpenFoodFactsProduct(payload.product) : null;
+    const payload = await readOpenFoodFactsJson(response) as { status?: unknown; product?: unknown } | null;
+    if (!payload) return jsonResponse({ error: "Open Food Facts is temporarily unavailable" }, 502);
+    const product = payload?.status === 1 ? normalizeOpenFoodFactsProduct(payload.product) : null;
     if (!product) {
       return jsonResponse({ error: "Product not found" }, 404, {
         "x-ratelimit-limit": String(RATE_LIMIT),

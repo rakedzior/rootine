@@ -44,6 +44,7 @@ import {
   subscribeToModulePreferences,
   type ModulePreferences,
 } from "../data/modulePreferences";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import {
   getTodayWeatherLabel,
   loadTodayWeather,
@@ -166,13 +167,13 @@ type HelpGuideId = keyof typeof HELP_GUIDES;
 
 function getInitialSidebarState() {
   try {
-    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    const saved = getRootineStorageItem(SIDEBAR_STORAGE_KEY);
     const legacySaved = saved === null
-      ? window.localStorage.getItem(LEGACY_SIDEBAR_STORAGE_KEY)
+      ? getRootineStorageItem(LEGACY_SIDEBAR_STORAGE_KEY)
       : null;
     if (saved === null && legacySaved !== null) {
       try {
-        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, legacySaved);
+        setRootineStorageItem(SIDEBAR_STORAGE_KEY, legacySaved);
       } catch {
         // Keep using the legacy preference if the new key cannot be written yet.
       }
@@ -496,7 +497,7 @@ export default function Layout() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isSidebarCollapsed));
+      setRootineStorageItem(SIDEBAR_STORAGE_KEY, String(isSidebarCollapsed));
     } catch {
       // The preference is optional; the sidebar still works when storage is unavailable.
     }

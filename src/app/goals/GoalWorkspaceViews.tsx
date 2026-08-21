@@ -32,6 +32,7 @@ import {
 } from "../ui";
 import { AddToTasksButton } from "../ui";
 import type { ExternalTaskInput } from "../data/taskLinks";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import {
   Archive,
   BarChart3,
@@ -56,7 +57,7 @@ const GOALS_SIDEBAR_STATE_KEY = "rootine.goals.sidebar.v1";
 function loadGoalsCategoriesOpen(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const value = JSON.parse(window.localStorage.getItem(GOALS_SIDEBAR_STATE_KEY) ?? "null") as { categoriesOpen?: unknown } | null;
+    const value = JSON.parse(getRootineStorageItem(GOALS_SIDEBAR_STATE_KEY) ?? "null") as { categoriesOpen?: unknown } | null;
     return value?.categoriesOpen === true;
   } catch {
     return false;
@@ -101,7 +102,7 @@ export function GoalSubSidebar({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(GOALS_SIDEBAR_STATE_KEY, JSON.stringify({ categoriesOpen }));
+      setRootineStorageItem(GOALS_SIDEBAR_STATE_KEY, JSON.stringify({ categoriesOpen }));
     } catch {
       // A sidebar preference is optional and must not block goal management.
     }

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { Select } from "../ui";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 
 const EXPERIENCE_STORAGE_KEY = "rootine.experience.preferences.v1";
 const EXPERIENCE_VERSION = 1 as const;
@@ -58,7 +59,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function loadPreferences(): ExperiencePreferences {
   if (typeof window === "undefined") return DEFAULT_PREFERENCES;
   try {
-    const raw = window.localStorage.getItem(EXPERIENCE_STORAGE_KEY);
+    const raw = getRootineStorageItem(EXPERIENCE_STORAGE_KEY);
     if (!raw) return DEFAULT_PREFERENCES;
     const value: unknown = JSON.parse(raw);
     if (!isRecord(value) || value.version !== EXPERIENCE_VERSION) return DEFAULT_PREFERENCES;
@@ -108,7 +109,7 @@ export function AppExperienceProviders({ children }: { children: ReactNode }) {
     root.dataset.privacy = preferences.privacy ? "on" : "off";
     if (!root.dataset.dayPhase) root.dataset.dayPhase = getDayPhase();
     try {
-      window.localStorage.setItem(EXPERIENCE_STORAGE_KEY, JSON.stringify(preferences));
+      setRootineStorageItem(EXPERIENCE_STORAGE_KEY, JSON.stringify(preferences));
     } catch {
       // Preferences are progressive enhancement; the session remains fully usable.
     }

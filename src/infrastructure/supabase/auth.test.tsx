@@ -53,6 +53,15 @@ function AuthProbe() {
       >
         Google
       </button>
+      <button type="button" onClick={() => { void auth.signIn("  Ola@Example.COM ", "haslo").then(({ error }) => setResult(error ?? "email-ok")); }}>
+        E-mail
+      </button>
+      <button type="button" onClick={() => { void auth.signUp("  Nowa@Example.COM ", "haslo").then(({ error, needsEmailConfirmation }) => setResult(error ?? (needsEmailConfirmation ? "confirmation" : "signup-ok"))); }}>
+        Rejestracja
+      </button>
+      <button type="button" onClick={() => { void auth.requestPasswordReset("  Reset@Example.COM ").then(({ error }) => setResult(error ?? "reset-ok")); }}>
+        Reset
+      </button>
       <output data-testid="result">{result}</output>
     </>
   );
@@ -68,6 +77,9 @@ describe("SupabaseAuthProvider Google OAuth", () => {
       data: { subscription: { unsubscribe: testState.unsubscribe } },
     });
     testState.signInWithOAuth.mockReset().mockResolvedValue({ data: { provider: "google" }, error: null });
+    testState.signInWithPassword.mockReset().mockResolvedValue({ data: { session: { user: { id: "user-123" } } }, error: null });
+    testState.signUp.mockReset().mockResolvedValue({ data: { session: null }, error: null });
+    testState.resetPasswordForEmail.mockReset().mockResolvedValue({ error: null });
     testState.providerEnabled.mockReset().mockResolvedValue(true);
   });
 
@@ -98,6 +110,37 @@ describe("SupabaseAuthProvider Google OAuth", () => {
       provider: "google",
       options: { redirectTo: new URL("/dzisiaj", window.location.origin).toString() },
     });
+  });
+
+  it("normalizes e-mail credentials and sends the configured confirmation redirect", async () => {
+    const user = userEvent.setup();
+    render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+    await user.click(screen.getByRole("button", { name: "E-mail" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("email-ok"));
+    expect(testState.signInWithPassword).toHaveBeenCalledWith({ email: "ola@example.com", password: "haslo" });
+
+    await user.click(screen.getByRole("button", { name: "Rejestracja" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("confirmation"));
+    expect(testState.signUp).toHaveBeenCalledWith({
+      email: "nowa@example.com",
+      password: "haslo",
+      options: { emailRedirectTo: new URL("/dzisiaj", window.location.origin).toString() },
+    });
+  });
+
+  it("sends password recovery back to the application route", async () => {
+    const user = userEvent.setup();
+    render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("reset-ok"));
+    expect(testState.resetPasswordForEmail).toHaveBeenCalledWith(
+      "reset@example.com",
+      { redirectTo: new URL("/dzisiaj", window.location.origin).toString() },
+    );
   });
 
   it("surfaces an OAuth callback error and removes it from the URL", async () => {

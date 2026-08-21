@@ -37,7 +37,9 @@ export class OpenFoodFactsSearchError extends Error {
 
 const SEARCH_ENDPOINT = (import.meta.env.VITE_OPEN_FOOD_FACTS_PROXY_URL as string | undefined)?.trim()
   || "/api/openfoodfacts/search";
-const onlineSearchCache = new Map<string, FoodSuggestion[]>();
+const ONLINE_CACHE_TTL_MS = 5 * 60_000;
+const ONLINE_CACHE_LIMIT = 100;
+const onlineSearchCache = new Map<string, { expiresAt: number; results: FoodSuggestion[] }>();
 
 export const GENERIC_FOODS: FoodSuggestion[] = [
   { id: "usda-2346401", name: "Ziemniaki surowe, bez skórki", source: "usda", defaultAmount: 100, unit: "g", per100g: { calories: 83.4, protein: 2.27, carbs: 17.8, fat: 0.36 }, keywords: ["ziemniak", "kartofle"] },
@@ -130,6 +132,7 @@ function mapOpenFoodFactsHit(value: unknown): FoodSuggestion | null {
   const packageLabel = textValue(value.packageLabel) || undefined;
   const defaultAmount = numberValue(value.defaultAmount);
   const unit = value.unit === "ml" ? "ml" as const : "g" as const;
+  const safeMacro = (candidate: unknown) => Math.max(0, numberValue(candidate) ?? 0);
   return {
     id,
     name,
@@ -140,9 +143,9 @@ function mapOpenFoodFactsHit(value: unknown): FoodSuggestion | null {
     packageLabel,
     per100g: {
       calories,
-      protein: numberValue(per100g.protein) ?? 0,
-      carbs: numberValue(per100g.carbs) ?? 0,
-      fat: numberValue(per100g.fat) ?? 0,
+      protein: safeMacro(per100g.protein),
+      carbs: safeMacro(per100g.carbs),
+      fat: safeMacro(per100g.fat),
     },
   };
 }
@@ -171,7 +174,8 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal, a
   if (normalizedQuery.length < 2) return [];
   const cacheKey = normalizedText(normalizedQuery);
   const cached = onlineSearchCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.results;
+  if (cached) onlineSearchCache.delete(cacheKey);
   const params = new URLSearchParams({
     q: `countries_tags:"en:poland" ${escapeLuceneText(normalizedQuery)}`,
     langs: "pl,en",
@@ -191,13 +195,27 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal, a
       "nutriments",
     ].join(","),
   });
-  const response = await fetch(`${SEARCH_ENDPOINT}?${params}`, {
-    signal,
-    headers: {
-      Accept: "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 8_000);
+  const abortFromCaller = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener("abort", abortFromCaller, { once: true });
+  let response: Response;
+  try {
+    response = await fetch(`${SEARCH_ENDPOINT}?${params}`, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+  } catch (error) {
+    if (controller.signal.aborted && !signal?.aborted) throw new OpenFoodFactsSearchError(504);
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortFromCaller);
+  }
   if (!response.ok) {
     const retryAfter = response.headers.get("retry-after");
     const seconds = retryAfter && /^\d+$/.test(retryAfter)
@@ -219,7 +237,12 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal, a
   const results = Array.from(unique.values())
     .sort((a, b) => Number(Boolean(a.brand)) - Number(Boolean(b.brand)) || a.name.localeCompare(b.name, "pl"))
     .slice(0, 10);
-  onlineSearchCache.set(cacheKey, results);
+  onlineSearchCache.set(cacheKey, { expiresAt: Date.now() + ONLINE_CACHE_TTL_MS, results });
+  while (onlineSearchCache.size > ONLINE_CACHE_LIMIT) {
+    const oldestKey = onlineSearchCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    onlineSearchCache.delete(oldestKey);
+  }
   return results;
 }
 

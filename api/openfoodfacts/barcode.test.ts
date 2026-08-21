@@ -75,4 +75,13 @@ describe("Open Food Facts barcode proxy", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Product not found" });
   });
+
+  it("rejects malformed upstream JSON instead of treating it as a missing product", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("not-json", { status: 200 })));
+
+    const response = await handler("5901234123457");
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "Open Food Facts is temporarily unavailable" });
+  });
 });

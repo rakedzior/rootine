@@ -20,6 +20,7 @@ import type {
   GoalSortKey,
 } from "./goalViewState";
 import { uiColors } from "../ui";
+import { getRootineStorageItem } from "../data/accountStorage";
 import {
   Activity,
   AlertTriangle,
@@ -211,8 +212,8 @@ export const countForFilter = (id: FilterId, goals: Goal[]) => {
 
 export function readLayoutPreference(): GoalLayout {
   try {
-    const saved = localStorage.getItem("rootine.goals.layout")
-      ?? localStorage.getItem("routine.goals.layout");
+    const saved = getRootineStorageItem("rootine.goals.layout")
+      ?? getRootineStorageItem("routine.goals.layout");
     return saved === "list" ? "list" : "grid";
   } catch {
     return "grid";
@@ -221,8 +222,8 @@ export function readLayoutPreference(): GoalLayout {
 
 export function readSortPreference(): GoalSortKey {
   try {
-    const saved = localStorage.getItem("rootine.goals.sort")
-      ?? localStorage.getItem("routine.goals.sort");
+    const saved = getRootineStorageItem("rootine.goals.sort")
+      ?? getRootineStorageItem("routine.goals.sort");
     return saved === "due" || saved === "progress" || saved === "updated" || saved === "name"
       ? saved
       : "priority";

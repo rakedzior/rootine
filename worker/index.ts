@@ -2,14 +2,6 @@ import { authorizeRootineRequest } from "../api/_shared/auth";
 import { handleOpenFoodFactsBarcode } from "../api/openfoodfacts/barcode";
 import { handleOpenFoodFactsSearch } from "../api/openfoodfacts/search";
 
-interface Env {
-  ASSETS: Fetcher;
-  OPEN_FOOD_FACTS_CONTACT?: string;
-  SUPABASE_URL?: string;
-  SUPABASE_PUBLISHABLE_KEY?: string;
-  SUPABASE_ANON_KEY?: string;
-}
-
 const worker: ExportedHandler<Env> = {
   async fetch(request, env) {
     const url = new URL(request.url);

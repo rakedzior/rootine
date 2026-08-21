@@ -1,13 +1,19 @@
 import { authorizeRootineRequest, type RootineAuthorizer } from "../_shared/auth";
 import {
+  fetchOpenFoodFacts,
   normalizeOpenFoodFactsProduct,
   openFoodFactsUserAgent,
+  OPEN_FOOD_FACTS_FIELDS,
+  readOpenFoodFactsJson,
   type NormalizedNutritionProduct,
 } from "./product";
 
 export const config = { runtime: "edge" };
 
-const UPSTREAM = "https://search.openfoodfacts.org/search";
+const UPSTREAMS = [
+  "https://search.openfoodfacts.org/search",
+  "https://world.openfoodfacts.org/api/v2/search",
+] as const;
 const FORWARDED_PARAMS = new Set(["q", "langs", "page", "page_size", "index_id", "fields"]);
 const RATE_LIMIT = 8;
 const RATE_WINDOW_MS = 60_000;
@@ -80,6 +86,31 @@ function consumeRateLimit(
   };
 }
 
+function searchHits(value: unknown): unknown[] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const payload = value as { hits?: unknown; products?: unknown };
+  if (Array.isArray(payload.hits)) return payload.hits;
+  if (Array.isArray(payload.products)) return payload.products;
+  return null;
+}
+
+function upstreamUrl(base: string, incoming: URL, query: string, pageSize: number) {
+  const upstream = new URL(base);
+  incoming.searchParams.forEach((value, key) => {
+    if (FORWARDED_PARAMS.has(key) && key !== "fields") upstream.searchParams.set(key, value);
+  });
+  upstream.searchParams.set("q", query);
+  upstream.searchParams.set("page_size", String(pageSize));
+  upstream.searchParams.set("fields", OPEN_FOOD_FACTS_FIELDS);
+  if (base.includes("/api/v2/search")) {
+    const langs = incoming.searchParams.get("langs");
+    if (langs) upstream.searchParams.set("languages", langs);
+    upstream.searchParams.delete("langs");
+    upstream.searchParams.delete("index_id");
+  }
+  return upstream;
+}
+
 export function resetProxyRateLimitForTests() {
   rateWindows.clear();
 }
@@ -114,43 +145,44 @@ export async function handleOpenFoodFactsSearch(
     );
   }
 
-  const upstream = new URL(UPSTREAM);
-  incoming.searchParams.forEach((value, key) => {
-    if (FORWARDED_PARAMS.has(key)) upstream.searchParams.set(key, value);
-  });
-  upstream.searchParams.set("q", query);
-  const requestedPageSize = Number.parseInt(upstream.searchParams.get("page_size") ?? "", 10);
+  const requestedPageSize = Number.parseInt(incoming.searchParams.get("page_size") ?? "", 10);
   const pageSize = Number.isFinite(requestedPageSize)
     ? Math.max(1, Math.min(20, requestedPageSize))
     : 18;
-  upstream.searchParams.set("page_size", String(pageSize));
 
   try {
-    const response = await fetch(upstream, {
-      headers: {
-        accept: "application/json",
-        "user-agent": openFoodFactsUserAgent(options.contact ?? runtimeContact()),
-      },
-    });
-    if (!response.ok) {
-      const body = await response.arrayBuffer();
-      return new Response(body, {
-        status: response.status,
+    let products: NormalizedNutritionProduct[] | null = null;
+    let lastUpstreamStatus: number | null = null;
+    for (const base of UPSTREAMS) {
+      const response = await fetchOpenFoodFacts(upstreamUrl(base, incoming, query, pageSize), {
         headers: {
-          "content-type": response.headers.get("content-type") ?? "application/json; charset=utf-8",
-          "cache-control": "no-store",
-          "x-ratelimit-limit": String(RATE_LIMIT),
-          "x-ratelimit-remaining": String(rateLimit.remaining),
+          accept: "application/json",
+          "user-agent": openFoodFactsUserAgent(options.contact ?? runtimeContact()),
         },
       });
-    }
-
-    const payload = await response.json() as { hits?: unknown[] };
-    const products = (payload.hits ?? [])
-      .map(normalizeOpenFoodFactsProduct)
+      lastUpstreamStatus = response.status;
+      if (!response.ok) continue;
+      const payload = await readOpenFoodFactsJson(response);
+      const hits = searchHits(payload);
+      if (!hits) continue;
+      products = hits
+        .map(normalizeOpenFoodFactsProduct)
       .filter((product): product is NormalizedNutritionProduct => Boolean(product));
+      break;
+    }
+    if (!products) {
+      return jsonResponse({ error: "Open Food Facts is temporarily unavailable" }, 502, {
+        "x-ratelimit-limit": String(RATE_LIMIT),
+        "x-ratelimit-remaining": String(rateLimit.remaining),
+        ...(lastUpstreamStatus === 429 ? { "retry-after": "60" } : {}),
+      });
+    }
+    const uniqueProducts = new Map<string, NormalizedNutritionProduct>();
+    products.forEach((product) => {
+      if (!uniqueProducts.has(product.barcode)) uniqueProducts.set(product.barcode, product);
+    });
     return jsonResponse(
-      { products },
+      { products: [...uniqueProducts.values()].slice(0, 20) },
       200,
       {
         "cache-control": "private, max-age=300",

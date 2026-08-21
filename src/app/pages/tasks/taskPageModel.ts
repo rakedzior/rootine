@@ -30,6 +30,7 @@ import {
 import { pluralize } from "../../formatters";
 import { uiColors, uiShadows } from "../../ui";
 import { TAXONOMY_COLORS } from "../../data/taxonomyPalette";
+import { getRootineStorageItem, setRootineStorageItem } from "../../data/accountStorage";
 
 export const C = {
   bg:           uiColors.appBg,
@@ -151,7 +152,7 @@ const DEFAULT_TASKS_VIEW_MODE: TasksViewMode = "list";
 export function loadTasksViewMode(): TasksViewMode {
   if (typeof window === "undefined") return DEFAULT_TASKS_VIEW_MODE;
   try {
-    const value = window.localStorage.getItem(TASKS_VIEW_MODE_STORAGE_KEY);
+    const value = getRootineStorageItem(TASKS_VIEW_MODE_STORAGE_KEY);
     return value === "calendar" ? "calendar" : DEFAULT_TASKS_VIEW_MODE;
   } catch {
     return DEFAULT_TASKS_VIEW_MODE;
@@ -161,7 +162,7 @@ export function loadTasksViewMode(): TasksViewMode {
 export function saveTasksViewMode(mode: TasksViewMode): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(TASKS_VIEW_MODE_STORAGE_KEY, mode);
+    setRootineStorageItem(TASKS_VIEW_MODE_STORAGE_KEY, mode);
     window.dispatchEvent(new CustomEvent("rootine:tasks-view-mode-change", { detail: mode }));
   } catch {
     // The view preference is optional; navigation must continue without storage.
@@ -182,7 +183,7 @@ const DEFAULT_TASK_SIDEBAR_STATE: TaskSidebarState = {
 export function loadTaskSidebarState(): TaskSidebarState {
   if (typeof window === "undefined") return DEFAULT_TASK_SIDEBAR_STATE;
   try {
-    const raw = window.localStorage.getItem(TASK_SIDEBAR_STATE_KEY);
+    const raw = getRootineStorageItem(TASK_SIDEBAR_STATE_KEY);
     if (!raw) return DEFAULT_TASK_SIDEBAR_STATE;
     const parsed = JSON.parse(raw) as Partial<TaskSidebarState>;
     return {
@@ -203,7 +204,7 @@ export function saveTaskSidebarState(patch: Partial<TaskSidebarState>): TaskSide
   const next = { ...loadTaskSidebarState(), ...patch };
   if (typeof window === "undefined") return next;
   try {
-    window.localStorage.setItem(TASK_SIDEBAR_STATE_KEY, JSON.stringify(next));
+    setRootineStorageItem(TASK_SIDEBAR_STATE_KEY, JSON.stringify(next));
     window.dispatchEvent(new CustomEvent("rootine:task-sidebar-change", { detail: next }));
   } catch {
     // Sidebar preferences are optional; navigation must continue without storage.

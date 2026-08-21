@@ -21,6 +21,7 @@ import {
 import { DISCIPLINE_META } from "./theme";
 import { readLocalWorkspace, writeLocalWorkspace, type LocalLoadResult } from "../data/localRepository";
 import { calendarDaysBetween } from "../data/localDate";
+import { getRootineStorageItem } from "../data/accountStorage";
 
 export type PlannerView = "today" | "cycle" | "templates" | "exercises" | "history" | "analysis";
 
@@ -993,7 +994,7 @@ export function createEmptySportPlannerState(): SportPlannerState {
 function loadLegacySportFallback(): SportPlannerState {
   if (typeof window === "undefined") return createEmptySportPlannerState();
   try {
-    const legacyStored = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    const legacyStored = getRootineStorageItem(LEGACY_STORAGE_KEY);
     if (legacyStored) {
       const legacy: unknown = JSON.parse(legacyStored);
       if (isLegacySportState(legacy)) return migrateLegacyState(legacy);
@@ -1025,7 +1026,7 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
   if (isSportPlannerStateV2(value)) {
     const legacy: unknown = (() => {
       try {
-        const legacyStored = typeof window !== "undefined" ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null;
+        const legacyStored = typeof window !== "undefined" ? getRootineStorageItem(LEGACY_STORAGE_KEY) : null;
         return legacyStored ? JSON.parse(legacyStored) : null;
       } catch {
         return null;
@@ -1052,7 +1053,7 @@ function migratePlannerState(value: unknown): SportPlannerState | null {
     let history = historyFromSessions(createInitialSessions());
     let sessions: WorkoutSession[] = [];
     try {
-      const legacyStored = typeof window !== "undefined" ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null;
+        const legacyStored = typeof window !== "undefined" ? getRootineStorageItem(LEGACY_STORAGE_KEY) : null;
       const legacy: unknown = legacyStored ? JSON.parse(legacyStored) : null;
       if (isLegacySportState(legacy)) {
         history = historyFromSessions(legacy.sessions);
@@ -1096,7 +1097,7 @@ export function loadSportPlannerState(): SportPlannerState {
   let needsPersist = result.status === "migrated";
   if (typeof window !== "undefined") {
     try {
-      const raw = window.localStorage.getItem(SPORT_PLANNER_STORAGE_KEY);
+      const raw = getRootineStorageItem(SPORT_PLANNER_STORAGE_KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : null;
       if (parsed && typeof parsed === "object") {
         const record = parsed as { storageSchemaVersion?: unknown; version?: unknown };

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useGoalsStore } from "../goals/goalsContext";
 import { calendarDaysBetween, formatLocalDate, todayLocalDateKey } from "../data/localDate";
 import { recordActivity } from "../experience/activityLog";
+import { getRootineStorageItem, setRootineStorageItem } from "../data/accountStorage";
 import type {
   Goal as StoredGoal,
   GoalDraft,
@@ -98,7 +99,7 @@ const GOAL_STEP_DEPTH_KEY = "rootine.goals.next-step-depth";
 function readGoalStepDepth(): GoalStepDepth {
   if (typeof window === "undefined") return 1;
   try {
-    const saved = window.localStorage.getItem(GOAL_STEP_DEPTH_KEY);
+    const saved = getRootineStorageItem(GOAL_STEP_DEPTH_KEY);
     return saved === "2" ? 2 : saved === "3" ? 3 : 1;
   } catch {
     return 1;
@@ -213,10 +214,10 @@ export default function Cele() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  useEffect(() => { try { localStorage.setItem("rootine.goals.layout", layout); } catch { /* preference persistence is best-effort */ } }, [layout]);
-  useEffect(() => { try { localStorage.setItem("rootine.goals.sort", sortKey); } catch { /* preference persistence is best-effort */ } }, [sortKey]);
+  useEffect(() => { try { setRootineStorageItem("rootine.goals.layout", layout); } catch { /* preference persistence is best-effort */ } }, [layout]);
+  useEffect(() => { try { setRootineStorageItem("rootine.goals.sort", sortKey); } catch { /* preference persistence is best-effort */ } }, [sortKey]);
   useEffect(() => {
-    try { localStorage.setItem(GOAL_STEP_DEPTH_KEY, String(goalStepDepth)); } catch { /* preference persistence is best-effort */ }
+    try { setRootineStorageItem(GOAL_STEP_DEPTH_KEY, String(goalStepDepth)); } catch { /* preference persistence is best-effort */ }
   }, [goalStepDepth]);
 
   const visibleGoals = useMemo(() => {

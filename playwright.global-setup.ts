@@ -12,8 +12,7 @@ export const SERVER_PID_FILE = path.join(os.tmpdir(), "rootine-playwright-vite.j
 
 function runE2eBuild() {
   return new Promise<void>((resolve, reject) => {
-    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-    const build = spawn(npmCommand, ["run", "build:e2e"], {
+    const build = spawn(process.execPath, [path.join(ROOT_DIR, "scripts", "build-e2e.mjs")], {
       cwd: ROOT_DIR,
       env: { ...process.env, VITE_ROOTINE_QA_AUTH: "1" },
       stdio: "inherit",

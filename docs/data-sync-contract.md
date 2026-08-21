@@ -8,6 +8,12 @@ Rootine jest local-first. Klient zapisuje zmianę najpierw w swoim trwałym maga
 
 Jednostką synchronizacji jest wersjonowany dokument domenowy wskazany przez `storage_key`, np. workspace Zadań lub Sportu. Synchronizacja nie interpretuje jego pól. Schemat, walidacja i migracje payloadu należą do repozytorium danej domeny.
 
+## Zakres lokalny i konto
+
+Trwały magazyn przeglądarki ma dwa zakresy danych: `local` dla pracy bez konta oraz `account:<user_id>` dla zalogowanego użytkownika. Manifesty, payloady IndexedDB, cache repozytoriów i kopie odzyskiwania są adresowane przez aktywny zakres. Namespace konta jest przygotowywany przed zamontowaniem ekranów aplikacji, więc zmiana sesji nie może wyświetlić ani wysłać danych poprzedniego użytkownika.
+
+Przy pierwszym wejściu na konto istniejące dane z zakresu `local` mogą zostać jednorazowo przejęte do pustego namespace’u konta. Po tej operacji zakres anonimowy jest czyszczony. Znacznik claimu zapobiega ponownemu automatycznemu kopiowaniu danych przy kolejnych zmianach konta. Backup pełny zawiera zakres, z którego został wyeksportowany; import do innego konta jest odrzucany przed zapisem.
+
 ## Rekord serwera
 
 Tabela `public.rootine_workspace_snapshots` przechowuje:

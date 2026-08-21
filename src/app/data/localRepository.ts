@@ -2,7 +2,23 @@ import {
   createBrowserWorkspacePayloadStore,
   type WorkspacePayloadRecord,
   type WorkspacePayloadStore,
+  type WorkspacePayloadWriteInput,
 } from "./indexedDbWorkspaceStore";
+import {
+  accountDataScope,
+  getRootineDataScope,
+  getRootineStorageItem,
+  getUnscopedRootineStorageItem,
+  logicalRootineStorageKey,
+  removeRootineStorageItem,
+  ROOTINE_GLOBAL_STORAGE_KEYS,
+  ROOTINE_ACCOUNT_CLAIM_KEY,
+  scopedRootineStorageKey,
+  setRootineDataScope,
+  setRootineStorageItem,
+  setUnscopedRootineStorageItem,
+  type RootineDataScope,
+} from "./accountStorage";
 
 export type LocalLoadStatus = "missing" | "ok" | "migrated" | "corrupt";
 
@@ -257,6 +273,54 @@ function shouldUseIndexedDb(key: string) {
   return payloadStore.available && isRootineWorkspaceKey(key) && !INLINE_STORAGE_KEYS.has(key);
 }
 
+function readRootineStorage(key: string) {
+  return getRootineStorageItem(key);
+}
+
+function writeRootineStorage(key: string, value: string) {
+  setRootineStorageItem(key, value);
+}
+
+function deleteRootineStorage(key: string) {
+  removeRootineStorageItem(key);
+}
+
+function logicalPayloadRecord(record: WorkspacePayloadRecord) {
+  const logicalKey = logicalRootineStorageKey(record.key);
+  return logicalKey ? { ...record, key: logicalKey } : null;
+}
+
+async function readPayloadRecord(key: string) {
+  const record = await payloadStore.read(scopedRootineStorageKey(key));
+  return record ? logicalPayloadRecord(record) : null;
+}
+
+async function listPayloadRecords() {
+  const records = await payloadStore.list();
+  return records.flatMap((record) => {
+    const logical = logicalPayloadRecord(record);
+    return logical ? [logical] : [];
+  });
+}
+
+async function writePayloadRecord(input: WorkspacePayloadWriteInput) {
+  const result = await payloadStore.compareAndSwap({
+    ...input,
+    key: scopedRootineStorageKey(input.key),
+  });
+  if (result.status === "conflict") {
+    return {
+      status: result.status,
+      current: result.current ? logicalPayloadRecord(result.current) : null,
+    } as const;
+  }
+  return { status: result.status, record: logicalPayloadRecord(result.record)! } as const;
+}
+
+async function removePayloadRecord(key: string) {
+  await payloadStore.remove(scopedRootineStorageKey(key));
+}
+
 /**
  * Monotonic count of interactions that could have mutated a workspace.
  *
@@ -332,7 +396,7 @@ function notifyLocalRollback(key: string) {
 function readRecoveryIndex(): LocalRecoveryRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(RECOVERY_INDEX_KEY);
+    const raw = readRootineStorage(RECOVERY_INDEX_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -355,7 +419,7 @@ function readRecoveryIndex(): LocalRecoveryRecord[] {
 function writeRecoveryIndex(records: LocalRecoveryRecord[]) {
   if (typeof window === "undefined") return false;
   try {
-    window.localStorage.setItem(RECOVERY_INDEX_KEY, JSON.stringify(records));
+    writeRootineStorage(RECOVERY_INDEX_KEY, JSON.stringify(records));
     return true;
   } catch {
     return false;
@@ -369,18 +433,19 @@ function cleanupRecoveryPayloads(records = readRecoveryIndex()) {
     .map((record) => record.backupKey));
   const orphaned: string[] = [];
   for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
+    const physicalKey = window.localStorage.key(index);
+    const key = physicalKey ? logicalRootineStorageKey(physicalKey) : null;
     if (key?.startsWith(BACKUP_PREFIX) && !retained.has(key)) orphaned.push(key);
   }
-  orphaned.forEach((key) => window.localStorage.removeItem(key));
+  orphaned.forEach((key) => deleteRootineStorage(key));
 }
 
 async function removeRecoveryPayload(record: LocalRecoveryRecord) {
   if (record.tier === "indexeddb") {
-    await payloadStore.remove(record.backupKey);
+    await removePayloadRecord(record.backupKey);
     return;
   }
-  if (typeof window !== "undefined") window.localStorage.removeItem(record.backupKey);
+  if (typeof window !== "undefined") deleteRootineStorage(record.backupKey);
 }
 
 function commitRecoveryIndex(record: LocalRecoveryRecord) {
@@ -408,7 +473,7 @@ function createRecoveryCopy(storageKey: string, raw: string, reason: string): Lo
     if (record.storageKey !== storageKey) return false;
     if (record.contentHash) return record.contentHash === contentHash;
     try {
-      const envelope = JSON.parse(window.localStorage.getItem(record.backupKey) ?? "") as Partial<StoredBackupEnvelope>;
+      const envelope = JSON.parse(readRootineStorage(record.backupKey) ?? "") as Partial<StoredBackupEnvelope>;
       return envelope.raw === raw;
     } catch {
       return false;
@@ -442,9 +507,9 @@ function createRecoveryCopy(storageKey: string, raw: string, reason: string): Lo
       raw,
     };
     record.tier = "localStorage";
-    window.localStorage.setItem(backupKey, JSON.stringify(envelope));
+    writeRootineStorage(backupKey, JSON.stringify(envelope));
     if (!commitRecoveryIndex(record)) {
-      window.localStorage.removeItem(backupKey);
+      deleteRootineStorage(backupKey);
       return false;
     }
     return true;
@@ -453,7 +518,7 @@ function createRecoveryCopy(storageKey: string, raw: string, reason: string): Lo
   if (record.tier === "indexeddb") {
     const promise = (async () => {
       try {
-        const result = await payloadStore.compareAndSwap({
+        const result = await writePayloadRecord({
           key: backupKey,
           raw,
           expectedRevision: null,
@@ -466,7 +531,7 @@ function createRecoveryCopy(storageKey: string, raw: string, reason: string): Lo
           throw new DOMException("Recovery payload key conflict.", "InvalidStateError");
         }
         if (!commitRecoveryIndex(record)) {
-          await payloadStore.remove(backupKey);
+          await removePayloadRecord(backupKey);
           throw new DOMException("Recovery index is full.", "QuotaExceededError");
         }
         return true;
@@ -637,14 +702,14 @@ function parseCachedWorkspace(key: string, raw: string) {
 
 function writeManifest(record: WorkspacePayloadRecord) {
   if (typeof window === "undefined") throw new DOMException("Browser storage is unavailable.", "NotSupportedError");
-  const current = parseWorkspaceManifest(window.localStorage.getItem(record.key), record.key);
+  const current = parseWorkspaceManifest(readRootineStorage(record.key), record.key);
   if (current && current.revision > record.revision) return;
-  window.localStorage.setItem(record.key, JSON.stringify(manifestFromRecord(record)));
+  writeRootineStorage(record.key, JSON.stringify(manifestFromRecord(record)));
 }
 
 function currentLocalState(key: string) {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(key);
+  const raw = readRootineStorage(key);
   const manifest = parseWorkspaceManifest(raw, key);
   if (manifest) {
     return {
@@ -704,7 +769,7 @@ function scheduleHydration(key: string, manifest?: WorkspaceManifest) {
   if (existing) return existing;
   if (!blockedWrites.has(key)) blockedWrites.set(key, mutationSequence);
 
-  const promise = payloadStore.read(key)
+  const promise = readPayloadRecord(key)
     .then(async (record) => {
       if (!record) {
         knownMissingKeys.add(key);
@@ -780,7 +845,7 @@ function scheduleLegacyWorkspaceMigration(key: string, legacyKey: string) {
   if (existing) return existing;
   if (!blockedWrites.has(key)) blockedWrites.set(key, mutationSequence);
 
-  const promise = payloadStore.read(legacyKey)
+  const promise = readPayloadRecord(legacyKey)
     .then(async (record) => {
       if (!record) {
         knownMissingKeys.add(key);
@@ -810,7 +875,7 @@ async function migrateLegacyRaw(key: string, raw: string) {
   const contentHash = hashRaw(raw);
   const updatedAt = updatedAtFromRaw(raw);
   const size = byteLength(raw);
-  const initial = await payloadStore.compareAndSwap({
+  const initial = await writePayloadRecord({
     key,
     raw,
     expectedRevision: null,
@@ -831,7 +896,7 @@ async function migrateLegacyRaw(key: string, raw: string) {
       initial.current.raw,
       "Starsza wersja zabezpieczona podczas uzgadniania migracji IndexedDB",
     );
-    const replacement = await payloadStore.compareAndSwap({
+    const replacement = await writePayloadRecord({
       key,
       raw,
       expectedRevision: initial.current.revision,
@@ -898,7 +963,7 @@ function scheduleLegacyMigration(key: string, raw: string) {
         return;
       }
       try {
-        window.localStorage.setItem(key, deferred.raw);
+        writeRootineStorage(key, deferred.raw);
         recordInlineBaseline(key, deferred.raw);
         blockedWrites.delete(key);
         reportPersistenceIssue({
@@ -967,9 +1032,9 @@ export function readLocalWorkspace<T>({
   installMutationListeners();
 
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = readRootineStorage(key);
     const legacyKey = raw === null ? getLegacyWorkspaceKey(key) : null;
-    const legacyRaw = legacyKey ? window.localStorage.getItem(legacyKey) : null;
+    const legacyRaw = legacyKey ? readRootineStorage(legacyKey) : null;
     const manifest = parseWorkspaceManifest(raw, key);
 
     if (!raw && legacyRaw && legacyKey) {
@@ -982,7 +1047,7 @@ export function readLocalWorkspace<T>({
       recordInlineBaseline(key, legacyRaw);
       if (validate(legacyParsed)) {
         try {
-          window.localStorage.setItem(key, legacyRaw);
+          writeRootineStorage(key, legacyRaw);
         } catch {
           // Keep the legacy copy available if the new key cannot be written yet.
         }
@@ -993,7 +1058,7 @@ export function readLocalWorkspace<T>({
       if (migratedLegacy && validate(migratedLegacy)) {
         const migratedRaw = JSON.stringify(migratedLegacy);
         try {
-          window.localStorage.setItem(key, migratedRaw);
+          writeRootineStorage(key, migratedRaw);
         } catch {
           // Keep the legacy copy available if the new key cannot be written yet.
         }
@@ -1061,7 +1126,7 @@ export function readLocalWorkspace<T>({
       error: "Zapis ma nieprawidłowy format. Oryginał zachowano w centrum odzyskiwania.",
     };
   } catch (error) {
-    const raw = window.localStorage.getItem(key);
+    const raw = readRootineStorage(key);
     const recovery = raw ? createRecoveryCopy(key, raw, "Nie można odczytać danych JSON") : null;
     if (!blockedWrites.has(key)) blockedWrites.set(key, mutationSequence);
     return {
@@ -1086,7 +1151,7 @@ function inlineWriteNow(
     return conflictWrite(key, raw, current?.updatedAt);
   }
   try {
-    window.localStorage.setItem(key, raw);
+    writeRootineStorage(key, raw);
     recordInlineBaseline(key, raw);
     blockedWrites.delete(key);
     clearPersistenceIssuesForKey(key);
@@ -1128,7 +1193,7 @@ async function fallbackTierWrite(pending: Omit<PendingTierWrite, "timer">, error
   }
 
   try {
-    window.localStorage.setItem(pending.key, pending.raw);
+    writeRootineStorage(pending.key, pending.raw);
     recordInlineBaseline(pending.key, pending.raw);
     blockedWrites.delete(pending.key);
     reportPersistenceIssue({
@@ -1161,7 +1226,7 @@ async function persistTierWrite(
   pending: Omit<PendingTierWrite, "timer">,
 ): Promise<TierWriteOutcome> {
   try {
-    const result = await payloadStore.compareAndSwap({
+    const result = await writePayloadRecord({
       key: pending.key,
       raw: pending.raw,
       expectedRevision: pending.expectedRevision,
@@ -1377,13 +1442,13 @@ export async function exportLocalRecoveryRecord(id: string): Promise<string | nu
   if (!record) return null;
   if (record.tier === "indexeddb") {
     try {
-      return (await payloadStore.read(record.backupKey))?.raw ?? null;
+      return (await readPayloadRecord(record.backupKey))?.raw ?? null;
     } catch {
       return null;
     }
   }
   try {
-    const envelope = JSON.parse(window.localStorage.getItem(record.backupKey) ?? "") as Partial<StoredBackupEnvelope>;
+    const envelope = JSON.parse(readRootineStorage(record.backupKey) ?? "") as Partial<StoredBackupEnvelope>;
     return typeof envelope.raw === "string" ? envelope.raw : null;
   } catch {
     return null;
@@ -1399,16 +1464,16 @@ async function persistRawImmediately(
 ) {
   const guarded = expectedRaw !== EXPECT_ANY_WORKSPACE_RAW;
   if (!shouldUseIndexedDb(key)) {
-    if (guarded && window.localStorage.getItem(key) !== expectedRaw) return false;
-    window.localStorage.setItem(key, raw);
+    if (guarded && readRootineStorage(key) !== expectedRaw) return false;
+    writeRootineStorage(key, raw);
     recordInlineBaseline(key, raw);
     return true;
   }
 
   try {
-    const currentRecord = await payloadStore.read(key);
+    const currentRecord = await readPayloadRecord(key);
     if (guarded && (currentRecord?.raw ?? null) !== expectedRaw) return false;
-    const result = await payloadStore.compareAndSwap({
+    const result = await writePayloadRecord({
       key,
       raw,
       expectedRevision: currentRecord?.revision ?? null,
@@ -1432,7 +1497,7 @@ async function persistRawImmediately(
     // A guarded remote import must never fall back to a blind localStorage
     // write when IndexedDB cannot prove the expected revision.
     if (guarded) return false;
-    window.localStorage.setItem(key, raw);
+    writeRootineStorage(key, raw);
     recordInlineBaseline(key, raw);
     reportPersistenceIssue({
       key,
@@ -1493,12 +1558,16 @@ export async function deleteLocalRecoveryRecord(id: string): Promise<boolean> {
 function isRootineWorkspaceKey(key: string) {
   return (key.startsWith("rootine.") || key.startsWith("rootine-") || key.startsWith("routine.") || key.startsWith("routine-"))
     && key !== RECOVERY_INDEX_KEY
+    && key !== ROOTINE_ACCOUNT_CLAIM_KEY
+    && !ROOTINE_GLOBAL_STORAGE_KEYS.has(key)
     && !key.startsWith(BACKUP_PREFIX);
 }
 
 export type FullLocalBackup = {
   version: typeof EXPORT_VERSION;
   exportedAt: string;
+  /** Optional in v1 so backups from older Rootine builds remain importable. */
+  scope?: RootineDataScope;
   workspaces: Record<string, string>;
 };
 
@@ -1549,6 +1618,8 @@ const RAW_VALUE_VALIDATORS: Record<string, (raw: string) => boolean> = {
   "rootine.sidebar.collapsed": (raw) => raw === "true" || raw === "false",
   "rootine.goals.layout": (raw) => raw === "list" || raw === "grid",
   "rootine.goals.sort": (raw) => ["priority", "due", "progress", "updated", "name"].includes(raw),
+  "rootine.notes.layout": (raw) => raw === "cards" || raw === "list",
+  "rootine.tasks.view-mode.v1": (raw) => raw === "list" || raw === "calendar",
 };
 
 function validateStoredWorkspaceValue(key: string, raw: string) {
@@ -1576,7 +1647,19 @@ function validateFullLocalBackup(value: unknown): LocalBackupValidationResult {
     return { ok: false, error: "Plik kopii ma nieobsługiwany format." };
   }
 
-  const entries = Object.entries(value.workspaces);
+  if (
+    value.scope !== undefined
+    && value.scope !== "local"
+    && (typeof value.scope !== "string" || !value.scope.startsWith("account:"))
+  ) {
+    return { ok: false, error: "Kopia ma nieprawidłowe źródło konta." };
+  }
+  if (typeof value.scope === "string" && value.scope !== "local" && value.scope !== getRootineDataScope()) {
+    return { ok: false, error: "Ta kopia pochodzi z innego konta. Otwórz właściwe konto przed importem." };
+  }
+
+  const entries = Object.entries(value.workspaces)
+    .filter(([key]) => !ROOTINE_GLOBAL_STORAGE_KEYS.has(key));
   if (!entries.every(([key, raw]) => (
     isRootineWorkspaceKey(key)
     && typeof raw === "string"
@@ -1728,12 +1811,12 @@ export function getWorkspaceStorageTierStatus() {
 
 async function readAuthoritativeRaw(key: string) {
   if (typeof window === "undefined") return null;
-  const local = window.localStorage.getItem(key);
+  const local = readRootineStorage(key);
   const manifest = parseWorkspaceManifest(local, key);
   if (!manifest) {
     if (local !== null) return local;
     if (!payloadStore.available) return null;
-    return (await payloadStore.read(key))?.raw ?? null;
+    return (await readPayloadRecord(key))?.raw ?? null;
   }
   const cached = workspaceCache.get(key);
   if (
@@ -1743,25 +1826,31 @@ async function readAuthoritativeRaw(key: string) {
   ) {
     return cached.raw;
   }
-  return (await payloadStore.read(key))?.raw ?? null;
+  return (await readPayloadRecord(key))?.raw ?? null;
 }
 
 export async function exportAllLocalWorkspaces(): Promise<FullLocalBackup> {
   const workspaces: Record<string, string> = {};
   if (typeof window === "undefined") {
-    return { version: EXPORT_VERSION, exportedAt: new Date().toISOString(), workspaces };
+    return {
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      scope: getRootineDataScope(),
+      workspaces,
+    };
   }
 
   await flushLocalWorkspaceWrites();
 
   const keys = new Set<string>();
   for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
+    const physicalKey = window.localStorage.key(index);
+    const key = physicalKey ? logicalRootineStorageKey(physicalKey) : null;
     if (key && isRootineWorkspaceKey(key)) keys.add(key);
   }
   if (payloadStore.available) {
     try {
-      (await payloadStore.list()).forEach((record) => {
+      (await listPayloadRecords()).forEach((record) => {
         if (isRootineWorkspaceKey(record.key)) keys.add(record.key);
       });
     } catch (error) {
@@ -1778,7 +1867,89 @@ export async function exportAllLocalWorkspaces(): Promise<FullLocalBackup> {
     const raw = await readAuthoritativeRaw(key);
     if (raw !== null) workspaces[key] = raw;
   }
-  return { version: EXPORT_VERSION, exportedAt: new Date().toISOString(), workspaces };
+  return {
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    scope: getRootineDataScope(),
+    workspaces,
+  };
+}
+
+function resetWorkspaceRuntimeState() {
+  baselines.clear();
+  workspaceCache.clear();
+  parsedWorkspaceCache.clear();
+  knownMissingKeys.clear();
+  hydrationPromises.clear();
+  migrationPromises.clear();
+  deferredTierWrites.clear();
+  pendingTierWrites.forEach((pending) => {
+    if (pending.timer !== null && typeof window !== "undefined") window.clearTimeout(pending.timer);
+  });
+  pendingTierWrites.clear();
+  activeFlushes.clear();
+  persistenceIssues.clear();
+  pendingRecoveryCopies.clear();
+}
+
+export function getActiveWorkspaceScope() {
+  return getRootineDataScope();
+}
+
+export async function switchWorkspaceScope(scope: RootineDataScope) {
+  if (scope === getRootineDataScope()) return;
+  await flushLocalWorkspaceWrites();
+  setRootineDataScope(scope);
+  resetWorkspaceRuntimeState();
+}
+
+async function clearActiveWorkspaceScope() {
+  const backup = await exportAllLocalWorkspaces();
+  const keys = Object.keys(backup.workspaces);
+  for (const key of keys) {
+    deleteRootineStorage(key);
+    if (payloadStore.available) await removePayloadRecord(key);
+  }
+
+  const recoveryRecords = readRecoveryIndex();
+  await Promise.all(recoveryRecords.map((record) => removeRecoveryPayload(record)));
+  writeRecoveryIndex([]);
+  resetWorkspaceRuntimeState();
+}
+
+/**
+ * Switches to a user's local namespace. Before the first account is used on a
+ * browser, existing anonymous data is claimed by that account exactly once.
+ * The anonymous namespace is then cleared, so a later account can never
+ * inherit the first user's local data.
+ */
+export async function prepareWorkspaceScopeForAccount(userId: string) {
+  const target = accountDataScope(userId);
+  const current = getRootineDataScope();
+  if (current === target) return;
+
+  const claim = getUnscopedRootineStorageItem(ROOTINE_ACCOUNT_CLAIM_KEY);
+  const shouldClaimAnonymousData = current === "local" && claim === null;
+  const anonymousBackup = shouldClaimAnonymousData
+    ? await exportAllLocalWorkspaces()
+    : null;
+
+  await switchWorkspaceScope(target);
+  if (!shouldClaimAnonymousData) return;
+
+  const accountBackup = await exportAllLocalWorkspaces();
+  if (Object.keys(anonymousBackup?.workspaces ?? {}).length > 0 && Object.keys(accountBackup.workspaces).length === 0) {
+    const imported = await importAllLocalWorkspaces(anonymousBackup);
+    if (!imported.ok) {
+      await switchWorkspaceScope("local");
+      throw new Error(imported.error ?? "Nie udało się przenieść lokalnych danych do konta.");
+    }
+    await switchWorkspaceScope("local");
+    await clearActiveWorkspaceScope();
+    await switchWorkspaceScope(target);
+  }
+
+  setUnscopedRootineStorageItem(ROOTINE_ACCOUNT_CLAIM_KEY, userId);
 }
 
 export async function importAllLocalWorkspaces(
@@ -1876,19 +2047,19 @@ export async function importAllLocalWorkspaces(
             if (
               shouldUseIndexedDb(key)
               || importedRaw === null
-              || window.localStorage.getItem(key) !== importedRaw
+              || readRootineStorage(key) !== importedRaw
             ) {
               rollbackFailed = true;
             } else {
-              window.localStorage.removeItem(key);
+              deleteRootineStorage(key);
               workspaceCache.delete(key);
               baselines.delete(key);
             }
           } else {
-            window.localStorage.removeItem(key);
+            deleteRootineStorage(key);
             workspaceCache.delete(key);
             baselines.delete(key);
-            if (payloadStore.available) await payloadStore.remove(key);
+            if (payloadStore.available) await removePayloadRecord(key);
           }
         } else {
           const rolledBack = guarded
@@ -2014,7 +2185,7 @@ export function subscribeToLocalWorkspace(key: string, listener: () => void) {
   window.addEventListener("storage", onStorage);
   window.addEventListener("rootine:workspace-change", onCustom);
   channel?.addEventListener("message", onChannel);
-  const manifest = parseWorkspaceManifest(window.localStorage.getItem(key), key);
+  const manifest = parseWorkspaceManifest(readRootineStorage(key), key);
   const cached = workspaceCache.get(key);
   if (
     manifest
