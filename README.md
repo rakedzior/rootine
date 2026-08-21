@@ -2,7 +2,7 @@
 
 Rootine to polskojęzyczny, local-first system do zarządzania codziennymi obszarami życia. Aplikacja działa bez konta i bez backendu, a opcjonalne konto Supabase dodaje trwałą synchronizację między urządzeniami bez odbierania użytkownikowi lokalnej ciągłości pracy.
 
-## Zakres produktu
+## Zakres produktu a
 
 Kanoniczna nawigacja zawiera dziewięć modułów:
 
