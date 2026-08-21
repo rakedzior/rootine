@@ -377,18 +377,6 @@
     padding-top: var(--space-lg);
   }
 
-  .test-account-notice {
-    top: auto;
-    right: var(--space-sm);
-    bottom: calc(60px + env(safe-area-inset-bottom) + var(--space-sm));
-    left: var(--space-sm);
-    justify-content: space-between;
-  }
-
-  .test-account-notice small {
-    display: none;
-  }
-
   /* Keep the complete local/test entry surface available on short phones as well. */
   @media (max-height: 650px) {
     .auth-panel {

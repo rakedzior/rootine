@@ -617,27 +617,19 @@
  * The header has to react to the width of the column it sits in, not to the width of the window.
  * Opening a 408px detail panel narrows that column without changing the viewport, so a media
  * query left the toolbar at its wide layout and the filters were clipped by the panel edge.
- * The 1100px threshold is the registered dense-workspace adjustment: the title owns the first
- * row, while controls get a full-width action rail instead of wrapping inside a cramped corner.
+ * The 760px threshold is the registered narrow-workspace adjustment: the title owns the first
+ * row only when the column is genuinely too narrow for the identity and action group together.
  */
 .ui-main-content {
   container: workspace / inline-size;
 }
 
-@container content-header (max-width: 1100px) {
+@container content-header (max-width: 760px) {
   .ui-content-header__row {
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--space-sm);
   }
   .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
-}
-
-/* The test-account notice is a global utility toast. On the one-row header mode it must not
- * sit on top of a primary action; the header temporarily reserves its own right-side lane. */
-@container content-header (min-width: 1101px) {
-  body:has(.test-account-notice) .ui-content-header__row {
-    padding-inline-end: min(380px, 34%);
-  }
 }
 
 /* The workspace query remains for the quick composer, but the header itself is governed by the
@@ -652,7 +644,7 @@
 
 /* Fallback for engines without container queries: keep the previous viewport behaviour. */
 @supports not (container-type: inline-size) {
-  @media (max-width: 1100px) {
+  @media (max-width: 760px) {
     .ui-content-header__row { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-sm); }
     .ui-content-header__actions { width: 100%; flex: 1 1 100%; justify-content: flex-start; }
   }

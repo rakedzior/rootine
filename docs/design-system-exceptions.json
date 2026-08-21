@@ -34,13 +34,12 @@
       "value": 1100,
       "paths": [
         "src/styles/calendar.css",
-        "src/styles/sport.css",
-        "src/styles/ui.css"
+        "src/styles/sport.css"
       ],
       "owner": "design-system",
-      "reason": "Dense planner, Calendar header controls, and the ContentHeader fallback share an intermediate adjustment.",
-      "migration": "Replace the viewport fallback with container-query coverage when supported by the full browser matrix.",
-      "review": "Review when planner, Calendar controls, or header density changes."
+      "reason": "Dense planner and Calendar header controls share an intermediate adjustment.",
+      "migration": "Replace the remaining viewport adjustments with container-query coverage when supported by the full browser matrix.",
+      "review": "Review when planner or Calendar controls change."
     },
     {
       "value": 1120,

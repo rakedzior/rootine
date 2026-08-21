@@ -10,7 +10,6 @@ import { AffairsReminderCenter } from "./affairs/AffairsReminderCenter";
 import { AuthLoadingScreen, AuthScreen } from "./auth/AuthScreen";
 import { AppSessionProvider, useAppSession } from "./auth/AppSession";
 import { Button } from "./ui";
-import { FlaskConical } from "lucide-react";
 import { useSupabaseAuth } from "../infrastructure/supabase/auth";
 import { LegalPage, type LegalDocument } from "./pages/LegalPage";
 import {
@@ -31,18 +30,6 @@ function publicLegalDocument(): LegalDocument | null {
   return null;
 }
 
-function TestAccountNotice() {
-  const session = useAppSession();
-  if (!session.isTestAccount) return null;
-  return (
-    <aside className="test-account-notice" aria-label="Konto testowe">
-      <FlaskConical size={14} aria-hidden="true" />
-      <span><strong>Konto testowe</strong><small>Zmiany znikną po twardym odświeżeniu.</small></span>
-      <Button variant="ghost" size="xs" onClick={session.exitTestAccount}>Zakończ demo</Button>
-    </aside>
-  );
-}
-
 function WorkspaceApplication() {
   return (
     <RemotePersistenceProvider>
@@ -51,7 +38,6 @@ function WorkspaceApplication() {
           <GoalsProvider>
             <RouterProvider router={router} />
             <AffairsReminderCenter />
-            <TestAccountNotice />
           </GoalsProvider>
         </ActivityLogProvider>
       </AppExperienceProviders>

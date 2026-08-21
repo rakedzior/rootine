@@ -20,7 +20,7 @@ the manifest, mirrors, exception paths, and actual media preludes.
 |---|---:|---|
 | settings | 560px | theme preview remains usable at compact widths |
 | command center | 600px | action register becomes one column before labels truncate |
-| dense workspace | 1100px | planner controls, the Calendar header, and the shared ContentHeader fallback need an intermediate adjustment |
+| dense workspace | 1100px | planner controls and the Calendar header need an intermediate adjustment |
 | nutrition | 1120px | analysis charts preserve label readability |
 | work | 1200px | work detail actions need an intermediate collapse |
 | nutrition wide | 1280px | upper bound of the intermediate nutrition chart layout |

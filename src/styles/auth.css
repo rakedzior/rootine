@@ -421,44 +421,6 @@
   color: var(--color-primary-text);
 }
 
-.test-account-notice {
-  position: fixed;
-  z-index: var(--layer-toast);
-  top: var(--space-sm);
-  right: var(--space-md);
-  display: flex;
-  min-height: var(--control-height-md);
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-2);
-  box-shadow: var(--shadow-floating);
-  color: var(--color-primary-text);
-}
-
-.test-account-notice > span {
-  display: grid;
-  gap: 1px;
-}
-
-.test-account-notice strong,
-.test-account-notice small {
-  white-space: nowrap;
-}
-
-.test-account-notice strong {
-  color: var(--color-text-primary);
-  font-size: var(--text-meta);
-  font-weight: var(--weight-semibold);
-}
-
-.test-account-notice small {
-  color: var(--color-text-tertiary);
-  font-size: var(--text-micro);
-}
-
 .app-account-panel--test .app-account-panel__message {
   display: flex;
   align-items: flex-start;
