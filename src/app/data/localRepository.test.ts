@@ -350,20 +350,39 @@ describe("local repository", () => {
 
   it("accepts raw app preferences and rootine-dash workspace keys in a full backup", async () => {
     const repository = await import("./localRepository");
+    const expectedWorkspaces = {
+      "rootine.sidebar.collapsed": "true",
+      "rootine.goals.layout": "grid",
+      "rootine.goals.sort": "updated",
+      "rootine.goals.next-step-depth": "2",
+      "rootine.notes.layout": "list",
+      "rootine.tasks.view-mode.v1": "calendar",
+      "rootine-sport-planner-v1": JSON.stringify({ version: 1 }),
+    };
+    Object.entries(expectedWorkspaces).forEach(([key, raw]) => window.localStorage.setItem(key, raw));
+
+    const backup = await repository.exportAllLocalWorkspaces();
+    window.localStorage.clear();
+    const result = await repository.importAllLocalWorkspaces(backup);
+
+    expect(result).toEqual({ ok: true, restored: 7 });
+    expect(backup.workspaces).toEqual(expectedWorkspaces);
+    Object.entries(expectedWorkspaces).forEach(([key, raw]) => {
+      expect(window.localStorage.getItem(key)).toBe(raw);
+    });
+  });
+
+  it("keeps the global theme outside workspace imports", async () => {
+    const repository = await import("./localRepository");
+    window.localStorage.setItem("rootine.appearance.theme", "rootine-cobalt");
     const result = await repository.importAllLocalWorkspaces({
       version: 1,
       exportedAt: new Date().toISOString(),
-      workspaces: {
-        "rootine.sidebar.collapsed": "true",
-        "rootine.goals.layout": "grid",
-        "rootine-sport-planner-v1": JSON.stringify({ version: 1 }),
-      },
+      workspaces: { "rootine.appearance.theme": "olive-walnut-ivory" },
     });
 
-    expect(result).toEqual({ ok: true, restored: 3 });
-    expect(window.localStorage.getItem("rootine.sidebar.collapsed")).toBe("true");
-    expect(window.localStorage.getItem("rootine.goals.layout")).toBe("grid");
-    expect(window.localStorage.getItem("rootine-sport-planner-v1")).toBe(JSON.stringify({ version: 1 }));
+    expect(result).toEqual({ ok: true, restored: 0 });
+    expect(window.localStorage.getItem("rootine.appearance.theme")).toBe("rootine-cobalt");
   });
 
   it("reports origin storage usage and handles unavailable estimates", async () => {

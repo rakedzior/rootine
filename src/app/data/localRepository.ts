@@ -1618,8 +1618,19 @@ const RAW_VALUE_VALIDATORS: Record<string, (raw: string) => boolean> = {
   "rootine.sidebar.collapsed": (raw) => raw === "true" || raw === "false",
   "rootine.goals.layout": (raw) => raw === "list" || raw === "grid",
   "rootine.goals.sort": (raw) => ["priority", "due", "progress", "updated", "name"].includes(raw),
+  "rootine.goals.next-step-depth": (raw) => ["1", "2", "3"].includes(raw),
   "rootine.notes.layout": (raw) => raw === "cards" || raw === "list",
   "rootine.tasks.view-mode.v1": (raw) => raw === "list" || raw === "calendar",
+  "rootine.appearance.theme": (raw) => [
+    "system",
+    "rootine-cobalt",
+    "rootine-warm-linen",
+    "olive-walnut-ivory",
+    "deep-teal-smoked-oak-pearl",
+    "onyx-ebony-stone",
+    "putty-natural-oak-calacatta",
+    "burgundy-soft-ivory",
+  ].includes(raw),
 };
 
 function validateStoredWorkspaceValue(key: string, raw: string) {

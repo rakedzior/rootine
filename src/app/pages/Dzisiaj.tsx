@@ -663,7 +663,7 @@ export default function Dzisiaj() {
       message: goalsState === "complete"
           ? "Wszystko wykonane"
           : goalsState === "empty"
-            ? "Brak celów wymagających uwagi"
+            ? "Brak celów na dziś"
           : remainingGoalsDueToday > 0
             ? counted(remainingGoalsDueToday, "cel na dziś", "cele na dziś", "celów na dziś")
             : undefined,
