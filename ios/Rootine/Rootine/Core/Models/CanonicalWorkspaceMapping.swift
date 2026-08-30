@@ -56,6 +56,7 @@ enum RootineCanonicalWorkspaceMapping {
         let sessions = history.map { item in
             CanonicalSportSession(
                 id: item.id,
+                cycleWorkoutId: item.id,
                 title: item.title,
                 discipline: item.discipline,
                 date: item.date,
@@ -87,19 +88,21 @@ enum RootineCanonicalWorkspaceMapping {
 
     static func sportWorkspace(from payload: JSONValue) throws -> SportWorkspace {
         let canonical = try decode(CanonicalSportWorkspace.self, from: payload)
+        let sessionWorkoutIDs = Dictionary(uniqueKeysWithValues: canonical.sessions.map { ($0.id, $0.cycleWorkoutId ?? $0.id) })
         var workouts: [SportWorkout] = []
         var seen = Set<String>()
         for item in canonical.history {
+            let workoutID = sessionWorkoutIDs[item.id] ?? item.id
             workouts.append(SportWorkout(
-                id: item.id,
+                id: workoutID,
                 title: item.title,
                 date: item.date,
-                minutes: max(1, item.durationMinutes),
+                minutes: max(1, item.durationMinutes, item.plannedDurationMinutes ?? 1),
                 kind: kind(for: item.discipline),
                 completed: item.status == "completed",
                 createdAt: canonicalSportUpdatedAt(canonical)
             ))
-            seen.insert(item.id)
+            seen.insert(workoutID)
         }
         for item in canonical.scheduledWorkouts ?? [] where !seen.contains(item.id) {
             workouts.append(SportWorkout(
@@ -113,17 +116,19 @@ enum RootineCanonicalWorkspaceMapping {
             ))
             seen.insert(item.id)
         }
-        for item in canonical.sessions where !seen.contains(item.id) {
+        for item in canonical.sessions {
+            let workoutID = item.cycleWorkoutId ?? item.id
+            guard !seen.contains(workoutID) else { continue }
             workouts.append(SportWorkout(
-                id: item.id,
+                id: workoutID,
                 title: item.title,
                 date: item.date,
-                minutes: max(1, item.durationMinutes),
+                minutes: max(1, item.durationMinutes, item.plannedDurationMinutes ?? 1),
                 kind: kind(for: item.discipline),
                 completed: item.status == "completed",
                 createdAt: canonicalSportUpdatedAt(canonical)
             ))
-            seen.insert(item.id)
+            seen.insert(workoutID)
         }
         for cycleValue in canonical.cycles {
             guard let cycle = try? decode(CanonicalSportCycle.self, from: cycleValue) else { continue }
@@ -149,15 +154,28 @@ enum RootineCanonicalWorkspaceMapping {
         let projected = try objectValue(projectedPayload)
         let canonical = try decode(CanonicalSportWorkspace.self, from: base)
         let nativeIDs = Set(workspace.workouts.map(\.id))
-        root["history"] = mergedNativeRecords(existing: root["history"], projected: projected["history"], nativeIDs: nativeIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status"])
-        root["sessions"] = mergedNativeRecords(existing: root["sessions"], projected: projected["sessions"], nativeIDs: nativeIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status"])
-        root["scheduledWorkouts"] = mergedNativeRecords(existing: root["scheduledWorkouts"], projected: projected["scheduledWorkouts"], nativeIDs: nativeIDs, controlledKeys: ["id", "planId", "date", "name", "sportCategory", "plannedDuration", "status", "contentSnapshot", "notes", "createdAt", "updatedAt"])
+        let originalNativeIDs = Set((try? sportWorkspace(from: base))?.workouts.map(\.id) ?? [])
+        let sessionIDsByWorkoutID: [String: String] = Dictionary(uniqueKeysWithValues: canonical.sessions.compactMap { session in
+            guard let workoutID = session.cycleWorkoutId else { return nil }
+            return (workoutID, session.id)
+        })
+        let managedWorkoutIDs = originalNativeIDs.union(nativeIDs)
+        let managedRecordIDs = managedWorkoutIDs.union(sessionIDsByWorkoutID.values)
+        let workoutIDBySessionID: [String: String] = Dictionary(uniqueKeysWithValues: sessionIDsByWorkoutID.map { ($0.value, $0.key) })
+        let preservedHistoryIDs = Set(canonical.history.filter { $0.status != "completed" && nativeIDs.contains(workoutIDBySessionID[$0.id] ?? $0.id) }.map(\.id)).intersection(managedRecordIDs)
+        let preservedSessionIDs = Set(canonical.sessions.filter { $0.status != "completed" && nativeIDs.contains(workoutIDBySessionID[$0.id] ?? $0.id) }.map(\.id)).intersection(managedRecordIDs)
+        let preservedWorkoutIDs = Set(preservedHistoryIDs.union(preservedSessionIDs).map { workoutIDBySessionID[$0] ?? $0 }).intersection(nativeIDs)
+        let projectedHistory = remappedRecordIDs(projected["history"], using: sessionIDsByWorkoutID)
+        let projectedSessions = remappedRecordIDs(projected["sessions"], using: sessionIDsByWorkoutID)
+        root["history"] = mergedSportRecords(existing: root["history"], projected: projectedHistory, managedIDs: managedRecordIDs, preservedIDs: preservedHistoryIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status"])
+        root["sessions"] = mergedSportRecords(existing: root["sessions"], projected: projectedSessions, managedIDs: managedRecordIDs, preservedIDs: preservedSessionIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status"])
+        root["scheduledWorkouts"] = mergedSportRecords(existing: root["scheduledWorkouts"], projected: projected["scheduledWorkouts"], managedIDs: managedWorkoutIDs, preservedIDs: [], controlledKeys: ["id", "date", "name", "sportCategory", "plannedDuration"])
         if var outcomes = objectValueIfPresent(root["workoutOutcomes"]) {
             if let projectedOutcomes = objectValueIfPresent(projected["workoutOutcomes"]) {
-                for id in nativeIDs {
+                for id in managedWorkoutIDs {
                     if let value = projectedOutcomes[id] {
                         outcomes[id] = mergeObjectFields(existing: outcomes[id] ?? .null, replacement: value, keys: ["status", "sessionId", "updatedAt"])
-                    } else {
+                    } else if !preservedWorkoutIDs.contains(id) {
                         outcomes.removeValue(forKey: id)
                     }
                 }
@@ -421,7 +439,7 @@ enum RootineCanonicalWorkspaceMapping {
                 return nil
             }
             let originalTrip = originalNative?.trips.first(where: { $0.id == id })
-            for key in ["name", "destination", "startDate", "endDate", "itinerary"] {
+            for key in ["destination", "startDate", "endDate", "itinerary"] {
                 if key == "itinerary" { continue }
                 if let replacement = native[key] { trip[key] = replacement }
             }
@@ -500,6 +518,14 @@ enum RootineCanonicalWorkspaceMapping {
         }
     }
 
+    private static func remappedRecordIDs(_ value: JSONValue?, using mapping: [String: String]) -> JSONValue {
+        .array(arrayValue(value).map { record in
+            guard var object = objectValueIfPresent(record), let id = stringValue(object["id"]), let mappedID = mapping[id] else { return record }
+            object["id"] = .string(mappedID)
+            return .object(object)
+        })
+    }
+
     private static func mergedNativeRecords(existing: JSONValue?, projected: JSONValue?, nativeIDs: Set<String>, controlledKeys: [String]) -> JSONValue {
         let projectedRecords = arrayValue(projected)
         let projectedByID = Dictionary(uniqueKeysWithValues: projectedRecords.compactMap { record -> (String, JSONValue)? in
@@ -514,6 +540,40 @@ enum RootineCanonicalWorkspaceMapping {
                 continue
             }
             if let replacement = projectedByID[id] {
+                records.append(mergeObjectFields(existing: record, replacement: replacement, keys: controlledKeys))
+                usedIDs.insert(id)
+            }
+        }
+        records.append(contentsOf: projectedRecords.filter { record in
+            guard let id = stringValue(objectValueIfPresent(record)?["id"]) else { return true }
+            return !usedIDs.contains(id)
+        })
+        return .array(records)
+    }
+
+    private static func mergedSportRecords(existing: JSONValue?, projected: JSONValue?, managedIDs: Set<String>, preservedIDs: Set<String>, controlledKeys: [String]) -> JSONValue {
+        let projectedRecords = arrayValue(projected)
+        let projectedByID = Dictionary(uniqueKeysWithValues: projectedRecords.compactMap { record -> (String, JSONValue)? in
+            guard let id = stringValue(objectValueIfPresent(record)?["id"]) else { return nil }
+            return (id, record)
+        })
+        var usedIDs = Set<String>()
+        var records: [JSONValue] = []
+        for record in arrayValue(existing) {
+            guard let id = stringValue(objectValueIfPresent(record)?["id"]) else {
+                records.append(record)
+                continue
+            }
+            guard managedIDs.contains(id) else {
+                records.append(record)
+                continue
+            }
+            if preservedIDs.contains(id), let replacement = projectedByID[id] {
+                records.append(mergeObjectFields(existing: record, replacement: replacement, keys: controlledKeys))
+                usedIDs.insert(id)
+            } else if preservedIDs.contains(id) {
+                records.append(record)
+            } else if let replacement = projectedByID[id] {
                 records.append(mergeObjectFields(existing: record, replacement: replacement, keys: controlledKeys))
                 usedIDs.insert(id)
             }
@@ -648,7 +708,12 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     private static func goalIcon(for icon: String) -> String {
-        ["laptop", "no-smoking", "activity", "languages", "piggy-bank", "dumbbell", "trophy", "sparkles", "target"].contains(icon) ? icon : "target"
+        switch icon {
+        case "figure.strengthtraining.traditional": return "dumbbell"
+        case "figure.run": return "activity"
+        case "laptop", "no-smoking", "activity", "languages", "piggy-bank", "dumbbell", "trophy", "sparkles", "target": return icon
+        default: return "target"
+        }
     }
 
     private static func nativeIcon(for icon: String) -> String {
@@ -814,6 +879,7 @@ private struct CanonicalSportHistory: Codable {
 
 private struct CanonicalSportSession: Codable {
     var id: String
+    var cycleWorkoutId: String?
     var title: String
     var discipline: String
     var date: String

@@ -45,8 +45,24 @@ final class ContractFixtureTests: XCTestCase {
     }
 
     func testNativeNoOpMergePreservesRichWebOnlyFields() throws {
-        let goalsPayload = try fixture("goals-workspace-v1", as: JSONValue.self)
-        let travelPayload = try fixture("travel-workspace-v2", as: JSONValue.self)
+        var goalsPayload = try fixture("goals-workspace-v1", as: JSONValue.self)
+        var travelPayload = try fixture("travel-workspace-v2", as: JSONValue.self)
+        if case .object(var root) = goalsPayload,
+           case .array(var goals) = root["goals"],
+           case .object(var goal) = goals[0] {
+            goal["iconKey"] = .string("dumbbell")
+            goals[0] = .object(goal)
+            root["goals"] = .array(goals)
+            goalsPayload = .object(root)
+        }
+        if case .object(var root) = travelPayload,
+           case .array(var trips) = root["trips"],
+           case .object(var trip) = trips[0] {
+            trip["name"] = .string("Weekend nad morzem")
+            trips[0] = .object(trip)
+            root["trips"] = .array(trips)
+            travelPayload = .object(root)
+        }
 
         let nativeGoals = try RootineCanonicalWorkspaceMapping.goalsWorkspace(from: goalsPayload)
         let nativeTravel = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: travelPayload)
@@ -71,7 +87,8 @@ final class ContractFixtureTests: XCTestCase {
     func testSportNoOpMergePreservesRichRecordFields() throws {
         let timestamp = "2026-08-30T12:00:00.000Z"
         let workout = SportWorkout(id: "ios-rich-sport", title: "Bieg", date: "2026-08-30", minutes: 30, kind: "Bieg", completed: true, createdAt: timestamp)
-        var rich = try RootineCanonicalWorkspaceMapping.payload(for: SportWorkspace(version: 1, updatedAt: timestamp, workouts: [workout]))
+        let pending = SportWorkout(id: "ios-rich-pending", title: "Mobilność", date: "2026-08-31", minutes: 20, kind: "Mobilność", completed: false, createdAt: timestamp)
+        var rich = try RootineCanonicalWorkspaceMapping.payload(for: SportWorkspace(version: 1, updatedAt: timestamp, workouts: [workout, pending]))
         if case .object(var root) = rich,
            case .array(var sessions) = root["sessions"],
            case .object(var session) = sessions[0] {
@@ -79,10 +96,68 @@ final class ContractFixtureTests: XCTestCase {
             session["metrics"] = .object(["distanceKm": .number(8.4)])
             sessions[0] = .object(session)
             root["sessions"] = .array(sessions)
+            if case .array(var scheduled) = root["scheduledWorkouts"], case .object(var item) = scheduled[0] {
+                item["planId"] = .string("web-plan")
+                item["status"] = .string("started")
+                item["contentSnapshot"] = .array([.object(["exerciseId": .string("web-exercise")])])
+                item["notes"] = .string("Web-only note")
+                scheduled[0] = .object(item)
+                root["scheduledWorkouts"] = .array(scheduled)
+            }
             rich = .object(root)
         }
         let native = try RootineCanonicalWorkspaceMapping.sportWorkspace(from: rich)
         XCTAssertEqual(try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: native, onto: rich), rich)
+    }
+
+    func testSportIncompleteAndDeletedRecordsRemainConsistent() throws {
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let workout = SportWorkout(id: "ios-status-sport", title: "Bieg", date: "2026-08-30", minutes: 30, kind: "Bieg", completed: false, createdAt: timestamp)
+        var base = try RootineCanonicalWorkspaceMapping.payload(for: SportWorkspace(version: 1, updatedAt: timestamp, workouts: [workout]))
+        if case .object(var root) = base {
+            root["history"] = .array([.object([
+                "id": .string("ios-session-status"), "title": .string(workout.title), "discipline": .string("running"),
+                "date": .string(workout.date), "plannedDurationMinutes": .number(30), "durationMinutes": .number(0), "status": .string("missed")
+            ])])
+            root["sessions"] = .array([.object([
+                "id": .string("ios-session-status"), "cycleWorkoutId": .string(workout.id), "title": .string(workout.title), "discipline": .string("running"),
+                "date": .string(workout.date), "plannedDurationMinutes": .number(30), "durationMinutes": .number(0), "status": .string("missed"),
+                "exercises": .array([])
+            ])])
+            root["workoutOutcomes"] = .object([workout.id: .object([
+                "status": .string("missed"), "sessionId": .string("ios-session-status"), "updatedAt": .string(timestamp)
+            ])])
+            base = .object(root)
+        }
+        let native = try RootineCanonicalWorkspaceMapping.sportWorkspace(from: base)
+        let preserved = try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: native, onto: base)
+        XCTAssertEqual(preserved, base)
+
+        let completed = SportWorkspace(version: 1, updatedAt: timestamp, workouts: [
+            SportWorkout(id: workout.id, title: workout.title, date: workout.date, minutes: 30, kind: workout.kind, completed: true, createdAt: workout.createdAt)
+        ])
+        let transitioned = try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: completed, onto: base)
+        if case .object(let root) = transitioned,
+           case .array(let history) = root["history"],
+           case .array(let sessions) = root["sessions"] {
+            XCTAssertEqual(history.count, 1)
+            XCTAssertEqual(sessions.count, 1)
+            XCTAssertEqual(root["scheduledWorkouts"], .array([]))
+            XCTAssertEqual(objectValue(history[0])?["status"], .string("completed"))
+            XCTAssertEqual(objectValue(sessions[0])?["status"], .string("completed"))
+        } else {
+            XCTFail("Completing a missed workout should replace, not duplicate, canonical records")
+        }
+
+        let deleted = try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: .empty, onto: base)
+        if case .object(let root) = deleted {
+            XCTAssertEqual(root["history"], .array([]))
+            XCTAssertEqual(root["sessions"], .array([]))
+            XCTAssertEqual(root["scheduledWorkouts"], .array([]))
+            if case .object(let outcomes) = root["workoutOutcomes"] { XCTAssertNil(outcomes[workout.id]) }
+        } else {
+            XCTFail("Sport deletion should remove all canonical records for the native workout")
+        }
     }
 
     func testMoreNativePayloadsUseCanonicalKeysAndShapes() throws {
@@ -141,6 +216,172 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(queue.map(\.id), ["second"])
     }
 
+    func testLegacyAliasMigrationUsesCanonicalKeyAndRevisionZero() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "legacy-user", rootURL: root)
+        let remoteClient = FakeWorkspaceRemote()
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remoteClient)
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let legacy = SportWorkspace(version: 1, updatedAt: timestamp, workouts: [
+            SportWorkout(id: "legacy-workout", title: "Bieg", date: "2026-08-30", minutes: 30, kind: "Bieg", completed: true, createdAt: timestamp)
+        ])
+        let legacyPayload = try jsonValue(legacy)
+        let legacyRow = RemoteWorkspaceSnapshot(
+            storageKey: RootineStorageKey.sport.rawValue,
+            payload: legacyPayload,
+            contentHash: "legacy",
+            revision: 7,
+            updatedAt: timestamp
+        )
+
+        let result = try await WorkspaceCanonicalReconciler.reconcile(
+            nil,
+            fallback: SportWorkspace.empty,
+            key: .sport,
+            remote: [legacyRow.storageKey: legacyRow],
+            shadow: nil,
+            store: store,
+            syncEngine: syncEngine,
+            encode: { try RootineCanonicalWorkspaceMapping.payload(for: $0) },
+            merge: { try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: $0, onto: $1) },
+            decode: { try RootineCanonicalWorkspaceMapping.sportWorkspace(from: $0) }
+        )
+
+        XCTAssertEqual(result.value.workouts, legacy.workouts)
+        let pending = try await store.pendingMutations()
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertEqual(pending.first?.storageKey, "rootine-sport-planner-v1")
+        XCTAssertEqual(pending.first?.expectedRevision, 0)
+        if case .object(let payload) = pending.first?.payload, case .number(let version) = payload["version"] {
+            XCTAssertEqual(version, 5)
+        } else {
+            XCTFail("Legacy alias should be rewritten as the canonical Sport payload")
+        }
+    }
+
+    func testGoalsAndHealthLegacyAliasesMigrateAtRevisionZero() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "legacy-more-user", rootURL: root)
+        let remoteClient = FakeWorkspaceRemote()
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remoteClient)
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let goals = GoalsWorkspace(version: 1, updatedAt: timestamp, goals: [
+            GoalRecord(id: "legacy-goal", title: "Cel", detail: "Opis", current: 2, target: 10, icon: "target", createdAt: timestamp, updatedAt: timestamp)
+        ])
+        let health = HealthWorkspace(version: 1, updatedAt: timestamp, checkIns: [:], reminders: [
+            HealthReminder(id: "legacy-reminder", title: "Woda", detail: "Szklanka", completedDates: [])
+        ])
+
+        let goalsRow = RemoteWorkspaceSnapshot(storageKey: RootineStorageKey.goals.rawValue, payload: try jsonValue(goals), contentHash: "legacy-goals", revision: 5, updatedAt: timestamp)
+        _ = try await WorkspaceCanonicalReconciler.reconcile(
+            nil,
+            fallback: GoalsWorkspace.empty,
+            key: .goals,
+            remote: [goalsRow.storageKey: goalsRow],
+            shadow: nil,
+            store: store,
+            syncEngine: syncEngine,
+            encode: { try RootineCanonicalWorkspaceMapping.payload(for: $0) },
+            merge: { try RootineCanonicalWorkspaceMapping.mergedGoalsPayload(for: $0, onto: $1) },
+            decode: { try RootineCanonicalWorkspaceMapping.goalsWorkspace(from: $0) }
+        )
+        let healthRow = RemoteWorkspaceSnapshot(storageKey: RootineStorageKey.health.rawValue, payload: try jsonValue(health), contentHash: "legacy-health", revision: 6, updatedAt: timestamp)
+        _ = try await WorkspaceCanonicalReconciler.reconcile(
+            nil,
+            fallback: HealthWorkspace.empty,
+            key: .health,
+            remote: [healthRow.storageKey: healthRow],
+            shadow: nil,
+            store: store,
+            syncEngine: syncEngine,
+            encode: { try RootineCanonicalWorkspaceMapping.payload(for: $0) },
+            merge: { try RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: $0, onto: $1) },
+            decode: { try RootineCanonicalWorkspaceMapping.healthWorkspace(from: $0) }
+        )
+
+        let pending = try await store.pendingMutations()
+        XCTAssertEqual(pending.count, 2)
+        XCTAssertEqual(pending.first(where: { $0.storageKey == "rootine.goals.v1" })?.expectedRevision, 0)
+        XCTAssertEqual(pending.first(where: { $0.storageKey == "rootine.health.workspace.v1" })?.expectedRevision, 0)
+    }
+
+    func testCollidingWorkAndTravelLegacyRowsSeedTheirCurrentCASRevision() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "collision-user", rootURL: root)
+        let remoteClient = FakeWorkspaceRemote()
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remoteClient)
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let work = WorkWorkspace(version: 1, updatedAt: timestamp, activeFocusStartedAt: timestamp, focusSessions: [])
+        let workRow = RemoteWorkspaceSnapshot(storageKey: RootineStorageKey.work.rawValue, payload: try jsonValue(work), contentHash: "legacy-work", revision: 11, updatedAt: timestamp)
+        _ = try await WorkspaceCanonicalReconciler.reconcile(
+            nil,
+            fallback: WorkWorkspace.empty,
+            key: .work,
+            remote: [workRow.storageKey: workRow],
+            shadow: nil,
+            store: store,
+            syncEngine: syncEngine,
+            encode: { try RootineCanonicalWorkspaceMapping.payload(for: $0) },
+            merge: { try RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: $0, onto: $1) },
+            decode: { try RootineCanonicalWorkspaceMapping.workWorkspace(from: $0) }
+        )
+        let workPending = try await store.pendingMutations()
+        XCTAssertEqual(workPending.first?.expectedRevision, 11)
+        XCTAssertEqual(workPending.first?.storageKey, RootineStorageKey.work.rawValue)
+
+        try await store.removeMutation(id: try XCTUnwrap(workPending.first?.id))
+        let travel = TravelWorkspace(version: 1, updatedAt: timestamp, trips: [])
+        let travelRow = RemoteWorkspaceSnapshot(storageKey: RootineStorageKey.travel.rawValue, payload: try jsonValue(travel), contentHash: "legacy-travel", revision: 13, updatedAt: timestamp)
+        _ = try await WorkspaceCanonicalReconciler.reconcile(
+            nil,
+            fallback: TravelWorkspace.empty,
+            key: .travel,
+            remote: [travelRow.storageKey: travelRow],
+            shadow: nil,
+            store: store,
+            syncEngine: syncEngine,
+            encode: { try RootineCanonicalWorkspaceMapping.payload(for: $0) },
+            merge: { try RootineCanonicalWorkspaceMapping.mergedTravelPayload(for: $0, onto: $1) },
+            decode: { try RootineCanonicalWorkspaceMapping.travelWorkspace(from: $0) }
+        )
+        let travelPending = try await store.pendingMutations()
+        XCTAssertEqual(travelPending.first?.expectedRevision, 13)
+        XCTAssertEqual(travelPending.first?.storageKey, RootineStorageKey.travel.rawValue)
+    }
+
+    func testFakeRemoteCASConflictKeepsMutationUntilRetry() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "cas-user", rootURL: root)
+        let remoteClient = FakeWorkspaceRemote(shouldApply: false, revision: 4)
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remoteClient)
+        let payload: JSONValue = .object(["version": .number(1)])
+        try await store.setRevision(4, for: RootineStorageKey.work.rawValue)
+        try await syncEngine.enqueue(payload: payload, storageKey: RootineStorageKey.work.rawValue)
+
+        let conflict = try await syncEngine.flush(accessToken: "fake")
+        XCTAssertEqual(conflict, .conflict([RootineStorageKey.work.rawValue]))
+        let pendingAfterConflict = try await store.pendingMutations()
+        XCTAssertEqual(pendingAfterConflict.count, 1)
+        let attemptedMutation = await remoteClient.lastMutation()
+        XCTAssertEqual(attemptedMutation?.expectedRevision, 4)
+
+        await remoteClient.setShouldApply(true)
+        let applied = try await syncEngine.flush(accessToken: "fake")
+        XCTAssertEqual(applied, .applied(1))
+        let pendingAfterRetry = try await store.pendingMutations()
+        XCTAssertTrue(pendingAfterRetry.isEmpty)
+        let revisionAfterRetry = try await store.revision(for: RootineStorageKey.work.rawValue)
+        XCTAssertEqual(revisionAfterRetry, 5)
+    }
+
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         let bundle = Bundle(for: ContractFixtureTests.self)
         let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"))
@@ -149,5 +390,42 @@ final class ContractFixtureTests: XCTestCase {
 
     private func roundTrip<T: Codable>(_ value: T) throws -> T {
         try JSONDecoder().decode(T.self, from: JSONEncoder().encode(value))
+    }
+
+    private func jsonValue<T: Encodable>(_ value: T) throws -> JSONValue {
+        try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
+    }
+
+    private func objectValue(_ value: JSONValue?) -> [String: JSONValue]? {
+        guard case .object(let object) = value else { return nil }
+        return object
+    }
+}
+
+private actor FakeWorkspaceRemote: WorkspaceRemoteClient {
+    private var shouldApply: Bool
+    private var revision: Int64
+    private var mutations: [PendingWorkspaceMutation] = []
+
+    init(shouldApply: Bool = true, revision: Int64 = 0) {
+        self.shouldApply = shouldApply
+        self.revision = revision
+    }
+
+    func setShouldApply(_ value: Bool) {
+        shouldApply = value
+    }
+
+    func lastMutation() -> PendingWorkspaceMutation? {
+        mutations.last
+    }
+
+    func apply(_ mutation: PendingWorkspaceMutation, accessToken: String) async throws -> ApplySnapshotResponse {
+        mutations.append(mutation)
+        guard shouldApply else {
+            return ApplySnapshotResponse(applied: false, storageKey: mutation.storageKey, payload: mutation.payload, contentHash: mutation.contentHash, revision: revision, updatedAt: RootineDate.isoTimestamp())
+        }
+        revision = max(revision, mutation.expectedRevision) + 1
+        return ApplySnapshotResponse(applied: true, storageKey: mutation.storageKey, payload: mutation.payload, contentHash: mutation.contentHash, revision: revision, updatedAt: RootineDate.isoTimestamp())
     }
 }

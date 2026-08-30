@@ -974,27 +974,64 @@ final class AppEnvironment: ObservableObject {
         remote: [String: RemoteWorkspaceSnapshot],
         store: WorkspaceFileStore,
         syncEngine: WorkspaceSyncEngine,
-        encode: (T) throws -> JSONValue,
-        merge: (T, JSONValue) throws -> JSONValue,
-        decode: (JSONValue) throws -> T
+        encode: @Sendable (T) throws -> JSONValue,
+        merge: @Sendable (T, JSONValue) throws -> JSONValue,
+        decode: @Sendable (JSONValue) throws -> T
     ) async throws -> (value: T, conflict: Bool) {
+        let result = try await WorkspaceCanonicalReconciler.reconcile(
+            local,
+            fallback: fallback,
+            key: key,
+            remote: remote,
+            shadow: canonicalShadows[key],
+            store: store,
+            syncEngine: syncEngine,
+            encode: encode,
+            merge: merge,
+            decode: decode
+        )
+        if let shadow = result.shadow {
+            canonicalShadows[key] = shadow
+        }
+        return (result.value, result.conflict)
+    }
+}
+
+struct CanonicalReconcileResult<T: Sendable>: Sendable {
+    let value: T
+    let conflict: Bool
+    let shadow: JSONValue?
+}
+
+enum WorkspaceCanonicalReconciler {
+    static func reconcile<T: Codable & Equatable & Sendable>(
+        _ local: T?,
+        fallback: T,
+        key: RootineStorageKey,
+        remote: [String: RemoteWorkspaceSnapshot],
+        shadow: JSONValue?,
+        store: WorkspaceFileStore,
+        syncEngine: WorkspaceSyncEngine,
+        encode: @Sendable (T) throws -> JSONValue,
+        merge: @Sendable (T, JSONValue) throws -> JSONValue,
+        decode: @Sendable (JSONValue) throws -> T
+    ) async throws -> CanonicalReconcileResult<T> {
         let canonicalKey = RootineCanonicalWorkspaceMapping.storageKey(for: key)
         let remoteRow = remote[canonicalKey]
         let legacyRow = remoteRow == nil && canonicalKey != key.rawValue ? remote[key.rawValue] : nil
         guard let remoteRow = remoteRow ?? legacyRow else {
             if let local {
-                let mapped = try canonicalShadows[key].map { try merge(local, $0) } ?? encode(local)
-                canonicalShadows[key] = mapped
+                let mapped = try shadow.map { try merge(local, $0) } ?? encode(local)
                 if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
                     try await store.save(mapped, key: shadowKey)
                 }
                 try await syncEngine.enqueue(payload: mapped, storageKey: canonicalKey)
-                return (local, false)
+                return CanonicalReconcileResult(value: local, conflict: false, shadow: mapped)
             }
-            return (fallback, false)
+            return CanonicalReconcileResult(value: fallback, conflict: false, shadow: shadow)
         }
 
-        var isLegacy = legacyRow != nil
+        var isLegacy = legacyRow != nil || isLegacyNativeShape(remoteRow.payload, key: key)
         let remoteValue: T
         if isLegacy {
             remoteValue = try JSONDecoder().decode(T.self, from: JSONEncoder().encode(remoteRow.payload))
@@ -1009,7 +1046,6 @@ final class AppEnvironment: ObservableObject {
             }
         }
         let canonicalPayload = isLegacy ? try encode(remoteValue) : remoteRow.payload
-        canonicalShadows[key] = canonicalPayload
         if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
             try await store.save(canonicalPayload, key: shadowKey)
         }
@@ -1026,7 +1062,7 @@ final class AppEnvironment: ObservableObject {
             } else {
                 try await store.setRevision(remoteRow.revision, for: canonicalKey)
             }
-            return (remoteValue, false)
+            return CanonicalReconcileResult(value: remoteValue, conflict: false, shadow: canonicalPayload)
         }
         if try merge(local, canonicalPayload) == canonicalPayload {
             if isLegacy {
@@ -1037,8 +1073,18 @@ final class AppEnvironment: ObservableObject {
             } else {
                 try await store.setRevision(remoteRow.revision, for: canonicalKey)
             }
-            return (local, false)
+            return CanonicalReconcileResult(value: local, conflict: false, shadow: canonicalPayload)
         }
-        return (local, true)
+        return CanonicalReconcileResult(value: local, conflict: true, shadow: canonicalPayload)
+    }
+
+    private static func isLegacyNativeShape(_ payload: JSONValue, key: RootineStorageKey) -> Bool {
+        guard case .object(let object) = payload else { return false }
+        guard case .number(let version) = object["version"] else { return false }
+        switch key {
+        case .work: return version == 1
+        case .travel: return version == 1
+        default: return false
+        }
     }
 }
