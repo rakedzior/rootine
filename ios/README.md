@@ -13,7 +13,8 @@ Native SwiftUI foundation for the Rootine MVP. The project targets iOS 26.0+ and
 
 ## What this stage contains
 
-- Xcode target and the accepted four-tab navigation contract, without premature product screens.
+- Xcode target and the native five-tab navigation contract: Today, Tasks,
+  Calendar, Nutrition, and More.
 - Dark semantic design tokens and native navigation patterns.
 - `Codable` models for tasks, nutrition, notes, normalized products, and sync payloads.
 - Atomic file persistence, Data Protection, Keychain session storage, and a persistent mutation queue.
@@ -22,13 +23,26 @@ Native SwiftUI foundation for the Rootine MVP. The project targets iOS 26.0+ and
   `ASWebAuthenticationSession`, and native Sign in with Apple.
 - Session refresh, OAuth/recovery deep links, Keychain persistence, and explicit
   online/offline bootstrap states.
-- A neutral authenticated diagnostic surface proving configuration and bootstrap
-  wiring until the separately approved `Dzisiaj` screen replaces it.
+- An initial native `Dzisiaj` screen with day progress, timed queue, overdue
+  attention, task/habit completion, nutrition totals, and notes activity.
+- An initial native `Zadania` screen with smart-view filters, overdue and
+  completed groups, task completion, and adding tasks with date/time/priority.
+- Native task details with editing, soft-delete/restore, and a dedicated habit
+  mode with daily/weekly/interval schedules, add/edit/delete/completion flows.
+- A first functional calendar day view backed by the same task workspace and a
+  global add action for tasks and habits.
+- A native `Odżywianie` day view with calorie/macro progress, water tracking,
+  meal sections, animated add-entry sheet, and swipe-to-delete entries.
+- A native `Więcej` hub with animated module tiles, account/sync sheet, and
+  sign-out action, plus functional surfaces for Notes, Sport, Goals, Work,
+  Travel, and Health. Their Codable snapshots are persisted locally and
+  queued through the same offline/CAS sync engine as the core tabs.
 - Contract tests that decode the exact fixtures used by the web client.
 
-Full Realtime, barcode camera UI, contextual quick capture, and the complete
-feature screens belong to separately approved implementation slices. They are
-intentionally not represented by dead buttons or improvised forms in this build.
+Full Realtime, barcode camera UI, and contextual quick capture belong to
+separately approved implementation slices. The additional module actions are
+available in the native preview with local sample data and file-backed
+snapshots, ready for the final server-side domain schema migration.
 
 ## Account configuration
 

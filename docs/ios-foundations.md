@@ -11,6 +11,24 @@ Ten dokument zamyka etap analizy i wywiadu przed rozpoczęciem natywnej aplikacj
 
 Implementacja projektu Xcode, backendu mobilnego ani ekranów nie rozpoczęła się przed jawną akceptacją tego dokumentu. Kolejne pełne ekrany nadal będą osobno omawiane, projektowane, zatwierdzane, implementowane i testowane.
 
+Aktualizacja implementacyjna (2026-08-30): pierwszy natywny ekran `Dzisiaj`
+został dodany w SwiftUI. Obejmuje postęp dnia, kolejkę zadań godzinowych,
+zaległości, podsumowania MVP oraz lokalne ukończenie zadań i nawyków przez
+istniejącą kolejkę synchronizacji. Dodano także pierwszy natywny ekran `Zadania`
+z filtrami widoków, grupowaniem zaległości/ukończonych, odhaczaniem oraz
+dodawaniem zadania z terminem, godziną i priorytetem. Nawyki mają osobny tryb
+wewnątrz Zadania, harmonogram oraz bieżący streak wyliczany z historii wykonań.
+Odżywianie ma natywny widok dnia z bilansem kalorii/makro, wodą, posiłkami i
+arkuszem dodawania wpisów. Więcej jest centrum modułów oraz konta z arkuszem
+synchronizacji. Dodano także natywne ekrany Notatek, Sportu, Celów, Pracy,
+Podróży i Zdrowia jako spójne powierzchnie. Moduły „Więcej” mają już lokalne
+snapshoty `Codable`, akcje CRUD/postępu oraz zapis w tej samej kolejce
+offline/CAS co pozostałe domeny.
+Pasek główny przyjął układ
+`Dzisiaj | Zadania | Kalendarz | Odżywianie | Więcej | +`, a globalny `+` otwiera
+dodawanie zadania lub nawyku. Kalendarz ma pierwszy widok dnia współdzielący
+`TaskWorkspace`.
+
 ## 2. Kontekst i użytkownicy
 
 - Pierwsza wersja jest przeznaczona dla właściciela produktu i kilku znajomych.
@@ -42,14 +60,15 @@ Dokument wejściowy wymieniał historyczne moduły, które nie odpowiadają obec
 ## 4. Kanoniczna lista wszystkich modułów Rootine
 
 1. **Dzisiaj** — bilans dnia, kolejka, zaległości i podsumowania obszarów.
-2. **Zadania** — zadania, Nawyki i Kalendarz.
-3. **Odżywianie** — dziennik, cele, produkty, posiłki, nawodnienie i analiza.
-4. **Sport** — plany, sesje, historia i analiza.
-5. **Praca** — firmy, projekty i zadania zawodowe.
-6. **Cele** — cele, kamienie milowe i postęp.
-7. **Podróże** — wyjazdy, plany, rezerwacje, budżety i dokumenty podróży.
-8. **Pozostałe** — Sprawy, Finanse, Dokumenty, Pojazdy, Zdrowie i JDG.
-9. **Notatki** — notatki tekstowe i checklisty.
+2. **Zadania** — zadania i osobny tryb Nawyków.
+3. **Kalendarz** — planowanie terminów i przegląd dni.
+4. **Odżywianie** — dziennik, cele, produkty, posiłki, nawodnienie i analiza.
+5. **Sport** — plany, sesje, historia i analiza.
+6. **Praca** — firmy, projekty i zadania zawodowe.
+7. **Cele** — cele, kamienie milowe i postęp.
+8. **Podróże** — wyjazdy, plany, rezerwacje, budżety i dokumenty podróży.
+9. **Pozostałe** — Sprawy, Finanse, Dokumenty, Pojazdy, Zdrowie i JDG.
+10. **Notatki** — notatki tekstowe i checklisty.
 
 ## 5. Zaakceptowany zakres MVP iOS
 
@@ -60,8 +79,8 @@ Dokument wejściowy wymieniał historyczne moduły, które nie odpowiadają obec
 - odzyskiwanie hasła i trwała sesja w Keychain;
 - Dzisiaj bez osobnego kalendarza;
 - Zadania: lista, szczegóły, dodawanie, edycja, ukończenie i usunięcie;
-- Nawyki: lista, dodawanie, edycja i oznaczanie wykonania;
-- Kalendarz wewnątrz Zadań;
+- Nawyki: osobny tryb w Zadaniach, lista, harmonogram (codziennie/dni tygodnia/co N dni), dodawanie, edycja i oznaczanie wykonania;
+- Kalendarz: osobna zakładka z wyborem dnia i zadaniami z tego dnia;
 - Odżywianie:
   - śniadanie, obiad, kolacja i przekąski;
   - dziennik dzienny;
@@ -106,21 +125,26 @@ Kolejność treści:
    - Odżywianie;
    - Notatki.
 
-Kalendarz nie jest osobną kartą na Dzisiaj. „Następne w kolejce” jest skrótem zadań godzinowych, a pełny Kalendarz należy do Zadań. Obszary bez natywnego ekranu nie są pokazywane, aby nie tworzyć martwych przejść.
+Kalendarz nie jest osobną kartą na Dzisiaj. „Następne w kolejce” jest skrótem zadań godzinowych, a pełny Kalendarz ma własną zakładkę. Nawyki pozostają osobnym trybem wewnątrz Zadania, bez dodatkowej zakładki na dole. Obszary bez natywnego ekranu nie są pokazywane, aby nie tworzyć martwych przejść.
 
 ## 7. Nawigacja i interakcje
 
 ### 7.1 Główna nawigacja
 
-Dolny pasek zawiera pięć elementów:
+Dolny pasek zawiera pięć zakładek i szósty element akcji:
 
 1. **Dzisiaj**;
 2. **Zadania**;
-3. **Odżywianie**;
-4. **Notatki**;
-5. kontekstowy przycisk **+**.
+3. **Kalendarz**;
+4. **Odżywianie**;
+5. **Więcej**;
+6. **Dodaj** (`+`).
 
-Profil, konto, synchronizacja i ustawienia są dostępne przez ikonę w prawym górnym rogu, a nie przez dodatkową zakładkę Więcej.
+Przycisk **+** jest globalną akcją na dole, bezpośrednio po **Więcej**, w tej
+samej linii co zakładki. Otwiera szybkie dodawanie zadania lub nawyku i nie
+zasłania kart.
+
+Profil, konto, synchronizacja i ustawienia są dostępne w zakładce **Więcej**.
 
 Każda zakładka utrzymuje własny `NavigationStack`. Szczegóły otwierają się przez push, krótkie formularze przez sheet, a skaner aparatu przez full-screen cover. Systemowy gest powrotu pozostaje aktywny.
 
@@ -130,6 +154,7 @@ Każda zakładka utrzymuje własny `NavigationStack`. Szczegóły otwierają si�
 | --- | --- |
 | Dzisiaj | Zadanie, posiłek, woda, notatka |
 | Zadania | Zadanie, nawyk |
+| Kalendarz | Zadanie |
 | Odżywianie | Posiłek, woda, skanuj produkt |
 | Notatki | Bezpośrednio nowa notatka |
 
@@ -152,6 +177,11 @@ Najważniejsze dokumenty dla MVP:
 | Zadania i Nawyki | `rootine.task-workspace.v1` | Pełne modele i edycja |
 | Odżywianie | `rootine.nutrition-workspace.v1` | Pełne modele MVP i edycja |
 | Notatki | `rootine.notes-workspace.v1` | Pełne modele i edycja |
+| Sport | `rootine.sport-workspace.v1` | Treningi, ukończenie i planowanie |
+| Cele | `rootine.goals-workspace.v1` | Cele, postęp i usuwanie |
+| Praca | `rootine.work-workspace.v1` | Sesje skupienia i historia |
+| Podróże | `rootine.travel-workspace.v1` | Podróże i planowanie wyjazdu |
+| Zdrowie | `rootine.health-workspace.v1` | Check-in energii i przypomnienia |
 | Ukończenia/podsumowania Zadań | `rootine.task-completion.v1`, `rootine.task-summary-notes.v1` | Zgodnie z użyciem ekranów MVP |
 | Pozostałe domeny | pozostałe klucze Rootine | Opaque JSON, bez natywnej edycji |
 
@@ -353,9 +383,12 @@ ios/
 12. Lista Zadań i widoki inteligentne.
 13. Szczegóły zadania.
 14. Dodawanie/edycja zadania.
-15. Nawyki.
-16. Dodawanie/edycja nawyku.
-17. Kalendarz.
+15. Nawyki jako osobny tryb wewnątrz Zadania.
+16. Dodawanie/edycja nawyku i harmonogramu.
+
+### Kalendarz
+
+17. Kalendarz jako osobna zakładka.
 
 ### Odżywianie
 
@@ -446,7 +479,7 @@ Po każdym ekranie następuje osobna akceptacja przed rozpoczęciem kolejnego.
 | TypeScript i Swift mogą różnie interpretować JSON | Utrata lub odrzucenie danych | Wspólne fixture'y i testy round-trip przed ekranami |
 | Snapshot całej domeny daje gruby konflikt | Równoległe edycje web/iPhone wymagają decyzji | CAS v2, jawny konflikt, kopia odzyskiwania; drobniejsze dokumenty dopiero w kontrakcie v3 |
 | Open Food Facts ma braki i duplikaty | Nieudane skanowanie produktu | Backendowy lookup, walidacja, cache i ręczny wpis jako późniejszy fallback |
-| Pięć zakładek plus `+` przeciąży pasek | Małe cele dotykowe i chaos | Cztery zakładki + `+`; ustawienia w toolbarze |
+| Pięć zakładek plus globalny `+` przeciąży pasek | Małe cele dotykowe i chaos | Własny, responsywny pasek sześciu elementów; `+` po Więcej; ustawienia w Więcej |
 | Moduły spoza MVP mają dane, ale brak ekranów | Martwe przejścia | Opaque sync bez prezentacji na Dzisiaj |
 | Buildy macOS generują koszt | Nieprzewidziane opłaty | Manual trigger, cache, limit kosztu i rzadkie buildy urządzeniowe |
 
@@ -455,7 +488,7 @@ Po każdym ekranie następuje osobna akceptacja przed rozpoczęciem kolejnego.
 Akceptacja dokumentu zatwierdza łącznie:
 
 1. zakres MVP opisany w rozdziale 5;
-2. cztery zakładki i kontekstowy `+` jako piąty element;
+2. pięć zakładek (`Dzisiaj`, `Zadania`, `Kalendarz`, `Odżywianie`, `Więcej`) oraz globalny kontekstowy `+` po prawej stronie paska;
 3. Dzisiaj bez Kalendarza i bez obszarów prowadzących do nieistniejących ekranów;
 4. tylko ciemny Atrament w MVP;
 5. e-mail/hasło, Google i Sign in with Apple;

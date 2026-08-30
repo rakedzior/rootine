@@ -4,6 +4,11 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case tasks = "rootine.task-workspace.v1"
     case nutrition = "rootine.nutrition-workspace.v1"
     case notes = "rootine.notes-workspace.v1"
+    case sport = "rootine.sport-workspace.v1"
+    case goals = "rootine.goals-workspace.v1"
+    case work = "rootine.work-workspace.v1"
+    case travel = "rootine.travel-workspace.v1"
+    case health = "rootine.health-workspace.v1"
 }
 
 enum TaskPriority: String, Codable, CaseIterable, Sendable {
@@ -99,6 +104,84 @@ struct WorkspaceHabit: Codable, Equatable, Identifiable, Sendable {
     var reminderMinutes: Int? = nil
     var color: String? = nil
     var pausePeriods: [WorkspaceHabitPause]? = nil
+}
+
+// Habit scheduling is shared by the native screens and the persistence layer.
+// Keeping it here prevents the Today and Tasks views from drifting apart when
+// a habit uses weekly or interval scheduling.
+func rootineHabitIsPausedOnDate(_ habit: WorkspaceHabit, dateKey: String) -> Bool {
+    (habit.pausePeriods ?? []).contains { period in
+        dateKey >= period.startDate && (period.endDate == nil || dateKey <= period.endDate!)
+    }
+}
+
+func rootineHabitIsScheduledOnDate(
+    _ habit: WorkspaceHabit,
+    dateKey: String,
+    calendar: Calendar = .current
+) -> Bool {
+    guard let schedule = habit.schedule else { return true }
+    guard dateKey >= schedule.startDate,
+          schedule.endDate == nil || dateKey <= schedule.endDate!,
+          !rootineHabitIsPausedOnDate(habit, dateKey: dateKey) else { return false }
+
+    switch schedule.type {
+    case "daily":
+        return true
+    case "weekly":
+        guard let date = rootineHabitDate(from: dateKey, calendar: calendar),
+              let start = rootineHabitDate(from: schedule.startDate, calendar: calendar) else { return true }
+        let weekday = calendar.component(.weekday, from: date)
+        let mondayWeekday = weekday == 1 ? 7 : weekday - 1
+        guard schedule.weekdays?.contains(mondayWeekday) ?? true else { return false }
+        let startWeek = rootineHabitMondayStart(start, calendar: calendar)
+        let currentWeek = rootineHabitMondayStart(date, calendar: calendar)
+        let days = calendar.dateComponents([.day], from: startWeek, to: currentWeek).day ?? 0
+        return days >= 0 && (days / 7) % max(1, schedule.interval ?? 1) == 0
+    case "interval":
+        guard let date = rootineHabitDate(from: dateKey, calendar: calendar),
+              let start = rootineHabitDate(from: schedule.startDate, calendar: calendar) else { return true }
+        let days = calendar.dateComponents([.day], from: start, to: date).day ?? -1
+        return days >= 0 && days % max(1, schedule.interval ?? 1) == 0
+    default:
+        return true
+    }
+}
+
+func rootineHabitIsDoneOnDate(_ habit: WorkspaceHabit, dateKey: String) -> Bool {
+    habit.completedDates?.contains(dateKey) ?? (habit.done && dateKey == RootineDate.localDate())
+}
+
+func rootineHabitCurrentStreak(
+    _ habit: WorkspaceHabit,
+    referenceDate: String = RootineDate.localDate(),
+    calendar: Calendar = .current
+) -> Int {
+    var streak = 0
+    for offset in 0..<3660 {
+        guard let date = rootineHabitDate(from: referenceDate, calendar: calendar),
+              let current = calendar.date(byAdding: .day, value: -offset, to: date) else { break }
+        let dateKey = RootineDate.localDate(current, calendar: calendar)
+        if let startDate = habit.schedule?.startDate, dateKey < startDate { break }
+        if rootineHabitIsPausedOnDate(habit, dateKey: dateKey) { continue }
+        if !rootineHabitIsScheduledOnDate(habit, dateKey: dateKey, calendar: calendar) { continue }
+        if !rootineHabitIsDoneOnDate(habit, dateKey: dateKey) { break }
+        streak += 1
+    }
+    return streak
+}
+
+private func rootineHabitDate(from key: String, calendar: Calendar) -> Date? {
+    let parts = key.split(separator: "-").compactMap { Int($0) }
+    guard parts.count == 3 else { return nil }
+    return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+}
+
+private func rootineHabitMondayStart(_ date: Date, calendar: Calendar) -> Date {
+    let startOfDay = calendar.startOfDay(for: date)
+    let weekday = calendar.component(.weekday, from: startOfDay)
+    let daysFromMonday = weekday == 1 ? 6 : weekday - 2
+    return calendar.date(byAdding: .day, value: -daysFromMonday, to: startOfDay) ?? startOfDay
 }
 
 struct TaskWorkspace: Codable, Equatable, Sendable {
@@ -307,6 +390,117 @@ struct NotesWorkspace: Codable, Equatable, Sendable {
     var notes: [NoteRecord]
 
     static let empty = NotesWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), lists: [], notes: [])
+}
+
+// MARK: More workspaces
+
+/// The More modules use small, independent snapshots. This keeps each module
+/// independently syncable and allows a future server contract to evolve
+/// without coupling unrelated feature data.
+struct SportWorkout: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var date: String
+    var minutes: Int
+    var kind: String
+    var completed: Bool
+    var createdAt: String
+}
+
+struct SportWorkspace: Codable, Equatable, Sendable {
+    var version: Int
+    var updatedAt: String
+    var workouts: [SportWorkout]
+
+    static let empty = SportWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), workouts: [])
+}
+
+struct GoalRecord: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var detail: String
+    var current: Double
+    var target: Double
+    var icon: String
+    var createdAt: String
+    var updatedAt: String
+
+    var progress: Double {
+        guard target > 0 else { return 0 }
+        return min(1, max(0, current / target))
+    }
+}
+
+struct GoalsWorkspace: Codable, Equatable, Sendable {
+    var version: Int
+    var updatedAt: String
+    var goals: [GoalRecord]
+
+    static let empty = GoalsWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), goals: [])
+}
+
+struct WorkFocusSession: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var startedAt: String
+    var endedAt: String
+    var minutes: Int
+}
+
+struct WorkWorkspace: Codable, Equatable, Sendable {
+    var version: Int
+    var updatedAt: String
+    var activeFocusStartedAt: String?
+    var focusSessions: [WorkFocusSession]
+
+    static let empty = WorkWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), activeFocusStartedAt: nil, focusSessions: [])
+}
+
+struct TravelItineraryItem: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var day: String
+    var title: String
+    var detail: String
+}
+
+struct TravelRecord: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var destination: String
+    var dateRange: String
+    var nights: Int
+    var itinerary: [TravelItineraryItem]
+    var createdAt: String
+    var updatedAt: String
+}
+
+struct TravelWorkspace: Codable, Equatable, Sendable {
+    var version: Int
+    var updatedAt: String
+    var trips: [TravelRecord]
+
+    static let empty = TravelWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), trips: [])
+}
+
+struct HealthCheckIn: Codable, Equatable, Sendable {
+    var date: String
+    var energy: Int
+    var note: String?
+    var updatedAt: String
+}
+
+struct HealthReminder: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var detail: String
+    var completedDates: [String]
+}
+
+struct HealthWorkspace: Codable, Equatable, Sendable {
+    var version: Int
+    var updatedAt: String
+    var checkIns: [String: HealthCheckIn]
+    var reminders: [HealthReminder]
+
+    static let empty = HealthWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), checkIns: [:], reminders: [])
 }
 
 struct NutritionProduct: Codable, Equatable, Identifiable, Sendable {
