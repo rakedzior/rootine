@@ -23,6 +23,7 @@ final class AppEnvironment: ObservableObject {
     private let keychain: KeychainSessionStore
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
+    private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
@@ -290,6 +291,7 @@ final class AppEnvironment: ObservableObject {
         session = nil
         store = nil
         syncEngine = nil
+        canonicalShadows.removeAll()
         taskWorkspace = .empty
         nutritionWorkspace = .empty
         notesWorkspace = .empty
@@ -764,27 +766,27 @@ final class AppEnvironment: ObservableObject {
 
     private func persistSportWorkspace(_ next: SportWorkspace) async {
         sportWorkspace = next
-        await persistWorkspace(next, key: .sport)
+        await persistCanonicalWorkspace(next, key: .sport, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload)
     }
 
     private func persistGoalsWorkspace(_ next: GoalsWorkspace) async {
         goalsWorkspace = next
-        await persistWorkspace(next, key: .goals)
+        await persistCanonicalWorkspace(next, key: .goals, merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload)
     }
 
     private func persistWorkWorkspace(_ next: WorkWorkspace) async {
         workWorkspace = next
-        await persistWorkspace(next, key: .work)
+        await persistCanonicalWorkspace(next, key: .work, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload)
     }
 
     private func persistTravelWorkspace(_ next: TravelWorkspace) async {
         travelWorkspace = next
-        await persistWorkspace(next, key: .travel)
+        await persistCanonicalWorkspace(next, key: .travel, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload)
     }
 
     private func persistHealthWorkspace(_ next: HealthWorkspace) async {
         healthWorkspace = next
-        await persistWorkspace(next, key: .health)
+        await persistCanonicalWorkspace(next, key: .health, merge: RootineCanonicalWorkspaceMapping.mergedHealthPayload)
     }
 
     private func persistWorkspace<T: Codable & Sendable>(_ value: T, key: RootineStorageKey) async {
@@ -798,6 +800,44 @@ final class AppEnvironment: ObservableObject {
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
+        }
+    }
+
+    private func persistCanonicalWorkspace<T: Codable & Sendable>(
+        _ value: T,
+        key: RootineStorageKey,
+        merge: (T, JSONValue) throws -> JSONValue
+    ) async {
+        guard let store, let syncEngine else {
+            foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+            return
+        }
+        do {
+            let base = canonicalShadows[key]
+            let mapped = try base.map { try merge(value, $0) } ?? encodeCanonical(value, key: key)
+            try await store.save(value, key: key)
+            canonicalShadows[key] = mapped
+            if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
+                try await store.save(mapped, key: shadowKey)
+            }
+            try await syncEngine.enqueue(
+                payload: mapped,
+                storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: key)
+            )
+            await flushPendingMutations()
+        } catch {
+            foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
+        }
+    }
+
+    private func encodeCanonical<T: Codable>(_ value: T, key: RootineStorageKey) throws -> JSONValue {
+        switch key {
+        case .sport: return try RootineCanonicalWorkspaceMapping.payload(for: value as! SportWorkspace)
+        case .goals: return try RootineCanonicalWorkspaceMapping.payload(for: value as! GoalsWorkspace)
+        case .work: return try RootineCanonicalWorkspaceMapping.payload(for: value as! WorkWorkspace)
+        case .travel: return try RootineCanonicalWorkspaceMapping.payload(for: value as! TravelWorkspace)
+        case .health: return try RootineCanonicalWorkspaceMapping.payload(for: value as! HealthWorkspace)
+        default: return try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
         }
     }
 
@@ -815,6 +855,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func configureRuntime(userID: String) {
+        canonicalShadows.removeAll()
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
         syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
@@ -843,6 +884,11 @@ final class AppEnvironment: ObservableObject {
         workWorkspace = (try? await store.load(WorkWorkspace.self, key: .work)) ?? .empty
         travelWorkspace = (try? await store.load(TravelWorkspace.self, key: .travel)) ?? .empty
         healthWorkspace = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
+        for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
+            guard let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key),
+                  let shadow = try? await store.load(JSONValue.self, key: shadowKey) else { continue }
+            canonicalShadows[key] = shadow
+        }
     }
 
     private func loadAndReconcile(accessToken: String) async {
@@ -862,11 +908,11 @@ final class AppEnvironment: ObservableObject {
             let taskResult = try await reconcile(localTasks, fallback: .empty, key: .tasks, remote: remote, store: store, syncEngine: syncEngine)
             let nutritionResult = try await reconcile(localNutrition, fallback: .empty, key: .nutrition, remote: remote, store: store, syncEngine: syncEngine)
             let notesResult = try await reconcile(localNotes, fallback: .empty, key: .notes, remote: remote, store: store, syncEngine: syncEngine)
-            let sportResult = try await reconcile(localSport, fallback: .empty, key: .sport, remote: remote, store: store, syncEngine: syncEngine)
-            let goalsResult = try await reconcile(localGoals, fallback: .empty, key: .goals, remote: remote, store: store, syncEngine: syncEngine)
-            let workResult = try await reconcile(localWork, fallback: .empty, key: .work, remote: remote, store: store, syncEngine: syncEngine)
-            let travelResult = try await reconcile(localTravel, fallback: .empty, key: .travel, remote: remote, store: store, syncEngine: syncEngine)
-            let healthResult = try await reconcile(localHealth, fallback: .empty, key: .health, remote: remote, store: store, syncEngine: syncEngine)
+            let sportResult = try await reconcileCanonical(localSport, fallback: .empty, key: .sport, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload, decode: RootineCanonicalWorkspaceMapping.sportWorkspace(from:))
+            let goalsResult = try await reconcileCanonical(localGoals, fallback: .empty, key: .goals, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload, decode: RootineCanonicalWorkspaceMapping.goalsWorkspace(from:))
+            let workResult = try await reconcileCanonical(localWork, fallback: .empty, key: .work, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:))
+            let travelResult = try await reconcileCanonical(localTravel, fallback: .empty, key: .travel, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload, decode: RootineCanonicalWorkspaceMapping.travelWorkspace(from:))
+            let healthResult = try await reconcileCanonical(localHealth, fallback: .empty, key: .health, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedHealthPayload, decode: RootineCanonicalWorkspaceMapping.healthWorkspace(from:))
             taskWorkspace = taskResult.value
             nutritionWorkspace = nutritionResult.value
             notesWorkspace = notesResult.value
@@ -916,6 +962,81 @@ final class AppEnvironment: ObservableObject {
         }
         if local == remoteValue {
             try await store.setRevision(remoteRow.revision, for: key.rawValue)
+            return (local, false)
+        }
+        return (local, true)
+    }
+
+    private func reconcileCanonical<T: Codable & Equatable & Sendable>(
+        _ local: T?,
+        fallback: T,
+        key: RootineStorageKey,
+        remote: [String: RemoteWorkspaceSnapshot],
+        store: WorkspaceFileStore,
+        syncEngine: WorkspaceSyncEngine,
+        encode: (T) throws -> JSONValue,
+        merge: (T, JSONValue) throws -> JSONValue,
+        decode: (JSONValue) throws -> T
+    ) async throws -> (value: T, conflict: Bool) {
+        let canonicalKey = RootineCanonicalWorkspaceMapping.storageKey(for: key)
+        let remoteRow = remote[canonicalKey]
+        let legacyRow = remoteRow == nil && canonicalKey != key.rawValue ? remote[key.rawValue] : nil
+        guard let remoteRow = remoteRow ?? legacyRow else {
+            if let local {
+                let mapped = try canonicalShadows[key].map { try merge(local, $0) } ?? encode(local)
+                canonicalShadows[key] = mapped
+                if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
+                    try await store.save(mapped, key: shadowKey)
+                }
+                try await syncEngine.enqueue(payload: mapped, storageKey: canonicalKey)
+                return (local, false)
+            }
+            return (fallback, false)
+        }
+
+        var isLegacy = legacyRow != nil
+        let remoteValue: T
+        if isLegacy {
+            remoteValue = try JSONDecoder().decode(T.self, from: JSONEncoder().encode(remoteRow.payload))
+        } else {
+            do {
+                remoteValue = try decode(remoteRow.payload)
+            } catch where key == .work || key == .travel {
+                // Work and Travel kept their old key, so shape detection is
+                // required while upgrading the v1 native payload in place.
+                remoteValue = try JSONDecoder().decode(T.self, from: JSONEncoder().encode(remoteRow.payload))
+                isLegacy = true
+            }
+        }
+        let canonicalPayload = isLegacy ? try encode(remoteValue) : remoteRow.payload
+        canonicalShadows[key] = canonicalPayload
+        if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
+            try await store.save(canonicalPayload, key: shadowKey)
+        }
+        guard let local else {
+            try await store.save(remoteValue, key: key)
+            if isLegacy {
+                if canonicalKey == key.rawValue {
+                    // Work and Travel reused the canonical key for their
+                    // compact v1 payload. The migration must CAS against the
+                    // revision of that row, not the default revision zero.
+                    try await store.setRevision(remoteRow.revision, for: canonicalKey)
+                }
+                try await syncEngine.enqueue(payload: canonicalPayload, storageKey: canonicalKey)
+            } else {
+                try await store.setRevision(remoteRow.revision, for: canonicalKey)
+            }
+            return (remoteValue, false)
+        }
+        if try merge(local, canonicalPayload) == canonicalPayload {
+            if isLegacy {
+                if canonicalKey == key.rawValue {
+                    try await store.setRevision(remoteRow.revision, for: canonicalKey)
+                }
+                try await syncEngine.enqueue(payload: canonicalPayload, storageKey: canonicalKey)
+            } else {
+                try await store.setRevision(remoteRow.revision, for: canonicalKey)
+            }
             return (local, false)
         }
         return (local, true)

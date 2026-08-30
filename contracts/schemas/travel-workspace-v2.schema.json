@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/travel-workspace-v2.schema.json",
+  "title": "Rootine Travel workspace v2",
+  "type": "object",
+  "required": ["version", "updatedAt", "trips"],
+  "properties": {
+    "version": { "const": 2 },
+    "updatedAt": { "type": "string" },
+    "trips": { "type": "array" }
+  }
+}

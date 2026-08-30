@@ -23,6 +23,9 @@ export type HealthWorkspace = {
   version: 1;
   entries: HealthEntry[];
   updatedAt: string;
+  /** Optional cross-platform fields written by the native energy surface. */
+  checkIns?: Record<string, { date: string; energy: number; note?: string | null; updatedAt: string }>;
+  reminders?: Array<{ id: string; title: string; detail: string; completedDates: string[] }>;
 };
 
 export const HEALTH_STORAGE_KEY = "rootine.health.workspace.v1";
@@ -71,7 +74,34 @@ export function isHealthWorkspace(value: unknown): value is HealthWorkspace {
   return workspace.version === 1
     && Array.isArray(workspace.entries)
     && workspace.entries.every(isHealthEntry)
-    && typeof workspace.updatedAt === "string";
+    && typeof workspace.updatedAt === "string"
+    && (workspace.checkIns === undefined || (
+      typeof workspace.checkIns === "object"
+      && workspace.checkIns !== null
+      && !Array.isArray(workspace.checkIns)
+      && Object.values(workspace.checkIns).every((checkIn) => (
+        typeof checkIn === "object"
+        && checkIn !== null
+        && typeof checkIn.date === "string"
+        && Number.isInteger(checkIn.energy)
+        && checkIn.energy >= 1
+        && checkIn.energy <= 4
+        && (checkIn.note === undefined || checkIn.note === null || typeof checkIn.note === "string")
+        && typeof checkIn.updatedAt === "string"
+      ))
+    ))
+    && (workspace.reminders === undefined || (
+      Array.isArray(workspace.reminders)
+      && workspace.reminders.every((reminder) => (
+        typeof reminder === "object"
+        && reminder !== null
+        && typeof reminder.id === "string"
+        && typeof reminder.title === "string"
+        && typeof reminder.detail === "string"
+        && Array.isArray(reminder.completedDates)
+        && reminder.completedDates.every((date) => typeof date === "string")
+      ))
+    ));
 }
 
 export function createDefaultHealthWorkspace(): HealthWorkspace {

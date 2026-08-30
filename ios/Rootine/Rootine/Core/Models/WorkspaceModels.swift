@@ -9,6 +9,14 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case work = "rootine.work-workspace.v1"
     case travel = "rootine.travel-workspace.v1"
     case health = "rootine.health-workspace.v1"
+    // Private local copies of the last full canonical payload. They are never
+    // uploaded; they let compact native projections update one record without
+    // deleting web-only fields.
+    case sportCanonicalShadow = "rootine.canonical-shadow.sport.v1"
+    case goalsCanonicalShadow = "rootine.canonical-shadow.goals.v1"
+    case workCanonicalShadow = "rootine.canonical-shadow.work.v1"
+    case travelCanonicalShadow = "rootine.canonical-shadow.travel.v1"
+    case healthCanonicalShadow = "rootine.canonical-shadow.health.v1"
 }
 
 enum TaskPriority: String, Codable, CaseIterable, Sendable {

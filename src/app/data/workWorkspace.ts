@@ -98,6 +98,14 @@ export type WorkWorkspace = {
   companies: WorkCompany[];
   projects: WorkProject[];
   tasks: WorkTask[];
+  /** Optional cross-platform fields written by the native focus surface. */
+  activeFocusStartedAt?: string;
+  focusSessions?: Array<{
+    id: string;
+    startedAt: string;
+    endedAt: string;
+    minutes: number;
+  }>;
 };
 
 type LegacyWorkTask = Omit<WorkTask, "dueDate" | "updatedAt"> & {
@@ -356,8 +364,20 @@ function hasWorkspaceShape(value: unknown): value is Omit<WorkWorkspace, "versio
 function isWorkspace(value: unknown): value is WorkWorkspace {
   return hasWorkspaceShape(value)
     && value.version === WORKSPACE_VERSION
-    && value.tasks.every((task) => typeof task.dueDate === "string");
+    && value.tasks.every((task) => typeof task.dueDate === "string")
+    && (value.activeFocusStartedAt === undefined || isTimestamp(value.activeFocusStartedAt))
+    && (value.focusSessions === undefined || (Array.isArray(value.focusSessions) && value.focusSessions.every((session) => (
+      isRecord(session)
+      && typeof session.id === "string"
+      && isTimestamp(session.startedAt)
+      && isTimestamp(session.endedAt)
+      && typeof session.minutes === "number"
+      && Number.isInteger(session.minutes)
+      && session.minutes > 0
+    ))));
 }
+
+export const isWorkWorkspace = isWorkspace;
 
 function migrateLegacyWorkspace(value: unknown): WorkWorkspace | null {
   if (!hasWorkspaceShape(value) || (value.version !== 1 && value.version !== 2)) return null;

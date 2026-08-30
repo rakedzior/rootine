@@ -24,6 +24,36 @@
       "domainVersion": 1,
       "schema": "schemas/notes-workspace-v1.schema.json",
       "fixture": "fixtures/notes-workspace-v1.json"
+    },
+    {
+      "storageKey": "rootine-sport-planner-v1",
+      "domainVersion": 5,
+      "schema": "schemas/sport-planner-v5.schema.json",
+      "fixture": "fixtures/sport-planner-v5.json"
+    },
+    {
+      "storageKey": "rootine.goals.v1",
+      "domainVersion": 1,
+      "schema": "schemas/goals-workspace-v1.schema.json",
+      "fixture": "fixtures/goals-workspace-v1.json"
+    },
+    {
+      "storageKey": "rootine.work-workspace.v1",
+      "domainVersion": 3,
+      "schema": "schemas/work-workspace-v3.schema.json",
+      "fixture": "fixtures/work-workspace-v3.json"
+    },
+    {
+      "storageKey": "rootine.travel-workspace.v1",
+      "domainVersion": 2,
+      "schema": "schemas/travel-workspace-v2.schema.json",
+      "fixture": "fixtures/travel-workspace-v2.json"
+    },
+    {
+      "storageKey": "rootine.health.workspace.v1",
+      "domainVersion": 1,
+      "schema": "schemas/health-workspace-v1.schema.json",
+      "fixture": "fixtures/health-workspace-v1.json"
     }
   ],
   "nutritionProductApi": {

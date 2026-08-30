@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/sport-planner-v5.schema.json",
+  "title": "Rootine Sport planner v5",
+  "type": "object",
+  "required": ["version", "storageSchemaVersion", "templates", "activeCycle", "cycles", "activeCycleId", "history", "sessions", "workoutOutcomes"],
+  "properties": {
+    "version": { "const": 5 },
+    "storageSchemaVersion": { "const": 5 },
+    "templates": { "type": "array" },
+    "activeCycle": { "type": ["object", "null"] },
+    "cycles": { "type": "array" },
+    "activeCycleId": { "type": ["string", "null"] },
+    "history": { "type": "array" },
+    "sessions": { "type": "array" },
+    "workoutOutcomes": { "type": "object" },
+    "exercises": { "type": "array" },
+    "scheduledWorkouts": { "type": "array" },
+    "executions": { "type": "array" }
+  }
+}

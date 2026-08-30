@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/work-workspace-v3.schema.json",
+  "title": "Rootine Work workspace v3",
+  "type": "object",
+  "required": ["version", "updatedAt", "companies", "projects", "tasks"],
+  "properties": {
+    "version": { "const": 3 },
+    "updatedAt": { "type": "string" },
+    "companies": { "type": "array" },
+    "projects": { "type": "array" },
+    "tasks": { "type": "array" },
+    "activeFocusStartedAt": { "type": "string" },
+    "focusSessions": { "type": "array" }
+  }
+}

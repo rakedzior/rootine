@@ -23,11 +23,19 @@ actor WorkspaceSyncEngine {
     func enqueue<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) async throws {
         let data = try encoder.encode(value)
         let payload = try decoder.decode(JSONValue.self, from: data)
+        try await enqueue(payload: payload, storageKey: key.rawValue)
+    }
+
+    /// Enqueues an already mapped canonical document. Native More models use
+    /// this overload so their compact local representation never leaks into a
+    /// snapshot consumed by the web client.
+    func enqueue(payload: JSONValue, storageKey: String) async throws {
+        let data = try encoder.encode(payload)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        let expectedRevision = try await store.revision(for: key.rawValue)
+        let expectedRevision = try await store.revision(for: storageKey)
         try await store.enqueue(PendingWorkspaceMutation(
             id: UUID().uuidString,
-            storageKey: key.rawValue,
+            storageKey: storageKey,
             payload: payload,
             contentHash: digest,
             expectedRevision: expectedRevision,

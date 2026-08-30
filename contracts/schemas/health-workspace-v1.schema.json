@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/health-workspace-v1.schema.json",
+  "title": "Rootine Health workspace v1",
+  "type": "object",
+  "required": ["version", "entries", "updatedAt"],
+  "properties": {
+    "version": { "const": 1 },
+    "entries": { "type": "array" },
+    "updatedAt": { "type": "string" },
+    "checkIns": { "type": "object" },
+    "reminders": { "type": "array" }
+  }
+}

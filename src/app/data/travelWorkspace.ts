@@ -469,6 +469,8 @@ function isWorkspace(value: unknown): value is TravelWorkspace {
     && value.trips.every(isTrip);
 }
 
+export const isTravelWorkspace = isWorkspace;
+
 export function createDefaultTravelWorkspace(): TravelWorkspace {
   return JSON.parse(JSON.stringify(DEFAULT_WORKSPACE)) as TravelWorkspace;
 }

@@ -385,7 +385,7 @@ function isWorkoutOutcome(value: unknown): value is WorkoutOutcome {
     && typeof value.updatedAt === "string";
 }
 
-function isSportPlannerState(value: unknown): value is SportPlannerState {
+export function isSportPlannerState(value: unknown): value is SportPlannerState {
   return isRecord(value)
     && (value.version === 4 || value.version === 5)
     && Array.isArray(value.templates)
