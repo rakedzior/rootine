@@ -65,6 +65,7 @@ import {
   tasksForSmartDateView,
 } from "./tasks/taskPageModel";
 import { TaskReminderCenter } from "./tasks/TaskReminderCenter";
+import { readModuleMemoryValue, writeModuleMemoryValue } from "../experience/moduleMemory";
 import "../../styles/calendar.css";
 import "../../styles/tasks.css";
 
@@ -98,6 +99,15 @@ type CalendarFilter =
   | { kind: "list"; id: string }
   | { kind: "tag"; id: string }
   | { kind: "priority"; id: CalendarPriority };
+
+function isCalendarFilter(value: unknown): value is CalendarFilter {
+  if (!value || typeof value !== "object" || !("kind" in value)) return false;
+  const candidate = value as { kind?: unknown; id?: unknown };
+  if (candidate.kind === "all") return true;
+  if (candidate.kind === "list" || candidate.kind === "tag") return typeof candidate.id === "string";
+  return candidate.kind === "priority"
+    && (candidate.id === "high" || candidate.id === "medium" || candidate.id === "low");
+}
 
 function isTasksCalendarEvent(task: Task): task is CalendarEvent {
   return isCalendarTask(task) && isTaskOwnedByTasksModule(task);
@@ -373,9 +383,16 @@ export default function Kalendarz() {
   const [initialWorkspace] = useState(loadTaskWorkspace);
   const initialSidebarState = loadTaskSidebarState();
   const activeTaskView = "wszystkie";
-  // Kalendarz is intentionally a fresh current-month view. The selected day
-  // is today so the first useful context is visible immediately after entry.
-  const [viewDate, setViewDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
+  const [viewDate, setViewDate] = useState(() => {
+    const rememberedMonth = readModuleMemoryValue(
+      "calendar",
+      "month",
+      (value): value is string => typeof value === "string" && /^\d{4}-\d{2}$/.test(value),
+    );
+    if (!rememberedMonth) return new Date(now.getFullYear(), now.getMonth(), 1);
+    const [year, month] = rememberedMonth.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  });
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isTasksCalendarEvent));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
@@ -383,7 +400,9 @@ export default function Kalendarz() {
   const [tagiOpen, setTagiOpen] = useState(initialSidebarState.tagiOpen);
   const [showAllLists, setShowAllLists] = useState(false);
   const [showAllTags, setShowAllTags] = useState(false);
-  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>({ kind: "all" });
+  const [calendarFilter, setCalendarFilter] = useState<CalendarFilter>(() => (
+    readModuleMemoryValue("calendar", "filter", isCalendarFilter) ?? { kind: "all" }
+  ));
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedOccurrenceDate, setSelectedOccurrenceDate] = useState<string | null>(null);
   const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null);
@@ -413,6 +432,18 @@ export default function Kalendarz() {
   const calendarMode: CalendarMode = calendarWidth === null ? "full" : getCalendarMode(calendarWidth);
   const visibleEventLimit = 3;
   const hideCalendarTime = calendarMode !== "full";
+
+  useEffect(() => {
+    writeModuleMemoryValue(
+      "calendar",
+      "month",
+      `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}`,
+    );
+  }, [viewDate]);
+
+  useEffect(() => {
+    writeModuleMemoryValue("calendar", "filter", calendarFilter);
+  }, [calendarFilter]);
 
   useLayoutEffect(() => {
     const root = calendarRootRef.current;
@@ -960,6 +991,7 @@ export default function Kalendarz() {
     <ModuleShell
       pageWidth="fluid"
       className="task-module calendar-module"
+      memoryKey="calendar"
     >
       <ModuleSidebar
         label="Widoki i listy zadań"
@@ -1293,7 +1325,12 @@ export default function Kalendarz() {
                         setAgendaDateKey(key);
                       }}
                     >
-                      +{dayEvents.length - visibleEventLimit} więcej
+                      <span className="calendar-overflow-trigger__full">+{dayEvents.length - visibleEventLimit} więcej</span>
+                      <span
+                        className="calendar-overflow-trigger__compact"
+                        aria-hidden="true"
+                        data-count={dayEvents.length - visibleEventLimit}
+                      />
                     </button>
                     {agendaDateKey === key && agendaTriggerRef.current && (
                       <AnchoredPopover

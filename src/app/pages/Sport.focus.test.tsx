@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -40,7 +40,7 @@ describe("Sport destructive confirmation focus", () => {
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog", { name: /Usunąć szablon/ })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("returns focus to the exercise row action trigger after cancel", async () => {
@@ -57,6 +57,6 @@ describe("Sport destructive confirmation focus", () => {
     await user.click(within(dialog).getByRole("button", { name: "Anuluj" }));
 
     expect(screen.queryByRole("dialog", { name: /Usunąć ćwiczenie/ })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });

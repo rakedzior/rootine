@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useGoalsStore } from "../goals/goalsContext";
 import { calendarDaysBetween, formatLocalDate, todayLocalDateKey } from "../data/localDate";
 import { recordActivity } from "../experience/activityLog";
@@ -94,6 +94,10 @@ type GoalActionItem = {
 
 type GoalStepDepth = 1 | 2 | 3;
 
+type GoalFormHistoryState = {
+  rootineGoalFormId?: "new" | string;
+};
+
 const GOAL_STEP_DEPTH_KEY = "rootine.goals.next-step-depth";
 
 function readGoalStepDepth(): GoalStepDepth {
@@ -108,6 +112,7 @@ function readGoalStepDepth(): GoalStepDepth {
 
 export default function Cele() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     goals: storedGoals,
@@ -166,11 +171,30 @@ export default function Cele() {
   const [importCandidate, setImportCandidate] = useState<ImportCandidate | null>(null);
   const [importNotice, setImportNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
   const [goalStepDepth, setGoalStepDepth] = useState<GoalStepDepth>(readGoalStepDepth);
+  const previousHistoryGoalFormRef = useRef<"new" | string | null>(null);
   const goals = useMemo(() => storedGoals.map((goal) => toViewGoal(goal, categories)), [storedGoals, categories]);
 
   const openGoalForm = (id: "new" | string, returnFocus?: HTMLElement | null) => {
     goalFormReturnFocusRef.current = returnFocus ?? null;
     setGoalFormId(id);
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      state: {
+        ...(location.state && typeof location.state === "object" ? location.state : {}),
+        rootineGoalFormId: id,
+      } satisfies GoalFormHistoryState,
+    });
+  };
+  const closeGoalForm = (reason?: "navigation") => {
+    setGoalCommandPrefill({});
+    if (reason === "navigation") {
+      setGoalFormId(null);
+      return;
+    }
+    if ((location.state as GoalFormHistoryState | null)?.rootineGoalFormId) {
+      navigate(-1);
+      return;
+    }
+    setGoalFormId(null);
   };
   const openFullGoal = (id: string | number) => {
     const query = searchParams.toString();
@@ -183,6 +207,13 @@ export default function Cele() {
   const setSelectedGoalId = (goalId: string | null) => updateGoalViewState({ selectedId: goalId });
   const setGoalLayout = (nextLayout: GoalLayout) => updateGoalViewState({ layout: nextLayout });
   const setGoalSort = (nextSort: GoalSortKey) => updateGoalViewState({ sort: nextSort });
+
+  useEffect(() => {
+    const historyGoalFormId = (location.state as GoalFormHistoryState | null)?.rootineGoalFormId ?? null;
+    if (historyGoalFormId) setGoalFormId(historyGoalFormId);
+    else if (previousHistoryGoalFormRef.current) setGoalFormId(null);
+    previousHistoryGoalFormRef.current = historyGoalFormId;
+  }, [location.state]);
 
   useEffect(() => {
     if (searchParams.get("akcja") === "nowy-cel") return;
@@ -379,8 +410,7 @@ export default function Cele() {
       updateGoal(goalFormId, data);
       recordActivity({ moduleId: "goals", kind: "save", title: data.title, detail: "Zaktualizowano cel" });
     }
-    setGoalFormId(null);
-    setGoalCommandPrefill({});
+    closeGoalForm();
   };
 
   const downloadJson = (raw: string, fileName: string) => {
@@ -853,10 +883,7 @@ export default function Cele() {
           initialValues={goalFormId === "new" ? goalCommandPrefill : undefined}
           categories={categories}
           returnFocusRef={goalFormReturnFocusRef}
-          onClose={() => {
-            setGoalFormId(null);
-            setGoalCommandPrefill({});
-          }}
+          onClose={closeGoalForm}
           onSubmit={submitGoal}
         />
       )}

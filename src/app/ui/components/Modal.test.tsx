@@ -61,7 +61,7 @@ describe("Modal", () => {
     expect(screen.getByRole("textbox", { name: "Nazwa celu" })).toHaveFocus();
 
     await user.keyboard("{Escape}");
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("keeps an AnchoredPopover listbox inside the modal focus boundary", async () => {

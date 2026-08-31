@@ -70,7 +70,7 @@
 /* The second rail becomes an icon strip only after the primary rail is already
  * compact. Hover and keyboard focus expand it over the workspace without
  * changing the grid column, so the content does not jump under the pointer. */
-@media (min-width: 761px) and (max-width: 980px) {
+@media (min-width: 761px) and (max-width: 980px) and (min-height: 481px) {
   .ui-module-shell__body.is-with-module-sidebar {
     grid-template-columns: var(--context-sidebar-collapsed-width) minmax(0, 1fr) auto;
   }
@@ -336,7 +336,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .auth-shell {
     display: block;
   }
@@ -587,28 +587,31 @@
   }
 
   .app-mobile-nav__label {
-    overflow: hidden;
     max-width: 100%;
-    padding: 0 var(--space-xs);
     font-size: var(--text-label);
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .app-mobile-menu {
     position: absolute;
-    z-index: var(--layer-popover);
-    right: var(--space-sm);
-    bottom: calc(60px + env(safe-area-inset-bottom) + var(--space-sm));
-    left: var(--space-sm);
+    z-index: var(--layer-drawer);
+    inset: env(safe-area-inset-top) env(safe-area-inset-right) calc(60px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
     display: grid;
-    max-height: min(680px, calc(100dvh - 88px));
+    align-content: start;
+    max-height: none;
     overflow-y: auto;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-xl);
-    background: var(--color-surface-2);
-    box-shadow: var(--shadow-modal);
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: 0;
+    background: var(--color-app-bg);
+    box-shadow: none;
     scrollbar-width: thin;
+    animation: rootine-mobile-center-enter var(--motion-normal) var(--ease-enter) both;
+  }
+
+  .app-mobile-menu[data-state="closing"] {
+    animation: rootine-mobile-center-exit var(--motion-fast) var(--ease-standard) both;
+    pointer-events: none;
   }
 
   .app-mobile-menu__header {
@@ -617,12 +620,12 @@
     top: 0;
     display: grid;
     min-height: 60px;
-    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
     align-items: center;
     gap: var(--space-md);
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) max(var(--space-md), env(safe-area-inset-right)) var(--space-sm) max(var(--space-md), env(safe-area-inset-left));
     border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface-2);
+    background: var(--color-app-bg);
   }
 
   .app-mobile-menu__header > span:nth-child(2) {
@@ -651,8 +654,8 @@
 
   .app-mobile-menu__icon-button {
     display: grid;
-    width: 32px;
-    height: calc(var(--control-height-sm) + var(--space-xs));
+    width: var(--component-option-height-touch);
+    height: var(--component-option-height-touch);
     place-items: center;
     padding: 0;
     border: 0;
@@ -671,14 +674,14 @@
   .app-mobile-menu__modules {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-xs);
-    padding: var(--space-md);
+    gap: var(--space-sm);
+    padding: var(--space-lg) max(var(--space-lg), env(safe-area-inset-right)) var(--space-md) max(var(--space-lg), env(safe-area-inset-left));
   }
 
   .app-mobile-menu__module {
     display: grid;
     min-width: 0;
-    min-height: var(--control-height-lg);
+    min-height: calc(var(--control-height-lg) + var(--space-xs));
     grid-template-columns: 24px minmax(0, 1fr);
     align-items: center;
     gap: var(--space-sm);
@@ -730,14 +733,14 @@
   .app-mobile-menu__actions {
     display: grid;
     gap: var(--space-xs);
-    padding: var(--space-sm) var(--space-md) var(--space-md);
+    padding: var(--space-md) max(var(--space-lg), env(safe-area-inset-right)) max(var(--space-xl), env(safe-area-inset-bottom)) max(var(--space-lg), env(safe-area-inset-left));
     border-top: 1px solid var(--color-border);
   }
 
   .app-mobile-menu__actions button,
-.app-mobile-menu__weather {
+  .app-mobile-menu__weather {
     display: grid;
-    min-height: var(--control-height-lg);
+    min-height: calc(var(--control-height-lg) + var(--space-xs));
     grid-template-columns: 24px minmax(0, 1fr);
     align-items: center;
     gap: var(--space-sm);
@@ -789,6 +792,26 @@
     text-decoration: none;
   }
 
+  .app-mobile-menu__actions {
+    position: sticky;
+    bottom: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: var(--space-xs) max(var(--space-md), env(safe-area-inset-right)) max(var(--space-xs), env(safe-area-inset-bottom)) max(var(--space-md), env(safe-area-inset-left));
+    background: var(--color-app-bg);
+  }
+
+  .app-mobile-menu__actions button {
+    min-height: var(--component-option-height-touch);
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 2px;
+    padding: var(--space-xs);
+    text-align: center;
+  }
+
+  .app-mobile-menu__actions button > span { justify-items: center; }
+  .app-mobile-menu__actions button small { display: none; }
+
   .app-mobile-menu__weather:disabled {
     cursor: wait;
     opacity: 0.68;
@@ -806,11 +829,26 @@
     font-size: var(--text-body);
     line-height: var(--leading-normal);
   }
-}
-
-@media (max-width: 760px) {
 
   .calendar-toolbar-period {
     display: none;
+  }
+}
+
+@keyframes rootine-mobile-center-enter {
+  from { opacity: 0; transform: translate3d(0, 20px, 0); }
+}
+
+@keyframes rootine-mobile-center-exit {
+  to { opacity: 0; transform: translate3d(0, 20px, 0); }
+}
+
+:root[data-motion="reduced"] .app-mobile-menu {
+  animation-duration: var(--motion-reduced) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .app-mobile-menu {
+    animation-duration: var(--motion-reduced) !important;
   }
 }

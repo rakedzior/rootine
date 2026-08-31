@@ -44,7 +44,10 @@ export function readNutritionSessionDraft<T>(storageKey: string, kind: Exclude<N
   return stored.kind === kind ? stored.value as T : null;
 }
 
-export function useNutritionDateQuery(setSelectedDate: Dispatch<SetStateAction<string>>) {
+export function useNutritionDateQuery(
+  selectedDate: string,
+  setSelectedDate: Dispatch<SetStateAction<string>>,
+) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -54,20 +57,17 @@ export function useNutritionDateQuery(setSelectedDate: Dispatch<SetStateAction<s
     if (rawDate === null) return;
     const requestedDate = parseNutritionDateParam(rawDate);
     if (requestedDate) {
-      setSelectedDate(requestedDate);
+      if (requestedDate !== selectedDate) setSelectedDate(requestedDate);
       return;
     }
     params.delete("data");
     const search = params.toString();
     navigate({ pathname: location.pathname, search: search ? `?${search}` : "", hash: location.hash }, { replace: true });
-  }, [location.hash, location.pathname, location.search, navigate, setSelectedDate]);
+  }, [location.hash, location.pathname, location.search, navigate, selectedDate, setSelectedDate]);
 
   return useCallback((date: string) => {
-    setSelectedDate(date);
     const params = new URLSearchParams(location.search);
-    if (!params.has("data")) return;
     params.set("data", date);
-    const search = params.toString();
-    navigate({ pathname: location.pathname, search: search ? `?${search}` : "", hash: location.hash }, { replace: true });
-  }, [location.hash, location.pathname, location.search, navigate, setSelectedDate]);
+    navigate({ pathname: location.pathname, search: `?${params.toString()}`, hash: location.hash }, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
 }

@@ -1,6 +1,14 @@
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useEffectiveReducedMotion } from "../../experience/useReducedMotion";
+import {
+  cloneOverlayForExit,
+  inertSiblings,
+  lockDocumentScroll,
+  overlayExitDuration,
+  resolveStableFocusTarget,
+} from "../overlayLifecycle";
 import { Button } from "./Button";
 
 export interface ModalProps {
@@ -53,12 +61,33 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
   const generatedId = useId();
   const titleId = labelledBy ?? `${generatedId}-title`;
   const descriptionId = description ? `${generatedId}-description` : undefined;
+  const backdropRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const reducedMotion = useEffectiveReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    reducedMotionRef.current = reducedMotion;
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop) return;
+    const releaseScroll = lockDocumentScroll();
+    const restoreBackground = inertSiblings(document.body, [backdrop]);
+
+    return () => {
+      const duration = overlayExitDuration(reducedMotionRef.current);
+      cloneOverlayForExit([backdrop], document.body, duration);
+      window.setTimeout(restoreBackground, duration);
+      releaseScroll(duration);
+    };
+  }, []);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -115,19 +144,30 @@ export function Modal({ title, description, eyebrow, onClose, children, footer, 
 
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("focusin", onFocusIn);
+    const returnFocus = returnFocusRef?.current;
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("focusin", onFocusIn);
       const focusTarget = explicitReturnFocus ?? previousFocus;
-      if (focusTarget?.isConnected && !focusTarget.matches(":disabled")) focusTarget.focus();
+      const delay = overlayExitDuration(reducedMotionRef.current);
+      window.setTimeout(() => {
+        const stableTarget = resolveStableFocusTarget(returnFocus ?? focusTarget);
+        if (stableTarget && !stableTarget.matches(":disabled")) stableTarget.focus();
+      }, delay + 16);
     };
   }, [returnFocusRef]);
 
   return createPortal(
-    <div className="ui-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onCloseRef.current(); }}>
+    <div
+      ref={backdropRef}
+      className="ui-modal-backdrop"
+      data-state="open"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) onCloseRef.current(); }}
+    >
       <section
         ref={dialogRef}
         className="ui-modal"
+        data-state="open"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

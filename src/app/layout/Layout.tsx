@@ -9,6 +9,7 @@ import {
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   ArrowLeft,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -57,6 +58,7 @@ import {
   subscribeToLocalPersistenceIssues,
 } from "../data/localRepository";
 import {
+  APP_MODULE_BY_ID,
   APP_MODULES,
   findModuleForPath,
   isModulePath,
@@ -77,10 +79,20 @@ import { ThemeSettings } from "./ThemeSettings";
 import { SettingsAccordions } from "./SettingsAccordions";
 import { setActiveAreaId, useIsActiveArea } from "../experience/activeArea";
 import {
+  readModuleMemoryValue,
+  writeModuleMemoryValue,
+} from "../experience/moduleMemory";
+import {
   ExperienceSettings,
   usePrivacy,
 } from "../experience/preferences";
 import { RouteTransition } from "../experience/transitions";
+import { useEffectiveReducedMotion } from "../experience/useReducedMotion";
+import {
+  cloneOverlayForExit,
+  lockDocumentScroll,
+  overlayExitDuration,
+} from "../ui/overlayLifecycle";
 import { AccountPanel } from "../../infrastructure/supabase/AccountPanel";
 import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
 import { useRemoteSync } from "../../infrastructure/supabase/RemotePersistenceProvider";
@@ -98,7 +110,13 @@ type WeatherState =
   | { status: "ready"; data: TodayWeather }
   | { status: "error"; message: string };
 
-type OpenMenu = "settings" | "profile" | "mobileMore" | "mobileSettings" | "mobileProfile" | null;
+type OpenMenu = "settings" | "profile" | null;
+
+type MobileLayer = "more" | "settings" | "profile" | "help";
+
+type MobileHistoryState = {
+  rootineMobileLayer?: MobileLayer;
+};
 
 const MOBILE_MENU_FOCUSABLE = [
   "a[href]",
@@ -119,6 +137,82 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   day: "numeric",
   month: "short",
 });
+
+const MOBILE_CORE_NAV = [
+  {
+    id: "today",
+    label: APP_MODULE_BY_ID.today.label,
+    icon: APP_MODULE_BY_ID.today.icon,
+    to: APP_MODULE_BY_ID.today.to,
+  },
+  {
+    id: "tasks",
+    label: APP_MODULE_BY_ID.tasks.label,
+    icon: APP_MODULE_BY_ID.tasks.icon,
+    to: APP_MODULE_BY_ID.tasks.to,
+  },
+  {
+    id: "calendar",
+    label: "Kalendarz",
+    icon: CalendarDays,
+    to: "/kalendarz",
+  },
+  {
+    id: "nutrition",
+    label: APP_MODULE_BY_ID.nutrition.label,
+    icon: APP_MODULE_BY_ID.nutrition.icon,
+    to: APP_MODULE_BY_ID.nutrition.to,
+  },
+] as const;
+
+function isMobileCorePath(pathname: string, to: string) {
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function MobilePrimaryNavItem({
+  item,
+}: {
+  item: (typeof MOBILE_CORE_NAV)[number];
+}) {
+  const location = useLocation();
+  const active = isMobileCorePath(location.pathname, item.to);
+  const Icon = item.icon;
+  const rememberedDestination = readModuleMemoryValue(
+    "mobile-navigation",
+    item.id,
+    (value): value is string => {
+      if (typeof value !== "string") return false;
+      try {
+        const parsed = new URL(value, window.location.origin);
+        return parsed.origin === window.location.origin && isMobileCorePath(parsed.pathname, item.to);
+      } catch {
+        return false;
+      }
+    },
+  );
+  const destination = active
+    ? `${location.pathname}${location.search}${location.hash}`
+    : rememberedDestination ?? item.to;
+
+  return (
+    <Link
+      to={destination}
+      viewTransition
+      title={item.label}
+      aria-current={active ? "page" : undefined}
+      data-mobile-destination={item.id}
+      className={`app-mobile-nav__item${active ? " is-active" : ""}`}
+      onClick={(event) => {
+        if (active) event.preventDefault();
+      }}
+      onPointerEnter={() => prefetchRoute(item.to)}
+      onFocus={() => prefetchRoute(item.to)}
+    >
+      <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
+      <span className="app-mobile-nav__label">{item.label}</span>
+    </Link>
+  );
+}
 
 const HELP_GUIDES = {
   today: {
@@ -456,7 +550,11 @@ function ProfileSummary({
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const mobileLayer = (location.state as MobileHistoryState | null)?.rootineMobileLayer ?? null;
+  const mobileMenuLayer = mobileLayer === "help" ? "more" : mobileLayer;
+  const hasMobileLayer = Boolean(mobileMenuLayer);
   const auth = useSupabaseAuth();
+  const reducedMotion = useEffectiveReducedMotion();
   const profileIdentity = getProfileIdentity(auth.user);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(getInitialSidebarState);
   const [isPrimarySidebarCompactViewport, setIsPrimarySidebarCompactViewport] = useState(getInitialPrimarySidebarCompactViewport);
@@ -479,6 +577,11 @@ export default function Layout() {
   const weatherAbortController = useRef<AbortController | null>(null);
   const mobileMoreButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLElement>(null);
+  const previousMobileLayerRef = useRef<MobileLayer | null>(mobileLayer);
+  const previousMobilePathRef = useRef(location.pathname);
+  const mobileMenuScrollRef = useRef(0);
+  const mobileMenuFocusIdRef = useRef<string | null>(null);
+  const reducedMotionRef = useRef(reducedMotion);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(maxWidthQuery("context"));
@@ -488,9 +591,23 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
+    reducedMotionRef.current = reducedMotion;
+  }, [reducedMotion]);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    const item = MOBILE_CORE_NAV.find((candidate) => isMobileCorePath(location.pathname, candidate.to));
+    if (!item) return;
+    writeModuleMemoryValue(
+      "mobile-navigation",
+      item.id,
+      `${location.pathname}${location.search}${location.hash}`,
+    );
+  }, [location.hash, location.pathname, location.search]);
 
   // Hover covers the deliberate switch; this covers the first one of the session.
   useEffect(() => prefetchModuleRoutesWhenIdle(), []);
@@ -555,12 +672,12 @@ export default function Layout() {
   }, [requestWeather]);
 
   useEffect(() => {
-    if (!openMenu?.startsWith("mobile")) return;
+    if (!mobileLayer || mobileLayer === "help") return;
 
     const handleMenuKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpenMenu(null);
-        window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
+        event.preventDefault();
+        navigate(-1);
         return;
       }
       if (event.key !== "Tab" || !mobileMenuRef.current) return;
@@ -583,34 +700,54 @@ export default function Layout() {
       }
     };
 
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Element
-        && !target.closest("[data-app-popover]")
-        && !target.closest("[data-app-menu-trigger]")
-      ) {
-        setOpenMenu(null);
-      }
-    };
-
     document.addEventListener("keydown", handleMenuKeyDown);
-    document.addEventListener("pointerdown", closeOnOutsideClick);
     return () => {
       document.removeEventListener("keydown", handleMenuKeyDown);
-      document.removeEventListener("pointerdown", closeOnOutsideClick);
     };
-  }, [openMenu]);
+  }, [mobileLayer, navigate]);
 
   useEffect(() => {
-    if (!openMenu?.startsWith("mobile")) return;
+    const previousLayer = previousMobileLayerRef.current;
+    const previousPath = previousMobilePathRef.current;
+    previousMobileLayerRef.current = mobileLayer;
+    previousMobilePathRef.current = location.pathname;
+
+    if (!mobileLayer) {
+      if (previousLayer && previousPath === location.pathname) {
+        const timeout = window.setTimeout(
+          () => mobileMoreButtonRef.current?.focus(),
+          overlayExitDuration(reducedMotionRef.current),
+        );
+        return () => window.clearTimeout(timeout);
+      }
+      return;
+    }
+
+    if (mobileLayer === "help") return;
     const frame = window.requestAnimationFrame(() => {
-      mobileMenuRef.current
-        ?.querySelector<HTMLElement>("[data-mobile-menu-focus]")
-        ?.focus();
+      const menu = mobileMenuRef.current;
+      if (!menu) return;
+      menu.scrollTop = mobileMenuScrollRef.current;
+      const remembered = mobileLayer === "more" && mobileMenuFocusIdRef.current
+        ? menu.querySelector<HTMLElement>(`[data-mobile-menu-id="${mobileMenuFocusIdRef.current}"]`)
+        : null;
+      (remembered ?? menu.querySelector<HTMLElement>("[data-mobile-menu-focus]"))?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [openMenu]);
+  }, [location.pathname, mobileLayer]);
+
+  useEffect(() => {
+    if (!hasMobileLayer) return;
+    const menu = mobileMenuRef.current;
+    const releaseScroll = lockDocumentScroll();
+
+    return () => {
+      const host = menu?.parentElement;
+      const duration = overlayExitDuration(reducedMotionRef.current);
+      if (menu && host) cloneOverlayForExit([menu], host, duration);
+      releaseScroll(duration);
+    };
+  }, [hasMobileLayer]);
 
   useEffect(() => {
     setOpenMenu(null);
@@ -655,13 +792,10 @@ export default function Layout() {
 
   const orderedNav = getOrderedModules(modulePreferences);
   const visibleNav = getVisibleModules(modulePreferences);
+  const mobileMoreModules = orderedNav.filter((item) => (
+    item.id !== "today" && item.id !== "tasks" && item.id !== "nutrition"
+  ));
   const enabledModuleCount = visibleNav.length;
-  const mobilePrimaryNav = [...visibleNav]
-    .sort((left, right) => (
-      (left.mobilePriority ?? Number.POSITIVE_INFINITY)
-      - (right.mobilePriority ?? Number.POSITIVE_INFINITY)
-    ))
-    .slice(0, 4);
   const currentModule = findModuleForPath(location.pathname);
   const contextualHelpId: HelpGuideId = location.pathname.startsWith("/kalendarz")
     ? "calendar"
@@ -674,7 +808,8 @@ export default function Layout() {
     .filter(([, guide]) => !normalizedHelpQuery || [guide.title, ...guide.steps]
       .some((value) => value.toLocaleLowerCase("pl-PL").includes(normalizedHelpQuery)));
   const moreIsActive = Boolean(
-    currentModule && !mobilePrimaryNav.some((item) => item.id === currentModule.id),
+    mobileLayer
+    || (currentModule && !MOBILE_CORE_NAV.some((item) => isMobileCorePath(location.pathname, item.to))),
   );
   const showCollapsedBrandControl = isSidebarCollapsed && !isPrimarySidebarCompactViewport;
   const timeLabel = TIME_FORMATTER.format(now);
@@ -688,11 +823,25 @@ export default function Layout() {
     : weather.status === "loading"
       ? "Pobieranie prognozy"
       : weather.message;
+  const openMobileLayer = (layer: MobileLayer) => {
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      state: {
+        ...(location.state && typeof location.state === "object" ? location.state : {}),
+        rootineMobileLayer: layer,
+      } satisfies MobileHistoryState,
+    });
+  };
   const closeMobileMenu = () => {
-    setOpenMenu(null);
-    window.requestAnimationFrame(() => mobileMoreButtonRef.current?.focus());
+    if (!mobileLayer) return;
+    navigate(mobileLayer === "more" ? -1 : -2);
   };
   const openHelpFromSettings = () => {
+    if (mobileLayer) {
+      setHelpGuideId(contextualHelpId);
+      setHelpQuery("");
+      openMobileLayer("help");
+      return;
+    }
     setOpenMenu(null);
     setHelpGuideId(contextualHelpId);
     setHelpQuery("");
@@ -761,6 +910,7 @@ export default function Layout() {
         id="primary-sidebar"
         className={`app-primary-sidebar app-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
         aria-label="Główna nawigacja"
+        inert={Boolean(mobileLayer) || undefined}
       >
         <div className="app-brand">
           {showCollapsedBrandControl ? (
@@ -925,13 +1075,16 @@ export default function Layout() {
         </div>
       </aside>
 
-      {helpOpen && (
+      {(helpOpen || mobileLayer === "help") && (
         <Modal
           title="Pomoc i szybkie przejście"
           description="Przejdź do obszaru bez szukania go w nawigacji albo sprawdź, jak bezpiecznie zarządzać lokalnymi danymi."
           size="md"
           bodyClassName="app-help-dialog"
-          onClose={() => setHelpOpen(false)}
+          onClose={() => {
+            if (mobileLayer === "help") navigate(-1);
+            else setHelpOpen(false);
+          }}
         >
           <section aria-labelledby="help-context-title">
             <div className="app-help-dialog__heading">
@@ -1041,37 +1194,44 @@ export default function Layout() {
           id="primary-workspace"
           className="main-content app-shell__content"
           tabIndex={-1}
+          inert={Boolean(mobileLayer) || undefined}
         >
           <Suspense fallback={<RouteLoadingState />}>
             <RouteTransition><Outlet /></RouteTransition>
           </Suspense>
         </div>
 
-        {openMenu?.startsWith("mobile") && (
+        {mobileMenuLayer && (
           <section
             ref={mobileMenuRef}
             id="mobile-more-menu"
             className="app-mobile-menu"
             data-app-popover
+            data-mobile-layer={mobileMenuLayer}
+            data-state="open"
             role="dialog"
             aria-modal="true"
             tabIndex={-1}
+            inert={mobileLayer === "help" || undefined}
+            onScroll={(event) => {
+              mobileMenuScrollRef.current = event.currentTarget.scrollTop;
+            }}
             aria-label={
-              openMenu === "mobileSettings"
+              mobileMenuLayer === "settings"
                 ? "Ustawienia aplikacji"
-                : openMenu === "mobileProfile"
+                : mobileMenuLayer === "profile"
                   ? "Profil użytkownika"
                   : "Wszystkie obszary aplikacji"
             }
           >
             <header className="app-mobile-menu__header">
-              {openMenu !== "mobileMore" ? (
+              {mobileMenuLayer !== "more" ? (
                 <button
                   type="button"
                   className="app-mobile-menu__icon-button"
                   data-mobile-menu-focus
                   aria-label="Wróć do wszystkich obszarów"
-                  onClick={() => setOpenMenu("mobileMore")}
+                  onClick={() => navigate(-1)}
                 >
                   <ArrowLeft size={16} aria-hidden="true" />
                 </button>
@@ -1080,18 +1240,18 @@ export default function Layout() {
               )}
               <span>
                 <strong>
-                  {openMenu === "mobileSettings"
+                  {mobileMenuLayer === "settings"
                     ? "Ustawienia"
-                    : openMenu === "mobileProfile"
+                    : mobileMenuLayer === "profile"
                       ? "Konto"
-                      : "Rootine"}
+                      : "Więcej"}
                 </strong>
                 <small>
-                    {openMenu === "mobileSettings"
+                    {mobileMenuLayer === "settings"
                       ? "Wygląd, nawigacja i prognoza"
-                      : openMenu === "mobileProfile"
+                      : mobileMenuLayer === "profile"
                         ? "Konto i preferencje"
-                        : "Wszystkie obszary"}
+                        : "Wszystkie obszary Rootine"}
                 </small>
               </span>
               <button
@@ -1104,10 +1264,10 @@ export default function Layout() {
               </button>
             </header>
 
-            {openMenu === "mobileMore" && (
+            {mobileMenuLayer === "more" && (
               <>
                 <nav className="app-mobile-menu__modules" aria-label="Wszystkie obszary">
-                  {orderedNav.map((item, index) => {
+                  {mobileMoreModules.map((item, index) => {
                     const Icon = item.icon;
                     const hiddenByPreference = modulePreferences.disabled.includes(item.id);
                     return (
@@ -1116,11 +1276,15 @@ export default function Layout() {
                         to={item.to}
                         aria-current={isModulePath(item, location.pathname) ? "page" : undefined}
                         data-mobile-menu-focus={index === 0 ? "" : undefined}
+                        data-mobile-menu-id={item.id}
                         className={[
                           "app-mobile-menu__module",
                           isModulePath(item, location.pathname) ? "is-active" : "",
                           hiddenByPreference ? "is-preference-hidden" : "",
                         ].filter(Boolean).join(" ")}
+                        onClick={() => {
+                          mobileMenuFocusIdRef.current = item.id;
+                        }}
                         onPointerEnter={() => prefetchRoute(item.to)}
                       >
                         <Icon size={16} strokeWidth={1.7} aria-hidden="true" />
@@ -1133,21 +1297,42 @@ export default function Layout() {
                   })}
                 </nav>
                 <div className="app-mobile-menu__actions">
-                  <button type="button" onClick={() => { closeMobileMenu(); setHelpOpen(true); }}>
+                  <button
+                    type="button"
+                    data-mobile-menu-id="help"
+                    onClick={() => {
+                      mobileMenuFocusIdRef.current = "help";
+                      openMobileLayer("help");
+                    }}
+                  >
                     <CircleHelp size={16} strokeWidth={1.7} aria-hidden="true" />
                     <span>
                       <strong>Pomoc i skróty</strong>
                       <small>Szybkie przejście i bezpieczeństwo danych</small>
                     </span>
                   </button>
-                  <button type="button" onClick={() => setOpenMenu("mobileSettings")}>
+                  <button
+                    type="button"
+                    data-mobile-menu-id="settings"
+                    onClick={() => {
+                      mobileMenuFocusIdRef.current = "settings";
+                      openMobileLayer("settings");
+                    }}
+                  >
                     <Settings size={16} strokeWidth={1.7} aria-hidden="true" />
                     <span>
                       <strong>Ustawienia</strong>
                       <small>Motyw, kolejność, widoczność i pogoda</small>
                     </span>
                   </button>
-                  <button type="button" onClick={() => setOpenMenu("mobileProfile")}>
+                  <button
+                    type="button"
+                    data-mobile-menu-id="profile"
+                    onClick={() => {
+                      mobileMenuFocusIdRef.current = "profile";
+                      openMobileLayer("profile");
+                    }}
+                  >
                     <UserRound size={16} strokeWidth={1.7} aria-hidden="true" />
                     <span>
                       <strong>Profil lokalny</strong>
@@ -1158,7 +1343,7 @@ export default function Layout() {
               </>
             )}
 
-            {openMenu === "mobileSettings" && (
+            {mobileMenuLayer === "settings" && (
               <div className="app-mobile-menu__settings">
                 <SettingsAccordions
                   idPrefix="mobile-settings"
@@ -1184,7 +1369,7 @@ export default function Layout() {
               </div>
             )}
 
-            {openMenu === "mobileProfile" && (
+            {mobileMenuLayer === "profile" && (
               <div className="app-mobile-menu__profile">
                 <ProfileSummary />
               </div>
@@ -1192,17 +1377,26 @@ export default function Layout() {
           </section>
         )}
 
-        <nav className="app-mobile-nav" aria-label="Główna nawigacja mobilna">
-          {mobilePrimaryNav.map((item) => <PrimaryNavItem key={item.id} item={item} mobile />)}
+        <nav
+          className="app-mobile-nav"
+          aria-label="Główna nawigacja mobilna"
+          inert={Boolean(mobileLayer) || undefined}
+        >
+          {MOBILE_CORE_NAV.map((item) => <MobilePrimaryNavItem key={item.id} item={item} />)}
           <button
             ref={mobileMoreButtonRef}
             type="button"
-            className={`app-mobile-nav__item${moreIsActive || openMenu?.startsWith("mobile") ? " is-active" : ""}`}
+            className={`app-mobile-nav__item${moreIsActive ? " is-active" : ""}`}
             data-app-menu-trigger
             aria-haspopup="dialog"
-            aria-expanded={Boolean(openMenu?.startsWith("mobile"))}
+            aria-expanded={Boolean(mobileLayer)}
+            aria-current={moreIsActive ? "page" : undefined}
             aria-controls="mobile-more-menu"
-            onClick={() => setOpenMenu((current) => current?.startsWith("mobile") ? null : "mobileMore")}
+            onClick={() => {
+              mobileMenuFocusIdRef.current = null;
+              if (mobileLayer) navigate(-1);
+              else openMobileLayer("more");
+            }}
           >
             <MoreHorizontal size={18} strokeWidth={1.7} aria-hidden="true" />
             <span className="app-mobile-nav__label">Więcej</span>

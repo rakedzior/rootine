@@ -162,7 +162,9 @@ async function exercisePriorityIconGrammar(page: Page, dialog: Locator) {
   const listboxId = await trigger.getAttribute("aria-controls");
   expect(listboxId).toBeTruthy();
   const options = page.locator(`#${listboxId}`).getByRole("option");
-  expect(await options.count()).toBeGreaterThan(1);
+  // The listbox is mounted in a portal after the key handler returns.  Wait for
+  // its second option rather than sampling the portal during that transition.
+  await expect(options.nth(1)).toBeVisible();
   await expect(options.locator(".ui-priority-icon")).toHaveCount(await options.count());
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();

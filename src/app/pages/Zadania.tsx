@@ -103,6 +103,11 @@ import {
 } from "./tasks/TaskSecondaryViews";
 import type { HabitMetaDraft } from "./tasks/TaskSecondaryViews";
 
+type TaskDetailHistoryState = {
+  rootineOverlay?: "task-detail" | "habit-detail";
+  rootineHabitId?: number;
+};
+
 export default function Zadania() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -164,7 +169,40 @@ export default function Zadania() {
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
+  const openTaskSelection = useCallback((selectionId: number) => {
+    taskDeepLinkPreferencesRef.current = null;
+    deepLinkSelectionRef.current = false;
+    setSelectedId(selectionId);
+    setSelectedHabitId(null);
+    setTaskLinkNotice(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("zadanie", String(selectionId));
+    navigate(`${url.pathname}${url.search}${url.hash}`, {
+      state: {
+        ...(location.state && typeof location.state === "object" ? location.state : {}),
+        rootineOverlay: "task-detail",
+      } satisfies TaskDetailHistoryState,
+    });
+  }, [location.state, navigate]);
+
+  const openHabitSelection = useCallback((habitId: number) => {
+    setSelectedId(null);
+    setSelectedHabitId(habitId);
+    setTaskLinkNotice(null);
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      state: {
+        ...(location.state && typeof location.state === "object" ? location.state : {}),
+        rootineOverlay: "habit-detail",
+        rootineHabitId: habitId,
+      } satisfies TaskDetailHistoryState,
+    });
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
+
   const dismissTaskSelection = useCallback(() => {
+    if ((location.state as TaskDetailHistoryState | null)?.rootineOverlay === "task-detail") {
+      navigate(-1);
+      return;
+    }
     const preferences = taskDeepLinkPreferencesRef.current;
     if (!preferences) {
       setTaskSelection(null);
@@ -180,7 +218,30 @@ export default function Zadania() {
     setTagFilter(preferences.tagFilter);
     setTasksViewMode(preferences.viewMode);
     navigate(buildTaskPreferenceRestoreRoute(window.location.href, preferences), { replace: true });
-  }, [navigate, setTaskSelection]);
+  }, [location.state, navigate, setTaskSelection]);
+
+  const dismissHabitSelection = useCallback(() => {
+    if ((location.state as TaskDetailHistoryState | null)?.rootineOverlay === "habit-detail") {
+      navigate(-1);
+      return;
+    }
+    setSelectedHabitId(null);
+  }, [location.state, navigate]);
+
+  useEffect(() => {
+    const overlayState = location.state as TaskDetailHistoryState | null;
+    if (overlayState?.rootineOverlay !== "habit-detail") {
+      setSelectedHabitId(null);
+      return;
+    }
+    const habitId = overlayState.rootineHabitId;
+    const validHabitId = typeof habitId === "number"
+      && Number.isSafeInteger(habitId)
+      && habits.some((habit) => habit.id === habitId);
+    setSelectedHabitId(validHabitId
+      ? habitId
+      : null);
+  }, [habits, location.state]);
 
   useEffect(() => {
     const nextWorkspace = { ...workspaceRef.current, tasks, habits, lists: listy, tags: tagi };
@@ -210,11 +271,16 @@ export default function Zadania() {
   }, []);
 
   useEffect(() => {
-    const url = new URL(window.location.href);
+    if (tasksViewMode === "calendar" || location.pathname !== "/zadania") return;
+    const url = new URL(`${location.pathname}${location.search}${location.hash}`, window.location.origin);
     if (taskView === "dzis") url.searchParams.delete("widok");
     else url.searchParams.set("widok", taskView);
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [taskView]);
+    const nextHref = `${url.pathname}${url.search}${url.hash}`;
+    const currentHref = `${location.pathname}${location.search}${location.hash}`;
+    if (nextHref !== currentHref) {
+      navigate(nextHref, { replace: true, state: location.state });
+    }
+  }, [location.hash, location.pathname, location.search, location.state, navigate, taskView, tasksViewMode]);
 
   const taskRoute = (view: string, base = "/zadania") => (
     view === "dzis" ? base : `${base}?widok=${encodeURIComponent(view)}`
@@ -661,7 +727,10 @@ export default function Zadania() {
       });
     }
     setTasks((current) => trashTask(workspaceWithTasks(current), id).tasks);
-    setTaskSelection(null);
+    // A deletion from the detail menu must consume that overlay history entry. Leaving its
+    // `zadanie` query and `rootineOverlay` state behind made the next Trash detail's Back land
+    // on a still-open, now invisible predecessor instead of returning to the archive list.
+    dismissTaskSelection();
   };
   const restoreTaskFromTrash = (id: number) => {
     setTasks((current) => restoreTask(workspaceWithTasks(current), id).tasks);
@@ -861,7 +930,8 @@ export default function Zadania() {
       onUpdate={updateTask}
       onSelect={(id) => {
         const nextId = selectedId === id ? null : id;
-        setTaskSelection(nextId, nextId !== null && Number.isInteger(nextId) ? nextId : null);
+        if (nextId !== null && Number.isInteger(nextId)) openTaskSelection(nextId);
+        else dismissTaskSelection();
       }}
     />
   );
@@ -1238,7 +1308,10 @@ export default function Zadania() {
             habits={habits}
             onToggleHabit={toggleHabit}
             selectedHabitId={selectedHabitId}
-            onSelectHabit={(id) => { setSelectedHabitId((current) => current === id ? null : id); setTaskSelection(null); }}
+            onSelectHabit={(id) => {
+              if (selectedHabitId === id) dismissHabitSelection();
+              else openHabitSelection(id);
+            }}
             onAddHabit={addHabit}
             quickCaptureTitle={habitQuickCapture.title}
             quickCaptureRevision={habitQuickCapture.revision}
@@ -1549,7 +1622,8 @@ export default function Zadania() {
                       onUpdate={updateTask}
                       onSelect={(id) => {
                         const nextId = selectedId === id ? null : id;
-                        setTaskSelection(nextId, nextId !== null && Number.isInteger(nextId) ? nextId : null);
+                        if (nextId !== null && Number.isInteger(nextId)) openTaskSelection(nextId);
+                        else dismissTaskSelection();
                       }} />
                   </div>
                   <Button
@@ -1645,7 +1719,7 @@ export default function Zadania() {
               ? "Szczegóły wystąpienia"
               : "Szczegóły zadania"
             : "Szczegóły nawyku"}
-          onDismiss={() => selectedTask ? dismissTaskSelection() : setSelectedHabitId(null)}
+          onDismiss={() => selectedTask ? dismissTaskSelection() : dismissHabitSelection()}
         >
         {selectedTask ? (
           <TaskDetail
@@ -1669,7 +1743,7 @@ export default function Zadania() {
         ) : selectedHabit ? (
           <HabitDetail
             habit={selectedHabit}
-            onClose={() => setSelectedHabitId(null)}
+            onClose={dismissHabitSelection}
             onUpdate={updateHabit}
             onSetCompletion={setHabitCompletion}
             onDelete={deleteHabit}

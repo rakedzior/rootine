@@ -870,7 +870,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .goal-detail-page {
     padding-bottom: var(--space-xl);
   }
@@ -1289,7 +1289,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .goal-card-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2764,7 +2764,7 @@
   min-width: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .goals-content {
     padding: var(--space-lg);
   }

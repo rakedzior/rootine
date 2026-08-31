@@ -198,7 +198,7 @@ export default function Odzywanie() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const selectNutritionDate = useNutritionDateQuery(setSelectedDate);
+  const selectNutritionDate = useNutritionDateQuery(selectedDate, setSelectedDate);
 
   const view: NutritionSidebarItem = location.pathname === VIEW_PATHS.meals
     ? "meals"

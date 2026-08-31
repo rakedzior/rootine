@@ -573,7 +573,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .today-day-balance {
     min-height: 0;
     grid-template-areas:
@@ -1503,7 +1503,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .today-module .ui-page-shell {
     padding-top: var(--space-xl);
   }
@@ -2031,7 +2031,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
   .today-day-balance {
     grid-template-areas:
       "progress"

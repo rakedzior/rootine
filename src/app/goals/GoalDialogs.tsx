@@ -121,7 +121,7 @@ function DialogShell({
 }: {
   title: string;
   subtitle?: string;
-  onClose: () => void;
+  onClose: (reason?: "navigation") => void;
   children: ReactNode;
   footer?: ReactNode;
   returnFocusRef?: RefObject<HTMLElement | null>;

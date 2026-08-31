@@ -298,6 +298,9 @@ function MoreMenu({ id, anchorEl, onAction, onClose, seriesScoped = false }: {
 }) {
   const triggerRef = useRef<HTMLElement | null>(anchorEl);
   triggerRef.current = anchorEl;
+  const isMobileDrawer = typeof window !== "undefined" && window.matchMedia(
+    "(max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape)",
+  ).matches;
   return (
     <AnchoredPopover
       open
@@ -305,6 +308,10 @@ function MoreMenu({ id, anchorEl, onAction, onClose, seriesScoped = false }: {
       placement="top"
       align="end"
       layer="systemOverlay"
+      // On a mobile drawer the menu must share the panel's inert/focus boundary. A docked
+      // desktop panel deliberately keeps its popover in the global overlay layer so it cannot
+      // be clipped by that panel's scroll surface.
+      portalRoot={isMobileDrawer ? anchorEl.closest(".ui-detail-panel") : undefined}
       minWidth={240}
       onDismiss={onClose}
     >

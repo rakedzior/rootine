@@ -15,7 +15,15 @@ import {
 import { maxWidthQuery } from "../breakpoints";
 import { findModuleForPath } from "../../moduleRegistry";
 import { useModuleMemory } from "../../experience/moduleMemory";
+import { useEffectiveReducedMotion } from "../../experience/useReducedMotion";
 import { useSubtabTransition } from "../../experience/transitions";
+import {
+  cloneOverlayForExit,
+  inertOutsideElements,
+  lockDocumentScroll,
+  overlayExitDuration,
+  resolveStableFocusTarget,
+} from "../overlayLifecycle";
 import { PageShell } from "./PageShell";
 import type { PageWidth } from "./PageShell";
 
@@ -307,16 +315,40 @@ export const DetailPanel = forwardRef<HTMLElement, DetailPanelProps>(function De
   },
   forwardedRef,
 ) {
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const onDismissRef = useRef(onDismiss);
   const isResponsiveDrawer = useMediaQuery(maxWidthQuery("detail"));
   const managedDrawer = isResponsiveDrawer && Boolean(onDismiss);
+  const reducedMotion = useEffectiveReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
 
   useImperativeHandle(forwardedRef, () => panelRef.current as HTMLElement);
 
   useEffect(() => {
     onDismissRef.current = onDismiss;
   }, [onDismiss]);
+
+  useEffect(() => {
+    reducedMotionRef.current = reducedMotion;
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    if (!managedDrawer) return;
+    const panel = panelRef.current;
+    const backdrop = backdropRef.current;
+    const host = panel?.parentElement;
+    if (!panel || !backdrop || !host) return;
+    const releaseScroll = lockDocumentScroll();
+    const restoreBackground = inertOutsideElements([backdrop, panel]);
+
+    return () => {
+      const duration = overlayExitDuration(reducedMotionRef.current);
+      cloneOverlayForExit([backdrop, panel], host, duration);
+      window.setTimeout(restoreBackground, duration);
+      releaseScroll(duration);
+    };
+  }, [managedDrawer]);
 
   useEffect(() => {
     if (!managedDrawer) return;
@@ -386,28 +418,37 @@ export const DetailPanel = forwardRef<HTMLElement, DetailPanelProps>(function De
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("focusin", handleFocusIn);
-      if (previousFocus?.isConnected && !previousFocus.matches(":disabled")) previousFocus.focus();
+      const delay = overlayExitDuration(reducedMotionRef.current);
+      window.setTimeout(() => {
+        const stableTarget = resolveStableFocusTarget(previousFocus);
+        if (stableTarget && !stableTarget.matches(":disabled")) stableTarget.focus();
+      }, delay + 16);
     };
   }, [managedDrawer]);
+
+  const PanelElement = managedDrawer ? "div" : "aside";
 
   return (
     <>
       {managedDrawer && (
         <div
+          ref={backdropRef}
           className="ui-detail-panel-backdrop"
+          data-state="open"
           aria-hidden="true"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) onDismissRef.current?.();
           }}
         />
       )}
-      <aside
+      <PanelElement
         ref={panelRef}
         role={managedDrawer ? "dialog" : role}
         aria-modal={managedDrawer ? "true" : undefined}
         aria-label={ariaLabel ?? label}
         tabIndex={managedDrawer ? -1 : tabIndex}
         data-drawer-managed={managedDrawer ? "true" : undefined}
+        data-state={managedDrawer ? "open" : undefined}
         className={cx("ui-detail-panel", className)}
         {...props}
       />

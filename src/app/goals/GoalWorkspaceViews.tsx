@@ -466,6 +466,7 @@ export function GoalCard({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls={actionsMenuId}
+              data-focus-return-key={`goal-actions-${goal.id}`}
               className="goal-card-more__button"
             >
               <Ellipsis size={16} strokeWidth={1.8} aria-hidden="true" />

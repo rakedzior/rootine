@@ -44,7 +44,10 @@ describe("Praca persistence lifecycle", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
     cleanup();
     vi.useRealTimers();
     window.localStorage.clear();
@@ -170,6 +173,9 @@ describe("Praca persistence lifecycle", () => {
     expect(screen.getByDisplayValue("Firma w szkicu")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Kontynuuj edycję"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
     expect(screen.queryByText("Odrzucić niezapisane zmiany?")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Firma w szkicu")).toBeInTheDocument();
 
@@ -206,6 +212,9 @@ describe("Praca persistence lifecycle", () => {
     fireEvent.submit(editorForm!);
 
     expect(window.sessionStorage.getItem(draftKey)).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
     expect(screen.queryByDisplayValue("Odzyskana firma")).not.toBeInTheDocument();
 
     await act(async () => {

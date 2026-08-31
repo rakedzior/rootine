@@ -16,7 +16,7 @@ export interface DraftProtectionOptions<T> {
   isDirty: boolean;
   draft: T;
   storageKey: string;
-  onDiscard: () => void;
+  onDiscard: (reason?: "navigation") => void;
 }
 
 /**
@@ -90,7 +90,7 @@ export function useDraftProtection<T>({
     clearDraft();
     setCloseRequested(false);
     const blockedNavigation = blocker.state === "blocked";
-    onDiscardRef.current();
+    onDiscardRef.current(blockedNavigation ? "navigation" : undefined);
     if (blockedNavigation) blocker.proceed();
   }, [blocker, clearDraft]);
 
