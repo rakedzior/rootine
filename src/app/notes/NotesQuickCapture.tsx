@@ -50,6 +50,7 @@ export function NotesQuickCapture({
           disabled={!value.trim()}
         >
           <Plus size={14} aria-hidden="true" />
+          <span>Dodaj</span>
         </button>
       )}
       editor={(

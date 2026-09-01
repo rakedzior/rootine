@@ -1052,6 +1052,7 @@ export default function Praca() {
            toggleTaskDetails(task.id);
          }}
          data-drag-over={dragOverTaskId === task.id ? "true" : undefined}
+         data-task-id={task.id}
         rail={!compact ? (
           <DatePicker
             value={task.dueDate}
@@ -1716,7 +1717,7 @@ export default function Praca() {
             <Button variant="ghost" size="sm" iconOnly aria-label="Usuń projekt" title="Usuń projekt" onClick={() => setDeleteState({ kind: "project", id: selectedProject.id, name: selectedProject.name })}><Trash2 size={13} /></Button>
           </>}
           <div className="work-add-menu">
-            <MenuTrigger ref={addTriggerRef} open={addMenuOpen} menuId="work-add-menu" className="ui-button ui-button--primary" onClick={() => setAddMenuOpen((current) => !current)}><Plus size={13} /> Dodaj</MenuTrigger>
+            <MenuTrigger ref={addTriggerRef} open={addMenuOpen} menuId="work-add-menu" className="ui-button ui-button--primary" onClick={() => setAddMenuOpen((current) => !current)}><Plus size={13} /> Dodaj zadanie</MenuTrigger>
             {addMenuOpen && (
               <Menu id="work-add-menu" className="work-add-menu__panel" triggerRef={addTriggerRef} onDismiss={() => setAddMenuOpen(false)}>
                  <MenuItem leadingIcon={<Building2 size={13} />} onClick={() => { setAddMenuOpen(false); openCompanyEditor(); }}>Dodaj firmę</MenuItem>

@@ -88,8 +88,8 @@ test("nutrition ledger keeps one-row products through every responsive stage @de
   const viewportChecks = [
     { width: 1440, metricsVisible: true, summaryAtRight: true, maxRowHeight: 62 },
     { width: 1366, metricsVisible: true, summaryAtRight: false, maxRowHeight: 62 },
-    { width: 1024, metricsVisible: true, summaryAtRight: false, maxRowHeight: 62 },
-    { width: 760, metricsVisible: true, summaryAtRight: false, maxRowHeight: 62 },
+    { width: 1024, metricsVisible: false, summaryAtRight: false, maxRowHeight: 62 },
+    { width: 760, metricsVisible: false, summaryAtRight: false, maxRowHeight: 62 },
     { width: 600, metricsVisible: false, summaryAtRight: false, maxRowHeight: 52 },
     { width: 390, metricsVisible: false, summaryAtRight: false, maxRowHeight: 52 },
     { width: 320, metricsVisible: false, summaryAtRight: false, maxRowHeight: 52 },

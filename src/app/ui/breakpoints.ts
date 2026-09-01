@@ -25,6 +25,7 @@ export const BREAKPOINTS = {
 export const BREAKPOINT_EXCEPTIONS = {
   settings: 560,
   commandCenter: 600,
+  nutritionLandscape: 900,
   densePlanner: 1100,
   nutrition: 1120,
   work: 1200,

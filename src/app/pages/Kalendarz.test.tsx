@@ -72,6 +72,7 @@ vi.mock("../data/taskWorkspace", async (importOriginal) => {
   return {
     ...actual,
     loadTaskWorkspace: () => fixtures.taskWorkspace,
+    loadTaskWorkspaceResult: () => ({ status: "ok" as const, workspace: fixtures.taskWorkspace }),
     saveTaskWorkspace: () => true,
   };
 });

@@ -26,6 +26,14 @@
   padding-inline: 0;
 }
 
+/* A task header describes the current working view.  Unlike a compact utility
+ * label it must remain legible when the list measure is deliberately capped. */
+.task-module-main .ui-content-header__description {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 /* Calendar shares the task-list header axis; only the calendar grid stays fluid below it. */
 .calendar-module-main .ui-content-header {
   padding-inline: var(--task-workspace-inline-padding, var(--space-3xl));
@@ -271,6 +279,42 @@
   gap: var(--space-md);
 }
 
+.task-mobile-filters {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.task-mobile-filters > label,
+.task-mobile-filters strong {
+  color: var(--color-text-primary);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+}
+
+.task-mobile-filters input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+  font: inherit;
+  padding-inline: var(--space-md);
+}
+
+.task-mobile-filters [role="group"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.task-mobile-filters-trigger {
+  /* 48px is the tokenised comfortable target: it preserves the mobile 44px
+     minimum without introducing an off-scale control height at tablet widths. */
+  min-height: var(--control-height-lg);
+}
+
 .task-detail-panel {
   width: 408px;
   min-width: 408px;
@@ -303,6 +347,17 @@
   .task-row__priority {
     display: none;
   }
+
+  /* The docked detail reduces the usable list column without changing the
+     desktop viewport.  Let the full toolbar form rows inside that column
+     instead of leaving a few pixels of its controls outside the header. */
+  .task-module-main .task-toolbar-actions {
+    width: 100%;
+    max-width: 100%;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
@@ -316,16 +371,10 @@
     flex-wrap: wrap;
   }
 
-  .task-priority-filters {
-    width: 100%;
-    flex: 1 1 100%;
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
+  .task-priority-filters { display: none; }
 
   .task-toolbar-actions {
-    width: 100%;
+    width: auto;
     min-width: 0;
     flex-wrap: wrap;
     justify-content: space-between;
@@ -336,10 +385,6 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
-  }
-
-  .task-priority-filters::-webkit-scrollbar {
-    display: none;
   }
 
   .task-content {
@@ -1520,6 +1565,18 @@ input.task-entry-input:focus-visible {
   border-color: var(--color-border-strong);
   border-radius: var(--radius-lg);
   background: var(--color-surface-1);
+}
+
+.task-sched__sheet {
+  padding: 0 !important;
+}
+
+.task-sched__sheet-content {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .task-sched--v2 .task-schedule-tabs {

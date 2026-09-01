@@ -11,7 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   CalendarDays,
   ChartNoAxesCombined,
@@ -112,7 +112,39 @@ type TodayQueueItem = {
   id: string;
   time: string;
   title: string;
+  to: string;
+  recency: number;
+  isRecentTodayTask?: boolean;
 };
+
+const shortLandscapeQuery = "(max-width: 900px) and (max-height: 480px) and (orientation: landscape)";
+
+function useShortLandscape() {
+  const [isShortLandscape, setIsShortLandscape] = useState(() => (
+    typeof window !== "undefined" && window.matchMedia(shortLandscapeQuery).matches
+  ));
+
+  useEffect(() => {
+    const media = window.matchMedia(shortLandscapeQuery);
+    const update = () => setIsShortLandscape(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return isShortLandscape;
+}
+
+function readRecentTodayTask(): WorkspaceTask | null {
+  try {
+    const raw = window.localStorage.getItem("rootine.today-recent-task.v1");
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<WorkspaceTask>;
+    return typeof value.id === "number" && typeof value.text === "string" ? value as WorkspaceTask : null;
+  } catch {
+    return null;
+  }
+}
 
 function TodayOverdueDonut({ value }: { value: number }) {
   return (
@@ -322,11 +354,14 @@ function ModuleSummary({
 }
 
 export default function Dzisiaj() {
+  const navigate = useNavigate();
   const goalsStore = useGoalsStore();
   const activeAreaId = useActiveAreaId();
+  const isShortLandscape = useShortLandscape();
   const [today, setToday] = useState(() => new Date());
   const todayKey = useMemo(() => toCalendarDateKey(today), [today]);
   const [taskWorkspace, setTaskWorkspace] = useState(createEmptyTaskWorkspace);
+  const [recentTodayTask, setRecentTodayTask] = useState<WorkspaceTask | null>(readRecentTodayTask);
   const [workWorkspace, setWorkWorkspace] = useState(createEmptyWorkWorkspace);
   const [affairsWorkspace, setAffairsWorkspace] = useState(createEmptyAffairsWorkspace);
   const [sportPlanner, setSportPlanner] = useState(createEmptySportPlannerState);
@@ -340,6 +375,7 @@ export default function Dzisiaj() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setTaskWorkspace(loadTaskWorkspace());
+      setRecentTodayTask(readRecentTodayTask());
       setWorkWorkspace(loadWorkWorkspace());
       setAffairsWorkspace(loadAffairsWorkspace());
       setSportPlanner(loadSportPlannerState());
@@ -358,6 +394,7 @@ export default function Dzisiaj() {
   useEffect(() => {
     const unsubscribeTasks = subscribeToLocalWorkspace(TASK_STORAGE_KEY, () => {
       setTaskWorkspace(loadTaskWorkspace());
+      setRecentTodayTask(readRecentTodayTask());
     });
     const unsubscribeWork = subscribeToLocalWorkspace(WORK_STORAGE_KEY, () => {
       setWorkWorkspace(loadWorkWorkspace());
@@ -454,14 +491,17 @@ export default function Dzisiaj() {
   const workState = moduleState(workTasksForToday.length, todayWorkTasks.length);
 
   const nextScheduledItems = useMemo<TodayQueueItem[]>(() => {
-    const personalItems = todayTasks
-      .filter((task) => !task.done && Boolean(task.time))
+    const personalItems = [...taskWorkspace.tasks, ...(recentTodayTask && !taskWorkspace.tasks.some((task) => task.id === recentTodayTask.id) ? [recentTodayTask] : [])]
+      .filter((task) => !task.done && task.source?.kind !== "work")
       .map((task) => ({
         id: `task-${task.id}`,
-        time: task.time!,
+        time: task.time ?? "Cały dzień",
         title: task.text,
+        to: `/zadania?widok=dzis&zadanie=${task.id}`,
+        recency: Number(task.id) || 0,
+        isRecentTodayTask: task.id === recentTodayTask?.id,
       }));
-    const workItems = workTasksForToday
+    const workItems: TodayQueueItem[] = workTasksForToday
       .filter((task) => (
         !task.completed
         && task.dueDate === todayKey
@@ -471,12 +511,24 @@ export default function Dzisiaj() {
         id: `work-${task.id}`,
         time: task.linkedTask!.time!,
         title: task.title,
+        to: "/praca",
+        recency: 0,
       }));
 
     return [...personalItems, ...workItems]
-      .sort((left, right) => left.time.localeCompare(right.time))
-      .slice(0, 3);
-  }, [todayKey, todayTasks, workTasksForToday]);
+      .sort((left, right) => {
+        // The record just made from the one primary Today CTA must remain a
+        // concrete, touch-sized opener on the return journey, even when the
+        // pre-existing timed queue already fills all visible slots.
+        if (left.isRecentTodayTask !== right.isRecentTodayTask) return left.isRecentTodayTask ? -1 : 1;
+        const leftTimed = /^\d{2}:\d{2}$/.test(left.time);
+        const rightTimed = /^\d{2}:\d{2}$/.test(right.time);
+        if (leftTimed && rightTimed) return left.time.localeCompare(right.time);
+        if (leftTimed !== rightTimed) return leftTimed ? -1 : 1;
+        return right.recency - left.recency;
+      })
+      .slice(0, 6);
+  }, [recentTodayTask, taskWorkspace.tasks, todayKey, workTasksForToday]);
 
   const dailyRegularGoals = useMemo(
     () => goalsStore.goals.filter((goal) => isDailyRegularGoal(goal, todayKey)),
@@ -809,7 +861,7 @@ export default function Dzisiaj() {
 
   return (
       <ModuleShell
-        className="today-module"
+        className={`today-module${isShortLandscape ? " is-short-landscape" : ""}`}
         pageWidth="standard"
       >
       <ModuleMain>
@@ -822,13 +874,13 @@ export default function Dzisiaj() {
           actions={(
             <div className="today-add-menu">
               <Button
+                className="today-primary-action"
                 variant="primary"
                 leadingIcon={<Plus size={13} aria-hidden="true" />}
-                aria-label="Dodaj do dzisiejszego planu"
-                aria-haspopup="dialog"
-                onClick={() => window.dispatchEvent(new Event("rootine:open-command-center"))}
+                aria-label="Dodaj zadanie do dzisiejszego planu"
+                onClick={() => navigate("/zadania?widok=dzis&akcja=nowe-zadanie")}
               >
-                <span className="header-action-label">Dodaj</span>
+                <span className="header-action-label">Dodaj zadanie</span>
               </Button>
             </div>
           )}
@@ -837,12 +889,12 @@ export default function Dzisiaj() {
           <div className="today-content" data-active-area={activeAreaId ?? undefined}>
             <section
               className={`today-day-balance ${dayComplete ? "is-complete" : ""}`}
-              aria-labelledby="today-day-balance-title"
+              aria-label="Bilans dnia"
             >
               <div className="today-day-balance__progress-panel">
                 <div className="today-day-balance__panel-header">
                   <span className="today-day-balance__panel-icon" aria-hidden="true"><ChartNoAxesCombined size={21} /></span>
-                  <h2 id="today-day-balance-title">Postęp dnia</h2>
+                  <h2 id="today-now-title">Teraz</h2>
                 </div>
                 <div className="today-day-balance__completed-value">
                   <strong>{completedDailyItems}</strong>
@@ -879,8 +931,10 @@ export default function Dzisiaj() {
                   <ol className="today-day-balance__queue-list">
                     {nextScheduledItems.map((item) => (
                       <li key={item.id}>
-                        <time dateTime={`T${item.time}`}>{item.time}</time>
-                        <strong>{item.title}</strong>
+                        <Link to={item.to} aria-label={`Otwórz zadanie: ${item.title}`}>
+                          <time dateTime={/^\d{2}:\d{2}$/.test(item.time) ? `T${item.time}` : undefined}>{item.time}</time>
+                          <span>{item.title}</span>
+                        </Link>
                       </li>
                     ))}
                   </ol>
@@ -919,6 +973,11 @@ export default function Dzisiaj() {
                   </div>
                 </div>
               </aside>
+
+              <div className="today-day-balance__balance" aria-label="Bilans dnia">
+                <strong>Bilans</strong>
+                <span>{completedDailyItems} z {totalDailyItems} elementów ukończonych · {counted(remainingDailyItems, "element", "elementy", "elementów")} pozostało</span>
+              </div>
             </section>
 
             <section className="today-module-register" aria-labelledby="today-module-register-title">

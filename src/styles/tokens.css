@@ -280,8 +280,8 @@
   --color-border: rgba(70, 55, 40, 0.12);
   --color-border-strong: rgba(70, 55, 40, 0.22);
   --color-text-primary: #302c27;
-  --color-text-secondary: #756e64;
-  --color-text-tertiary: #6f685f;
+  --color-text-secondary: #685f55;
+  --color-text-tertiary: #655d54;
   --color-sidebar-text: #665f56;
   --color-primary: #4f63a6;
   --color-primary-hover: #40538f;
@@ -299,7 +299,7 @@
   --color-danger-text: #a63e3e;
   --color-progress-track: rgba(48, 44, 39, 0.1);
   --color-disabled-bg: #efe8dd;
-  --color-disabled-text: #938a7d;
+  --color-disabled-text: #6c645b;
   --color-neutral-subtle: rgba(70, 55, 40, 0.06);
   --color-backdrop: rgba(45, 37, 27, 0.46);
   --color-category-sky: #4f758b;
@@ -429,6 +429,7 @@
   /* Registered feature-specific thresholds; media queries cannot consume custom properties. */
   --bp-settings: 560px;
   --bp-command-center: 600px;
+  --bp-nutrition-landscape: 900px;
   --bp-dense-planner: 1100px;
   --bp-nutrition: 1120px;
   --bp-work: 1200px;

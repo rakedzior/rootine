@@ -267,14 +267,15 @@ test.describe("cross-module creation primitives", { tag: "@shared" }, () => {
     expect(new Set(composerRadii).size, "both quick composers use one radius token").toBe(1);
   });
 
-  test("the task scheduler composes canonical DatePicker and TimePicker primitives", async ({ rootinePage: page }) => {
+  test("the task scheduler composes canonical DatePicker and TimePicker primitives", async ({ rootinePage: page, isMobile }) => {
     await openRootineRoute(page, "/zadania?widok=dzis");
     const trigger = page.getByRole("button", { name: "Ustaw termin nowego zadania" });
     await trigger.click();
 
     const scheduler = page.getByRole("dialog", { name: "Ustaw termin zadania" });
     await expect(scheduler).toBeVisible();
-    await expect(scheduler).toHaveClass(/ui-anchored-popover/);
+    if (isMobile) await expect(scheduler).toHaveAttribute("aria-modal", "true");
+    else await expect(scheduler).toHaveClass(/ui-anchored-popover/);
     await expect(scheduler.locator(".ui-date-picker--compact.ui-date-picker--inline")).toBeVisible();
     await expect(scheduler.locator(".ui-date-picker").getByRole("grid")).toBeVisible();
 
@@ -322,7 +323,7 @@ test.describe("cross-module creation primitives", { tag: "@shared" }, () => {
 test.describe("cross-module full creation editors", { tag: "@shared" }, () => {
   test("Command Center maps an important Affair to the binary high-priority scale", async ({ rootinePage: page }) => {
     await openRootineRoute(page, "/dzisiaj");
-    await page.getByRole("button", { name: "Dodaj do dzisiejszego planu" }).click();
+    await page.keyboard.press("ControlOrMeta+k");
 
     const commandCenter = page.getByRole("dialog", { name: "Dodaj" });
     const quickInput = commandCenter.getByRole("textbox", { name: "Szybkie dodawanie" });

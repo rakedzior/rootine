@@ -456,6 +456,7 @@ function WeekBoard({
                     <button
                       key={workout.id}
                       type="button"
+                      data-workout-id={workout.id}
                       draggable={canMove}
                       aria-pressed={selectedWorkoutId === workout.id}
                       aria-describedby={canMove ? "sport-cycle-drag-hint" : undefined}

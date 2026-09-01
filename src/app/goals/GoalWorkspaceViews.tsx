@@ -369,6 +369,7 @@ export function GoalCard({
   return (
     <article
       className={`goal-card ${grid ? "goal-card-grid" : ""} ${selected ? "is-selected" : ""}`}
+      data-goal-id={String(goal.id)}
       data-status={goal.status}
       style={{
         "--goal-progress": `${goal.progress}%`,

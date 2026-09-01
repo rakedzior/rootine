@@ -509,14 +509,13 @@ export default function Sport() {
   };
 
   const applyCycleChange = (nextCycle: TrainingCycle, notice: string) => {
-    if (view === "today") {
-      const savedCycle = { ...nextCycle, updatedAt: new Date().toISOString() };
-      setCycleDraft(savedCycle);
-      setPlannerState((current) => withActiveCycle(current, savedCycle));
-      setAutosaveNotice(notice);
-      return;
-    }
-    setCycleDraft(nextCycle);
+    // Cycle editing is described in the UI as autosaved. Persist the active
+    // cycle from every Sport view so reopening or reloading cannot discard a
+    // completed edit merely because it originated in the cycle board.
+    const savedCycle = { ...nextCycle, updatedAt: new Date().toISOString() };
+    setCycleDraft(savedCycle);
+    setPlannerState((current) => withActiveCycle(current, savedCycle));
+    setAutosaveNotice(notice);
   };
 
   const submitCycleSettings = (cycle: TrainingCycle) => {
@@ -805,7 +804,7 @@ export default function Sport() {
       return;
     }
     const index = cycleDraft.workouts.findIndex((item) => item.id === workout.id);
-    const persisted = view === "today";
+    const persisted = true;
     const nextCycle = {
       ...cycleDraft,
       workouts: cycleDraft.workouts.filter((item) => item.id !== workout.id),

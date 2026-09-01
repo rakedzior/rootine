@@ -31,15 +31,26 @@
       "review": "Review when the command-center composition changes."
     },
     {
+      "value": 900,
+      "paths": [
+        "src/styles/nutrition.css"
+      ],
+      "owner": "nutrition",
+      "reason": "Very short landscape nutrition screens need a single header row so the first logged item remains above mobile navigation.",
+      "migration": "Replace with container-query coverage when the nutrition header has a stable intrinsic layout contract.",
+      "review": "Review when the mobile nutrition header or safe-area composition changes."
+    },
+    {
       "value": 1100,
       "paths": [
         "src/styles/calendar.css",
-        "src/styles/sport.css"
+        "src/styles/sport.css",
+        "src/styles/nutrition.css"
       ],
       "owner": "design-system",
-      "reason": "Dense planner and Calendar header controls share an intermediate adjustment.",
+      "reason": "Dense planner, Calendar headers, and the nutrition ledger share an intermediate adjustment before labels and columns crowd the workspace.",
       "migration": "Replace the remaining viewport adjustments with container-query coverage when supported by the full browser matrix.",
-      "review": "Review when planner or Calendar controls change."
+      "review": "Review when planner, Calendar, or nutrition ledger controls change."
     },
     {
       "value": 1120,
@@ -192,9 +203,10 @@
       "review": "Review when Travel metric visualizations change."
     },
     {
-      "paths": [
-        "src/app/pages/Odzywanie.tsx"
-      ],
+    "paths": [
+      "src/app/pages/Odzywanie.tsx",
+      "src/app/nutrition/NutritionDailyBalance.tsx"
+    ],
       "allowedProperties": [
         "background",
         "transform"

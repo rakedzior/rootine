@@ -1,7 +1,9 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   Bell,
@@ -16,7 +18,7 @@ import {
   Sunrise,
   X,
 } from "lucide-react";
-import { AnchoredPopover, Button, DatePicker, Menu, MenuItem, Switch, Tabs, TimePicker } from "../../ui";
+import { AnchoredPopover, Button, DatePicker, Menu, MenuItem, Modal, Switch, Tabs, TimePicker } from "../../ui";
 import { toCalendarDateKey } from "../../data/taskWorkspace";
 import { HALF_HOUR_TIME_OPTIONS } from "../../data/timeOptions";
 import {
@@ -64,6 +66,94 @@ type LayerKind =
   | "duration-timezone"
   | null;
 
+const mobileScheduleQuery = "(max-width: 760px), (max-width: 900px) and (max-height: 480px) and (orientation: landscape)";
+
+function useMobileScheduleSheet() {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(mobileScheduleQuery).matches);
+  useEffect(() => {
+    const media = window.matchMedia(mobileScheduleQuery);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return matches;
+}
+
+function TaskScheduleSurface({
+  children,
+  anchorRef,
+  placementAnchor,
+  popRef,
+  onClose,
+  popWidth,
+  scheduleError,
+}: {
+  children: ReactNode;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  placementAnchor: boolean;
+  popRef: React.RefObject<HTMLDivElement | null>;
+  onClose: () => void;
+  popWidth: number;
+  scheduleError: string;
+}) {
+  const mobileSheet = useMobileScheduleSheet();
+  useEffect(() => {
+    if (!mobileSheet) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (event.target instanceof Element && event.target.closest(".ui-anchored-popover")) return;
+      const sheet = document.querySelector(".task-sched__sheet-content")?.closest(".ui-modal");
+      if (!sheet?.contains(event.target as Node)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    // Capture precedes the calendar detail's legacy document listener, so this
+    // always closes only the top schedule layer before the parent detail.
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [mobileSheet, onClose]);
+  if (mobileSheet) {
+    return (
+      <Modal
+        title="Ustaw termin zadania"
+        onClose={onClose}
+        size="sm"
+        bodyClassName="task-sched__sheet"
+      >
+        <div className="task-sched__popover task-sched--v2 task-sched__sheet-content" aria-describedby={scheduleError ? "task-schedule-error" : undefined}>
+          {children}
+        </div>
+      </Modal>
+    );
+  }
+  return (
+    <AnchoredPopover
+      ref={popRef}
+      open
+      anchorRef={anchorRef}
+      placement={placementAnchor ? "right" : "auto"}
+      align={placementAnchor ? "start" : "end"}
+      layer="featurePopup"
+      initialFocus="first"
+      dismissOnFocusOutside={false}
+      minWidth={popWidth}
+      maxHeight={Math.max(240, window.innerHeight - 16)}
+      viewportPadding={8}
+      onDismiss={onClose}
+      role="dialog"
+      aria-modal="false"
+      aria-label="Ustaw termin zadania"
+      aria-describedby={scheduleError ? "task-schedule-error" : undefined}
+      tabIndex={-1}
+      className="task-sched__popover task-sched--v2"
+    >
+      {children}
+    </AnchoredPopover>
+  );
+}
+
 function nextHalfHour(now = new Date()) {
   const minutes = now.getHours() * 60 + now.getMinutes();
   const rounded = (Math.floor(minutes / 30) + 1) * 30;
@@ -105,7 +195,10 @@ function timezoneValues(current: string) {
       supportedValuesOf?: (key: "timeZone") => string[];
     }).supportedValuesOf;
     const values = supportedValuesOf?.("timeZone") ?? COMMON_TIMEZONES;
-    return [current, ...values].filter((value, index, all) => all.indexOf(value) === index);
+    // Put familiar, local choices first. It avoids rendering hundreds of IANA
+    // entries before someone has started searching, while search still covers
+    // the complete browser-provided list.
+    return [current, ...COMMON_TIMEZONES, ...values].filter((value, index, all) => all.indexOf(value) === index);
   } catch {
     return [current, ...COMMON_TIMEZONES].filter((value, index, all) => all.indexOf(value) === index);
   }
@@ -158,6 +251,7 @@ function TimezoneLayer({
       || timezoneLabel(timezone, date ?? new Date()).toLocaleLowerCase("pl-PL").includes(normalized)
     ));
   }, [date, options, query]);
+  const visible = query.trim() ? filtered : filtered.slice(0, 80);
 
   return (
     <div className="task-sched__timezone-layer">
@@ -173,7 +267,7 @@ function TimezoneLayer({
         />
       </label>
       <Menu aria-label="Strefa czasowa" initialFocus="none" className="task-sched__timezone-options">
-        {filtered.map((timezone) => (
+        {visible.map((timezone) => (
           <MenuItem
             key={timezone}
             role="menuitemradio"
@@ -475,25 +569,13 @@ export function DatePickerPopup({
 
   return (
     <>
-      <AnchoredPopover
-        ref={popRef}
-        open
+      <TaskScheduleSurface
         anchorRef={placementAnchorEl ? placementAnchorRef : anchorRef}
-        placement={placementAnchorEl ? "right" : "auto"}
-        align={placementAnchorEl ? "start" : "end"}
-        layer="featurePopup"
-        initialFocus="first"
-        dismissOnFocusOutside={false}
-        minWidth={popWidth}
-        maxHeight={Math.max(240, window.innerHeight - 16)}
-        viewportPadding={8}
-        onDismiss={() => onClose()}
-        role="dialog"
-        aria-modal="false"
-        aria-label="Ustaw termin zadania"
-        aria-describedby={scheduleError ? "task-schedule-error" : undefined}
-        tabIndex={-1}
-        className={`task-sched__popover task-sched--v2 task-sched__popover--${tab}`}
+        placementAnchor={Boolean(placementAnchorEl)}
+        popRef={popRef}
+        onClose={onClose}
+        popWidth={popWidth}
+        scheduleError={scheduleError}
       >
         {!dateOnly && (
           <Tabs
@@ -731,7 +813,7 @@ export function DatePickerPopup({
           <Button type="button" variant="ghost" size="sm" fullWidth onClick={handleClear}>Wyczyść</Button>
           <Button type="button" variant="primary" size="sm" fullWidth onClick={confirmAndClose} disabled={Boolean(scheduleError)}>Zapisz termin</Button>
         </div>
-      </AnchoredPopover>
+      </TaskScheduleSurface>
 
       {activeLayer && layerAnchor && (
         <AnchoredPopover

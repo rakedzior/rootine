@@ -769,7 +769,11 @@ export default function Sprawy() {
     const days = item.dueDate ? daysUntil(item.dueDate) : Number.POSITIVE_INFINITY;
     const timeState = !item.dueDate ? "undated" : days < 0 ? "overdue" : days <= 7 ? "soon" : "later";
     return (
-      <div key={item.key} className={`affairs-agenda-row affairs-agenda-row--time-${timeState}`}>
+      <div
+        key={item.key}
+        className={`affairs-agenda-row affairs-agenda-row--time-${timeState}`}
+        data-affair-id={item.kind === "matter" ? item.sourceId : undefined}
+      >
         <button type="button" className="affairs-agenda-row__main" onClick={() => openAttentionSource(item)}>
           <span className="affairs-agenda-row__icon">
             <UpcomingIcon size={13} />

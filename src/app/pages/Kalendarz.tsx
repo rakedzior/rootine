@@ -20,7 +20,7 @@ import {
   isCalendarTask,
   isHabitDoneOnDate,
   isHabitScheduledOnDate,
-  loadTaskWorkspace,
+  loadTaskWorkspaceResult,
   isTaskOwnedByTasksModule,
   replaceCalendarTasks,
   restoreTask,
@@ -39,6 +39,7 @@ import {
   Button,
   ContentHeader,
   ContextNavItem,
+  DetailPanel,
   ModuleSidebar,
   Menu,
   MenuItem,
@@ -380,7 +381,8 @@ function CalendarDayPanel({
 
 export default function Kalendarz() {
   const now = new Date();
-  const [initialWorkspace] = useState(loadTaskWorkspace);
+  const [initialWorkspaceLoad] = useState(loadTaskWorkspaceResult);
+  const [initialWorkspace] = useState(() => initialWorkspaceLoad.workspace);
   const initialSidebarState = loadTaskSidebarState();
   const activeTaskView = "wszystkie";
   const [viewDate, setViewDate] = useState(() => {
@@ -423,8 +425,10 @@ export default function Kalendarz() {
   const agendaTriggerRef = useRef<HTMLButtonElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailInitialFocusIdRef = useRef<string | null>(null);
+  const skipDetailHistoryRef = useRef(false);
   const pendingKeyboardMoveRef = useRef<{ id: number; dateKey: string } | null>(null);
   const workspaceRef = useRef(initialWorkspace);
+  const [taskWorkspaceHydrated, setTaskWorkspaceHydrated] = useState(() => initialWorkspaceLoad.status !== "missing");
   const suppressCellClickRef = useRef(false);
   const [storageFailed, setStorageFailed] = useState(false);
   const [focusedDateKey, setFocusedDateKey] = useState(todayKey);
@@ -469,20 +473,23 @@ export default function Kalendarz() {
   }, []);
 
   useEffect(() => {
+    if (!taskWorkspaceHydrated) return;
     const persistedEvents = events.filter((event) => event.text.trim().length > 0);
     const nextWorkspace = replaceCalendarTasks(workspaceRef.current, persistedEvents);
     setStorageFailed(!saveTaskWorkspace(nextWorkspace));
     workspaceRef.current = nextWorkspace;
-  }, [events]);
+  }, [events, taskWorkspaceHydrated]);
 
   useEffect(() => {
     const syncWorkspace = () => {
-      const nextWorkspace = loadTaskWorkspace();
+      const result = loadTaskWorkspaceResult();
+      const nextWorkspace = result.workspace;
       workspaceRef.current = nextWorkspace;
       setEvents(nextWorkspace.tasks.filter(isTasksCalendarEvent));
       setLists(nextWorkspace.lists);
       setTags(nextWorkspace.tags);
       setSelectedId((current) => current !== null && nextWorkspace.tasks.some((task) => task.id === current && isCalendarTask(task)) ? current : null);
+      if (result.status !== "missing") setTaskWorkspaceHydrated(true);
     };
     const unsubscribe = subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace);
     return unsubscribe;
@@ -709,6 +716,11 @@ export default function Kalendarz() {
   }, [selectedExternalOccurrence, selectedTask, anchorDateKey, viewDate]);
 
   const closeTaskDetail = useCallback((restoreFocus = true) => {
+    const currentState = window.history.state as { rootineCalendarDetail?: unknown } | null;
+    if (!skipDetailHistoryRef.current && currentState?.rootineCalendarDetail) {
+      window.history.back();
+      return;
+    }
     if (draftId !== null) {
       setEvents((current) => current.filter((event) => event.id !== draftId || Boolean(event.text.trim())));
       setDraftId(null);
@@ -773,6 +785,10 @@ export default function Kalendarz() {
       closeTaskDetail(false);
       setAnchorDateKey(event.calendarDate);
       setSelectedExternalKey(event.key);
+      window.history.pushState({
+        ...(window.history.state ?? {}),
+        rootineCalendarDetail: { kind: "external", key: event.key, date: event.calendarDate },
+      }, "", window.location.href);
       return;
     }
     const id = event.task.occurrence.sourceTaskId;
@@ -785,7 +801,37 @@ export default function Kalendarz() {
     setSelectedExternalKey(null);
     setSelectedId(id);
     setSelectedOccurrenceDate(event.task.occurrence.virtual ? event.task.occurrence.date : null);
+    window.history.pushState({
+      ...(window.history.state ?? {}),
+      rootineCalendarDetail: { kind: "task", id, date: event.task.occurrence.date },
+    }, "", window.location.href);
   };
+
+  useEffect(() => {
+    const restoreCalendarDetail = () => {
+      const state = window.history.state as {
+        rootineCalendarDetail?: { kind?: "task" | "external"; id?: number; key?: string; date?: string };
+      } | null;
+      const detail = state?.rootineCalendarDetail;
+      skipDetailHistoryRef.current = true;
+      if (detail?.kind === "task" && typeof detail.id === "number") {
+        setSelectedExternalKey(null);
+        setAnchorDateKey(detail.date ?? null);
+        setSelectedId(detail.id);
+        setSelectedOccurrenceDate(detail.date ?? null);
+      } else if (detail?.kind === "external" && detail.key) {
+        setSelectedId(null);
+        setSelectedOccurrenceDate(null);
+        setAnchorDateKey(detail.date ?? null);
+        setSelectedExternalKey(detail.key);
+      } else {
+        closeTaskDetail();
+      }
+      queueMicrotask(() => { skipDetailHistoryRef.current = false; });
+    };
+    window.addEventListener("popstate", restoreCalendarDetail);
+    return () => window.removeEventListener("popstate", restoreCalendarDetail);
+  }, [closeTaskDetail]);
 
   useEffect(() => {
     if (selectedDetailId === null) {
@@ -957,6 +1003,14 @@ export default function Kalendarz() {
     setTrashedTask(null);
   };
   const dismissTrashUndo = useCallback(() => setTrashedTask(null), []);
+  const retryTaskSave = useCallback(() => {
+    const nextWorkspace = replaceCalendarTasks(
+      workspaceRef.current,
+      events.filter((event) => event.text.trim().length > 0),
+    );
+    workspaceRef.current = nextWorkspace;
+    setStorageFailed(!saveTaskWorkspace(nextWorkspace));
+  }, [events]);
   const createDraft = (calendarDate = todayKey()) => {
     const parsed = new Date(`${calendarDate}T12:00:00`);
     const event: CalendarEvent = {
@@ -1107,7 +1161,7 @@ export default function Kalendarz() {
         <ContentHeader
           headingLevel={1}
           title={formatHeaderDate(viewDate)}
-          meta={storageFailed ? <Badge tone="danger">Brak zapisu lokalnego</Badge> : undefined}
+          meta={storageFailed ? <Button variant="quiet" size="sm" onClick={retryTaskSave}>Spróbuj zapisać ponownie</Button> : undefined}
           // The open count belongs in the description, exactly as in the task list. As a badge in
           // `meta` it sat next to a 28px button and made the calendar header 9px taller than the
           // list header, so switching views nudged the whole grid down.
@@ -1426,12 +1480,11 @@ export default function Kalendarz() {
       <TaskReminderCenter tasks={events} habits={workspaceRef.current.habits} />
 
       {selectedTask && (
-        <div
+        <DetailPanel
           ref={detailRef}
           className={`calendar-task-detail${detailPosition.ready ? " is-ready" : ""}`}
-          role="dialog"
-          aria-modal="false"
-          aria-label={selectedVirtualOccurrence ? "Szczegóły wystąpienia cyklicznego" : "Szczegóły zadania"}
+          label={selectedVirtualOccurrence ? "Szczegóły wystąpienia cyklicznego" : "Szczegóły zadania"}
+          onDismiss={closeTaskDetail}
           style={{
             left: detailPosition.left,
             top: detailPosition.top,
@@ -1465,7 +1518,7 @@ export default function Kalendarz() {
             listy={lists}
             tagi={tags}
           />
-        </div>
+        </DetailPanel>
       )}
 
       {selectedExternalOccurrence && (

@@ -26,7 +26,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
 import { HALF_HOUR_TIME_OPTIONS } from "../data/timeOptions";
@@ -85,7 +85,6 @@ import {
 import { readSessionDraft, useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { TravelDateTimeField } from "../travel/TravelDateTimeField";
 import "../../styles/travel.css";
-
 import {
   BUDGET_CATEGORY_LABELS,
   DOCUMENT_STATUS_LABELS,
@@ -116,7 +115,6 @@ import {
   type TravelSection,
   type TripActionState,
 } from "../travel/travelPresentation";
-
 function PrivateMoney({
   value,
   currency,
@@ -132,7 +130,6 @@ function PrivateMoney({
     </SensitiveValue>
   );
 }
-
 function formatTripDateRange(trip: TravelTrip) {
   const start = formatLongDate(trip.startDate).split(" ");
   const end = formatLongDate(trip.endDate).split(" ");
@@ -140,7 +137,6 @@ function formatTripDateRange(trip: TravelTrip) {
     ? `${start[0]}–${end[0]} ${end.slice(1).join(" ")}`
     : `${start.join(" ")} — ${end.join(" ")}`;
 }
-
 function overviewNextAction(trip: TravelTrip) {
   const openTasks = trip.tasks.filter((task) => !task.completed);
   if (openTasks.length > 1) return `${openTasks.length} otwarte sprawy`;
@@ -202,6 +198,10 @@ export default function Podroze({
   const [searchParams, setSearchParams] = useSearchParams();
   const embedded = Boolean(layout);
   const tripId = routeTripId ?? searchParams.get("podroz") ?? undefined;
+  const account = searchParams.get("konto");
+  const withAccount = useCallback((path: string) => account
+    ? `${path}${path.includes("?") ? "&" : "?"}konto=${encodeURIComponent(account)}`
+    : path, [account]);
   const selectedTrip = workspace.trips.find((trip) => trip.id === tripId)!;
   const routeSectionParam = routeTravelSection ? TRAVEL_ROUTE_SECTION[routeTravelSection] ?? null : null;
   const sectionParam = searchParams.get("sekcja") ?? routeSectionParam;
@@ -229,8 +229,8 @@ export default function Podroze({
   }), []);
 
   useEffect(() => {
-    if (tripId && !selectedTrip) navigate(embedded ? "/sprawy?widok=travel" : "/podroze", { replace: true });
-  }, [embedded, navigate, selectedTrip, tripId]);
+    if (tripId && !selectedTrip) navigate(withAccount(embedded ? "/sprawy?widok=travel" : "/podroze"), { replace: true });
+  }, [embedded, navigate, selectedTrip, tripId, withAccount]);
 
   useEffect(() => {
     setTripDetailPanel(null);
@@ -323,7 +323,7 @@ export default function Podroze({
     const normalizedSection = section === "preparation" ? "tasks" : section;
     if (isCanonicalTravelRoute && tripId) {
       const routeSection = TRAVEL_SECTION_ROUTE[normalizedSection as TravelSection] ?? normalizedSection;
-      navigate(routeSection === "overview" ? `/travel/${tripId}` : `/travel/${tripId}/${routeSection}`);
+      navigate(withAccount(routeSection === "overview" ? `/travel/${tripId}` : `/travel/${tripId}/${routeSection}`));
       return;
     }
     if (embedded) {
@@ -334,8 +334,10 @@ export default function Podroze({
       setSearchParams(next);
       return;
     }
-    if (normalizedSection === "overview") setSearchParams({});
-    else setSearchParams({ sekcja: normalizedSection });
+    const next = new URLSearchParams();
+    if (account) next.set("konto", account);
+    if (normalizedSection !== "overview") next.set("sekcja", normalizedSection);
+    setSearchParams(next);
   };
 
   const selectTrip = (id: string) => {
@@ -348,9 +350,9 @@ export default function Podroze({
     }
     if (isCanonicalTravelRoute) {
       const routeSection = TRAVEL_SECTION_ROUTE[activeSection] ?? activeSection;
-      navigate(`/travel/${id}${activeSection === "overview" ? "" : `/${routeSection}`}`);
+      navigate(withAccount(`/travel/${id}${activeSection === "overview" ? "" : `/${routeSection}`}`));
     } else {
-      navigate(`/podroze/${id}`);
+      navigate(withAccount(`/podroze/${id}`));
     }
   };
   const showAllTrips = () => {
@@ -362,7 +364,7 @@ export default function Podroze({
       navigate(`/sprawy?${next.toString()}`);
       return;
     }
-    navigate(isCanonicalTravelRoute ? "/travel/overview" : "/podroze");
+    navigate(withAccount(isCanonicalTravelRoute ? "/travel/overview" : "/podroze"));
   };
 
   const updateTrip = (tripIdToUpdate: string, updater: (trip: TravelTrip) => TravelTrip) => {
@@ -773,9 +775,15 @@ export default function Podroze({
 
   const undoTripDelete = () => {
     if (!deletedTripUndo) return;
-    setWorkspace((current) => current.trips.some((trip) => trip.id === deletedTripUndo.id)
-      ? current
-      : { ...current, trips: [...current.trips, deletedTripUndo] });
+    setWorkspace((current) => {
+      const next = current.trips.some((trip) => trip.id === deletedTripUndo.id)
+        ? current
+        : { ...current, trips: [...current.trips, deletedTripUndo] };
+      // The toast is the recovery boundary: persist the restored dossier now,
+      // rather than relying on the following render effect before navigation.
+      saveTravelWorkspace(next);
+      return next;
+    });
     const restoredId = deletedTripUndo.id;
     setDeletedTripUndo(null);
     selectTrip(restoredId);
@@ -903,7 +911,7 @@ export default function Podroze({
     const expanded = selectedTrip?.id === trip.id || (!selectedTrip && nearestTrip?.id === trip.id);
     const sectionNavigationId = `travel-sections-${trip.id}`;
     return (
-      <div key={trip.id} className={`travel-sidebar__trip ${expanded ? "is-expanded" : ""}`}>
+      <div key={trip.id} data-trip-id={trip.id} className={`travel-sidebar__trip ${expanded ? "is-expanded" : ""}`}>
         <ContextNavItem
           active={Boolean(selectedTrip?.id === trip.id && activeSection === "overview")}
           aria-expanded={expanded}
@@ -1199,6 +1207,7 @@ export default function Podroze({
       <button
         key={trip.id}
         type="button"
+        data-trip-id={trip.id}
         className={`travel-board__row ${completed ? "is-completed" : ""}`}
         onClick={() => selectTrip(trip.id)}
       >

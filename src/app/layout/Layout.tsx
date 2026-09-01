@@ -169,13 +169,28 @@ function isMobileCorePath(pathname: string, to: string) {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
+function withWorkspaceAccount(destination: string, currentSearch: string) {
+  const account = new URLSearchParams(currentSearch).get("konto");
+  // The temporary browser-audit profile has no durable account selector, so its
+  // route token must survive navigation. Normal/local navigation deliberately
+  // keeps canonical, shareable URLs without a redundant query parameter.
+  if (account !== "testowe") return destination;
+
+  const [pathAndSearch, hash = ""] = destination.split("#", 2);
+  const separator = pathAndSearch.includes("?") ? "&" : "?";
+  return `${pathAndSearch}${separator}konto=${encodeURIComponent(account)}${hash ? `#${hash}` : ""}`;
+}
+
 function MobilePrimaryNavItem({
   item,
 }: {
   item: (typeof MOBILE_CORE_NAV)[number];
 }) {
   const location = useLocation();
-  const active = isMobileCorePath(location.pathname, item.to);
+  const activeMobileLayer = (location.state as MobileHistoryState | null)?.rootineMobileLayer ?? null;
+  // A More layer is the current mobile destination in its own right. Keeping the
+  // base link current as well creates two active destinations for assistive tech.
+  const active = !activeMobileLayer && isMobileCorePath(location.pathname, item.to);
   const Icon = item.icon;
   const rememberedDestination = readModuleMemoryValue(
     "mobile-navigation",
@@ -192,7 +207,7 @@ function MobilePrimaryNavItem({
   );
   const destination = active
     ? `${location.pathname}${location.search}${location.hash}`
-    : rememberedDestination ?? item.to;
+    : rememberedDestination ?? withWorkspaceAccount(item.to, location.search);
 
   return (
     <Link
@@ -333,7 +348,9 @@ function PrimaryNavItem({
   const location = useLocation();
   const areaActive = useIsActiveArea(item.id);
   const active = isModulePath(item, location.pathname);
-  const destination = active ? `${location.pathname}${location.search}` : item.to;
+  const destination = active
+    ? `${location.pathname}${location.search}`
+    : withWorkspaceAccount(item.to, location.search);
   return (
     <Link
       to={destination}
@@ -1273,7 +1290,7 @@ export default function Layout() {
                     return (
                       <Link
                         key={item.id}
-                        to={item.to}
+                        to={withWorkspaceAccount(item.to, location.search)}
                         aria-current={isModulePath(item, location.pathname) ? "page" : undefined}
                         data-mobile-menu-focus={index === 0 ? "" : undefined}
                         data-mobile-menu-id={item.id}

@@ -1716,7 +1716,9 @@
 /* Canonical daily-balance alignment: one shared header axis and three equal reading zones. */
 .today-day-balance {
   min-height: 248px;
-  grid-template-areas: "progress queue attention";
+  grid-template-areas:
+    "progress queue attention"
+    "balance balance balance";
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   padding: var(--space-xl);
@@ -1861,18 +1863,24 @@
 }
 
 .today-day-balance__queue-list li {
-  display: grid;
-  min-height: 48px;
+  display: block;
   min-width: 0;
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-lg);
-  padding-block: var(--space-sm);
   border-top: 1px solid var(--color-border);
 }
 
 .today-day-balance__queue-list li:last-child {
   border-bottom: 1px solid var(--color-border);
+}
+
+.today-day-balance__queue-list a {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-lg);
+  padding-block: var(--space-sm);
+  color: var(--color-text-primary);
+  text-decoration: none;
 }
 
 .today-day-balance__queue-list time {
@@ -1883,7 +1891,7 @@
   line-height: var(--leading-tight);
 }
 
-.today-day-balance__queue-list strong {
+.today-day-balance__queue-list a > span {
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-primary);
@@ -2006,7 +2014,8 @@
   .today-day-balance {
     grid-template-areas:
       "progress queue"
-      "attention attention";
+      "attention attention"
+      "balance balance";
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: var(--space-2xl);
   }
@@ -2036,7 +2045,8 @@
     grid-template-areas:
       "progress"
       "queue"
-      "attention";
+      "attention"
+      "balance";
     grid-template-columns: minmax(0, 1fr);
     row-gap: 0;
   }
@@ -2068,4 +2078,173 @@
     width: 132px;
     flex-basis: 132px;
   }
+}
+
+/* Sprint 02: the daily reading order remains explicit when the three desktop
+   zones collapse.  The compact footer is deliberately data-like rather than a
+   fourth competing call to action. */
+.today-day-balance__balance {
+  display: flex;
+  grid-area: balance;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-top: var(--space-xl);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+}
+
+.today-day-balance__balance strong {
+  flex: 0 0 auto;
+  color: var(--color-text-primary);
+  font-family: var(--font-data);
+  font-size: var(--text-body-emphasis);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+}
+
+.today-day-balance__balance span {
+  min-width: 0;
+}
+
+.today-day-balance__queue-list a:hover,
+.today-day-balance__queue-list a:focus-visible {
+  color: var(--color-primary-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.today-primary-action {
+  min-inline-size: 48px;
+  min-height: 48px;
+  padding-inline: var(--space-md);
+}
+
+.today-primary-action .header-action-label {
+  display: inline;
+}
+
+/* The shared compact-header rule makes ordinary module actions icon-only on
+   phones. Today has one intentionally dominant action, so its text is part of
+   the recognition affordance rather than screen-reader-only copy. Keep this
+   override explicit for every mobile breakpoint as well as the default. */
+.today-add-menu .today-primary-action {
+  min-inline-size: max-content;
+  min-block-size: 48px;
+}
+
+.today-add-menu .today-primary-action .header-action-label {
+  position: static;
+  display: inline;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  white-space: nowrap;
+}
+
+/* A 320px-high landscape viewport has room for one concise reading of today,
+   not the stacked desktop dashboard. Progress and the next actionable record
+   therefore share the first card; the lower-priority balance and overdue
+   diagnostics remain available by scrolling below it. */
+.today-module.is-short-landscape .today-content {
+  padding: var(--space-xs) var(--space-md) var(--space-sm);
+  gap: var(--space-sm);
+}
+
+.today-module.is-short-landscape .today-day-balance {
+  min-height: 0;
+  grid-template-areas: "progress queue";
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  padding: var(--space-sm);
+}
+
+.today-module.is-short-landscape .today-day-balance__progress-panel,
+.today-module.is-short-landscape .today-day-balance__queue {
+  min-height: 0;
+  padding: 0 var(--space-sm) 0 0;
+  border-right: 1px solid var(--color-border);
+  border-bottom: 0;
+}
+
+.today-module.is-short-landscape .today-day-balance__queue {
+  padding: 0 0 0 var(--space-sm);
+  border-right: 0;
+}
+
+.today-module.is-short-landscape .today-day-balance__attention,
+.today-module.is-short-landscape .today-day-balance__balance {
+  display: none;
+}
+
+.today-module.is-short-landscape .today-day-balance__panel-header {
+  min-height: 28px;
+  gap: var(--space-sm);
+}
+
+.today-module.is-short-landscape .today-day-balance__panel-icon {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: var(--radius-md);
+}
+
+.today-module.is-short-landscape .today-day-balance__panel-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.today-module.is-short-landscape .today-day-balance__panel-header h2 {
+  font-size: var(--text-body-emphasis);
+}
+
+.today-module.is-short-landscape .today-day-balance__completed-value {
+  min-height: 0;
+  margin-top: var(--space-sm);
+  font-size: var(--text-meta);
+}
+
+.today-module.is-short-landscape .today-day-balance__completed-value strong {
+  font-size: var(--text-title);
+}
+
+.today-module.is-short-landscape .today-day-balance__progress-panel .today-day-balance__progress-row {
+  margin-top: var(--space-sm);
+}
+
+.today-module.is-short-landscape .today-day-balance__progress-panel .today-day-balance__progress {
+  height: 6px;
+}
+
+.today-module.is-short-landscape .today-day-balance__priority,
+.today-module.is-short-landscape .today-day-balance__remaining-summary,
+.today-module.is-short-landscape .today-day-balance__queue-link {
+  display: none;
+}
+
+.today-module.is-short-landscape .today-day-balance__queue-list {
+  margin-top: var(--space-sm);
+}
+
+.today-module.is-short-landscape .today-day-balance__queue-list li:not(:first-child) {
+  display: none;
+}
+
+.today-module.is-short-landscape .today-day-balance__queue-list a {
+  min-height: 44px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: var(--space-sm);
+  padding-block: 0;
+}
+
+.today-module.is-short-landscape .today-day-balance__queue-list time,
+.today-module.is-short-landscape .today-day-balance__queue-list a > span,
+.today-module.is-short-landscape .today-day-balance__queue-empty {
+  font-size: var(--text-meta);
 }

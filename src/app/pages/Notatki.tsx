@@ -1143,7 +1143,7 @@ export default function Notatki() {
     const visibleChecklistItems = layout === "cards" ? note.items : note.items.slice(0, 2);
 
     return (
-      <article key={note.id} className={`notes-card notes-card--${note.color}`}>
+      <article key={note.id} data-note-id={note.id} className={`notes-card notes-card--${note.color}`}>
         <span
           className="notes-card__color"
           role="img"

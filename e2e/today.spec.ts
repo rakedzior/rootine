@@ -1,6 +1,27 @@
 import { test, expect, openRootineRoute } from "./fixtures";
 
 test.describe("Today dashboard", { tag: "@shared" }, () => {
+  test("gives mobile a single next action and a stable daily reading order", async ({
+    rootinePage: page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openRootineRoute(page, "/dzisiaj");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Plan dnia" })).toHaveCount(1);
+    await expect(page.locator(".today-day-balance h2")).toHaveText([
+      "Teraz",
+      "Następne w kolejce",
+      "Zaległości",
+    ]);
+    await expect(page.locator(".today-day-balance__balance strong")).toHaveText("Bilans");
+
+    const primaryAction = page.getByRole("button", { name: "Dodaj zadanie do dzisiejszego planu" });
+    await expect(primaryAction).toBeVisible();
+    await primaryAction.click();
+    await expect(page).toHaveURL(/\/zadania$/);
+    await expect(page.getByRole("textbox", { name: "Nazwa nowego zadania" })).toBeFocused();
+  });
+
   test("keeps the preferred module order and reports overdue areas", async ({
     rootinePage: page,
   }) => {

@@ -79,7 +79,7 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
     await capture(page.locator(`#calendar-agenda-${CALENDAR_DATE}`), "calendar-overflow-menu.png", { maxDiffPixels: 32 });
   });
 
-  test("task detail preserves the responsive panel and DatePicker portal", async ({ rootinePage: page, isMobile }) => {
+  test("task detail preserves the responsive panel and schedule-layer lifecycle", async ({ rootinePage: page, isMobile }) => {
     await openRootineRoute(page, "/zadania?widok=dzis");
     await page.locator(".task-item-row").first().click();
 
@@ -107,7 +107,8 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
       reminderPicker.evaluate((element) => Number(getComputedStyle(element).zIndex)),
       reminderPicker.boundingBox(),
     ]);
-    expect(childLayer).toBeGreaterThan(parentLayer);
+    if (isMobile) expect(childLayer).toBeGreaterThan(0);
+    else expect(childLayer).toBeGreaterThan(parentLayer);
     expect(reminderSize && pickerSize && reminderSize.y < pickerSize.y + pickerSize.height).toBe(true);
 
     await datePicker.getByRole("tab", { name: "Czas trwania" }).click();
@@ -116,10 +117,14 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
     await expect(datePicker.getByText("Koniec", { exact: true })).toBeVisible();
     await capture(datePicker, "task-duration-picker-portal.png", { maxDiffPixels: 384 });
 
-    const outsideX = pickerSize && pickerSize.x >= 8
-      ? Math.max(2, pickerSize.x - 4)
-      : Math.min((await page.evaluate(() => window.innerWidth)) - 2, (pickerSize?.x ?? 0) + (pickerSize?.width ?? 0) + 4);
-    await page.mouse.click(outsideX, 2);
+    if (isMobile) {
+      await page.locator(".ui-modal-backdrop").click({ position: { x: 2, y: 2 } });
+    } else {
+      const outsideX = pickerSize && pickerSize.x >= 8
+        ? Math.max(2, pickerSize.x - 4)
+        : Math.min((await page.evaluate(() => window.innerWidth)) - 2, (pickerSize?.x ?? 0) + (pickerSize?.width ?? 0) + 4);
+      await page.mouse.click(outsideX, 2);
+    }
     await expect(datePicker).toBeHidden();
 
     if (!isMobile) {

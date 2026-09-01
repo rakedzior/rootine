@@ -5,16 +5,15 @@
  * FIRST VIEWPORT: Cztery posiłki stoją obok trzech równych kart: bilansu, nawodnienia i masy ciała.
  * FORM: Wariant A — SectionSurface dla posiłku, płaskie wiersze produktów i ObjectCard dla samodzielnych podsumowań.
  */
-
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   ChartNoAxesCombined, CheckCircle2, ChevronLeft, ChevronRight, Droplets,
-  LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, Save, Settings, Trash2, X,
+  LoaderCircle, Pencil, Plus, RefreshCw, Save, Settings, Trash2, X,
 } from "lucide-react";
 import {
   Badge, Button, Card, ConfirmDialog, ContentHeader, DatePicker, Input, Modal, ModuleMain, ModuleShell,
-  SectionHeader, SectionSurface, Select, Textarea, uiColors,
+  SectionHeader, SectionSurface, Select, Textarea,
 } from "../ui";
 import { useDraftProtection } from "../ui/hooks/useDraftProtection";
 import { subscribeToLocalWorkspace } from "../data/localRepository";
@@ -39,6 +38,7 @@ import {
   type MealSlot,
   type NutritionEntry,
   type NutritionWorkspace,
+  type WeightMeasurement,
 } from "../data/nutritionWorkspace";
 import { upsertCustomMeal, type CustomMeal } from "../data/nutritionMeals";
 import { NutritionAnalysis, type NutritionAnalysisRange } from "../nutrition/NutritionAnalysis";
@@ -50,6 +50,7 @@ import {
   useNutritionCommandAction,
 } from "../nutrition/useNutritionCommandAction";
 import { NutritionWeightCard } from "../nutrition/NutritionWeightCard";
+import { NutritionDailyBalance } from "../nutrition/NutritionDailyBalance";
 import { NutritionCustomMeals } from "../nutrition/NutritionCustomMeals";
 import { NutritionGoalsDialog, NutritionWaterGoalDialog } from "../nutrition/NutritionGoalDialogs";
 import { NutritionSidebar, type NutritionSidebarItem } from "../nutrition/NutritionSidebar";
@@ -64,10 +65,8 @@ import {
 } from "../nutrition/useNutritionPageState";
 import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
 import "../../styles/nutrition.css";
-
 import {
   MEAL_META,
-  NUTRIENT_META,
   WATER_AMOUNTS,
   calculateMacroDraftTargets,
   createCalculatorDraft,
@@ -93,14 +92,12 @@ import {
   type MacroDraft,
   type WeightDialog,
 } from "../nutrition/nutritionPresentationModel";
-
 /** Every Odżywianie subtab is a real URL, so it can be linked, reloaded and shared. */
 const VIEW_PATHS: Record<NutritionSidebarItem, string> = {
   today: "/odzywianie",
   meals: "/odzywianie/posilki",
   analysis: "/odzywianie/analiza",
 };
-
 export default function Odzywanie() {
   const { session } = useSupabaseAuth();
   const accessToken = session?.access_token;
@@ -108,6 +105,7 @@ export default function Odzywanie() {
   const quickAddRequested = initialCommand.action === "dodaj-posilek";
   const [initialLoad] = useState(loadNutritionWorkspace);
   const [workspace, setWorkspace] = useState(initialLoad.workspace);
+  const workspaceRef = useRef(initialLoad.workspace);
   const [loadStatus, setLoadStatus] = useState(initialLoad.status);
   const [savePending, setSavePending] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => (
@@ -165,11 +163,11 @@ export default function Odzywanie() {
   const weightDraftPreparedRef = useRef(false);
   const [weightError, setWeightError] = useState("");
   const [analysisRange, setAnalysisRange] = useState<NutritionAnalysisRange>(7);
-
   useEffect(() => {
     writeModuleMemoryValue("nutrition", "selectedDate", selectedDate);
   }, [selectedDate]);
   const [waterCustomAmount, setWaterCustomAmount] = useState("");
+  const [waterCustomError, setWaterCustomError] = useState("");
   const [waterEditOpen, setWaterEditOpen] = useState(false);
   const [waterEditDraft, setWaterEditDraft] = useState("");
   const [waterEditError, setWaterEditError] = useState("");
@@ -187,26 +185,24 @@ export default function Odzywanie() {
   const goalDraftPreparedRef = useRef(false);
   const [storageFailed, setStorageFailed] = useState(false);
   const [undoEntry, setUndoEntry] = useState<{ meal: MealSlot; entry: NutritionEntry } | null>(null);
+  const [pendingWeightDelete, setPendingWeightDelete] = useState<WeightMeasurement | null>(null);
   const waterCustomInputRef = useRef<HTMLInputElement>(null);
-
+  const entryReturnFocusRef = useRef<HTMLElement | null>(null);
   useNutritionCommandAction({
     setSelectedDate, setEntryDraft, setEditingEntry, setSelectedFood, setEntryErrors,
     setCatalogOpen, setEntryDialogOpen, setWaterCustomAmount, waterCustomInputRef,
     weightMeasurements: workspace.weightMeasurements,
     setWeightDraft, setWeightError, setWeightDialog,
   });
-
   const location = useLocation();
   const navigate = useNavigate();
   const selectNutritionDate = useNutritionDateQuery(selectedDate, setSelectedDate);
-
   const view: NutritionSidebarItem = location.pathname === VIEW_PATHS.meals
     ? "meals"
     : location.pathname === VIEW_PATHS.analysis
       ? "analysis"
       : "today";
   const customMeals = workspace.customMeals ?? [];
-
   const today = nutritionDateKey();
   const day = workspace.days[selectedDate] ?? createEmptyNutritionDay(selectedDate);
   const dayClosed = Boolean(day.closedAt);
@@ -221,7 +217,10 @@ export default function Odzywanie() {
   const remoteBranded = useMemo(() => remoteCatalogResults.filter((item) => item.brand), [remoteCatalogResults]);
   const allSuggestions = useMemo(() => {
     const seen = new Set<string>();
-    return [...genericResults, ...remoteBranded, ...remoteUnbranded].filter((item) => {
+    // The source is part of the decision: staple foods are fastest to scan, then
+    // unbranded catalogue matches, then a branded choice. Do not flatten this into
+    // one arbitrary relevance list; it would make a manual entry look like a saved meal.
+    return [...genericResults, ...remoteUnbranded, ...remoteBranded].filter((item) => {
       if (seen.has(item.id)) return false;
       seen.add(item.id);
       return true;
@@ -256,14 +255,11 @@ export default function Odzywanie() {
   const simpleWaterMax = simpleWaterWeightValue >= 20 && simpleWaterWeightValue <= 500
     ? Math.round((simpleWaterWeightValue * 35) / 50) * 50
     : 0;
-
   useEffect(() => {
     if (!goalDialog) return;
-
     setGoalDraft((current) => {
       const updates: Partial<typeof current> = {};
       let caloriesForMacros = parseDraftNumber(current.calories);
-
       if (
         goalDialog === "nutrition"
         && calculationSync.calories
@@ -273,7 +269,6 @@ export default function Odzywanie() {
         updates.calories = String(calculatorResult.calorieTarget);
         caloriesForMacros = calculatorResult.calorieTarget;
       }
-
       if (goalDialog === "nutrition" && calculationSync.macros && macroDraft.mode !== "grams") {
         const targets = calculateMacroDraftTargets(caloriesForMacros, macroDraft, calculatorProfile);
         if (targets) {
@@ -282,7 +277,6 @@ export default function Odzywanie() {
           updates.fat = String(targets.fat);
         }
       }
-
       const changed = Object.entries(updates).some(([field, value]) => current[field as keyof typeof current] !== value);
       return changed ? { ...current, ...updates } : current;
     });
@@ -295,7 +289,6 @@ export default function Odzywanie() {
     goalDraft.calories,
     macroDraft,
   ]);
-
   useEffect(() => {
     if (!savePending) return;
     const saved = saveNutritionWorkspace(workspace);
@@ -303,25 +296,23 @@ export default function Odzywanie() {
     if (saved) setLoadStatus("ok");
     setSavePending(false);
   }, [savePending, workspace]);
-
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
   useEffect(() => subscribeToLocalWorkspace(NUTRITION_STORAGE_KEY, () => {
     const loaded = loadNutritionWorkspace();
     setWorkspace(loaded.workspace);
     setLoadStatus(loaded.status);
     setSavePending(false);
   }), []);
-
   useEffect(() => {
     setUndoEntry(null);
   }, [selectedDate]);
-
   useEffect(() => {
     setActiveSuggestion(0);
   }, [allSuggestions.length, entryDraft.name]);
-
   useEffect(() => () => catalogRequestRef.current?.abort(), []);
-
-  const closeEntryDialog = useCallback(() => {
+  const closeEntryDialog = useCallback((fromHistory = false) => {
     entryDraftPreparedRef.current = false;
     catalogRequestRef.current?.abort();
     catalogRequestRef.current = null;
@@ -334,21 +325,21 @@ export default function Odzywanie() {
     setCatalogPending(false);
     setCatalogError("");
     setCatalogSearchedQuery("");
+    if (!fromHistory && window.history.state?.rootineNutritionOverlay?.kind === "entry") {
+      window.history.back();
+    }
   }, []);
-
   const closeGoalDialog = useCallback(() => {
     goalDraftPreparedRef.current = false;
     setGoalDialog(null);
     setGoalError("");
     setCalculatorErrors({});
   }, []);
-
   const closeWeightDialog = useCallback(() => {
     weightDraftPreparedRef.current = false;
     setWeightDialog(null);
     setWeightError("");
   }, []);
-
   useEffect(() => {
     if (!entryDialogOpen || entryDraftPreparedRef.current) return;
     const baseDraft = entryDraft;
@@ -359,7 +350,6 @@ export default function Odzywanie() {
     const storedDraft = readNutritionSessionDraft<EntryDraft>(storageKey, "entry");
     if (storedDraft) setEntryDraft(storedDraft);
   }, [editingEntry, entryDialogOpen, entryDraft, selectedDate]);
-
   useEffect(() => {
     if (weightDialog !== "measurement") {
       weightDraftPreparedRef.current = false;
@@ -374,7 +364,6 @@ export default function Odzywanie() {
     const storedDraft = readNutritionSessionDraft<WeightDraftState>(storageKey, "weight");
     if (storedDraft) setWeightDraft(storedDraft);
   }, [weightDialog, weightDraft]);
-
   const currentGoalDraft = useMemo<GoalDraftSnapshot>(() => ({
     goalDraft,
     calculatorDraft,
@@ -390,7 +379,6 @@ export default function Odzywanie() {
     waterCalculatorMode,
     waterSimpleWeight,
   ]);
-
   const protectedDraft: NutritionProtectedDraft = entryDialogOpen && entryDraftPreparedRef.current
     ? { kind: "entry", value: entryDraft }
     : weightDialog === "measurement" && weightDraftPreparedRef.current
@@ -425,9 +413,11 @@ export default function Odzywanie() {
     storageKey: protectedStorageKey,
     onDiscard: discardProtectedDraft,
   });
-
-  const openEntryDialog = (meal: MealSlot = "breakfast") => {
+  const openEntryDialog = useCallback((meal: MealSlot = "breakfast", fromHistory = false) => {
     if (dayClosed) return;
+    if (!fromHistory && document.activeElement instanceof HTMLElement) {
+      entryReturnFocusRef.current = document.activeElement;
+    }
     const baseDraft = createEntryDraft(meal);
     const storageKey = `${NUTRITION_DRAFT_PREFIX}.entry.${selectedDate}.new.${meal}`;
     entryDraftPreparedRef.current = true;
@@ -445,10 +435,19 @@ export default function Odzywanie() {
     setCatalogError("");
     setCatalogSearchedQuery("");
     setEntryDialogOpen(true);
-  };
-
+    if (!fromHistory) {
+      // Keep the overlay entry in browser history without making a transient form
+      // URL shareable/reloadable. A reload must restore the saved draft only when the
+      // person explicitly opens it again, not resurrect an abandoned layer.
+      const baseState = { ...window.history.state } as { rootineNutritionOverlay?: unknown };
+      delete baseState.rootineNutritionOverlay;
+      window.history.replaceState(baseState, "", window.location.href);
+      window.history.pushState({ ...baseState, rootineNutritionOverlay: { kind: "entry", meal } }, "", window.location.href);
+    }
+  }, [dayClosed, selectedDate]);
   const openEditDialog = (meal: MealSlot, entry: NutritionEntry) => {
     if (dayClosed) return;
+    if (document.activeElement instanceof HTMLElement) entryReturnFocusRef.current = document.activeElement;
     const baseDraft: EntryDraft = {
       meal,
       name: entry.name,
@@ -476,13 +475,33 @@ export default function Odzywanie() {
     setCatalogError("");
     setCatalogSearchedQuery("");
     setEntryDialogOpen(true);
+    const baseState = { ...window.history.state } as { rootineNutritionOverlay?: unknown };
+    delete baseState.rootineNutritionOverlay;
+    window.history.replaceState(baseState, "", window.location.href);
+    window.history.pushState({ ...baseState, rootineNutritionOverlay: { kind: "entry", meal } }, "", window.location.href);
   };
-
+  useEffect(() => {
+    const syncOverlayWithHistory = () => {
+      const overlay = window.history.state?.rootineNutritionOverlay as { kind?: string; meal?: MealSlot } | undefined;
+      if (overlay?.kind === "entry" && !entryDialogOpen) {
+        openEntryDialog(overlay.meal ?? "breakfast", true);
+      } else if (overlay?.kind !== "entry" && entryDialogOpen) {
+        closeEntryDialog(true);
+      }
+    };
+    window.addEventListener("popstate", syncOverlayWithHistory);
+    return () => window.removeEventListener("popstate", syncOverlayWithHistory);
+  }, [entryDialogOpen, closeEntryDialog, openEntryDialog]);
   const commitWorkspace = (updater: (current: NutritionWorkspace) => NutritionWorkspace) => {
-    setWorkspace(updater);
-    setSavePending(true);
+    // A user can close or reload immediately after tapping Save. Persist the committed
+    // local-first snapshot synchronously instead of relying on a later render effect.
+    const next = updater(workspaceRef.current);
+    workspaceRef.current = next;
+    const saved = saveNutritionWorkspace(next);
+    setStorageFailed(!saved);
+    if (saved) setLoadStatus("ok");
+    setWorkspace(next);
   };
-
   const updateDay = (
     updater: (current: ReturnType<typeof createEmptyNutritionDay>) => ReturnType<typeof createEmptyNutritionDay>,
     preserveClosure = false,
@@ -588,6 +607,8 @@ export default function Odzywanie() {
     catalogRequestRef.current = null;
     setEntryDraft((current) => ({ ...current, name: value }));
     if (selectedFood?.name !== value) setSelectedFood(null);
+    // Local staples remain useful from the first character; remote catalogue work
+    // deliberately starts at two characters below.
     setCatalogOpen(value.trim().length >= 1);
     setCatalogPending(false);
     setCatalogError("");
@@ -636,6 +657,11 @@ export default function Odzywanie() {
         }
       });
   }, [accessToken]);
+
+  const retryCatalogSearch = () => {
+    const query = entryDraft.name.trim();
+    if (query.length >= 2) searchCatalog(query);
+  };
 
   useEffect(() => {
     if (!entryDialogOpen) return;
@@ -772,17 +798,27 @@ export default function Odzywanie() {
 
   const addCustomWater = () => {
     const amount = Math.round(parseDraftNumber(waterCustomAmount));
-    if (amount <= 0) return;
+    if (amount <= 0) {
+      setWaterCustomError("Wpisz dodatnią ilość wody.");
+      return;
+    }
     changeWater(amount);
     setWaterCustomAmount("");
+    setWaterCustomError("");
   };
 
-  const toggleDayClosed = () => {
+  const closeDay = () => {
     if (selectedDate > today) return;
     updateDay((current) => ({
       ...current,
-      closedAt: current.closedAt ? undefined : new Date().toISOString(),
+      closedAt: new Date().toISOString(),
     }), true);
+  };
+
+  /** Reopening is deliberately available only from the closed-state notice. */
+  const reopenDayForEditing = () => {
+    if (!dayClosed) return;
+    updateDay((current) => ({ ...current, closedAt: undefined }), true);
   };
 
   const openGoalDialog = (dialog: Exclude<GoalDialog, null>) => {
@@ -848,15 +884,15 @@ export default function Odzywanie() {
     setWeightInlineOpen(true);
   };
 
-  const removeLatestWeight = () => {
-    if (!latestWeight) return;
+  const removeWeightMeasurement = (measurement: WeightMeasurement) => {
     commitWorkspace((current) => {
       const nextMeasurements = { ...current.weightMeasurements };
-      delete nextMeasurements[latestWeight.date];
+      delete nextMeasurements[measurement.date];
       return { ...current, weightMeasurements: nextMeasurements };
     });
     setWeightInlineOpen(false);
     setWeightError("");
+    setPendingWeightDelete(null);
   };
 
   const saveWeightMeasurement = (event: FormEvent<HTMLFormElement>) => {
@@ -1211,25 +1247,24 @@ export default function Odzywanie() {
                 Analiza
               </Button>
               {day.source === "demo" && <Button variant="quiet" size="sm" disabled={dayClosed} onClick={clearDemoDay}>Wyczyść przykład</Button>}
-              <Button
-                variant="quiet"
-                size="sm"
-                className={`nutrition-day-close ${dayClosed ? "is-closed" : ""}`}
-                leadingIcon={dayClosed ? <RotateCcw size={13} /> : <CheckCircle2 size={13} />}
-                aria-pressed={dayClosed}
-                aria-label={dayClosed ? "Otwórz ponownie wybrany dzień" : "Zamknij wybrany dzień"}
-                disabled={selectedDate > today}
-                title={selectedDate > today
-                  ? "Nie można zamknąć przyszłego dnia."
-                  : dayClosed
-                    ? "Dzień jest zamknięty. Kliknij, aby otworzyć go ponownie."
+              {!dayClosed && (
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  className="nutrition-day-close"
+                  leadingIcon={<CheckCircle2 size={13} />}
+                  aria-label="Zamknij wybrany dzień"
+                  disabled={selectedDate > today}
+                  title={selectedDate > today
+                    ? "Nie można zamknąć przyszłego dnia."
                     : "Oznacz dzień jako wykonany na ekranie Dzisiaj."}
-                onClick={toggleDayClosed}
-              >
-                {dayClosed ? "Otwórz dzień" : "Zamknij dzień"}
-              </Button>
-              <Button className="ui-button--icon-mobile" variant="primary" leadingIcon={<Plus size={13} />} disabled={dayClosed} onClick={() => openEntryDialog()}>
-                <span className="header-action-label">Dodaj produkt</span>
+                  onClick={closeDay}
+                >
+                  Zamknij dzień
+                </Button>
+              )}
+              <Button className="nutrition-primary-action" variant="primary" leadingIcon={<Plus size={13} />} aria-label="Dodaj produkt" disabled={dayClosed} onClick={() => openEntryDialog()}>
+                Dodaj produkt
               </Button>
             </>}
           />
@@ -1239,7 +1274,7 @@ export default function Odzywanie() {
               <Card tone="input" padding="dense" className="nutrition-closed-notice" role="status">
                 <CheckCircle2 size={13} aria-hidden="true" />
                 <span>Dzień jest zamknięty. Posiłki i nawodnienie są tylko do odczytu.</span>
-                <Button variant="quiet" size="sm" onClick={toggleDayClosed}>Otwórz do edycji</Button>
+                <Button variant="quiet" size="sm" onClick={reopenDayForEditing}>Otwórz do edycji</Button>
               </Card>
             )}
             <div className="nutrition-layout">
@@ -1265,7 +1300,7 @@ export default function Odzywanie() {
                         <div className="nutrition-meal-card__header">
                           <div className="nutrition-meal-card__identity">
                             <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
-                            <h3 id={`meal-${id}`}>{label}</h3>
+                            <h2 id={`meal-${id}`}>{label}</h2>
                             <Badge tone="neutral">{mealEntries.length}</Badge>
                           </div>
                           {mealEntries.length > 0 && (
@@ -1343,72 +1378,11 @@ export default function Odzywanie() {
               </section>
 
               <aside className="nutrition-summary">
-                <SectionSurface elevated padding="default" className="nutrition-summary-card">
-                  <SectionHeader
-                    title="Bilans dnia"
-                    variant="label"
-                    action={(
-                      <Button variant="ghost" size="sm" iconOnly aria-label="Ustaw cele kalorii i makroskładników" onClick={() => openGoalDialog("nutrition")}>
-                        <Settings size={13} />
-                      </Button>
-                    )}
-                  />
-                  <Card tone="card" padding="default" className="nutrition-budget-card">
-                    {(() => {
-                      const calorieGoal = workspace.goals.calories;
-                      const calorieRatio = calorieGoal > 0 ? totals.calories / calorieGoal : 0;
-                      const calorieRemaining = calorieGoal - totals.calories;
-                      const calorieStatus = calorieRemaining < 0
-                        ? `Przekroczono o ${formatNumber(Math.abs(calorieRemaining))} kcal`
-                        : calorieRatio >= 0.9
-                          ? "Blisko celu"
-                          : `Pozostało ${formatNumber(calorieRemaining)} kcal`;
-                      return (
-                        <>
-                          <div className="nutrition-budget-card__primary">
-                            <div>
-                              <span>Kalorie</span>
-                              <strong>{formatNumber(totals.calories)} / {formatNumber(calorieGoal)} kcal</strong>
-                            </div>
-                            <p className={calorieRemaining < 0 ? "is-over" : ""}>{calorieStatus}</p>
-                            <div className="nutrition-budget-card__bar" role="progressbar" aria-label="Kalorie" aria-valuemin={0} aria-valuemax={Math.max(calorieGoal, totals.calories, 1)} aria-valuenow={totals.calories}>
-                              <i style={{ transform: `scaleX(${Math.min(1, calorieRatio)})` }} />
-                            </div>
-                          </div>
-                          <div className="nutrition-budget-card__macro-list">
-                            {NUTRIENT_META.filter(({ key }) => key !== "calories").map(({ key, label, unit, color }) => {
-                              const current = totals[key];
-                              const goal = workspace.goals[key];
-                              const remaining = goal - current;
-                              const ratio = goal > 0 ? current / goal : 0;
-                              const status = key === "protein"
-                                ? ratio >= 1
-                                  ? "Cel osiągnięty"
-                                  : ratio >= 0.9
-                                    ? "Cel prawie osiągnięty"
-                                    : `Pozostało ${formatNumber(remaining)} ${unit}`
-                                : remaining < 0
-                                  ? `Przekroczono o ${formatNumber(Math.abs(remaining))} ${unit}`
-                                  : `Pozostało ${formatNumber(remaining)} ${unit}`;
-                              return (
-                                <div key={key} className="nutrition-budget-card__macro">
-                                  <div className="nutrition-budget-card__macro-head">
-                                    <span>{label}</span>
-                                    <strong>{formatNumber(current)} / {formatNumber(goal)} {unit}</strong>
-                                  </div>
-                                  <p className={key === "fat" && remaining < 0 ? "is-over" : ""}>{status}</p>
-                                  <div className="nutrition-budget-card__bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={Math.max(goal, current, 1)} aria-valuenow={current}>
-                                    <i style={{ transform: `scaleX(${Math.min(1, ratio)})`, background: ratio > 1 ? uiColors.danger : color }} />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </Card>
-                </SectionSurface>
+                <NutritionDailyBalance
+                  totals={totals}
+                  goals={workspace.goals}
+                  onOpenGoals={() => openGoalDialog("nutrition")}
+                />
 
                 <SectionSurface elevated padding="default" className="nutrition-summary-card">
                   <SectionHeader
@@ -1500,7 +1474,21 @@ export default function Odzywanie() {
                         ))}
                       </div>
                       <div className="nutrition-water-custom__form">
-                        <Input ref={waterCustomInputRef} fieldClassName="nutrition-water-custom__field" aria-label="Inna ilość wody" type="number" min="1" step="50" placeholder="Własna ilość (ml)" value={waterCustomAmount} onChange={(event) => setWaterCustomAmount(event.target.value)} />
+                        <Input
+                          ref={waterCustomInputRef}
+                          fieldClassName="nutrition-water-custom__field"
+                          aria-label="Inna ilość wody"
+                          type="number"
+                          min="1"
+                          step="50"
+                          placeholder="Własna ilość (ml)"
+                          value={waterCustomAmount}
+                          error={waterCustomError || undefined}
+                          onChange={(event) => {
+                            setWaterCustomAmount(event.target.value);
+                            setWaterCustomError("");
+                          }}
+                        />
                         <Button variant="ghost" size="sm" disabled={dayClosed || !waterCustomAmount} onClick={addCustomWater}>Dodaj</Button>
                       </div>
                     </div>
@@ -1524,7 +1512,7 @@ export default function Odzywanie() {
                           <Pencil size={13} />
                         </Button>
                         {latestWeight && (
-                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Usuń ostatni pomiar masy" onClick={removeLatestWeight}>
+                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Usuń ostatni pomiar masy" onClick={() => setPendingWeightDelete(latestWeight)}>
                             <Trash2 size={13} />
                           </Button>
                         )}
@@ -1555,6 +1543,7 @@ export default function Odzywanie() {
             : `Wpis zostanie dodany do dnia: ${formatDate(selectedDate)}.`}
           width="720px"
           bodyClassName="nutrition-entry-modal__body"
+          returnFocusRef={entryReturnFocusRef}
           onClose={draftProtection.requestClose}
           footer={(
             <>
@@ -1599,8 +1588,8 @@ export default function Odzywanie() {
               {catalogOpen && entryDraft.name.trim().length >= 1 && (
                 <div id="nutrition-food-suggestions" className="nutrition-suggestions" role="listbox" aria-label="Podpowiedzi produktów">
                   {renderSuggestionGroup("Produkty podstawowe", genericResults)}
+                  {renderSuggestionGroup("Produkty bez marki", remoteUnbranded)}
                   {renderSuggestionGroup("Produkty firmowe", remoteBranded)}
-                  {renderSuggestionGroup("Pozostałe produkty", remoteUnbranded)}
                   {catalogPending && (
                     <div className="nutrition-suggestions__status">
                       <LoaderCircle size={13} className="nutrition-search-spinner" />
@@ -1609,7 +1598,8 @@ export default function Odzywanie() {
                   )}
                   {!catalogPending && catalogError && (
                     <div className="nutrition-suggestions__status is-error" role="alert">
-                      {catalogError}
+                      <span>{catalogError}</span>
+                      <Button variant="quiet" size="sm" onClick={retryCatalogSearch}>Spróbuj ponownie</Button>
                     </div>
                   )}
                   {!catalogPending && !catalogError && !allSuggestions.length && entryDraft.name.trim().length === 1 && (
@@ -1778,6 +1768,16 @@ export default function Odzywanie() {
         />
       )}
 
+      {pendingWeightDelete && (
+        <ConfirmDialog
+          eyebrow="Masa ciała"
+          title={`Usunąć pomiar z ${formatDate(pendingWeightDelete.date)}?`}
+          description="Usunięcie zmieni trend w analizie. Możesz anulować, jeśli chcesz zachować ten pomiar."
+          confirmLabel="Usuń pomiar"
+          onCancel={() => setPendingWeightDelete(null)}
+          onConfirm={() => removeWeightMeasurement(pendingWeightDelete)}
+        />
+      )}
       {draftProtection.promptOpen && protectedDraft.kind !== "none" && (
         <ConfirmDialog
           title={protectedDraft.kind === "entry"

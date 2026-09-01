@@ -59,7 +59,7 @@ test.describe("mobile foundation contract", { tag: "@mobile" }, () => {
     test.setTimeout(60_000);
     await page.setViewportSize({ width: 844, height: 390 });
     const surfaces = [
-      { route: "/dzisiaj", control: () => page.getByRole("button", { name: "Dodaj do dzisiejszego planu" }), dialog: "Dodaj" },
+      { route: "/dzisiaj", control: () => page.getByRole("button", { name: "Dodaj zadanie do dzisiejszego planu" }), routeAfterClick: /\/zadania$/ },
       { route: "/zadania?widok=wszystkie", control: () => page.getByRole("textbox", { name: "Nazwa nowego zadania" }) },
       { route: "/kalendarz", control: () => page.getByRole("button", { name: "Następny miesiąc" }) },
       { route: "/odzywianie", control: () => page.getByRole("button", { name: "Dodaj produkt" }), dialog: "Dodaj produkt" },
@@ -81,6 +81,8 @@ test.describe("mobile foundation contract", { tag: "@mobile" }, () => {
       if ("dialog" in surface) {
         await expect(page.getByRole("dialog", { name: surface.dialog })).toBeVisible();
         await page.keyboard.press("Escape");
+      } else if ("routeAfterClick" in surface) {
+        await expect(page).toHaveURL(surface.routeAfterClick);
       }
     }
   });

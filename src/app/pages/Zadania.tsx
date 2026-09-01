@@ -10,20 +10,17 @@ import {
 } from "lucide-react";
 import { persistTaskCompletion } from "../data/taskCompletion";
 import { shiftLocalDateKey, todayLocalDateKey } from "../data/localDate";
-import { subscribeToLocalWorkspace } from "../data/localRepository";
 import {
   projectTaskOccurrences,
   setTaskOccurrenceCompletion,
   type TaskOccurrence,
 } from "../data/taskSchedule";
-import { TRAVEL_STORAGE_KEY } from "../data/travelWorkspace";
-import { WORK_STORAGE_KEY } from "../data/workWorkspace";
 import {
   isHabitDoneOnDate,
   isHabitScheduledOnDate,
   emptyTaskTrash,
   normalizeHabitState,
-  loadTaskWorkspace,
+  loadTaskWorkspaceResult,
   purgeTask,
   restoreTask,
   saveTaskWorkspace,
@@ -32,7 +29,6 @@ import {
   trashTask,
   toggleHabitOnDate,
   taskViewForCalendarDate,
-  TASK_STORAGE_KEY,
   toCalendarDateKey,
 } from "../data/taskWorkspace";
 import {
@@ -76,7 +72,6 @@ import {
   formatDateLabel,
   groupTasksForListView,
   initialTaskView,
-  loadInitialTaskPagePreferences,
   isTaskUndated,
   saveTasksViewMode,
   saveTaskSidebarState,
@@ -94,6 +89,12 @@ import {
   type Task,
   type TasksViewMode,
 } from "./tasks/taskPageModel";
+import {
+  resolveTaskDeepLink,
+  initialTaskPreferencesForWorkspace,
+  useTaskWorkspaceSynchronization,
+  workspaceWithRecentTask,
+} from "./tasks/taskWorkspaceHydration";
 import { DatePickerPopup } from "./tasks/TaskSchedulePicker";
 import { TaskDetail, TaskRow } from "./tasks/TaskViews";
 import {
@@ -111,14 +112,17 @@ type TaskDetailHistoryState = {
 export default function Zadania() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [initialWorkspace] = useState(loadTaskWorkspace);
-  const [initialTaskPreferences] = useState(() => loadInitialTaskPagePreferences(initialWorkspace.tasks));
+  const [initialWorkspaceLoad] = useState(() => loadTaskWorkspaceResult());
+  const [initialWorkspace] = useState(() => workspaceWithRecentTask(initialWorkspaceLoad.workspace, window.localStorage.getItem("rootine.today-recent-task.v1")));
+  const [initialTaskPreferences] = useState(() => initialTaskPreferencesForWorkspace(initialWorkspaceLoad, initialWorkspace, window.location.search));
   const [tasksViewMode, setTasksViewMode] = useState<TasksViewMode>(initialTaskPreferences.viewMode);
   const workspaceRef = useRef(initialWorkspace);
   const [taskView,      setTaskView]      = useState(initialTaskPreferences.taskView);
   const [listFilter,    setListFilter]    = useState<string | null>(initialTaskPreferences.listFilter);
   const [tagFilter,     setTagFilter]     = useState<string | null>(initialTaskPreferences.tagFilter);
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
+  const [taskSearch, setTaskSearch] = useState("");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [tasks,         setTasks]         = useState<Task[]>(initialWorkspace.tasks);
   const [habits,        setHabits]        = useState<Habit[]>(initialWorkspace.habits);
   const [listy,         setListy]         = useState<ListItem[]>(initialWorkspace.lists);
@@ -139,6 +143,7 @@ export default function Zadania() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [storageFailed, setStorageFailed] = useState(false);
+  const [taskWorkspaceHydrated, setTaskWorkspaceHydrated] = useState(() => initialWorkspaceLoad.status !== "missing");
   const [taxonomyDelete, setTaxonomyDelete] = useState<{
     kind: "list" | "tag";
     id: string;
@@ -244,31 +249,13 @@ export default function Zadania() {
   }, [habits, location.state]);
 
   useEffect(() => {
+    if (!taskWorkspaceHydrated) return;
     const nextWorkspace = { ...workspaceRef.current, tasks, habits, lists: listy, tags: tagi };
     workspaceRef.current = nextWorkspace;
     setStorageFailed(!saveTaskWorkspace(nextWorkspace));
-  }, [habits, listy, tagi, tasks]);
+  }, [habits, listy, tagi, taskWorkspaceHydrated, tasks]);
 
-  useEffect(() => {
-    const syncWorkspace = () => {
-      const nextWorkspace = loadTaskWorkspace();
-      workspaceRef.current = nextWorkspace;
-      setTasks(nextWorkspace.tasks);
-      setHabits(nextWorkspace.habits);
-      setListy(nextWorkspace.lists);
-      setTagi(nextWorkspace.tags);
-      setSelectedId((current) => current !== null && (
-        nextWorkspace.tasks.some((task) => task.id === current)
-        || !Number.isInteger(current)
-      ) ? current : null);
-    };
-    const unsubscribers = [
-      subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace),
-      subscribeToLocalWorkspace(WORK_STORAGE_KEY, syncWorkspace),
-      subscribeToLocalWorkspace(TRAVEL_STORAGE_KEY, syncWorkspace),
-    ];
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, []);
+  useTaskWorkspaceSynchronization({ workspaceRef, setTasks, setHabits, setLists: setListy, setTags: setTagi, setSelectedId, setHydrated: setTaskWorkspaceHydrated });
 
   useEffect(() => {
     if (tasksViewMode === "calendar" || location.pathname !== "/zadania") return;
@@ -287,12 +274,13 @@ export default function Zadania() {
   );
 
   useEffect(() => {
+    if (!taskWorkspaceHydrated) return;
     const url = new URL(window.location.href);
     const explicitListContext = url.searchParams.has("widok") || url.searchParams.has("zadanie");
     if (tasksViewMode === "calendar" && url.pathname === "/zadania" && !explicitListContext) {
       navigate(taskView === "dzis" ? "/kalendarz" : `/kalendarz?widok=${encodeURIComponent(taskView)}`, { replace: true });
     }
-  }, [navigate, taskView, tasksViewMode]);
+  }, [navigate, taskView, taskWorkspaceHydrated, tasksViewMode]);
 
   const openTaskView = (view: string, resetFilters = true) => {
     setTaskViewWithDefault(view);
@@ -393,6 +381,7 @@ export default function Zadania() {
   }, [taskView]);
 
   useEffect(() => {
+    if (!taskWorkspaceHydrated) return;
     const url = new URL(window.location.href);
     const action = url.searchParams.get("akcja");
     if (action !== "nowe-zadanie" && action !== "nowy-nawyk") return;
@@ -411,7 +400,12 @@ export default function Zadania() {
       setNewDateVal(parsedDate && !Number.isNaN(parsedDate.getTime())
         ? { ...DEFAULT_DATE_VAL, date: parsedDate, time, allDay: !time }
         : defaultDateValueForTaskView("dzis"));
-      window.setTimeout(() => inputRef.current?.focus(), 0);
+      // The route shell deliberately puts focus on its h1 in its first frame.
+      // Move once more after that shared announcement so a named create action
+      // lands directly in the composer without racing its accessibility rule.
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => inputRef.current?.focus());
+      });
     }
     url.searchParams.delete("akcja");
     url.searchParams.delete("tytul");
@@ -419,7 +413,7 @@ export default function Zadania() {
     url.searchParams.delete("godzina");
     url.searchParams.delete("priorytet");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [setTaskViewWithDefault, taskView]);
+  }, [setTaskViewWithDefault, taskView, taskWorkspaceHydrated]);
 
   const todayKey = todayLocalDateKey();
   const todayLongLabel = todayStr();
@@ -459,6 +453,7 @@ export default function Zadania() {
     : habits.find((habit) => habit.id === selectedHabitId) ?? null;
 
   useEffect(() => {
+    if (!taskWorkspaceHydrated) return;
     const url = new URL(window.location.href);
     const requested = url.searchParams.get("zadanie");
     if (requested === null) {
@@ -471,12 +466,31 @@ export default function Zadania() {
     const parsed = /^\d+$/.test(requested) ? Number(requested) : Number.NaN;
     const linkedTask = Number.isSafeInteger(parsed) ? tasks.find((task) => task.id === parsed) : undefined;
     if (!linkedTask) {
-      deepLinkSelectionRef.current = false;
-      setSelectedId(null);
-      setTaskLinkNotice("Nie znaleziono wskazanego zadania. Pokazujemy bieżącą listę zadań.");
-      url.searchParams.delete("zadanie");
-      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-      return;
+      let cancelled = false;
+      // Await the local write queue before invalidating a numeric deep link.
+      void resolveTaskDeepLink(parsed).then(({ workspace, task }) => {
+        if (cancelled) return;
+        if (task) {
+          workspaceRef.current = workspace;
+          setTasks(workspace.tasks);
+          setHabits(workspace.habits);
+          setListy(workspace.lists);
+          setTagi(workspace.tags);
+          deepLinkSelectionRef.current = true;
+          setSelectedId(task.id);
+          setSelectedHabitId(null);
+          setTaskLinkNotice(null);
+          return;
+        }
+        deepLinkSelectionRef.current = false;
+        setSelectedId(null);
+        setTaskLinkNotice("Nie znaleziono wskazanego zadania. Pokazujemy bieżącą listę zadań.");
+        url.searchParams.delete("zadanie");
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      });
+      return () => {
+        cancelled = true;
+      };
     }
     deepLinkSelectionRef.current = true;
     setSelectedId(linkedTask.id);
@@ -486,7 +500,7 @@ export default function Zadania() {
       url.searchParams.set("zadanie", String(linkedTask.id));
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     }
-  }, [location.search, tasks]);
+  }, [location.search, taskWorkspaceHydrated, tasks]);
   const tagUsage = tasks.reduce<Record<string, number>>((counts, task) => {
     if (task.deleted) return counts;
     for (const tag of task.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
@@ -518,8 +532,9 @@ export default function Zadania() {
     const listMatch = listFilter ? task.list === listFilter : true;
     const tagMatch  = tagFilter  ? (task.tags ?? []).includes(tagFilter) : true;
     const prioMatch = priorityFilter ? task.priority === priorityFilter : true;
-    return listMatch && tagMatch && prioMatch;
-  }, [listFilter, priorityFilter, tagFilter]);
+    const queryMatch = !taskSearch.trim() || task.text.toLocaleLowerCase("pl-PL").includes(taskSearch.trim().toLocaleLowerCase("pl-PL"));
+    return listMatch && tagMatch && prioMatch && queryMatch;
+  }, [listFilter, priorityFilter, tagFilter, taskSearch]);
   const scopedVisible = useMemo(() => taskPool.filter(t => {
     if (taskView === "kosz") return Boolean(t.deleted);
     if (t.deleted) return false;
@@ -606,6 +621,10 @@ export default function Zadania() {
       date: dateLabel || undefined,
       calendarDate,
     };
+    // Dzisiaj is an independent route and may mount before IndexedDB hydration
+    // completes. Keep one local, recoverable hand-off so the task just created
+    // from its primary action is immediately reachable on the return journey.
+    window.localStorage.setItem("rootine.today-recent-task.v1", JSON.stringify(task));
     setTagi((existing) => {
       const known = new Set(existing.map((tag) => tag.id));
       const missing = newTaskTags.filter((tag) => !known.has(tag));
@@ -1370,6 +1389,9 @@ export default function Zadania() {
               </div>
             )}
             <div className="task-toolbar-actions">
+              <Button className="task-mobile-filters-trigger" variant="quiet" size="sm" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen(true)}>
+                Filtry
+              </Button>
               <div className="task-priority-filters" aria-label="Filtr priorytetu">
                 {([
                   { id: "high" as Priority, label: "Wysoki", color: C.danger },
@@ -1440,11 +1462,43 @@ export default function Zadania() {
             </div>
           </>}
         />
-
+        {mobileFiltersOpen && (
+          <Modal
+            title="Filtry zadań"
+            description="Szukaj po nazwie i zawęź listę tagiem lub priorytetem."
+            onClose={() => setMobileFiltersOpen(false)}
+          >
+            <div className="task-mobile-filters">
+              <label htmlFor="task-mobile-search">Szukaj zadań</label>
+              <input
+                id="task-mobile-search"
+                data-autofocus
+                type="search"
+                value={taskSearch}
+                onChange={(event) => setTaskSearch(event.currentTarget.value)}
+                placeholder="Nazwa zadania"
+              />
+              <div role="group" aria-label="Filtr tagu">
+                <strong>Tag</strong>
+                <Button variant={tagFilter === null ? "quiet" : "ghost"} size="sm" onClick={() => setTagFilter(null)}>Wszystkie tagi</Button>
+                {tagi.map((tag) => (
+                  <Button key={tag.id} variant={tagFilter === tag.id ? "quiet" : "ghost"} size="sm" aria-pressed={tagFilter === tag.id} onClick={() => setTagFilter(tagFilter === tag.id ? null : tag.id)}>#{tag.label}</Button>
+                ))}
+              </div>
+              <div role="group" aria-label="Filtr priorytetu">
+                <strong>Priorytet</strong>
+                {(["high", "medium", "low"] as const).map((priority) => (
+                  <Button key={priority} variant={priorityFilter === priority ? "quiet" : "ghost"} size="sm" aria-pressed={priorityFilter === priority} onClick={() => setPriorityFilter(priorityFilter === priority ? null : priority)}>
+                    {{ high: "Wysoki", medium: "Średni", low: "Niski" }[priority]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </Modal>
+        )}
         {taskLinkNotice && (
           <p className="task-deep-link-notice" role="status">{taskLinkNotice}</p>
         )}
-
         {bulkMode && (
           <div className="task-bulk-bar" role="toolbar" aria-label="Operacje zbiorcze na zadaniach">
             <strong aria-live="polite">Zaznaczono: {bulkSelectedIds.size}</strong>
@@ -1690,7 +1744,6 @@ export default function Zadania() {
               })}
             </section>
           )}
-
           {taskView !== "kosz" && taskView !== "ukonczone" && pending.length === 0 && completed.length === 0 && (
             <EmptyState
               className="task-empty-state"
@@ -1707,7 +1760,6 @@ export default function Zadania() {
           </div>
         </div>
       </ModuleMain>
-
       <TaskReminderCenter tasks={tasks} habits={habits} />
 
       {/* ── Right panel ── */}
@@ -1809,7 +1861,6 @@ export default function Zadania() {
           <p className="task-confirm-copy">Tej operacji nie można cofnąć.</p>
         </ConfirmDialog>
       )}
-
       {emptyTrashOpen && (
         <ConfirmDialog
           title="Opróżnić Kosz?"
@@ -1823,7 +1874,6 @@ export default function Zadania() {
           </p>
         </ConfirmDialog>
       )}
-
       {/* ── Input tags dropdown ── */}
       {inputDropdown === "tags" && hashBtnInputRef.current && (
         <InputFloatMenu id="task-entry-tags-menu" anchorEl={hashBtnInputRef.current} onClose={() => setInputDropdown(null)}>

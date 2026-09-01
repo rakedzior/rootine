@@ -409,6 +409,7 @@
   background: var(--color-surface-1);
   box-shadow: var(--shadow-floating);
 }
+
 .ui-date-picker__header { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-sm); }
 .ui-date-picker__header > strong { color: var(--color-text-primary); font-size: var(--text-body); font-weight: var(--weight-semibold); }
 .ui-date-picker__header > div { display: flex; align-items: center; gap: 2px; }
@@ -1075,6 +1076,7 @@
   .ui-content-header__controls > .ui-field { min-width: 0; flex: 1 1 140px; }
   .ui-context-sidebar { display: none; }
   .app-shell:has(.ui-detail-panel[data-drawer-managed="true"]) .app-mobile-nav { visibility: hidden; }
+  body:has(.ui-modal) .app-mobile-nav { visibility: hidden; }
   .context-mobile-select { display: block; }
   .workspace-context-label { display: none; }
   .ui-modal-backdrop {
@@ -1167,7 +1169,34 @@
     clip: rect(0 0 0 0);
     clip-path: inset(50%);
     white-space: nowrap;
-  }}
+  }
+
+  /* A primary quick-add is a recognisable action, not an icon riddle. Secondary
+     header controls may still compact, but every shared icon-mobile primary CTA
+     keeps its name and a thumb-safe hit area in the six More workspaces. */
+  .ui-content-header .ui-button--primary {
+    min-block-size: var(--control-height-lg);
+  }
+
+  .ui-button--primary.ui-button--icon-mobile {
+    min-inline-size: max-content;
+    min-block-size: var(--control-height-lg);
+    padding-inline: var(--space-md);
+  }
+
+  .ui-button--primary.ui-button--icon-mobile .header-action-label {
+    position: static;
+    display: inline;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: nowrap;
+  }
+}
 
 @media (pointer: coarse) {
   .ui-button--sm,
