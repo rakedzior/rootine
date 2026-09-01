@@ -29,9 +29,9 @@ struct FoundationStatusView: View {
                 .font(.footnote)
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
 
-            Text("Następny pełny ekran powstanie dopiero po osobnej akceptacji projektu.")
+            Text("Natywne ekrany Rootine są gotowe do ręcznego przeglądu.")
                 .font(.footnote)
-                .foregroundStyle(RootineTheme.ColorToken.warning)
+                .foregroundStyle(RootineTheme.ColorToken.success)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(RootineTheme.Spacing.large)
@@ -51,10 +51,12 @@ struct FoundationStatusView: View {
 /// and the shared offline mutation queue.
 struct MoreModuleView: View {
     let module: MoreModule
+    @EnvironmentObject private var environment: AppEnvironment
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                ModuleSyncStatusBanner()
                 MoreModuleHero(module: module)
 
                 switch module {
@@ -121,6 +123,33 @@ private struct MoreModuleHero: View {
     }
 }
 
+private struct ModuleSyncStatusBanner: View {
+    @EnvironmentObject private var environment: AppEnvironment
+
+    var body: some View {
+        Group {
+            if case .conflict = environment.workspaceSyncStatus {
+                RootineErrorState(
+                    title: "Konflikt synchronizacji",
+                    message: "Zmiany w tym module są bezpieczne lokalnie. Spróbuj ponownie, gdy połączenie będzie stabilne.",
+                    onRetry: { Task { await environment.flushPendingMutations() } }
+                )
+            } else if case .localOnly(let pending) = environment.workspaceSyncStatus {
+                RootineOfflineBanner(message: offlineMessage(pending: pending))
+            }
+        }
+    }
+
+    private func offlineMessage(pending: Int) -> String {
+        switch pending {
+        case 1: return "Tryb offline · 1 zmiana czeka na synchronizację"
+        case 2...4: return "Tryb offline · \(pending) zmiany czekają na synchronizację"
+        case 5...: return "Tryb offline · \(pending) zmian czeka na synchronizację"
+        default: return "Tryb offline · zmiany zapisują się na tym iPhonie"
+        }
+    }
+}
+
 private struct ModuleSectionTitle: View {
     let title: String
     let systemImage: String
@@ -146,6 +175,8 @@ private struct ModuleActionButton: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(tint)
+        .frame(minHeight: 48)
+        .accessibilityHint("Otwiera formularz dodawania")
     }
 }
 
@@ -154,10 +185,21 @@ private struct ModuleActionButton: View {
 private struct NotesModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var editorTarget: NoteEditorTarget?
+    @State private var searchText = ""
+    @State private var showingArchive = false
+    @State private var noteToDelete: NoteRecord?
+    @State private var deletedNote: NoteRecord?
 
     private var notes: [NoteRecord] {
         environment.notesWorkspace.notes
-            .filter { !$0.archived }
+            .filter { showingArchive ? $0.archived : !$0.archived }
+            .filter { note in
+                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !query.isEmpty else { return true }
+                return note.title.localizedCaseInsensitiveContains(query)
+                    || note.body.localizedCaseInsensitiveContains(query)
+                    || note.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
+            }
             .sorted { lhs, rhs in
                 if lhs.pinned != rhs.pinned { return lhs.pinned }
                 return lhs.updatedAt > rhs.updatedAt
@@ -166,6 +208,40 @@ private struct NotesModuleContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+            HStack(spacing: RootineTheme.Spacing.small) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                TextField("Szukaj notatek lub tagów", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .accessibilityLabel("Szukaj notatek lub tagów")
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Wyczyść wyszukiwanie")
+                }
+            }
+            .padding(.horizontal, RootineTheme.Spacing.small)
+            .background(RootineTheme.ColorToken.elevated)
+            .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+
+            HStack {
+                Label(showingArchive ? "Archiwum" : "Aktywne", systemImage: showingArchive ? "archivebox.fill" : "note.text")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button(showingArchive ? "Pokaż aktywne" : "Pokaż archiwum") {
+                    showingArchive.toggle()
+                }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+                .accessibilityHint("Przełącza listę aktywnych i zarchiwizowanych notatek")
+            }
+
             if let pinned = notes.first(where: { $0.pinned }) {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                     HStack {
@@ -200,29 +276,42 @@ private struct NotesModuleContent: View {
                     )
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(notes.prefix(4).enumerated()), id: \.element.id) { index, note in
+                        ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                             Button { editorTarget = NoteEditorTarget(note: note) } label: {
                                 NoteListRow(note: note)
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button {
-                                    Task { await environment.toggleNotePinned(id: note.id) }
-                                } label: {
-                                    Label(note.pinned ? "Odepnij" : "Przypnij", systemImage: note.pinned ? "pin.slash" : "pin")
-                                }
-                                Button {
-                                    Task { await environment.archiveNote(id: note.id) }
-                                } label: {
-                                    Label("Archiwizuj", systemImage: "archivebox")
-                                }
+                                noteActions(for: note)
                                 Button(role: .destructive) {
-                                    Task { await environment.deleteNote(id: note.id) }
+                                    requestDelete(note)
                                 } label: {
                                     Label("Usuń", systemImage: "trash")
                                 }
                             }
-                            if index < min(notes.count, 4) - 1 {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    requestDelete(note)
+                                } label: {
+                                    Label("Usuń", systemImage: "trash")
+                                }
+                                if showingArchive {
+                                    Button {
+                                        restore(note)
+                                    } label: {
+                                        Label("Przywróć", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .tint(RootineTheme.ColorToken.success)
+                                } else {
+                                    Button {
+                                        Task { await environment.archiveNote(id: note.id) }
+                                    } label: {
+                                        Label("Archiwizuj", systemImage: "archivebox")
+                                    }
+                                    .tint(MoreModule.notes.tint)
+                                }
+                            }
+                            if index < notes.count - 1 {
                                 Divider().overlay(RootineTheme.ColorToken.separator)
                             }
                         }
@@ -239,9 +328,75 @@ private struct NotesModuleContent: View {
             NoteEditorSheet(note: target.note) { note in
                 Task { await environment.upsertNote(note) }
             } onDelete: { note in
-                Task { await environment.deleteNote(id: note.id) }
+                requestDelete(note)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć notatkę?",
+            isPresented: Binding(
+                get: { noteToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { noteToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let noteToDelete {
+                Button("Usuń notatkę", role: .destructive) {
+                    delete(noteToDelete)
+                    self.noteToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedNote {
+                RootineUndoBanner(message: "Usunięto notatkę") {
+                    let note = deletedNote
+                    self.deletedNote = nil
+                    Task { await environment.upsertNote(note) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
             }
         }
+    }
+
+    @ViewBuilder
+    private func noteActions(for note: NoteRecord) -> some View {
+        Button {
+            Task { await environment.toggleNotePinned(id: note.id) }
+        } label: {
+            Label(note.pinned ? "Odepnij" : "Przypnij", systemImage: note.pinned ? "pin.slash" : "pin")
+        }
+        if showingArchive {
+            Button { restore(note) } label: {
+                Label("Przywróć", systemImage: "arrow.uturn.backward")
+            }
+        } else {
+            Button {
+                Task { await environment.archiveNote(id: note.id) }
+            } label: {
+                Label("Archiwizuj", systemImage: "archivebox")
+            }
+        }
+    }
+
+    private func restore(_ note: NoteRecord) {
+        var restored = note
+        restored.archived = false
+        Task { await environment.upsertNote(restored) }
+    }
+
+    private func delete(_ note: NoteRecord) {
+        deletedNote = note
+        Task { await environment.deleteNote(id: note.id) }
+    }
+
+    private func requestDelete(_ note: NoteRecord) {
+        noteToDelete = note
     }
 }
 
@@ -324,7 +479,6 @@ private struct NoteEditorSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -355,7 +509,9 @@ private struct NoteFeatureCard: View {
                 }
             }
         }
+        .frame(minHeight: 72, alignment: .leading)
         .rootineSurface()
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -383,6 +539,7 @@ private struct NoteListRow: View {
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
         }
         .padding(.vertical, RootineTheme.Spacing.small)
+        .frame(minHeight: 52)
     }
 }
 
@@ -402,20 +559,63 @@ private func noteColor(_ color: NoteColor) -> Color {
 private struct SportModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var isShowingWorkoutEditor = false
+    @State private var selectedWorkout: SportWorkout?
+    @State private var editingWorkout: SportWorkout?
+    @State private var workoutToDelete: SportWorkout?
+    @State private var deletedWorkout: SportWorkout?
     private let weekdays = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
 
     private var workouts: [SportWorkout] {
         environment.sportWorkspace.workouts.sorted { $0.date > $1.date }
     }
 
-    private var totalMinutes: Int { workouts.reduce(0) { $0 + $1.minutes } }
+    private var weekRange: (Date, Date) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let mondayOffset = (calendar.component(.weekday, from: today) + 5) % 7
+        let monday = calendar.date(byAdding: .day, value: -mondayOffset, to: today) ?? today
+        let sunday = calendar.date(byAdding: .day, value: 7, to: monday) ?? today
+        return (monday, sunday)
+    }
+
+    private var weekWorkouts: [SportWorkout] {
+        let (monday, sunday) = weekRange
+        return workouts.filter { workout in
+            guard let date = rootineDate(from: workout.date) else { return false }
+            return date >= monday && date < sunday
+        }
+    }
+
+    private var weekTotalMinutes: Int { weekWorkouts.reduce(0) { $0 + $1.minutes } }
+    private var weekCompletedWorkouts: Int { weekWorkouts.filter(\.completed).count }
+    private var weekAverageMinutes: Int {
+        guard !weekWorkouts.isEmpty else { return 0 }
+        return Int((Double(weekTotalMinutes) / Double(weekWorkouts.count)).rounded())
+    }
+
+    private var upcomingWorkouts: [SportWorkout] {
+        let today = RootineDate.localDate()
+        return workouts
+            .filter { !$0.completed && $0.date >= today }
+            .sorted { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
+    }
 
     private var chartMinutes: [Int] {
-        let fallback = [24, 38, 0, 52, 18, 0, 30]
-        guard !workouts.isEmpty else { return fallback }
-        let today = RootineDate.localDate()
-        let todayMinutes = workouts.filter { $0.date == today }.reduce(0) { $0 + $1.minutes }
-        return [0, 0, 0, 0, 0, 0, min(60, todayMinutes)]
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        // Calendar.weekday is Sunday-first; convert it to a Monday-first offset
+        // so the chart labels and bars always line up in Polish locales.
+        let mondayOffset = (calendar.component(.weekday, from: today) + 5) % 7
+        let monday = calendar.date(byAdding: .day, value: -mondayOffset, to: today) ?? today
+        return (0..<7).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: monday) ?? monday
+            let key = RootineDate.localDate(date)
+            return min(120, weekWorkouts.filter { $0.date == key }.reduce(0) { $0 + $1.minutes })
+        }
+    }
+
+    private var chartScale: CGFloat {
+        CGFloat(max(60, chartMinutes.max() ?? 0))
     }
 
     var body: some View {
@@ -424,7 +624,7 @@ private struct SportModuleContent: View {
                 HStack {
                     ModuleSectionTitle(title: "Ten tydzień", systemImage: "chart.bar.fill")
                     Spacer()
-                    Text("\(totalMinutes) min")
+                    Text("\(weekTotalMinutes) min")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(MoreModule.sport.tint)
                 }
@@ -435,7 +635,7 @@ private struct SportModuleContent: View {
                             GeometryReader { proxy in
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                                     .fill(chartMinutes[index] == 0 ? RootineTheme.ColorToken.elevated : MoreModule.sport.tint)
-                                    .frame(height: max(10, proxy.size.height * CGFloat(chartMinutes[index]) / 60))
+                                    .frame(height: max(10, proxy.size.height * CGFloat(chartMinutes[index]) / chartScale))
                                     .frame(maxHeight: .infinity, alignment: .bottom)
                             }
                             .frame(height: 78)
@@ -450,49 +650,28 @@ private struct SportModuleContent: View {
             .rootineSurface()
 
             HStack(spacing: RootineTheme.Spacing.small) {
-                SportMetric(value: "\(workouts.count)", label: "treningi", systemImage: "figure.run")
-                SportMetric(value: String(format: "%.1f", Double(totalMinutes) / 22.0), label: "km biegu", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                SportMetric(value: "8h", label: "regeneracji", systemImage: "bed.double.fill")
+                SportMetric(value: "\(weekTotalMinutes)", label: "min aktywności", systemImage: "timer")
+                SportMetric(value: "\(weekCompletedWorkouts)", label: "ukończone", systemImage: "checkmark.circle")
+                SportMetric(value: "\(weekAverageMinutes) min", label: "średnio / trening", systemImage: "chart.bar.xaxis")
             }
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                 ModuleSectionTitle(title: "Następny trening", systemImage: "calendar.badge.clock")
-                if let next = workouts.first(where: { !$0.completed }) {
-                    HStack(spacing: RootineTheme.Spacing.medium) {
-                        ZStack {
-                            Circle()
-                                .fill(MoreModule.sport.tint.opacity(0.18))
-                            Image(systemName: "figure.strengthtraining.traditional")
-                                .font(.title2)
-                                .foregroundStyle(MoreModule.sport.tint)
-                        }
-                        .frame(width: 52, height: 52)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(next.title)
-                                .font(.headline)
-                            Text("\(next.kind) · \(next.minutes) min")
-                                .font(.subheadline)
-                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                        }
-                        Spacer(minLength: 0)
-                        Button {
-                            Task { await environment.toggleWorkoutCompleted(id: next.id) }
-                        } label: {
-                            Image(systemName: "checkmark.circle")
-                                .font(.title2)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(MoreModule.sport.tint)
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            Task { await environment.deleteWorkout(id: next.id) }
-                        } label: {
-                            Label("Usuń trening", systemImage: "trash")
-                        }
-                    }
-                } else {
+                if upcomingWorkouts.isEmpty {
                     ModuleEmptyCard(title: "Zaplanuj kolejny trening", detail: "Dodaj aktywność i obserwuj regularność.", systemImage: "figure.run", tint: MoreModule.sport.tint)
+                } else {
+                    ForEach(upcomingWorkouts) { workout in
+                        SportWorkoutRow(
+                            workout: workout,
+                            onSelect: { selectedWorkout = workout },
+                            onToggle: { Task { await environment.toggleWorkoutCompleted(id: workout.id) } },
+                            onEdit: { editingWorkout = workout },
+                            onDelete: { requestDelete(workout) }
+                        )
+                        if workout.id != upcomingWorkouts.last?.id {
+                            Divider().overlay(RootineTheme.ColorToken.separator)
+                        }
+                    }
                 }
                 ModuleActionButton(title: "Zaplanuj trening", systemImage: "plus", tint: MoreModule.sport.tint) {
                     isShowingWorkoutEditor = true
@@ -504,17 +683,142 @@ private struct SportModuleContent: View {
             WorkoutEditorSheet { title, kind, minutes, date in
                 Task { await environment.addWorkout(title: title, date: date, minutes: minutes, kind: kind) }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedWorkout) { workout in
+            WorkoutDetailSheet(
+                workout: workout,
+                onEdit: { editingWorkout = workout },
+                onDelete: { requestDelete(workout) }
+            )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editingWorkout) { workout in
+            WorkoutEditorSheet(existing: workout) { title, kind, minutes, date in
+                Task { await environment.updateWorkout(id: workout.id, title: title, date: date, minutes: minutes, kind: kind) }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć trening?",
+            isPresented: Binding(
+                get: { workoutToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { workoutToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let workoutToDelete {
+                Button("Usuń trening", role: .destructive) {
+                    delete(workoutToDelete)
+                    self.workoutToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedWorkout {
+                RootineUndoBanner(message: "Usunięto trening \(deletedWorkout.title)") {
+                    let workout = deletedWorkout
+                    self.deletedWorkout = nil
+                    Task { await environment.restoreWorkout(workout) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
+            }
+        }
+    }
+
+    private func delete(_ workout: SportWorkout) {
+        deletedWorkout = workout
+        Task { await environment.deleteWorkout(id: workout.id) }
+    }
+
+    private func requestDelete(_ workout: SportWorkout) {
+        workoutToDelete = workout
+    }
+}
+
+private struct SportWorkoutRow: View {
+    let workout: SportWorkout
+    let onSelect: () -> Void
+    let onToggle: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.medium) {
+            ZStack {
+                Circle().fill(MoreModule.sport.tint.opacity(0.18))
+                Image(systemName: "figure.strengthtraining.traditional")
+                    .font(.title2)
+                    .foregroundStyle(MoreModule.sport.tint)
+            }
+            .frame(width: 52, height: 52)
+
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(workout.title)
+                        .font(.headline)
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(workout.kind) · \(workout.minutes) min · \(workout.date)")
+                        .font(.subheadline)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Szczegóły treningu: \(workout.title)")
+            .accessibilityHint("Otwiera szczegóły, edycję i usuwanie")
+
+            Button(action: onToggle) {
+                Image(systemName: workout.completed ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(workout.completed ? RootineTheme.ColorToken.success : MoreModule.sport.tint)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(workout.completed ? "Oznacz jako zaplanowany" : "Oznacz jako ukończony")
+        }
+        .contextMenu {
+            Button(action: onEdit) { Label("Edytuj trening", systemImage: "pencil") }
+            Button(role: .destructive, action: onDelete) { Label("Usuń trening", systemImage: "trash") }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive, action: onDelete) { Label("Usuń", systemImage: "trash") }
+            Button(action: onEdit) { Label("Edytuj", systemImage: "pencil") }.tint(MoreModule.sport.tint)
         }
     }
 }
 
+private func rootineDate(from key: String) -> Date? {
+    let parts = key.split(separator: "-").compactMap { Int($0) }
+    guard parts.count == 3 else { return nil }
+    return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+}
+
 private struct WorkoutEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    let existing: SportWorkout?
     let onSave: (String, String, Int, String) -> Void
-    @State private var title = ""
-    @State private var kind = "Trening"
-    @State private var minutes = "30"
-    @State private var date = RootineDate.localDate()
+    @State private var title: String
+    @State private var kind: String
+    @State private var minutes: String
+    @State private var date: String
+
+    init(existing: SportWorkout? = nil, onSave: @escaping (String, String, Int, String) -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        _title = State(initialValue: existing?.title ?? "")
+        _kind = State(initialValue: existing?.kind ?? "Trening")
+        _minutes = State(initialValue: String(existing?.minutes ?? 30))
+        _date = State(initialValue: existing?.date ?? RootineDate.localDate())
+    }
 
     var body: some View {
         NavigationStack {
@@ -527,7 +831,7 @@ private struct WorkoutEditorSheet: View {
                     TextField("Data (RRRR-MM-DD)", text: $date)
                 }
             }
-            .navigationTitle("Zaplanuj trening")
+            .navigationTitle(existing == nil ? "Zaplanuj trening" : "Edytuj trening")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
@@ -540,7 +844,73 @@ private struct WorkoutEditorSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+    }
+}
+
+private struct WorkoutDetailSheet: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.dismiss) private var dismiss
+    let workout: SportWorkout
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showDeleteConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                Label(workout.title, systemImage: "figure.run")
+                    .font(.title2.weight(.bold))
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                    detailRow("Rodzaj", value: workout.kind)
+                    detailRow("Data", value: workout.date)
+                    detailRow("Czas", value: "\(workout.minutes) min")
+                    detailRow("Status", value: workout.completed ? "Ukończony" : "Zaplanowany")
+                }
+                RootinePrimaryButton(
+                    workout.completed ? "Oznacz jako zaplanowany" : "Oznacz jako ukończony",
+                    systemImage: workout.completed ? "arrow.uturn.backward" : "checkmark"
+                ) {
+                    Task {
+                        await environment.toggleWorkoutCompleted(id: workout.id)
+                        dismiss()
+                    }
+                }
+                RootineSecondaryButton("Edytuj trening", systemImage: "pencil") {
+                    onEdit()
+                    dismiss()
+                }
+                Button("Usuń trening", role: .destructive) { showDeleteConfirmation = true }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .padding(RootineTheme.Spacing.large)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(RootineTheme.ColorToken.canvas)
+            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+            .navigationTitle("Szczegóły treningu")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Gotowe") { dismiss() }
+                }
+            }
+            .confirmationDialog("Usunąć trening?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                Button("Usuń trening", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("Anuluj", role: .cancel) {}
+            }
+        }
+    }
+
+    private func detailRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            Spacer()
+            Text(value)
+                .fontWeight(.semibold)
+        }
     }
 }
 
@@ -560,9 +930,11 @@ private struct SportMetric: View {
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: 72, alignment: .leading)
         .padding(RootineTheme.Spacing.small)
         .background(RootineTheme.ColorToken.surface)
         .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -571,6 +943,10 @@ private struct SportMetric: View {
 private struct GoalsModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var isShowingGoalEditor = false
+    @State private var selectedGoal: GoalRecord?
+    @State private var editingGoal: GoalRecord?
+    @State private var goalToDelete: GoalRecord?
+    @State private var deletedGoal: GoalRecord?
 
     private var goals: [GoalRecord] { environment.goalsWorkspace.goals }
     private var averageProgress: Double {
@@ -580,51 +956,64 @@ private struct GoalsModuleContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
-            HStack(spacing: RootineTheme.Spacing.large) {
-                ZStack {
-                    Circle()
-                        .stroke(RootineTheme.ColorToken.separator, lineWidth: 10)
-                    Circle()
-                        .trim(from: 0, to: averageProgress)
-                        .stroke(MoreModule.goals.tint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                        Text(goals.isEmpty ? "Ustal pierwszy cel" : "Dobry kierunek")
+                            .font(.title3.weight(.semibold))
+                        Text(goals.isEmpty ? "Mały cel pomaga utrzymać kierunek." : "Jeszcze jeden krok dziennie i utrzymasz tempo.")
+                            .font(.subheadline)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+                    Spacer(minLength: RootineTheme.Spacing.small)
                     Text("\(Int(averageProgress * 100))%")
-                        .font(.title3.weight(.bold))
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(MoreModule.goals.tint)
                 }
-                .frame(width: 92, height: 92)
-
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                    Text(goals.isEmpty ? "Ustal pierwszy cel" : "Dobry kierunek")
-                        .font(.title3.weight(.semibold))
-                    Text(goals.isEmpty ? "Mały cel pomaga utrzymać kierunek." : "Jeszcze jeden krok dziennie i utrzymasz tempo.")
-                        .font(.subheadline)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                }
+                ProgressView(value: averageProgress)
+                    .tint(MoreModule.goals.tint)
+                    .accessibilityLabel("Średni postęp celów")
+                    .accessibilityValue("\(Int(averageProgress * 100)) procent")
             }
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
             .rootineSurface()
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
                 ModuleSectionTitle(title: "Aktywne cele", systemImage: "target")
-                VStack(spacing: 0) {
-                    ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
-                        GoalRow(goal: goal) {
-                            Task { await environment.advanceGoal(id: goal.id) }
-                        }
-                        .contextMenu {
-                            Button { Task { await environment.advanceGoal(id: goal.id) } } label: {
-                                Label("Dodaj krok", systemImage: "plus.circle")
+                if goals.isEmpty {
+                    ModuleEmptyCard(title: "Zacznij od jednego celu", detail: "Wybierz mały, konkretny krok na dziś.", systemImage: "target", tint: MoreModule.goals.tint)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
+                            GoalRow(goal: goal, onSelect: { selectedGoal = goal }) {
+                                Task { await environment.advanceGoal(id: goal.id) }
                             }
-                            Button(role: .destructive) { Task { await environment.deleteGoal(id: goal.id) } } label: {
-                                Label("Usuń cel", systemImage: "trash")
+                            .contextMenu {
+                                Button { Task { await environment.advanceGoal(id: goal.id) } } label: {
+                                    Label("Dodaj krok", systemImage: "plus.circle")
+                                }
+                                Button(role: .destructive) { requestDelete(goal) } label: {
+                                    Label("Usuń cel", systemImage: "trash")
+                                }
                             }
-                        }
-                        if index < goals.count - 1 {
-                            Divider().overlay(RootineTheme.ColorToken.separator)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    requestDelete(goal)
+                                } label: {
+                                    Label("Usuń", systemImage: "trash")
+                                }
+                                Button { editingGoal = goal } label: {
+                                    Label("Edytuj", systemImage: "pencil")
+                                }
+                                .tint(MoreModule.goals.tint)
+                            }
+                            if index < goals.count - 1 {
+                                Divider().overlay(RootineTheme.ColorToken.separator)
+                            }
                         }
                     }
+                    .rootineSurface()
                 }
-                .rootineSurface()
             }
 
             ModuleActionButton(title: "Dodaj cel", systemImage: "plus", tint: MoreModule.goals.tint) {
@@ -636,11 +1025,66 @@ private struct GoalsModuleContent: View {
                 Task { await environment.addGoal(title: title, detail: detail, target: target, icon: icon) }
             }
         }
+        .sheet(item: $selectedGoal) { goal in
+            GoalDetailSheet(
+                goal: goal,
+                onEdit: { editingGoal = goal },
+                onDelete: { requestDelete(goal) }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editingGoal) { goal in
+            GoalEditorSheet(existing: goal) { title, detail, target, icon in
+                Task { await environment.updateGoal(id: goal.id, title: title, detail: detail, target: target, icon: icon) }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć cel?",
+            isPresented: Binding(
+                get: { goalToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { goalToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let goalToDelete {
+                Button("Usuń cel", role: .destructive) {
+                    delete(goalToDelete)
+                    self.goalToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedGoal {
+                RootineUndoBanner(message: "Usunięto cel \(deletedGoal.title)") {
+                    let goal = deletedGoal
+                    self.deletedGoal = nil
+                    Task { await environment.restoreGoal(goal) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
+            }
+        }
+    }
+
+    private func delete(_ goal: GoalRecord) {
+        deletedGoal = goal
+        Task { await environment.deleteGoal(id: goal.id) }
+    }
+
+    private func requestDelete(_ goal: GoalRecord) {
+        goalToDelete = goal
     }
 }
 
 private struct GoalRow: View {
     let goal: GoalRecord
+    let onSelect: () -> Void
     let onAdvance: () -> Void
 
     var body: some View {
@@ -648,37 +1092,55 @@ private struct GoalRow: View {
             Image(systemName: goal.icon)
                 .foregroundStyle(MoreModule.goals.tint)
                 .frame(width: 26)
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                HStack {
-                    Text(goal.title).font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text("\(Int(goal.progress * 100))%")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(MoreModule.goals.tint)
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                    HStack {
+                        Text(goal.title).font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text("\(Int(goal.progress * 100))%")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(MoreModule.goals.tint)
+                    }
+                    Text(goal.detail.isEmpty ? "Postęp celu" : goal.detail)
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    ProgressView(value: goal.progress)
+                        .tint(MoreModule.goals.tint)
                 }
-                Text(goal.detail.isEmpty ? "Postęp celu" : goal.detail)
-                    .font(.caption)
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                ProgressView(value: goal.progress)
-                    .tint(MoreModule.goals.tint)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Szczegóły celu: \(goal.title)")
             Button(action: onAdvance) {
                 Image(systemName: "plus.circle.fill")
                     .foregroundStyle(MoreModule.goals.tint)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dodaj krok do celu \(goal.title)")
         }
         .padding(.vertical, RootineTheme.Spacing.small)
+        .contentShape(Rectangle())
     }
 }
 
 private struct GoalEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    let existing: GoalRecord?
     let onSave: (String, String, Double, String) -> Void
-    @State private var title = ""
-    @State private var detail = ""
-    @State private var target = "10"
-    @State private var icon = "target"
+    @State private var title: String
+    @State private var detail: String
+    @State private var target: String
+    @State private var icon: String
+
+    init(existing: GoalRecord? = nil, onSave: @escaping (String, String, Double, String) -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        _title = State(initialValue: existing?.title ?? "")
+        _detail = State(initialValue: existing?.detail ?? "")
+        _target = State(initialValue: String(existing?.target ?? 10))
+        _icon = State(initialValue: existing?.icon ?? "target")
+    }
 
     var body: some View {
         NavigationStack {
@@ -691,7 +1153,7 @@ private struct GoalEditorSheet: View {
                     TextField("Ikona SF Symbol", text: $icon)
                 }
             }
-            .navigationTitle("Dodaj cel")
+            .navigationTitle(existing == nil ? "Dodaj cel" : "Edytuj cel")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
@@ -704,7 +1166,54 @@ private struct GoalEditorSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+    }
+}
+
+private struct GoalDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let goal: GoalRecord
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showDeleteConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                Label(goal.title, systemImage: goal.icon)
+                    .font(.title2.weight(.bold))
+                Text(goal.detail.isEmpty ? "Bez dodatkowego opisu" : goal.detail)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                ProgressView(value: goal.progress)
+                    .tint(MoreModule.goals.tint)
+                    .accessibilityLabel("Postęp celu")
+                    .accessibilityValue("\(Int(goal.progress * 100)) procent")
+                Text("\(Int(goal.current.rounded())) z \(Int(goal.target.rounded())) kroków")
+                    .font(.subheadline.weight(.semibold))
+                RootineSecondaryButton("Edytuj cel", systemImage: "pencil") {
+                    onEdit()
+                    dismiss()
+                }
+                Button("Usuń cel", role: .destructive) { showDeleteConfirmation = true }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                Spacer()
+            }
+            .padding(RootineTheme.Spacing.large)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(RootineTheme.ColorToken.canvas)
+            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+            .navigationTitle("Szczegóły celu")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Gotowe") { dismiss() } }
+            }
+            .confirmationDialog("Usunąć cel?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                Button("Usuń cel", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("Anuluj", role: .cancel) {}
+            }
+        }
     }
 }
 
@@ -713,23 +1222,33 @@ private struct GoalEditorSheet: View {
 private struct WorkModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var isShowingPriorityEditor = false
+    @State private var editingPriority: WorkspaceTask?
+    @State private var priorityToDelete: WorkspaceTask?
+    @State private var deletedPriority: WorkspaceTask?
 
     private var workTasks: [WorkspaceTask] {
         environment.taskWorkspace.tasks.filter { $0.deleted != true && $0.source?.kind == "work" }
     }
 
-    private var isFocusRunning: Bool { environment.workWorkspace.activeFocusStartedAt != nil }
+    private var isFocusRunning: Bool { focusStartDate != nil }
+
+    private var focusStartDate: Date? {
+        guard let startedAt = environment.workWorkspace.activeFocusStartedAt else { return nil }
+        return RootineDate.date(from: startedAt)
+    }
+
+    private var hasCorruptFocusSession: Bool {
+        environment.workWorkspace.activeFocusStartedAt != nil && focusStartDate == nil
+    }
 
     private func elapsedText(at date: Date) -> String {
-        guard let startedAt = environment.workWorkspace.activeFocusStartedAt,
-              let start = ISO8601DateFormatter().date(from: startedAt) else { return "25:00" }
+        guard let start = focusStartDate else { return "—" }
         let elapsed = max(0, Int(date.timeIntervalSince(start)))
         return String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
 
     private func focusProgress(at date: Date) -> Double {
-        guard let startedAt = environment.workWorkspace.activeFocusStartedAt,
-              let start = ISO8601DateFormatter().date(from: startedAt) else { return 0 }
+        guard let start = focusStartDate else { return 0 }
         return min(1, max(0, date.timeIntervalSince(start) / (25 * 60)))
     }
 
@@ -743,34 +1262,60 @@ private struct WorkModuleContent: View {
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(isFocusRunning ? MoreModule.work.tint : RootineTheme.ColorToken.success)
                 }
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                if hasCorruptFocusSession {
+                    Label("Sesja wymaga odzyskania", systemImage: "exclamationmark.triangle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.warning)
+                    Text("Nie udało się odczytać czasu rozpoczęcia. Wyczyść uszkodzony zapis, aby uruchomić nową sesję.")
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    Button("Wyczyść uszkodzoną sesję", role: .destructive) {
+                        Task { await environment.resetFocusSession() }
+                    }
+                    .frame(minHeight: 44)
+                } else if isFocusRunning {
+                    TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                        VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                            HStack(alignment: .lastTextBaseline) {
+                                Text(elapsedText(at: timeline.date))
+                                    .font(.largeTitle.weight(.bold))
+                                    .monospacedDigit()
+                                Text("min")
+                                    .font(.subheadline)
+                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            }
+                            ProgressView(value: focusProgress(at: timeline.date))
+                                .tint(MoreModule.work.tint)
+                        }
+                    }
+                } else {
                     HStack(alignment: .lastTextBaseline) {
-                        Text(isFocusRunning ? elapsedText(at: timeline.date) : "25:00")
-                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                        Text("25:00")
+                            .font(.largeTitle.weight(.bold))
                             .monospacedDigit()
-                        Text(isFocusRunning ? "min" : "min planu")
+                        Text("min planu")
                             .font(.subheadline)
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                 }
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    ProgressView(value: isFocusRunning ? focusProgress(at: timeline.date) : 0)
-                        .tint(MoreModule.work.tint)
-                }
-                Button {
-                    Task {
-                        if isFocusRunning {
-                            await environment.stopFocusSession()
-                        } else {
-                            await environment.startFocusSession()
+                if !hasCorruptFocusSession {
+                    Button {
+                        Task {
+                            if isFocusRunning {
+                                await environment.stopFocusSession()
+                            } else {
+                                await environment.startFocusSession()
+                            }
                         }
+                    } label: {
+                        Label(isFocusRunning ? "Zatrzymaj sesję" : "Rozpocznij sesję", systemImage: isFocusRunning ? "pause.fill" : "play.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Label(isFocusRunning ? "Zatrzymaj sesję" : "Rozpocznij sesję", systemImage: isFocusRunning ? "pause.fill" : "play.fill")
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                    .tint(MoreModule.work.tint)
+                    .frame(minHeight: 48)
+                    .accessibilityHint(isFocusRunning ? "Kończy bieżącą sesję skupienia" : "Uruchamia 25 minut skupienia")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(MoreModule.work.tint)
             }
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
             .rootineSurface()
@@ -779,30 +1324,47 @@ private struct WorkModuleContent: View {
                 HStack {
                     ModuleSectionTitle(title: "Priorytety", systemImage: "checklist")
                     Spacer()
-                    Text("\(workTasks.count == 0 ? 3 : workTasks.count)")
+                    Text("\(workTasks.count)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
-                let fallback = ["Zamknąć ofertę dla klienta", "Przygotować agendę spotkania", "Odpisać na feedback"]
-                let titles = workTasks.isEmpty ? fallback : workTasks.prefix(3).map(\.text)
-                VStack(spacing: 0) {
-                    ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            Image(systemName: index == 0 ? "circle.inset.filled" : "circle")
-                                .foregroundStyle(index == 0 ? MoreModule.work.tint : RootineTheme.ColorToken.secondaryText)
-                            Text(title)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                                .lineLimit(2)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.vertical, RootineTheme.Spacing.small)
-                        if index < titles.count - 1 {
-                            Divider().overlay(RootineTheme.ColorToken.separator)
+                if workTasks.isEmpty {
+                    ModuleEmptyCard(title: "Dodaj pierwszy priorytet", detail: "Zapisane priorytety pojawią się tutaj — bez przykładowych danych.", systemImage: "checklist", tint: MoreModule.work.tint)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workTasks.enumerated()), id: \.element.id) { index, task in
+                            Button { editingPriority = task } label: {
+                                HStack(spacing: RootineTheme.Spacing.small) {
+                                    Image(systemName: task.done ? "checkmark.circle.fill" : index == 0 ? "circle.inset.filled" : "circle")
+                                        .foregroundStyle(task.done ? RootineTheme.ColorToken.success : index == 0 ? MoreModule.work.tint : RootineTheme.ColorToken.secondaryText)
+                                    Text(task.text)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                        .lineLimit(2)
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                }
+                                .padding(.vertical, RootineTheme.Spacing.small)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Edytuj priorytet: \(task.text)")
+                            .contextMenu {
+                                Button { editingPriority = task } label: { Label("Edytuj", systemImage: "pencil") }
+                                Button(role: .destructive) { requestDelete(task) } label: { Label("Usuń", systemImage: "trash") }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) { requestDelete(task) } label: { Label("Usuń", systemImage: "trash") }
+                            }
+                            if index < workTasks.count - 1 {
+                                Divider().overlay(RootineTheme.ColorToken.separator)
+                            }
                         }
                     }
+                    .rootineSurface()
                 }
-                .rootineSurface()
                 ModuleActionButton(title: "Dodaj priorytet", systemImage: "plus", tint: MoreModule.work.tint) {
                     isShowingPriorityEditor = true
                 }
@@ -833,13 +1395,69 @@ private struct WorkModuleContent: View {
                 Task { await environment.addWorkPriority(text: title) }
             }
         }
+        .sheet(item: $editingPriority) { task in
+            WorkPriorityEditorSheet(existing: task, onSave: { title in
+                Task { await environment.updateWorkPriority(id: task.id, text: title) }
+            }, onDelete: {
+                requestDelete(task)
+            })
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć priorytet?",
+            isPresented: Binding(
+                get: { priorityToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { priorityToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let priorityToDelete {
+                Button("Usuń priorytet", role: .destructive) {
+                    delete(priorityToDelete)
+                    self.priorityToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedPriority {
+                RootineUndoBanner(message: "Usunięto priorytet") {
+                    let task = deletedPriority
+                    self.deletedPriority = nil
+                    Task { await environment.restoreWorkPriority(task) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
+            }
+        }
+    }
+
+    private func delete(_ task: WorkspaceTask) {
+        deletedPriority = task
+        Task { await environment.deleteTask(id: task.id) }
+    }
+
+    private func requestDelete(_ task: WorkspaceTask) {
+        priorityToDelete = task
     }
 }
 
 private struct WorkPriorityEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    let existing: WorkspaceTask?
     let onSave: (String) -> Void
-    @State private var title = ""
+    let onDelete: (() -> Void)?
+    @State private var title: String
+
+    init(existing: WorkspaceTask? = nil, onSave: @escaping (String) -> Void, onDelete: (() -> Void)? = nil) {
+        self.existing = existing
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _title = State(initialValue: existing?.text ?? "")
+    }
 
     var body: some View {
         NavigationStack {
@@ -848,8 +1466,16 @@ private struct WorkPriorityEditorSheet: View {
                     TextField("Co jest najważniejsze?", text: $title, axis: .vertical)
                         .lineLimit(2...4)
                 }
+                if existing != nil, let onDelete {
+                    Section {
+                        Button("Usuń priorytet", role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        }
+                    }
+                }
             }
-            .navigationTitle("Dodaj priorytet")
+            .navigationTitle(existing == nil ? "Dodaj priorytet" : "Edytuj priorytet")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
@@ -862,7 +1488,6 @@ private struct WorkPriorityEditorSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -871,54 +1496,26 @@ private struct WorkPriorityEditorSheet: View {
 private struct TravelModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var isShowingTripEditor = false
+    @State private var selectedTrip: TravelRecord?
+    @State private var editingTrip: TravelRecord?
+    @State private var deletedTrip: TravelRecord?
+    @State private var tripToDelete: TravelRecord?
 
     private var trips: [TravelRecord] { environment.travelWorkspace.trips }
 
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
-            if let trip = trips.first {
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                            Text(trip.destination)
-                                .font(.title2.weight(.bold))
-                            Text("\(trip.dateRange) · \(trip.nights) nocy")
-                                .font(.subheadline)
-                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                        }
-                        Spacer()
-                        Image(systemName: "water.waves.and.moon")
-                            .font(.title)
-                            .foregroundStyle(MoreModule.travel.tint)
-                    }
-                    HStack(spacing: RootineTheme.Spacing.small) {
-                        TravelChip(title: "Plan", systemImage: "checklist")
-                        TravelChip(title: "\(trip.itinerary.count) punktów", systemImage: "map")
-                    }
-                }
-                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                .rootineSurface()
-                .contextMenu {
-                    Button(role: .destructive) { Task { await environment.deleteTrip(id: trip.id) } } label: {
-                        Label("Usuń podróż", systemImage: "trash")
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                    ModuleSectionTitle(title: "Plan podróży", systemImage: "map")
-                    if trip.itinerary.isEmpty {
-                        Text("Dodaj punkty planu później — podróż jest już zapisana.")
-                            .font(.subheadline)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    } else {
-                        ForEach(Array(trip.itinerary.enumerated()), id: \.element.id) { index, item in
-                            TravelTimelineRow(day: item.day, title: item.title, detail: item.detail, isLast: index == trip.itinerary.count - 1)
-                        }
-                    }
-                }
-                .rootineSurface()
-            } else {
+            if trips.isEmpty {
                 ModuleEmptyCard(title: "Zaplanuj podróż", detail: "Zapisz miejsce i termin, żeby mieć je zawsze pod ręką.", systemImage: "airplane", tint: MoreModule.travel.tint)
+            } else {
+                ForEach(trips) { trip in
+                    TravelTripCard(
+                        trip: trip,
+                        onDelete: { tripToDelete = trip },
+                        onEdit: { editingTrip = trip },
+                        onSelect: { selectedTrip = trip }
+                    )
+                }
             }
 
             ModuleActionButton(title: trips.isEmpty ? "Dodaj podróż" : "Dodaj kolejną podróż", systemImage: "plus", tint: MoreModule.travel.tint) {
@@ -929,16 +1526,224 @@ private struct TravelModuleContent: View {
             TripEditorSheet { destination, dateRange, nights in
                 Task { await environment.addTrip(destination: destination, dateRange: dateRange, nights: nights) }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editingTrip) { trip in
+            TripEditorSheet(existing: trip) { destination, dateRange, nights in
+                Task { await environment.updateTrip(id: trip.id, destination: destination, dateRange: dateRange, nights: nights) }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedTrip) { trip in
+            TravelDetailSheet(
+                trip: trip,
+                onEdit: { editingTrip = trip },
+                onDelete: {
+                    selectedTrip = nil
+                    delete(trip)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć podróż?",
+            isPresented: Binding(
+                get: { tripToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { tripToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let tripToDelete {
+                Button("Usuń podróż", role: .destructive) {
+                    delete(tripToDelete)
+                    self.tripToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedTrip {
+                RootineUndoBanner(message: "Usunięto podróż do \(deletedTrip.destination)") {
+                    let trip = deletedTrip
+                    self.deletedTrip = nil
+                    Task { await environment.restoreTrip(trip) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
+            }
+        }
+    }
+
+    private func delete(_ trip: TravelRecord) {
+        deletedTrip = trip
+        Task { await environment.deleteTrip(id: trip.id) }
+    }
+}
+
+private struct TravelTripCard: View {
+    let trip: TravelRecord
+    let onDelete: () -> Void
+    let onEdit: () -> Void
+    let onSelect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+            HStack {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                    Text(trip.destination)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                    Text("\(trip.dateRange.isEmpty ? "Termin do ustalenia" : trip.dateRange) · \(trip.nights) nocy")
+                        .font(.subheadline)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                Spacer(minLength: RootineTheme.Spacing.small)
+                Image(systemName: "water.waves.and.moon")
+                    .font(.title)
+                    .foregroundStyle(MoreModule.travel.tint)
+                    .accessibilityHidden(true)
+            }
+            HStack(spacing: RootineTheme.Spacing.small) {
+                TravelChip(title: "Plan", systemImage: "checklist")
+                TravelChip(title: "\(trip.itinerary.count) punktów", systemImage: "map")
+                Spacer()
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Usuń podróż \(trip.destination)")
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MoreModule.travel.tint)
+                .accessibilityLabel("Edytuj podróż \(trip.destination)")
+            }
+
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                ModuleSectionTitle(title: "Plan podróży", systemImage: "map")
+                if trip.itinerary.isEmpty {
+                    Text("Dodaj punkty planu później — podróż jest już zapisana.")
+                        .font(.subheadline)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                } else {
+                    ForEach(Array(trip.itinerary.enumerated()), id: \.element.id) { index, item in
+                        TravelTimelineRow(day: item.day, title: item.title, detail: item.detail, isLast: index == trip.itinerary.count - 1)
+                    }
+                }
+            }
+
+            Button(action: onSelect) {
+                Label("Otwórz szczegóły", systemImage: "arrow.up.right")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(MoreModule.travel.tint)
+            .accessibilityHint("Pokazuje pełny plan podróży i dostępne akcje")
+        }
+        .rootineSurface()
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) {
+                Label("Usuń podróż", systemImage: "trash")
+            }
+        }
+    }
+}
+
+private struct TravelDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let trip: TravelRecord
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showDeleteConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                        Label(trip.destination, systemImage: "airplane")
+                            .font(.title2.weight(.bold))
+                        Text(trip.dateRange.isEmpty ? "Termin do ustalenia" : trip.dateRange)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+
+                    HStack(spacing: RootineTheme.Spacing.small) {
+                        TravelChip(title: "\(trip.nights) nocy", systemImage: "moon.stars")
+                        TravelChip(title: "\(trip.itinerary.count) punktów", systemImage: "map")
+                    }
+
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                        ModuleSectionTitle(title: "Plan podróży", systemImage: "map")
+                        if trip.itinerary.isEmpty {
+                            ModuleEmptyCard(
+                                title: "Plan pojawi się tutaj",
+                                detail: "Podróż jest zapisana. Dodaj punkty planu, gdy będziesz gotowy.",
+                                systemImage: "map",
+                                tint: MoreModule.travel.tint
+                            )
+                        } else {
+                            ForEach(Array(trip.itinerary.enumerated()), id: \.element.id) { index, item in
+                                TravelTimelineRow(
+                                    day: item.day,
+                                    title: item.title,
+                                    detail: item.detail,
+                                    isLast: index == trip.itinerary.count - 1
+                                )
+                            }
+                        }
+                    }
+
+                    RootineSecondaryButton("Edytuj podróż", systemImage: "pencil") {
+                        onEdit()
+                        dismiss()
+                    }
+                    Button("Usuń podróż", role: .destructive) { showDeleteConfirmation = true }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .padding(RootineTheme.Spacing.large)
+            }
+            .background(RootineTheme.ColorToken.canvas)
+            .navigationTitle("Szczegóły podróży")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Gotowe") { dismiss() }
+                }
+            }
+            .confirmationDialog("Usunąć podróż?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                Button("Usuń podróż", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("Anuluj", role: .cancel) {}
+            }
         }
     }
 }
 
 private struct TripEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    let existing: TravelRecord?
     let onSave: (String, String, Int) -> Void
-    @State private var destination = ""
-    @State private var dateRange = ""
-    @State private var nights = "3"
+    @State private var destination: String
+    @State private var dateRange: String
+    @State private var nights: String
+
+    init(existing: TravelRecord? = nil, onSave: @escaping (String, String, Int) -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        _destination = State(initialValue: existing?.destination ?? "")
+        _dateRange = State(initialValue: existing?.dateRange ?? "")
+        _nights = State(initialValue: String(existing?.nights ?? 3))
+    }
 
     var body: some View {
         NavigationStack {
@@ -950,7 +1755,7 @@ private struct TripEditorSheet: View {
                         .keyboardType(.numberPad)
                 }
             }
-            .navigationTitle("Dodaj podróż")
+            .navigationTitle(existing == nil ? "Dodaj podróż" : "Edytuj podróż")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
@@ -963,7 +1768,6 @@ private struct TripEditorSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -1022,22 +1826,31 @@ private struct TravelTimelineRow: View {
 private struct HealthModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var isShowingReminderEditor = false
+    @State private var selectedReminder: HealthReminder?
+    @State private var editingReminder: HealthReminder?
+    @State private var reminderToDelete: HealthReminder?
+    @State private var deletedReminder: HealthReminder?
 
     private var water: Double {
         let key = RootineDate.localDate()
-        return environment.nutritionWorkspace.days[key]?.waterMl ?? 1250
+        return environment.nutritionWorkspace.days[key]?.waterMl ?? 0
     }
 
     private var todayEnergy: Int? {
         environment.healthWorkspace.checkIns[RootineDate.localDate()]?.energy
     }
 
+    private var todayEnergyLabel: String {
+        guard let energy = todayEnergy else { return "Nieuzupełnione" }
+        return "\(energy)/4"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
             HStack(spacing: RootineTheme.Spacing.small) {
-                HealthMetric(value: "7h 42m", label: "sen", systemImage: "bed.double.fill", tint: MoreModule.health.tint)
-                HealthMetric(value: "72", label: "bpm", systemImage: "heart.fill", tint: RootineTheme.ColorToken.destructive)
+                HealthMetric(value: todayEnergyLabel, label: "energia", systemImage: "bolt.fill", tint: MoreModule.health.tint)
                 HealthMetric(value: "\(Int(water)) ml", label: "wody", systemImage: "drop.fill", tint: RootineTheme.ColorToken.action)
+                HealthMetric(value: "\(environment.healthWorkspace.reminders.count)", label: "przypomnienia", systemImage: "bell.badge.fill", tint: RootineTheme.ColorToken.warning)
             }
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
@@ -1059,12 +1872,15 @@ private struct HealthModuleContent: View {
                             Image(systemName: mood)
                                 .font(.title2.weight(.semibold))
                                 .foregroundStyle(todayEnergy == index + 1 ? RootineTheme.ColorToken.canvas : MoreModule.health.tint)
-                                .frame(maxWidth: .infinity)
+                                .frame(maxWidth: .infinity, minHeight: 52)
                                 .padding(.vertical, RootineTheme.Spacing.small)
                                 .background(todayEnergy == index + 1 ? MoreModule.health.tint : RootineTheme.ColorToken.elevated)
                                 .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Energia: \(index + 1) z 4")
+                        .accessibilityValue(todayEnergy == index + 1 ? "Wybrano" : "Niewybrano")
+                        .accessibilityAddTraits(todayEnergy == index + 1 ? [.isSelected] : [])
                     }
                 }
             }
@@ -1073,28 +1889,43 @@ private struct HealthModuleContent: View {
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
                 ModuleSectionTitle(title: "Małe przypomnienia", systemImage: "bell.badge")
                 if environment.healthWorkspace.reminders.isEmpty {
-                    Text("Nie masz jeszcze przypomnień.")
-                        .font(.subheadline)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    ModuleEmptyCard(title: "Ustaw jedno przypomnienie", detail: "Krótki sygnał pomaga wrócić do dobrego rytmu.", systemImage: "bell.badge", tint: MoreModule.health.tint)
                 } else {
                     ForEach(Array(environment.healthWorkspace.reminders.enumerated()), id: \.element.id) { index, reminder in
-                        Button {
-                            Task { await environment.toggleHealthReminder(id: reminder.id) }
-                        } label: {
-                            HealthReminderRow(
-                                title: reminder.title,
-                                detail: reminder.detail,
-                                tint: index == 0 ? MoreModule.health.tint : RootineTheme.ColorToken.action,
-                                isCompleted: reminder.completedDates.contains(RootineDate.localDate())
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        HealthReminderRow(
+                            title: reminder.title,
+                            detail: reminder.detail,
+                            tint: index == 0 ? MoreModule.health.tint : RootineTheme.ColorToken.action,
+                            isCompleted: reminder.completedDates.contains(RootineDate.localDate()),
+                            onToggle: { Task { await environment.toggleHealthReminder(id: reminder.id) } },
+                            onSelect: { selectedReminder = reminder }
+                        )
+                        .frame(minHeight: 52)
                         .contextMenu {
+                            Button { selectedReminder = reminder } label: {
+                                Label("Szczegóły przypomnienia", systemImage: "info.circle")
+                            }
+                            Button { editingReminder = reminder } label: {
+                                Label("Edytuj przypomnienie", systemImage: "pencil")
+                            }
                             Button(role: .destructive) {
-                                Task { await environment.deleteHealthReminder(id: reminder.id) }
+                                requestDelete(reminder)
                             } label: {
                                 Label("Usuń przypomnienie", systemImage: "trash")
                             }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                requestDelete(reminder)
+                            } label: {
+                                Label("Usuń", systemImage: "trash")
+                            }
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button { editingReminder = reminder } label: {
+                                Label("Edytuj", systemImage: "pencil")
+                            }
+                            .tint(MoreModule.health.tint)
                         }
                         if index < environment.healthWorkspace.reminders.count - 1 {
                             Divider().overlay(RootineTheme.ColorToken.separator)
@@ -1111,15 +1942,153 @@ private struct HealthModuleContent: View {
             HealthReminderEditorSheet { title, detail in
                 Task { await environment.addHealthReminder(title: title, detail: detail) }
             }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editingReminder) { reminder in
+            HealthReminderEditorSheet(existing: reminder) { title, detail in
+                Task { await environment.updateHealthReminder(id: reminder.id, title: title, detail: detail) }
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedReminder) { reminder in
+            HealthReminderDetailSheet(
+                reminder: reminder,
+                isCompleted: reminder.completedDates.contains(RootineDate.localDate()),
+                onToggle: {
+                    Task { await environment.toggleHealthReminder(id: reminder.id) }
+                },
+                onEdit: {
+                    selectedReminder = nil
+                    editingReminder = reminder
+                },
+                onDelete: {
+                    selectedReminder = nil
+                    requestDelete(reminder)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć przypomnienie?",
+            isPresented: Binding(
+                get: { reminderToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { reminderToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let reminderToDelete {
+                Button("Usuń przypomnienie", role: .destructive) {
+                    delete(reminderToDelete)
+                    self.reminderToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedReminder {
+                RootineUndoBanner(message: "Usunięto przypomnienie") {
+                    let reminder = deletedReminder
+                    self.deletedReminder = nil
+                    Task { await environment.restoreHealthReminder(reminder) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
+            }
+        }
+    }
+
+    private func requestDelete(_ reminder: HealthReminder) {
+        reminderToDelete = reminder
+    }
+
+    private func delete(_ reminder: HealthReminder) {
+        deletedReminder = reminder
+        Task { await environment.deleteHealthReminder(id: reminder.id) }
+    }
+}
+
+private struct HealthReminderDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let reminder: HealthReminder
+    let isCompleted: Bool
+    let onToggle: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showDeleteConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                    Label(reminder.title, systemImage: isCompleted ? "checkmark.circle.fill" : "bell.badge")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                    Text(reminder.detail.isEmpty ? "Bez dodatkowej informacji" : reminder.detail)
+                        .font(.body)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    HStack(spacing: RootineTheme.Spacing.small) {
+                        Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isCompleted ? RootineTheme.ColorToken.success : MoreModule.health.tint)
+                        Text(isCompleted ? "Ukończone dzisiaj" : "Do zrobienia dzisiaj")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .accessibilityElement(children: .combine)
+
+                    RootinePrimaryButton(
+                        isCompleted ? "Oznacz jako nieukończone" : "Oznacz jako ukończone",
+                        systemImage: isCompleted ? "arrow.uturn.backward" : "checkmark"
+                    ) {
+                        onToggle()
+                        dismiss()
+                    }
+                    RootineSecondaryButton("Edytuj przypomnienie", systemImage: "pencil") {
+                        onEdit()
+                        dismiss()
+                    }
+                    Button("Usuń przypomnienie", role: .destructive) {
+                        showDeleteConfirmation = true
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .padding(RootineTheme.Spacing.large)
+            }
+            .background(RootineTheme.ColorToken.canvas)
+            .navigationTitle("Szczegóły przypomnienia")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Gotowe") { dismiss() }
+                }
+            }
+            .confirmationDialog("Usunąć przypomnienie?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                Button("Usuń przypomnienie", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("Anuluj", role: .cancel) {}
+            }
         }
     }
 }
 
 private struct HealthReminderEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    let existing: HealthReminder?
     let onSave: (String, String) -> Void
-    @State private var title = ""
-    @State private var detail = ""
+    @State private var title: String
+    @State private var detail: String
+
+    init(existing: HealthReminder? = nil, onSave: @escaping (String, String) -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        _title = State(initialValue: existing?.title ?? "")
+        _detail = State(initialValue: existing?.detail ?? "")
+    }
 
     var body: some View {
         NavigationStack {
@@ -1129,7 +2098,7 @@ private struct HealthReminderEditorSheet: View {
                     TextField("Kiedy? (opcjonalnie)", text: $detail)
                 }
             }
-            .navigationTitle("Dodaj przypomnienie")
+            .navigationTitle(existing == nil ? "Dodaj przypomnienie" : "Edytuj przypomnienie")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
@@ -1142,7 +2111,6 @@ private struct HealthReminderEditorSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -1166,9 +2134,12 @@ private struct HealthMetric: View {
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: 72, alignment: .leading)
         .padding(RootineTheme.Spacing.small)
         .background(RootineTheme.ColorToken.surface)
         .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 }
 
@@ -1176,30 +2147,53 @@ private struct HealthReminderRow: View {
     let title: String
     let detail: String
     let tint: Color
-    var isCompleted: Bool = false
+    let isCompleted: Bool
+    let onToggle: () -> Void
+    let onSelect: () -> Void
 
     var body: some View {
         HStack(spacing: RootineTheme.Spacing.small) {
-            Circle()
-                .fill(tint.opacity(0.18))
-                .frame(width: 34, height: 34)
-                .overlay {
-                Image(systemName: isCompleted ? "checkmark" : "bell")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(tint)
-                }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.medium))
-                    .strikethrough(isCompleted)
-                    .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            Button(action: onToggle) {
+                Circle()
+                    .fill(tint.opacity(0.18))
+                    .frame(width: 36, height: 36)
+                    .overlay {
+                        Image(systemName: isCompleted ? "checkmark" : "bell")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(tint)
+                    }
+                    .frame(width: 44, height: 44)
             }
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .accessibilityLabel(isCompleted ? "Oznacz przypomnienie jako nieukończone" : "Oznacz przypomnienie jako ukończone")
+
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
+                        .strikethrough(isCompleted)
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                    Text(detail.isEmpty ? "Bez dodatkowej informacji" : detail)
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Szczegóły przypomnienia: \(title)")
+
+            Button(action: onSelect) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Otwórz szczegóły przypomnienia: \(title)")
         }
         .padding(.vertical, RootineTheme.Spacing.xSmall)
+        .frame(minHeight: 52)
     }
 }
 
@@ -1224,6 +2218,8 @@ private struct ModuleEmptyCard: View {
             }
             Spacer(minLength: 0)
         }
+        .frame(minHeight: 72, alignment: .leading)
         .rootineSurface()
+        .accessibilityElement(children: .combine)
     }
 }

@@ -1,6 +1,18 @@
 import Combine
 import Foundation
 
+private enum WorkspaceEncodingError: Error {
+    case invalidValue(for: RootineStorageKey)
+}
+
+enum WorkspaceSyncStatus: Equatable, Sendable {
+    case unavailable
+    case localOnly(pending: Int)
+    case syncing(pending: Int)
+    case synced
+    case conflict(storageKeys: [String])
+}
+
 @MainActor
 final class AppEnvironment: ObservableObject {
     @Published private(set) var session: SupabaseSession?
@@ -17,6 +29,7 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var isPasswordRecovery = false
     @Published private(set) var authCallbackError: String?
     @Published private(set) var foundationMessage = "Szkielet techniczny gotowy"
+    @Published private(set) var workspaceSyncStatus = WorkspaceSyncStatus.unavailable
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
@@ -24,6 +37,7 @@ final class AppEnvironment: ObservableObject {
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
+    private var creationGate = WorkspaceCreationGate()
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
@@ -131,6 +145,7 @@ final class AppEnvironment: ObservableObject {
     func start() async {
         defer { isLaunching = false }
         guard var activeSession = session else {
+            workspaceSyncStatus = .unavailable
             foundationMessage = configuration.isAuthComplete
                 ? "Zaloguj się, aby połączyć dane Rootine"
                 : "Uzupełnij konfigurację logowania w Secrets.xcconfig"
@@ -148,6 +163,7 @@ final class AppEnvironment: ObservableObject {
                 return
             } catch {
                 await loadLocalCopies()
+                await markLocalOnly()
                 foundationMessage = "Offline — używam danych zapisanych na tym iPhonie"
                 return
             }
@@ -301,13 +317,37 @@ final class AppEnvironment: ObservableObject {
         travelWorkspace = .empty
         healthWorkspace = .empty
         foundationMessage = "Sesja usunięta z Keychain"
+        workspaceSyncStatus = .unavailable
     }
 
     func toggleTaskCompletion(id: Int, on date: Date = Date()) async {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
-        next.tasks[index].done.toggle()
-        next.tasks[index].completedAt = next.tasks[index].done ? RootineDate.isoTimestamp(date) : nil
+        let dateKey = RootineDate.localDate(date)
+        if var schedule = next.tasks[index].schedule {
+            // Recurring tasks are completed per local day. Keep the legacy
+            // global flag in sync only for the current day so Today, Tasks and
+            // Calendar never leak yesterday's state into another date.
+            var completedDates = schedule.completedDates ?? []
+            var completedAtByDate = schedule.completedAtByDate ?? [:]
+            if completedDates.contains(dateKey) {
+                completedDates.removeAll { $0 == dateKey }
+                completedAtByDate[dateKey] = nil
+            } else {
+                completedDates.append(dateKey)
+                completedDates.sort()
+                completedAtByDate[dateKey] = RootineDate.isoTimestamp(date)
+            }
+            schedule.completedDates = completedDates
+            schedule.completedAtByDate = completedAtByDate
+            next.tasks[index].schedule = schedule
+            let todayKey = RootineDate.localDate()
+            next.tasks[index].done = rootineTaskIsDoneOnDate(next.tasks[index], dateKey: todayKey)
+            next.tasks[index].completedAt = completedAtByDate[todayKey]
+        } else {
+            next.tasks[index].done.toggle()
+            next.tasks[index].completedAt = next.tasks[index].done ? RootineDate.isoTimestamp(date) : nil
+        }
         await persistTaskWorkspace(next)
     }
 
@@ -369,12 +409,17 @@ final class AppEnvironment: ObservableObject {
         name: String,
         time: String?,
         priority: TaskPriority? = nil,
-        schedule: WorkspaceHabitSchedule? = nil
+        schedule: WorkspaceHabitSchedule? = nil,
+        operationID: String = UUID().uuidString
     ) async {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        let creationFingerprint = "habit|\(trimmedName)|\(time ?? "")|\(priority?.rawValue ?? "")"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = taskWorkspace
-        let nextID = (next.habits.map(\.id).max() ?? 0) + 1
+        let nextID = RootineLocalIdentifier.integer(namespace: "habit", operationID: operationID)
+        guard !next.habits.contains(where: { $0.id == nextID }) else { return }
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedSchedule = schedule ?? WorkspaceHabitSchedule(type: "daily", startDate: RootineDate.localDate())
         next.habits.append(WorkspaceHabit(
@@ -418,8 +463,14 @@ final class AppEnvironment: ObservableObject {
         await persistTaskWorkspace(next)
     }
 
-    func addTodayTask(text: String, time: String?) async {
-        await addTask(text: text, time: time, calendarDate: RootineDate.localDate(), view: "dzis")
+    func addTodayTask(text: String, time: String?, operationID: String = UUID().uuidString) async {
+        await addTask(
+            text: text,
+            time: time,
+            calendarDate: RootineDate.localDate(),
+            view: "dzis",
+            operationID: operationID
+        )
     }
 
     func addTask(
@@ -427,12 +478,17 @@ final class AppEnvironment: ObservableObject {
         time: String?,
         calendarDate: String?,
         view: String = "dzis",
-        priority: TaskPriority? = nil
+        priority: TaskPriority? = nil,
+        operationID: String = UUID().uuidString
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        let creationFingerprint = "task|\(trimmedText)|\(time ?? "")|\(calendarDate ?? "")|\(view)|\(priority?.rawValue ?? "")"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = taskWorkspace
-        let nextID = (next.tasks.map(\.id).max() ?? 0) + 1
+        let nextID = RootineLocalIdentifier.integer(namespace: "task", operationID: operationID)
+        guard !next.tasks.contains(where: { $0.id == nextID }) else { return }
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
         next.tasks.append(WorkspaceTask(
             id: nextID,
@@ -446,12 +502,16 @@ final class AppEnvironment: ObservableObject {
         await persistTaskWorkspace(next)
     }
 
-    func addWorkPriority(text: String) async {
+    func addWorkPriority(text: String, operationID: String = UUID().uuidString) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        let creationFingerprint = "work-priority|\(trimmedText)"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = taskWorkspace
         let now = RootineDate.isoTimestamp()
-        let nextID = (next.tasks.map(\.id).max() ?? 0) + 1
+        let nextID = RootineLocalIdentifier.integer(namespace: "task", operationID: operationID)
+        guard !next.tasks.contains(where: { $0.id == nextID }) else { return }
         next.tasks.append(WorkspaceTask(
             id: nextID,
             text: trimmedText,
@@ -461,6 +521,26 @@ final class AppEnvironment: ObservableObject {
             source: CommitmentTaskSource(kind: "work", entity: "task", context: "work", href: "/work", originTaskId: nil, managed: "ios")
         ))
         next.updatedAt = now
+        await persistTaskWorkspace(next)
+    }
+
+    func updateWorkPriority(id: Int, text: String) async {
+        var next = taskWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }),
+              next.tasks[index].source?.kind == "work" else { return }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        next.tasks[index].text = trimmedText
+        await persistTaskWorkspace(next)
+    }
+
+    func restoreWorkPriority(_ task: WorkspaceTask) async {
+        var next = taskWorkspace
+        guard task.source?.kind == "work",
+              !next.tasks.contains(where: { $0.id == task.id }) else { return }
+        var restored = task
+        restored.deleted = false
+        next.tasks.append(restored)
         await persistTaskWorkspace(next)
     }
 
@@ -477,7 +557,11 @@ final class AppEnvironment: ObservableObject {
             if let list = next.lists.first {
                 normalized.listId = list.id
             } else {
-                let list = NoteList(id: UUID().uuidString, name: "Osobiste", createdAt: normalized.updatedAt)
+                let list = NoteList(
+                    id: RootineLocalIdentifier.string(namespace: "note-list", operationID: normalized.id),
+                    name: "Osobiste",
+                    createdAt: normalized.updatedAt
+                )
                 next.lists.append(list)
                 normalized.listId = list.id
             }
@@ -513,13 +597,24 @@ final class AppEnvironment: ObservableObject {
         await persistNotesWorkspace(next)
     }
 
-    func addWorkout(title: String, date: String, minutes: Int, kind: String) async {
+    func addWorkout(
+        title: String,
+        date: String,
+        minutes: Int,
+        kind: String,
+        operationID: String = UUID().uuidString
+    ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
+        let creationFingerprint = "workout|\(trimmedTitle)|\(date)|\(minutes)|\(kind)"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = sportWorkspace
         let now = RootineDate.isoTimestamp()
+        let recordID = RootineLocalIdentifier.string(namespace: "workout", operationID: operationID)
+        guard !next.workouts.contains(where: { $0.id == recordID }) else { return }
         next.workouts.append(SportWorkout(
-            id: UUID().uuidString,
+            id: recordID,
             title: trimmedTitle,
             date: date,
             minutes: max(1, minutes),
@@ -546,13 +641,45 @@ final class AppEnvironment: ObservableObject {
         await persistSportWorkspace(next)
     }
 
-    func addGoal(title: String, detail: String, target: Double, icon: String) async {
+    func updateWorkout(id: String, title: String, date: String, minutes: Int, kind: String) async {
+        var next = sportWorkspace
+        guard let index = next.workouts.firstIndex(where: { $0.id == id }) else { return }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
+        next.workouts[index].title = trimmedTitle
+        next.workouts[index].date = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.workouts[index].minutes = max(1, minutes)
+        next.workouts[index].kind = kind.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Trening" : kind
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistSportWorkspace(next)
+    }
+
+    func restoreWorkout(_ workout: SportWorkout) async {
+        var next = sportWorkspace
+        guard !next.workouts.contains(where: { $0.id == workout.id }) else { return }
+        next.workouts.append(workout)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistSportWorkspace(next)
+    }
+
+    func addGoal(
+        title: String,
+        detail: String,
+        target: Double,
+        icon: String,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        let creationFingerprint = "goal|\(trimmedTitle)|\(detail)|\(target)|\(icon)"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = goalsWorkspace
         let now = RootineDate.isoTimestamp()
+        let recordID = RootineLocalIdentifier.string(namespace: "goal", operationID: operationID)
+        guard !next.goals.contains(where: { $0.id == recordID }) else { return }
         next.goals.append(GoalRecord(
-            id: UUID().uuidString,
+            id: recordID,
             title: trimmedTitle,
             detail: detail.trimmingCharacters(in: .whitespacesAndNewlines),
             current: 0,
@@ -581,6 +708,29 @@ final class AppEnvironment: ObservableObject {
         await persistGoalsWorkspace(next)
     }
 
+    func updateGoal(id: String, title: String, detail: String, target: Double, icon: String) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        next.goals[index].title = trimmedTitle
+        next.goals[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.goals[index].target = max(1, target)
+        next.goals[index].current = min(next.goals[index].current, next.goals[index].target)
+        next.goals[index].icon = icon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "target" : icon
+        next.goals[index].updatedAt = RootineDate.isoTimestamp()
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func restoreGoal(_ goal: GoalRecord) async {
+        var next = goalsWorkspace
+        guard !next.goals.contains(where: { $0.id == goal.id }) else { return }
+        next.goals.append(goal)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
     func startFocusSession() async {
         guard workWorkspace.activeFocusStartedAt == nil else { return }
         var next = workWorkspace
@@ -591,22 +741,49 @@ final class AppEnvironment: ObservableObject {
 
     func stopFocusSession() async {
         guard let startedAt = workWorkspace.activeFocusStartedAt,
-              let startDate = ISO8601DateFormatter().date(from: startedAt) else { return }
+              let startDate = RootineDate.date(from: startedAt) else {
+            await resetFocusSession(message: "Uszkodzona sesja skupienia została przeniesiona do stanu odzyskiwania")
+            return
+        }
         var next = workWorkspace
         let now = Date()
         let minutes = max(1, Int(now.timeIntervalSince(startDate) / 60))
-        next.focusSessions.insert(WorkFocusSession(id: UUID().uuidString, startedAt: startedAt, endedAt: RootineDate.isoTimestamp(now), minutes: minutes), at: 0)
+        let sessionID = RootineLocalIdentifier.string(namespace: "focus", operationID: startedAt)
+        next.focusSessions.removeAll { $0.id == sessionID }
+        next.focusSessions.insert(WorkFocusSession(id: sessionID, startedAt: startedAt, endedAt: RootineDate.isoTimestamp(now), minutes: minutes), at: 0)
         next.activeFocusStartedAt = nil
         next.updatedAt = RootineDate.isoTimestamp(now)
         await persistWorkWorkspace(next)
     }
 
-    func addTrip(destination: String, dateRange: String, nights: Int) async {
+    /// Clears an invalid or abandoned focus timestamp without fabricating a
+    /// completed session. This is intentionally separate from `stop` so the
+    /// UI can offer a safe recovery action when decoding fails.
+    func resetFocusSession(message: String = "Sesja skupienia wyczyszczona") async {
+        guard workWorkspace.activeFocusStartedAt != nil else { return }
+        var next = workWorkspace
+        next.activeFocusStartedAt = nil
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistWorkWorkspace(next)
+        foundationMessage = message
+    }
+
+    func addTrip(
+        destination: String,
+        dateRange: String,
+        nights: Int,
+        operationID: String = UUID().uuidString
+    ) async {
         let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDestination.isEmpty else { return }
+        let creationFingerprint = "trip|\(trimmedDestination)|\(dateRange)|\(nights)"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = travelWorkspace
         let now = RootineDate.isoTimestamp()
-        next.trips.insert(TravelRecord(id: UUID().uuidString, destination: trimmedDestination, dateRange: dateRange, nights: max(1, nights), itinerary: [], createdAt: now, updatedAt: now), at: 0)
+        let recordID = RootineLocalIdentifier.string(namespace: "trip", operationID: operationID)
+        guard !next.trips.contains(where: { $0.id == recordID }) else { return }
+        next.trips.insert(TravelRecord(id: recordID, destination: trimmedDestination, dateRange: dateRange, nights: max(1, nights), itinerary: [], createdAt: now, updatedAt: now), at: 0)
         next.updatedAt = now
         await persistTravelWorkspace(next)
     }
@@ -614,6 +791,27 @@ final class AppEnvironment: ObservableObject {
     func deleteTrip(id: String) async {
         var next = travelWorkspace
         next.trips.removeAll { $0.id == id }
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistTravelWorkspace(next)
+    }
+
+    func updateTrip(id: String, destination: String, dateRange: String, nights: Int) async {
+        var next = travelWorkspace
+        guard let index = next.trips.firstIndex(where: { $0.id == id }) else { return }
+        let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDestination.isEmpty else { return }
+        next.trips[index].destination = trimmedDestination
+        next.trips[index].dateRange = dateRange.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.trips[index].nights = max(1, nights)
+        next.trips[index].updatedAt = RootineDate.isoTimestamp()
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistTravelWorkspace(next)
+    }
+
+    func restoreTrip(_ trip: TravelRecord) async {
+        var next = travelWorkspace
+        guard !next.trips.contains(where: { $0.id == trip.id }) else { return }
+        next.trips.append(trip)
         next.updatedAt = RootineDate.isoTimestamp()
         await persistTravelWorkspace(next)
     }
@@ -640,11 +838,20 @@ final class AppEnvironment: ObservableObject {
         await persistHealthWorkspace(next)
     }
 
-    func addHealthReminder(title: String, detail: String) async {
+    func addHealthReminder(
+        title: String,
+        detail: String,
+        operationID: String = UUID().uuidString
+    ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
+        let creationFingerprint = "health-reminder|\(trimmedTitle)|\(detail)"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = healthWorkspace
-        next.reminders.append(HealthReminder(id: UUID().uuidString, title: trimmedTitle, detail: detail.trimmingCharacters(in: .whitespacesAndNewlines), completedDates: []))
+        let recordID = RootineLocalIdentifier.string(namespace: "health-reminder", operationID: operationID)
+        guard !next.reminders.contains(where: { $0.id == recordID }) else { return }
+        next.reminders.append(HealthReminder(id: recordID, title: trimmedTitle, detail: detail.trimmingCharacters(in: .whitespacesAndNewlines), completedDates: []))
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
@@ -652,6 +859,25 @@ final class AppEnvironment: ObservableObject {
     func deleteHealthReminder(id: String) async {
         var next = healthWorkspace
         next.reminders.removeAll { $0.id == id }
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistHealthWorkspace(next)
+    }
+
+    func updateHealthReminder(id: String, title: String, detail: String) async {
+        var next = healthWorkspace
+        guard let index = next.reminders.firstIndex(where: { $0.id == id }) else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        next.reminders[index].title = trimmedTitle
+        next.reminders[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistHealthWorkspace(next)
+    }
+
+    func restoreHealthReminder(_ reminder: HealthReminder) async {
+        var next = healthWorkspace
+        guard !next.reminders.contains(where: { $0.id == reminder.id }) else { return }
+        next.reminders.append(reminder)
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
@@ -664,22 +890,122 @@ final class AppEnvironment: ObservableObject {
         calories: Double,
         protein: Double,
         carbs: Double,
-        fat: Double
+        fat: Double,
+        amount: Double? = nil,
+        unit: String? = nil,
+        brand: String? = nil,
+        catalogId: String? = nil,
+        catalogSource: String? = nil,
+        per100g: NutritionValues? = nil,
+        operationID: String = UUID().uuidString
     ) async {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        let creationFingerprint = "nutrition|\(dateKey)|\(meal)|\(trimmedName)|\(portion)|\(calories)|\(protein)|\(carbs)|\(fat)"
+        guard creationGate.claim(creationFingerprint) else { return }
+        defer { creationGate.release(creationFingerprint) }
         var next = nutritionWorkspace
         var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
+        let recordID = RootineLocalIdentifier.string(namespace: "nutrition-entry", operationID: operationID)
+        let allEntries = day.entries.breakfast + day.entries.lunch + day.entries.snack + day.entries.dinner
+        guard !allEntries.contains(where: { $0.id == recordID }) else { return }
         let entry = NutritionEntry(
-            id: UUID().uuidString,
+            id: recordID,
             name: trimmedName,
             portion: portion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "1 porcja" : portion,
+            amount: amount,
+            unit: unit,
             calories: max(0, calories),
             protein: max(0, protein),
             carbs: max(0, carbs),
             fat: max(0, fat),
+            brand: brand,
+            catalogId: catalogId,
+            catalogSource: catalogSource,
+            per100g: per100g,
             createdAt: RootineDate.isoTimestamp()
         )
+        switch meal {
+        case "breakfast": day.entries.breakfast.append(entry)
+        case "lunch": day.entries.lunch.append(entry)
+        case "snack": day.entries.snack.append(entry)
+        default: day.entries.dinner.append(entry)
+        }
+        next.days[dateKey] = day
+        await persistNutritionWorkspace(next)
+    }
+
+    func updateNutritionEntry(
+        dateKey: String,
+        originalMeal: String,
+        meal: String,
+        id: String,
+        name: String,
+        portion: String,
+        calories: Double,
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        amount: Double? = nil,
+        unit: String? = nil,
+        brand: String? = nil,
+        catalogId: String? = nil,
+        catalogSource: String? = nil,
+        per100g: NutritionValues? = nil
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = nutritionWorkspace
+        guard var day = next.days[dateKey] else { return }
+        var existing: NutritionEntry?
+
+        func remove(_ entries: inout [NutritionEntry]) {
+            if let index = entries.firstIndex(where: { $0.id == id }) {
+                existing = entries.remove(at: index)
+            }
+        }
+
+        // Search every meal rather than trusting the caller's original section;
+        // this keeps an edit safe after a concurrent meal move or reload.
+        remove(&day.entries.breakfast)
+        remove(&day.entries.lunch)
+        remove(&day.entries.snack)
+        remove(&day.entries.dinner)
+        guard let previous = existing else { return }
+        let now = RootineDate.isoTimestamp()
+        let updated = NutritionEntry(
+            id: id,
+            name: trimmedName,
+            portion: portion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "1 porcja" : portion,
+            amount: amount,
+            unit: unit,
+            calories: max(0, calories),
+            protein: max(0, protein),
+            carbs: max(0, carbs),
+            fat: max(0, fat),
+            brand: brand,
+            catalogId: catalogId,
+            catalogSource: catalogSource,
+            per100g: per100g,
+            createdAt: previous.createdAt,
+            updatedAt: now
+        )
+        switch meal {
+        case "breakfast": day.entries.breakfast.append(updated)
+        case "lunch": day.entries.lunch.append(updated)
+        case "snack": day.entries.snack.append(updated)
+        default: day.entries.dinner.append(updated)
+        }
+        next.days[dateKey] = day
+        await persistNutritionWorkspace(next)
+        _ = originalMeal // Kept in the API for explicit caller intent and telemetry.
+    }
+
+    func restoreNutritionEntry(dateKey: String, meal: String, entry: NutritionEntry) async {
+        var next = nutritionWorkspace
+        var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
+        let allEntries = day.entries.breakfast + day.entries.lunch + day.entries.snack + day.entries.dinner
+        guard !allEntries.contains(where: { $0.id == entry.id }) else { return }
         switch meal {
         case "breakfast": day.entries.breakfast.append(entry)
         case "lunch": day.entries.lunch.append(entry)
@@ -719,7 +1045,9 @@ final class AppEnvironment: ObservableObject {
         await persistNutritionWorkspace(next)
     }
 
-    private func persistTaskWorkspace(_ next: TaskWorkspace) async {
+    private func persistTaskWorkspace(_ value: TaskWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         taskWorkspace = next
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
@@ -728,13 +1056,16 @@ final class AppEnvironment: ObservableObject {
         do {
             try await store.save(next, key: .tasks)
             try await syncEngine.enqueue(next, key: .tasks)
+            await markLocalOnly()
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
     }
 
-    private func persistNutritionWorkspace(_ next: NutritionWorkspace) async {
+    private func persistNutritionWorkspace(_ value: NutritionWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         nutritionWorkspace = next
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
@@ -743,13 +1074,16 @@ final class AppEnvironment: ObservableObject {
         do {
             try await store.save(next, key: .nutrition)
             try await syncEngine.enqueue(next, key: .nutrition)
+            await markLocalOnly()
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
     }
 
-    private func persistNotesWorkspace(_ next: NotesWorkspace) async {
+    private func persistNotesWorkspace(_ value: NotesWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         notesWorkspace = next
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
@@ -758,33 +1092,44 @@ final class AppEnvironment: ObservableObject {
         do {
             try await store.save(next, key: .notes)
             try await syncEngine.enqueue(next, key: .notes)
+            await markLocalOnly()
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
     }
 
-    private func persistSportWorkspace(_ next: SportWorkspace) async {
+    private func persistSportWorkspace(_ value: SportWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         sportWorkspace = next
         await persistCanonicalWorkspace(next, key: .sport, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload)
     }
 
-    private func persistGoalsWorkspace(_ next: GoalsWorkspace) async {
+    private func persistGoalsWorkspace(_ value: GoalsWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         goalsWorkspace = next
         await persistCanonicalWorkspace(next, key: .goals, merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload)
     }
 
-    private func persistWorkWorkspace(_ next: WorkWorkspace) async {
+    private func persistWorkWorkspace(_ value: WorkWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         workWorkspace = next
         await persistCanonicalWorkspace(next, key: .work, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload)
     }
 
-    private func persistTravelWorkspace(_ next: TravelWorkspace) async {
+    private func persistTravelWorkspace(_ value: TravelWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         travelWorkspace = next
         await persistCanonicalWorkspace(next, key: .travel, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload)
     }
 
-    private func persistHealthWorkspace(_ next: HealthWorkspace) async {
+    private func persistHealthWorkspace(_ value: HealthWorkspace) async {
+        var next = value
+        next.updatedAt = RootineDate.isoTimestamp()
         healthWorkspace = next
         await persistCanonicalWorkspace(next, key: .health, merge: RootineCanonicalWorkspaceMapping.mergedHealthPayload)
     }
@@ -797,6 +1142,7 @@ final class AppEnvironment: ObservableObject {
         do {
             try await store.save(value, key: key)
             try await syncEngine.enqueue(value, key: key)
+            await markLocalOnly()
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
@@ -824,6 +1170,7 @@ final class AppEnvironment: ObservableObject {
                 payload: mapped,
                 storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: key)
             )
+            await markLocalOnly()
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
@@ -832,26 +1179,57 @@ final class AppEnvironment: ObservableObject {
 
     private func encodeCanonical<T: Codable>(_ value: T, key: RootineStorageKey) throws -> JSONValue {
         switch key {
-        case .sport: return try RootineCanonicalWorkspaceMapping.payload(for: value as! SportWorkspace)
-        case .goals: return try RootineCanonicalWorkspaceMapping.payload(for: value as! GoalsWorkspace)
-        case .work: return try RootineCanonicalWorkspaceMapping.payload(for: value as! WorkWorkspace)
-        case .travel: return try RootineCanonicalWorkspaceMapping.payload(for: value as! TravelWorkspace)
-        case .health: return try RootineCanonicalWorkspaceMapping.payload(for: value as! HealthWorkspace)
+        case .sport:
+            guard let value = value as? SportWorkspace else { throw WorkspaceEncodingError.invalidValue(for: key) }
+            return try RootineCanonicalWorkspaceMapping.payload(for: value)
+        case .goals:
+            guard let value = value as? GoalsWorkspace else { throw WorkspaceEncodingError.invalidValue(for: key) }
+            return try RootineCanonicalWorkspaceMapping.payload(for: value)
+        case .work:
+            guard let value = value as? WorkWorkspace else { throw WorkspaceEncodingError.invalidValue(for: key) }
+            return try RootineCanonicalWorkspaceMapping.payload(for: value)
+        case .travel:
+            guard let value = value as? TravelWorkspace else { throw WorkspaceEncodingError.invalidValue(for: key) }
+            return try RootineCanonicalWorkspaceMapping.payload(for: value)
+        case .health:
+            guard let value = value as? HealthWorkspace else { throw WorkspaceEncodingError.invalidValue(for: key) }
+            return try RootineCanonicalWorkspaceMapping.payload(for: value)
         default: return try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
         }
     }
 
     func flushPendingMutations() async {
-        guard let accessToken = session?.accessToken, let syncEngine else { return }
+        guard let syncEngine else {
+            workspaceSyncStatus = .unavailable
+            return
+        }
+        let pending = (try? await syncEngine.pendingMutationCount()) ?? 0
+        guard let accessToken = session?.accessToken else {
+            workspaceSyncStatus = .localOnly(pending: pending)
+            return
+        }
+        workspaceSyncStatus = .syncing(pending: pending)
         do {
             switch try await syncEngine.flush(accessToken: accessToken) {
-            case .idle: foundationMessage = "Brak zmian oczekujących na synchronizację"
-            case .applied(let count): foundationMessage = "Zsynchronizowano zmian: \(count)"
-            case .conflict(let keys): foundationMessage = "Konflikt CAS wymaga decyzji dla: \(keys.count)"
+            case .idle:
+                workspaceSyncStatus = .synced
+                foundationMessage = "Brak zmian oczekujących na synchronizację"
+            case .applied(let count):
+                workspaceSyncStatus = .synced
+                foundationMessage = "Zsynchronizowano zmian: \(count)"
+            case .conflict(let keys):
+                workspaceSyncStatus = .conflict(storageKeys: keys)
+                foundationMessage = "Konflikt CAS wymaga decyzji dla: \(keys.count)"
             }
         } catch {
+            await markLocalOnly()
             foundationMessage = "Offline — kolejka pozostała na urządzeniu"
         }
+    }
+
+    private func markLocalOnly() async {
+        let pending = (try? await syncEngine?.pendingMutationCount()) ?? 0
+        workspaceSyncStatus = .localOnly(pending: pending)
     }
 
     private func configureRuntime(userID: String) {
@@ -921,15 +1299,26 @@ final class AppEnvironment: ObservableObject {
             workWorkspace = workResult.value
             travelWorkspace = travelResult.value
             healthWorkspace = healthResult.value
-            let conflictCount = [taskResult.conflict, nutritionResult.conflict, notesResult.conflict, sportResult.conflict, goalsResult.conflict, workResult.conflict, travelResult.conflict, healthResult.conflict]
-                .filter { $0 }
-                .count
+            let reconciliationResults: [(RootineStorageKey, Bool)] = [
+                (.tasks, taskResult.conflict),
+                (.nutrition, nutritionResult.conflict),
+                (.notes, notesResult.conflict),
+                (.sport, sportResult.conflict),
+                (.goals, goalsResult.conflict),
+                (.work, workResult.conflict),
+                (.travel, travelResult.conflict),
+                (.health, healthResult.conflict)
+            ]
+            let conflictKeys = reconciliationResults
+                .filter(\.1)
+                .map { $0.0.rawValue }
 
-            if conflictCount == 0 {
+            if conflictKeys.isEmpty {
                 foundationMessage = "Kontrakty lokalne i Supabase zostały uzgodnione"
                 await flushPendingMutations()
             } else {
-                foundationMessage = "Konflikt pierwszego uzgodnienia: \(conflictCount)"
+                workspaceSyncStatus = .conflict(storageKeys: conflictKeys)
+                foundationMessage = "Konflikt pierwszego uzgodnienia: \(conflictKeys.count)"
             }
         } catch {
             await loadLocalCopies()

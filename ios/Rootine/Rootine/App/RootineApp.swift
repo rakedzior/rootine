@@ -8,7 +8,6 @@ struct RootineApp: App {
         WindowGroup {
             RootineEntryView()
                 .environmentObject(environment)
-                .preferredColorScheme(.dark)
                 .tint(RootineTheme.ColorToken.action)
         }
     }

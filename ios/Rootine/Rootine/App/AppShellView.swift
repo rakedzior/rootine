@@ -80,7 +80,6 @@ struct RootineEntryView: View {
 /// Native product shell. Each tab owns its navigation stack so feature details
 /// can be added without changing the root navigation contract.
 struct RootineMainView: View {
-    @EnvironmentObject private var environment: AppEnvironment
     @State private var selection: RootineTab = RootineMainView.initialSelection
     @State private var isShowingQuickAdd = false
 
@@ -106,116 +105,61 @@ struct RootineMainView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch selection {
-                case .today:
-                    NavigationStack { TodayView() }
-                case .tasks:
-                    NavigationStack { TasksView() }
-                case .calendar:
-                    NavigationStack { CalendarView() }
-                case .nutrition:
-                    NavigationStack { NutritionView() }
-                case .more:
-                    NavigationStack {
-                        if let module = RootineMainView.initialModule {
-                            MoreModuleView(module: module)
-                        } else {
-                            MoreLandingView()
-                        }
-                    }
+        TabView(selection: $selection) {
+            rootTab(.today) {
+                TodayView()
+            }
+            rootTab(.tasks) {
+                TasksView()
+            }
+            rootTab(.calendar) {
+                CalendarView()
+            }
+            rootTab(.nutrition) {
+                NutritionView()
+            }
+            rootTab(.more) {
+                if let module = RootineMainView.initialModule {
+                    MoreModuleView(module: module)
+                } else {
+                    MoreLandingView()
                 }
             }
-            // NavigationStack can extend through the bottom safe area. Reserve
-            // the bar's visual height explicitly so scroll content never sits
-            // underneath it.
-            .padding(.bottom, 96)
-
-            RootineBottomBar(selection: $selection) {
-                isShowingQuickAdd = true
-            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .transition(.opacity)
-        .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
         .tint(RootineTheme.ColorToken.action)
-        .animation(.easeInOut(duration: 0.28), value: selection)
         .sheet(isPresented: $isShowingQuickAdd) {
             QuickAddSheet()
                 .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
     }
-}
 
-private struct RootineBottomBar: View {
-    @Binding var selection: RootineTab
-    let onAdd: () -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(RootineTab.allCases) { tab in
-                RootineBottomTabItem(tab: tab, selection: $selection)
-            }
-
-            Button(action: onAdd) {
-                VStack(spacing: 4) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                    Text("Dodaj")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .lineLimit(1)
+    private func rootTab<Content: View>(
+        _ tab: RootineTab,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        NavigationStack {
+            content()
+                .navigationTitle(tab.label)
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            isShowingQuickAdd = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Dodaj")
+                        .accessibilityHint("Otwiera wybór nowego zadania lub nawyku")
+                    }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .foregroundStyle(RootineTheme.ColorToken.action)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .frame(minWidth: 0, maxWidth: .infinity)
-            .accessibilityLabel("Dodaj")
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 7)
-        .background(.ultraThinMaterial)
-        .background(RootineTheme.ColorToken.surface.opacity(0.92))
-        .clipShape(Capsule())
-        .overlay {
-            Capsule().stroke(RootineTheme.ColorToken.separator, lineWidth: 1)
+        .tag(tab)
+        .tabItem {
+            Label(tab.label, systemImage: tab.systemImage)
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
-    }
-}
-
-private struct RootineBottomTabItem: View {
-    let tab: RootineTab
-    @Binding var selection: RootineTab
-
-    var body: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                selection = tab
-            }
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: tab.systemImage)
-                    .font(.system(size: 19, weight: .semibold))
-                Text(tab.label)
-                    .font(.system(size: 9.5, weight: .semibold))
-                    .lineLimit(1)
-                    .allowsTightening(true)
-                    .minimumScaleFactor(0.52)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .foregroundStyle(selection == tab ? RootineTheme.ColorToken.action : RootineTheme.ColorToken.primaryText)
-            .background(selection == tab ? RootineTheme.ColorToken.action.opacity(0.16) : .clear)
-            .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .frame(minWidth: 0, maxWidth: .infinity)
-        .accessibilityAddTraits(selection == tab ? .isSelected : [])
     }
 }
 
@@ -265,17 +209,19 @@ private struct QuickAddSheet: View {
                 .environmentObject(environment)
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
 private struct MoreLandingView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShowingAccount = false
     @State private var hasAppeared = false
 
     private var activeTasks: Int {
-        environment.taskWorkspace.tasks.filter { $0.deleted != true && !$0.done }.count
+        environment.taskWorkspace.tasks.filter {
+            $0.deleted != true && !rootineTaskIsDoneOnDate($0, dateKey: RootineDate.localDate())
+        }.count
     }
 
     private var activeHabits: Int {
@@ -292,6 +238,7 @@ private struct MoreLandingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                MoreLandingSyncStatusBanner()
                 MoreAccountCard(message: environment.foundationMessage) {
                     isShowingAccount = true
                 }
@@ -331,12 +278,43 @@ private struct MoreLandingView: View {
         .scrollIndicators(.hidden)
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
         .onAppear {
-            withAnimation(.easeOut(duration: 0.42)) { hasAppeared = true }
+            if reduceMotion {
+                hasAppeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.42)) { hasAppeared = true }
+            }
         }
         .sheet(isPresented: $isShowingAccount) {
             MoreAccountSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct MoreLandingSyncStatusBanner: View {
+    @EnvironmentObject private var environment: AppEnvironment
+
+    var body: some View {
+        Group {
+            if case .conflict = environment.workspaceSyncStatus {
+                RootineErrorState(
+                    title: "Konflikt synchronizacji",
+                    message: "Zmiany są bezpieczne lokalnie. Spróbuj ponownie, gdy połączenie będzie stabilne.",
+                    onRetry: { Task { await environment.flushPendingMutations() } }
+                )
+            } else if case .localOnly(let pending) = environment.workspaceSyncStatus {
+                RootineOfflineBanner(message: offlineMessage(pending: pending))
+            }
+        }
+    }
+
+    private func offlineMessage(pending: Int) -> String {
+        switch pending {
+        case 1: return "Tryb offline · 1 zmiana czeka na synchronizację"
+        case 2...4: return "Tryb offline · \(pending) zmiany czekają na synchronizację"
+        case 5...: return "Tryb offline · \(pending) zmian czeka na synchronizację"
+        default: return "Tryb offline · zmiany zapisują się na tym iPhonie"
         }
     }
 }
@@ -384,12 +362,12 @@ enum MoreModule: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
-        case .notes: return Color(red: 0.52, green: 0.58, blue: 1.0)
-        case .sport: return Color(red: 0.34, green: 0.82, blue: 0.64)
-        case .goals: return Color(red: 1.0, green: 0.67, blue: 0.30)
-        case .work: return Color(red: 0.44, green: 0.70, blue: 1.0)
-        case .travel: return Color(red: 0.72, green: 0.56, blue: 1.0)
-        case .health: return Color(red: 1.0, green: 0.40, blue: 0.48)
+        case .notes: return Color(uiColor: .systemIndigo)
+        case .sport: return Color(uiColor: .systemGreen)
+        case .goals: return Color(uiColor: .systemOrange)
+        case .work: return Color(uiColor: .systemBlue)
+        case .travel: return Color(uiColor: .systemPurple)
+        case .health: return Color(uiColor: .systemPink)
         }
     }
 }
@@ -582,7 +560,6 @@ private struct MoreAccountSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }
 

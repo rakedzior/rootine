@@ -1,36 +1,39 @@
 import SwiftUI
 
 private enum TasksFilter: String, CaseIterable, Identifiable {
-    case today
-    case upcoming
     case all
-    case undated
+    case open
     case completed
     case habits
+    case today
+    case upcoming
+    case undated
     case trash
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .today: return "Dziś"
-        case .upcoming: return "Nadchodzące"
         case .all: return "Wszystkie"
-        case .undated: return "Bez terminu"
+        case .open: return "Otwarte"
         case .completed: return "Ukończone"
         case .habits: return "Nawyki"
+        case .today: return "Dziś"
+        case .upcoming: return "Nadchodzące"
+        case .undated: return "Bez terminu"
         case .trash: return "Kosz"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .today: return "sun.max.fill"
-        case .upcoming: return "calendar"
         case .all: return "tray.full"
-        case .undated: return "circle.dashed"
+        case .open: return "circle"
         case .completed: return "checkmark.circle"
         case .habits: return "flame"
+        case .today: return "sun.max.fill"
+        case .upcoming: return "calendar"
+        case .undated: return "circle.dashed"
         case .trash: return "trash"
         }
     }
@@ -38,7 +41,8 @@ private enum TasksFilter: String, CaseIterable, Identifiable {
 
 struct TasksView: View {
     @EnvironmentObject private var environment: AppEnvironment
-    @State private var filter: TasksFilter = .today
+    @State private var filter: TasksFilter = .open
+    @State private var searchText = ""
     @State private var isShowingAddTask = false
     @State private var isShowingAddHabit = false
     @State private var selectedTask: WorkspaceTask?
@@ -52,100 +56,131 @@ struct TasksView: View {
         environment.taskWorkspace.tasks.filter { $0.deleted == true }.sorted(by: taskSort)
     }
 
+    private var searchIsActive: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     private var filteredTasks: [WorkspaceTask] {
         let today = RootineDate.localDate()
+        let base: [WorkspaceTask]
         switch filter {
+        case .all:
+            base = activeTasks
+        case .open:
+            base = activeTasks.filter { !isDone($0) }
+        case .completed:
+            base = activeTasks.filter { isDone($0) }
+        case .habits:
+            base = []
         case .today:
-            return activeTasks.filter { task in
+            base = activeTasks.filter { task in
                 task.calendarDate == today
                     || (task.calendarDate == nil && task.view == "dzis")
-                    || (task.calendarDate != nil && task.calendarDate! < today && !task.done)
+                    || (task.calendarDate != nil && task.calendarDate! < today && !isDone(task))
             }
         case .upcoming:
-            return activeTasks.filter { ($0.calendarDate ?? "") > today }
-        case .all:
-            return activeTasks
+            base = activeTasks.filter { ($0.calendarDate ?? "") > today }
         case .undated:
-            return activeTasks.filter { $0.calendarDate == nil && !$0.done }
-        case .completed:
-            return activeTasks.filter(\.done)
-        case .habits:
-            return []
+            base = activeTasks.filter { $0.calendarDate == nil && !isDone($0) }
         case .trash:
-            return deletedTasks
+            base = deletedTasks
         }
+        guard searchIsActive else { return base.sorted(by: taskSort) }
+        let query = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL"))
+        return base.filter { task in
+            let searchable = [task.text, task.notes ?? "", task.tags?.joined(separator: " ") ?? ""].joined(separator: " ")
+            return searchable.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL")).contains(query)
+        }.sorted(by: taskSort)
     }
 
-    private var pendingTasks: [WorkspaceTask] {
-        filteredTasks.filter { !$0.done }.sorted(by: taskSort)
-    }
-
-    private var completedTasks: [WorkspaceTask] {
-        filteredTasks.filter(\.done).sorted(by: taskSort)
+    private var visibleHabits: [WorkspaceHabit] {
+        guard filter == .habits else { return [] }
+        let query = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL"))
+        return environment.taskWorkspace.habits
+            .filter { query.isEmpty || $0.name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL")).contains(query) }
+            .sorted { lhs, rhs in
+                let lhsDone = isHabitDone(lhs)
+                let rhsDone = isHabitDone(rhs)
+                if lhsDone != rhsDone { return !lhsDone }
+                return lhs.id < rhs.id
+            }
     }
 
     private var overdueTasks: [WorkspaceTask] {
         let today = RootineDate.localDate()
-        return pendingTasks.filter { ($0.calendarDate ?? "") < today && $0.calendarDate != nil }
+        return filteredTasks.filter { !isDone($0) && $0.calendarDate != nil && $0.calendarDate! < today }
     }
 
-    private var datedPendingTasks: [WorkspaceTask] {
-        pendingTasks.filter { !overdueTasks.contains($0) }
-    }
-
-    private var visibleHabits: [WorkspaceHabit] {
-        let habits = filter == .habits
-            ? environment.taskWorkspace.habits
-            : environment.taskWorkspace.habits.filter {
-                isHabitScheduled($0, dateKey: RootineDate.localDate())
-            }
-        return habits.sorted { lhs, rhs in
-            let lhsScheduled = isHabitScheduled(lhs, dateKey: RootineDate.localDate())
-            let rhsScheduled = isHabitScheduled(rhs, dateKey: RootineDate.localDate())
-            if lhsScheduled != rhsScheduled { return lhsScheduled && !rhsScheduled }
-            return lhs.id < rhs.id
-        }
-    }
+    private var pendingTasks: [WorkspaceTask] { filteredTasks.filter { !isDone($0) && !overdueTasks.contains($0) } }
+    private var completedTasks: [WorkspaceTask] { filteredTasks.filter { isDone($0) } }
 
     var body: some View {
         VStack(spacing: 0) {
+            TasksSearchField(text: $searchText)
             TasksFilterStrip(filter: $filter, counts: counts)
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+                LazyVStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+                    if environment.isLaunching {
+                        ProgressView("Wczytuję zadania…")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, RootineTheme.Spacing.large)
+                    }
+                    if case .conflict = environment.workspaceSyncStatus {
+                        RootineErrorState(
+                            title: "Konflikt synchronizacji",
+                            message: "Zmiany są bezpieczne lokalnie. Spróbuj ponownie, gdy połączenie będzie stabilne.",
+                            onRetry: { Task { await environment.flushPendingMutations() } }
+                        )
+                    } else if case .localOnly = environment.workspaceSyncStatus {
+                        RootineOfflineBanner()
+                    }
+
+                    TasksQuickActions(
+                        onAddTask: { isShowingAddTask = true },
+                        onAddHabit: { isShowingAddHabit = true }
+                    )
+
                     if filter == .trash {
                         if deletedTasks.isEmpty {
-                            TasksEmptyState(filter: filter) { isShowingAddTask = false }
+                            TasksEmptyState(filter: filter, onAdd: {})
                         } else {
                             TasksTrashCard(tasks: deletedTasks) { id in
                                 Task { await environment.restoreTask(id: id) }
                             }
                         }
+                    } else if filter == .habits {
+                        if visibleHabits.isEmpty {
+                            TasksEmptyState(filter: filter, onAdd: { isShowingAddHabit = true })
+                        } else {
+                            TasksHabitsCard(
+                                habits: visibleHabits,
+                                onToggle: toggleHabit,
+                                onSelect: { selectedHabit = $0 }
+                            )
+                        }
                     } else {
-                    if filter == .today && !overdueTasks.isEmpty {
-                        TasksSectionCard(
-                            title: "Po terminie",
-                            systemImage: "clock.badge.exclamationmark",
-                            tint: RootineTheme.ColorToken.warning,
-                            tasks: overdueTasks,
-                            lists: environment.taskWorkspace.lists,
-                            onToggle: toggle,
-                            onSelect: { selectedTask = $0 }
-                        )
-                    }
+                        if !overdueTasks.isEmpty {
+                            TasksSectionCard(
+                                title: "Po terminie",
+                                systemImage: "clock.badge.exclamationmark",
+                                tint: RootineTheme.ColorToken.warning,
+                                tasks: overdueTasks,
+                                lists: environment.taskWorkspace.lists,
+                                onToggle: toggle,
+                                onSelect: { selectedTask = $0 }
+                            )
+                        }
 
-                    if filter != .habits && !datedPendingTasks.isEmpty {
-                        TasksSectionCard(
-                            title: sectionTitle,
-                            systemImage: filter == .completed ? "checkmark.circle" : "list.bullet",
-                            tasks: datedPendingTasks,
-                            lists: environment.taskWorkspace.lists,
-                            onToggle: toggle,
-                            onSelect: { selectedTask = $0 }
-                        )
-                    }
+                        if !pendingTasks.isEmpty {
+                            TasksSectionCard(
+                                title: sectionTitle,
+                                systemImage: "list.bullet",
+                                tasks: pendingTasks,
+                                lists: environment.taskWorkspace.lists,
+                                onToggle: toggle,
+                                onSelect: { selectedTask = $0 }
+                            )
+                        }
 
-                    if filter == .completed {
                         if !completedTasks.isEmpty {
                             TasksSectionCard(
                                 title: "Ukończone",
@@ -157,85 +192,67 @@ struct TasksView: View {
                                 onSelect: { selectedTask = $0 }
                             )
                         }
-                    } else if !completedTasks.isEmpty {
-                        TasksSectionCard(
-                            title: "Ukończone",
-                            systemImage: "checkmark.circle.fill",
-                            tint: RootineTheme.ColorToken.success,
-                            tasks: completedTasks,
-                            lists: environment.taskWorkspace.lists,
-                            onToggle: toggle,
-                            onSelect: { selectedTask = $0 }
-                        )
-                    }
 
-                    if filter == .today || filter == .habits {
-                        if !visibleHabits.isEmpty {
-                            TasksHabitsCard(
-                                habits: visibleHabits,
-                                showsSchedule: filter == .habits,
-                                onToggle: toggleHabit,
-                                onSelect: { selectedHabit = $0 }
-                            )
+                        if pendingTasks.isEmpty && completedTasks.isEmpty {
+                            TasksEmptyState(filter: filter, onAdd: { isShowingAddTask = true })
                         }
-                    }
-
-                    if pendingTasks.isEmpty && completedTasks.isEmpty && (filter != .today && filter != .habits || visibleHabits.isEmpty) {
-                        TasksEmptyState(filter: filter) {
-                            if filter == .habits { isShowingAddHabit = true }
-                            else { isShowingAddTask = true }
-                        }
-                    }
                     }
                 }
                 .padding(.horizontal, RootineTheme.Spacing.medium)
-                .padding(.top, RootineTheme.Spacing.medium)
+                .padding(.top, RootineTheme.Spacing.small)
                 .padding(.bottom, RootineTheme.Spacing.xLarge)
-                .animation(.spring(response: 0.38, dampingFraction: 0.84), value: filter.rawValue)
             }
             .scrollIndicators(.hidden)
+            .refreshable { await environment.flushPendingMutations() }
         }
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
         .sheet(isPresented: $isShowingAddTask) {
             AddTaskSheet()
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingAddHabit) {
             AddHabitSheet()
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(task: task)
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(item: $selectedHabit) { habit in
             HabitDetailSheet(habit: habit)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
     private var counts: [TasksFilter: Int] {
         let today = RootineDate.localDate()
         return [
-            .today: activeTasks.filter {
-                !$0.done && ($0.calendarDate == today || ($0.calendarDate == nil && $0.view == "dzis") || (($0.calendarDate ?? "") < today && $0.calendarDate != nil))
-            }.count,
-            .upcoming: activeTasks.filter { !$0.done && ($0.calendarDate ?? "") > today }.count,
-            .all: activeTasks.filter { !$0.done }.count,
-            .undated: activeTasks.filter { !$0.done && $0.calendarDate == nil }.count,
-            .completed: activeTasks.filter(\.done).count,
+            .all: activeTasks.count,
+            .open: activeTasks.filter { !isDone($0) }.count,
+            .completed: activeTasks.filter { isDone($0) }.count,
             .habits: environment.taskWorkspace.habits.count,
+            .today: activeTasks.filter { task in
+                (task.calendarDate == today || (task.calendarDate == nil && task.view == "dzis"))
+                    || (task.calendarDate != nil && task.calendarDate! < today && !isDone(task))
+            }.count,
+            .upcoming: activeTasks.filter { ($0.calendarDate ?? "") > today }.count,
+            .undated: activeTasks.filter { $0.calendarDate == nil && !isDone($0) }.count,
             .trash: deletedTasks.count
         ]
     }
 
     private var sectionTitle: String {
         switch filter {
-        case .today: return "Dziś"
+        case .all: return "Wszystkie zadania"
+        case .open: return "Do zrobienia"
+        case .completed: return "Ukończone"
+        case .today: return "Dzisiaj"
         case .upcoming: return "Nadchodzące"
-        case .all: return "Do zrobienia"
         case .undated: return "Bez terminu"
-        case .completed: return "Zadania"
         case .habits: return "Nawyki"
         case .trash: return "Kosz"
         }
@@ -260,16 +277,77 @@ struct TasksView: View {
     private func toggleHabit(_ habit: WorkspaceHabit) {
         Task { await environment.toggleHabitCompletion(id: habit.id) }
     }
+
+    private func isDone(_ task: WorkspaceTask, dateKey: String = RootineDate.localDate()) -> Bool {
+        rootineTaskIsDoneOnDate(task, dateKey: dateKey)
+    }
+}
+
+private struct TasksSearchField: View {
+    @Binding var text: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            TextField("Szukaj zadań i nawyków", text: $text)
+                .textInputAutocapitalization(.sentences)
+                .autocorrectionDisabled(false)
+                .focused($isFocused)
+                .submitLabel(.search)
+                .accessibilityLabel("Szukaj zadań i nawyków")
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                    isFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Wyczyść wyszukiwanie")
+            }
+        }
+        .padding(.horizontal, RootineTheme.Spacing.medium)
+        .frame(minHeight: 52)
+        .background(RootineTheme.ColorToken.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(RootineTheme.ColorToken.separator).frame(height: 1)
+        }
+    }
+}
+
+private struct TasksQuickActions: View {
+    let onAddTask: () -> Void
+    let onAddHabit: () -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: RootineTheme.Spacing.small) {
+                RootinePrimaryButton("Dodaj zadanie", systemImage: "plus", action: onAddTask)
+                RootineSecondaryButton("Dodaj nawyk", systemImage: "flame", action: onAddHabit)
+            }
+            VStack(spacing: RootineTheme.Spacing.small) {
+                RootinePrimaryButton("Dodaj zadanie", systemImage: "plus", action: onAddTask)
+                RootineSecondaryButton("Dodaj nawyk", systemImage: "flame", action: onAddHabit)
+            }
+        }
+    }
 }
 
 private struct TasksFilterStrip: View {
     @Binding var filter: TasksFilter
     let counts: [TasksFilter: Int]
 
+    private var primary: [TasksFilter] { [.all, .open, .completed, .habits] }
+    private var secondary: [TasksFilter] { [.today, .upcoming, .undated, .trash] }
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: RootineTheme.Spacing.small) {
-                ForEach(TasksFilter.allCases) { option in
+                ForEach(primary + secondary) { option in
                     Button { filter = option } label: {
                         HStack(spacing: RootineTheme.Spacing.xSmall) {
                             Image(systemName: option.systemImage)
@@ -284,12 +362,14 @@ private struct TasksFilterStrip: View {
                         }
                         .foregroundStyle(filter == option ? RootineTheme.ColorToken.primaryText : RootineTheme.ColorToken.secondaryText)
                         .padding(.horizontal, RootineTheme.Spacing.medium)
-                        .padding(.vertical, RootineTheme.Spacing.small)
+                        .frame(minHeight: 44)
                         .background(filter == option ? RootineTheme.ColorToken.elevated : RootineTheme.ColorToken.surface)
                         .clipShape(Capsule())
-                        .overlay(Capsule().stroke(RootineTheme.ColorToken.separator, lineWidth: 1))
+                        .overlay(Capsule().stroke(filter == option ? RootineTheme.ColorToken.action.opacity(0.5) : RootineTheme.ColorToken.separator, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Filtr: \(option.label)")
+                    .accessibilityAddTraits(filter == option ? .isSelected : [])
                 }
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
@@ -337,48 +417,60 @@ private struct TasksRow: View {
     let onToggle: () -> Void
     let onSelect: () -> Void
 
+    private var isDone: Bool { rootineTaskIsDoneOnDate(task) }
+
     var body: some View {
-        HStack(alignment: .top, spacing: RootineTheme.Spacing.small) {
+        HStack(alignment: .center, spacing: RootineTheme.Spacing.small) {
             Button(action: onToggle) {
-                Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
+                Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(task.done ? RootineTheme.ColorToken.success : priorityColor)
+                    .foregroundStyle(isDone ? RootineTheme.ColorToken.success : priorityColor)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(task.done ? "Oznacz jako niewykonane" : "Oznacz jako wykonane")
+            .accessibilityLabel(isDone ? "Oznacz \(task.text) jako niewykonane" : "Oznacz \(task.text) jako wykonane")
 
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                Text(task.text)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(task.done ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
-                    .strikethrough(task.done)
-                    .lineLimit(3)
+            Button(action: onSelect) {
+                HStack(alignment: .center, spacing: RootineTheme.Spacing.small) {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                        Text(task.text)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
+                            .strikethrough(isDone)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
 
-                HStack(spacing: RootineTheme.Spacing.small) {
-                    if let time = task.time {
-                        Label(time, systemImage: "clock")
+                        ViewThatFits(in: .horizontal) {
+                            metadata
+                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) { metadata }
+                        }
                     }
-                    if let date = task.calendarDate, date != RootineDate.localDate() {
-                        Label(shortDate(date), systemImage: "calendar")
-                    }
-                    if let listName {
-                        Label(listName, systemImage: "folder")
-                    }
-                    if let priority = task.priority {
-                        Text(priorityLabel(priority))
-                            .foregroundStyle(priorityColor)
-                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
-                .font(.caption)
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .contentShape(Rectangle())
             }
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Szczegóły zadania: \(task.text)")
+            .accessibilityHint("Otwiera edycję zadania")
         }
-        .padding(.vertical, RootineTheme.Spacing.small)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
     }
+
+    private var metadata: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            if let time = task.time { Label(time, systemImage: "clock") }
+            if let date = task.calendarDate, date != RootineDate.localDate() { Label(shortDate(date), systemImage: "calendar") }
+            if let listName { Label(listName, systemImage: "folder") }
+            if let priority { Text(priorityLabel(priority)).foregroundStyle(priorityColor) }
+        }
+        .font(.caption)
+        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+    }
+
+    private var priority: TaskPriority? { task.priority }
 
     private var priorityColor: Color {
         switch task.priority {
@@ -400,7 +492,6 @@ private struct TasksRow: View {
 
 private struct TasksHabitsCard: View {
     let habits: [WorkspaceHabit]
-    let showsSchedule: Bool
     let onToggle: (WorkspaceHabit) -> Void
     let onSelect: (WorkspaceHabit) -> Void
 
@@ -423,44 +514,40 @@ private struct TasksHabitsCard: View {
                         Image(systemName: isHabitDone(habit) ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
                             .foregroundStyle(isHabitDone(habit) ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.action)
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                     .disabled(!isHabitScheduled(habit, dateKey: RootineDate.localDate()))
-                    .accessibilityLabel(isHabitDone(habit) ? "Oznacz nawyk jako niewykonany" : "Oznacz nawyk jako wykonany")
+                    .accessibilityLabel(isHabitDone(habit) ? "Oznacz \(habit.name) jako niewykonany" : "Oznacz \(habit.name) jako wykonany")
 
-                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                        Text(habit.name)
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(isHabitDone(habit) ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
-                            .strikethrough(isHabitDone(habit))
+                    Button { onSelect(habit) } label: {
                         HStack(spacing: RootineTheme.Spacing.small) {
-                            if let time = habit.time {
-                                Label(time, systemImage: "clock")
+                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                                Text(habit.name)
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(isHabitDone(habit) ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
+                                    .strikethrough(isHabitDone(habit))
+                                    .lineLimit(2)
+                                HStack(spacing: RootineTheme.Spacing.small) {
+                                    if let time = habit.time { Label(time, systemImage: "clock") }
+                                    Text("Seria \(rootineHabitCurrentStreak(habit))")
+                                    Text(habitScheduleLabel(habit.schedule))
+                                }
+                                .font(.caption)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                             }
-                            let streak = rootineHabitCurrentStreak(habit)
-                            if streak > 0 {
-                                Label("Seria \(streak)", systemImage: "flame")
-                            } else if !isHabitScheduled(habit, dateKey: RootineDate.localDate()) {
-                                Text(habitScheduleStatus(habit))
-                            } else {
-                                Text("Nowy rytm")
-                            }
-                            if showsSchedule {
-                                Text(habitScheduleLabel(habit.schedule))
-                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                         }
-                        .font(.caption)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Szczegóły nawyku: \(habit.name)")
                 }
-                .padding(.vertical, RootineTheme.Spacing.small)
-                .contentShape(Rectangle())
-                .onTapGesture { onSelect(habit) }
-
-                if habit.id != habits.last?.id {
-                    Divider().overlay(RootineTheme.ColorToken.separator)
-                }
+                if habit.id != habits.last?.id { Divider().overlay(RootineTheme.ColorToken.separator) }
             }
         }
         .rootineSurface()
@@ -494,12 +581,12 @@ private struct TasksTrashCard: View {
                     Spacer(minLength: 0)
                     Button("Przywróć") { onRestore(task.id) }
                         .font(.subheadline.weight(.semibold))
+                        .frame(minWidth: 44, minHeight: 44)
                         .foregroundStyle(RootineTheme.ColorToken.action)
+                        .accessibilityLabel("Przywróć zadanie: \(task.text)")
                 }
-                .padding(.vertical, RootineTheme.Spacing.small)
-                if task.id != tasks.last?.id {
-                    Divider().overlay(RootineTheme.ColorToken.separator)
-                }
+                .frame(minHeight: 48)
+                if task.id != tasks.last?.id { Divider().overlay(RootineTheme.ColorToken.separator) }
             }
         }
         .rootineSurface()
@@ -511,23 +598,13 @@ private struct TasksEmptyState: View {
     let onAdd: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
-            Image(systemName: filter == .completed ? "checkmark.circle" : filter == .habits ? "flame" : "sparkles")
-                .font(.title2)
-                .foregroundStyle(RootineTheme.ColorToken.action)
-            Text(emptyTitle)
-                .font(.headline)
-                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-            Text(emptyDescription)
-                .font(.subheadline)
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-            if filter != .completed && filter != .trash {
-                Button(filter == .habits ? "Dodaj nawyk" : "Dodaj zadanie", action: onAdd)
-                    .buttonStyle(.borderedProminent)
-                    .tint(RootineTheme.ColorToken.action)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        RootineEmptyState(
+            title: emptyTitle,
+            message: emptyDescription,
+            systemImage: filter == .completed ? "checkmark.circle" : filter == .habits ? "flame" : filter == .trash ? "trash" : "sparkles",
+            actionTitle: filter == .completed || filter == .trash ? nil : filter == .habits ? "Dodaj nawyk" : "Dodaj zadanie",
+            action: filter == .completed || filter == .trash ? nil : onAdd
+        )
         .rootineSurface()
     }
 
@@ -567,7 +644,6 @@ struct AddTaskSheet: View {
                     TextField("Godzina (opcjonalnie, np. 09:00)", text: $time)
                         .keyboardType(.numbersAndPunctuation)
                 }
-
                 Section("Termin") {
                     Picker("Dzień", selection: $dateChoice) {
                         Text("Dziś").tag("today")
@@ -576,7 +652,6 @@ struct AddTaskSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
-
                 Section("Priorytet") {
                     Picker("Priorytet", selection: $priorityChoice) {
                         Text("Brak").tag("none")
@@ -591,9 +666,7 @@ struct AddTaskSheet: View {
             .navigationTitle("Dodaj zadanie")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Anuluj") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Dodaj") {
                         Task {
@@ -611,36 +684,36 @@ struct AddTaskSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     private var selectedDate: String? {
         switch dateChoice {
-        case "tomorrow":
-            return RootineDate.localDate(Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
-        case "none":
-            return nil
-        default:
-            return RootineDate.localDate()
+        case "tomorrow": return RootineDate.localDate(Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+        case "none": return nil
+        default: return RootineDate.localDate()
         }
     }
 }
 
-private struct TaskDetailSheet: View {
+struct TaskDetailSheet: View {
     let task: WorkspaceTask
+    let completionDate: Date?
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var time: String
-    @State private var date: String
+    @State private var dueDate: Date
+    @State private var hasDate: Bool
     @State private var priority: String
     @State private var showDeleteConfirmation = false
 
-    init(task: WorkspaceTask) {
+    init(task: WorkspaceTask, completionDate: Date? = nil) {
         self.task = task
+        self.completionDate = completionDate
         _title = State(initialValue: task.text)
         _time = State(initialValue: task.time ?? "")
-        _date = State(initialValue: task.calendarDate ?? "")
+        _dueDate = State(initialValue: dateFromKey(task.calendarDate) ?? Date())
+        _hasDate = State(initialValue: task.calendarDate != nil)
         _priority = State(initialValue: task.priority?.rawValue ?? "none")
     }
 
@@ -650,13 +723,14 @@ private struct TaskDetailSheet: View {
                 Section("Zadanie") {
                     TextField("Nazwa zadania", text: $title, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField("Data (RRRR-MM-DD)", text: $date)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    Toggle("Ma termin", isOn: $hasDate)
+                    if hasDate {
+                        DatePicker("Dzień", selection: $dueDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                    }
                     TextField("Godzina (opcjonalnie)", text: $time)
                         .keyboardType(.numbersAndPunctuation)
                 }
-
                 Section("Priorytet") {
                     Picker("Priorytet", selection: $priority) {
                         Text("Brak").tag("none")
@@ -665,14 +739,14 @@ private struct TaskDetailSheet: View {
                         Text("Niski").tag("low")
                     }
                 }
-
                 Section {
-                    Button(task.done ? "Oznacz jako niewykonane" : "Oznacz jako wykonane") {
-                        Task { await environment.toggleTaskCompletion(id: task.id); dismiss() }
+                    Button(isCompletedOnContextDate ? "Oznacz jako niewykonane" : "Oznacz jako wykonane") {
+                        Task {
+                            await environment.toggleTaskCompletion(id: task.id, on: completionDate ?? Date())
+                            dismiss()
+                        }
                     }
-                    Button("Usuń zadanie", role: .destructive) {
-                        showDeleteConfirmation = true
-                    }
+                    Button("Usuń zadanie", role: .destructive) { showDeleteConfirmation = true }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -680,9 +754,7 @@ private struct TaskDetailSheet: View {
             .navigationTitle("Szczegóły zadania")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Anuluj") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
                         Task {
@@ -690,13 +762,13 @@ private struct TaskDetailSheet: View {
                                 id: task.id,
                                 text: title,
                                 time: time,
-                                calendarDate: normalizedDate,
+                                calendarDate: hasDate ? RootineDate.localDate(dueDate) : nil,
                                 priority: TaskPriority(rawValue: priority)
                             )
                             dismiss()
                         }
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isValidDateKey(normalizedDate))
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .confirmationDialog("Usunąć zadanie?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
@@ -706,12 +778,10 @@ private struct TaskDetailSheet: View {
                 Button("Anuluj", role: .cancel) {}
             }
         }
-        .preferredColorScheme(.dark)
     }
 
-    private var normalizedDate: String? {
-        let value = date.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
+    private var isCompletedOnContextDate: Bool {
+        rootineTaskIsDoneOnDate(task, dateKey: RootineDate.localDate(completionDate ?? Date()))
     }
 }
 
@@ -741,43 +811,33 @@ private struct HabitScheduleSection: View {
     var body: some View {
         Section("Częstotliwość") {
             Picker("Powtarzaj", selection: $frequency) {
-                ForEach(HabitFrequency.allCases) { option in
-                    Text(option.label).tag(option)
-                }
+                ForEach(HabitFrequency.allCases) { option in Text(option.label).tag(option) }
             }
-
             if frequency == .weekly {
                 HStack(spacing: RootineTheme.Spacing.xSmall) {
                     ForEach(1...7, id: \.self) { day in
                         Button {
                             if weekdays.contains(day) {
                                 if weekdays.count > 1 { weekdays.remove(day) }
-                            } else {
-                                weekdays.insert(day)
-                            }
+                            } else { weekdays.insert(day) }
                         } label: {
                             Text(weekdayLabels[day - 1])
                                 .font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, RootineTheme.Spacing.small)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                                 .foregroundStyle(weekdays.contains(day) ? RootineTheme.ColorToken.primaryText : RootineTheme.ColorToken.secondaryText)
                                 .background(weekdays.contains(day) ? RootineTheme.ColorToken.action.opacity(0.22) : RootineTheme.ColorToken.surface)
                                 .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(weekdayLabels[day - 1])
+                        .accessibilityAddTraits(weekdays.contains(day) ? .isSelected : [])
                     }
                 }
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
             }
-
             if frequency == .interval {
                 Stepper(value: $interval, in: 2...30) {
-                    HStack {
-                        Text("Powtarzaj co")
-                        Spacer()
-                        Text("\(interval) dni")
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    }
+                    HStack { Text("Powtarzaj co"); Spacer(); Text("\(interval) dni").foregroundStyle(RootineTheme.ColorToken.secondaryText) }
                 }
             }
         }
@@ -799,8 +859,7 @@ struct AddHabitSheet: View {
             Form {
                 Section("Nowy nawyk") {
                     TextField("Nazwa nawyku", text: $name)
-                    TextField("Godzina (opcjonalnie)", text: $time)
-                        .keyboardType(.numbersAndPunctuation)
+                    TextField("Godzina (opcjonalnie)", text: $time).keyboardType(.numbersAndPunctuation)
                 }
                 HabitScheduleSection(frequency: $frequency, weekdays: $weekdays, interval: $interval)
                 Section("Priorytet") {
@@ -817,18 +876,11 @@ struct AddHabitSheet: View {
             .navigationTitle("Dodaj nawyk")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Anuluj") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Dodaj") {
                         Task {
-                            await environment.addHabit(
-                                name: name,
-                                time: time,
-                                priority: TaskPriority(rawValue: priority),
-                                schedule: schedule
-                            )
+                            await environment.addHabit(name: name, time: time, priority: TaskPriority(rawValue: priority), schedule: schedule)
                             dismiss()
                         }
                     }
@@ -836,27 +888,18 @@ struct AddHabitSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     private var schedule: WorkspaceHabitSchedule {
         switch frequency {
-        case .daily:
-            return WorkspaceHabitSchedule(type: "daily", startDate: RootineDate.localDate())
-        case .weekly:
-            return WorkspaceHabitSchedule(
-                type: "weekly",
-                weekdays: weekdays.sorted(),
-                interval: 1,
-                startDate: RootineDate.localDate()
-            )
-        case .interval:
-            return WorkspaceHabitSchedule(type: "interval", interval: max(2, interval), startDate: RootineDate.localDate())
+        case .daily: return WorkspaceHabitSchedule(type: "daily", startDate: RootineDate.localDate())
+        case .weekly: return WorkspaceHabitSchedule(type: "weekly", weekdays: weekdays.sorted(), interval: 1, startDate: RootineDate.localDate())
+        case .interval: return WorkspaceHabitSchedule(type: "interval", interval: max(2, interval), startDate: RootineDate.localDate())
         }
     }
 }
 
-private struct HabitDetailSheet: View {
+struct HabitDetailSheet: View {
     let habit: WorkspaceHabit
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
@@ -873,10 +916,9 @@ private struct HabitDetailSheet: View {
         _name = State(initialValue: habit.name)
         _time = State(initialValue: habit.time ?? "")
         _priority = State(initialValue: habit.priority?.rawValue ?? "none")
-        let schedule = habit.schedule
-        _frequency = State(initialValue: HabitFrequency(rawValue: schedule?.type ?? "daily") ?? .daily)
-        _weekdays = State(initialValue: Set(schedule?.weekdays ?? Array(1...7)))
-        _interval = State(initialValue: max(2, schedule?.interval ?? 2))
+        _frequency = State(initialValue: HabitFrequency(rawValue: habit.schedule?.type ?? "daily") ?? .daily)
+        _weekdays = State(initialValue: Set(habit.schedule?.weekdays ?? Array(1...7)))
+        _interval = State(initialValue: max(2, habit.schedule?.interval ?? 2))
     }
 
     var body: some View {
@@ -884,8 +926,7 @@ private struct HabitDetailSheet: View {
             Form {
                 Section("Nawyk") {
                     TextField("Nazwa nawyku", text: $name)
-                    TextField("Godzina (opcjonalnie)", text: $time)
-                        .keyboardType(.numbersAndPunctuation)
+                    TextField("Godzina (opcjonalnie)", text: $time).keyboardType(.numbersAndPunctuation)
                 }
                 HabitScheduleSection(frequency: $frequency, weekdays: $weekdays, interval: $interval)
                 Section("Priorytet") {
@@ -908,19 +949,11 @@ private struct HabitDetailSheet: View {
             .navigationTitle("Szczegóły nawyku")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Anuluj") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
                         Task {
-                            await environment.updateHabit(
-                                id: habit.id,
-                                name: name,
-                                time: time,
-                                priority: TaskPriority(rawValue: priority),
-                                schedule: schedule
-                            )
+                            await environment.updateHabit(id: habit.id, name: name, time: time, priority: TaskPriority(rawValue: priority), schedule: schedule)
                             dismiss()
                         }
                     }
@@ -934,29 +967,14 @@ private struct HabitDetailSheet: View {
                 Button("Anuluj", role: .cancel) {}
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     private var schedule: WorkspaceHabitSchedule {
         let startDate = habit.schedule?.startDate ?? RootineDate.localDate()
         switch frequency {
-        case .daily:
-            return WorkspaceHabitSchedule(type: "daily", startDate: startDate, endDate: habit.schedule?.endDate)
-        case .weekly:
-            return WorkspaceHabitSchedule(
-                type: "weekly",
-                weekdays: weekdays.sorted(),
-                interval: 1,
-                startDate: startDate,
-                endDate: habit.schedule?.endDate
-            )
-        case .interval:
-            return WorkspaceHabitSchedule(
-                type: "interval",
-                interval: max(2, interval),
-                startDate: startDate,
-                endDate: habit.schedule?.endDate
-            )
+        case .daily: return WorkspaceHabitSchedule(type: "daily", startDate: startDate, endDate: habit.schedule?.endDate)
+        case .weekly: return WorkspaceHabitSchedule(type: "weekly", weekdays: weekdays.sorted(), interval: 1, startDate: startDate, endDate: habit.schedule?.endDate)
+        case .interval: return WorkspaceHabitSchedule(type: "interval", interval: max(2, interval), startDate: startDate, endDate: habit.schedule?.endDate)
         }
     }
 }
@@ -969,18 +987,15 @@ private func isHabitScheduled(_ habit: WorkspaceHabit, dateKey: String, calendar
     rootineHabitIsScheduledOnDate(habit, dateKey: dateKey, calendar: calendar)
 }
 
-private func isValidDateKey(_ value: String?) -> Bool {
-    guard let value, !value.isEmpty else { return true }
-    let parts = value.split(separator: "-").compactMap { Int($0) }
-    return parts.count == 3 && parts[0] >= 2000 && parts[1] >= 1 && parts[1] <= 12 && parts[2] >= 1 && parts[2] <= 31
+private func dateFromKey(_ key: String?) -> Date? {
+    guard let key else { return nil }
+    let parts = key.split(separator: "-").compactMap { Int($0) }
+    guard parts.count == 3 else { return nil }
+    return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
 }
 
 private func shortDate(_ key: String) -> String {
-    let parts = key.split(separator: "-").compactMap { Int($0) }
-    guard parts.count == 3,
-          let date = Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else {
-        return key
-    }
+    guard let date = dateFromKey(key) else { return key }
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "pl_PL")
     formatter.dateFormat = "d MMM"
@@ -992,26 +1007,11 @@ private func habitScheduleLabel(_ schedule: WorkspaceHabitSchedule?) -> String {
     switch schedule.type {
     case "weekly":
         let labels = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
-        let days = (schedule.weekdays ?? Array(1...7)).sorted().compactMap { day -> String? in
-            guard labels.indices.contains(day - 1) else { return nil }
-            return labels[day - 1]
-        }
-        let prefix = schedule.interval.map { $0 > 1 ? "Co \($0) tyg." : "Tyg." } ?? "Tyg."
-        return days.isEmpty ? prefix : "\(prefix): \(days.joined(separator: ", "))"
+        let days = (schedule.weekdays ?? Array(1...7)).sorted().compactMap { labels.indices.contains($0 - 1) ? labels[$0 - 1] : nil }
+        return days.isEmpty ? "Tygodniowo" : days.joined(separator: ", ")
     case "interval":
         let interval = max(1, schedule.interval ?? 1)
         return interval == 1 ? "Codziennie" : "Co \(interval) dni"
-    default:
-        return "Codziennie"
+    default: return "Codziennie"
     }
-}
-
-private func habitScheduleStatus(_ habit: WorkspaceHabit) -> String {
-    let today = RootineDate.localDate()
-    if rootineHabitIsPausedOnDate(habit, dateKey: today) { return "Wstrzymany" }
-    if let schedule = habit.schedule {
-        if today < schedule.startDate { return "Start \(shortDate(schedule.startDate))" }
-        if let endDate = schedule.endDate, today > endDate { return "Zakończony" }
-    }
-    return "Dziś wolne · \(habitScheduleLabel(habit.schedule))"
 }

@@ -1,34 +1,35 @@
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
-	classes = {};
-	objectVersion = 77;
+	classes = {
+	};
+	objectVersion = 71;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		B00000000000000000000001 /* RootineApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000001 /* RootineApp.swift */; };
 		B00000000000000000000002 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* AppEnvironment.swift */; };
 		B00000000000000000000003 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* AppShellView.swift */; };
-		B00000000000000000000004 /* RootineTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* RootineTheme.swift */; };
-		B00000000000000000000005 /* WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* WorkspaceModels.swift */; };
-		B00000000000000000000016 /* CanonicalWorkspaceMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* CanonicalWorkspaceMapping.swift */; };
-		B00000000000000000000006 /* RootineAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* RootineAPIClient.swift */; };
-		B00000000000000000000007 /* KeychainSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* KeychainSessionStore.swift */; };
-		B00000000000000000000008 /* WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* WorkspaceFileStore.swift */; };
-		B00000000000000000000009 /* WorkspaceSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* WorkspaceSyncEngine.swift */; };
+		B00000000000000000000004 /* Design/RootineTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* Design/RootineTheme.swift */; };
+		B00000000000000000000005 /* Models/WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* Models/WorkspaceModels.swift */; };
+		B00000000000000000000006 /* Networking/RootineAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* Networking/RootineAPIClient.swift */; };
+		B00000000000000000000007 /* Persistence/KeychainSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */; };
+		B00000000000000000000008 /* Persistence/WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */; };
+		B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */; };
 		B0000000000000000000000A /* FeatureRootViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* FeatureRootViews.swift */; };
-		B0000000000000000000000B /* AuthenticationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* AuthenticationSupport.swift */; };
-		B0000000000000000000000C /* AuthenticationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* AuthenticationViews.swift */; };
+		B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* Auth/AuthenticationSupport.swift */; };
+		B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* Authentication/AuthenticationViews.swift */; };
 		B0000000000000000000000D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000011 /* TodayView.swift */; };
 		B0000000000000000000000E /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* TasksView.swift */; };
 		B0000000000000000000000F /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* CalendarView.swift */; };
 		B00000000000000000000010 /* NutritionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* NutritionView.swift */; };
+		B00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */; };
 		B00000000000000000000101 /* ContractFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* ContractFixtureTests.swift */; };
-		B00000000000000000000106 /* AuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000106 /* AuthenticationTests.swift */; };
 		B00000000000000000000102 /* task-workspace-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* task-workspace-v2.json */; };
 		B00000000000000000000103 /* nutrition-workspace-v6.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* nutrition-workspace-v6.json */; };
 		B00000000000000000000104 /* notes-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* notes-workspace-v1.json */; };
 		B00000000000000000000105 /* nutrition-product.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* nutrition-product.json */; };
+		B00000000000000000000106 /* AuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000106 /* AuthenticationTests.swift */; };
 		B00000000000000000000107 /* sport-planner-v5.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000107 /* sport-planner-v5.json */; };
 		B00000000000000000000108 /* goals-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000108 /* goals-workspace-v1.json */; };
 		B00000000000000000000109 /* work-workspace-v3.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000109 /* work-workspace-v3.json */; };
@@ -50,30 +51,30 @@
 		F00000000000000000000001 /* RootineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineApp.swift; sourceTree = "<group>"; };
 		F00000000000000000000002 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		F00000000000000000000003 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
-		F00000000000000000000004 /* RootineTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design/RootineTheme.swift; sourceTree = "<group>"; };
-		F00000000000000000000005 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/WorkspaceModels.swift; sourceTree = "<group>"; };
-		F00000000000000000000016 /* CanonicalWorkspaceMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/CanonicalWorkspaceMapping.swift; sourceTree = "<group>"; };
-		F00000000000000000000006 /* RootineAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/RootineAPIClient.swift; sourceTree = "<group>"; };
-		F00000000000000000000007 /* KeychainSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/KeychainSessionStore.swift; sourceTree = "<group>"; };
-		F00000000000000000000008 /* WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/WorkspaceFileStore.swift; sourceTree = "<group>"; };
-		F00000000000000000000009 /* WorkspaceSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/WorkspaceSyncEngine.swift; sourceTree = "<group>"; };
+		F00000000000000000000004 /* Design/RootineTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design/RootineTheme.swift; sourceTree = "<group>"; };
+		F00000000000000000000005 /* Models/WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/WorkspaceModels.swift; sourceTree = "<group>"; };
+		F00000000000000000000006 /* Networking/RootineAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/RootineAPIClient.swift; sourceTree = "<group>"; };
+		F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/KeychainSessionStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/WorkspaceFileStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/WorkspaceSyncEngine.swift; sourceTree = "<group>"; };
 		F0000000000000000000000A /* FeatureRootViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRootViews.swift; sourceTree = "<group>"; };
 		F0000000000000000000000B /* Rootine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rootine.entitlements; sourceTree = "<group>"; };
 		F0000000000000000000000C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		F0000000000000000000000D /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
-		F0000000000000000000000E /* AuthenticationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/AuthenticationSupport.swift; sourceTree = "<group>"; };
-		F0000000000000000000000F /* AuthenticationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication/AuthenticationViews.swift; sourceTree = "<group>"; };
+		F0000000000000000000000E /* Auth/AuthenticationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/AuthenticationSupport.swift; sourceTree = "<group>"; };
+		F0000000000000000000000F /* Authentication/AuthenticationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication/AuthenticationViews.swift; sourceTree = "<group>"; };
+		F00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F00000000000000000000011 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		F00000000000000000000012 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		F00000000000000000000013 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		F00000000000000000000014 /* NutritionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionView.swift; sourceTree = "<group>"; };
-		F00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/CanonicalWorkspaceMapping.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* ContractFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractFixtureTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000106 /* AuthenticationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* task-workspace-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "task-workspace-v2.json"; sourceTree = "<group>"; };
 		F00000000000000000000103 /* nutrition-workspace-v6.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-workspace-v6.json"; sourceTree = "<group>"; };
 		F00000000000000000000104 /* notes-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notes-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000105 /* nutrition-product.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-product.json"; sourceTree = "<group>"; };
+		F00000000000000000000106 /* AuthenticationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000107 /* sport-planner-v5.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sport-planner-v5.json"; sourceTree = "<group>"; };
 		F00000000000000000000108 /* goals-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "goals-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000109 /* work-workspace-v3.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "work-workspace-v3.json"; sourceTree = "<group>"; };
@@ -84,42 +85,142 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		PH0000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		PH0000000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		PH0000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		G00000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				G00000000000000000000002 /* App */,
-				G00000000000000000000003 /* Core */,
-				G00000000000000000000004 /* Features */,
-				G00000000000000000000005 /* Resources */,
+				G00000000000000000000002 /* Rootine/App */,
+				G00000000000000000000003 /* Rootine/Core */,
+				G00000000000000000000004 /* Rootine/Features */,
+				G00000000000000000000005 /* Rootine/Resources */,
 				G00000000000000000000006 /* RootineTests */,
-				G00000000000000000000007 /* Contract fixtures */,
+				G00000000000000000000007 /* ../../contracts/fixtures */,
 				G00000000000000000000008 /* Config */,
 				G00000000000000000000009 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		G00000000000000000000002 /* App */ = {isa = PBXGroup; children = (F00000000000000000000001, F00000000000000000000002, F00000000000000000000003); path = Rootine/App; sourceTree = "<group>"; };
-		G00000000000000000000003 /* Core */ = {isa = PBXGroup; children = (F00000000000000000000004, F00000000000000000000005, F00000000000000000000016, F00000000000000000000006, F00000000000000000000007, F00000000000000000000008, F00000000000000000000009, F0000000000000000000000E); path = Rootine/Core; sourceTree = "<group>"; };
-		G00000000000000000000004 /* Features */ = {isa = PBXGroup; children = (F0000000000000000000000A, F0000000000000000000000F, F00000000000000000000011, F00000000000000000000012, F00000000000000000000013, F00000000000000000000014); path = Rootine/Features; sourceTree = "<group>"; };
-		G00000000000000000000005 /* Resources */ = {isa = PBXGroup; children = (F0000000000000000000000B, F00000000000000000000010); path = Rootine/Resources; sourceTree = "<group>"; };
-		G00000000000000000000006 /* RootineTests */ = {isa = PBXGroup; children = (F00000000000000000000101, F00000000000000000000106); path = RootineTests; sourceTree = "<group>"; };
-		G00000000000000000000007 /* Contract fixtures */ = {isa = PBXGroup; children = (F00000000000000000000102, F00000000000000000000103, F00000000000000000000104, F00000000000000000000105, F00000000000000000000107, F00000000000000000000108, F00000000000000000000109, F0000000000000000000010A, F0000000000000000000010B); path = ../../contracts/fixtures; sourceTree = "<group>"; };
-		G00000000000000000000008 /* Config */ = {isa = PBXGroup; children = (F0000000000000000000000C, F0000000000000000000000D); path = Config; sourceTree = "<group>"; };
-		G00000000000000000000009 /* Products */ = {isa = PBXGroup; children = (F00000000000000000001001, F00000000000000000001002); name = Products; sourceTree = "<group>"; };
+		G00000000000000000000002 /* Rootine/App */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000001 /* RootineApp.swift */,
+				F00000000000000000000002 /* AppEnvironment.swift */,
+				F00000000000000000000003 /* AppShellView.swift */,
+			);
+			path = Rootine/App;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000003 /* Rootine/Core */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000004 /* Design/RootineTheme.swift */,
+				F00000000000000000000005 /* Models/WorkspaceModels.swift */,
+				F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */,
+				F00000000000000000000006 /* Networking/RootineAPIClient.swift */,
+				F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */,
+				F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */,
+				F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */,
+				F0000000000000000000000E /* Auth/AuthenticationSupport.swift */,
+			);
+			path = Rootine/Core;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000004 /* Rootine/Features */ = {
+			isa = PBXGroup;
+			children = (
+				F0000000000000000000000A /* FeatureRootViews.swift */,
+				F0000000000000000000000F /* Authentication/AuthenticationViews.swift */,
+				F00000000000000000000011 /* TodayView.swift */,
+				F00000000000000000000012 /* TasksView.swift */,
+				F00000000000000000000013 /* CalendarView.swift */,
+				F00000000000000000000014 /* NutritionView.swift */,
+			);
+			path = Rootine/Features;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000005 /* Rootine/Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F0000000000000000000000B /* Rootine.entitlements */,
+				F00000000000000000000010 /* Info.plist */,
+			);
+			path = Rootine/Resources;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000006 /* RootineTests */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000101 /* ContractFixtureTests.swift */,
+				F00000000000000000000106 /* AuthenticationTests.swift */,
+			);
+			path = RootineTests;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000007 /* ../../contracts/fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000102 /* task-workspace-v2.json */,
+				F00000000000000000000103 /* nutrition-workspace-v6.json */,
+				F00000000000000000000104 /* notes-workspace-v1.json */,
+				F00000000000000000000105 /* nutrition-product.json */,
+				F00000000000000000000107 /* sport-planner-v5.json */,
+				F00000000000000000000108 /* goals-workspace-v1.json */,
+				F00000000000000000000109 /* work-workspace-v3.json */,
+				F0000000000000000000010A /* travel-workspace-v2.json */,
+				F0000000000000000000010B /* health-workspace-v1.json */,
+			);
+			path = ../../contracts/fixtures;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000008 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				F0000000000000000000000C /* Shared.xcconfig */,
+				F0000000000000000000000D /* Secrets.xcconfig.example */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000009 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000001001 /* Rootine.app */,
+				F00000000000000000001002 /* RootineTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		T000000000000000000000001 /* Rootine */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C000000000000000000000002 /* Build configuration list for PBXNativeTarget "Rootine" */;
-			buildPhases = (PH0000000000000000000011 /* Sources */, PH0000000000000000000001 /* Frameworks */, PH0000000000000000000021 /* Resources */);
-			buildRules = ();
-			dependencies = ();
+			buildPhases = (
+				PH0000000000000000000011 /* Sources */,
+				PH0000000000000000000001 /* Frameworks */,
+				PH0000000000000000000021 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = Rootine;
 			productName = Rootine;
 			productReference = F00000000000000000001001 /* Rootine.app */;
@@ -128,9 +229,16 @@
 		T000000000000000000000002 /* RootineTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C000000000000000000000003 /* Build configuration list for PBXNativeTarget "RootineTests" */;
-			buildPhases = (PH0000000000000000000012 /* Sources */, PH0000000000000000000002 /* Frameworks */, PH0000000000000000000022 /* Resources */);
-			buildRules = ();
-			dependencies = (D00000000000000000000002 /* PBXTargetDependency */);
+			buildPhases = (
+				PH0000000000000000000012 /* Sources */,
+				PH0000000000000000000002 /* Frameworks */,
+				PH0000000000000000000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000000000000000000002 /* PBXTargetDependency */,
+			);
 			name = RootineTests;
 			productName = RootineTests;
 			productReference = F00000000000000000001002 /* RootineTests.xctest */;
@@ -146,50 +254,226 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					T000000000000000000000001 = {CreatedOnToolsVersion = 26.3; };
-					T000000000000000000000002 = {CreatedOnToolsVersion = 26.3; TestTargetID = T000000000000000000000001; };
+					T000000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					T000000000000000000000002 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = T000000000000000000000001;
+					};
 				};
 			};
 			buildConfigurationList = C000000000000000000000001 /* Build configuration list for PBXProject "Rootine" */;
 			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = pl;
 			hasScannedForEncodings = 0;
-			knownRegions = (pl, en, Base);
+			knownRegions = (
+				pl,
+				en,
+				Base,
+			);
 			mainGroup = G00000000000000000000001;
 			productRefGroup = G00000000000000000000009 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (T000000000000000000000001 /* Rootine */, T000000000000000000000002 /* RootineTests */);
+			targets = (
+				T000000000000000000000001 /* Rootine */,
+				T000000000000000000000002 /* RootineTests */,
+			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		PH0000000000000000000021 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		PH0000000000000000000022 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B00000000000000000000102, B00000000000000000000103, B00000000000000000000104, B00000000000000000000105, B00000000000000000000107, B00000000000000000000108, B00000000000000000000109, B0000000000000000000010A, B0000000000000000000010B); runOnlyForDeploymentPostprocessing = 0; };
+		PH0000000000000000000021 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000102 /* task-workspace-v2.json in Resources */,
+				B00000000000000000000103 /* nutrition-workspace-v6.json in Resources */,
+				B00000000000000000000104 /* notes-workspace-v1.json in Resources */,
+				B00000000000000000000105 /* nutrition-product.json in Resources */,
+				B00000000000000000000107 /* sport-planner-v5.json in Resources */,
+				B00000000000000000000108 /* goals-workspace-v1.json in Resources */,
+				B00000000000000000000109 /* work-workspace-v3.json in Resources */,
+				B0000000000000000000010A /* travel-workspace-v2.json in Resources */,
+				B0000000000000000000010B /* health-workspace-v1.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		PH0000000000000000000011 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00000000000000000000001, B00000000000000000000002, B00000000000000000000003, B00000000000000000000004, B00000000000000000000005, B00000000000000000000016, B00000000000000000000006, B00000000000000000000007, B00000000000000000000008, B00000000000000000000009, B0000000000000000000000A, B0000000000000000000000B, B0000000000000000000000C, B0000000000000000000000D, B0000000000000000000000E, B0000000000000000000000F, B00000000000000000000010); runOnlyForDeploymentPostprocessing = 0; };
-		PH0000000000000000000012 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00000000000000000000101, B00000000000000000000106); runOnlyForDeploymentPostprocessing = 0; };
+		PH0000000000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000001 /* RootineApp.swift in Sources */,
+				B00000000000000000000002 /* AppEnvironment.swift in Sources */,
+				B00000000000000000000003 /* AppShellView.swift in Sources */,
+				B00000000000000000000004 /* Design/RootineTheme.swift in Sources */,
+				B00000000000000000000005 /* Models/WorkspaceModels.swift in Sources */,
+				B00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift in Sources */,
+				B00000000000000000000006 /* Networking/RootineAPIClient.swift in Sources */,
+				B00000000000000000000007 /* Persistence/KeychainSessionStore.swift in Sources */,
+				B00000000000000000000008 /* Persistence/WorkspaceFileStore.swift in Sources */,
+				B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */,
+				B0000000000000000000000A /* FeatureRootViews.swift in Sources */,
+				B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */,
+				B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */,
+				B0000000000000000000000D /* TodayView.swift in Sources */,
+				B0000000000000000000000E /* TasksView.swift in Sources */,
+				B0000000000000000000000F /* CalendarView.swift in Sources */,
+				B00000000000000000000010 /* NutritionView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		PH0000000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000101 /* ContractFixtureTests.swift in Sources */,
+				B00000000000000000000106 /* AuthenticationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		D00000000000000000000002 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = T000000000000000000000001 /* Rootine */; targetProxy = D00000000000000000000001 /* PBXContainerItemProxy */; };
+		D00000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = T000000000000000000000001 /* Rootine */;
+			targetProxy = D00000000000000000000001 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		C000000000000000000000011 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_OPTIMIZATION_LEVEL = 0; ONLY_ACTIVE_ARCH = YES; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
-		C000000000000000000000012 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; GCC_C_LANGUAGE_STANDARD = gnu17; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; VALIDATE_PRODUCT = YES; }; name = Release; };
-		C000000000000000000000021 /* Debug */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements; ENABLE_PREVIEWS = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Rootine/Resources/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Debug; };
-		C000000000000000000000022 /* Release */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Rootine/Resources/Info.plist; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; }; name = Release; };
-		C000000000000000000000031 /* Debug */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine"; }; name = Debug; };
-		C000000000000000000000032 /* Release */ = {isa = XCBuildConfiguration; baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.2; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine"; }; name = Release; };
+		C000000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		C000000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C000000000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rootine/Resources/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		C000000000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rootine/Resources/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		C000000000000000000000031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine";
+			};
+			name = Debug;
+		};
+		C000000000000000000000032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C000000000000000000000001 /* Build configuration list for PBXProject "Rootine" */ = {isa = XCConfigurationList; buildConfigurations = (C000000000000000000000011, C000000000000000000000012); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		C000000000000000000000002 /* Build configuration list for PBXNativeTarget "Rootine" */ = {isa = XCConfigurationList; buildConfigurations = (C000000000000000000000021, C000000000000000000000022); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		C000000000000000000000003 /* Build configuration list for PBXNativeTarget "RootineTests" */ = {isa = XCConfigurationList; buildConfigurations = (C000000000000000000000031, C000000000000000000000032); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		C000000000000000000000001 /* Build configuration list for PBXProject "Rootine" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C000000000000000000000011 /* Debug */,
+				C000000000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C000000000000000000000002 /* Build configuration list for PBXNativeTarget "Rootine" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C000000000000000000000021 /* Debug */,
+				C000000000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C000000000000000000000003 /* Build configuration list for PBXNativeTarget "RootineTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C000000000000000000000031 /* Debug */,
+				C000000000000000000000032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = P000000000000000000000001 /* Project object */;

@@ -382,6 +382,200 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(revisionAfterRetry, 5)
     }
 
+    func testZeroAndOneRecordSnapshotsRoundTripAcrossStoreReload() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-reload-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let timestamp = "2026-09-01T08:00:00.000Z"
+        let empty = TaskWorkspace(version: 2, updatedAt: timestamp, tasks: [], habits: [], lists: [], tags: [])
+
+        let firstStore = WorkspaceFileStore(userID: "reload-user", rootURL: root)
+        try await firstStore.save(empty, key: .tasks)
+        let emptyAfterReload = try await WorkspaceFileStore(userID: "reload-user", rootURL: root)
+            .load(TaskWorkspace.self, key: .tasks)
+        XCTAssertEqual(emptyAfterReload, empty)
+
+        let operationID = "quick-add-submit-1"
+        let recordID = RootineLocalIdentifier.integer(namespace: "task", operationID: operationID)
+        var one = empty
+        one.tasks = [WorkspaceTask(id: recordID, text: "Jedno zadanie", done: false, view: "dzis")]
+        try await firstStore.save(one, key: .tasks)
+
+        let oneAfterReload = try await WorkspaceFileStore(userID: "reload-user", rootURL: root)
+            .load(TaskWorkspace.self, key: .tasks)
+        XCTAssertEqual(oneAfterReload, one)
+        XCTAssertEqual(oneAfterReload?.tasks.first?.id, recordID)
+    }
+
+    func testUnsupportedVersionAndCorruptSnapshotAreQuarantined() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-corrupt-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "corrupt-user", rootURL: root)
+        let workspaceDirectory = root.appendingPathComponent("Workspaces", isDirectory: true)
+        let snapshotURL = workspaceDirectory.appendingPathComponent("rootine-task-workspace-v1.json")
+        try FileManager.default.createDirectory(at: workspaceDirectory, withIntermediateDirectories: true)
+
+        let unsupported = TaskWorkspace(
+            version: 0,
+            updatedAt: "2026-09-01T08:00:00.000Z",
+            tasks: [],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        try JSONEncoder().encode(unsupported).write(to: snapshotURL, options: .atomic)
+        let unsupportedResult = try await store.load(TaskWorkspace.self, key: .tasks)
+        XCTAssertNil(unsupportedResult)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: snapshotURL.path))
+
+        try Data("{not-json".utf8).write(to: snapshotURL, options: .atomic)
+        let corruptResult = try await store.load(TaskWorkspace.self, key: .tasks)
+        XCTAssertNil(corruptResult)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: snapshotURL.path))
+
+        let recovery = try await store.recoveryFiles()
+        XCTAssertEqual(recovery.count, 2)
+        XCTAssertTrue(recovery.allSatisfy { $0.name.contains("corrupt") })
+        XCTAssertEqual(try Data(contentsOf: recovery[0].url).isEmpty, false)
+    }
+
+    func testDuplicateEnqueueIsIdempotentAndCorruptQueueCanRecover() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-queue-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "queue-user", rootURL: root)
+        let remote = FakeWorkspaceRemote()
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remote)
+        let payload: JSONValue = .object(["version": .number(2), "tasks": .array([])])
+
+        let first = try await syncEngine.enqueue(payload: payload, storageKey: RootineStorageKey.tasks.rawValue)
+        let duplicate = try await syncEngine.enqueue(payload: payload, storageKey: RootineStorageKey.tasks.rawValue)
+        XCTAssertEqual(duplicate.id, first.id)
+        let duplicateQueue = try await store.pendingMutations()
+        XCTAssertEqual(duplicateQueue.count, 1)
+
+        try Data("broken queue".utf8).write(
+            to: root.appendingPathComponent("pending-mutations.json"),
+            options: .atomic
+        )
+        let recoveredEmptyQueue = try await store.pendingMutations()
+        XCTAssertTrue(recoveredEmptyQueue.isEmpty)
+        _ = try await syncEngine.enqueue(payload: payload, storageKey: RootineStorageKey.tasks.rawValue)
+        let newQueue = try await store.pendingMutations()
+        let queueRecovery = try await store.recoveryFiles()
+        XCTAssertEqual(newQueue.count, 1)
+        XCTAssertEqual(queueRecovery.count, 1)
+    }
+
+    func testRapidMutationDuringFlushRebasesQueuedSuccessor() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-rapid-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "rapid-user", rootURL: root)
+        let remote = GatedWorkspaceRemote()
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remote)
+        let storageKey = RootineStorageKey.tasks.rawValue
+
+        _ = try await syncEngine.enqueue(
+            payload: .object(["version": .number(2), "sequence": .number(1)]),
+            storageKey: storageKey
+        )
+        let firstFlush = Task { try await syncEngine.flush(accessToken: "fake") }
+        await remote.waitUntilApplyStarted()
+
+        let successor = try await syncEngine.enqueue(
+            payload: .object(["version": .number(2), "sequence": .number(2)]),
+            storageKey: storageKey
+        )
+        XCTAssertEqual(successor.expectedRevision, 0)
+        await remote.releaseApply()
+        let firstOutcome = try await firstFlush.value
+        XCTAssertEqual(firstOutcome, .applied(2))
+
+        let rebasedQueue = try await store.pendingMutations()
+        let appliedMutations = await remote.appliedMutations()
+        XCTAssertTrue(rebasedQueue.isEmpty)
+        XCTAssertEqual(appliedMutations.map(\.expectedRevision), [0, 1])
+        XCTAssertEqual(appliedMutations.last?.id, successor.id)
+        let finalRevision = try await store.revision(for: storageKey)
+        XCTAssertEqual(finalRevision, 2)
+    }
+
+    func testUndoReceiptNeverOverwritesANewerRapidMutation() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-undo-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "undo-user", rootURL: root)
+        let timestamp = "2026-09-01T08:00:00.000Z"
+        let empty = TaskWorkspace(version: 2, updatedAt: timestamp, tasks: [], habits: [], lists: [], tags: [])
+        try await store.save(empty, key: .tasks)
+
+        var first = empty
+        first.tasks = [WorkspaceTask(id: 1, text: "Pierwsza", done: false, view: "dzis")]
+        let firstReceipt = try await store.saveWithReceipt(first, key: .tasks)
+        var second = first
+        second.tasks.append(WorkspaceTask(id: 2, text: "Druga", done: false, view: "dzis"))
+        let secondReceipt = try await store.saveWithReceipt(second, key: .tasks)
+
+        let staleUndoApplied = try await store.undo(firstReceipt)
+        let afterStaleUndo = try await store.load(TaskWorkspace.self, key: .tasks)
+        let latestUndoApplied = try await store.undo(secondReceipt)
+        let afterLatestUndo = try await store.load(TaskWorkspace.self, key: .tasks)
+        XCTAssertFalse(staleUndoApplied)
+        XCTAssertEqual(afterStaleUndo, second)
+        XCTAssertTrue(latestUndoApplied)
+        XCTAssertEqual(afterLatestUndo, first)
+    }
+
+    func testLocalIdentifiersAreStableAndNamespacedForDuplicateTaps() {
+        let operationID = "form-submit-42"
+        XCTAssertEqual(
+            RootineLocalIdentifier.integer(namespace: "task", operationID: operationID),
+            RootineLocalIdentifier.integer(namespace: "task", operationID: operationID)
+        )
+        XCTAssertNotEqual(
+            RootineLocalIdentifier.integer(namespace: "task", operationID: operationID),
+            RootineLocalIdentifier.integer(namespace: "habit", operationID: operationID)
+        )
+        XCTAssertEqual(
+            RootineLocalIdentifier.string(namespace: "goal", operationID: operationID),
+            RootineLocalIdentifier.string(namespace: "goal", operationID: operationID)
+        )
+
+        var gate = WorkspaceCreationGate()
+        XCTAssertTrue(gate.claim("task|duplicate-tap"))
+        XCTAssertFalse(gate.claim("task|duplicate-tap"))
+        gate.release("task|duplicate-tap")
+        XCTAssertTrue(gate.claim("task|duplicate-tap"))
+    }
+
+    func testScheduledTaskCompletionIsScopedToTheRequestedDate() {
+        let schedule = WorkspaceTaskSchedule(
+            allDay: true,
+            startTime: "",
+            completedDates: ["2026-09-01"],
+            completedAtByDate: ["2026-09-01": "2026-09-01T09:00:00.000Z"],
+            timezone: "Europe/Warsaw"
+        )
+        let task = WorkspaceTask(
+            id: 42,
+            text: "Powtarzalne zadanie",
+            done: true,
+            view: "dzis",
+            schedule: schedule
+        )
+
+        XCTAssertTrue(rootineTaskIsDoneOnDate(task, dateKey: "2026-09-01"))
+        XCTAssertFalse(rootineTaskIsDoneOnDate(task, dateKey: "2026-09-02"))
+    }
+
+    func testRootineDateParsesBothTimestampPrecisions() {
+        XCTAssertNotNil(RootineDate.date(from: "2026-09-01T08:00:00.123Z"))
+        XCTAssertNotNil(RootineDate.date(from: "2026-09-01T08:00:00Z"))
+        XCTAssertNil(RootineDate.date(from: "not-a-timestamp"))
+    }
+
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         let bundle = Bundle(for: ContractFixtureTests.self)
         let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"))
@@ -427,5 +621,53 @@ private actor FakeWorkspaceRemote: WorkspaceRemoteClient {
         }
         revision = max(revision, mutation.expectedRevision) + 1
         return ApplySnapshotResponse(applied: true, storageKey: mutation.storageKey, payload: mutation.payload, contentHash: mutation.contentHash, revision: revision, updatedAt: RootineDate.isoTimestamp())
+    }
+}
+
+private actor GatedWorkspaceRemote: WorkspaceRemoteClient {
+    private var revision: Int64 = 0
+    private var applyStarted = false
+    private var applyStartWaiters: [CheckedContinuation<Void, Never>] = []
+    private var applyGate: CheckedContinuation<Void, Never>?
+    private var shouldGateNextApply = true
+    private var mutations: [PendingWorkspaceMutation] = []
+
+    func appliedMutations() -> [PendingWorkspaceMutation] {
+        mutations
+    }
+
+    func waitUntilApplyStarted() async {
+        guard !applyStarted else { return }
+        await withCheckedContinuation { continuation in
+            applyStartWaiters.append(continuation)
+        }
+    }
+
+    func releaseApply() {
+        shouldGateNextApply = false
+        applyGate?.resume()
+        applyGate = nil
+    }
+
+    func apply(_ mutation: PendingWorkspaceMutation, accessToken: String) async throws -> ApplySnapshotResponse {
+        mutations.append(mutation)
+        if shouldGateNextApply {
+            applyStarted = true
+            let waiters = applyStartWaiters
+            applyStartWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+            await withCheckedContinuation { continuation in
+                applyGate = continuation
+            }
+        }
+        revision = max(revision, mutation.expectedRevision) + 1
+        return ApplySnapshotResponse(
+            applied: true,
+            storageKey: mutation.storageKey,
+            payload: mutation.payload,
+            contentHash: mutation.contentHash,
+            revision: revision,
+            updatedAt: RootineDate.isoTimestamp()
+        )
     }
 }

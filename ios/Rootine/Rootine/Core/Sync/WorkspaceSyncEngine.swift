@@ -12,6 +12,10 @@ actor WorkspaceSyncEngine {
     private let remote: WorkspaceRemoteClient
     private let encoder: JSONEncoder
     private let decoder = JSONDecoder()
+    // Share one awaitable result between concurrent callers. Returning `.idle`
+    // while another flush is active made the UI briefly claim everything was
+    // synced even though the first request could still fail or conflict.
+    private var inFlightFlush: Task<WorkspaceSyncOutcome, Error>?
 
     init(store: WorkspaceFileStore, remote: WorkspaceRemoteClient) {
         self.store = store
@@ -20,21 +24,29 @@ actor WorkspaceSyncEngine {
         encoder.outputFormatting = [.sortedKeys]
     }
 
-    func enqueue<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) async throws {
+    func pendingMutationCount() async throws -> Int {
+        try await store.pendingMutations().count
+    }
+
+    @discardableResult
+    func enqueue<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) async throws -> PendingWorkspaceMutation {
         let data = try encoder.encode(value)
         let payload = try decoder.decode(JSONValue.self, from: data)
-        try await enqueue(payload: payload, storageKey: key.rawValue)
+        return try await enqueue(payload: payload, storageKey: key.rawValue)
     }
 
     /// Enqueues an already mapped canonical document. Native More models use
     /// this overload so their compact local representation never leaks into a
     /// snapshot consumed by the web client.
-    func enqueue(payload: JSONValue, storageKey: String) async throws {
+    @discardableResult
+    func enqueue(payload: JSONValue, storageKey: String) async throws -> PendingWorkspaceMutation {
         let data = try encoder.encode(payload)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let expectedRevision = try await store.revision(for: storageKey)
-        try await store.enqueue(PendingWorkspaceMutation(
-            id: UUID().uuidString,
+        let mutationIDData = Data("\(storageKey):\(expectedRevision):\(digest)".utf8)
+        let mutationID = SHA256.hash(data: mutationIDData).map { String(format: "%02x", $0) }.joined()
+        return try await store.enqueue(PendingWorkspaceMutation(
+            id: mutationID,
             storageKey: storageKey,
             payload: payload,
             contentHash: digest,
@@ -44,20 +56,40 @@ actor WorkspaceSyncEngine {
     }
 
     func flush(accessToken: String) async throws -> WorkspaceSyncOutcome {
-        let queue = try await store.pendingMutations()
-        guard !queue.isEmpty else { return .idle }
+        if let inFlightFlush {
+            return try await inFlightFlush.value
+        }
+
+        let task = Task { [self] in
+            try await performFlush(accessToken: accessToken)
+        }
+        inFlightFlush = task
+        defer { inFlightFlush = nil }
+        return try await task.value
+    }
+
+    private func performFlush(accessToken: String) async throws -> WorkspaceSyncOutcome {
+
         var applied = 0
         var conflicts: [String] = []
-        for mutation in queue {
+        var attemptedMutationIDs: Set<String> = []
+        while let mutation = try await store.pendingMutations().first(where: {
+            !attemptedMutationIDs.contains($0.id)
+        }) {
+            attemptedMutationIDs.insert(mutation.id)
             let response = try await remote.apply(mutation, accessToken: accessToken)
             if response.applied {
-                try await store.setRevision(response.revision, for: mutation.storageKey)
-                try await store.removeMutation(id: mutation.id)
+                try await store.acknowledgeMutation(
+                    id: mutation.id,
+                    storageKey: mutation.storageKey,
+                    revision: response.revision
+                )
                 applied += 1
             } else {
                 conflicts.append(mutation.storageKey)
             }
         }
+        guard applied > 0 || !conflicts.isEmpty else { return .idle }
         return conflicts.isEmpty ? .applied(applied) : .conflict(conflicts)
     }
 }

@@ -9,9 +9,25 @@ struct PendingWorkspaceMutation: Codable, Equatable, Identifiable, Sendable {
     var createdAt: String
 }
 
+struct WorkspaceWriteReceipt: Sendable {
+    let id: String
+    let key: RootineStorageKey
+    fileprivate let previousData: Data?
+    fileprivate let replacementData: Data
+}
+
+struct WorkspaceRecoveryFile: Equatable, Sendable {
+    let name: String
+    let url: URL
+}
+
 actor WorkspaceFileStore {
     private struct SyncMetadata: Codable {
         var revisions: [String: Int64] = [:]
+    }
+
+    private struct VersionEnvelope: Decodable {
+        let version: Int
     }
 
     private let fileManager: FileManager
@@ -21,8 +37,10 @@ actor WorkspaceFileStore {
 
     init(userID: String, fileManager: FileManager = .default, rootURL: URL? = nil) {
         self.fileManager = fileManager
+        let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
         let base = rootURL
-            ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            ?? applicationSupport
                 .appendingPathComponent("Rootine/Users", isDirectory: true)
                 .appendingPathComponent(userID, isDirectory: true)
         self.rootURL = base
@@ -35,31 +53,86 @@ actor WorkspaceFileStore {
         try ensureDirectories()
         let url = workspaceURL(for: key)
         guard fileManager.fileExists(atPath: url.path) else { return nil }
-        return try decoder.decode(T.self, from: Data(contentsOf: url))
+        let data = try Data(contentsOf: url)
+        do {
+            if let supportedVersion = key.supportedLocalVersion {
+                let envelope = try decoder.decode(VersionEnvelope.self, from: data)
+                guard envelope.version == supportedVersion else {
+                    throw WorkspaceFileStoreError.unsupportedVersion(
+                        key: key.rawValue,
+                        found: envelope.version,
+                        supported: supportedVersion
+                    )
+                }
+            }
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            quarantine(data: data, sourceURL: url, label: safeName(key.rawValue))
+            return nil
+        }
     }
 
     func save<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) throws {
+        _ = try saveWithReceipt(value, key: key)
+    }
+
+    /// Returns the exact prior bytes so a UI-level Undo can restore the local
+    /// snapshot without re-encoding it or losing fields unknown to the model.
+    func saveWithReceipt<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) throws -> WorkspaceWriteReceipt {
         try ensureDirectories()
         let url = workspaceURL(for: key)
-        if fileManager.fileExists(atPath: url.path) {
-            let recovery = recoveryDirectory
-                .appendingPathComponent("\(safeName(key.rawValue))-\(Int(Date().timeIntervalSince1970)).json")
-            try? fileManager.copyItem(at: url, to: recovery)
+        let previousData = try? Data(contentsOf: url)
+        let replacementData = try encoder.encode(value)
+        try protectedWrite(replacementData, to: url)
+        return WorkspaceWriteReceipt(
+            id: UUID().uuidString,
+            key: key,
+            previousData: previousData,
+            replacementData: replacementData
+        )
+    }
+
+    /// Undo is conditional: a stale receipt never overwrites a newer rapid
+    /// mutation. The caller can surface that boundary instead of losing data.
+    func undo(_ receipt: WorkspaceWriteReceipt) throws -> Bool {
+        try ensureDirectories()
+        let url = workspaceURL(for: receipt.key)
+        let currentData = try? Data(contentsOf: url)
+        guard currentData == receipt.replacementData else { return false }
+        if let previousData = receipt.previousData {
+            try protectedWrite(previousData, to: url)
+        } else if fileManager.fileExists(atPath: url.path) {
+            try fileManager.removeItem(at: url)
         }
-        try protectedWrite(try encoder.encode(value), to: url)
+        return true
     }
 
     func pendingMutations() throws -> [PendingWorkspaceMutation] {
         try ensureDirectories()
         guard fileManager.fileExists(atPath: queueURL.path) else { return [] }
-        return try decoder.decode([PendingWorkspaceMutation].self, from: Data(contentsOf: queueURL))
+        let data = try Data(contentsOf: queueURL)
+        do {
+            return try decoder.decode([PendingWorkspaceMutation].self, from: data)
+        } catch {
+            quarantine(data: data, sourceURL: queueURL, label: "pending-mutations")
+            return []
+        }
     }
 
-    func enqueue(_ mutation: PendingWorkspaceMutation) throws {
+    @discardableResult
+    func enqueue(_ mutation: PendingWorkspaceMutation) throws -> PendingWorkspaceMutation {
         var queue = try pendingMutations()
+        if let duplicate = queue.first(where: {
+            $0.storageKey == mutation.storageKey
+                && $0.contentHash == mutation.contentHash
+                && $0.expectedRevision == mutation.expectedRevision
+        }) {
+            return duplicate
+        }
         queue.removeAll { $0.storageKey == mutation.storageKey }
         queue.append(mutation)
         try protectedWrite(try encoder.encode(queue), to: queueURL)
+        return mutation
     }
 
     func removeMutation(id: String) throws {
@@ -76,6 +149,35 @@ actor WorkspaceFileStore {
         var metadata = try loadMetadata()
         metadata.revisions[storageKey] = revision
         try protectedWrite(try encoder.encode(metadata), to: metadataURL)
+    }
+
+    /// Commits a successful CAS response and rebases a newer coalesced local
+    /// mutation that arrived while the acknowledged request was in flight.
+    func acknowledgeMutation(id: String, storageKey: String, revision: Int64) throws {
+        var metadata = try loadMetadata()
+        metadata.revisions[storageKey] = revision
+
+        var queue = try pendingMutations()
+        queue.removeAll { $0.id == id }
+        if let index = queue.firstIndex(where: {
+            $0.storageKey == storageKey && $0.expectedRevision < revision
+        }) {
+            queue[index].expectedRevision = revision
+        }
+
+        try protectedWrite(try encoder.encode(metadata), to: metadataURL)
+        try protectedWrite(try encoder.encode(queue), to: queueURL)
+    }
+
+    func recoveryFiles() throws -> [WorkspaceRecoveryFile] {
+        try ensureDirectories()
+        return try fileManager.contentsOfDirectory(
+            at: recoveryDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .map { WorkspaceRecoveryFile(name: $0.lastPathComponent, url: $0) }
+        .sorted { $0.name < $1.name }
     }
 
     func clearAllLocalData() throws {
@@ -105,7 +207,27 @@ actor WorkspaceFileStore {
     private func loadMetadata() throws -> SyncMetadata {
         try ensureDirectories()
         guard fileManager.fileExists(atPath: metadataURL.path) else { return SyncMetadata() }
-        return try decoder.decode(SyncMetadata.self, from: Data(contentsOf: metadataURL))
+        let data = try Data(contentsOf: metadataURL)
+        do {
+            return try decoder.decode(SyncMetadata.self, from: data)
+        } catch {
+            quarantine(data: data, sourceURL: metadataURL, label: "sync-metadata")
+            return SyncMetadata()
+        }
+    }
+
+    private func quarantine(data: Data, sourceURL: URL, label: String) {
+        let recoveryURL = recoveryDirectory.appendingPathComponent(
+            "\(label)-corrupt-\(UUID().uuidString).json"
+        )
+        do {
+            try protectedWrite(data, to: recoveryURL)
+            if fileManager.fileExists(atPath: sourceURL.path) {
+                try fileManager.removeItem(at: sourceURL)
+            }
+        } catch {
+            // The original remains untouched if Recovery itself is unavailable.
+        }
     }
 
     private func protectedWrite(_ data: Data, to url: URL) throws {
@@ -115,4 +237,8 @@ actor WorkspaceFileStore {
             ofItemAtPath: url.path
         )
     }
+}
+
+enum WorkspaceFileStoreError: Error, Equatable {
+    case unsupportedVersion(key: String, found: Int, supported: Int)
 }

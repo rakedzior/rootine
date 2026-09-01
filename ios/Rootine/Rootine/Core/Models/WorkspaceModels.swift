@@ -17,6 +17,53 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case workCanonicalShadow = "rootine.canonical-shadow.work.v1"
     case travelCanonicalShadow = "rootine.canonical-shadow.travel.v1"
     case healthCanonicalShadow = "rootine.canonical-shadow.health.v1"
+
+    /// Local snapshots use the same version numbers as their canonical web
+    /// contracts. A future version must be migrated explicitly instead of
+    /// being decoded optimistically and then overwritten by an older client.
+    var supportedLocalVersion: Int? {
+        switch self {
+        case .tasks: return 2
+        case .nutrition: return 6
+        case .notes, .sport, .goals, .work, .travel, .health: return 1
+        case .sportCanonicalShadow, .goalsCanonicalShadow, .workCanonicalShadow,
+             .travelCanonicalShadow, .healthCanonicalShadow:
+            return nil
+        }
+    }
+}
+
+enum RootineLocalIdentifier {
+    /// FNV-1a keeps IDs deterministic across launches without depending on
+    /// Swift's randomized `Hashable` implementation. Values stay inside the
+    /// integer range that JavaScript can represent exactly.
+    static func integer(namespace: String, operationID: String) -> Int {
+        let hash = fnv1a64("\(namespace):\(operationID)")
+        return max(1, Int(hash & 0x001F_FFFF_FFFF_FFFF))
+    }
+
+    static func string(namespace: String, operationID: String) -> String {
+        let hash = fnv1a64("\(namespace):\(operationID)")
+        return "ios-\(namespace)-\(String(format: "%016llx", hash))"
+    }
+
+    private static func fnv1a64(_ value: String) -> UInt64 {
+        value.utf8.reduce(14_695_981_039_346_656_037) { hash, byte in
+            (hash ^ UInt64(byte)) &* 1_099_511_628_211
+        }
+    }
+}
+
+struct WorkspaceCreationGate {
+    private var activeFingerprints: Set<String> = []
+
+    mutating func claim(_ fingerprint: String) -> Bool {
+        activeFingerprints.insert(fingerprint).inserted
+    }
+
+    mutating func release(_ fingerprint: String) {
+        activeFingerprints.remove(fingerprint)
+    }
 }
 
 enum TaskPriority: String, Codable, CaseIterable, Sendable {
@@ -84,6 +131,20 @@ struct WorkspaceTask: Codable, Equatable, Identifiable, Sendable {
     var comments: [WorkspaceTaskComment]? = nil
     var schedule: WorkspaceTaskSchedule? = nil
     var source: CommitmentTaskSource? = nil
+}
+
+/// Returns the completion state for the requested local day. Recurring tasks
+/// carry an explicit per-day completion map; one-off tasks keep their legacy
+/// global `done` flag so older server payloads remain fully compatible.
+func rootineTaskIsDoneOnDate(_ task: WorkspaceTask, dateKey: String = RootineDate.localDate()) -> Bool {
+    guard let schedule = task.schedule else { return task.done }
+    // Some web payloads contain both maps, while older records contain only
+    // one. Treat either source as authoritative and avoid an empty
+    // `completedDates` array masking a populated timestamp map.
+    if schedule.completedDates?.contains(dateKey) == true { return true }
+    if schedule.completedAtByDate?[dateKey] != nil { return true }
+    if schedule.completedDates != nil || schedule.completedAtByDate != nil { return false }
+    return task.done
 }
 
 struct WorkspaceHabitSchedule: Codable, Equatable, Sendable {
@@ -559,6 +620,14 @@ enum RootineDate {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
+    }
+
+    static func date(from timestamp: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: timestamp) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: timestamp)
     }
 
     static func localDate(_ date: Date = Date(), calendar: Calendar = .current) -> String {
