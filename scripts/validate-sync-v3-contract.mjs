@@ -54,6 +54,8 @@ if (schema) {
 if (manifest) {
   if (manifest.syncV3?.contractVersion !== 3) failures.push("contracts manifest must register sync-v3 contractVersion 3");
   if (manifest.syncV3?.schema !== "schemas/sync-v3.schema.json") failures.push("contracts manifest points to the wrong sync-v3 schema");
+  if (manifest.syncV3?.endpoint !== "functions/v1/mobile-sync") failures.push("contracts manifest must use the action-dispatched mobile-sync endpoint");
+  if (manifest.syncV3?.dispatchField !== "action") failures.push("contracts manifest must register action as the mobile-sync dispatch field");
   if (manifest.featureFlags?.default !== false) failures.push("feature flag default must be false");
   for (const flag of ["normalized_sync_enabled", "normalized_read_enabled", "notifications_enabled"]) {
     if (!manifest.featureFlags?.names?.includes(flag)) failures.push(`feature flag is missing from manifest: ${flag}`);
@@ -99,6 +101,18 @@ if (pushRequest?.commands?.some((command) => !operationPattern.test(command.oper
 }
 if (pushResponse?.results?.some((result) => !operationPattern.test(result.operation_id))) {
   failures.push("sync-v3 push response has an invalid operation_id");
+}
+
+const expectedActions = {
+  "sync-v3-bootstrap-request.json": "bootstrap",
+  "sync-v3-pull-request.json": "pull",
+  "sync-v3-push-request.json": "push",
+  "sync-v3-register-device-request.json": "register_device",
+  "sync-v3-register-device-no-apns-request.json": "register_device",
+};
+for (const [fixtureName, expectedAction] of Object.entries(expectedActions)) {
+  const fixture = readJson(resolve(fixtureDirectory, fixtureName));
+  if (fixture?.action !== expectedAction) failures.push(`${fixtureName} must dispatch with action=${expectedAction}`);
 }
 
 // A future or legacy response must not be treated as a sync-v3 response.

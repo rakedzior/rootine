@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rootine.app/contracts/sync-v3.schema.json",
   "title": "Rootine sync-v3 transport contract",
-  "description": "The versioned request and response envelopes for mobile sync. Select one endpoint shape at the root.",
+  "description": "The versioned request and response envelopes for mobile sync. A single endpoint dispatches requests by action.",
   "oneOf": [
     { "$ref": "#/$defs/bootstrapRequest" },
     { "$ref": "#/$defs/pullRequest" },
@@ -51,9 +51,10 @@
     },
     "requestEnvelope": {
       "type": "object",
-      "required": ["correlation_id"],
+      "required": ["correlation_id", "action"],
       "properties": {
-        "correlation_id": { "$ref": "#/$defs/correlationId" }
+        "correlation_id": { "$ref": "#/$defs/correlationId" },
+        "action": { "enum": ["bootstrap", "pull", "push", "register_device"] }
       },
       "description": "Shared request fields; endpoint schemas close the envelope with unevaluatedProperties."
     },
@@ -63,7 +64,10 @@
         {
           "type": "object",
           "required": ["device_id"],
-          "properties": { "device_id": { "$ref": "#/$defs/deviceId" } },
+          "properties": {
+            "action": { "const": "bootstrap" },
+            "device_id": { "$ref": "#/$defs/deviceId" }
+          },
           "description": "Bootstrap request fields."
         }
       ],
@@ -76,6 +80,7 @@
           "type": "object",
           "required": ["device_id", "cursor"],
           "properties": {
+            "action": { "const": "pull" },
             "device_id": { "$ref": "#/$defs/deviceId" },
             "cursor": { "type": ["integer", "null"], "minimum": 0 },
             "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 500 }
@@ -115,6 +120,7 @@
           "type": "object",
           "required": ["device_id", "commands"],
           "properties": {
+            "action": { "const": "push" },
             "device_id": { "$ref": "#/$defs/deviceId" },
             "commands": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/syncCommand" } }
           },
@@ -130,6 +136,7 @@
           "type": "object",
           "required": ["device_id", "platform", "app_version", "environment"],
           "properties": {
+            "action": { "const": "register_device" },
             "device_id": { "$ref": "#/$defs/deviceId" },
             "platform": { "const": "ios" },
             "app_version": { "type": "string", "minLength": 1, "maxLength": 40 },

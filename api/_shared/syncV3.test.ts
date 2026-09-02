@@ -22,17 +22,20 @@ const operation_id = "op3_123e4567-e89b-42d3-a456-426614174000";
 
 describe("sync-v3 contract", () => {
   it("validates every request boundary and supplies the pull default limit", () => {
-    expect(bootstrapRequestSchema.parse({ correlation_id, device_id })).toEqual({
+    expect(bootstrapRequestSchema.parse({ action: "bootstrap", correlation_id, device_id })).toEqual({
+      action: "bootstrap",
       correlation_id,
       device_id,
     });
-    expect(pullRequestSchema.parse({ correlation_id, device_id, cursor: null })).toMatchObject({
+    expect(pullRequestSchema.parse({ action: "pull", correlation_id, device_id, cursor: null })).toMatchObject({
+      action: "pull",
       correlation_id,
       device_id,
       cursor: null,
       limit: 500,
     });
     expect(pushRequestSchema.parse({
+      action: "push",
       correlation_id,
       device_id,
       commands: [{
@@ -45,6 +48,7 @@ describe("sync-v3 contract", () => {
       }],
     })).toMatchObject({ device_id, commands: [{ operation_id }] });
     expect(registerDeviceRequestSchema.parse({
+      action: "register_device",
       correlation_id,
       device_id,
       platform: "ios",
@@ -54,6 +58,7 @@ describe("sync-v3 contract", () => {
       push_token: "fixture-token-that-is-not-a-real-apns-token",
     })).toMatchObject({ device_id, platform: "ios" });
     expect(registerDeviceRequestSchema.parse({
+      action: "register_device",
       correlation_id,
       device_id,
       platform: "ios",
@@ -61,6 +66,7 @@ describe("sync-v3 contract", () => {
       environment: "staging",
     })).toMatchObject({ device_id, platform: "ios" });
     expect(() => registerDeviceRequestSchema.parse({
+      action: "register_device",
       correlation_id,
       device_id,
       platform: "ios",
@@ -68,6 +74,7 @@ describe("sync-v3 contract", () => {
       environment: "staging",
       push_token: "token-without-apns-environment",
     })).toThrow();
+    expect(() => bootstrapRequestSchema.parse({ action: "pull", correlation_id, device_id })).toThrow();
   });
 
   it("requires contract_version 3 on each response and rejects a legacy version", () => {

@@ -30,17 +30,17 @@ używany po reinstalacji aplikacji.
 
 ## Operacje
 
-Endpoint Supabase to `/functions/v1/mobile-sync/{operation}`, gdzie `operation`
-jest jedną z nazw w tabeli poniżej. W nagłówku należy przesłać
+Endpoint Supabase to `/functions/v1/mobile-sync`. Operację wybiera pole
+`action` w JSON body, przyjmujące jedną z nazw w tabeli poniżej. W nagłówku należy przesłać
 `Authorization: Bearer <access_token>`. Funkcja używa
 `auth.uid()` z tokenu; `user_id` nie jest przyjmowany z body.
 
 | Operacja | Żądanie | Odpowiedź |
 | --- | --- | --- |
-| `bootstrap` | `correlation_id`, `device_id` | `server_cursor`, `next_cursor`, `has_more`, `changes[]` |
-| `pull` | `correlation_id`, `device_id`, `cursor` (`null` oznacza początek), `limit` 1–500 | `from_cursor`, `next_cursor`, `has_more`, `changes[]` |
-| `push` | `correlation_id`, `device_id`, 1–100 komend | `server_cursor`, `results[]` per komenda |
-| `register_device` | `correlation_id`, `device_id`, platforma `ios`, wersja aplikacji i środowisko; opcjonalnie para środowisko APNs + token | `device_id`, `environment`, `registered_at` |
+| `bootstrap` | `action: "bootstrap"`, `correlation_id`, `device_id` | `server_cursor`, `next_cursor`, `has_more`, `changes[]` |
+| `pull` | `action: "pull"`, `correlation_id`, `device_id`, `cursor` (`null` oznacza początek), `limit` 1–500 | `from_cursor`, `next_cursor`, `has_more`, `changes[]` |
+| `push` | `action: "push"`, `correlation_id`, `device_id`, 1–100 komend | `server_cursor`, `results[]` per komenda |
+| `register_device` | `action: "register_device"`, `correlation_id`, `device_id`, platforma `ios`, wersja aplikacji i środowisko; opcjonalnie para środowisko APNs + token | `device_id`, `environment`, `registered_at` |
 
 Komenda `push` ma `operation_id`, `entity`, `entity_id`, `kind`,
 `base_revision` i `payload` dla `upsert`. `delete` jest soft-delete i nie

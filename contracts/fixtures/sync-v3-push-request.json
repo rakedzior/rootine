@@ -1,4 +1,5 @@
 {
+  "action": "push",
   "correlation_id": "rt3_staging_123e4567-e89b-42d3-a456-426614174000",
   "device_id": "ios_123e4567-e89b-42d3-a456-426614174000",
   "commands": [

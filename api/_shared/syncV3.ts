@@ -48,10 +48,12 @@ export const syncV3RequestEnvelopeSchema = z.object({
 }).strict();
 
 export const bootstrapRequestSchema = syncV3RequestEnvelopeSchema.extend({
+  action: z.literal("bootstrap"),
   device_id: deviceIdSchema,
 }).strict();
 
 export const pullRequestSchema = syncV3RequestEnvelopeSchema.extend({
+  action: z.literal("pull"),
   device_id: deviceIdSchema,
   cursor: z.number().int().nonnegative().nullable(),
   limit: z.number().int().min(1).max(500).default(500),
@@ -82,11 +84,13 @@ export const syncCommandSchema = z.object({
 });
 
 export const pushRequestSchema = syncV3RequestEnvelopeSchema.extend({
+  action: z.literal("push"),
   device_id: deviceIdSchema,
   commands: z.array(syncCommandSchema).min(1).max(100),
 }).strict();
 
 export const registerDeviceRequestSchema = syncV3RequestEnvelopeSchema.extend({
+  action: z.literal("register_device"),
   device_id: deviceIdSchema,
   platform: z.literal("ios"),
   app_version: z.string().min(1).max(40),
