@@ -3,11 +3,12 @@
 -- smoke suite with two authenticated JWTs; this file stays data-free and
 -- never creates test users or APNs credentials.
 -- The compatibility assertions at the end model the B02/B11 schema: the
--- worker token column is push_token and B03's five-argument function remains
--- a jsonb contract.
+-- worker token column is push_token and, when present, B03's five-argument
+-- function remains a jsonb contract. B09 intentionally does not create or
+-- replace that earlier dependency.
 
 begin;
-select plan(20);
+select plan(19);
 
 select has_table('public', 'rootine_devices', 'device registry table exists');
 select has_column('public', 'rootine_devices', 'id', 'B02 device id primary key is retained');
@@ -56,13 +57,9 @@ select ok(
   'authenticated clients can execute six-argument registration RPC'
 );
 select ok(
-  to_regprocedure('public.rootine_register_device(text,text,text,text,text)') is not null,
-  'B03 five-argument registration RPC is retained'
-);
-select is(
-  pg_get_function_result(to_regprocedure('public.rootine_register_device(text,text,text,text,text)')),
-  'jsonb',
-  'B03 five-argument registration RPC still returns jsonb'
+  to_regprocedure('public.rootine_register_device(text,text,text,text,text)') is null
+    or pg_get_function_result(to_regprocedure('public.rootine_register_device(text,text,text,text,text)')) = 'jsonb',
+  'B09 leaves the B03 five-argument jsonb RPC unchanged when present'
 );
 select ok(
   has_function_privilege(

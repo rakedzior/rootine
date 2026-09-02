@@ -109,7 +109,11 @@ begin
   if current_user_id is null then
     raise exception 'Authentication is required.' using errcode = '42501';
   end if;
-  if normalized_device_id = '' or char_length(normalized_device_id) > 180 then
+  -- New clients send ios_<uuidv4>. A bare UUIDv4 is accepted only for an
+  -- already-installed legacy Keychain value so the same row is refreshed
+  -- instead of creating a second active installation during migration.
+  if normalized_device_id !~ '^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    and normalized_device_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
     raise exception 'Invalid device id.' using errcode = '22023';
   end if;
   if normalized_platform <> 'ios' then
@@ -207,84 +211,11 @@ begin
 end;
 $$;
 
--- B03's existing public contract is five args -> jsonb. Do not change its
--- return type: PostgreSQL cannot replace a function's return type in place.
--- This body remains compatible whether B03's migration ran before or after
--- B09 and continues to use B02/B11's push_token column.
-create or replace function public.rootine_register_device(
-  p_device_id text,
-  p_platform text,
-  p_app_version text,
-  p_apns_environment text default null,
-  p_push_token text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  current_user_id uuid := auth.uid();
-  normalized_device_id text := nullif(trim(p_device_id), '');
-  normalized_platform text := lower(trim(coalesce(p_platform, '')));
-  normalized_version text := nullif(trim(p_app_version), '');
-  normalized_environment text := nullif(lower(trim(coalesce(p_apns_environment, ''))), '');
-  normalized_push_token text := nullif(trim(coalesce(p_push_token, '')), '');
-  now_utc timestamptz := timezone('utc', now());
-begin
-  if current_user_id is null then
-    raise exception 'Authentication is required.' using errcode = '42501';
-  end if;
-  if normalized_device_id is null or char_length(normalized_device_id) > 180
-    or normalized_version is null or char_length(normalized_version) > 64
-    or normalized_platform not in ('ios', 'web', 'android', 'other') then
-    raise exception 'Invalid device registration.' using errcode = '22023';
-  end if;
-  if normalized_environment is not null and normalized_environment not in ('sandbox', 'production') then
-    raise exception 'Invalid APNs environment.' using errcode = '22023';
-  end if;
-  if normalized_push_token is not null and (
-    char_length(normalized_push_token) > 4096
-    or normalized_push_token ~ '[[:space:]]'
-  ) then
-    raise exception 'Invalid push token.' using errcode = '22023';
-  end if;
-
-  insert into public.rootine_devices as devices (
-    user_id, device_id, platform, app_version, apns_environment, push_token,
-    permission_state, last_seen_at, revoked_at, revoked_reason, deleted_at, updated_at
-  ) values (
-    current_user_id, normalized_device_id, normalized_platform, normalized_version,
-    normalized_environment, normalized_push_token, 'unknown', now_utc, null, null, null, now_utc
-  )
-  on conflict (user_id, device_id) do update set
-    platform = excluded.platform,
-    app_version = excluded.app_version,
-    apns_environment = excluded.apns_environment,
-    push_token = excluded.push_token,
-    permission_state = 'unknown',
-    last_seen_at = excluded.last_seen_at,
-    revoked_at = null,
-    revoked_reason = null,
-    deleted_at = null,
-    updated_at = excluded.updated_at;
-
-  insert into public.rootine_sync_cursors (user_id, device_id, last_cursor, updated_at)
-  values (current_user_id, normalized_device_id, 0, now_utc)
-  on conflict (user_id, device_id) do nothing;
-
-  return jsonb_build_object(
-    'contract_version', 1,
-    'device_id', normalized_device_id,
-    'registered', true,
-    'last_seen_at', now_utc
-  );
-end;
-$$;
-
-revoke all on function public.rootine_register_device(text, text, text, text, text) from public, anon, authenticated;
+-- B03 owns the five-argument `rootine_register_device(...)->jsonb` RPC.
+-- B09 intentionally does not redefine it: PostgreSQL cannot replace a
+-- function with a different return type, and B03's final v3 body must remain
+-- the owner of that compatibility surface.
 revoke all on function public.rootine_register_device(text, text, text, text, text, text) from public, anon, authenticated;
-grant execute on function public.rootine_register_device(text, text, text, text, text) to authenticated;
 grant execute on function public.rootine_register_device(text, text, text, text, text, text) to authenticated;
 
 create or replace function public.rootine_revoke_device(

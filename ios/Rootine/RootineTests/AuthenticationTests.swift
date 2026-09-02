@@ -64,6 +64,15 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertEqual(RootinePushRegistry.shared.tokenString(), "00abff")
     }
 
+    func testNewDeviceIdentityUsesPrefixedLowercaseUUIDv4() {
+        let identifier = RootineDeviceIdentityStore.makeIdentifier()
+
+        XCTAssertTrue(identifier.hasPrefix("ios_"))
+        XCTAssertEqual(identifier, identifier.lowercased())
+        XCTAssertTrue(RootineDeviceIdentityStore.isV3Identifier(identifier))
+        XCTAssertFalse(RootineDeviceIdentityStore.isLegacyIdentifier(identifier))
+    }
+
     func testDeviceRegistrationResponseNeverModelsAnAPNsToken() throws {
         let response = RootineDeviceRegistration(
             deviceID: "installation-1",

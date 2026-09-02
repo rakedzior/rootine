@@ -129,7 +129,11 @@ extension Notification.Name {
 
 /// A Keychain-backed installation identifier. Keychain items survive an app
 /// reinstall, so reinstall + APNs token rotation updates one installation row
-/// instead of leaving an unbounded list of active device records.
+/// instead of leaving an unbounded list of active device records. New
+/// identifiers follow B01/B03's `ios_<lowercase UUIDv4>` contract. A bare UUID
+/// already stored by an older build is retained so it continues to address its
+/// existing `(user_id, device_id)` row; the server accepts that legacy form
+/// during migration and no duplicate is created on reinstall.
 final class RootineDeviceIdentityStore: @unchecked Sendable {
     private let service: String
     private let account = "rootine-device-id"
@@ -138,12 +142,41 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
         service = "\(bundleIdentifier).device"
     }
 
+    static func makeIdentifier() -> String {
+        "ios_\(UUID().uuidString.lowercased())"
+    }
+
+    static func isV3Identifier(_ identifier: String) -> Bool {
+        guard identifier.hasPrefix("ios_") else { return false }
+        return isUUIDv4(String(identifier.dropFirst(4)))
+    }
+
+    static func isLegacyIdentifier(_ identifier: String) -> Bool {
+        isUUIDv4(identifier)
+    }
+
+    private static func isUUIDv4(_ value: String) -> Bool {
+        let characters = Array(value)
+        guard value == value.lowercased(),
+              characters.count == 36,
+              characters[8] == "-",
+              characters[13] == "-",
+              characters[18] == "-",
+              characters[23] == "-",
+              characters[14] == "4",
+              "89ab".contains(characters[19]),
+              UUID(uuidString: value) != nil else {
+            return false
+        }
+        return true
+    }
+
     func loadOrCreate() -> String {
         if let existing = load(), !existing.isEmpty {
             return existing
         }
 
-        let identifier = UUID().uuidString.lowercased()
+        let identifier = Self.makeIdentifier()
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

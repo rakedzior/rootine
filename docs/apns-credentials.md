@@ -32,6 +32,13 @@ It sends its APNs device token to `rootine_register_device`, which stores it in
 the server-only `rootine_devices.push_token` column. Authenticated clients
 cannot select that table or the `rootine_active_devices` worker view.
 
+Device identity compatibility: new iOS installations use the B01/B03 v3 form
+`ios_<lowercase UUIDv4>`. An older installation may still have a bare lowercase
+UUIDv4 in Keychain; the app retains that value and B09 accepts it as a migration
+exception so refreshes continue to update the existing `(user_id, device_id)`
+row instead of creating a duplicate. Newly created Keychain values always use
+the prefixed form.
+
 ## Deployment verification
 
 1. Apply migrations through `20260902120000_rootine_devices.sql`.
