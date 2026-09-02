@@ -51,6 +51,22 @@
       { "storageKey": "rootine.notes-editor-draft.v1", "domain": "web-only", "adapterVersion": 1, "currentVersion": 1, "fixture": "fixtures/web-only-state.json" }
     ]
   },
+  "syncV3": {
+    "contractVersion": 3,
+    "endpoint": "functions/v1/mobile-sync",
+    "dispatchField": "action",
+    "schema": "schemas/sync-v3.schema.json",
+    "operations": ["bootstrap", "pull", "push", "register_device"],
+    "errorCodes": ["unauthorized", "invalid", "conflict", "cursor_expired", "rate_limited", "server_error"],
+    "correlationIdFormat": "rt3_<environment>_<uuidv4>",
+    "operationIdFormat": "op3_<uuidv4>",
+    "deviceIdFormat": "ios_<uuidv4>"
+  },
+  "featureFlags": {
+    "source": "rootine_get_feature_flags(environment), with account override by auth.uid()",
+    "default": false,
+    "names": ["normalized_sync_enabled", "normalized_read_enabled", "notifications_enabled"]
+  },
   "workspaces": [
     {
       "storageKey": "rootine.task-workspace.v1",

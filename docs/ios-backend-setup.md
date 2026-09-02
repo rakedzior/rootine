@@ -2,11 +2,17 @@
 
 This is the operational checklist for connecting the native app to the same Supabase project as the web app. Secrets are deliberately not stored in this repository.
 
-## Required deployment
+## Environments and required deployment
+
+The app has separate development, staging, and production xcconfig examples.
+Use only the publishable/anon Supabase key in iOS. The environment and feature
+flag values are visible configuration, not secrets; server-side account flag
+evaluation remains authoritative.
 
 1. Apply the migrations in chronological order:
    - `20260806120000_rootine_workspace_snapshots.sql`
    - `20260819090000_rootine_workspace_sync_v2.sql`
+   - `20260902080000_rootine_feature_flags.sql`
    - `20260902120000_rootine_devices.sql`
 2. Deploy the `delete-account` Edge Function.
 3. Optionally deploy `register-device` until B03's `mobile-sync` router is
@@ -15,7 +21,12 @@ This is the operational checklist for connecting the native app to the same Supa
    - `OPEN_FOOD_FACTS_CONTACT`
    - `SUPABASE_URL`
    - `SUPABASE_PUBLISHABLE_KEY` or the legacy `SUPABASE_ANON_KEY`
-4. Keep `SUPABASE_SERVICE_ROLE_KEY` only in Supabase-managed Edge Function secrets.
+5. Keep `SUPABASE_SERVICE_ROLE_KEY` only in Supabase-managed Edge Function secrets.
+
+For sync-v3 staging, deploy the feature-flag migration and `mobile-sync` Edge
+Function to the isolated project. Keep all three normalized/notification flags
+`false` until the staging smoke checks pass, then enable only the test account
+override described in `docs/staging-runbook.md`.
 
 The product search and barcode endpoints now require `Authorization: Bearer <access_token>` and validate the token against the configured Supabase project.
 

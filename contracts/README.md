@@ -27,3 +27,12 @@ read-only; the generated compatibility copy is materialized only after the
 relational revision commit.
 
 The web test `crossPlatformContracts.test.ts` verifies that the fixtures are accepted by the current web domain validators. The iOS test target decodes the same files with Swift `Codable` models.
+
+## sync-v3 transport
+
+`schemas/sync-v3.schema.json` and the `sync-v3-*.json` fixtures define the
+versioned transport envelope used by `bootstrap`, `pull`, `push`, and
+`register_device`. Transport responses require `contract_version: 3`; this is
+separate from each domain's `version`. The contract deliberately uses
+technical-only fixtures. Do not add note, health, finance, authentication, or
+APNs token content to examples or logs.

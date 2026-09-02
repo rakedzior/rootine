@@ -1,0 +1,7 @@
+// Public production defaults. Put production values in the ignored Secrets.xcconfig.
+#include "Shared.xcconfig"
+
+ROOTINE_ENVIRONMENT = production
+ROOTINE_NORMALIZED_SYNC_ENABLED = NO
+ROOTINE_NORMALIZED_READ_ENABLED = NO
+ROOTINE_NOTIFICATIONS_ENABLED = NO

@@ -25,6 +25,7 @@
 		B00000000000000000000010 /* NutritionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* NutritionView.swift */; };
 		B00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */; };
 		B00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */; };
+		B00000000000000000000018 /* Configuration/RootineFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000018 /* RootineFeatureFlags.swift */; };
 		B00000000000000000000101 /* ContractFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* ContractFixtureTests.swift */; };
 		B00000000000000000000102 /* task-workspace-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* task-workspace-v2.json */; };
 		B00000000000000000000103 /* nutrition-workspace-v6.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* nutrition-workspace-v6.json */; };
@@ -62,6 +63,9 @@
 		F0000000000000000000000B /* Rootine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rootine.entitlements; sourceTree = "<group>"; };
 		F0000000000000000000000C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		F0000000000000000000000D /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
+		F00000000000000000000018 /* Development.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development.xcconfig; sourceTree = "<group>"; };
+		F00000000000000000000019 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
+		F0000000000000000000001A /* Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Production.xcconfig; sourceTree = "<group>"; };
 		F0000000000000000000000E /* Auth/AuthenticationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/AuthenticationSupport.swift; sourceTree = "<group>"; };
 		F0000000000000000000000F /* Authentication/AuthenticationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication/AuthenticationViews.swift; sourceTree = "<group>"; };
 		F00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -71,6 +75,7 @@
 		F00000000000000000000014 /* NutritionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionView.swift; sourceTree = "<group>"; };
 		F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/CanonicalWorkspaceMapping.swift; sourceTree = "<group>"; };
 		F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/RootineDeviceRegistry.swift; sourceTree = "<group>"; };
+		F00000000000000000000018 /* Configuration/RootineFeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configuration/RootineFeatureFlags.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* ContractFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractFixtureTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* task-workspace-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "task-workspace-v2.json"; sourceTree = "<group>"; };
 		F00000000000000000000103 /* nutrition-workspace-v6.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-workspace-v6.json"; sourceTree = "<group>"; };
@@ -134,6 +139,7 @@
 				F00000000000000000000004 /* Design/RootineTheme.swift */,
 				F00000000000000000000005 /* Models/WorkspaceModels.swift */,
 				F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */,
+				F00000000000000000000018 /* RootineFeatureFlags.swift */,
 				F00000000000000000000006 /* Networking/RootineAPIClient.swift */,
 				F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */,
 				F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */,
@@ -196,6 +202,9 @@
 			children = (
 				F0000000000000000000000C /* Shared.xcconfig */,
 				F0000000000000000000000D /* Secrets.xcconfig.example */,
+				F00000000000000000000018 /* Development.xcconfig */,
+				F00000000000000000000019 /* Staging.xcconfig */,
+				F0000000000000000000001A /* Production.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -335,6 +344,7 @@
 				B0000000000000000000000E /* TasksView.swift in Sources */,
 				B0000000000000000000000F /* CalendarView.swift in Sources */,
 				B00000000000000000000010 /* NutritionView.swift in Sources */,
+				B00000000000000000000018 /* Configuration/RootineFeatureFlags.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

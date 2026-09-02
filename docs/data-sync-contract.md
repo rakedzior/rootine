@@ -1,6 +1,8 @@
 # Rootine data sync contract
 
-Status: `v2`, obowiązujący dla klienta webowego i planowanych klientów natywnych.
+Status: `v2` dla legacy snapshotów; transport `sync-v3` jest przygotowany do
+wdrożenia na stagingu. Zobacz [kontrakt sync-v3](sync-v3-contract.md) oraz
+[runbook stagingu](staging-runbook.md).
 
 ## Cel i granica
 

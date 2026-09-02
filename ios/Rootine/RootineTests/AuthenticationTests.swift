@@ -88,4 +88,28 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertNil(json["apns_token"])
         XCTAssertEqual(json["apns_environment"] as? String, "sandbox")
     }
+
+    func testSyncV3FeatureFlagsDefaultToOffWithExplicitSource() {
+        let flags = RootineFeatureFlags.disabled
+
+        XCTAssertFalse(flags.isEnabled(.normalizedSyncEnabled))
+        XCTAssertFalse(flags.isEnabled(.normalizedReadEnabled))
+        XCTAssertFalse(flags.isEnabled(.notificationsEnabled))
+        XCTAssertEqual(flags.value(for: .normalizedSyncEnabled).source, .default)
+    }
+
+    func testSyncV3FeatureFlagCanRepresentAnAccountScopedOverride() {
+        let flags = RootineFeatureFlags(
+            environment: .staging,
+            values: [
+                .normalizedSyncEnabled: RootineFeatureFlagValue(enabled: true, source: .account),
+                .normalizedReadEnabled: RootineFeatureFlagValue(enabled: false, source: .environment),
+                .notificationsEnabled: RootineFeatureFlagValue(enabled: false, source: .default),
+            ]
+        )
+
+        XCTAssertTrue(flags.isEnabled(.normalizedSyncEnabled))
+        XCTAssertEqual(flags.value(for: .normalizedSyncEnabled).source, .account)
+        XCTAssertEqual(flags.environment, .staging)
+    }
 }

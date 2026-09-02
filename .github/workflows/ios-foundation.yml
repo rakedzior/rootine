@@ -24,6 +24,9 @@ jobs:
       - name: Show selected toolchain
         run: xcodebuild -version
 
+      - name: Validate sync-v3 contract fixtures
+        run: node scripts/validate-sync-v3-contract.mjs
+
       - name: Compile app and contract tests
         run: >-
           xcodebuild build-for-testing

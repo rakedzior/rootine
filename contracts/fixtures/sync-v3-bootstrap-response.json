@@ -1,0 +1,8 @@
+{
+  "contract_version": 3,
+  "correlation_id": "rt3_staging_123e4567-e89b-42d3-a456-426614174000",
+  "server_cursor": 1842,
+  "next_cursor": 1842,
+  "has_more": false,
+  "changes": []
+}

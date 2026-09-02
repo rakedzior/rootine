@@ -5,9 +5,10 @@ Native SwiftUI foundation for the Rootine MVP. The project targets iOS 26.0+ and
 ## Open on the Mac
 
 1. Copy `Rootine/Config/Secrets.xcconfig.example` to `Rootine/Config/Secrets.xcconfig`.
-2. Fill in the production Supabase URL, publishable key, and deployed web backend URL.
-3. Open `Rootine/Rootine.xcodeproj` in Xcode 26.3.
-4. Select the `Rootine` scheme and the installed iOS 26.x simulator runtime. The current verified simulator destination is iPhone 17 Pro on iOS 26.3; the physical iPhone target remains unchanged.
+2. Fill in values for the selected environment; never add a service-role key.
+3. Select `Development.xcconfig`, `Staging.xcconfig`, or `Production.xcconfig` as the base configuration in Xcode (all rollout flags default to `NO`).
+4. Open `Rootine/Rootine.xcodeproj` in Xcode 26.3.
+5. Select the `Rootine` scheme and the installed iOS 26.x simulator runtime. The current verified simulator destination is iPhone 17 Pro on iOS 26.3; the physical iPhone target remains unchanged.
 
 `Secrets.xcconfig` is ignored by Git. Never put a service-role key in an iOS build.
 
@@ -57,3 +58,8 @@ The native callback is `rootine://auth-callback`. Add that exact redirect URL to
 the Supabase Auth allowlist. Registration stays visibly unavailable until real
 `ROOTINE_TERMS_URL` and `ROOTINE_PRIVACY_URL` values are supplied; the app never
 ships dead legal links.
+
+The server is authoritative for `normalized_sync_enabled`,
+`normalized_read_enabled`, and `notifications_enabled`. Bundle values are safe
+defaults for bootstrapping and diagnostics only; account-scoped rollout is
+documented in [`docs/staging-runbook.md`](../docs/staging-runbook.md).

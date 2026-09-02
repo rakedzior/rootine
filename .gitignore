@@ -21,6 +21,7 @@ codex_workflow/
 .dev.vars.*
 !.dev.vars.example
 ios/Rootine/Config/Secrets.xcconfig
+ios/Rootine/Config/Secrets.*.xcconfig
 ios/**/xcuserdata/
 ios/**/DerivedData/
 ios/**/*.xcuserstate

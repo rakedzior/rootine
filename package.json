@@ -19,6 +19,7 @@
     "test:e2e:viewport": "playwright test --grep @viewport-matrix",
     "test:e2e:zoom": "playwright test --grep @zoom-matrix",
     "smoke:production": "node scripts/smoke-production.mjs",
+    "contract:sync-v3": "node scripts/validate-sync-v3-contract.mjs",
     "css:lint": "stylelint \"src/**/*.{css,scss}\"",
     "css:lint:fix": "stylelint \"src/**/*.{css,scss}\" --fix",
     "css:audit": "node scripts/css-audit.mjs",
@@ -26,7 +27,7 @@
     "design-system:audit": "node --test scripts/design-system-inline-audit.test.mjs scripts/design-system-source-audit.test.mjs scripts/goals-design-system-utility.test.mjs scripts/app-design-system-utility.test.mjs && node scripts/design-system-audit.mjs",
     "architecture:audit": "node scripts/architecture-audit.mjs",
     "ios:audit": "node scripts/ios-project-audit.mjs",
-    "check": "npm run lint && npm run css:lint && npm run design-system:audit && npm run architecture:audit && npm run ios:audit && npm run test && npm run typecheck && vite build"
+    "check": "npm run lint && npm run css:lint && npm run design-system:audit && npm run architecture:audit && npm run ios:audit && npm run contract:sync-v3 && npm run test && npm run typecheck && vite build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.1",

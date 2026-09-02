@@ -1,0 +1,7 @@
+// Public staging defaults. Put staging values in the ignored Secrets.xcconfig.
+#include "Shared.xcconfig"
+
+ROOTINE_ENVIRONMENT = staging
+ROOTINE_NORMALIZED_SYNC_ENABLED = NO
+ROOTINE_NORMALIZED_READ_ENABLED = NO
+ROOTINE_NOTIFICATIONS_ENABLED = NO

@@ -1,0 +1,7 @@
+// Public development defaults. Put local Supabase values in Secrets.xcconfig.
+#include "Shared.xcconfig"
+
+ROOTINE_ENVIRONMENT = development
+ROOTINE_NORMALIZED_SYNC_ENABLED = NO
+ROOTINE_NORMALIZED_READ_ENABLED = NO
+ROOTINE_NOTIFICATIONS_ENABLED = NO

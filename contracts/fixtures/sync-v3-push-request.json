@@ -1,0 +1,14 @@
+{
+  "correlation_id": "rt3_staging_123e4567-e89b-42d3-a456-426614174000",
+  "device_id": "ios_123e4567-e89b-42d3-a456-426614174000",
+  "commands": [
+    {
+      "operation_id": "op3_123e4567-e89b-42d3-a456-426614174000",
+      "entity": "task",
+      "entity_id": "task-technical-fixture",
+      "kind": "upsert",
+      "base_revision": 11,
+      "payload": { "state": "complete" }
+    }
+  ]
+}

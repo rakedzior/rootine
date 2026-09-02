@@ -1,0 +1,23 @@
+{
+  "contract_version": 3,
+  "correlation_id": "rt3_staging_123e4567-e89b-42d3-a456-426614174000",
+  "from_cursor": 1800,
+  "next_cursor": 1842,
+  "has_more": false,
+  "changes": [
+    {
+      "cursor": 1841,
+      "entity": "task",
+      "entity_id": "task-technical-fixture",
+      "operation": "upsert",
+      "record": { "state": "complete" }
+    },
+    {
+      "cursor": 1842,
+      "entity": "habit",
+      "entity_id": "habit-technical-fixture",
+      "operation": "delete",
+      "record": { "deleted_at": "2026-09-02T10:00:00.000Z" }
+    }
+  ]
+}

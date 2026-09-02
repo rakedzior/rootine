@@ -6,6 +6,8 @@ const sourceRoot = join(projectRoot, "Rootine");
 const testsRoot = join(projectRoot, "RootineTests");
 const projectFile = join(projectRoot, "Rootine.xcodeproj/project.pbxproj");
 const sharedConfig = join(projectRoot, "Config/Shared.xcconfig");
+const environmentConfigs = ["Development.xcconfig", "Staging.xcconfig", "Production.xcconfig"]
+  .map((name) => join(projectRoot, `Config/${name}`));
 const infoPlist = join(sourceRoot, "Resources/Info.plist");
 const entitlements = join(sourceRoot, "Resources/Rootine.entitlements");
 const failures = [];
@@ -17,7 +19,7 @@ function walk(directory) {
   });
 }
 
-for (const path of [projectFile, sharedConfig, infoPlist, entitlements, sourceRoot, testsRoot]) {
+for (const path of [projectFile, sharedConfig, ...environmentConfigs, infoPlist, entitlements, sourceRoot, testsRoot]) {
   if (!existsSync(path)) failures.push(`Missing required iOS path: ${path}`);
 }
 
@@ -26,6 +28,7 @@ if (failures.length === 0) {
   const config = readFileSync(sharedConfig, "utf8");
   const plist = readFileSync(infoPlist, "utf8");
   const capabilities = readFileSync(entitlements, "utf8");
+  const environmentConfigContents = environmentConfigs.map((path) => readFileSync(path, "utf8"));
   const swiftFiles = [...walk(sourceRoot), ...walk(testsRoot)].filter((path) => path.endsWith(".swift"));
   for (const swiftFile of swiftFiles) {
     if (!project.includes(basename(swiftFile))) {
@@ -51,6 +54,16 @@ if (failures.length === 0) {
   if (!project.includes("LastUpgradeCheck = 2630")) failures.push("Xcode project metadata is not aligned with Xcode 26.3");
   if (!plist.includes("$(ROOTINE_AUTH_CALLBACK_SCHEME)")) failures.push("Info.plist is missing the configurable native auth URL scheme");
   if (!config.includes("ROOTINE_AUTH_CALLBACK_SCHEME = rootine")) failures.push("Native auth callback scheme must remain aligned with Supabase setup");
+  for (const [index, environment] of ["development", "staging", "production"].entries()) {
+    if (!environmentConfigContents[index]?.includes(`ROOTINE_ENVIRONMENT = ${environment}`)) {
+      failures.push(`iOS environment config is missing ROOTINE_ENVIRONMENT = ${environment}`);
+    }
+    for (const flag of ["ROOTINE_NORMALIZED_SYNC_ENABLED", "ROOTINE_NORMALIZED_READ_ENABLED", "ROOTINE_NOTIFICATIONS_ENABLED"]) {
+      if (!environmentConfigContents[index]?.includes(`${flag} = NO`)) {
+        failures.push(`${environment} iOS config must keep ${flag} disabled by default`);
+      }
+    }
+  }
   if (!capabilities.includes("com.apple.developer.applesignin")) failures.push("Sign in with Apple entitlement is missing");
 
   const source = walk(sourceRoot)

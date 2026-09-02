@@ -23,4 +23,12 @@ ROOTINE_APNS_ENTITLEMENT_ENVIRONMENT = development
 ROOTINE_TERMS_URL =
 ROOTINE_PRIVACY_URL =
 
+// B01 safe defaults. Environment-specific xcconfig files may select a
+// deployment, but rollout flags stay off until the server evaluates an
+// account-scoped override.
+ROOTINE_ENVIRONMENT = development
+ROOTINE_NORMALIZED_SYNC_ENABLED = NO
+ROOTINE_NORMALIZED_READ_ENABLED = NO
+ROOTINE_NOTIFICATIONS_ENABLED = NO
+
 #include? "Secrets.xcconfig"

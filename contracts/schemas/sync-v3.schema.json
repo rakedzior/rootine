@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.app/contracts/sync-v3.schema.json",
+  "title": "Rootine sync-v3 transport contract",
+  "description": "The versioned request and response envelopes for mobile sync. Select one endpoint shape at the root.",
+  "oneOf": [
+    { "$ref": "#/$defs/bootstrapRequest" },
+    { "$ref": "#/$defs/pullRequest" },
+    { "$ref": "#/$defs/pushRequest" },
+    { "$ref": "#/$defs/registerDeviceRequest" },
+    { "$ref": "#/$defs/bootstrapResponse" },
+    { "$ref": "#/$defs/pullResponse" },
+    { "$ref": "#/$defs/pushResponse" },
+    { "$ref": "#/$defs/registerDeviceResponse" },
+    { "$ref": "#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "correlationId": {
+      "type": "string",
+      "pattern": "^rt3_(development|staging|production)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "Opaque request correlation ID: rt3_<environment>_<lowercase UUIDv4>. It carries no user data."
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^op3_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "deviceId": {
+      "type": "string",
+      "pattern": "^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "environment": {
+      "enum": ["development", "staging", "production"]
+    },
+    "entity": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "entityId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "required": ["contract_version", "correlation_id"],
+      "properties": {
+        "contract_version": { "const": 3 },
+        "correlation_id": { "$ref": "#/$defs/correlationId" }
+      },
+      "description": "Shared response fields; endpoint schemas close the envelope with unevaluatedProperties."
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "required": ["correlation_id"],
+      "properties": {
+        "correlation_id": { "$ref": "#/$defs/correlationId" }
+      },
+      "description": "Shared request fields; endpoint schemas close the envelope with unevaluatedProperties."
+    },
+    "bootstrapRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "required": ["device_id"],
+          "properties": { "device_id": { "$ref": "#/$defs/deviceId" } },
+          "description": "Bootstrap request fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "pullRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "required": ["device_id", "cursor"],
+          "properties": {
+            "device_id": { "$ref": "#/$defs/deviceId" },
+            "cursor": { "type": ["integer", "null"], "minimum": 0 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 500 }
+          },
+          "description": "Pull request fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "syncCommand": {
+      "type": "object",
+      "required": ["operation_id", "entity", "entity_id", "kind", "base_revision"],
+      "properties": {
+        "operation_id": { "$ref": "#/$defs/operationId" },
+        "entity": { "$ref": "#/$defs/entity" },
+        "entity_id": { "$ref": "#/$defs/entityId" },
+        "kind": { "enum": ["upsert", "delete"] },
+        "base_revision": { "type": "integer", "minimum": 0 },
+        "payload": { "type": "object", "additionalProperties": true }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "upsert" } } },
+          "then": { "required": ["payload"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "delete" } } },
+          "then": { "not": { "required": ["payload"] } }
+        }
+      ]
+    },
+    "pushRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "required": ["device_id", "commands"],
+          "properties": {
+            "device_id": { "$ref": "#/$defs/deviceId" },
+            "commands": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/syncCommand" } }
+          },
+          "description": "Push request fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "registerDeviceRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "required": ["device_id", "platform", "app_version", "environment", "apns_environment", "push_token"],
+          "properties": {
+            "device_id": { "$ref": "#/$defs/deviceId" },
+            "platform": { "const": "ios" },
+            "app_version": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "environment": { "$ref": "#/$defs/environment" },
+            "apns_environment": { "enum": ["sandbox", "production"] },
+            "push_token": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          "description": "Register-device request fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "syncChange": {
+      "type": "object",
+      "required": ["cursor", "entity", "entity_id", "operation", "record"],
+      "properties": {
+        "cursor": { "type": "integer", "minimum": 1 },
+        "entity": { "$ref": "#/$defs/entity" },
+        "entity_id": { "$ref": "#/$defs/entityId" },
+        "operation": { "enum": ["upsert", "delete"] },
+        "record": {}
+      },
+      "additionalProperties": false
+    },
+    "bootstrapResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "required": ["server_cursor", "next_cursor", "has_more", "changes"],
+          "properties": {
+            "server_cursor": { "type": "integer", "minimum": 0 },
+            "next_cursor": { "type": "integer", "minimum": 0 },
+            "has_more": { "type": "boolean" },
+            "changes": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/syncChange" } }
+          },
+          "description": "Bootstrap response fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "pullResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "required": ["from_cursor", "next_cursor", "has_more", "changes"],
+          "properties": {
+            "from_cursor": { "type": "integer", "minimum": 0 },
+            "next_cursor": { "type": "integer", "minimum": 0 },
+            "has_more": { "type": "boolean" },
+            "changes": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/syncChange" } }
+          },
+          "description": "Pull response fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "pushResult": {
+      "type": "object",
+      "required": ["operation_id", "status", "entity", "entity_id"],
+      "properties": {
+        "operation_id": { "$ref": "#/$defs/operationId" },
+        "status": { "enum": ["applied", "already_applied", "conflict", "invalid"] },
+        "entity": { "$ref": "#/$defs/entity" },
+        "entity_id": { "$ref": "#/$defs/entityId" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "server_revision": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "pushResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "required": ["server_cursor", "results"],
+          "properties": {
+            "server_cursor": { "type": "integer", "minimum": 0 },
+            "results": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/pushResult" } }
+          },
+          "description": "Push response fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "registerDeviceResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "required": ["device_id", "environment", "registered_at"],
+          "properties": {
+            "device_id": { "$ref": "#/$defs/deviceId" },
+            "environment": { "$ref": "#/$defs/environment" },
+            "registered_at": { "type": "string", "format": "date-time" }
+          },
+          "description": "Register-device response fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "errorResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "required": ["error"],
+          "properties": {
+            "error": { "enum": ["unauthorized", "invalid", "conflict", "cursor_expired", "rate_limited", "server_error"] },
+            "retry_after_seconds": { "type": "integer", "minimum": 1 }
+          },
+          "description": "Machine-readable sync error fields."
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
