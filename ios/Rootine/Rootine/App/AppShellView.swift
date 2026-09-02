@@ -67,9 +67,11 @@ struct RootineEntryView: View {
             if isPreviewLaunch {
                 await environment.loadPreviewData()
             } else {
+                environment.registerBackgroundRefreshTask()
                 await environment.start()
             }
 #else
+            environment.registerBackgroundRefreshTask()
             await environment.start()
 #endif
         }
@@ -81,8 +83,15 @@ struct RootineEntryView: View {
             Task { await environment.registerDeviceForCurrentSession() }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, !isPreviewLaunch else { return }
-            Task { await environment.refreshActiveSession() }
+            guard !isPreviewLaunch else { return }
+            let rootinePhase: RootineScenePhase
+            switch phase {
+            case .active: rootinePhase = .active
+            case .inactive: rootinePhase = .inactive
+            case .background: rootinePhase = .background
+            @unknown default: rootinePhase = .inactive
+            }
+            environment.scenePhaseDidChange(rootinePhase)
         }
     }
 }

@@ -17,6 +17,8 @@
 		B00000000000000000000008 /* Persistence/WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */; };
 		B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */; };
 		B0000000000000000000001B /* Sync/DualWriteBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001B /* Sync/DualWriteBridge.swift */; };
+		B0000000000000000000001D /* Sync/RootineRealtimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */; };
+		B0000000000000000000001E /* Sync/RootineSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */; };
 		B0000000000000000000000A /* FeatureRootViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* FeatureRootViews.swift */; };
 		B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* Auth/AuthenticationSupport.swift */; };
 		B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* Authentication/AuthenticationViews.swift */; };
@@ -33,6 +35,7 @@
 		B00000000000000000000104 /* notes-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* notes-workspace-v1.json */; };
 		B00000000000000000000105 /* nutrition-product.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* nutrition-product.json */; };
 		B00000000000000000000106 /* AuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000106 /* AuthenticationTests.swift */; };
+		B00000000000000000000110 /* RootineRealtimeLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */; };
 		B00000000000000000000107 /* sport-planner-v5.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000107 /* sport-planner-v5.json */; };
 		B00000000000000000000108 /* goals-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000108 /* goals-workspace-v1.json */; };
 		B00000000000000000000109 /* work-workspace-v3.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000109 /* work-workspace-v3.json */; };
@@ -61,6 +64,8 @@
 		F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/WorkspaceSyncEngine.swift; sourceTree = "<group>"; };
 		F0000000000000000000001B /* Sync/DualWriteBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/DualWriteBridge.swift; sourceTree = "<group>"; };
+		F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineRealtimeClient.swift; sourceTree = "<group>"; };
+		F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineSyncCoordinator.swift; sourceTree = "<group>"; };
 		F0000000000000000000000A /* FeatureRootViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRootViews.swift; sourceTree = "<group>"; };
 		F0000000000000000000000B /* Rootine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rootine.entitlements; sourceTree = "<group>"; };
 		F0000000000000000000000C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
@@ -84,6 +89,7 @@
 		F00000000000000000000104 /* notes-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notes-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000105 /* nutrition-product.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-product.json"; sourceTree = "<group>"; };
 		F00000000000000000000106 /* AuthenticationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineRealtimeLifecycleTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000107 /* sport-planner-v5.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sport-planner-v5.json"; sourceTree = "<group>"; };
 		F00000000000000000000108 /* goals-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "goals-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000109 /* work-workspace-v3.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "work-workspace-v3.json"; sourceTree = "<group>"; };
@@ -148,6 +154,8 @@
 				F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */,
 				F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */,
 				F0000000000000000000001B /* Sync/DualWriteBridge.swift */,
+				F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */,
+				F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */,
 				F0000000000000000000000E /* Auth/AuthenticationSupport.swift */,
 			);
 			path = Rootine/Core;
@@ -180,6 +188,7 @@
 			children = (
 				F00000000000000000000101 /* ContractFixtureTests.swift */,
 				F00000000000000000000106 /* AuthenticationTests.swift */,
+				F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */,
 			);
 			path = RootineTests;
 			sourceTree = "<group>";
@@ -341,6 +350,8 @@
 				B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */,
 				B00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift in Sources */,
 				B0000000000000000000001B /* Sync/DualWriteBridge.swift in Sources */,
+				B0000000000000000000001D /* Sync/RootineRealtimeClient.swift in Sources */,
+				B0000000000000000000001E /* Sync/RootineSyncCoordinator.swift in Sources */,
 				B0000000000000000000000A /* FeatureRootViews.swift in Sources */,
 				B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */,
 				B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */,
@@ -358,6 +369,7 @@
 			files = (
 				B00000000000000000000101 /* ContractFixtureTests.swift in Sources */,
 				B00000000000000000000106 /* AuthenticationTests.swift in Sources */,
+				B00000000000000000000110 /* RootineRealtimeLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

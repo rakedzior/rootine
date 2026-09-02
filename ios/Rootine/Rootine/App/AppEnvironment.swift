@@ -1,6 +1,8 @@
 import Combine
 import Foundation
 import UIKit
+import BackgroundTasks
+import Network
 
 private enum WorkspaceEncodingError: Error {
     case invalidValue(for: RootineStorageKey)
@@ -66,6 +68,8 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var foundationMessage = "Szkielet techniczny gotowy"
     @Published private(set) var workspaceSyncStatus = WorkspaceSyncStatus.unavailable
     @Published private(set) var realtimeLastRefresh: Date?
+    @Published private(set) var realtimeStatus: RootineRealtimeStatus = .stopped
+    @Published private(set) var syncCoordinatorStatus: RootineSyncCoordinatorStatus = .stopped
     @Published private(set) var recoveryFiles: [WorkspaceRecoveryFile] = []
     @Published private(set) var deviceRegistration: RootineDeviceRegistration?
     @Published private(set) var notificationPermissionState: RootineNotificationPermissionState = .notDetermined
@@ -78,7 +82,11 @@ final class AppEnvironment: ObservableObject {
     private var syncEngine: WorkspaceSyncEngine?
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
     private var creationGate = WorkspaceCreationGate()
-    private var refreshTask: Task<Void, Never>?
+    private var realtimeClient: RootineRealtimeClient?
+    private var syncCoordinator: RootineSyncCoordinator?
+    private var networkMonitor: NWPathMonitor?
+    private var networkMonitorQueue: DispatchQueue?
+    private var didRegisterBackgroundTask = false
     private var isReconciling = false
     /// Main-actor methods can still interleave at an `await`. Keep an import
     /// from racing a UI write by letting already-started persistence finish
@@ -227,6 +235,8 @@ final class AppEnvironment: ObservableObject {
         }
         await recoverOrphanedTransactions()
         await loadAndReconcile(accessToken: activeSession.accessToken)
+        await flushPendingMutations()
+        startRealtimeRuntime()
         startRealtimeRefreshLoop()
         scheduleDeviceRegistration()
         await refreshRecoveryFiles()
@@ -457,6 +467,7 @@ final class AppEnvironment: ObservableObject {
         }
         refreshTask?.cancel()
         refreshTask = nil
+        stopRealtimeRuntime()
         keychain.clear()
         session = nil
         store = nil
@@ -472,6 +483,8 @@ final class AppEnvironment: ObservableObject {
         healthWorkspace = .empty
         affairsWorkspace = .empty
         realtimeLastRefresh = nil
+        realtimeStatus = .stopped
+        syncCoordinatorStatus = .stopped
         recoveryFiles = []
         deviceRegistration = nil
         notificationPermissionState = .notDetermined
@@ -697,8 +710,13 @@ final class AppEnvironment: ObservableObject {
     /// flight, so a slow network never blocks navigation or editing.
     func refreshActiveSession() async {
         guard let accessToken = session?.accessToken else { return }
-        await loadAndReconcile(accessToken: accessToken)
         scheduleDeviceRegistration()
+        if let syncCoordinator {
+            _ = await syncCoordinator.syncNow(reason: .manual)
+        } else {
+            await loadAndReconcile(accessToken: accessToken)
+            await flushPendingMutations()
+        }
         await refreshRecoveryFiles()
     }
 
@@ -2158,12 +2176,48 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func configureRuntime(userID: String) {
+        stopRealtimeRuntime()
         canonicalShadows.removeAll()
         lastDeviceRegistrationFingerprint = nil
         deviceRegistration = nil
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
         syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
+
+        syncCoordinator = RootineSyncCoordinator(
+            operations: RootineSyncOperations(
+                pull: { @MainActor [weak self] in
+                    guard let self, let accessToken = self.session?.accessToken else { return }
+                    await self.loadAndReconcile(accessToken: accessToken, flushAfterReconcile: false)
+                },
+                push: { @MainActor [weak self] in
+                    await self?.flushPendingMutations()
+                },
+                pendingPushCount: { @MainActor [weak self] in
+                    guard let self else { return 0 }
+                    return (try? await self.syncEngine?.pendingMutationCount()) ?? 0
+                }
+            ),
+            onStatus: { @MainActor [weak self] status in
+                self?.syncCoordinatorStatus = status
+            }
+        )
+
+        guard let activeSession = session else { return }
+        realtimeClient = RootineRealtimeClient(
+            configuration: configuration,
+            session: activeSession,
+            onEvent: { [weak self] event in
+                Task { @MainActor [weak self] in
+                    self?.handleRealtimeEvent(event)
+                }
+            },
+            onStatus: { [weak self] status in
+                Task { @MainActor [weak self] in
+                    self?.handleRealtimeStatus(status)
+                }
+            }
+        )
     }
 
     /// A process can terminate after an import has swapped one of the local
@@ -2184,21 +2238,120 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Foreground refresh plus polling keeps local state current when no
-    /// realtime subscription is available. It never replaces the local
-    /// source of truth and is cancelled as soon as the session ends.
-    private func startRealtimeRefreshLoop() {
-        refreshTask?.cancel()
-        guard configuration.isAuthComplete else { return }
-        refreshTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await _Concurrency.Task.sleep(for: .seconds(30))
-                guard !Task.isCancelled, let self else { return }
-                guard let token = self.session?.accessToken else { return }
-                await self.loadAndReconcile(accessToken: token)
+    /// Starts Realtime and its lifecycle coordinator only after the initial
+    /// authoritative bootstrap has completed. Polling remains owned by the
+    /// coordinator and is automatically stopped in the background/sign-out.
+    private func startRealtimeRuntime() {
+        guard configuration.isAuthComplete,
+              session != nil,
+              let syncCoordinator,
+              let realtimeClient else { return }
+        startNetworkMonitor()
+        scheduleBackgroundRefresh()
+        Task {
+            await syncCoordinator.start()
+            await realtimeClient.start()
+        }
+    }
+
+    private func stopRealtimeRuntime() {
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshTaskIdentifier)
+        networkMonitor?.cancel()
+        networkMonitor = nil
+        networkMonitorQueue = nil
+        if let realtimeClient {
+            Task { await realtimeClient.stop() }
+        }
+        if let syncCoordinator {
+            Task { await syncCoordinator.stop() }
+        }
+        realtimeClient = nil
+        syncCoordinator = nil
+        realtimeStatus = .stopped
+        syncCoordinatorStatus = .stopped
+    }
+
+    private func scheduleBackgroundRefresh() {
+        guard session != nil else { return }
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTaskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    private func startNetworkMonitor() {
+        guard networkMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        let queue = DispatchQueue(label: "app.rootine.sync.network-monitor")
+        monitor.pathUpdateHandler = { [weak self] path in
+            let isReachable = path.status == .satisfied
+            Task { @MainActor [weak self] in
+                self?.handleNetworkPath(isReachable: isReachable)
+            }
+        }
+        monitor.start(queue: queue)
+        networkMonitor = monitor
+        networkMonitorQueue = queue
+    }
+
+    private func handleNetworkPath(isReachable: Bool) {
+        guard session != nil, let syncCoordinator else { return }
+        Task { await syncCoordinator.networkPathChanged(isReachable: isReachable) }
+    }
+
+    private func handleRealtimeEvent(_ event: RootineRealtimeEvent) {
+        guard let session,
+              case .syncAvailable(let signal) = event,
+              signal.userID == session.user.id,
+              let syncCoordinator else { return }
+        // An echo is intentionally just another availability hint. The pull
+        // is authoritative and never enqueues a second write from the event.
+        Task { await syncCoordinator.requestPull(reason: .realtime) }
+    }
+
+    private func handleRealtimeStatus(_ status: RootineRealtimeStatus) {
+        realtimeStatus = status
+        guard case .connected = status,
+              session != nil,
+              let syncCoordinator else { return }
+        // Includes the first connection and every reconnect: pull from the
+        // last durable cursor rather than trusting a websocket payload.
+        Task { await syncCoordinator.requestPull(reason: .realtimeReconnect) }
+    }
+
+    func scenePhaseDidChange(_ phase: RootineScenePhase) {
+        guard session != nil, let syncCoordinator else { return }
+        Task { await syncCoordinator.scenePhaseChanged(phase) }
+    }
+
+    func registerBackgroundRefreshTask() {
+        guard !didRegisterBackgroundTask else { return }
+        didRegisterBackgroundTask = true
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.backgroundRefreshTaskIdentifier,
+            using: nil
+        ) { [weak self] task in
+            guard let task = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            Task { @MainActor [weak self] in
+                await self?.performBackgroundRefresh(task)
             }
         }
     }
+
+    func performBackgroundRefresh(_ task: BGTask? = nil) async {
+        guard session != nil, let syncCoordinator else {
+            task?.setTaskCompleted(success: false)
+            return
+        }
+        let work = Task { await syncCoordinator.syncNow(reason: .backgroundTask) }
+        task?.expirationHandler = { work.cancel() }
+        let success = await work.value
+        task?.setTaskCompleted(success: success)
+    }
+
+    private static let backgroundRefreshTaskIdentifier = "app.rootine.sync.refresh"
 
     private func normalizedEmail(_ email: String) -> String {
         email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -2212,6 +2365,8 @@ final class AppEnvironment: ObservableObject {
         guard !passwordRecovery else { return }
         await recoverOrphanedTransactions()
         await loadAndReconcile(accessToken: newSession.accessToken)
+        await flushPendingMutations()
+        startRealtimeRuntime()
         startRealtimeRefreshLoop()
         scheduleDeviceRegistration()
         await refreshRecoveryFiles()
@@ -2397,7 +2552,7 @@ final class AppEnvironment: ObservableObject {
         return normalized
     }
 
-    private func loadAndReconcile(accessToken: String) async {
+    private func loadAndReconcile(accessToken: String, flushAfterReconcile: Bool = true) async {
         guard let store, let syncEngine else { return }
         guard !archiveImportInProgress else { return }
         guard !isReconciling else { return }
@@ -2468,7 +2623,9 @@ final class AppEnvironment: ObservableObject {
 
             if conflictKeys.isEmpty {
                 foundationMessage = "Kontrakty lokalne i Supabase zostały uzgodnione"
-                await flushPendingMutations()
+                if flushAfterReconcile {
+                    await flushPendingMutations()
+                }
                 if case .conflict = workspaceSyncStatus {
                     foundationMessage = "Dane lokalne są bezpieczne, ale czekają na rozwiązanie konfliktu"
                 } else {

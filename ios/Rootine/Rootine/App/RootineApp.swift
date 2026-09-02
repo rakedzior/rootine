@@ -15,6 +15,9 @@ struct RootineApp: App {
                 .tint(RootineTheme.ColorToken.action)
                 .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
         }
+        .backgroundTask(.appRefresh("app.rootine.sync.refresh")) {
+            await environment.performBackgroundRefresh()
+        }
     }
 }
 
