@@ -43,6 +43,9 @@ enum WorkspaceSyncStatus: Equatable, Sendable {
     case syncing(pending: Int)
     case synced
     case conflict(storageKeys: [String])
+    case schemaMismatch
+    case unauthorized
+    case error
 }
 
 @MainActor
@@ -2141,6 +2144,47 @@ final class AppEnvironment: ObservableObject {
         await flushPendingMutations(allowingImport: false)
     }
 
+    /// v3 is wired in shadow mode. Existing aggregate snapshots continue to
+    /// reconcile and remain the read path until B08; this entry point lets a
+    /// future coordinator flush normalized commands without changing that
+    /// behavior today.
+    func flushPendingNormalizedCommands() async {
+        guard let syncEngine else {
+            workspaceSyncStatus = .unavailable
+            return
+        }
+        let pending = (try? await syncEngine.pendingCommandCount()) ?? 0
+        guard let accessToken = session?.accessToken else {
+            workspaceSyncStatus = .localOnly(pending: pending)
+            return
+        }
+        workspaceSyncStatus = .syncing(pending: pending)
+        do {
+            switch try await syncEngine.flushNormalized(accessToken: accessToken) {
+            case .idle, .applied:
+                workspaceSyncStatus = .synced
+            case .conflict(let keys):
+                workspaceSyncStatus = .conflict(storageKeys: keys)
+            case .retryScheduled:
+                workspaceSyncStatus = .localOnly(pending: pending)
+            case .unauthorized:
+                workspaceSyncStatus = .unauthorized
+            case .cursorExpired:
+                workspaceSyncStatus = .error
+            case .error:
+                workspaceSyncStatus = .error
+            }
+        } catch RootineSyncRemoteError.unauthorized {
+            workspaceSyncStatus = .unauthorized
+        } catch RootineSyncRemoteError.schemaMismatch {
+            workspaceSyncStatus = .schemaMismatch
+        } catch RootineSyncEngineError.normalizedSyncUnavailable {
+            workspaceSyncStatus = .unavailable
+        } catch {
+            workspaceSyncStatus = .error
+        }
+    }
+
     private func flushPendingMutations(allowingImport: Bool) async {
         guard allowingImport || !archiveImportInProgress else { return }
         guard let syncEngine else {
@@ -2183,7 +2227,18 @@ final class AppEnvironment: ObservableObject {
         deviceRegistration = nil
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
-        syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
+        guard let normalizedRemote = try? RootineSyncRemoteClient(configuration: configuration) else {
+            syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
+            return
+        }
+        let deviceID = syncDeviceIdentifier(for: userID)
+        syncEngine = WorkspaceSyncEngine(
+            store: userStore,
+            remote: api,
+            normalizedRemote: normalizedRemote,
+            deviceID: deviceID,
+            accountID: userID
+        )
 
         syncCoordinator = RootineSyncCoordinator(
             operations: RootineSyncOperations(
@@ -2219,6 +2274,16 @@ final class AppEnvironment: ObservableObject {
                 }
             }
         )
+    }
+
+    private func syncDeviceIdentifier(for userID: String) -> String {
+        let key = "rootine.sync.device-id.\(userID)"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+        let identifier = RootineSyncIdentifiers.deviceID()
+        UserDefaults.standard.set(identifier, forKey: key)
+        return identifier
     }
 
     /// A process can terminate after an import has swapped one of the local
