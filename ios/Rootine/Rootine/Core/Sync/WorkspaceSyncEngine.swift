@@ -7,6 +7,11 @@ enum WorkspaceSyncOutcome: Equatable {
     case conflict([String])
 }
 
+struct WorkspaceSyncPayload: Sendable {
+    let storageKey: String
+    let payload: JSONValue
+}
+
 actor WorkspaceSyncEngine {
     private let store: WorkspaceFileStore
     private let remote: WorkspaceRemoteClient
@@ -40,19 +45,47 @@ actor WorkspaceSyncEngine {
     /// snapshot consumed by the web client.
     @discardableResult
     func enqueue(payload: JSONValue, storageKey: String) async throws -> PendingWorkspaceMutation {
-        let data = try encoder.encode(payload)
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        let expectedRevision = try await store.revision(for: storageKey)
-        let mutationIDData = Data("\(storageKey):\(expectedRevision):\(digest)".utf8)
-        let mutationID = SHA256.hash(data: mutationIDData).map { String(format: "%02x", $0) }.joined()
-        return try await store.enqueue(PendingWorkspaceMutation(
-            id: mutationID,
-            storageKey: storageKey,
-            payload: payload,
-            contentHash: digest,
-            expectedRevision: expectedRevision,
-            createdAt: RootineDate.isoTimestamp()
-        ))
+        return try await enqueueBatch([
+            WorkspaceSyncPayload(storageKey: storageKey, payload: payload)
+        ]).first!
+    }
+
+    /// Computes and persists every mutation in one queue write. Existing
+    /// entries remain coalesced by workspace and identical operations remain
+    /// idempotent.
+    @discardableResult
+    func enqueueBatch(_ payloads: [WorkspaceSyncPayload]) async throws -> [PendingWorkspaceMutation] {
+        guard !payloads.isEmpty else { return [] }
+        var queue = try await store.pendingMutations()
+        var mutations: [PendingWorkspaceMutation] = []
+        for request in payloads {
+            let data = try encoder.encode(request.payload)
+            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            let expectedRevision = try await store.revision(for: request.storageKey)
+            let mutationIDData = Data("\(request.storageKey):\(expectedRevision):\(digest)".utf8)
+            let mutationID = SHA256.hash(data: mutationIDData).map { String(format: "%02x", $0) }.joined()
+            if let duplicate = queue.first(where: {
+                $0.storageKey == request.storageKey
+                    && $0.contentHash == digest
+                    && $0.expectedRevision == expectedRevision
+            }) {
+                mutations.append(duplicate)
+                continue
+            }
+            let mutation = PendingWorkspaceMutation(
+                id: mutationID,
+                storageKey: request.storageKey,
+                payload: request.payload,
+                contentHash: digest,
+                expectedRevision: expectedRevision,
+                createdAt: RootineDate.isoTimestamp()
+            )
+            queue.removeAll { $0.storageKey == request.storageKey }
+            queue.append(mutation)
+            mutations.append(mutation)
+        }
+        try await store.replacePendingMutations(queue)
+        return mutations
     }
 
     func flush(accessToken: String) async throws -> WorkspaceSyncOutcome {

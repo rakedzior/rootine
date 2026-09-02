@@ -71,11 +71,7 @@ struct TasksView: View {
         case .habits:
             base = []
         case .today:
-            base = activeTasks.filter { task in
-                task.calendarDate == today
-                    || (task.calendarDate == nil && task.view == "dzis")
-                    || (task.calendarDate != nil && task.calendarDate! < today && !isDone(task))
-            }
+            base = activeTasks.filter { isVisibleToday($0, today: today) }
         case .upcoming:
             base = activeTasks.filter { ($0.calendarDate ?? "") > today }
         case .undated:
@@ -235,10 +231,7 @@ struct TasksView: View {
             .open: activeTasks.filter { !isDone($0) }.count,
             .completed: activeTasks.filter { isDone($0) }.count,
             .habits: environment.taskWorkspace.habits.count,
-            .today: activeTasks.filter { task in
-                (task.calendarDate == today || (task.calendarDate == nil && task.view == "dzis"))
-                    || (task.calendarDate != nil && task.calendarDate! < today && !isDone(task))
-            }.count,
+            .today: activeTasks.filter { isVisibleToday($0, today: today) }.count,
             .upcoming: activeTasks.filter { ($0.calendarDate ?? "") > today }.count,
             .undated: activeTasks.filter { $0.calendarDate == nil && !isDone($0) }.count,
             .trash: deletedTasks.count
@@ -280,6 +273,15 @@ struct TasksView: View {
 
     private func isDone(_ task: WorkspaceTask, dateKey: String = RootineDate.localDate()) -> Bool {
         rootineTaskIsDoneOnDate(task, dateKey: dateKey)
+    }
+
+    private func isVisibleToday(_ task: WorkspaceTask, today: String) -> Bool {
+        if task.calendarDate == today { return true }
+        if task.calendarDate == nil && task.view == "dzis" { return true }
+        if let calendarDate = task.calendarDate, calendarDate < today {
+            return !isDone(task, dateKey: today)
+        }
+        return false
     }
 }
 

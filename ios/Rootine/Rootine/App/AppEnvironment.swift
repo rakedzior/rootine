@@ -5,6 +5,26 @@ private enum WorkspaceEncodingError: Error {
     case invalidValue(for: RootineStorageKey)
 }
 
+enum RootineWorkspaceArchiveError: LocalizedError, Equatable {
+    case unsupportedVersion(Int)
+    case unsupportedWorkspaceVersion(key: String, found: Int, supported: Int)
+    case accountMismatch
+    case noLocalStore
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedVersion(let version):
+            return "Ta kopia danych pochodzi z nieobsługiwanej wersji \(version)."
+        case .unsupportedWorkspaceVersion(let key, let found, let supported):
+            return "Workspace \(key) ma wersję \(found), a ta aplikacja obsługuje wersję \(supported)."
+        case .accountMismatch:
+            return "Ta kopia należy do innego konta Rootine. Nie zmieniono lokalnych danych."
+        case .noLocalStore:
+            return "Kopia lokalna będzie dostępna po uruchomieniu sesji konta."
+        }
+    }
+}
+
 enum WorkspaceSyncStatus: Equatable, Sendable {
     case unavailable
     case localOnly(pending: Int)
@@ -24,12 +44,15 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var workWorkspace = WorkWorkspace.empty
     @Published private(set) var travelWorkspace = TravelWorkspace.empty
     @Published private(set) var healthWorkspace = HealthWorkspace.empty
+    @Published private(set) var affairsWorkspace = AffairsWorkspace.empty
     @Published private(set) var isWorking = false
     @Published private(set) var isLaunching = true
     @Published private(set) var isPasswordRecovery = false
     @Published private(set) var authCallbackError: String?
     @Published private(set) var foundationMessage = "Szkielet techniczny gotowy"
     @Published private(set) var workspaceSyncStatus = WorkspaceSyncStatus.unavailable
+    @Published private(set) var realtimeLastRefresh: Date?
+    @Published private(set) var recoveryFiles: [WorkspaceRecoveryFile] = []
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
@@ -38,6 +61,8 @@ final class AppEnvironment: ObservableObject {
     private var syncEngine: WorkspaceSyncEngine?
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
     private var creationGate = WorkspaceCreationGate()
+    private var refreshTask: Task<Void, Never>?
+    private var isReconciling = false
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
@@ -169,6 +194,8 @@ final class AppEnvironment: ObservableObject {
             }
         }
         await loadAndReconcile(accessToken: activeSession.accessToken)
+        startRealtimeRefreshLoop()
+        await refreshRecoveryFiles()
     }
 
 #if DEBUG
@@ -277,6 +304,46 @@ final class AppEnvironment: ObservableObject {
                 HealthReminder(id: "preview-reminder-water", title: "Uzupełnij wodę", detail: "Brakuje 750 ml", completedDates: [])
             ]
         )
+        affairsWorkspace = AffairsWorkspace(
+            version: 2,
+            matters: [
+                AffairMatter(
+                    id: "preview-matter",
+                    title: "Sprawdzić ubezpieczenie mieszkania",
+                    category: "dom",
+                    priority: "high",
+                    status: "open",
+                    dueDate: tomorrow,
+                    note: "Porównać zakres i termin płatności.",
+                    createdAt: timestamp,
+                    kind: "task",
+                    time: nil,
+                    location: nil,
+                    reminderMinutes: nil,
+                    sourceAttentionKey: nil
+                )
+            ],
+            oneTimePayments: [],
+            payments: [
+                AffairRecurringPayment(
+                    id: "preview-payment",
+                    name: "Czynsz",
+                    category: "Mieszkanie",
+                    amount: 890,
+                    cadence: "monthly",
+                    nextDueDate: tomorrow,
+                    automatic: false,
+                    active: true,
+                    note: "Do 10. dnia miesiąca."
+                )
+            ],
+            subscriptions: [],
+            documents: [],
+            vehicles: [],
+            vehicleItems: [],
+            budgets: [],
+            attentionStates: []
+        )
 
         // Preview mode uses the same file-backed store as a signed-in user so
         // simulator interactions survive a relaunch. Missing snapshots keep
@@ -290,6 +357,7 @@ final class AppEnvironment: ObservableObject {
             if let value = try? await store.load(WorkWorkspace.self, key: .work) { workWorkspace = value }
             if let value = try? await store.load(TravelWorkspace.self, key: .travel) { travelWorkspace = value }
             if let value = try? await store.load(HealthWorkspace.self, key: .health) { healthWorkspace = value }
+            if let value = try? await store.load(AffairsWorkspace.self, key: .affairs) { affairsWorkspace = value }
             try? await store.save(taskWorkspace, key: .tasks)
             try? await store.save(nutritionWorkspace, key: .nutrition)
             try? await store.save(notesWorkspace, key: .notes)
@@ -298,11 +366,14 @@ final class AppEnvironment: ObservableObject {
             try? await store.save(workWorkspace, key: .work)
             try? await store.save(travelWorkspace, key: .travel)
             try? await store.save(healthWorkspace, key: .health)
+            try? await store.save(affairsWorkspace, key: .affairs)
         }
     }
 #endif
 
     func signOutFoundationSession() {
+        refreshTask?.cancel()
+        refreshTask = nil
         keychain.clear()
         session = nil
         store = nil
@@ -316,8 +387,176 @@ final class AppEnvironment: ObservableObject {
         workWorkspace = .empty
         travelWorkspace = .empty
         healthWorkspace = .empty
+        affairsWorkspace = .empty
+        realtimeLastRefresh = nil
+        recoveryFiles = []
         foundationMessage = "Sesja usunięta z Keychain"
         workspaceSyncStatus = .unavailable
+    }
+
+    // MARK: Local data archive and recovery
+
+    func exportWorkspaceArchive() throws -> Data {
+        let archive = RootineWorkspaceExport(
+            schemaVersion: RootineWorkspaceExport.currentVersion,
+            exportedAt: RootineDate.isoTimestamp(),
+            accountID: session?.user.id,
+            accountEmail: session?.user.email,
+            tasks: taskWorkspace,
+            nutrition: nutritionWorkspace,
+            notes: notesWorkspace,
+            sport: sportWorkspace,
+            goals: goalsWorkspace,
+            work: workWorkspace,
+            travel: travelWorkspace,
+            health: healthWorkspace,
+            affairs: normalizedAffairsWorkspace(affairsWorkspace)
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(archive)
+    }
+
+    func importWorkspaceArchive(_ data: Data) async throws {
+        guard let store, let syncEngine else { throw RootineWorkspaceArchiveError.noLocalStore }
+        var archive = try JSONDecoder().decode(RootineWorkspaceExport.self, from: data)
+        guard archive.schemaVersion == RootineWorkspaceExport.currentVersion else {
+            throw RootineWorkspaceArchiveError.unsupportedVersion(archive.schemaVersion)
+        }
+        if let importedAccount = archive.accountID,
+           let currentAccount = session?.user.id,
+           importedAccount != currentAccount {
+            throw RootineWorkspaceArchiveError.accountMismatch
+        }
+
+        archive.affairs = normalizedAffairsWorkspace(archive.affairs)
+        try validateWorkspaceArchive(archive)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let canonicalInputs: [(RootineStorageKey, JSONValue)] = [
+            (.sport, try encodeCanonical(archive.sport, key: .sport)),
+            (.goals, try encodeCanonical(archive.goals, key: .goals)),
+            (.work, try encodeCanonical(archive.work, key: .work)),
+            (.travel, try encodeCanonical(archive.travel, key: .travel)),
+            (.health, try encodeCanonical(archive.health, key: .health))
+        ]
+        let compactDocuments: [WorkspaceBatchDocument] = [
+            WorkspaceBatchDocument(key: .tasks, data: try encoder.encode(archive.tasks)),
+            WorkspaceBatchDocument(key: .nutrition, data: try encoder.encode(archive.nutrition)),
+            WorkspaceBatchDocument(key: .notes, data: try encoder.encode(archive.notes)),
+            WorkspaceBatchDocument(key: .sport, data: try encoder.encode(archive.sport)),
+            WorkspaceBatchDocument(key: .goals, data: try encoder.encode(archive.goals)),
+            WorkspaceBatchDocument(key: .work, data: try encoder.encode(archive.work)),
+            WorkspaceBatchDocument(key: .travel, data: try encoder.encode(archive.travel)),
+            WorkspaceBatchDocument(key: .health, data: try encoder.encode(archive.health)),
+            WorkspaceBatchDocument(key: .affairs, data: try encoder.encode(archive.affairs))
+        ]
+        var documents = compactDocuments
+        var syncPayloads: [WorkspaceSyncPayload] = [
+            WorkspaceSyncPayload(storageKey: RootineStorageKey.tasks.rawValue, payload: try jsonPayload(archive.tasks, encoder: encoder)),
+            WorkspaceSyncPayload(storageKey: RootineStorageKey.nutrition.rawValue, payload: try jsonPayload(archive.nutrition, encoder: encoder)),
+            WorkspaceSyncPayload(storageKey: RootineStorageKey.notes.rawValue, payload: try jsonPayload(archive.notes, encoder: encoder)),
+            WorkspaceSyncPayload(storageKey: RootineStorageKey.affairs.rawValue, payload: try jsonPayload(archive.affairs, encoder: encoder))
+        ]
+        for (key, canonical) in canonicalInputs {
+            if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
+                documents.append(WorkspaceBatchDocument(key: shadowKey, data: try encoder.encode(canonical)))
+            }
+            syncPayloads.append(
+                WorkspaceSyncPayload(
+                    storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: key),
+                    payload: canonical
+                )
+            )
+        }
+
+        // Create the safety copy and stage every file before publishing any
+        // @Published value. Validation and encoding above are intentionally
+        // complete before this write begins.
+        _ = try await store.writeRecoveryCopy(try exportWorkspaceArchive(), label: "before-import")
+        try await store.replaceWorkspaceBatch(documents)
+        _ = try await syncEngine.enqueueBatch(syncPayloads)
+
+        taskWorkspace = archive.tasks
+        nutritionWorkspace = archive.nutrition
+        notesWorkspace = archive.notes
+        sportWorkspace = archive.sport
+        goalsWorkspace = archive.goals
+        workWorkspace = archive.work
+        travelWorkspace = archive.travel
+        healthWorkspace = archive.health
+        affairsWorkspace = archive.affairs
+        for (key, canonical) in canonicalInputs {
+            canonicalShadows[key] = canonical
+        }
+        await refreshRecoveryFiles()
+        await markLocalOnly()
+        await flushPendingMutations()
+        foundationMessage = "Zaimportowano kopię danych. Poprzedni stan jest w Recovery."
+    }
+
+    func restoreRecoveryFile(_ file: WorkspaceRecoveryFile) async throws {
+        guard let store else { throw RootineWorkspaceArchiveError.noLocalStore }
+        let files = try await store.recoveryFiles()
+        guard files.contains(where: { $0.name == file.name && $0.url.standardizedFileURL == file.url.standardizedFileURL }) else {
+            throw RootineWorkspaceArchiveError.noLocalStore
+        }
+        let data = try Data(contentsOf: file.url)
+        try await importWorkspaceArchive(data)
+        foundationMessage = "Przywrócono kopię \(file.name)."
+    }
+
+    func validateWorkspaceArchive(_ archive: RootineWorkspaceExport) throws {
+        let versionChecks: [(RootineStorageKey, Int, Int)] = [
+            (.tasks, archive.tasks.version, RootineStorageKey.tasks.supportedLocalVersion!),
+            (.nutrition, archive.nutrition.version, RootineStorageKey.nutrition.supportedLocalVersion!),
+            (.notes, archive.notes.version, RootineStorageKey.notes.supportedLocalVersion!),
+            (.sport, archive.sport.version, RootineStorageKey.sport.supportedLocalVersion!),
+            (.goals, archive.goals.version, RootineStorageKey.goals.supportedLocalVersion!),
+            (.work, archive.work.version, RootineStorageKey.work.supportedLocalVersion!),
+            (.travel, archive.travel.version, RootineStorageKey.travel.supportedLocalVersion!),
+            (.health, archive.health.version, RootineStorageKey.health.supportedLocalVersion!),
+            (.affairs, archive.affairs.version, RootineStorageKey.affairs.supportedLocalVersion!)
+        ]
+        for (key, found, supported) in versionChecks where found != supported {
+            throw RootineWorkspaceArchiveError.unsupportedWorkspaceVersion(
+                key: key.rawValue,
+                found: found,
+                supported: supported
+            )
+        }
+    }
+
+    func refreshRecoveryFiles() async {
+        guard let store else {
+            recoveryFiles = []
+            return
+        }
+        recoveryFiles = (try? await store.recoveryFiles()) ?? []
+    }
+
+    func deleteRecoveryFile(_ file: WorkspaceRecoveryFile) async {
+        guard let store else { return }
+        try? await store.deleteRecoveryFile(file)
+        await refreshRecoveryFiles()
+    }
+
+    func clearLocalDataAndSignOut() async throws {
+        if let store {
+            try await store.clearAllLocalData()
+        }
+        signOutFoundationSession()
+    }
+
+    /// Refreshes the active account when the app returns to the foreground.
+    /// The local snapshot remains the source of truth while the request is in
+    /// flight, so a slow network never blocks navigation or editing.
+    func refreshActiveSession() async {
+        guard let accessToken = session?.accessToken else { return }
+        await loadAndReconcile(accessToken: accessToken)
+        await refreshRecoveryFiles()
     }
 
     func toggleTaskCompletion(id: Int, on date: Date = Date()) async {
@@ -882,6 +1121,169 @@ final class AppEnvironment: ObservableObject {
         await persistHealthWorkspace(next)
     }
 
+    // MARK: Pozostałe / Sprawy
+
+    func addAffairMatter(
+        title: String,
+        category: String,
+        priority: String,
+        dueDate: String,
+        note: String,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        let fingerprint = "affair|\(trimmedTitle)|\(category)|\(dueDate)"
+        guard creationGate.claim(fingerprint) else { return }
+        defer { creationGate.release(fingerprint) }
+        var next = affairsWorkspace
+        let id = RootineLocalIdentifier.string(namespace: "affair", operationID: operationID)
+        guard !next.matters.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.matters.insert(
+            AffairMatter(
+                id: id,
+                title: trimmedTitle,
+                category: AffairMatterCategory.canonical(category),
+                priority: priority == "high" ? "high" : "normal",
+                status: "open",
+                dueDate: dueDate,
+                note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+                createdAt: now
+            ),
+            at: 0
+        )
+        next.version = 2
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairMatter(
+        id: String,
+        title: String,
+        category: String,
+        priority: String,
+        dueDate: String,
+        note: String
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return }
+        var next = affairsWorkspace
+        guard let index = next.matters.firstIndex(where: { $0.id == id }) else { return }
+        next.matters[index].title = trimmedTitle
+        next.matters[index].category = AffairMatterCategory.canonical(category)
+        next.matters[index].priority = priority == "high" ? "high" : "normal"
+        next.matters[index].dueDate = dueDate
+        next.matters[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        await persistAffairsWorkspace(next)
+    }
+
+    func toggleAffairMatter(id: String) async {
+        var next = affairsWorkspace
+        guard let index = next.matters.firstIndex(where: { $0.id == id }) else { return }
+        next.matters[index].status = next.matters[index].status == "done" ? "open" : "done"
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairMatter(id: String) async {
+        var next = affairsWorkspace
+        next.matters.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func restoreAffairMatter(_ matter: AffairMatter) async {
+        var next = affairsWorkspace
+        guard !next.matters.contains(where: { $0.id == matter.id }) else { return }
+        next.matters.insert(matter, at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func toggleOneTimePayment(id: String) async {
+        var next = affairsWorkspace
+        guard let index = next.oneTimePayments.firstIndex(where: { $0.id == id }) else { return }
+        next.oneTimePayments[index].paid.toggle()
+        next.oneTimePayments[index].paidAt = next.oneTimePayments[index].paid ? RootineDate.isoTimestamp() : ""
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteOneTimePayment(id: String) async {
+        var next = affairsWorkspace
+        next.oneTimePayments.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    // MARK: Nutrition secondary records
+
+    func updateNutritionGoals(_ goals: NutritionGoals) async {
+        var next = nutritionWorkspace
+        next.goals = NutritionGoals(
+            calories: max(0, goals.calories),
+            protein: max(0, goals.protein),
+            carbs: max(0, goals.carbs),
+            fat: max(0, goals.fat),
+            waterMl: max(0, goals.waterMl)
+        )
+        await persistNutritionWorkspace(next)
+    }
+
+    func addWeightMeasurement(weightKg: Double, dateKey: String = RootineDate.localDate(), note: String? = nil) async {
+        guard weightKg > 0 else { return }
+        var next = nutritionWorkspace
+        let now = RootineDate.isoTimestamp()
+        next.weightMeasurements[dateKey] = WeightMeasurement(date: dateKey, weightKg: weightKg, note: note, createdAt: now, updatedAt: now)
+        await persistNutritionWorkspace(next)
+    }
+
+    func upsertCustomMeal(_ meal: CustomMeal) async {
+        let trimmedName = meal.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, !meal.ingredients.isEmpty else { return }
+        var next = nutritionWorkspace
+        var value = meal
+        value.name = trimmedName
+        value.updatedAt = RootineDate.isoTimestamp()
+        if let index = (next.customMeals ?? []).firstIndex(where: { $0.id == value.id }) {
+            next.customMeals?[index] = value
+        } else {
+            next.customMeals = [value] + (next.customMeals ?? [])
+        }
+        await persistNutritionWorkspace(next)
+    }
+
+    func deleteCustomMeal(id: String) async {
+        var next = nutritionWorkspace
+        next.customMeals?.removeAll { $0.id == id }
+        await persistNutritionWorkspace(next)
+    }
+
+    func addCustomMealToDay(
+        _ meal: CustomMeal,
+        dateKey: String,
+        mealKind: String,
+        operationID: String = UUID().uuidString
+    ) async {
+        let values = meal.ingredients.reduce(NutritionValues(calories: 0, protein: 0, carbs: 0, fat: 0)) { partial, ingredient in
+            let multiplier = ingredient.unit.lowercased() == "g" || ingredient.unit.lowercased() == "ml" ? ingredient.amount / 100 : 1
+            return NutritionValues(
+                calories: partial.calories + ingredient.per100g.calories * multiplier,
+                protein: partial.protein + ingredient.per100g.protein * multiplier,
+                carbs: partial.carbs + ingredient.per100g.carbs * multiplier,
+                fat: partial.fat + ingredient.per100g.fat * multiplier
+            )
+        }
+        await addNutritionEntry(
+            dateKey: dateKey,
+            meal: mealKind,
+            name: meal.name,
+            portion: meal.servings.map { String(format: "%.0f porcji", $0) } ?? "1 porcja",
+            calories: values.calories,
+            protein: values.protein,
+            carbs: values.carbs,
+            fat: values.fat,
+            amount: meal.totalWeightG,
+            unit: "g",
+            operationID: operationID
+        )
+    }
+
     func addNutritionEntry(
         dateKey: String,
         meal: String,
@@ -933,6 +1335,17 @@ final class AppEnvironment: ObservableObject {
         }
         next.days[dateKey] = day
         await persistNutritionWorkspace(next)
+    }
+
+    func lookupNutritionProduct(barcode: String) async -> NutritionProduct? {
+        let normalized = barcode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, let token = session?.accessToken else { return nil }
+        do {
+            return try await api.product(barcode: normalized, accessToken: token)
+        } catch {
+            foundationMessage = "Nie udało się pobrać produktu — możesz wpisać go ręcznie."
+            return nil
+        }
     }
 
     func updateNutritionEntry(
@@ -1134,6 +1547,13 @@ final class AppEnvironment: ObservableObject {
         await persistCanonicalWorkspace(next, key: .health, merge: RootineCanonicalWorkspaceMapping.mergedHealthPayload)
     }
 
+    private func persistAffairsWorkspace(_ value: AffairsWorkspace) async {
+        var next = value
+        next.version = 2
+        affairsWorkspace = next
+        await persistWorkspace(next, key: .affairs)
+    }
+
     private func persistWorkspace<T: Codable & Sendable>(_ value: T, key: RootineStorageKey) async {
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
@@ -1175,6 +1595,10 @@ final class AppEnvironment: ObservableObject {
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
+    }
+
+    private func jsonPayload<T: Encodable>(_ value: T, encoder: JSONEncoder) throws -> JSONValue {
+        try JSONDecoder().decode(JSONValue.self, from: encoder.encode(value))
     }
 
     private func encodeCanonical<T: Codable>(_ value: T, key: RootineStorageKey) throws -> JSONValue {
@@ -1239,6 +1663,22 @@ final class AppEnvironment: ObservableObject {
         syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
     }
 
+    /// Foreground refresh plus polling keeps local state current when no
+    /// realtime subscription is available. It never replaces the local
+    /// source of truth and is cancelled as soon as the session ends.
+    private func startRealtimeRefreshLoop() {
+        refreshTask?.cancel()
+        guard configuration.isAuthComplete else { return }
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await _Concurrency.Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled, let self else { return }
+                guard let token = self.session?.accessToken else { return }
+                await self.loadAndReconcile(accessToken: token)
+            }
+        }
+    }
+
     private func normalizedEmail(_ email: String) -> String {
         email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
@@ -1250,6 +1690,8 @@ final class AppEnvironment: ObservableObject {
         configureRuntime(userID: newSession.user.id)
         guard !passwordRecovery else { return }
         await loadAndReconcile(accessToken: newSession.accessToken)
+        startRealtimeRefreshLoop()
+        await refreshRecoveryFiles()
     }
 
     private func loadLocalCopies() async {
@@ -1259,9 +1701,13 @@ final class AppEnvironment: ObservableObject {
         notesWorkspace = (try? await store.load(NotesWorkspace.self, key: .notes)) ?? .empty
         sportWorkspace = (try? await store.load(SportWorkspace.self, key: .sport)) ?? .empty
         goalsWorkspace = (try? await store.load(GoalsWorkspace.self, key: .goals)) ?? .empty
-        workWorkspace = (try? await store.load(WorkWorkspace.self, key: .work)) ?? .empty
+        let localWork = (try? await store.load(WorkWorkspace.self, key: .work)) ?? .empty
+        workWorkspace = await sanitizedWorkWorkspace(localWork, store: store, syncEngine: syncEngine)
         travelWorkspace = (try? await store.load(TravelWorkspace.self, key: .travel)) ?? .empty
         healthWorkspace = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
+        let localAffairs = (try? await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
+        affairsWorkspace = await sanitizedAffairsWorkspace(localAffairs, store: store, syncEngine: syncEngine)
+        recoveryFiles = (try? await store.recoveryFiles()) ?? []
         for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
             guard let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key),
                   let shadow = try? await store.load(JSONValue.self, key: shadowKey) else { continue }
@@ -1269,19 +1715,98 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
+    /// A timestamp is user data, not a reason to trap the Work screen in an
+    /// endless “stop” state. Keep the original bytes in Recovery and clear
+    /// only the invalid active marker; completed focus sessions remain intact.
+    private func sanitizedWorkWorkspace(
+        _ workspace: WorkWorkspace,
+        store: WorkspaceFileStore,
+        syncEngine: WorkspaceSyncEngine? = nil
+    ) async -> WorkWorkspace {
+        guard let rawStart = workspace.activeFocusStartedAt,
+              RootineDate.date(from: rawStart) == nil else { return workspace }
+        if let data = try? JSONEncoder().encode(workspace) {
+            _ = try? await store.writeRecoveryCopy(data, label: "work-focus-corrupt")
+        }
+        var sanitized = workspace
+        sanitized.activeFocusStartedAt = nil
+        sanitized.updatedAt = RootineDate.isoTimestamp()
+        try? await store.save(sanitized, key: .work)
+        let mapped: JSONValue?
+        if let shadow = canonicalShadows[.work] {
+            mapped = try? RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: sanitized, onto: shadow)
+        } else {
+            mapped = try? RootineCanonicalWorkspaceMapping.payload(for: sanitized)
+        }
+        if let syncEngine, let mapped {
+            canonicalShadows[.work] = mapped
+            if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: .work) {
+                try? await store.save(mapped, key: shadowKey)
+            }
+            _ = try? await syncEngine.enqueue(
+                payload: mapped,
+                storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: .work)
+            )
+        }
+        foundationMessage = "Uszkodzona sesja skupienia została zachowana w Recovery i wyczyszczona"
+        return sanitized
+    }
+
+    private func normalizedAffairsWorkspace(_ workspace: AffairsWorkspace) -> AffairsWorkspace {
+        var normalized = workspace
+        normalized.matters = workspace.matters.map { matter in
+            var matter = matter
+            matter.category = AffairMatterCategory.canonical(matter.category)
+            return matter
+        }
+        normalized.version = 2
+        return normalized
+    }
+
+    private func sanitizedAffairsWorkspace(
+        _ workspace: AffairsWorkspace,
+        store: WorkspaceFileStore,
+        syncEngine: WorkspaceSyncEngine? = nil
+    ) async -> AffairsWorkspace {
+        let normalized = normalizedAffairsWorkspace(workspace)
+        guard normalized != workspace else { return workspace }
+        try? await store.save(normalized, key: .affairs)
+        if let syncEngine, let payload = try? jsonPayload(normalized, encoder: JSONEncoder()) {
+            _ = try? await syncEngine.enqueue(payload: payload, storageKey: RootineStorageKey.affairs.rawValue)
+        }
+        foundationMessage = "Znaleziono starszą kategorię sprawy i bezpiecznie ją zmigrowano"
+        return normalized
+    }
+
     private func loadAndReconcile(accessToken: String) async {
         guard let store, let syncEngine else { return }
+        guard !isReconciling else { return }
+        isReconciling = true
+        defer { isReconciling = false }
         do {
             let localTasks = try await store.load(TaskWorkspace.self, key: .tasks)
             let localNutrition = try await store.load(NutritionWorkspace.self, key: .nutrition)
             let localNotes = try await store.load(NotesWorkspace.self, key: .notes)
             let localSport = try await store.load(SportWorkspace.self, key: .sport)
             let localGoals = try await store.load(GoalsWorkspace.self, key: .goals)
-            let localWork = try await store.load(WorkWorkspace.self, key: .work)
+            let localWorkRaw = try await store.load(WorkWorkspace.self, key: .work)
+            let localWork: WorkWorkspace?
+            if let localWorkRaw {
+                localWork = await sanitizedWorkWorkspace(localWorkRaw, store: store, syncEngine: syncEngine)
+            } else {
+                localWork = nil
+            }
             let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
             let localHealth = try await store.load(HealthWorkspace.self, key: .health)
+            let localAffairsRaw = (try await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
+            let localAffairs = await sanitizedAffairsWorkspace(localAffairsRaw, store: store, syncEngine: syncEngine)
             let remoteRows = try await api.readSnapshots(accessToken: accessToken)
-            let remote = Dictionary(uniqueKeysWithValues: remoteRows.map { ($0.storageKey, $0) })
+            // A malformed backend response must not crash the app through
+            // Dictionary(uniqueKeysWithValues:). Keep the last row and surface
+            // a conflict state below rather than losing the local snapshot.
+            let remote = remoteRows.reduce(into: [String: RemoteWorkspaceSnapshot]()) { result, row in
+                result[row.storageKey] = row
+            }
 
             let taskResult = try await reconcile(localTasks, fallback: .empty, key: .tasks, remote: remote, store: store, syncEngine: syncEngine)
             let nutritionResult = try await reconcile(localNutrition, fallback: .empty, key: .nutrition, remote: remote, store: store, syncEngine: syncEngine)
@@ -1291,14 +1816,16 @@ final class AppEnvironment: ObservableObject {
             let workResult = try await reconcileCanonical(localWork, fallback: .empty, key: .work, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:))
             let travelResult = try await reconcileCanonical(localTravel, fallback: .empty, key: .travel, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload, decode: RootineCanonicalWorkspaceMapping.travelWorkspace(from:))
             let healthResult = try await reconcileCanonical(localHealth, fallback: .empty, key: .health, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedHealthPayload, decode: RootineCanonicalWorkspaceMapping.healthWorkspace(from:))
+            let affairsResult = try await reconcile(localAffairs, fallback: .empty, key: .affairs, remote: remote, store: store, syncEngine: syncEngine)
             taskWorkspace = taskResult.value
             nutritionWorkspace = nutritionResult.value
             notesWorkspace = notesResult.value
             sportWorkspace = sportResult.value
             goalsWorkspace = goalsResult.value
-            workWorkspace = workResult.value
+            workWorkspace = await sanitizedWorkWorkspace(workResult.value, store: store, syncEngine: syncEngine)
             travelWorkspace = travelResult.value
             healthWorkspace = healthResult.value
+            affairsWorkspace = await sanitizedAffairsWorkspace(affairsResult.value, store: store, syncEngine: syncEngine)
             let reconciliationResults: [(RootineStorageKey, Bool)] = [
                 (.tasks, taskResult.conflict),
                 (.nutrition, nutritionResult.conflict),
@@ -1307,7 +1834,8 @@ final class AppEnvironment: ObservableObject {
                 (.goals, goalsResult.conflict),
                 (.work, workResult.conflict),
                 (.travel, travelResult.conflict),
-                (.health, healthResult.conflict)
+                (.health, healthResult.conflict),
+                (.affairs, affairsResult.conflict)
             ]
             let conflictKeys = reconciliationResults
                 .filter(\.1)
@@ -1316,13 +1844,32 @@ final class AppEnvironment: ObservableObject {
             if conflictKeys.isEmpty {
                 foundationMessage = "Kontrakty lokalne i Supabase zostały uzgodnione"
                 await flushPendingMutations()
+                if case .conflict = workspaceSyncStatus {
+                    foundationMessage = "Dane lokalne są bezpieczne, ale czekają na rozwiązanie konfliktu"
+                } else {
+                    realtimeLastRefresh = Date()
+                }
             } else {
                 workspaceSyncStatus = .conflict(storageKeys: conflictKeys)
                 foundationMessage = "Konflikt pierwszego uzgodnienia: \(conflictKeys.count)"
             }
+        } catch let error as RootineAPIError {
+            await loadLocalCopies()
+            switch error {
+            case .network, .server:
+                await markLocalOnly()
+                foundationMessage = "Offline — warstwa danych używa lokalnych kopii"
+            case .unauthorized:
+                signOutFoundationSession()
+                return
+            default:
+                workspaceSyncStatus = .conflict(storageKeys: ["remote"])
+                foundationMessage = "Nie udało się odczytać danych z serwera. Lokalna kopia jest bezpieczna."
+            }
         } catch {
             await loadLocalCopies()
-            foundationMessage = "Offline — warstwa danych używa lokalnych kopii"
+            workspaceSyncStatus = .conflict(storageKeys: ["remote"])
+            foundationMessage = "Nie udało się odczytać danych z serwera. Lokalna kopia jest bezpieczna."
         }
     }
 
@@ -1350,7 +1897,25 @@ final class AppEnvironment: ObservableObject {
             return (remoteValue, false)
         }
         if local == remoteValue {
+            let revision = try await store.revision(for: key.rawValue)
+            try await store.setRevision(max(revision, remoteRow.revision), for: key.rawValue)
+            return (local, false)
+        }
+        let localRevision = try await store.revision(for: key.rawValue)
+        let hasPendingMutation = try await store.pendingMutations().contains { $0.storageKey == key.rawValue }
+        if !hasPendingMutation, remoteRow.revision > localRevision {
+            try await store.save(remoteValue, key: key)
             try await store.setRevision(remoteRow.revision, for: key.rawValue)
+            return (remoteValue, false)
+        }
+        if !hasPendingMutation, remoteRow.revision < localRevision {
+            try await syncEngine.enqueue(local, key: key)
+            return (local, false)
+        }
+        // A local mutation is authoritative while the server still reports
+        // the revision it was based on. Only a strictly newer remote revision
+        // is a true concurrent conflict.
+        if hasPendingMutation, remoteRow.revision <= localRevision {
             return (local, false)
         }
         return (local, true)
@@ -1453,7 +2018,10 @@ enum WorkspaceCanonicalReconciler {
             }
             return CanonicalReconcileResult(value: remoteValue, conflict: false, shadow: canonicalPayload)
         }
-        if try merge(local, canonicalPayload) == canonicalPayload {
+        let localRevision = try await store.revision(for: canonicalKey)
+        let hasPendingMutation = try await store.pendingMutations().contains { $0.storageKey == canonicalKey }
+        let localMatchesRemote = try merge(local, canonicalPayload) == canonicalPayload
+        if localMatchesRemote {
             if isLegacy {
                 if canonicalKey == key.rawValue {
                     try await store.setRevision(remoteRow.revision, for: canonicalKey)
@@ -1462,6 +2030,22 @@ enum WorkspaceCanonicalReconciler {
             } else {
                 try await store.setRevision(remoteRow.revision, for: canonicalKey)
             }
+            return CanonicalReconcileResult(value: local, conflict: false, shadow: canonicalPayload)
+        }
+        if !hasPendingMutation, remoteRow.revision > localRevision {
+            try await store.save(remoteValue, key: key)
+            try await store.setRevision(remoteRow.revision, for: canonicalKey)
+            return CanonicalReconcileResult(value: remoteValue, conflict: false, shadow: canonicalPayload)
+        }
+        if !hasPendingMutation, remoteRow.revision < localRevision {
+            let mappedLocal = try merge(local, canonicalPayload)
+            if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
+                try await store.save(mappedLocal, key: shadowKey)
+            }
+            try await syncEngine.enqueue(payload: mappedLocal, storageKey: canonicalKey)
+            return CanonicalReconcileResult(value: local, conflict: false, shadow: mappedLocal)
+        }
+        if hasPendingMutation, remoteRow.revision <= localRevision {
             return CanonicalReconcileResult(value: local, conflict: false, shadow: canonicalPayload)
         }
         return CanonicalReconcileResult(value: local, conflict: true, shadow: canonicalPayload)

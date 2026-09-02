@@ -33,16 +33,23 @@ Native SwiftUI foundation for the Rootine MVP. The project targets iOS 26.0+ and
   global add action for tasks and habits.
 - A native `Odżywianie` day view with calorie/macro progress, water tracking,
   meal sections, animated add-entry sheet, and swipe-to-delete entries.
-- A native `Więcej` hub with animated module tiles, account/sync sheet, and
-  sign-out action, plus functional surfaces for Notes, Sport, Goals, Work,
-  Travel, and Health. Their Codable snapshots are persisted locally and
-  queued through the same offline/CAS sync engine as the core tabs.
+- A native `Więcej` hub with animated module tiles, account/sync sheet, data
+  export and recovery center, settings/help/legal surfaces, and functional
+  Notes, Sport, Goals, Work, Travel, Health, and Pozostałe/Sprawy modules.
+  Their Codable snapshots are persisted locally and queued through the same
+  offline/CAS sync engine as the core tabs.
+- A nutrition quick-capture flow with a local product catalog, manual fallback,
+  camera barcode scanning (when permission is granted), saved meals, weight
+  measurements, editable goals, and undo-safe deletion.
+- Foreground session refresh plus a dependency-free 30-second polling safety net
+  that accepts newer remote revisions when there is no local pending edit;
+  concurrent edits remain visible as conflicts instead of being overwritten.
 - Contract tests that decode the exact fixtures used by the web client.
 
-Full Realtime, barcode camera UI, and contextual quick capture belong to
-separately approved implementation slices. The additional module actions are
-available in the native preview with local sample data and file-backed
-snapshots, ready for the final server-side domain schema migration.
+The compact Quick Add composer creates tasks and habits. Nutrition records are
+created from the nutrition tab so meal, date, barcode, and macro context are
+never lost. Server-side domain migrations can extend the same versioned models
+without invalidating existing local snapshots.
 
 ## Account configuration
 

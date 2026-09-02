@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Accepted navigation contract. Product tabs are materialized only as their
 /// screens are separately reviewed and approved.
@@ -34,6 +35,7 @@ enum RootineTab: String, CaseIterable, Identifiable {
 
 struct RootineEntryView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.scenePhase) private var scenePhase
 
     private var isPreviewLaunch: Bool {
 #if DEBUG
@@ -73,6 +75,10 @@ struct RootineEntryView: View {
         }
         .onOpenURL { url in
             Task { await environment.receiveAuthCallback(url) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await environment.refreshActiveSession() }
         }
     }
 }
@@ -326,6 +332,7 @@ enum MoreModule: String, CaseIterable, Identifiable {
     case work
     case travel
     case health
+    case affairs
 
     var id: String { rawValue }
     var title: String {
@@ -336,6 +343,7 @@ enum MoreModule: String, CaseIterable, Identifiable {
         case .work: return "Praca"
         case .travel: return "Podróże"
         case .health: return "Zdrowie"
+        case .affairs: return "Pozostałe"
         }
     }
     var systemImage: String {
@@ -346,6 +354,7 @@ enum MoreModule: String, CaseIterable, Identifiable {
         case .work: return "briefcase"
         case .travel: return "airplane"
         case .health: return "heart.text.square"
+        case .affairs: return "checklist.checked"
         }
     }
 
@@ -357,6 +366,7 @@ enum MoreModule: String, CaseIterable, Identifiable {
         case .work: return "Skupienie bez chaosu"
         case .travel: return "Plany poza rutyną"
         case .health: return "Samopoczucie i energia"
+        case .affairs: return "Sprawy, płatności i ważne terminy"
         }
     }
 
@@ -368,6 +378,7 @@ enum MoreModule: String, CaseIterable, Identifiable {
         case .work: return Color(uiColor: .systemBlue)
         case .travel: return Color(uiColor: .systemPurple)
         case .health: return Color(uiColor: .systemPink)
+        case .affairs: return Color(uiColor: .systemTeal)
         }
     }
 }
@@ -533,6 +544,34 @@ private struct MoreAccountSheet: View {
                 Text(environment.foundationMessage)
                     .font(.subheadline)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                NavigationLink {
+                    RootineProfileView()
+                } label: {
+                    Label("Profil i dane konta", systemImage: "person.crop.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44)
+                NavigationLink {
+                    RootineDataCenterView()
+                } label: {
+                    Label("Kopie i odzyskiwanie", systemImage: "externaldrive.badge.icloud")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44)
+                NavigationLink {
+                    RootineSettingsView()
+                } label: {
+                    Label("Ustawienia aplikacji", systemImage: "gearshape")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44)
+                NavigationLink {
+                    RootineHelpView()
+                } label: {
+                    Label("Pomoc i prywatność", systemImage: "questionmark.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44)
                 Button {
                     Task { await environment.flushPendingMutations() }
                 } label: {
@@ -560,6 +599,288 @@ private struct MoreAccountSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: Konto, ustawienia i dane
+
+private struct RootineProfileView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+
+    var body: some View {
+        List {
+            Section("Konto") {
+                LabeledContent("E-mail", value: environment.session?.user.email ?? "Nie podano")
+                LabeledContent("Identyfikator", value: environment.session?.user.id ?? "Lokalnie")
+            }
+            Section("Połączenie") {
+                ConfigurationStatusRow(title: "Logowanie", ready: environment.configuration.isAuthComplete)
+                ConfigurationStatusRow(title: "Backend danych", ready: environment.configuration.isComplete)
+                if let refreshed = environment.realtimeLastRefresh {
+                    LabeledContent("Ostatnie uzgodnienie", value: refreshed.formatted(date: .omitted, time: .shortened))
+                }
+            }
+            Section {
+                Text("Rootine zapisuje zmiany lokalnie i synchronizuje je dopiero po potwierdzeniu sesji. Brak sieci nie blokuje pracy.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+        }
+        .navigationTitle("Profil")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct ConfigurationStatusRow: View {
+    let title: String
+    let ready: Bool
+
+    var body: some View {
+        Label(title, systemImage: ready ? "checkmark.circle.fill" : "exclamationmark.circle")
+            .foregroundStyle(ready ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.warning)
+    }
+}
+
+private struct RootineSettingsView: View {
+    @AppStorage("rootine.appearance") private var appearance = "system"
+
+    var body: some View {
+        Form {
+            Section("Wygląd") {
+                Picker("Motyw", selection: $appearance) {
+                    Text("Systemowy").tag("system")
+                    Text("Jasny").tag("light")
+                    Text("Ciemny").tag("dark")
+                }
+                .pickerStyle(.navigationLink)
+            }
+            Section("Zachowanie") {
+                Label("Aplikacja respektuje Reduce Motion i Dynamic Type ustawione w systemie.", systemImage: "accessibility")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                Label("Wszystkie akcje dotykowe mają co najmniej 44 punkty.", systemImage: "hand.tap")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Section("Dane") {
+                Text("Kopie, import, eksport i pliki odzyskiwania są dostępne w sekcji „Kopie i odzyskiwanie” w profilu.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+        }
+        .navigationTitle("Ustawienia")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct RootineHelpView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+
+    var body: some View {
+        List {
+            Section("Najczęstsze pytania") {
+                DisclosureGroup("Czy dane działają offline?") {
+                    Text("Tak. Zmiany zapisują się lokalnie, a kolejka synchronizacji wysyła je po odzyskaniu połączenia.")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                DisclosureGroup("Co zrobić przy konflikcie?") {
+                    Text("Nie zamykaj aplikacji. Twoja lokalna kopia pozostaje bezpieczna; spróbuj synchronizacji ponownie po ustabilizowaniu sieci.")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                DisclosureGroup("Jak odzyskać dane?") {
+                    Text("Otwórz Profil → Kopie i odzyskiwanie. Przed importem Rootine zapisuje poprzedni stan w Recovery.")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+            }
+            Section("Prywatność i warunki") {
+                if let privacyURL = environment.configuration.privacyURL {
+                    Link("Polityka prywatności", destination: privacyURL)
+                } else {
+                    Label("Polityka prywatności nie jest jeszcze skonfigurowana.", systemImage: "lock.shield")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if let termsURL = environment.configuration.termsURL {
+                    Link("Warunki korzystania", destination: termsURL)
+                } else {
+                    Label("Warunki korzystania nie są jeszcze skonfigurowane.", systemImage: "doc.text")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+            }
+        }
+        .navigationTitle("Pomoc i prywatność")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct RootineDataCenterView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @State private var exportDocument = RootineJSONDocument()
+    @State private var isExporting = false
+    @State private var isImporting = false
+    @State private var isConfirmingClear = false
+    @State private var isConfirmingRestore = false
+    @State private var restoreCandidate: WorkspaceRecoveryFile?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        List {
+            Section("Kopia danych") {
+                Text("Eksport zawiera wszystkie lokalne workspace’y w jednym pliku JSON. Przed importem bieżący stan zostaje zachowany w Recovery.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                Button {
+                    do {
+                        exportDocument = try RootineJSONDocument(data: environment.exportWorkspaceArchive())
+                        isExporting = true
+                    } catch {
+                        errorMessage = "Nie udało się przygotować kopii: \(error.localizedDescription)"
+                    }
+                } label: {
+                    Label("Eksportuj kopię JSON", systemImage: "square.and.arrow.up")
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+                Button { isImporting = true } label: {
+                    Label("Importuj kopię JSON", systemImage: "square.and.arrow.down")
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+            }
+            Section("Recovery") {
+                if environment.recoveryFiles.isEmpty {
+                    Label("Brak lokalnych kopii odzyskiwania", systemImage: "checkmark.shield")
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                } else {
+                    ForEach(environment.recoveryFiles, id: \.name) { file in
+                        HStack(spacing: RootineTheme.Spacing.small) {
+                            Image(systemName: "doc.badge.clock")
+                                .foregroundStyle(RootineTheme.ColorToken.warning)
+                            Text(file.name)
+                                .font(.caption)
+                                .lineLimit(2)
+                            Spacer()
+                            Button {
+                                restoreCandidate = file
+                                isConfirmingRestore = true
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(RootineTheme.ColorToken.action)
+                            .accessibilityLabel("Przywróć kopię \(file.name)")
+                            Button(role: .destructive) {
+                                Task { await environment.deleteRecoveryFile(file) }
+                            } label: {
+                                Image(systemName: "trash")
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Usuń kopię \(file.name)")
+                        }
+                    }
+                }
+            }
+            Section {
+                Button("Usuń dane lokalne i wyloguj", role: .destructive) {
+                    isConfirmingClear = true
+                }
+                .frame(minHeight: 44, alignment: .leading)
+            } footer: {
+                Text("Ta akcja usuwa lokalne kopie dla bieżącego konta. Użyj eksportu, jeśli chcesz zachować dane.")
+            }
+            if let errorMessage {
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(RootineTheme.ColorToken.destructive)
+                }
+            }
+        }
+        .navigationTitle("Kopie i odzyskiwanie")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await environment.refreshRecoveryFiles() }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: "rootine-backup-\(RootineDate.localDate())"
+        ) { result in
+            if case .failure(let error) = result {
+                errorMessage = "Eksport nie został zapisany: \(error.localizedDescription)"
+            }
+        }
+        .fileImporter(isPresented: $isImporting, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                Task {
+                    do {
+                        try await environment.importWorkspaceArchive(data)
+                    } catch {
+                        errorMessage = "Import nieudany: \(error.localizedDescription)"
+                    }
+                }
+            } catch {
+                errorMessage = "Nie udało się odczytać pliku: \(error.localizedDescription)"
+            }
+        }
+        .confirmationDialog("Usunąć lokalne dane?", isPresented: $isConfirmingClear, titleVisibility: .visible) {
+            Button("Usuń i wyloguj", role: .destructive) {
+                Task {
+                    do {
+                        try await environment.clearLocalDataAndSignOut()
+                    } catch {
+                        errorMessage = "Nie udało się usunąć danych: \(error.localizedDescription)"
+                    }
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text("Ta operacja jest nieodwracalna bez wcześniej zapisanej kopii.")
+        }
+        .confirmationDialog(
+            "Przywrócić kopię danych?",
+            isPresented: $isConfirmingRestore,
+            titleVisibility: .visible
+        ) {
+            Button("Przywróć i zastąp dane", role: .destructive) {
+                guard let restoreCandidate else { return }
+                Task {
+                    do {
+                        try await environment.restoreRecoveryFile(restoreCandidate)
+                    } catch {
+                        errorMessage = "Nie udało się przywrócić kopii: \(error.localizedDescription)"
+                    }
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text(restoreCandidate.map { "Zostanie przywrócony plik \($0.name). Bieżący stan trafi najpierw do Recovery." } ?? "")
+        }
+    }
+}
+
+private struct RootineJSONDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    static var writableContentTypes: [UTType] { [.json] }
+
+    var data: Data
+
+    init(data: Data = Data()) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }
 

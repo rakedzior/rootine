@@ -72,6 +72,8 @@ struct MoreModuleView: View {
                     TravelModuleContent()
                 case .health:
                     HealthModuleContent()
+                case .affairs:
+                    AffairsModuleContent()
                 }
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
@@ -652,7 +654,7 @@ private struct SportModuleContent: View {
             HStack(spacing: RootineTheme.Spacing.small) {
                 SportMetric(value: "\(weekTotalMinutes)", label: "min aktywności", systemImage: "timer")
                 SportMetric(value: "\(weekCompletedWorkouts)", label: "ukończone", systemImage: "checkmark.circle")
-                SportMetric(value: "\(weekAverageMinutes) min", label: "średnio / trening", systemImage: "chart.bar.xaxis")
+                SportMetric(value: weekWorkouts.isEmpty ? "—" : "\(weekAverageMinutes) min", label: "średnio / trening", systemImage: "chart.bar.xaxis")
             }
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
@@ -1290,10 +1292,9 @@ private struct WorkModuleContent: View {
                     }
                 } else {
                     HStack(alignment: .lastTextBaseline) {
-                        Text("25:00")
-                            .font(.largeTitle.weight(.bold))
-                            .monospacedDigit()
-                        Text("min planu")
+                        Label("Brak aktywnej sesji", systemImage: "timer")
+                            .font(.title3.weight(.semibold))
+                        Text("Uruchom blok skupienia")
                             .font(.subheadline)
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
@@ -2221,5 +2222,422 @@ private struct ModuleEmptyCard: View {
         .frame(minHeight: 72, alignment: .leading)
         .rootineSurface()
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: Pozostałe / Sprawy
+
+private struct AffairsModuleContent: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @State private var view: AffairsModuleView = .overview
+    @State private var showingMatterEditor = false
+    @State private var selectedMatter: AffairMatter?
+    @State private var matterToDelete: AffairMatter?
+    @State private var deletedMatter: AffairMatter?
+
+    private var activeMatters: [AffairMatter] {
+        environment.affairsWorkspace.matters
+            .filter { $0.status != "done" }
+            .sorted { lhs, rhs in
+                if lhs.priority != rhs.priority { return lhs.priority == "high" }
+                return lhs.dueDate < rhs.dueDate
+            }
+    }
+
+    private var upcomingPayments: [AffairRecurringPayment] {
+        environment.affairsWorkspace.payments
+            .filter(\.active)
+            .sorted { $0.nextDueDate < $1.nextDueDate }
+    }
+
+    private var openDocuments: [AffairDocument] {
+        environment.affairsWorkspace.documents.sorted { $0.expiresAt < $1.expiresAt }
+    }
+
+    private var vehicleItems: [AffairVehicleItem] {
+        environment.affairsWorkspace.vehicleItems
+            .filter { !$0.done }
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+            HStack(spacing: RootineTheme.Spacing.small) {
+                AffairsMetric(value: activeMatters.count, label: "otwarte sprawy", tint: MoreModule.affairs.tint)
+                AffairsMetric(value: upcomingPayments.count, label: "płatności", tint: RootineTheme.ColorToken.warning)
+                AffairsMetric(value: openDocuments.count, label: "dokumenty", tint: RootineTheme.ColorToken.action)
+            }
+
+            Picker("Widok spraw", selection: $view) {
+                ForEach(AffairsModuleView.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Widok modułu Pozostałe")
+
+            switch view {
+            case .overview:
+                overview
+            case .matters:
+                matters
+            case .finances:
+                finances
+            case .documents:
+                documents
+            case .vehicles:
+                vehicles
+            }
+        }
+        .sheet(isPresented: $showingMatterEditor) {
+            AffairEditorSheet(matter: nil) { draft in
+                Task { await environment.addAffairMatter(title: draft.title, category: draft.category, priority: draft.priority, dueDate: draft.dueDate, note: draft.note) }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedMatter) { matter in
+            AffairEditorSheet(matter: matter) { draft in
+                Task { await environment.updateAffairMatter(id: matter.id, title: draft.title, category: draft.category, priority: draft.priority, dueDate: draft.dueDate, note: draft.note) }
+            } onDelete: {
+                matterToDelete = matter
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            "Usunąć sprawę?",
+            isPresented: Binding(
+                get: { matterToDelete != nil },
+                set: { if !$0 { matterToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let matterToDelete {
+                Button("Usuń sprawę", role: .destructive) {
+                    deletedMatter = matterToDelete
+                    Task { await environment.deleteAffairMatter(id: matterToDelete.id) }
+                    self.matterToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if let deletedMatter {
+                RootineUndoBanner(message: "Usunięto sprawę") {
+                    let matter = deletedMatter
+                    self.deletedMatter = nil
+                    Task { await environment.restoreAffairMatter(matter) }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.bottom, RootineTheme.Spacing.small)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var overview: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+            sectionHeader("Najbliższe sprawy", image: "checklist")
+            if activeMatters.isEmpty {
+                ModuleEmptyCard(title: "Brak otwartych spraw", detail: "Dodaj zobowiązanie, które chcesz mieć pod ręką.", systemImage: "checkmark.circle", tint: MoreModule.affairs.tint)
+            } else {
+                ForEach(activeMatters.prefix(3)) { matter in
+                    affairRow(matter)
+                }
+            }
+            ModuleActionButton(title: "Dodaj sprawę", systemImage: "plus", tint: MoreModule.affairs.tint) {
+                showingMatterEditor = true
+            }
+        }
+        .rootineSurface()
+    }
+
+    @ViewBuilder
+    private var matters: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+            sectionHeader("Sprawy i terminy", image: "calendar.badge.exclamationmark")
+            if environment.affairsWorkspace.matters.isEmpty {
+                ModuleEmptyCard(title: "Twoja lista jest pusta", detail: "Dodaj pierwszą sprawę — bez danych demonstracyjnych.", systemImage: "checklist.checked", tint: MoreModule.affairs.tint)
+            } else {
+                ForEach(environment.affairsWorkspace.matters.sorted { $0.dueDate < $1.dueDate }) { matter in
+                    affairRow(matter)
+                }
+            }
+            ModuleActionButton(title: "Dodaj sprawę", systemImage: "plus", tint: MoreModule.affairs.tint) {
+                showingMatterEditor = true
+            }
+        }
+        .rootineSurface()
+    }
+
+    @ViewBuilder
+    private var finances: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+            sectionHeader("Finanse", image: "creditcard")
+            if upcomingPayments.isEmpty && environment.affairsWorkspace.oneTimePayments.isEmpty {
+                ModuleEmptyCard(title: "Brak płatności", detail: "Płatności pojawią się tutaj po zapisaniu ich w module Pozostałe.", systemImage: "creditcard", tint: RootineTheme.ColorToken.warning)
+            } else {
+                ForEach(upcomingPayments) { payment in
+                    AffairsPaymentRow(payment: payment)
+                }
+                ForEach(environment.affairsWorkspace.oneTimePayments.sorted { $0.dueDate < $1.dueDate }) { payment in
+                    HStack(spacing: RootineTheme.Spacing.small) {
+                        Button { Task { await environment.toggleOneTimePayment(id: payment.id) } } label: {
+                            Image(systemName: payment.paid ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(payment.paid ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.warning)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(payment.title).font(.subheadline.weight(.medium)).strikethrough(payment.paid)
+                            Text("Termin \(payment.dueDate) · \(affairCurrency(payment.amount))")
+                                .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }
+                        Spacer()
+                    }
+                    .frame(minHeight: 52)
+                }
+            }
+        }
+        .rootineSurface()
+    }
+
+    @ViewBuilder
+    private var documents: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+            sectionHeader("Dokumenty", image: "doc.text")
+            if openDocuments.isEmpty {
+                ModuleEmptyCard(title: "Brak dokumentów", detail: "Dodaj dokument z terminem ważności w pełnym module spraw.", systemImage: "doc.badge.plus", tint: RootineTheme.ColorToken.action)
+            } else {
+                ForEach(openDocuments) { document in
+                    AffairsInfoRow(title: document.name, detail: "\(document.holder) · ważny do \(document.expiresAt)", image: "doc.text", tint: RootineTheme.ColorToken.action)
+                }
+            }
+        }
+        .rootineSurface()
+    }
+
+    @ViewBuilder
+    private var vehicles: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+            sectionHeader("Pojazdy", image: "car")
+            if vehicleItems.isEmpty {
+                ModuleEmptyCard(title: "Brak terminów pojazdów", detail: "Przeglądy i ubezpieczenia pojawią się tutaj.", systemImage: "car", tint: MoreModule.affairs.tint)
+            } else {
+                ForEach(vehicleItems) { item in
+                    AffairsInfoRow(title: item.title, detail: "Termin \(item.dueDate)", image: "car", tint: MoreModule.affairs.tint)
+                }
+            }
+        }
+        .rootineSurface()
+    }
+
+    private func sectionHeader(_ title: String, image: String) -> some View {
+        ModuleSectionTitle(title: title, systemImage: image)
+    }
+
+    private func affairRow(_ matter: AffairMatter) -> some View {
+        AffairMatterRow(matter: matter, onSelect: { selectedMatter = matter }, onToggle: { Task { await environment.toggleAffairMatter(id: matter.id) } }, onDelete: { matterToDelete = matter })
+    }
+}
+
+private enum AffairsModuleView: String, CaseIterable, Identifiable {
+    case overview
+    case matters
+    case finances
+    case documents
+    case vehicles
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .overview: return "Przegląd"
+        case .matters: return "Sprawy"
+        case .finances: return "Finanse"
+        case .documents: return "Dokumenty"
+        case .vehicles: return "Pojazdy"
+        }
+    }
+}
+
+private struct AffairsMetric: View {
+    let value: Int
+    let label: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)").font(.title3.weight(.bold)).foregroundStyle(tint).monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText).lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(RootineTheme.Spacing.small)
+        .background(RootineTheme.ColorToken.surface)
+        .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
+    }
+}
+
+private struct AffairMatterRow: View {
+    let matter: AffairMatter
+    let onSelect: () -> Void
+    let onToggle: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Button(action: onToggle) {
+                Image(systemName: matter.status == "done" ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(matter.status == "done" ? RootineTheme.ColorToken.success : MoreModule.affairs.tint)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(matter.status == "done" ? "Oznacz jako otwarte" : "Oznacz jako wykonane")
+
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: RootineTheme.Spacing.xSmall) {
+                        Text(matter.title).font(.subheadline.weight(.medium)).strikethrough(matter.status == "done")
+                        if matter.priority == "high" { Text("WAŻNE").font(.caption2.weight(.bold)).foregroundStyle(RootineTheme.ColorToken.warning) }
+                    }
+                    Text("\(matter.category) · \(matter.dueDate)")
+                        .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Szczegóły sprawy: \(matter.title)")
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundStyle(RootineTheme.ColorToken.destructive)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Usuń sprawę: \(matter.title)")
+        }
+        .frame(minHeight: 52)
+    }
+}
+
+private struct AffairsPaymentRow: View {
+    let payment: AffairRecurringPayment
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Image(systemName: payment.automatic ? "arrow.triangle.2.circlepath" : "creditcard")
+                .foregroundStyle(RootineTheme.ColorToken.warning)
+                .frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(payment.name).font(.subheadline.weight(.medium))
+                Text("Następna płatność: \(payment.nextDueDate) · \(affairCurrency(payment.amount))")
+                    .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Spacer()
+        }
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct AffairsInfoRow: View {
+    let title: String
+    let detail: String
+    let image: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Image(systemName: image).foregroundStyle(tint).frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.medium))
+                Text(detail).font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Spacer()
+        }
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private func affairCurrency(_ amount: Double) -> String {
+    "\(String(format: "%.2f", amount)) zł"
+}
+
+private struct AffairEditorDraft {
+    var title: String
+    var category: String
+    var priority: String
+    var dueDate: String
+    var note: String
+}
+
+private struct AffairEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let matter: AffairMatter?
+    let onSave: (AffairEditorDraft) -> Void
+    let onDelete: (() -> Void)?
+    @State private var title: String
+    @State private var category: String
+    @State private var priority: String
+    @State private var dueDate: String
+    @State private var note: String
+
+    init(matter: AffairMatter?, onSave: @escaping (AffairEditorDraft) -> Void, onDelete: (() -> Void)? = nil) {
+        self.matter = matter
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _title = State(initialValue: matter?.title ?? "")
+        _category = State(initialValue: AffairMatterCategory.canonical(matter?.category ?? "dom"))
+        _priority = State(initialValue: matter?.priority ?? "normal")
+        _dueDate = State(initialValue: matter?.dueDate ?? RootineDate.localDate())
+        _note = State(initialValue: matter?.note ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Sprawa") {
+                    TextField("Nazwa", text: $title)
+                    Picker("Kategoria", selection: $category) {
+                        ForEach(AffairMatterCategory.allCases, id: \.rawValue) { category in
+                            Text(category.label).tag(category.rawValue)
+                        }
+                    }
+                    Picker("Priorytet", selection: $priority) {
+                        Text("Normalny").tag("normal")
+                        Text("Ważny").tag("high")
+                    }
+                    TextField("Termin (RRRR-MM-DD)", text: $dueDate)
+                        .keyboardType(.numbersAndPunctuation)
+                }
+                Section("Notatka") {
+                    TextEditor(text: $note).frame(minHeight: 96)
+                }
+                if let onDelete, matter != nil {
+                    Section {
+                        Button("Usuń sprawę", role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .navigationTitle(matter == nil ? "Nowa sprawa" : "Edytuj sprawę")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(AffairEditorDraft(title: title, category: category, priority: priority, dueDate: dueDate, note: note))
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }

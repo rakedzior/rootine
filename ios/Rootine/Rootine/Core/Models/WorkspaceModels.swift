@@ -9,6 +9,7 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case work = "rootine.work-workspace.v1"
     case travel = "rootine.travel-workspace.v1"
     case health = "rootine.health-workspace.v1"
+    case affairs = "rootine.affairs.workspace.v1"
     // Private local copies of the last full canonical payload. They are never
     // uploaded; they let compact native projections update one record without
     // deleting web-only fields.
@@ -26,6 +27,7 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
         case .tasks: return 2
         case .nutrition: return 6
         case .notes, .sport, .goals, .work, .travel, .health: return 1
+        case .affairs: return 2
         case .sportCanonicalShadow, .goalsCanonicalShadow, .workCanonicalShadow,
              .travelCanonicalShadow, .healthCanonicalShadow:
             return nil
@@ -570,6 +572,193 @@ struct HealthWorkspace: Codable, Equatable, Sendable {
     var reminders: [HealthReminder]
 
     static let empty = HealthWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), checkIns: [:], reminders: [])
+}
+
+// MARK: Pozostałe / Sprawy
+
+enum AffairMatterCategory: String, Codable, CaseIterable, Sendable {
+    case urzedy
+    case zdrowie
+    case dom
+    case auto
+    case finanse
+    case dokumenty
+
+    var label: String {
+        switch self {
+        case .urzedy: return "Urzędy"
+        case .zdrowie: return "Zdrowie"
+        case .dom: return "Dom"
+        case .auto: return "Auto"
+        case .finanse: return "Finanse"
+        case .dokumenty: return "Dokumenty"
+        }
+    }
+
+    static func canonical(_ rawValue: String) -> String {
+        let normalized = rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch normalized {
+        case "urzędy": return Self.urzedy.rawValue
+        case "zdrowie": return Self.zdrowie.rawValue
+        case "dom": return Self.dom.rawValue
+        case "auto": return Self.auto.rawValue
+        case "finanse": return Self.finanse.rawValue
+        case "dokumenty": return Self.dokumenty.rawValue
+        default: return Self.dom.rawValue
+        }
+    }
+}
+
+/// The iOS projection intentionally mirrors the web Affairs v2 contract so
+/// the native module can edit real records without creating a second schema.
+/// Fields that are not yet surfaced in the compact editor are still retained
+/// during Codable round-trips.
+struct AffairMatter: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var category: String
+    var priority: String
+    var status: String
+    var dueDate: String
+    var note: String
+    var createdAt: String
+    var kind: String? = nil
+    var time: String? = nil
+    var location: String? = nil
+    var reminderMinutes: [Int]? = nil
+    var sourceAttentionKey: String? = nil
+}
+
+struct AffairOneTimePayment: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var category: String
+    var amount: Double
+    var dueDate: String
+    var paid: Bool
+    var paidAt: String
+    var note: String
+}
+
+struct AffairRecurringPayment: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var category: String
+    var amount: Double
+    var cadence: String
+    var nextDueDate: String
+    var automatic: Bool
+    var active: Bool
+    var note: String
+}
+
+struct AffairSubscription: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var category: String
+    var amount: Double
+    var cadence: String
+    var nextBillingDate: String
+    var renewal: String
+    var commitmentEndDate: String
+    var active: Bool
+    var note: String
+}
+
+struct AffairDocument: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var category: String
+    var holder: String
+    var expiresAt: String
+    var reminderDays: Int
+    var note: String
+}
+
+struct AffairVehicle: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var registration: String
+    var mileage: Double
+}
+
+struct AffairVehicleItem: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var vehicleId: String
+    var title: String
+    var type: String
+    var dueDate: String
+    var dueMileage: Double?
+    var done: Bool
+    var note: String
+}
+
+struct AffairBudgetLine: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var label: String
+    var kind: String
+    var planned: Double
+    var actual: Double
+}
+
+struct AffairBudgetMonth: Codable, Equatable, Identifiable, Sendable {
+    var month: String
+    var lines: [AffairBudgetLine]
+    var id: String { month }
+}
+
+struct AffairAttentionState: Codable, Equatable, Identifiable, Sendable {
+    var key: String
+    var status: String
+    var snoozedUntil: String
+    var updatedAt: String
+    var id: String { key }
+}
+
+struct AffairsWorkspace: Codable, Equatable, Sendable {
+    var version: Int
+    var matters: [AffairMatter]
+    var oneTimePayments: [AffairOneTimePayment]
+    var payments: [AffairRecurringPayment]
+    var subscriptions: [AffairSubscription]
+    var documents: [AffairDocument]
+    var vehicles: [AffairVehicle]
+    var vehicleItems: [AffairVehicleItem]
+    var budgets: [AffairBudgetMonth]
+    var attentionStates: [AffairAttentionState]?
+
+    static let empty = AffairsWorkspace(
+        version: 2,
+        matters: [],
+        oneTimePayments: [],
+        payments: [],
+        subscriptions: [],
+        documents: [],
+        vehicles: [],
+        vehicleItems: [],
+        budgets: [],
+        attentionStates: []
+    )
+}
+
+struct RootineWorkspaceExport: Codable, Equatable, Sendable {
+    static let currentVersion = 1
+
+    var schemaVersion: Int
+    var exportedAt: String
+    var accountID: String?
+    var accountEmail: String?
+    var tasks: TaskWorkspace
+    var nutrition: NutritionWorkspace
+    var notes: NotesWorkspace
+    var sport: SportWorkspace
+    var goals: GoalsWorkspace
+    var work: WorkWorkspace
+    var travel: TravelWorkspace
+    var health: HealthWorkspace
+    var affairs: AffairsWorkspace
 }
 
 struct NutritionProduct: Codable, Equatable, Identifiable, Sendable {

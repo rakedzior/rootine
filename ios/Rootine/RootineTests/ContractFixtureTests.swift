@@ -576,6 +576,200 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertNil(RootineDate.date(from: "not-a-timestamp"))
     }
 
+    func testWorkspaceExportRoundTripsEveryNativeModuleAndPreservesIdentifiers() throws {
+        let timestamp = "2026-09-02T08:00:00.000Z"
+        var tasks = TaskWorkspace.empty
+        tasks.updatedAt = timestamp
+        tasks.tasks = [WorkspaceTask(id: 101, text: "Przegląd", done: false, view: "dzis")]
+
+        var nutrition = NutritionWorkspace.empty
+        nutrition.updatedAt = timestamp
+        nutrition.days = ["2026-09-02": NutritionDay.empty(date: "2026-09-02")]
+
+        var notes = NotesWorkspace.empty
+        notes.updatedAt = timestamp
+        notes.notes = [NoteRecord(
+            id: "note-export",
+            title: "Notatka",
+            body: "Treść",
+            kind: "text",
+            items: [],
+            tags: ["qa"],
+            listId: "inbox",
+            color: .blue,
+            pinned: false,
+            archived: false,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )]
+
+        let affairs = AffairsWorkspace(
+            version: 2,
+            matters: [AffairMatter(
+                id: "matter-export",
+                title: "Dowód rejestracyjny",
+                category: "dokumenty",
+                priority: "high",
+                status: "open",
+                dueDate: "2026-09-10",
+                note: "Przedłużyć",
+                createdAt: timestamp
+            )],
+            oneTimePayments: [],
+            payments: [],
+            subscriptions: [],
+            documents: [],
+            vehicles: [],
+            vehicleItems: [],
+            budgets: [],
+            attentionStates: []
+        )
+
+        let export = RootineWorkspaceExport(
+            schemaVersion: RootineWorkspaceExport.currentVersion,
+            exportedAt: timestamp,
+            accountID: "account-export",
+            accountEmail: "qa@example.com",
+            tasks: tasks,
+            nutrition: nutrition,
+            notes: notes,
+            sport: SportWorkspace.empty,
+            goals: GoalsWorkspace.empty,
+            work: WorkWorkspace.empty,
+            travel: TravelWorkspace.empty,
+            health: HealthWorkspace.empty,
+            affairs: affairs
+        )
+
+        let restored = try roundTrip(export)
+        XCTAssertEqual(restored.schemaVersion, RootineWorkspaceExport.currentVersion)
+        XCTAssertEqual(restored.accountID, "account-export")
+        XCTAssertEqual(restored.tasks.tasks.first?.id, 101)
+        XCTAssertEqual(restored.notes.notes.first?.id, "note-export")
+        XCTAssertEqual(restored.nutrition.days["2026-09-02"]?.date, "2026-09-02")
+        XCTAssertEqual(restored.affairs.matters.first?.id, "matter-export")
+    }
+
+    @MainActor
+    func testWorkspaceArchiveRejectsUnsupportedNestedWorkspaceVersion() throws {
+        var archive = RootineWorkspaceExport(
+            schemaVersion: RootineWorkspaceExport.currentVersion,
+            exportedAt: "2026-09-02T08:00:00.000Z",
+            accountID: nil,
+            accountEmail: nil,
+            tasks: .empty,
+            nutrition: .empty,
+            notes: .empty,
+            sport: .empty,
+            goals: .empty,
+            work: .empty,
+            travel: .empty,
+            health: .empty,
+            affairs: .empty
+        )
+        archive.tasks.version = 999
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        XCTAssertThrowsError(try environment.validateWorkspaceArchive(archive)) { error in
+            XCTAssertEqual(
+                error as? RootineWorkspaceArchiveError,
+                .unsupportedWorkspaceVersion(
+                    key: RootineStorageKey.tasks.rawValue,
+                    found: 999,
+                    supported: 2
+                )
+            )
+        }
+    }
+
+    func testAffairCategoryMigrationNeverEmitsUnknownWebValues() {
+        XCTAssertEqual(AffairMatterCategory.canonical("dokumenty"), "dokumenty")
+        XCTAssertEqual(AffairMatterCategory.canonical("Dokumenty"), "dokumenty")
+        XCTAssertEqual(AffairMatterCategory.canonical("Inne"), "dom")
+        XCTAssertFalse(AffairMatterCategory.allCases.map(\.rawValue).contains("inne"))
+    }
+
+    func testCanonicalReconcileAcceptsNewerRemoteWhenNoLocalMutationIsPending() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-remote-refresh-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "remote-refresh-user", rootURL: root)
+        let remote = FakeWorkspaceRemote()
+        let syncEngine = WorkspaceSyncEngine(store: store, remote: remote)
+        let timestamp = "2026-09-02T08:00:00.000Z"
+        let local = GoalsWorkspace.empty
+        let updated = GoalsWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            goals: [GoalRecord(
+                id: "remote-goal",
+                title: "Nowszy cel",
+                detail: "Z webu",
+                current: 2,
+                target: 4,
+                icon: "target",
+                createdAt: timestamp,
+                updatedAt: timestamp
+            )]
+        )
+        try await store.save(local, key: .goals)
+        try await store.setRevision(3, for: RootineCanonicalWorkspaceMapping.storageKey(for: .goals))
+        let row = RemoteWorkspaceSnapshot(
+            storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: .goals),
+            payload: try RootineCanonicalWorkspaceMapping.payload(for: updated),
+            contentHash: "remote-newer",
+            revision: 4,
+            updatedAt: timestamp
+        )
+
+        let result = try await WorkspaceCanonicalReconciler.reconcile(
+            local,
+            fallback: .empty,
+            key: .goals,
+            remote: [row.storageKey: row],
+            shadow: nil,
+            store: store,
+            syncEngine: syncEngine,
+            encode: RootineCanonicalWorkspaceMapping.payload,
+            merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload,
+            decode: RootineCanonicalWorkspaceMapping.goalsWorkspace(from:)
+        )
+
+        XCTAssertFalse(result.conflict)
+        XCTAssertEqual(result.value.goals.first?.id, "remote-goal")
+        let localAfterRefresh = try await store.load(GoalsWorkspace.self, key: .goals)
+        XCTAssertEqual(localAfterRefresh?.goals.first?.id, "remote-goal")
+        let revisionAfterRefresh = try await store.revision(for: row.storageKey)
+        XCTAssertEqual(revisionAfterRefresh, 4)
+    }
+
+    func testRecoveryCopyCanBeListedAndSafelyDeleted() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-recovery-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "recovery-user", rootURL: root)
+        let recovery = try await store.writeRecoveryCopy(Data("export".utf8), label: "manual-export")
+
+        let filesBeforeDelete = try await store.recoveryFiles()
+        XCTAssertEqual(filesBeforeDelete.map(\.name), [recovery.name])
+        try await store.deleteRecoveryFile(recovery)
+        let filesAfterDelete = try await store.recoveryFiles()
+        XCTAssertTrue(filesAfterDelete.isEmpty)
+
+        // A URL outside Recovery is ignored rather than allowing path traversal.
+        let outside = WorkspaceRecoveryFile(name: "outside.json", url: root.appendingPathComponent("outside.json"))
+        try Data("sentinel".utf8).write(to: outside.url, options: .atomic)
+        try await store.deleteRecoveryFile(outside)
+        XCTAssertEqual(try Data(contentsOf: outside.url), Data("sentinel".utf8))
+    }
+
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         let bundle = Bundle(for: ContractFixtureTests.self)
         let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"))

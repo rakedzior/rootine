@@ -1,4 +1,6 @@
 import SwiftUI
+import AVFoundation
+import UIKit
 
 /// Daily nutrition is deliberately a quick log, not a spreadsheet. The first
 /// screen answers "how am I doing?" and keeps the next useful action within one
@@ -73,7 +75,7 @@ struct NutritionView: View {
                 .offset(y: hasAppeared ? 0 : 18)
                 .opacity(hasAppeared ? 1 : 0)
 
-                NutritionQuickLinks(goals: goals, calories: calories, water: day.waterMl)
+                NutritionQuickLinks(goals: goals, calories: calories, water: day.waterMl, dateKey: dateKey, meal: selectedMeal)
 
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
                     HStack(alignment: .firstTextBaseline) {
@@ -437,6 +439,8 @@ private struct NutritionQuickLinks: View {
     let goals: NutritionGoals
     let calories: Double
     let water: Double
+    let dateKey: String
+    let meal: NutritionMealKind
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -464,49 +468,120 @@ private struct NutritionQuickLinks: View {
         }
         .buttonStyle(.bordered)
         .tint(RootineTheme.ColorToken.action)
+
+        NavigationLink {
+            NutritionCustomMealsView(dateKey: dateKey, meal: meal)
+        } label: {
+            Label("Własne posiłki", systemImage: "fork.knife.circle")
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .tint(RootineTheme.ColorToken.warning)
     }
 }
 
 private struct NutritionGoalsView: View {
+    @EnvironmentObject private var environment: AppEnvironment
     let goals: NutritionGoals
+    @State private var calories: String
+    @State private var protein: String
+    @State private var carbs: String
+    @State private var fat: String
+    @State private var water: String
+
+    init(goals: NutritionGoals) {
+        self.goals = goals
+        _calories = State(initialValue: String(Int(goals.calories.rounded())))
+        _protein = State(initialValue: String(Int(goals.protein.rounded())))
+        _carbs = State(initialValue: String(Int(goals.carbs.rounded())))
+        _fat = State(initialValue: String(Int(goals.fat.rounded())))
+        _water = State(initialValue: String(Int(goals.waterMl.rounded())))
+    }
 
     var body: some View {
-        List {
+        Form {
             Section("Dzisiejsze cele") {
-                nutritionGoalRow("Kalorie", value: goals.calories, unit: "kcal", image: "flame.fill", tint: RootineTheme.ColorToken.action)
-                nutritionGoalRow("Białko", value: goals.protein, unit: "g", image: "bolt.fill", tint: RootineTheme.ColorToken.success)
-                nutritionGoalRow("Węglowodany", value: goals.carbs, unit: "g", image: "leaf.fill", tint: RootineTheme.ColorToken.warning)
-                nutritionGoalRow("Tłuszcz", value: goals.fat, unit: "g", image: "drop.fill", tint: RootineTheme.ColorToken.action)
-                nutritionGoalRow("Woda", value: goals.waterMl, unit: "ml", image: "drop.circle.fill", tint: RootineTheme.ColorToken.action)
+                numericGoalField("Kalorie", text: $calories, unit: "kcal", image: "flame.fill", tint: RootineTheme.ColorToken.action)
+                numericGoalField("Białko", text: $protein, unit: "g", image: "bolt.fill", tint: RootineTheme.ColorToken.success)
+                numericGoalField("Węglowodany", text: $carbs, unit: "g", image: "leaf.fill", tint: RootineTheme.ColorToken.warning)
+                numericGoalField("Tłuszcz", text: $fat, unit: "g", image: "drop.fill", tint: RootineTheme.ColorToken.action)
+                numericGoalField("Woda", text: $water, unit: "ml", image: "drop.circle.fill", tint: RootineTheme.ColorToken.action)
+            }
+            Section {
+                Button("Zapisz cele") {
+                    Task {
+                        await environment.updateNutritionGoals(
+                            NutritionGoals(
+                                calories: number(calories),
+                                protein: number(protein),
+                                carbs: number(carbs),
+                                fat: number(fat),
+                                waterMl: number(water)
+                            )
+                        )
+                    }
+                }
             }
         }
         .navigationTitle("Cele żywieniowe")
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func nutritionGoalRow(_ title: String, value: Double, unit: String, image: String, tint: Color) -> some View {
-        Label {
-            Text(title)
+    private func numericGoalField(_ title: String, text: Binding<String>, unit: String, image: String, tint: Color) -> some View {
+        HStack {
+            Label(title, systemImage: image)
+                .foregroundStyle(tint)
             Spacer()
-            Text("\(Int(value.rounded())) \(unit)")
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            TextField(unit, text: text)
+                .multilineTextAlignment(.trailing)
+                .keyboardType(.decimalPad)
+                .frame(width: 92)
                 .monospacedDigit()
-        } icon: {
-            Image(systemName: image).foregroundStyle(tint)
         }
+    }
+
+    private func number(_ value: String) -> Double {
+        max(0, Double(value.replacingOccurrences(of: ",", with: ".")) ?? 0)
     }
 }
 
 private struct NutritionAnalysisView: View {
+    @EnvironmentObject private var environment: AppEnvironment
     let goals: NutritionGoals
     let calories: Double
     let water: Double
+    @State private var isShowingWeightEntry = false
 
     var body: some View {
         List {
             Section("Dzisiaj") {
                 analysisRow(title: "Kalorie", current: calories, goal: goals.calories, unit: "kcal")
                 analysisRow(title: "Woda", current: water, goal: goals.waterMl, unit: "ml")
+            }
+            Section("Masa ciała") {
+                if environment.nutritionWorkspace.weightMeasurements.isEmpty {
+                    Text("Dodaj pierwszy pomiar, aby zobaczyć trend.")
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                } else {
+                    ForEach(environment.nutritionWorkspace.weightMeasurements.values.sorted { $0.date > $1.date }, id: \.date) { measurement in
+                        HStack {
+                            Text(measurement.date)
+                            Spacer()
+                            Text("\(measurement.weightKg, specifier: "%.1f") kg")
+                                .font(.subheadline.weight(.semibold))
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                Button {
+                    isShowingWeightEntry = true
+                } label: {
+                    Label("Dodaj pomiar masy", systemImage: "scalemass")
+                }
+            }
+            Section("Zapisane posiłki") {
+                let count = environment.nutritionWorkspace.customMeals?.count ?? 0
+                Label(count == 0 ? "Brak zapisanych posiłków" : "\(count) zapisanych posiłków", systemImage: "fork.knife.circle")
             }
             Section("Jak czytać bilans") {
                 Label("Trzymaj regularne porcje i wracaj do dziennika po każdym posiłku.", systemImage: "lightbulb")
@@ -515,6 +590,12 @@ private struct NutritionAnalysisView: View {
         }
         .navigationTitle("Analiza")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $isShowingWeightEntry) {
+            WeightMeasurementSheet { weight, date, note in
+                Task { await environment.addWeightMeasurement(weightKg: weight, dateKey: date, note: note) }
+            }
+            .presentationDetents([.medium])
+        }
     }
 
     private func analysisRow(title: String, current: Double, goal: Double, unit: String) -> some View {
@@ -531,6 +612,203 @@ private struct NutritionAnalysisView: View {
                 .tint(RootineTheme.ColorToken.action)
         }
         .padding(.vertical, RootineTheme.Spacing.xSmall)
+    }
+}
+
+private struct WeightMeasurementSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (Double, String, String?) -> Void
+    @State private var weight = ""
+    @State private var date = Date()
+    @State private var note = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Pomiar") {
+                    TextField("Masa (kg)", text: $weight)
+                        .keyboardType(.decimalPad)
+                    DatePicker("Dzień", selection: $date, displayedComponents: .date)
+                    TextField("Notatka (opcjonalnie)", text: $note)
+                }
+            }
+            .navigationTitle("Nowy pomiar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        let value = Double(weight.replacingOccurrences(of: ",", with: ".")) ?? 0
+                        onSave(value, RootineDate.localDate(date), note.isEmpty ? nil : note)
+                        dismiss()
+                    }
+                    .disabled((Double(weight.replacingOccurrences(of: ",", with: ".")) ?? 0) <= 0)
+                }
+            }
+        }
+    }
+}
+
+private struct NutritionCustomMealsView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.dismiss) private var dismiss
+    let dateKey: String
+    let meal: NutritionMealKind
+    @State private var isShowingEditor = false
+    @State private var mealToDelete: CustomMeal?
+    @State private var isShowingDeleteDialog = false
+
+    private var meals: [CustomMeal] {
+        (environment.nutritionWorkspace.customMeals ?? []).sorted { ($0.updatedAt ?? $0.createdAt) > ($1.updatedAt ?? $1.createdAt) }
+    }
+
+    var body: some View {
+        List {
+            Section { introSection }
+            mealSection
+        }
+        .navigationTitle("Własne posiłki")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isShowingEditor = true
+                } label: {
+                    Image(systemName: "plus")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Dodaj własny posiłek")
+            }
+        }
+        .sheet(isPresented: $isShowingEditor) {
+            CustomMealEditorSheet { meal in
+                Task { await environment.upsertCustomMeal(meal) }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .confirmationDialog("Usunąć zapisany posiłek?", isPresented: $isShowingDeleteDialog) {
+            Button("Usuń posiłek", role: .destructive) {
+                guard let mealToDelete else { return }
+                Task { await environment.deleteCustomMeal(id: mealToDelete.id) }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+    }
+
+    private var introSection: some View {
+        Text("Zapisz powtarzalne posiłki raz, a potem dodawaj je do wybranego dnia jednym tapnięciem.")
+            .font(.footnote)
+            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+    }
+
+    @ViewBuilder
+    private var mealSection: some View {
+        Section("Twoje posiłki") {
+            if meals.isEmpty {
+                ContentUnavailableView(
+                    "Brak zapisanych posiłków",
+                    systemImage: "fork.knife.circle",
+                    description: Text("Dodaj pierwszy posiłek z własnym składnikiem.")
+                )
+            } else {
+                ForEach(meals, id: \.id) { customMeal in
+                    mealRow(customMeal)
+                }
+            }
+        }
+    }
+
+    private func mealRow(_ customMeal: CustomMeal) -> some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(customMeal.name)
+                    .font(.subheadline.weight(.medium))
+                Text("\(customMeal.ingredients.count) składników · \(mealCalories(customMeal)) kcal")
+                    .font(.caption)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Spacer()
+            Button {
+                Task { await environment.addCustomMealToDay(customMeal, dateKey: dateKey, mealKind: meal.rawValue) }
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(RootineTheme.ColorToken.action)
+            .accessibilityLabel("Dodaj \(customMeal.name) do \(meal.title)")
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                mealToDelete = customMeal
+                isShowingDeleteDialog = true
+            } label: {
+                Label("Usuń", systemImage: "trash")
+            }
+        }
+    }
+
+    private func mealCalories(_ customMeal: CustomMeal) -> Int {
+        let total = customMeal.ingredients.reduce(0.0) { partial, ingredient in
+            partial + ingredient.per100g.calories * (ingredient.amount / 100)
+        }
+        return Int(total.rounded())
+    }
+}
+
+private struct CustomMealEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (CustomMeal) -> Void
+    @State private var name = ""
+    @State private var ingredientName = ""
+    @State private var amount = "100"
+    @State private var calories = ""
+    @State private var protein = ""
+    @State private var carbs = ""
+    @State private var fat = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Posiłek") {
+                    TextField("Nazwa posiłku", text: $name)
+                }
+                Section("Pierwszy składnik") {
+                    TextField("Nazwa składnika", text: $ingredientName)
+                    TextField("Ilość (g)", text: $amount).keyboardType(.decimalPad)
+                    TextField("Kalorie / 100 g", text: $calories).keyboardType(.decimalPad)
+                    TextField("Białko / 100 g", text: $protein).keyboardType(.decimalPad)
+                    TextField("Węglowodany / 100 g", text: $carbs).keyboardType(.decimalPad)
+                    TextField("Tłuszcz / 100 g", text: $fat).keyboardType(.decimalPad)
+                }
+            }
+            .navigationTitle("Nowy własny posiłek")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        let now = RootineDate.isoTimestamp()
+                        let ingredient = CustomMealIngredient(
+                            id: UUID().uuidString,
+                            name: ingredientName.trimmingCharacters(in: .whitespacesAndNewlines),
+                            brand: nil,
+                            amount: number(amount),
+                            unit: "g",
+                            per100g: NutritionValues(calories: number(calories), protein: number(protein), carbs: number(carbs), fat: number(fat))
+                        )
+                        onSave(CustomMeal(id: UUID().uuidString, name: name, ingredients: [ingredient], totalWeightG: number(amount), servings: 1, createdAt: now, updatedAt: now))
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ingredientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func number(_ value: String) -> Double {
+        max(0, Double(value.replacingOccurrences(of: ",", with: ".")) ?? 0)
     }
 }
 
@@ -672,6 +950,8 @@ private struct AddNutritionEntrySheet: View {
     @State private var protein = ""
     @State private var carbs = ""
     @State private var fat = ""
+    @State private var isShowingScanner = false
+    @State private var scanMessage: String?
 
     init(dateKey: String, meal: NutritionMealKind, existingEntry: NutritionEntry? = nil) {
         self.dateKey = dateKey
@@ -736,6 +1016,18 @@ private struct AddNutritionEntrySheet: View {
                             .accessibilityHint("Uzupełnia formularz wartościami produktu")
                         }
                     }
+                    Button {
+                        isShowingScanner = true
+                    } label: {
+                        Label("Skanuj kod produktu", systemImage: "barcode.viewfinder")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .accessibilityHint("Otwiera aparat i wyszukuje produkt po kodzie")
+                    if let scanMessage {
+                        Label(scanMessage, systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
                 } header: {
                     Text("Katalog lub wpis ręczny")
                 } footer: {
@@ -762,6 +1054,18 @@ private struct AddNutritionEntrySheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(RootineTheme.ColorToken.canvas)
+            .sheet(isPresented: $isShowingScanner) {
+                BarcodeScannerView { code in
+                    isShowingScanner = false
+                    handleBarcode(code)
+                } onError: { message in
+                    isShowingScanner = false
+                    scanMessage = message
+                }
+                .ignoresSafeArea()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
             .navigationTitle(existingEntry == nil ? "Dodaj do dziennika" : "Edytuj wpis")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -793,6 +1097,20 @@ private struct AddNutritionEntrySheet: View {
         carbs = String(format: "%.1f", product.per100g.carbs * multiplier)
         fat = String(format: "%.1f", product.per100g.fat * multiplier)
         focusedField = .name
+    }
+
+    private func handleBarcode(_ code: String) {
+        query = code
+        scanMessage = "Szukam produktu dla kodu \(code)…"
+        _Concurrency.Task {
+            if let product = await environment.lookupNutritionProduct(barcode: code) {
+                select(product)
+                scanMessage = nil
+            } else {
+                scanMessage = "Nie znaleziono produktu. Uzupełnij dane ręcznie poniżej."
+                focusedField = .name
+            }
+        }
     }
 
     private func submit() {
@@ -909,4 +1227,143 @@ private enum NutritionCatalog {
         NutritionProduct(id: "catalog-rice", barcode: "", name: "Ryż gotowany", brand: "Rootine", source: "local", defaultAmount: 180, unit: "g", per100g: NutritionValues(calories: 130, protein: 2.7, carbs: 28, fat: 0.3)),
         NutritionProduct(id: "catalog-sandwich", barcode: "", name: "Kanapka z serem", brand: "Rootine", source: "local", defaultAmount: 1, unit: "szt.", per100g: NutritionValues(calories: 280, protein: 13, carbs: 30, fat: 12))
     ]
+}
+
+// MARK: Barcode scanning
+
+private struct BarcodeScannerView: UIViewControllerRepresentable {
+    let onCode: (String) -> Void
+    let onError: (String) -> Void
+
+    func makeUIViewController(context: Context) -> BarcodeScannerViewController {
+        BarcodeScannerViewController(onCode: onCode, onError: onError)
+    }
+
+    func updateUIViewController(_ viewController: BarcodeScannerViewController, context: Context) {}
+}
+
+@MainActor
+private final class BarcodeScannerViewController: UIViewController, @preconcurrency AVCaptureMetadataOutputObjectsDelegate {
+    private let onCode: (String) -> Void
+    private let onError: (String) -> Void
+    nonisolated(unsafe) private let captureSession = AVCaptureSession()
+    private let captureQueue = DispatchQueue(label: "app.rootine.barcode-capture", qos: .userInitiated)
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var hasDeliveredCode = false
+
+    init(onCode: @escaping (String) -> Void, onError: @escaping (String) -> Void) {
+        self.onCode = onCode
+        self.onError = onError
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        configureCamera()
+        addGuideOverlay()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        captureQueue.async { [weak self] in
+            guard let self else { return }
+            if self.captureSession.isRunning { self.captureSession.stopRunning() }
+        }
+    }
+
+    private func configureCamera() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if granted { self.configureSession() }
+                    else { self.onError("Aparat jest wyłączony. Zezwól na dostęp w Ustawieniach.") }
+                }
+            }
+        case .denied, .restricted:
+            onError("Aparat jest wyłączony. Zezwól na dostęp w Ustawieniach.")
+        @unknown default:
+            onError("Nie udało się uruchomić aparatu.")
+        }
+    }
+
+    private func configureSession() {
+        captureQueue.async { [weak self] in
+            guard let self else { return }
+            guard let device = AVCaptureDevice.default(for: .video) else {
+                DispatchQueue.main.async { [weak self] in self?.onError("Ten iPhone nie udostępnia aparatu.") }
+                return
+            }
+            do {
+                let input = try AVCaptureDeviceInput(device: device)
+                let output = AVCaptureMetadataOutput()
+                self.captureSession.beginConfiguration()
+                guard self.captureSession.canAddInput(input), self.captureSession.canAddOutput(output) else {
+                    self.captureSession.commitConfiguration()
+                    DispatchQueue.main.async { [weak self] in self?.onError("Nie udało się przygotować skanera.") }
+                    return
+                }
+                self.captureSession.addInput(input)
+                self.captureSession.addOutput(output)
+                output.metadataObjectTypes = [.ean8, .ean13, .upce, .code128, .qr]
+                self.captureSession.commitConfiguration()
+                let layer = AVCaptureVideoPreviewLayer(session: self.captureSession)
+                layer.videoGravity = .resizeAspectFill
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    output.setMetadataObjectsDelegate(self, queue: .main)
+                    self.previewLayer = layer
+                    self.view.layer.insertSublayer(layer, at: 0)
+                }
+                self.captureSession.startRunning()
+            } catch {
+                DispatchQueue.main.async { [weak self] in self?.onError("Nie udało się uruchomić aparatu.") }
+            }
+        }
+    }
+
+    private func addGuideOverlay() {
+        let guide = UILabel()
+        guide.text = "Skieruj aparat na kod produktu"
+        guide.textColor = .white
+        guide.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        guide.textAlignment = .center
+        guide.font = .preferredFont(forTextStyle: .headline)
+        guide.numberOfLines = 0
+        guide.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(guide)
+        NSLayoutConstraint.activate([
+            guide.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            guide.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            guide.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
+            guide.heightAnchor.constraint(greaterThanOrEqualToConstant: 52)
+        ])
+        guide.layer.cornerRadius = 14
+        guide.layer.masksToBounds = true
+    }
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        guard !hasDeliveredCode,
+              let object = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+              let code = object.stringValue,
+              !code.isEmpty else { return }
+        hasDeliveredCode = true
+        captureQueue.async { [weak self] in
+            guard let self, self.captureSession.isRunning else { return }
+            self.captureSession.stopRunning()
+        }
+        onCode(code)
+    }
 }

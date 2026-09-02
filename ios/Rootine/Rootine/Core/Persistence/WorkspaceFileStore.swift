@@ -21,6 +21,11 @@ struct WorkspaceRecoveryFile: Equatable, Sendable {
     let url: URL
 }
 
+struct WorkspaceBatchDocument: Sendable {
+    let key: RootineStorageKey
+    let data: Data
+}
+
 actor WorkspaceFileStore {
     private struct SyncMetadata: Codable {
         var revisions: [String: Int64] = [:]
@@ -74,6 +79,51 @@ actor WorkspaceFileStore {
 
     func save<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) throws {
         _ = try saveWithReceipt(value, key: key)
+    }
+
+    /// Stages every workspace document before swapping the directory. This
+    /// prevents a failed import from leaving a mixture of old and new modules.
+    func replaceWorkspaceBatch(_ documents: [WorkspaceBatchDocument]) throws {
+        guard !documents.isEmpty else { return }
+        try ensureDirectories()
+        let stagingURL = rootURL.appendingPathComponent("Workspaces.staging-\(UUID().uuidString)", isDirectory: true)
+        let backupURL = rootURL.appendingPathComponent("Workspaces.backup-\(UUID().uuidString)", isDirectory: true)
+        let hadCurrentDirectory = fileManager.fileExists(atPath: workspaceDirectory.path)
+        if hadCurrentDirectory {
+            // Keep files introduced by a newer client even when this archive
+            // only knows about the current set of workspace keys.
+            try fileManager.copyItem(at: workspaceDirectory, to: stagingURL)
+        } else {
+            try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: true)
+        }
+        defer {
+            try? fileManager.removeItem(at: stagingURL)
+            try? fileManager.removeItem(at: backupURL)
+        }
+
+        var seenKeys = Set<String>()
+        for document in documents where seenKeys.insert(document.key.rawValue).inserted {
+            let url = stagingURL.appendingPathComponent("\(safeName(document.key.rawValue)).json")
+            try protectedWrite(document.data, to: url)
+        }
+
+        if hadCurrentDirectory {
+            try fileManager.moveItem(at: workspaceDirectory, to: backupURL)
+        }
+        do {
+            try fileManager.moveItem(at: stagingURL, to: workspaceDirectory)
+            if hadCurrentDirectory {
+                try fileManager.removeItem(at: backupURL)
+            }
+        } catch {
+            if fileManager.fileExists(atPath: workspaceDirectory.path) {
+                try? fileManager.removeItem(at: workspaceDirectory)
+            }
+            if hadCurrentDirectory, fileManager.fileExists(atPath: backupURL.path) {
+                try? fileManager.moveItem(at: backupURL, to: workspaceDirectory)
+            }
+            throw error
+        }
     }
 
     /// Returns the exact prior bytes so a UI-level Undo can restore the local
@@ -135,6 +185,11 @@ actor WorkspaceFileStore {
         return mutation
     }
 
+    func replacePendingMutations(_ mutations: [PendingWorkspaceMutation]) throws {
+        try ensureDirectories()
+        try protectedWrite(try encoder.encode(mutations), to: queueURL)
+    }
+
     func removeMutation(id: String) throws {
         var queue = try pendingMutations()
         queue.removeAll { $0.id == id }
@@ -178,6 +233,28 @@ actor WorkspaceFileStore {
         )
         .map { WorkspaceRecoveryFile(name: $0.lastPathComponent, url: $0) }
         .sorted { $0.name < $1.name }
+    }
+
+    /// Saves a user-readable recovery copy without touching the active
+    /// workspace. Import/export uses this before replacing local documents.
+    @discardableResult
+    func writeRecoveryCopy(_ data: Data, label: String) throws -> WorkspaceRecoveryFile {
+        try ensureDirectories()
+        let safeLabel = safeName(label).isEmpty ? "workspace" : safeName(label)
+        let url = recoveryDirectory.appendingPathComponent(
+            "\(safeLabel)-\(UUID().uuidString).json"
+        )
+        try protectedWrite(data, to: url)
+        return WorkspaceRecoveryFile(name: url.lastPathComponent, url: url)
+    }
+
+    func deleteRecoveryFile(_ file: WorkspaceRecoveryFile) throws {
+        try ensureDirectories()
+        let recoveryPath = recoveryDirectory.standardizedFileURL.path
+        let candidate = file.url.standardizedFileURL
+        guard candidate.path.hasPrefix(recoveryPath + "/") else { return }
+        guard fileManager.fileExists(atPath: candidate.path) else { return }
+        try fileManager.removeItem(at: candidate)
     }
 
     func clearAllLocalData() throws {
