@@ -100,6 +100,21 @@ struct TasksView: View {
             }
     }
 
+    private var todayHabits: [WorkspaceHabit] {
+        guard filter == .today else { return [] }
+        let today = RootineDate.localDate()
+        let query = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL"))
+        return environment.taskWorkspace.habits
+            .filter { isHabitScheduled($0, dateKey: today) }
+            .filter { query.isEmpty || $0.name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pl_PL")).contains(query) }
+            .sorted { lhs, rhs in
+                let lhsDone = isHabitDone(lhs)
+                let rhsDone = isHabitDone(rhs)
+                if lhsDone != rhsDone { return !lhsDone }
+                return lhs.id < rhs.id
+            }
+    }
+
     private var overdueTasks: [WorkspaceTask] {
         let today = RootineDate.localDate()
         return filteredTasks.filter { !isDone($0) && $0.calendarDate != nil && $0.calendarDate! < today }
@@ -189,7 +204,16 @@ struct TasksView: View {
                             )
                         }
 
-                        if pendingTasks.isEmpty && completedTasks.isEmpty {
+                        if filter == .today && !todayHabits.isEmpty {
+                            TasksHabitsCard(
+                                title: "Nawyki dzisiaj",
+                                habits: todayHabits,
+                                onToggle: toggleHabit,
+                                onSelect: { selectedHabit = $0 }
+                            )
+                        }
+
+                        if pendingTasks.isEmpty && completedTasks.isEmpty && todayHabits.isEmpty {
                             TasksEmptyState(filter: filter, onAdd: { isShowingAddTask = true })
                         }
                     }
@@ -499,14 +523,22 @@ private struct TasksRow: View {
 }
 
 private struct TasksHabitsCard: View {
+    let title: String
     let habits: [WorkspaceHabit]
     let onToggle: (WorkspaceHabit) -> Void
     let onSelect: (WorkspaceHabit) -> Void
 
+    init(title: String = "Nawyki", habits: [WorkspaceHabit], onToggle: @escaping (WorkspaceHabit) -> Void, onSelect: @escaping (WorkspaceHabit) -> Void) {
+        self.title = title
+        self.habits = habits
+        self.onToggle = onToggle
+        self.onSelect = onSelect
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Label("Nawyki", systemImage: "flame.fill")
+                Label(title, systemImage: "flame.fill")
                     .font(.headline)
                     .foregroundStyle(RootineTheme.ColorToken.primaryText)
                 Spacer()

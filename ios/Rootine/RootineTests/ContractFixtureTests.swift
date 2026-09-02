@@ -2,6 +2,29 @@ import XCTest
 @testable import Rootine
 
 final class ContractFixtureTests: XCTestCase {
+    /// The test host is intentionally opt-in: CI and local fixture runs stay
+    /// deterministic, while a developer can run the same native preview as a
+    /// real UIApplication smoke check with `ROOTINE_UI_SMOKE=1`. This closes
+    /// the gap between compile-only SwiftUI coverage and an actual scene.
+    @MainActor
+    func testNativePreviewUIApplicationSmoke() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["ROOTINE_UI_SMOKE"] == "1",
+            "Opt-in: set ROOTINE_UI_SMOKE=1 to launch the native preview scene"
+        )
+
+        let application = XCUIApplication()
+        application.launchArguments = ["--rootine-preview"]
+        application.launch()
+        addTeardownBlock { application.terminate() }
+
+        XCTAssertTrue(application.tabBars.buttons["Dzisiaj"].waitForExistence(timeout: 12))
+        XCTAssertTrue(application.tabBars.buttons["Zadania"].exists)
+        XCTAssertTrue(application.tabBars.buttons["Kalendarz"].exists)
+        XCTAssertTrue(application.tabBars.buttons["Odżywianie"].exists)
+        XCTAssertTrue(application.tabBars.buttons["Więcej"].exists)
+    }
+
     func testTaskFixtureDecodesWithoutLosingScheduledAndHabitData() throws {
         let workspace = try fixture("task-workspace-v2", as: TaskWorkspace.self)
 
@@ -34,6 +57,23 @@ final class ContractFixtureTests: XCTestCase {
 
         let fallback = NutritionPortion.parse("", fallbackAmount: 60, fallbackUnit: "g")
         XCTAssertEqual(fallback, NutritionPortion(amount: 60, unit: "g"))
+        XCTAssertEqual(NutritionPortion.multiplier(amount: 1.5, unit: "kg"), 15)
+        XCTAssertEqual(NutritionPortion.multiplier(amount: 2, unit: "l"), 20)
+    }
+
+    func testNutritionManualMacroOverrideWinsOverCatalogScaling() {
+        let generated = NutritionValues(calories: 370, protein: 13, carbs: 60, fat: 7)
+        let entered = NutritionValues(calories: 410, protein: 20, carbs: 48, fat: 11)
+        let scaled = NutritionValues(calories: 740, protein: 26, carbs: 120, fat: 14)
+
+        XCTAssertEqual(
+            rootineResolvedNutritionValues(generated: generated, entered: entered, scaled: scaled),
+            entered
+        )
+        XCTAssertEqual(
+            rootineResolvedNutritionValues(generated: generated, entered: generated, scaled: scaled),
+            scaled
+        )
     }
 
     @MainActor
@@ -70,6 +110,44 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(environment.nutritionWorkspace.customMeals?.count, 1)
         XCTAssertEqual(environment.nutritionWorkspace.customMeals?.first?.id, meal.id)
         XCTAssertEqual(environment.nutritionWorkspace.customMeals?.first?.ingredients.first?.id, ingredient.id)
+    }
+
+    @MainActor
+    func testCustomMealAddsEachIntentButCoalescesSameOperation() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let meal = CustomMeal(
+            id: "custom-meal-serving",
+            name: "Owsianka",
+            ingredients: [CustomMealIngredient(
+                id: "ingredient-serving",
+                name: "Płatki",
+                amount: 60,
+                unit: "g",
+                per100g: NutritionValues(calories: 370, protein: 13, carbs: 60, fat: 7)
+            )],
+            totalWeightG: 60,
+            servings: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+
+        // A repeated callback for one user action is idempotent.
+        await environment.addCustomMealToDay(meal, dateKey: "2026-09-02", mealKind: "breakfast", operationID: "same-action")
+        await environment.addCustomMealToDay(meal, dateKey: "2026-09-02", mealKind: "breakfast", operationID: "same-action")
+        // A later, deliberate tap creates another journal occurrence.
+        await environment.addCustomMealToDay(meal, dateKey: "2026-09-02", mealKind: "breakfast", operationID: "later-action")
+
+        let entries = environment.nutritionWorkspace.days["2026-09-02"]?.entries.breakfast ?? []
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(Set(entries.map(\.id)).count, 2)
     }
 
     @MainActor
@@ -155,6 +233,14 @@ final class ContractFixtureTests: XCTestCase {
         )]
 
         XCTAssertEqual(try roundTrip(workspace), workspace)
+    }
+
+    func testNutritionBarcodeFormattingSharesOneStableRequestIdentity() {
+        XCTAssertEqual(NutritionBarcode.normalized(" 590-123 456 "), "590123456")
+        XCTAssertEqual(
+            NutritionBarcode.requestID(for: " 590-123 456 "),
+            NutritionBarcode.requestID(for: "590123456")
+        )
     }
 
     func testNotesFixtureDecodesChecklistAndPolishText() throws {
@@ -826,6 +912,45 @@ final class ContractFixtureTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkspaceArchiveRejectsUnsupportedAffairsVersionBeforeNormalization() throws {
+        var archive = RootineWorkspaceExport(
+            schemaVersion: RootineWorkspaceExport.currentVersion,
+            exportedAt: "2026-09-02T08:00:00.000Z",
+            accountID: nil,
+            accountEmail: nil,
+            tasks: .empty,
+            nutrition: .empty,
+            notes: .empty,
+            sport: .empty,
+            goals: .empty,
+            work: .empty,
+            travel: .empty,
+            health: .empty,
+            affairs: .empty
+        )
+        archive.affairs.version = 999
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        XCTAssertThrowsError(try environment.validateWorkspaceArchive(archive)) { error in
+            XCTAssertEqual(
+                error as? RootineWorkspaceArchiveError,
+                .unsupportedWorkspaceVersion(
+                    key: RootineStorageKey.affairs.rawValue,
+                    found: 999,
+                    supported: 2
+                )
+            )
+        }
+    }
+
+    @MainActor
     func testWorkspaceArchiveRejectsMalformedDataWithRecoveryMessage() async {
         let environment = AppEnvironment(configuration: RootineConfiguration(
             supabaseURL: nil,
@@ -914,10 +1039,15 @@ final class ContractFixtureTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let store = WorkspaceFileStore(userID: "recovery-user", rootURL: root)
         let recovery = try await store.writeRecoveryCopy(Data("export".utf8), label: "manual-export")
+        let hostile = try await store.writeRecoveryCopy(Data("safe".utf8), label: "../nested/path\\name")
+        XCTAssertFalse(hostile.name.contains(".."))
+        XCTAssertFalse(hostile.name.contains("/"))
+        XCTAssertFalse(hostile.name.contains("\\"))
 
         let filesBeforeDelete = try await store.recoveryFiles()
-        XCTAssertEqual(filesBeforeDelete.map(\.name), [recovery.name])
+        XCTAssertEqual(filesBeforeDelete.map(\.name), [hostile.name, recovery.name].sorted())
         try await store.deleteRecoveryFile(recovery)
+        try await store.deleteRecoveryFile(hostile)
         let filesAfterDelete = try await store.recoveryFiles()
         XCTAssertTrue(filesAfterDelete.isEmpty)
 
@@ -1129,6 +1259,157 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertNil(sanitized.activeFocusStartedAt)
         XCTAssertEqual(sanitized.focusSessions.map(\.id), ["focus"])
         XCTAssertEqual(sanitized.focusSessions.first?.minutes, 20)
+    }
+
+    func testCanonicalMergesDeduplicateWhitespaceAndRepeatedBaseIDs() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+
+        var sportBase = try RootineCanonicalWorkspaceMapping.payload(for: SportWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            workouts: [SportWorkout(id: "sport-1", title: "Bieg", date: "2026-09-02", minutes: 30, kind: "Bieg", completed: true, createdAt: timestamp)]
+        ))
+        if case .object(var root) = sportBase,
+           case .array(let history) = root["history"],
+           let duplicate = history.first {
+            root["history"] = .array(history + [duplicate])
+            sportBase = .object(root)
+        }
+        let mergedSport = try RootineCanonicalWorkspaceMapping.mergedSportPayload(
+            for: try RootineCanonicalWorkspaceMapping.sportWorkspace(from: sportBase),
+            onto: sportBase
+        )
+        if case .object(let root) = mergedSport,
+           case .array(let history) = root["history"] {
+            let ids = history.compactMap { objectValue($0)?["id"] }.compactMap { value -> String? in
+                guard case .string(let id) = value else { return nil }
+                return id.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            XCTAssertEqual(ids.count, Set(ids).count)
+        } else {
+            XCTFail("Canonical sport history should remain an array")
+        }
+
+        var goalsBase = try RootineCanonicalWorkspaceMapping.payload(for: GoalsWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            goals: [GoalRecord(id: " goal-1 ", title: "Cel", detail: "", current: 1, target: 10, icon: "target", createdAt: timestamp, updatedAt: timestamp)]
+        ))
+        if case .object(var root) = goalsBase,
+           case .array(let goals) = root["goals"],
+           let duplicate = goals.first {
+            root["goals"] = .array(goals + [duplicate])
+            goalsBase = .object(root)
+        }
+        let mergedGoals = try RootineCanonicalWorkspaceMapping.mergedGoalsPayload(
+            for: try RootineCanonicalWorkspaceMapping.goalsWorkspace(from: goalsBase),
+            onto: goalsBase
+        )
+        if case .object(let root) = mergedGoals,
+           case .array(let goals) = root["goals"] {
+            let ids = goals.compactMap { objectValue($0)?["id"] }.compactMap { value -> String? in
+                guard case .string(let id) = value else { return nil }
+                return id.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            XCTAssertEqual(ids.count, Set(ids).count)
+        } else {
+            XCTFail("Canonical goals should remain an array")
+        }
+
+        var travelBase = try RootineCanonicalWorkspaceMapping.payload(for: TravelWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            trips: [TravelRecord(id: "travel-1", destination: "Gdańsk", dateRange: "2026-09-02 – 2026-09-03", nights: 1, itinerary: [], createdAt: timestamp, updatedAt: timestamp)]
+        ))
+        if case .object(var root) = travelBase,
+           case .array(let trips) = root["trips"],
+           let duplicate = trips.first {
+            root["trips"] = .array(trips + [duplicate])
+            travelBase = .object(root)
+        }
+        let mergedTravel = try RootineCanonicalWorkspaceMapping.mergedTravelPayload(
+            for: try RootineCanonicalWorkspaceMapping.travelWorkspace(from: travelBase),
+            onto: travelBase
+        )
+        if case .object(let root) = mergedTravel,
+           case .array(let trips) = root["trips"] {
+            let ids = trips.compactMap { objectValue($0)?["id"] }.compactMap { value -> String? in
+                guard case .string(let id) = value else { return nil }
+                return id.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            XCTAssertEqual(ids.count, Set(ids).count)
+        } else {
+            XCTFail("Canonical travel should remain an array")
+        }
+    }
+
+    func testTravelItineraryMergeUpdatesDeletesAndAddsByStableID() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let original = TravelRecord(
+            id: "trip-stable",
+            destination: "Gdańsk",
+            dateRange: "2026-09-02 – 2026-09-03",
+            nights: 1,
+            itinerary: [
+                TravelItineraryItem(id: "stop-a", day: "2026-09-02", title: "Molo", detail: "Spacer"),
+                TravelItineraryItem(id: "stop-b", day: "2026-09-03", title: "Muzeum", detail: "Bilety")
+            ],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        var base = try RootineCanonicalWorkspaceMapping.payload(for: TravelWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            trips: [original]
+        ))
+        if case .object(var root) = base,
+           case .array(var trips) = root["trips"],
+           case .object(var trip) = trips.first,
+           case .array(let itinerary) = trip["itinerary"] {
+            trip["name"] = .string("Weekend nad morzem")
+            if case .object(var first) = itinerary[0] {
+                first["location"] = .string("Brzeźno")
+                var changed = itinerary
+                changed[0] = .object(first)
+                trip["itinerary"] = .array(changed)
+            }
+            trips[0] = .object(trip)
+            root["trips"] = .array(trips)
+            base = .object(root)
+        }
+
+        let updated = TravelRecord(
+            id: original.id,
+            destination: original.destination,
+            dateRange: original.dateRange,
+            nights: original.nights,
+            itinerary: [
+                TravelItineraryItem(id: "stop-a", day: "2026-09-04", title: "Molo po zmianie", detail: "Spacer wieczorem"),
+                TravelItineraryItem(id: "stop-c", day: "2026-09-02", title: "Latarnia", detail: "Nowy punkt")
+            ],
+            createdAt: original.createdAt,
+            updatedAt: "2026-09-02T11:00:00.000Z"
+        )
+        let merged = try RootineCanonicalWorkspaceMapping.mergedTravelPayload(
+            for: TravelWorkspace(version: 1, updatedAt: updated.updatedAt, trips: [updated]),
+            onto: base
+        )
+
+        guard case .object(let root) = merged,
+              case .array(let trips) = root["trips"],
+              case .object(let trip) = trips.first,
+              case .array(let itinerary) = trip["itinerary"] else {
+            return XCTFail("Travel merge should keep a canonical trip and itinerary")
+        }
+        let ids = itinerary.compactMap { objectValue($0)?["id"] }.compactMap { value -> String? in
+            guard case .string(let id) = value else { return nil }
+            return id
+        }
+        XCTAssertEqual(ids, ["stop-a", "stop-c"])
+        XCTAssertEqual(objectValue(itinerary[0])?["title"], .string("Molo po zmianie"))
+        XCTAssertEqual(objectValue(itinerary[0])?["location"], .string(""))
+        XCTAssertEqual(objectValue(itinerary[1])?["title"], .string("Latarnia"))
+        XCTAssertEqual(trip["name"], .string("Weekend nad morzem"))
     }
 
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {

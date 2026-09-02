@@ -466,10 +466,14 @@ actor WorkspaceFileStore {
         try ensureDirectories()
         return try fileManager.contentsOfDirectory(
             at: recoveryDirectory,
-            includingPropertiesForKeys: nil,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]
         )
-        .map { WorkspaceRecoveryFile(name: $0.lastPathComponent, url: $0) }
+        .compactMap { url in
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return nil }
+            return WorkspaceRecoveryFile(name: url.lastPathComponent, url: url)
+        }
         .sorted { $0.name < $1.name }
     }
 
@@ -498,6 +502,8 @@ actor WorkspaceFileStore {
         let candidate = file.url.standardizedFileURL
         guard candidate.path.hasPrefix(recoveryPath + "/") else { return }
         guard fileManager.fileExists(atPath: candidate.path) else { return }
+        let values = try? candidate.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return }
         try fileManager.removeItem(at: candidate)
     }
 
@@ -518,7 +524,22 @@ actor WorkspaceFileStore {
     }
 
     private func safeName(_ value: String) -> String {
-        value.replacingOccurrences(of: ".", with: "-")
+        // File names are assembled from storage keys and user-facing labels.
+        // Keep only portable alphanumerics plus '-'/'_' so separators,
+        // control bytes and dot-dot traversal can never escape the account
+        // directory. Repeated separators are collapsed for readable output.
+        let scalars = value.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar)
+                || scalar == "-"
+                || scalar == "_"
+            {
+                return Character(String(scalar))
+            }
+            return "-"
+        }
+        let raw = String(scalars)
+        let collapsed = raw.replacingOccurrences(of: "-{2,}", with: "-", options: .regularExpression)
+        return collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
     private func ensureDirectories() throws {

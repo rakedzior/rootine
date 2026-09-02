@@ -280,6 +280,24 @@ struct NutritionValues: Codable, Equatable, Sendable {
     var fat: Double
 }
 
+/// Resolves the values submitted by the nutrition editor. A catalog product
+/// may provide a calculated baseline, but a person who changes a macro field
+/// must never lose that explicit override when the form is saved. Keeping this
+/// policy at the model boundary makes the view and its tests use the exact
+/// same tolerance rules.
+func rootineResolvedNutritionValues(
+    generated: NutritionValues?,
+    entered: NutritionValues,
+    scaled: NutritionValues?
+) -> NutritionValues {
+    guard let generated, let scaled else { return entered }
+    let matchesGenerated = abs(entered.calories - generated.calories) < 0.6
+        && abs(entered.protein - generated.protein) < 0.06
+        && abs(entered.carbs - generated.carbs) < 0.06
+        && abs(entered.fat - generated.fat) < 0.06
+    return matchesGenerated ? scaled : entered
+}
+
 /// The amount typed in the nutrition editor is the source of truth for a
 /// catalog entry. Keeping the parser next to the model makes the same
 /// amount/unit semantics available to the view and persistence layer.
@@ -355,6 +373,10 @@ struct NutritionPortion: Equatable, Sendable {
         switch normalizedUnit {
         case "g", "gram", "grams", "gramy", "ml", "millilitr", "millilitry":
             return amount / 100
+        case "kg", "kilogram", "kilogramy", "l", "litr", "litry":
+            return amount * 10
+        case "dag", "dkg":
+            return amount / 10
         default:
             return amount
         }
@@ -656,12 +678,15 @@ func rootineSanitizedWorkWorkspace(_ workspace: WorkWorkspace) -> WorkWorkspace 
     var seenIDs = Set<String>()
     var retained: [WorkFocusSession] = []
     for session in workspace.focusSessions.reversed() {
-        guard !session.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        let normalizedID = session.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedID.isEmpty,
               RootineDate.date(from: session.startedAt) != nil,
               RootineDate.date(from: session.endedAt) != nil,
               session.minutes >= 0,
-              seenIDs.insert(session.id).inserted else { continue }
-        retained.append(session)
+              seenIDs.insert(normalizedID).inserted else { continue }
+        var normalized = session
+        normalized.id = normalizedID
+        retained.append(normalized)
     }
     sanitized.focusSessions = Array(retained.reversed())
     return sanitized

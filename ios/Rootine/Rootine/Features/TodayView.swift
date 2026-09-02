@@ -163,6 +163,7 @@ private struct TodayUndoAction: Identifiable {
     let kind: Kind
     let recordID: Int
     let title: String
+    let date: Date
 
     var message: String { "Oznaczono „\(title)” jako wykonane" }
 }
@@ -197,11 +198,11 @@ struct TodayView: View {
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
-                    undoAction = TodayUndoAction(kind: .task, recordID: task.id, title: task.text)
+                    undoAction = TodayUndoAction(kind: .task, recordID: task.id, title: task.text, date: context.date)
                     Task { await environment.toggleTaskCompletion(id: task.id, on: context.date) }
                 },
                 onToggleHabit: { habit in
-                    undoAction = TodayUndoAction(kind: .habit, recordID: habit.id, title: habit.name)
+                    undoAction = TodayUndoAction(kind: .habit, recordID: habit.id, title: habit.name, date: context.date)
                     Task { await environment.toggleHabitCompletion(id: habit.id, on: context.date) }
                 },
                 undoAction: undoAction,
@@ -235,9 +236,9 @@ struct TodayView: View {
         Task {
             switch action.kind {
             case .task:
-                await environment.toggleTaskCompletion(id: action.recordID)
+                await environment.toggleTaskCompletion(id: action.recordID, on: action.date)
             case .habit:
-                await environment.toggleHabitCompletion(id: action.recordID)
+                await environment.toggleHabitCompletion(id: action.recordID, on: action.date)
             }
         }
     }

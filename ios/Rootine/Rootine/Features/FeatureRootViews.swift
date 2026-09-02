@@ -800,8 +800,14 @@ private struct SportWorkoutRow: View {
 
 private func rootineDate(from key: String) -> Date? {
     let parts = key.split(separator: "-").compactMap { Int($0) }
-    guard parts.count == 3 else { return nil }
-    return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    guard parts.count == 3,
+          String(format: "%04d-%02d-%02d", parts[0], parts[1], parts[2]) == key else { return nil }
+    let calendar = Calendar.current
+    let components = DateComponents(year: parts[0], month: parts[1], day: parts[2])
+    guard let date = calendar.date(from: components) else { return nil }
+    let normalized = calendar.dateComponents([.year, .month, .day], from: date)
+    guard normalized.year == parts[0], normalized.month == parts[1], normalized.day == parts[2] else { return nil }
+    return date
 }
 
 private struct WorkoutEditorSheet: View {

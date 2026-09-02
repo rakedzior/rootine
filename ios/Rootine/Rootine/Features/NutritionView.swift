@@ -804,7 +804,19 @@ private struct NutritionCustomMealsView: View {
             }
             Spacer()
             Button {
-                Task { await environment.addCustomMealToDay(customMeal, dateKey: dateKey, mealKind: meal.rawValue) }
+                // Every deliberate tap is a journal occurrence. The
+                // environment's creation gate still coalesces an in-flight
+                // duplicate, while a later tap intentionally adds another
+                // serving instead of silently dropping it.
+                let operationID = UUID().uuidString
+                Task {
+                    await environment.addCustomMealToDay(
+                        customMeal,
+                        dateKey: dateKey,
+                        mealKind: meal.rawValue,
+                        operationID: operationID
+                    )
+                }
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title3)
@@ -1049,6 +1061,8 @@ private struct AddNutritionEntrySheet: View {
     @State private var pendingBarcodeToConsume: String?
     @State private var isShowingScanner = false
     @State private var scanMessage: String?
+    @State private var isSaving = false
+    @State private var saveOperationID: String
 
     init(
         dateKey: String,
@@ -1096,6 +1110,7 @@ private struct AddNutritionEntrySheet: View {
         // is eligible for automatic portion-based recalculation.
         _generatedNutritionValues = State(initialValue: existingEntry == nil ? initialValues : nil)
         _pendingBarcodeToConsume = State(initialValue: barcodeToConsume)
+        _saveOperationID = State(initialValue: existingEntry?.id ?? UUID().uuidString)
     }
 
     private var filteredProducts: [NutritionProduct] {
@@ -1221,7 +1236,10 @@ private struct AddNutritionEntrySheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(existingEntry == nil ? "Dodaj" : "Zapisz") { submit() }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(
+                            isSaving
+                                || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
                 }
             }
             .task {
@@ -1262,7 +1280,9 @@ private struct AddNutritionEntrySheet: View {
                 scanMessage = nil
             } else {
                 let normalized = NutritionBarcode.normalized(code)
-                let wasQueued = environment.nutritionWorkspace.pendingBarcodeLookups?.contains { $0.barcode == normalized } == true
+                let wasQueued = environment.nutritionWorkspace.pendingBarcodeLookups?.contains {
+                    NutritionBarcode.normalized($0.barcode) == normalized
+                } == true
                 scanMessage = wasQueued
                     ? "Nie znaleziono produktu online. Kod zapisano — ponowimy próbę po połączeniu; możesz też wpisać dane ręcznie."
                     : "Nie znaleziono produktu. Uzupełnij dane ręcznie poniżej."
@@ -1272,6 +1292,8 @@ private struct AddNutritionEntrySheet: View {
     }
 
     private func submit() {
+        guard !isSaving else { return }
+        isSaving = true
         let parsed = parsedPortion
         let entered = NutritionValues(
             calories: number(calories),
@@ -1279,16 +1301,11 @@ private struct AddNutritionEntrySheet: View {
             carbs: number(carbs),
             fat: number(fat)
         )
-        let calculated = generatedNutritionValues.map { generated in
-            let caloriesUnchanged = abs(entered.calories - generated.calories) < 0.6
-            let proteinUnchanged = abs(entered.protein - generated.protein) < 0.06
-            let carbsUnchanged = abs(entered.carbs - generated.carbs) < 0.06
-            let fatUnchanged = abs(entered.fat - generated.fat) < 0.06
-            return caloriesUnchanged && proteinUnchanged && carbsUnchanged && fatUnchanged
-                ? scaledNutritionValues
-                : nil
-        } ?? nil
-        let finalValues = calculated ?? entered
+        let finalValues = rootineResolvedNutritionValues(
+            generated: generatedNutritionValues,
+            entered: entered,
+            scaled: scaledNutritionValues
+        )
         let draft = NutritionEntryDraft(
             meal: selectedMeal.rawValue,
             name: name,
@@ -1356,7 +1373,7 @@ private struct AddNutritionEntrySheet: View {
             catalogId: draft.catalogId,
             catalogSource: draft.catalogSource,
             per100g: draft.per100g,
-            operationID: UUID().uuidString
+            operationID: saveOperationID
         )
     }
 
@@ -1437,7 +1454,7 @@ private final class BarcodeScannerViewController: UIViewController, @preconcurre
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    required init?(coder: NSCoder) { nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()

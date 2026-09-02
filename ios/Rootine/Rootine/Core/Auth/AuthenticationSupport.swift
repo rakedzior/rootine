@@ -29,7 +29,7 @@ enum AuthInputValidator {
 
 enum AuthNonce {
     static func random(length: Int = 32) throws -> String {
-        precondition(length > 0)
+        guard length > 0 else { throw RootineAPIError.invalidResponse }
         let characters = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
         var result = ""
         var remaining = length
@@ -93,7 +93,11 @@ final class OAuthWebSession: NSObject, ObservableObject, ASWebAuthenticationPres
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else {
-            preconditionFailure("Rootine requires an active window scene for OAuth presentation.")
+            // Authentication can be requested while the app is transitioning
+            // between scenes. Returning a detached anchor lets the system
+            // finish the request without crashing the process; the session
+            // callback will surface the provider error to the caller.
+            return UIWindow(frame: .zero)
         }
         return ASPresentationAnchor(windowScene: scene)
     }

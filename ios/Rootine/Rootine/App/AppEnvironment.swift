@@ -12,6 +12,7 @@ enum RootineWorkspaceArchiveError: LocalizedError, Equatable {
     case accountMismatch
     case noLocalStore
     case diagnosticRecoveryNotRestorable
+    case importInProgress
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +28,8 @@ enum RootineWorkspaceArchiveError: LocalizedError, Equatable {
             return "Kopia lokalna będzie dostępna po uruchomieniu sesji konta."
         case .diagnosticRecoveryNotRestorable:
             return "Ten plik Recovery zawiera diagnostykę, a nie pełną kopię danych. Możesz go usunąć lub przekazać do wsparcia."
+        case .importInProgress:
+            return "Import danych już trwa. Poczekaj na jego zakończenie i spróbuj ponownie."
         }
     }
 }
@@ -52,6 +55,10 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var healthWorkspace = HealthWorkspace.empty
     @Published private(set) var affairsWorkspace = AffairsWorkspace.empty
     @Published private(set) var isWorking = false
+    /// Import is a foreground data operation, not an authentication launch
+    /// state. The shell keeps the current screen visible while its writes are
+    /// temporarily gated.
+    @Published private(set) var isImportingWorkspace = false
     @Published private(set) var isLaunching = true
     @Published private(set) var isPasswordRecovery = false
     @Published private(set) var authCallbackError: String?
@@ -246,7 +253,22 @@ final class AppEnvironment: ObservableObject {
                 WorkspaceTask(id: 2, text: "Odpisać na najważniejsze wiadomości", done: true, completedAt: timestamp, time: "11:30", view: "dzis", priority: .medium, calendarDate: today),
                 WorkspaceTask(id: 3, text: "Zamówić filtr do ekspresu", done: false, view: "dzis"),
                 WorkspaceTask(id: 4, text: "Zarezerwować wizytę kontrolną", done: false, time: "15:00", view: "wszystkie", calendarDate: yesterday),
-                WorkspaceTask(id: 5, text: "Przegląd tygodnia", done: false, time: "17:30", view: "wszystkie", calendarDate: tomorrow)
+                WorkspaceTask(id: 5, text: "Przegląd tygodnia", done: false, time: "17:30", view: "wszystkie", calendarDate: tomorrow),
+                WorkspaceTask(
+                    id: 6,
+                    text: "Zamknąć brief produktu",
+                    done: false,
+                    view: "wszystkie",
+                    priority: .high,
+                    source: CommitmentTaskSource(
+                        kind: "work",
+                        entity: "task",
+                        context: "work",
+                        href: "/work",
+                        originTaskId: nil,
+                        managed: "ios"
+                    )
+                )
             ],
             habits: [
                 WorkspaceHabit(id: 101, name: "Poranna szklanka wody", streak: 6, done: true, completedDates: [today], schedule: WorkspaceHabitSchedule(type: "daily", startDate: today), time: "07:30"),
@@ -294,7 +316,19 @@ final class AppEnvironment: ObservableObject {
                 GoalRecord(id: "preview-goal-3", title: "Nauka", detail: "2 sesje w tym tygodniu", current: 2, target: 5, icon: "book.closed.fill", createdAt: timestamp, updatedAt: timestamp)
             ]
         )
-        workWorkspace = WorkWorkspace(version: 1, updatedAt: timestamp, activeFocusStartedAt: nil, focusSessions: [])
+        workWorkspace = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: nil,
+            focusSessions: [
+                WorkFocusSession(
+                    id: "preview-focus-1",
+                    startedAt: timestamp,
+                    endedAt: timestamp,
+                    minutes: 25
+                )
+            ]
+        )
         travelWorkspace = TravelWorkspace(
             version: 1,
             updatedAt: timestamp,
@@ -448,9 +482,18 @@ final class AppEnvironment: ObservableObject {
         // A second import is not allowed to interleave with this one. The
         // import lock is set before decoding so validation and disk staging
         // are one serialized operation from the UI's point of view.
-        guard !archiveImportInProgress else { return }
+        guard !archiveImportInProgress else {
+            throw RootineWorkspaceArchiveError.importInProgress
+        }
         archiveImportInProgress = true
-        defer { finishArchiveImport() }
+        let wasWorking = isWorking
+        isWorking = true
+        isImportingWorkspace = true
+        defer {
+            isWorking = wasWorking
+            isImportingWorkspace = false
+            finishArchiveImport()
+        }
         var archive: RootineWorkspaceExport
         do {
             archive = try JSONDecoder().decode(RootineWorkspaceExport.self, from: data)
@@ -467,6 +510,20 @@ final class AppEnvironment: ObservableObject {
         }
         guard let store, let syncEngine else { throw RootineWorkspaceArchiveError.noLocalStore }
 
+        // Affairs v1 is still readable and is migrated to the current v2
+        // category contract. Any other future version must be rejected before
+        // normalization; otherwise blindly setting `version = 2` would make
+        // an unsupported archive look valid and fail only after relaunch.
+        let importedAffairsVersion = archive.affairs.version
+        guard importedAffairsVersion == 1
+            || importedAffairsVersion == RootineStorageKey.affairs.supportedLocalVersion
+        else {
+            throw RootineWorkspaceArchiveError.unsupportedWorkspaceVersion(
+                key: RootineStorageKey.affairs.rawValue,
+                found: importedAffairsVersion,
+                supported: RootineStorageKey.affairs.supportedLocalVersion!
+            )
+        }
         archive.affairs = normalizedAffairsWorkspace(archive.affairs)
         try validateWorkspaceArchive(archive)
 
@@ -1410,12 +1467,17 @@ final class AppEnvironment: ObservableObject {
         let allEntries = day.entries.breakfast + day.entries.lunch + day.entries.snack + day.entries.dinner
         guard !allEntries.contains(where: { $0.id == recordID }) else { return }
         let parsedPortion = NutritionPortion.parse(portion, fallbackAmount: amount, fallbackUnit: unit)
-        let resolvedAmount = (amount ?? parsedPortion.amount).map { max(0, $0) }
-        let resolvedUnit = (unit ?? parsedPortion.unit)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The human-readable portion is authoritative whenever it contains a
+        // number/unit. Legacy callers may still provide fallback amount data,
+        // but must not overwrite a newly typed "120 g" with an old catalog
+        // default such as 60 g.
+        let resolvedAmount = (parsedPortion.amount ?? amount).map { max(0, $0) }
+        let resolvedUnit = (parsedPortion.unit ?? unit)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPortion = portion.trimmingCharacters(in: .whitespacesAndNewlines)
         let entry = NutritionEntry(
             id: recordID,
             name: trimmedName,
-            portion: portion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "1 porcja" : portion,
+            portion: normalizedPortion.isEmpty ? "1 porcja" : normalizedPortion,
             amount: resolvedAmount,
             unit: resolvedUnit?.isEmpty == true ? nil : resolvedUnit,
             calories: max(0, calories),
@@ -1470,8 +1532,9 @@ final class AppEnvironment: ObservableObject {
     /// when connectivity returns) is safe because every request is
     /// de-duplicated by its normalized barcode.
     func retryPendingNutritionBarcodes() async {
+        let normalized = await normalizeNutritionBarcodeQueueIfNeeded()
         guard session?.accessToken != nil else { return }
-        let pending = (nutritionWorkspace.pendingBarcodeLookups ?? []).filter { $0.resolvedProduct == nil }
+        let pending = normalized.filter { $0.resolvedProduct == nil }
         for request in pending {
             _ = await lookupNutritionProduct(barcode: request.barcode)
         }
@@ -1481,14 +1544,17 @@ final class AppEnvironment: ObservableObject {
         let normalized = NutritionBarcode.normalized(barcode)
         guard !normalized.isEmpty else { return }
         var next = nutritionWorkspace
-        var pending = next.pendingBarcodeLookups ?? []
+        let originalPending = next.pendingBarcodeLookups ?? []
+        var pending = normalizedNutritionBarcodeRequests(originalPending)
         let id = NutritionBarcode.requestID(for: normalized)
-        guard !pending.contains(where: { $0.id == id }) else { return }
-        pending.append(NutritionBarcodeRequest(
-            id: id,
-            barcode: normalized,
-            createdAt: RootineDate.isoTimestamp()
-        ))
+        if !pending.contains(where: { $0.id == id }) {
+            pending.append(NutritionBarcodeRequest(
+                id: id,
+                barcode: normalized,
+                createdAt: RootineDate.isoTimestamp()
+            ))
+        }
+        guard pending != originalPending || !originalPending.contains(where: { $0.id == id }) else { return }
         next.pendingBarcodeLookups = pending
         await persistNutritionWorkspace(next)
     }
@@ -1497,7 +1563,7 @@ final class AppEnvironment: ObservableObject {
         let normalized = NutritionBarcode.normalized(barcode)
         guard !normalized.isEmpty else { return }
         var next = nutritionWorkspace
-        var pending = next.pendingBarcodeLookups ?? []
+        var pending = normalizedNutritionBarcodeRequests(next.pendingBarcodeLookups ?? [])
         let id = NutritionBarcode.requestID(for: normalized)
         guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
         guard pending[index].resolvedProduct == nil else { return }
@@ -1508,9 +1574,11 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func storeNutritionBarcodeResult(_ barcode: String, product: NutritionProduct) async {
-        let id = NutritionBarcode.requestID(for: barcode)
+        let normalized = NutritionBarcode.normalized(barcode)
+        guard !normalized.isEmpty else { return }
+        let id = NutritionBarcode.requestID(for: normalized)
         var next = nutritionWorkspace
-        var pending = next.pendingBarcodeLookups ?? []
+        var pending = normalizedNutritionBarcodeRequests(next.pendingBarcodeLookups ?? [])
         guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
         pending[index].resolvedProduct = product
         pending[index].lastAttemptAt = RootineDate.isoTimestamp()
@@ -1522,15 +1590,99 @@ final class AppEnvironment: ObservableObject {
     /// the add-entry form. Failed lookups remain pending for a future retry.
     @discardableResult
     func consumeNutritionBarcode(barcode: String) async -> NutritionProduct? {
-        let id = NutritionBarcode.requestID(for: barcode)
+        let normalized = NutritionBarcode.normalized(barcode)
+        guard !normalized.isEmpty else { return nil }
+        let id = NutritionBarcode.requestID(for: normalized)
         var next = nutritionWorkspace
-        var pending = next.pendingBarcodeLookups ?? []
+        var pending = normalizedNutritionBarcodeRequests(next.pendingBarcodeLookups ?? [])
         guard let index = pending.firstIndex(where: { $0.id == id }),
               let product = pending[index].resolvedProduct else { return nil }
         pending.remove(at: index)
         next.pendingBarcodeLookups = pending
         await persistNutritionWorkspace(next)
         return product
+    }
+
+    /// Legacy v6 payloads may contain formatted barcodes or duplicate requests
+    /// created by an older one-shot scanner. Canonicalize them before every
+    /// queue operation so lookup, retry and consume all address the same
+    /// durable record and never discard a resolved product.
+    private func normalizedNutritionBarcodeRequests(
+        _ requests: [NutritionBarcodeRequest]
+    ) -> [NutritionBarcodeRequest] {
+        var result: [NutritionBarcodeRequest] = []
+        var indexes: [String: Int] = [:]
+
+        for request in requests {
+            let barcode = NutritionBarcode.normalized(request.barcode)
+            guard !barcode.isEmpty else { continue }
+            var normalized = request
+            normalized.id = NutritionBarcode.requestID(for: barcode)
+            normalized.barcode = barcode
+            normalized.attemptCount = max(0, request.attemptCount)
+
+            guard let existingIndex = indexes[barcode] else {
+                indexes[barcode] = result.count
+                result.append(normalized)
+                continue
+            }
+
+            var merged = result[existingIndex]
+            let previousAttemptAt = merged.lastAttemptAt
+            merged.createdAt = earlierTimestamp(merged.createdAt, normalized.createdAt)
+            merged.lastAttemptAt = laterTimestamp(merged.lastAttemptAt, normalized.lastAttemptAt)
+            merged.attemptCount = max(merged.attemptCount, normalized.attemptCount)
+            if let resolvedProduct = normalized.resolvedProduct,
+               shouldReplaceResolvedProduct(
+                   existing: merged.resolvedProduct,
+                   existingAttemptAt: previousAttemptAt,
+                   incomingAttemptAt: normalized.lastAttemptAt
+               )
+            {
+                merged.resolvedProduct = resolvedProduct
+            }
+            result[existingIndex] = merged
+        }
+        return result
+    }
+
+    private func shouldReplaceResolvedProduct(
+        existing: NutritionProduct?,
+        existingAttemptAt: String?,
+        incomingAttemptAt: String?
+    ) -> Bool {
+        guard existing != nil else { return true }
+        switch (existingAttemptAt, incomingAttemptAt) {
+        case (nil, nil): return false
+        case (nil, _?): return true
+        case (_?, nil): return false
+        case (let old?, let new?): return new >= old
+        }
+    }
+
+    private func normalizeNutritionBarcodeQueueIfNeeded() async -> [NutritionBarcodeRequest] {
+        let original = nutritionWorkspace.pendingBarcodeLookups ?? []
+        let normalized = normalizedNutritionBarcodeRequests(original)
+        guard normalized != original else { return normalized }
+        var next = nutritionWorkspace
+        next.pendingBarcodeLookups = normalized
+        await persistNutritionWorkspace(next)
+        return normalized
+    }
+
+    private func earlierTimestamp(_ left: String, _ right: String) -> String {
+        if left.isEmpty { return right }
+        if right.isEmpty { return left }
+        return left <= right ? left : right
+    }
+
+    private func laterTimestamp(_ left: String?, _ right: String?) -> String? {
+        switch (left, right) {
+        case (nil, nil): return nil
+        case (let value?, nil): return value
+        case (nil, let value?): return value
+        case (let left?, let right?): return left >= right ? left : right
+        }
     }
 
     func updateNutritionEntry(
@@ -1572,12 +1724,13 @@ final class AppEnvironment: ObservableObject {
         guard let previous = existing else { return }
         let now = RootineDate.isoTimestamp()
         let parsedPortion = NutritionPortion.parse(portion, fallbackAmount: amount, fallbackUnit: unit)
-        let resolvedAmount = (amount ?? parsedPortion.amount).map { max(0, $0) }
-        let resolvedUnit = (unit ?? parsedPortion.unit)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAmount = (parsedPortion.amount ?? amount).map { max(0, $0) }
+        let resolvedUnit = (parsedPortion.unit ?? unit)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPortion = portion.trimmingCharacters(in: .whitespacesAndNewlines)
         let updated = NutritionEntry(
             id: id,
             name: trimmedName,
-            portion: portion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "1 porcja" : portion,
+            portion: normalizedPortion.isEmpty ? "1 porcja" : normalizedPortion,
             amount: resolvedAmount,
             unit: resolvedUnit?.isEmpty == true ? nil : resolvedUnit,
             calories: max(0, calories),
@@ -1657,6 +1810,7 @@ final class AppEnvironment: ObservableObject {
         // between the check and the active-write count increment.
         guard !archiveImportInProgress else {
             _ = await waitForArchiveImportToFinish()
+            foundationMessage = "Import danych zakończył się — ponów ostatnią akcję"
             return false
         }
         activeWorkspacePersists += 1
@@ -1883,6 +2037,27 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
+    private func validateRemoteWorkspaceVersion(_ payload: JSONValue, key: RootineStorageKey) throws {
+        guard key == .tasks || key == .nutrition || key == .notes || key == .affairs else { return }
+        guard case .object(let object) = payload,
+              case .number(let rawVersion) = object["version"],
+              rawVersion.isFinite,
+              rawVersion.rounded() == rawVersion,
+              let found = Int(exactly: rawVersion) else {
+            throw RootineWorkspaceArchiveError.invalidArchive
+        }
+        let supported = key.supportedLocalVersion!
+        // Affairs v1 is normalized to v2 after decoding. Other direct
+        // workspaces have no implicit migration path and must match exactly.
+        guard found == supported || (key == .affairs && found == 1) else {
+            throw RootineWorkspaceArchiveError.unsupportedWorkspaceVersion(
+                key: key.rawValue,
+                found: found,
+                supported: supported
+            )
+        }
+    }
+
     private func jsonPayload<T: Encodable>(_ value: T, encoder: JSONEncoder) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: encoder.encode(value))
     }
@@ -2030,7 +2205,7 @@ final class AppEnvironment: ObservableObject {
         travelWorkspace = (try? await store.load(TravelWorkspace.self, key: .travel)) ?? .empty
         healthWorkspace = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
         let localAffairs = (try? await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
-        affairsWorkspace = await sanitizedAffairsWorkspace(localAffairs, store: store, syncEngine: syncEngine)
+        affairsWorkspace = await sanitizedAffairsWorkspace(localAffairs, store: store, syncEngine: syncEngine, allowSync: false)
         recoveryFiles = (try? await store.recoveryFiles()) ?? []
     }
 
@@ -2048,7 +2223,8 @@ final class AppEnvironment: ObservableObject {
     /// only the invalid active marker; completed focus sessions remain intact.
     private func sanitizedWorkWorkspace(
         _ workspace: WorkWorkspace,
-        store: WorkspaceFileStore
+        store: WorkspaceFileStore,
+        allowSync: Bool = false
     ) async -> WorkWorkspace {
         var sanitized = rootineSanitizedWorkWorkspace(workspace)
         let hasInvalidActive = workspace.activeFocusStartedAt.map { RootineDate.date(from: $0) == nil } ?? false
@@ -2075,6 +2251,20 @@ final class AppEnvironment: ObservableObject {
         }
         if let mapped {
             canonicalShadows[.work] = mapped
+            if allowSync,
+               sanitized != workspace,
+               !archiveImportInProgress,
+               let syncEngine {
+                // Once reconciliation has compared the remote revision, a
+                // repaired active marker is a real canonical migration. Queue
+                // it now so a malformed remote value cannot return on the
+                // next launch. The pre-reconcile path deliberately leaves
+                // this off to avoid shadowing a newer server snapshot.
+                _ = try? await syncEngine.enqueue(
+                    payload: mapped,
+                    storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: .work)
+                )
+            }
         }
         if sanitized != workspace {
             foundationMessage = hasInvalidActive
@@ -2098,12 +2288,14 @@ final class AppEnvironment: ObservableObject {
     private func sanitizedAffairsWorkspace(
         _ workspace: AffairsWorkspace,
         store: WorkspaceFileStore,
-        syncEngine: WorkspaceSyncEngine? = nil
+        syncEngine: WorkspaceSyncEngine? = nil,
+        allowSync: Bool = false
     ) async -> AffairsWorkspace {
         let normalized = normalizedAffairsWorkspace(workspace)
         guard normalized != workspace else { return workspace }
         try? await store.save(normalized, key: .affairs)
-        if !archiveImportInProgress,
+        if allowSync,
+           !archiveImportInProgress,
            let syncEngine,
            let payload = try? jsonPayload(normalized, encoder: JSONEncoder()) {
             _ = try? await syncEngine.enqueue(payload: payload, storageKey: RootineStorageKey.affairs.rawValue)
@@ -2139,7 +2331,7 @@ final class AppEnvironment: ObservableObject {
             let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
             let localHealth = try await store.load(HealthWorkspace.self, key: .health)
             let localAffairsRaw = (try await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
-            let localAffairs = await sanitizedAffairsWorkspace(localAffairsRaw, store: store, syncEngine: syncEngine)
+            let localAffairs = await sanitizedAffairsWorkspace(localAffairsRaw, store: store, syncEngine: syncEngine, allowSync: false)
             let remoteRows = try await api.readSnapshots(accessToken: accessToken)
             // A malformed backend response must not crash the app through
             // Dictionary(uniqueKeysWithValues:). Keep the last row and surface
@@ -2162,10 +2354,10 @@ final class AppEnvironment: ObservableObject {
             notesWorkspace = notesResult.value
             sportWorkspace = sportResult.value
             goalsWorkspace = goalsResult.value
-            workWorkspace = await sanitizedWorkWorkspace(workResult.value, store: store)
+            workWorkspace = await sanitizedWorkWorkspace(workResult.value, store: store, allowSync: true)
             travelWorkspace = travelResult.value
             healthWorkspace = healthResult.value
-            affairsWorkspace = await sanitizedAffairsWorkspace(affairsResult.value, store: store, syncEngine: syncEngine)
+            affairsWorkspace = await sanitizedAffairsWorkspace(affairsResult.value, store: store, syncEngine: syncEngine, allowSync: true)
             let reconciliationResults: [(RootineStorageKey, Bool)] = [
                 (.tasks, taskResult.conflict),
                 (.nutrition, nutritionResult.conflict),
@@ -2229,6 +2421,7 @@ final class AppEnvironment: ObservableObject {
             return (fallback, false)
         }
 
+        try validateRemoteWorkspaceVersion(remoteRow.payload, key: key)
         let remoteData = try JSONEncoder().encode(remoteRow.payload)
         let remoteValue = try JSONDecoder().decode(T.self, from: remoteData)
         guard let local else {

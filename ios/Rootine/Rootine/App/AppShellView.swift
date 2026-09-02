@@ -56,7 +56,7 @@ struct RootineEntryView: View {
                 AuthenticationFlowView()
             } else if environment.session == nil {
                 AuthenticationFlowView()
-            } else if environment.isWorking {
+            } else if environment.isWorking && !environment.isImportingWorkspace {
                 AuthLaunchView(message: "Przygotowuję Twoje dane…")
             } else {
                 RootineMainView()
@@ -77,7 +77,7 @@ struct RootineEntryView: View {
             Task { await environment.receiveAuthCallback(url) }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
+            guard phase == .active, !isPreviewLaunch else { return }
             Task { await environment.refreshActiveSession() }
         }
     }
@@ -748,6 +748,17 @@ private struct RootineDataCenterView: View {
                     Label("Importuj kopię JSON", systemImage: "square.and.arrow.down")
                         .frame(minHeight: 44, alignment: .leading)
                 }
+                .disabled(environment.isWorking)
+                if environment.isImportingWorkspace {
+                    HStack(spacing: RootineTheme.Spacing.small) {
+                        ProgressView()
+                        Text("Import trwa — zapisy są chwilowo wstrzymane")
+                            .font(.footnote)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Import danych trwa, zapisy są chwilowo wstrzymane")
+                }
             }
             Section("Recovery") {
                 if environment.recoveryFiles.isEmpty {
@@ -836,6 +847,10 @@ private struct RootineDataCenterView: View {
                 errorMessage = "Nie udało się odczytać pliku: \(error.localizedDescription)"
             }
         }
+        // Keep the current screen visible while an import runs, but do not
+        // allow recovery/delete/export actions to interleave with its
+        // transaction. The progress row above remains visible and voiced.
+        .disabled(environment.isWorking)
         .confirmationDialog("Usunąć lokalne dane?", isPresented: $isConfirmingClear, titleVisibility: .visible) {
             Button("Usuń i wyloguj", role: .destructive) {
                 Task {

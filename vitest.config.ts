@@ -18,6 +18,11 @@ export default defineConfig({
     css: true,
     restoreMocks: true,
     clearMocks: true,
+    // The jsdom suites create many portal/event-loop resources. An unbounded
+    // worker count makes short interaction tests exceed their real 5s budget
+    // on smaller CI/dev machines, while four workers retain useful parallelism
+    // and keep the check reproducible.
+    maxWorkers: 4,
     coverage: {
       reporter: ["text", "html"],
     },
