@@ -76,6 +76,8 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var recoveryFiles: [WorkspaceRecoveryFile] = []
     @Published private(set) var deviceRegistration: RootineDeviceRegistration?
     @Published private(set) var notificationPermissionState: RootineNotificationPermissionState = .notDetermined
+    @Published private(set) var profilePreferences = RootineProfilePreferences.current
+    @Published private(set) var notificationPreferences = RootineNotificationPreferences()
     @Published private(set) var normalizedReadEnabled = false
     @Published private(set) var normalizedReadFallbackReason: String?
 
@@ -94,7 +96,6 @@ final class AppEnvironment: ObservableObject {
     /// B08 can replace this in-memory value with the profile payload once its
     /// normalized read is available. It intentionally has no SQLite shadow in
     /// B10, matching the single aggregate-cache decision in the main plan.
-    private var notificationPreferences = RootineNotificationPreferences()
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
     private var creationGate = WorkspaceCreationGate()
     private var refreshTask: Task<Void, Never>?
@@ -222,6 +223,15 @@ final class AppEnvironment: ObservableObject {
         await loadAndReconcile(accessToken: accessToken)
     }
 
+    func updateAccountPassword(_ password: String) async throws {
+        guard let accessToken = session?.accessToken else { throw RootineAPIError.unauthorized }
+        guard AuthInputValidator.passwordError(password) == nil else {
+            throw RootineAPIError.weakPassword
+        }
+        try await api.updatePassword(password, accessToken: accessToken)
+        foundationMessage = "Hasło zostało zmienione"
+    }
+
     func cancelPasswordRecovery() {
         signOutFoundationSession()
         isPasswordRecovery = false
@@ -255,6 +265,7 @@ final class AppEnvironment: ObservableObject {
             }
         }
         await recoverOrphanedTransactions()
+        await refreshProfileSettings()
         await loadAndReconcile(accessToken: activeSession.accessToken)
         await flushPendingMutations()
         startRealtimeRuntime()
@@ -512,6 +523,8 @@ final class AppEnvironment: ObservableObject {
         recoveryFiles = []
         deviceRegistration = nil
         notificationPermissionState = .notDetermined
+        profilePreferences = .current
+        notificationPreferences = RootineNotificationPreferences()
         normalizedReadEnabled = false
         normalizedReadFallbackReason = nil
         foundationMessage = "Sesja usunięta z Keychain"
@@ -720,6 +733,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     func clearLocalDataAndSignOut() async throws {
+        let userID = session?.user.id
         guard await beginWorkspacePersistence() else {
             try await clearLocalDataAndSignOut()
             return
@@ -727,6 +741,10 @@ final class AppEnvironment: ObservableObject {
         defer { endWorkspacePersistence() }
         if let store {
             try await store.clearAllLocalData()
+        }
+        if let userID {
+            RootineProfilePreferencesStore.remove(userID: userID)
+            RootineNotificationPreferencesStore.remove(userID: userID)
         }
         signOutFoundationSession()
     }
@@ -743,6 +761,7 @@ final class AppEnvironment: ObservableObject {
             await loadAndReconcile(accessToken: accessToken)
             await flushPendingMutations()
         }
+        await refreshProfileSettings()
         await refreshRecoveryFiles()
     }
 
@@ -753,7 +772,166 @@ final class AppEnvironment: ObservableObject {
         if let userID = session?.user.id {
             RootineNotificationPreferencesStore.save(preferences, userID: userID)
         }
+        if let accessToken = session?.accessToken, configuration.isAuthComplete {
+            do {
+                let saved = try await api.saveNotificationPreferences(preferences, accessToken: accessToken)
+                guard session?.accessToken == accessToken else { return }
+                // Lock-screen detail is deliberately local-only: the server
+                // contract stores schedule metadata, never notification
+                // content or its privacy opt-in.
+                var merged = saved
+                merged.showTaskDetails = preferences.showTaskDetails
+                notificationPreferences = merged
+                if let userID = session?.user.id {
+                    RootineNotificationPreferencesStore.save(merged, userID: userID)
+                }
+            } catch {
+                // Local-first behavior is intentional. A missing notification
+                // migration or a temporary network error must not make the
+                // rest of the account settings unusable.
+                foundationMessage = "Powiadomienia zapisano lokalnie — synchronizacja serwera czeka"
+            }
+        }
         await reconcileLocalNotifications()
+    }
+
+    /// Hydrates only safe notification metadata. A missing optional migration
+    /// leaves the account's previously stored local defaults untouched.
+    func refreshProfileSettings() async {
+        guard let accessToken = session?.accessToken, configuration.isAuthComplete else { return }
+        do {
+            guard let remote = try await api.loadNotificationPreferences(accessToken: accessToken),
+                  session?.accessToken == accessToken else { return }
+            var merged = remote
+            merged.showTaskDetails = notificationPreferences.showTaskDetails
+            notificationPreferences = merged
+            if let userID = session?.user.id {
+                RootineNotificationPreferencesStore.save(merged, userID: userID)
+            }
+            var profile = profilePreferences
+            profile.timezoneIdentifier = remote.timezoneIdentifier
+            profilePreferences = profile.normalized
+            if let userID = session?.user.id {
+                RootineProfilePreferencesStore.save(profilePreferences, userID: userID)
+            }
+            await reconcileLocalNotifications()
+        } catch {
+            // Profile preferences are a progressive enhancement. Keep local
+            // values when the optional server table is unavailable/offline.
+        }
+    }
+
+    /// Persists presentation choices under the current account. Locale,
+    /// currency and units are deliberately not sent to the workspace API:
+    /// they affect rendering only and never mutate domain records.
+    func updateProfilePreferences(_ preferences: RootineProfilePreferences) async {
+        let normalized = preferences.normalized
+        profilePreferences = normalized
+        if let userID = session?.user.id {
+            RootineProfilePreferencesStore.save(normalized, userID: userID)
+        }
+        var notifications = notificationPreferences
+        notifications.timezoneIdentifier = normalized.timezoneIdentifier
+        await updateNotificationPreferences(notifications)
+        foundationMessage = "Preferencje profilu zapisane"
+    }
+
+    /// Updates the display name without exposing or persisting an auth token.
+    func updateProfileDisplayName(_ displayName: String) async throws {
+        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...120).contains(normalized.count),
+              !normalized.contains(where: { $0.isNewline }),
+              !normalized.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw RootineProfileSettingsError.invalidDisplayName
+        }
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        let updatedUser = try await api.updateDisplayName(
+            normalized,
+            existingMetadata: currentSession.user.userMetadata,
+            accessToken: currentSession.accessToken
+        )
+        guard session?.accessToken == currentSession.accessToken else { return }
+        var mergedUser = updatedUser
+        if mergedUser.email == nil { mergedUser.email = currentSession.user.email }
+        if mergedUser.userMetadata == nil { mergedUser.userMetadata = currentSession.user.userMetadata }
+        if mergedUser.appMetadata == nil { mergedUser.appMetadata = currentSession.user.appMetadata }
+        if mergedUser.identities == nil { mergedUser.identities = currentSession.user.identities }
+        var updatedSession = currentSession
+        updatedSession.user = mergedUser
+        try keychain.save(updatedSession)
+        session = updatedSession
+        foundationMessage = "Profil został zaktualizowany"
+    }
+
+    /// Requests the OS prompt only when the scheduler is available. The
+    /// resulting authorization state is published for the settings screen;
+    /// an OS denial remains a normal state and never fails sync.
+    func requestNotificationPermissionFromSettings() async {
+        let current = await RootineNotificationPermissionState.current()
+        if current == .denied {
+            notificationPermissionState = current
+            if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsURL)
+            }
+            return
+        }
+        let state = await requestNotificationAuthorization()
+        switch state {
+        case .authorized: notificationPermissionState = .authorized
+        case .provisional: notificationPermissionState = .provisional
+        case .ephemeral: notificationPermissionState = .ephemeral
+        case .denied: notificationPermissionState = .denied
+        case .notDetermined: notificationPermissionState = .notDetermined
+        case .unavailable, .error: notificationPermissionState = .unknown
+        }
+        await registerDeviceForCurrentSession()
+    }
+
+    var currentDeviceIdentifier: String? {
+        guard session != nil else { return nil }
+        let identifier = deviceIdentity.loadOrCreate()
+        guard identifier.count > 8 else { return identifier }
+        return "\(identifier.prefix(6))…\(identifier.suffix(4))"
+    }
+
+    func revokeCurrentDevice() async {
+        guard let accessToken = session?.accessToken else { return }
+        let deviceID = deviceIdentity.loadOrCreate()
+        deviceRegistrationTask?.cancel()
+        deviceRegistrationTask = nil
+        do {
+            _ = try await api.revokeDevice(deviceID: deviceID, accessToken: accessToken)
+            guard session?.accessToken == accessToken else { return }
+            deviceRegistration = nil
+            lastDeviceRegistrationFingerprint = nil
+            foundationMessage = "To urządzenie wyrejestrowano z powiadomień"
+        } catch {
+            foundationMessage = "Nie udało się wyrejestrować urządzenia"
+        }
+    }
+
+    /// Deletes the authenticated account through the server-owned Edge
+    /// Function, then clears the account's local files and Keychain session.
+    /// Local cleanup runs only after the server confirms deletion.
+    func deleteAccountAndSignOut() async throws {
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        isWorking = true
+        defer { isWorking = false }
+        try await api.deleteAccount(accessToken: currentSession.accessToken)
+        do {
+            try await clearLocalDataAndSignOut()
+        } catch {
+            // The remote account is already gone. Never leave a dead session
+            // active merely because local cleanup hit an I/O failure.
+            try? await store?.clearAllLocalData()
+            signOutFoundationSession()
+            RootineProfilePreferencesStore.remove(userID: currentSession.user.id)
+            RootineNotificationPreferencesStore.remove(userID: currentSession.user.id)
+            throw error
+        }
+        RootineProfilePreferencesStore.remove(userID: currentSession.user.id)
+        RootineNotificationPreferencesStore.remove(userID: currentSession.user.id)
+        foundationMessage = "Konto i dane lokalne zostały usunięte"
     }
 
     /// Permission UX remains outside B10. This method is intentionally safe to
@@ -762,6 +940,10 @@ final class AppEnvironment: ObservableObject {
     func requestNotificationAuthorization() async -> RootineNotificationAuthorization {
         guard let scheduler = localNotificationScheduler else { return .unavailable }
         return await scheduler.requestAuthorization()
+    }
+
+    func refreshNotificationPermissionState() async {
+        notificationPermissionState = await RootineNotificationPermissionState.current()
     }
 
     /// B08 rollout control. The flag is scoped to the signed-in account and
@@ -2301,8 +2483,10 @@ final class AppEnvironment: ObservableObject {
         // Preferences are account-scoped. Never carry an opt-in or lock-screen
         // detail setting across an account switch before B08 has supplied the
         // new profile payload.
+        profilePreferences = RootineProfilePreferencesStore.load(userID: userID)
+            ?? .current
         notificationPreferences = RootineNotificationPreferencesStore.load(userID: userID)
-            ?? RootineNotificationPreferences()
+            ?? RootineNotificationPreferences(timezoneIdentifier: profilePreferences.timezoneIdentifier)
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
         localNotificationScheduler = RootineLocalNotificationScheduler(
@@ -2538,6 +2722,7 @@ final class AppEnvironment: ObservableObject {
         configureRuntime(userID: newSession.user.id)
         guard !passwordRecovery else { return }
         await recoverOrphanedTransactions()
+        await refreshProfileSettings()
         await loadAndReconcile(accessToken: newSession.accessToken)
         await flushPendingMutations()
         startRealtimeRuntime()

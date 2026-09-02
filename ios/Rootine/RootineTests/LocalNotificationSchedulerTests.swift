@@ -46,6 +46,34 @@ final class LocalNotificationSchedulerTests: XCTestCase {
         XCTAssertNil(RootineNotificationPreferencesStore.load(userID: "user-2", defaults: defaults))
     }
 
+    func testProfilePreferencesAreAccountScopedAndNormalizeUnknownValues() {
+        let suiteName = "RootineProfilePreferencesTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = RootineProfilePreferences(
+            version: 1,
+            timezoneIdentifier: "not/a/timezone",
+            localeIdentifier: "fr-FR",
+            currencyCode: "CAD",
+            usesMetricUnits: false,
+            privacyMode: true
+        )
+
+        RootineProfilePreferencesStore.save(preferences, userID: "user-1", defaults: defaults)
+
+        let loaded = RootineProfilePreferencesStore.load(userID: "user-1", defaults: defaults)
+        XCTAssertEqual(loaded?.version, RootineProfilePreferences.currentVersion)
+        XCTAssertEqual(loaded?.timezoneIdentifier, TimeZone.current.identifier)
+        XCTAssertTrue(["pl-PL", "en-US"].contains(loaded?.localeIdentifier ?? ""))
+        XCTAssertTrue(["PLN", "EUR", "USD", "GBP"].contains(loaded?.currencyCode ?? ""))
+        XCTAssertEqual(loaded?.usesMetricUnits, false)
+        XCTAssertEqual(loaded?.privacyMode, true)
+        XCTAssertNil(RootineProfilePreferencesStore.load(userID: "user-2", defaults: defaults))
+
+        RootineProfilePreferencesStore.remove(userID: "user-1", defaults: defaults)
+        XCTAssertNil(RootineProfilePreferencesStore.load(userID: "user-1", defaults: defaults))
+    }
+
     func testPlannerUsesProfileTimezoneAcrossUTCDateBoundary() {
         let timeZone = try! XCTUnwrap(TimeZone(identifier: "Europe/Warsaw"))
         let now = date("2026-03-01", time: "23:30", timeZone: TimeZone(secondsFromGMT: 0)!)

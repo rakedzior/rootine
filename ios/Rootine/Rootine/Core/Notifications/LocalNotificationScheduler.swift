@@ -115,6 +115,114 @@ enum RootineNotificationPreferencesStore {
     }
 }
 
+/// Account-scoped display preferences. These values intentionally live next
+/// to notification preferences instead of in the workspace archive: changing
+/// locale or units must never create a domain mutation, and a later account
+/// must not inherit the previous account's presentation choices.
+struct RootineProfilePreferences: Codable, Equatable, Sendable {
+    static let currentVersion = 1
+
+    var version: Int
+    var timezoneIdentifier: String
+    var localeIdentifier: String
+    var currencyCode: String
+    var usesMetricUnits: Bool
+    var privacyMode: Bool
+
+    init(
+        version: Int = RootineProfilePreferences.currentVersion,
+        timezoneIdentifier: String = TimeZone.current.identifier,
+        localeIdentifier: String = RootineProfilePreferences.defaultLocaleIdentifier,
+        currencyCode: String = RootineProfilePreferences.defaultCurrencyCode,
+        usesMetricUnits: Bool = true,
+        privacyMode: Bool = false
+    ) {
+        self.version = version
+        self.timezoneIdentifier = timezoneIdentifier
+        self.localeIdentifier = localeIdentifier
+        self.currencyCode = currencyCode
+        self.usesMetricUnits = usesMetricUnits
+        self.privacyMode = privacyMode
+    }
+
+    static var defaultLocaleIdentifier: String {
+        Locale.current.language.languageCode?.identifier == "pl" ? "pl-PL" : "en-US"
+    }
+
+    static var defaultCurrencyCode: String {
+        Locale(identifier: defaultLocaleIdentifier).currency?.identifier ?? "PLN"
+    }
+
+    static var current: RootineProfilePreferences {
+        RootineProfilePreferences()
+    }
+
+    /// Reject unknown values at the storage boundary. A malformed account
+    /// preference should fall back to a usable, local-safe profile rather than
+    /// affecting workspace decoding or synchronization.
+    var normalized: RootineProfilePreferences {
+        var copy = self
+        copy.version = Self.currentVersion
+        if TimeZone(identifier: copy.timezoneIdentifier) == nil {
+            copy.timezoneIdentifier = TimeZone.current.identifier
+        }
+        if !["pl-PL", "en-US"].contains(copy.localeIdentifier) {
+            copy.localeIdentifier = Self.defaultLocaleIdentifier
+        }
+        if !["PLN", "EUR", "USD", "GBP"].contains(copy.currencyCode) {
+            copy.currencyCode = Self.defaultCurrencyCode
+        }
+        return copy
+    }
+}
+
+enum RootineProfileSettingsError: LocalizedError, Equatable, Sendable {
+    case invalidDisplayName
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidDisplayName:
+            return "Nazwa profilu musi mieć od 1 do 120 znaków i nie może zawierać znaków sterujących."
+        }
+    }
+}
+
+enum RootineProfilePreferencesStore {
+    private static let keyPrefix = "rootine.profile.preferences."
+
+    static func load(
+        userID: String,
+        defaults: UserDefaults = .standard
+    ) -> RootineProfilePreferences? {
+        guard let data = defaults.data(forKey: key(for: userID)),
+              let preferences = try? JSONDecoder().decode(RootineProfilePreferences.self, from: data),
+              preferences.version == RootineProfilePreferences.currentVersion else {
+            return nil
+        }
+        return preferences.normalized
+    }
+
+    static func save(
+        _ preferences: RootineProfilePreferences,
+        userID: String,
+        defaults: UserDefaults = .standard
+    ) {
+        guard let data = try? JSONEncoder().encode(preferences.normalized) else { return }
+        defaults.set(data, forKey: key(for: userID))
+    }
+
+    static func remove(userID: String, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key(for: userID))
+    }
+
+    private static func key(for userID: String) -> String {
+        keyPrefix + RootineLocalIdentifier.string(
+            namespace: "profile-preferences",
+            operationID: userID
+        )
+    }
+}
+
 /// Stable handoff boundary for the profile and device workstreams. The
 /// device ID is intentionally not part of a dedupe key (B11's contract is per
 /// user/entity/occurrence/type), but it is available for future diagnostics

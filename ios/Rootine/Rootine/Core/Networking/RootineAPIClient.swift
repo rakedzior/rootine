@@ -63,6 +63,30 @@ struct RootineConfiguration: Equatable, Sendable {
 struct SupabaseUser: Codable, Equatable, Sendable {
     var id: String
     var email: String?
+    /// Supabase includes arbitrary user metadata in auth responses. Keep it
+    /// typed as JSON so a provider can never make the entire session
+    /// undecodable by adding a non-string metadata value.
+    var userMetadata: [String: JSONValue]? = nil
+    var appMetadata: [String: JSONValue]? = nil
+    var identities: [SupabaseIdentity]? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case email
+        case userMetadata = "user_metadata"
+        case appMetadata = "app_metadata"
+        case identities
+    }
+}
+
+struct SupabaseIdentity: Codable, Equatable, Sendable {
+    var identityID: String?
+    var provider: String
+
+    enum CodingKeys: String, CodingKey {
+        case identityID = "identity_id"
+        case provider
+    }
 }
 
 struct SupabaseSession: Codable, Equatable, Sendable {
@@ -373,6 +397,62 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
         _ = try await sendRaw(request)
     }
 
+    /// Updates only the display-name field in the authenticated user's
+    /// metadata. Existing metadata is retained so a provider's avatar or
+    /// other harmless profile fields are not discarded by GoTrue.
+    func updateDisplayName(
+        _ displayName: String,
+        existingMetadata: [String: JSONValue]?,
+        accessToken: String
+    ) async throws -> SupabaseUser {
+        guard let baseURL = configuration.supabaseURL else { throw RootineAPIError.missingConfiguration }
+        var request = authorizedRequest(
+            url: baseURL.appendingPathComponent("auth/v1/user"),
+            accessToken: accessToken
+        )
+        request.httpMethod = "PUT"
+        var metadata = existingMetadata ?? [:]
+        metadata["full_name"] = .string(displayName)
+        request.httpBody = try JSONEncoder().encode(UserMetadataUpdate(data: metadata))
+        return try await send(request, as: SupabaseUser.self)
+    }
+
+    /// Saves account-scoped notification settings through the existing RPC.
+    /// The response contains only redacted preference metadata—never a push
+    /// token or notification body.
+    func saveNotificationPreferences(
+        _ preferences: RootineNotificationPreferences,
+        accessToken: String
+    ) async throws -> RootineNotificationPreferences {
+        guard let baseURL = configuration.supabaseURL else { throw RootineAPIError.missingConfiguration }
+        var request = authorizedRequest(
+            url: baseURL.appendingPathComponent("rest/v1/rpc/rootine_save_notification_preferences"),
+            accessToken: accessToken
+        )
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(RemoteNotificationPreferencesRequest(preferences: preferences))
+        let rows = try await send(request, as: [RemoteNotificationPreferences].self)
+        guard let response = rows.first else { throw RootineAPIError.invalidResponse }
+        return response.localPreferences
+    }
+
+    func loadNotificationPreferences(
+        accessToken: String
+    ) async throws -> RootineNotificationPreferences? {
+        guard let baseURL = configuration.supabaseURL else { throw RootineAPIError.missingConfiguration }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/rootine_notification_preferences"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "select", value: "notifications_enabled,task_notifications_enabled,habit_notifications_enabled,timezone,quiet_hours_start,quiet_hours_end"),
+            URLQueryItem(name: "limit", value: "1")
+        ]
+        guard let url = components?.url else { throw RootineAPIError.missingConfiguration }
+        let response = try await send(authorizedRequest(url: url, accessToken: accessToken), as: [RemoteNotificationPreferences].self)
+        return response.first?.localPreferences
+    }
+
     func refreshSession(refreshToken: String) async throws -> SupabaseSession {
         let request = try authRequest(
             path: "auth/v1/token",
@@ -567,6 +647,74 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
 
         enum CodingKeys: String, CodingKey {
             case deviceID = "p_device_id"
+        }
+    }
+
+    private struct UserMetadataUpdate: Encodable {
+        var data: [String: JSONValue]
+    }
+
+    private struct RemoteNotificationPreferencesRequest: Encodable {
+        var notificationsEnabled: Bool
+        var taskNotificationsEnabled: Bool
+        var habitNotificationsEnabled: Bool
+        var timezone: String
+        var quietHoursStart: String?
+        var quietHoursEnd: String?
+
+        init(preferences: RootineNotificationPreferences) {
+            notificationsEnabled = preferences.enabled
+            taskNotificationsEnabled = preferences.taskRemindersEnabled
+            habitNotificationsEnabled = preferences.habitRemindersEnabled
+            timezone = preferences.timezoneIdentifier
+            quietHoursStart = preferences.quietHoursStart
+            quietHoursEnd = preferences.quietHoursEnd
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case notificationsEnabled = "p_notifications_enabled"
+            case taskNotificationsEnabled = "p_task_notifications_enabled"
+            case habitNotificationsEnabled = "p_habit_notifications_enabled"
+            case timezone = "p_timezone"
+            case quietHoursStart = "p_quiet_hours_start"
+            case quietHoursEnd = "p_quiet_hours_end"
+        }
+    }
+
+    private struct RemoteNotificationPreferences: Decodable {
+        var notificationsEnabled: Bool
+        var taskNotificationsEnabled: Bool
+        var habitNotificationsEnabled: Bool
+        var timezone: String
+        var quietHoursStart: String?
+        var quietHoursEnd: String?
+
+        enum CodingKeys: String, CodingKey {
+            case notificationsEnabled = "notifications_enabled"
+            case taskNotificationsEnabled = "task_notifications_enabled"
+            case habitNotificationsEnabled = "habit_notifications_enabled"
+            case timezone
+            case quietHoursStart = "quiet_hours_start"
+            case quietHoursEnd = "quiet_hours_end"
+        }
+
+        var localPreferences: RootineNotificationPreferences {
+            RootineNotificationPreferences(
+                enabled: notificationsEnabled,
+                timezoneIdentifier: timezone,
+                taskRemindersEnabled: taskNotificationsEnabled,
+                habitRemindersEnabled: habitNotificationsEnabled,
+                showTaskDetails: false,
+                quietHoursStart: normalizedTime(quietHoursStart),
+                quietHoursEnd: normalizedTime(quietHoursEnd)
+            )
+        }
+
+        private func normalizedTime(_ value: String?) -> String? {
+            guard let value, !value.isEmpty else { return nil }
+            // Postgres `time` commonly arrives as HH:mm:ss; the local
+            // scheduler accepts HH:mm and the server accepts both forms.
+            return String(value.prefix(5))
         }
     }
 
