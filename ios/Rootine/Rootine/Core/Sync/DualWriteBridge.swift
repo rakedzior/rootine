@@ -61,7 +61,10 @@ struct DualWriteReconciliationMetadata: Codable, Equatable, Sendable {
 /// Cursor is account/device metadata, independent from a record revision.
 /// It is persisted beside the existing file queue so force quit cannot cause
 /// a later pull to replay an already acknowledged range as a new baseline.
-actor RootineSyncCursorStore {
+/// Legacy bridge cursor wrapper. The v3 sync engine owns the public
+/// `RootineSyncCursorStore`; keeping this bridge-local name avoids two
+/// persistence implementations sharing a Swift symbol.
+actor RootineDualWriteCursorStore {
     private let store: WorkspaceFileStore
 
     init(store: WorkspaceFileStore) {
