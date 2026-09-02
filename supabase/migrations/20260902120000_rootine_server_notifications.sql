@@ -294,46 +294,96 @@ create trigger rootine_notification_rules_entity_owner
   for each row execute function public.rootine_validate_notification_rule_entity();
 
 -- B02 currently allows stable UUID/string identifiers. When its tables expose
--- text identifiers (the native workspace uses integer-looking strings), add a
--- real FK as well as the owner trigger. If a later schema chooses uuid/int,
--- the trigger remains the portable ownership guard and B02 can add a typed FK
--- in its own forward migration.
+-- text identifiers (the native workspace uses integer-looking strings) and a
+-- typed unique (user_id, id) key, add ownership-safe composite FKs. Never use
+-- an FK on the entity id alone: the same id may exist under another account.
+-- If a later schema chooses uuid/int, the trigger remains the portable
+-- ownership guard and B02 can add a typed composite FK in a forward migration.
 do $$
+declare
+  tasks_table regclass;
+  habits_table regclass;
+  tasks_user_id_attnum smallint;
+  tasks_id_attnum smallint;
+  habits_user_id_attnum smallint;
+  habits_id_attnum smallint;
 begin
-  if to_regclass('public.tasks') is not null
+  tasks_table := to_regclass('public.tasks');
+  habits_table := to_regclass('public.habits');
+  alter table public.rootine_notification_rules
+    drop constraint if exists rootine_notification_rules_task_fk;
+  alter table public.rootine_notification_rules
+    drop constraint if exists rootine_notification_rules_habit_fk;
+
+  if tasks_table is not null
      and exists (
        select 1 from pg_attribute a
-       join pg_class c on c.oid = a.attrelid
-       join pg_namespace n on n.oid = c.relnamespace
-       where n.nspname = 'public' and c.relname = 'tasks'
+       where a.attrelid = tasks_table
+         and a.attname = 'user_id' and not a.attisdropped
+         and format_type(a.atttypid, a.atttypmod) = 'uuid'
+     )
+     and exists (
+       select 1 from pg_attribute a
+       where a.attrelid = tasks_table
          and a.attname = 'id' and not a.attisdropped
          and format_type(a.atttypid, a.atttypmod) = 'text'
      ) then
-    begin
-      alter table public.rootine_notification_rules
-        add constraint rootine_notification_rules_task_fk
-        foreign key (task_id) references public.tasks (id) on delete cascade;
-    exception when duplicate_object then null;
-    end;
+    select attnum into tasks_user_id_attnum from pg_attribute
+    where attrelid = tasks_table and attname = 'user_id' and not attisdropped;
+    select attnum into tasks_id_attnum from pg_attribute
+    where attrelid = tasks_table and attname = 'id' and not attisdropped;
+    if exists (
+      select 1 from pg_constraint c
+      where c.conrelid = tasks_table
+        and c.contype in ('p', 'u')
+        and c.conkey = array[tasks_user_id_attnum, tasks_id_attnum]::smallint[]
+    ) then
+      begin
+        alter table public.rootine_notification_rules
+          add constraint rootine_notification_rules_task_fk
+          foreign key (user_id, task_id)
+          references public.tasks (user_id, id) on delete cascade;
+      exception when duplicate_object then null;
+      end;
+    end if;
   end if;
-  if to_regclass('public.habits') is not null
+  if habits_table is not null
      and exists (
        select 1 from pg_attribute a
-       join pg_class c on c.oid = a.attrelid
-       join pg_namespace n on n.oid = c.relnamespace
-       where n.nspname = 'public' and c.relname = 'habits'
+       where a.attrelid = habits_table
+         and a.attname = 'user_id' and not a.attisdropped
+         and format_type(a.atttypid, a.atttypmod) = 'uuid'
+     )
+     and exists (
+       select 1 from pg_attribute a
+       where a.attrelid = habits_table
          and a.attname = 'id' and not a.attisdropped
          and format_type(a.atttypid, a.atttypmod) = 'text'
      ) then
-    begin
-      alter table public.rootine_notification_rules
-        add constraint rootine_notification_rules_habit_fk
-        foreign key (habit_id) references public.habits (id) on delete cascade;
-    exception when duplicate_object then null;
-    end;
+    select attnum into habits_user_id_attnum from pg_attribute
+    where attrelid = habits_table and attname = 'user_id' and not attisdropped;
+    select attnum into habits_id_attnum from pg_attribute
+    where attrelid = habits_table and attname = 'id' and not attisdropped;
+    if exists (
+      select 1 from pg_constraint c
+      where c.conrelid = habits_table
+        and c.contype in ('p', 'u')
+        and c.conkey = array[habits_user_id_attnum, habits_id_attnum]::smallint[]
+    ) then
+      begin
+        alter table public.rootine_notification_rules
+          add constraint rootine_notification_rules_habit_fk
+          foreign key (user_id, habit_id)
+          references public.habits (user_id, id) on delete cascade;
+      exception when duplicate_object then null;
+      end;
+    end if;
   end if;
 end;
 $$;
+
+-- Unscoped entity-id FKs are intentionally absent; the composite FK above is
+-- supplemented by rootine_validate_notification_rule_entity().
 
 create or replace function public.rootine_cancel_notification_jobs_for_rule()
 returns trigger
@@ -1034,7 +1084,7 @@ grant select on table public.rootine_notification_preferences,
   public.rootine_notification_rules,
   public.rootine_notification_jobs,
   public.rootine_notification_deliveries to authenticated;
-grant insert, update on table public.rootine_notification_preferences to authenticated;
+revoke insert, update on table public.rootine_notification_preferences from authenticated;
 
 drop policy if exists rootine_notification_preferences_owner on public.rootine_notification_preferences;
 create policy rootine_notification_preferences_owner
