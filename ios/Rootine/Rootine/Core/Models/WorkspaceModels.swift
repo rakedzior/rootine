@@ -978,6 +978,25 @@ enum JSONValue: Codable, Equatable, Sendable {
 }
 
 enum RootineDate {
+    /// Returns a Gregorian calendar configured for the supplied timezone. A
+    /// local-day key is a calendar value, not a UTC timestamp; using this
+    /// helper keeps DST and travel behavior explicit at every boundary.
+    static func calendar(
+        timeZone: TimeZone = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent
+    ) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        calendar.timeZone = timeZone
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        return calendar
+    }
+
+    static func calendar(using settings: RootineLocaleSettings) -> Calendar {
+        settings.calendar
+    }
+
     static func isoTimestamp(_ date: Date = Date()) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -995,5 +1014,51 @@ enum RootineDate {
     static func localDate(_ date: Date = Date(), calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    static func localDate(_ date: Date = Date(), timeZone: TimeZone) -> String {
+        localDate(date, calendar: calendar(timeZone: timeZone))
+    }
+
+    static func localDate(_ date: Date = Date(), settings: RootineLocaleSettings) -> String {
+        localDate(date, calendar: calendar(using: settings))
+    }
+
+    /// Parses a strict `YYYY-MM-DD` value in the supplied local timezone. A
+    /// date-only string must not be parsed through `DateFormatter` or UTC,
+    /// otherwise a user travelling across midnight can see the wrong day.
+    static func date(fromLocalDate value: String, calendar: Calendar = RootineDate.calendar()) -> Date? {
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts.allSatisfy({ $0.allSatisfy(\.isNumber) }),
+              parts[0].count == 4,
+              parts[1].count == 2,
+              parts[2].count == 2,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2]),
+              (1...12).contains(month),
+              (1...31).contains(day) else { return nil }
+        var components = DateComponents()
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        components.year = year
+        components.month = month
+        components.day = day
+        guard let date = calendar.date(from: components),
+              localDate(date, calendar: calendar) == value else { return nil }
+        return date
+    }
+
+    static func isValidLocalDate(_ value: String, calendar: Calendar = RootineDate.calendar()) -> Bool {
+        date(fromLocalDate: value, calendar: calendar) != nil
+    }
+
+    static func dayInterval(
+        for value: String,
+        calendar: Calendar = RootineDate.calendar()
+    ) -> DateInterval? {
+        guard let date = date(fromLocalDate: value, calendar: calendar) else { return nil }
+        return calendar.dateInterval(of: .day, for: date)
     }
 }

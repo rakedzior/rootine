@@ -46,6 +46,7 @@
 		B00000000000000000000112 /* SyncV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000112 /* SyncV3Tests.swift */; };
 		B00000000000000000000113 /* sync-v3-register-device-response.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000113 /* sync-v3-register-device-response.json */; };
 		B00000000000000000000114 /* LocalNotificationSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */; };
+		B00000000000000000000115 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000115 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000107 /* sport-planner-v5.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000107 /* sport-planner-v5.json */; };
 		B00000000000000000000108 /* goals-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000108 /* goals-workspace-v1.json */; };
 		B00000000000000000000109 /* work-workspace-v3.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000109 /* work-workspace-v3.json */; };
@@ -91,6 +92,7 @@
 		F0000000000000000000000E /* Auth/AuthenticationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/AuthenticationSupport.swift; sourceTree = "<group>"; };
 		F0000000000000000000000F /* Authentication/AuthenticationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication/AuthenticationViews.swift; sourceTree = "<group>"; };
 		F00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F00000000000000000000115 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F00000000000000000000011 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		F00000000000000000000012 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		F00000000000000000000013 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 			children = (
 				F0000000000000000000000B /* Rootine.entitlements */,
 				F00000000000000000000010 /* Info.plist */,
+				F00000000000000000000115 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Rootine/Resources;
 			sourceTree = "<group>";
@@ -359,6 +362,7 @@
 				B0000000000000000000010A /* travel-workspace-v2.json in Resources */,
 				B0000000000000000000010B /* health-workspace-v1.json in Resources */,
 				B00000000000000000000113 /* sync-v3-register-device-response.json in Resources */,
+				B00000000000000000000115 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

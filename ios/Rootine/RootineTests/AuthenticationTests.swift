@@ -32,6 +32,48 @@ final class AuthenticationTests: XCTestCase {
         }
     }
 
+    func testDeepLinkParserAcceptsKnownDestinationsWithoutRetainingAuthPayload() throws {
+        let configuration = RootineConfiguration(
+            supabaseURL: URL(string: "https://example.supabase.co"),
+            supabasePublishableKey: "publishable",
+            backendURL: URL(string: "https://app.example.com"),
+            authCallbackScheme: "rootine",
+            termsURL: nil,
+            privacyURL: nil
+        )
+
+        XCTAssertEqual(
+            RootineDeepLink.parse(URL(string: "rootine://tasks/42")!, configuration: configuration),
+            .tasks(taskID: 42)
+        )
+        XCTAssertEqual(
+            RootineDeepLink.parse(URL(string: "https://app.example.com/odzywianie/barcode/590123")!, configuration: configuration),
+            .nutritionBarcode(code: "590123")
+        )
+        XCTAssertEqual(
+            RootineDeepLink.parse(URL(string: "rootine://auth-callback#access_token=secret&refresh_token=secret")!, configuration: configuration),
+            .authCallback
+        )
+        XCTAssertNil(RootineDeepLink.parse(URL(string: "https://evil.example.com/tasks/42")!, configuration: configuration))
+        XCTAssertNil(RootineDeepLink.parse(URL(string: "rootine://tasks/0")!, configuration: configuration))
+    }
+
+    func testNotificationDeepLinkValidatesSchemaAndMapsToTasks() {
+        XCTAssertEqual(
+            RootineDeepLink.fromNotificationUserInfo([
+                "rootine_schema_version": 1,
+                "rootine_entity": "habit",
+                "rootine_entity_id": "101"
+            ]),
+            .reminder(entity: .habit, entityID: "101")
+        )
+        XCTAssertNil(RootineDeepLink.fromNotificationUserInfo([
+            "rootine_schema_version": 2,
+            "rootine_entity": "task",
+            "rootine_entity_id": "42"
+        ]))
+    }
+
     func testStoredSessionRefreshesShortlyBeforeExpiry() {
         let session = SupabaseSession(
             accessToken: "access",

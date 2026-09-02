@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @main
 struct RootineApp: App {
@@ -51,3 +51,18 @@ final class RootineAppDelegate: NSObject, UIApplicationDelegate {
 }
 
 extension RootineAppDelegate: UNUserNotificationCenterDelegate {}
+
+extension RootineAppDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        NotificationCenter.default.post(
+            name: .rootineDeepLinkDidReceive,
+            object: nil,
+            userInfo: response.notification.request.content.userInfo
+        )
+        completionHandler()
+    }
+}

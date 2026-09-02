@@ -3,6 +3,7 @@
 // run on the current physical iPhone and the matching simulator runtime.
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 SWIFT_VERSION = 6.2
+DEVELOPMENT_LANGUAGE = pl
 PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1

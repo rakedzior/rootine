@@ -289,7 +289,34 @@ protocol WorkspaceRemoteClient: Sendable {
     func apply(_ mutation: PendingWorkspaceMutation, accessToken: String) async throws -> ApplySnapshotResponse
 }
 
-final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient, @unchecked Sendable {
+/// AppEnvironment depends on this contract rather than a concrete transport.
+/// That keeps authentication, persistence, sync and offline tests isolated
+/// from URLSession and from credentials that are unavailable in CI.
+protocol RootineAPIService: WorkspaceRemoteClient, RootineRelationalReadClient, Sendable {
+    func signIn(email: String, password: String) async throws -> SupabaseSession
+    func signUp(email: String, password: String) async throws -> EmailRegistrationResult
+    func resendConfirmation(email: String) async throws
+    func requestPasswordReset(email: String) async throws
+    func updatePassword(_ password: String, accessToken: String) async throws
+    func refreshSession(refreshToken: String) async throws -> SupabaseSession
+    func signInWithApple(idToken: String, nonce: String) async throws -> SupabaseSession
+    func googleAuthorizationURL() throws -> URL
+    func session(from callbackURL: URL) async throws -> AuthCallbackResult
+    func readSnapshots(accessToken: String) async throws -> [RemoteWorkspaceSnapshot]
+    func registerDevice(
+        deviceID: String,
+        appVersion: String,
+        apnsEnvironment: RootineAPNsEnvironment,
+        pushToken: String?,
+        permissionState: RootineNotificationPermissionState,
+        accessToken: String
+    ) async throws -> RootineDeviceRegistration
+    func revokeDevice(deviceID: String, accessToken: String) async throws -> RootineDeviceRevocation
+    func product(barcode: String, accessToken: String) async throws -> NutritionProduct
+    func deleteAccount(accessToken: String) async throws
+}
+
+final class RootineAPIClient: RootineAPIService, @unchecked Sendable {
     private let configuration: RootineConfiguration
     private let session: URLSession
     private let syncDeviceID: String

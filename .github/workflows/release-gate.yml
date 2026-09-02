@@ -128,6 +128,7 @@ jobs:
           -project ios/Rootine/Rootine.xcodeproj
           -scheme Rootine
           -configuration Debug
+          -sdk iphonesimulator
           -destination "${IOS_SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
           -derivedDataPath "$RUNNER_TEMP/RootineDerivedData"
           -resultBundlePath "$RUNNER_TEMP/RootineTests.xcresult"

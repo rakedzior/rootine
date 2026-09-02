@@ -935,6 +935,17 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertNil(RootineDate.date(from: "not-a-timestamp"))
     }
 
+    func testRootineDateUsesExplicitTimezoneForLocalDayBoundaries() throws {
+        let warsaw = try XCTUnwrap(TimeZone(identifier: "Europe/Warsaw"))
+        let instant = try XCTUnwrap(RootineDate.date(from: "2026-03-29T22:30:00Z"))
+
+        XCTAssertEqual(RootineDate.localDate(instant, timeZone: warsaw), "2026-03-30")
+        XCTAssertTrue(RootineDate.isValidLocalDate("2024-02-29", calendar: RootineDate.calendar(timeZone: warsaw)))
+        XCTAssertFalse(RootineDate.isValidLocalDate("2025-02-29", calendar: RootineDate.calendar(timeZone: warsaw)))
+        XCTAssertNil(RootineDate.date(fromLocalDate: "2026-2-03", calendar: RootineDate.calendar(timeZone: warsaw)))
+        XCTAssertEqual(try XCTUnwrap(RootineDate.dayInterval(for: "2026-03-29", calendar: RootineDate.calendar(timeZone: warsaw))).duration, 23 * 60 * 60, accuracy: 0.1)
+    }
+
     func testWorkspaceExportRoundTripsEveryNativeModuleAndPreservesIdentifiers() throws {
         let timestamp = "2026-09-02T08:00:00.000Z"
         var tasks = TaskWorkspace.empty

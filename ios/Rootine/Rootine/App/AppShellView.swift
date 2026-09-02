@@ -76,11 +76,15 @@ struct RootineEntryView: View {
 #endif
         }
         .onOpenURL { url in
-            Task { await environment.receiveAuthCallback(url) }
+            Task { await environment.receiveDeepLink(url) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .rootineAPNsTokenDidRegister)) { _ in
             guard !isPreviewLaunch else { return }
             Task { await environment.registerDeviceForCurrentSession() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .rootineDeepLinkDidReceive)) { notification in
+            guard let userInfo = notification.userInfo else { return }
+            environment.receiveNotificationDeepLink(userInfo)
         }
         .onChange(of: scenePhase) { _, phase in
             guard !isPreviewLaunch else { return }
@@ -99,6 +103,7 @@ struct RootineEntryView: View {
 /// Native product shell. Each tab owns its navigation stack so feature details
 /// can be added without changing the root navigation contract.
 struct RootineMainView: View {
+    @EnvironmentObject private var environment: AppEnvironment
     @State private var selection: RootineTab = RootineMainView.initialSelection
     @State private var isShowingQuickAdd = false
 
@@ -150,6 +155,15 @@ struct RootineMainView: View {
             QuickAddSheet()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
+        }
+        .onChange(of: environment.pendingDeepLink) { _, deepLink in
+            guard let deepLink else { return }
+            switch deepLink.tab {
+            case .today: selection = .today
+            case .tasks: selection = .tasks
+            case .calendar: selection = .calendar
+            case .nutrition: selection = .nutrition
+            }
         }
     }
 

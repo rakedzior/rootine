@@ -4,6 +4,27 @@ import UIKit
 import BackgroundTasks
 import Network
 
+protocol RootineNetworkPathMonitoring: AnyObject, Sendable {
+    func start(onChange: @escaping @Sendable (Bool) -> Void)
+    func cancel()
+}
+
+final class SystemRootineNetworkPathMonitor: RootineNetworkPathMonitoring, @unchecked Sendable {
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "app.rootine.sync.network-monitor")
+
+    func start(onChange: @escaping @Sendable (Bool) -> Void) {
+        monitor.pathUpdateHandler = { path in
+            onChange(path.status == .satisfied)
+        }
+        monitor.start(queue: queue)
+    }
+
+    func cancel() {
+        monitor.cancel()
+    }
+}
+
 private enum WorkspaceEncodingError: Error {
     case invalidValue(for: RootineStorageKey)
 }
@@ -78,19 +99,28 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var notificationPermissionState: RootineNotificationPermissionState = .notDetermined
     @Published private(set) var normalizedReadEnabled = false
     @Published private(set) var normalizedReadFallbackReason: String?
+    /// The destination is kept until the owning feature consumes it. This
+    /// also handles a universal link received while the auth gate is still
+    /// presenting; no route is lost during cold start.
+    @Published private(set) var pendingDeepLink: RootineDeepLink?
 
     let configuration: RootineConfiguration
-    private let api: RootineAPIClient
+    private let api: any RootineAPIService
     private let normalizedReadClient: any RootineRelationalReadClient
     private let readFeatureFlags: any RootineReadFeatureFlagStore
-    private let keychain: KeychainSessionStore
-    private let deviceIdentity: RootineDeviceIdentityStore
+    private let keychain: any RootineSessionStoring
+    private let deviceIdentity: any RootineDeviceIdentityProviding
+    private let workspaceStoreFactory: @Sendable (String) -> WorkspaceFileStore
+    private let notificationSchedulerFactory: @Sendable (String) -> any RootineNotificationScheduling
+    private let clock: any RootineClock
+    private let normalizedSyncRemote: (any RootineSyncRemoteClientProtocol)?
+    private let networkMonitorFactory: @Sendable () -> any RootineNetworkPathMonitoring
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
     /// Local reminders consume the same task aggregate as the sync boundary.
     /// The scheduler is optional so permission/API failures never gate local
     /// persistence or the sync queue.
-    private var localNotificationScheduler: RootineLocalNotificationScheduler?
+    private var localNotificationScheduler: (any RootineNotificationScheduling)?
     /// B08 can replace this in-memory value with the profile payload once its
     /// normalized read is available. It intentionally has no SQLite shadow in
     /// B10, matching the single aggregate-cache decision in the main plan.
@@ -100,8 +130,7 @@ final class AppEnvironment: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var realtimeClient: RootineRealtimeClient?
     private var syncCoordinator: RootineSyncCoordinator?
-    private var networkMonitor: NWPathMonitor?
-    private var networkMonitorQueue: DispatchQueue?
+    private var networkMonitor: (any RootineNetworkPathMonitoring)?
     private var didRegisterBackgroundTask = false
     private var isReconciling = false
     /// Main-actor methods can still interleave at an `await`. Keep an import
@@ -120,17 +149,31 @@ final class AppEnvironment: ObservableObject {
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
-        keychain: KeychainSessionStore = KeychainSessionStore(),
+        keychain: any RootineSessionStoring = KeychainSessionStore(),
+        api: (any RootineAPIService)? = nil,
         normalizedReadClient: (any RootineRelationalReadClient)? = nil,
-        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil
+        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil,
+        deviceIdentity: (any RootineDeviceIdentityProviding)? = nil,
+        workspaceStoreFactory: @escaping @Sendable (String) -> WorkspaceFileStore = { WorkspaceFileStore(userID: $0) },
+        notificationSchedulerFactory: @escaping @Sendable (String) -> any RootineNotificationScheduling = { userID in
+            RootineLocalNotificationScheduler(context: RootineNotificationAccountContext(userID: userID))
+        },
+        clock: any RootineClock = SystemRootineClock(),
+        normalizedSyncRemote: (any RootineSyncRemoteClientProtocol)? = nil,
+        networkMonitorFactory: @escaping @Sendable () -> any RootineNetworkPathMonitoring = { SystemRootineNetworkPathMonitor() }
     ) {
         self.configuration = configuration
         self.keychain = keychain
         let configuredAPI = RootineAPIClient(configuration: configuration)
-        self.api = configuredAPI
-        self.deviceIdentity = RootineDeviceIdentityStore()
-        self.normalizedReadClient = normalizedReadClient ?? configuredAPI
+        self.api = api ?? configuredAPI
+        self.deviceIdentity = deviceIdentity ?? RootineDeviceIdentityStore()
+        self.normalizedReadClient = normalizedReadClient ?? (api ?? configuredAPI)
         self.readFeatureFlags = readFeatureFlags ?? UserDefaultsRootineReadFeatureFlagStore()
+        self.workspaceStoreFactory = workspaceStoreFactory
+        self.notificationSchedulerFactory = notificationSchedulerFactory
+        self.clock = clock
+        self.normalizedSyncRemote = normalizedSyncRemote
+        self.networkMonitorFactory = networkMonitorFactory
         let storedSession = keychain.load()
         session = storedSession
         if let storedSession {
@@ -195,8 +238,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     func handleAuthCallback(_ url: URL) async throws {
-        guard url.scheme?.lowercased() == configuration.authCallbackScheme.lowercased(),
-              url.host == "auth-callback" else { return }
+        guard case .authCallback? = RootineDeepLink.parse(url, configuration: configuration) else { return }
         try await establishGoogleSession(callbackURL: url)
     }
 
@@ -207,6 +249,27 @@ final class AppEnvironment: ObservableObject {
         } catch {
             authCallbackError = error.localizedDescription
         }
+    }
+
+    /// Handles auth callbacks and safe feature destinations through one URL
+    /// boundary. Auth URLs are consumed immediately; feature links remain
+    /// payload-free state for the active tab to consume.
+    func receiveDeepLink(_ url: URL) async {
+        guard let deepLink = RootineDeepLink.parse(url, configuration: configuration) else { return }
+        if case .authCallback = deepLink {
+            await receiveAuthCallback(url)
+        } else {
+            pendingDeepLink = deepLink
+        }
+    }
+
+    func receiveNotificationDeepLink(_ userInfo: [AnyHashable: Any]) {
+        guard let deepLink = RootineDeepLink.fromNotificationUserInfo(userInfo) else { return }
+        pendingDeepLink = deepLink
+    }
+
+    func clearPendingDeepLink() {
+        pendingDeepLink = nil
     }
 
     func clearAuthCallbackError() {
@@ -265,7 +328,7 @@ final class AppEnvironment: ObservableObject {
 
 #if DEBUG
     func loadPreviewData() async {
-        let now = Date()
+        let now = clock.now
         let today = RootineDate.localDate(now)
         let yesterday = RootineDate.localDate(Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now)
         let tomorrow = RootineDate.localDate(Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now)
@@ -506,6 +569,7 @@ final class AppEnvironment: ObservableObject {
         travelWorkspace = .empty
         healthWorkspace = .empty
         affairsWorkspace = .empty
+        pendingDeepLink = nil
         realtimeLastRefresh = nil
         realtimeStatus = .stopped
         syncCoordinatorStatus = .stopped
@@ -523,7 +587,7 @@ final class AppEnvironment: ObservableObject {
     func exportWorkspaceArchive() throws -> Data {
         let archive = RootineWorkspaceExport(
             schemaVersion: RootineWorkspaceExport.currentVersion,
-            exportedAt: RootineDate.isoTimestamp(),
+            exportedAt: RootineDate.isoTimestamp(clock.now),
             accountID: session?.user.id,
             accountEmail: session?.user.email,
             tasks: taskWorkspace,
@@ -1218,7 +1282,7 @@ final class AppEnvironment: ObservableObject {
             return
         }
         var next = workWorkspace
-        let now = Date()
+        let now = clock.now
         let minutes = max(1, Int(now.timeIntervalSince(startDate) / 60))
         let sessionID = RootineLocalIdentifier.string(namespace: "focus", operationID: startedAt)
         next.focusSessions.removeAll { $0.id == sessionID }
@@ -2288,7 +2352,7 @@ final class AppEnvironment: ObservableObject {
         _ = await scheduler.reconcile(
             workspace: taskWorkspace,
             preferences: notificationPreferences,
-            now: Date()
+            now: clock.now
         )
     }
 
@@ -2303,11 +2367,9 @@ final class AppEnvironment: ObservableObject {
         // new profile payload.
         notificationPreferences = RootineNotificationPreferencesStore.load(userID: userID)
             ?? RootineNotificationPreferences()
-        let userStore = WorkspaceFileStore(userID: userID)
+        let userStore = workspaceStoreFactory(userID)
         store = userStore
-        localNotificationScheduler = RootineLocalNotificationScheduler(
-            context: RootineNotificationAccountContext(userID: userID)
-        )
+        localNotificationScheduler = notificationSchedulerFactory(userID)
         // Login/account switching must not strand the previous account's
         // pending requests. The old actor retains its own hashed ownership
         // prefix, so this cancellation cannot touch the new account.
@@ -2317,7 +2379,7 @@ final class AppEnvironment: ObservableObject {
             environment: configuration.environment
         )
         normalizedReadFallbackReason = nil
-        guard let normalizedRemote = try? RootineSyncRemoteClient(configuration: configuration) else {
+        guard let normalizedRemote = normalizedSyncRemote ?? (try? RootineSyncRemoteClient(configuration: configuration)) else {
             syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
             return
         }
@@ -2432,7 +2494,6 @@ final class AppEnvironment: ObservableObject {
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshTaskIdentifier)
         networkMonitor?.cancel()
         networkMonitor = nil
-        networkMonitorQueue = nil
         if let realtimeClient {
             Task { await realtimeClient.stop() }
         }
@@ -2448,23 +2509,19 @@ final class AppEnvironment: ObservableObject {
     private func scheduleBackgroundRefresh() {
         guard session != nil else { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTaskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        request.earliestBeginDate = clock.now.addingTimeInterval(30 * 60)
         try? BGTaskScheduler.shared.submit(request)
     }
 
     private func startNetworkMonitor() {
         guard networkMonitor == nil else { return }
-        let monitor = NWPathMonitor()
-        let queue = DispatchQueue(label: "app.rootine.sync.network-monitor")
-        monitor.pathUpdateHandler = { [weak self] path in
-            let isReachable = path.status == .satisfied
+        let monitor = networkMonitorFactory()
+        monitor.start { [weak self] isReachable in
             Task { @MainActor [weak self] in
                 self?.handleNetworkPath(isReachable: isReachable)
             }
         }
-        monitor.start(queue: queue)
         networkMonitor = monitor
-        networkMonitorQueue = queue
     }
 
     private func handleNetworkPath(isReachable: Bool) {
@@ -2825,7 +2882,7 @@ final class AppEnvironment: ObservableObject {
             if conflictKeys.isEmpty {
                 workspaceSyncStatus = .synced
                 foundationMessage = "Relacyjny stan został bezpiecznie uzgodniony"
-                realtimeLastRefresh = Date()
+                realtimeLastRefresh = clock.now
             } else {
                 workspaceSyncStatus = .conflict(storageKeys: conflictKeys)
                 foundationMessage = "Relacyjny konflikt wymaga decyzji dla: \(conflictKeys.count)"
@@ -3092,7 +3149,7 @@ final class AppEnvironment: ObservableObject {
                 if case .conflict = workspaceSyncStatus {
                     foundationMessage = "Dane lokalne są bezpieczne, ale czekają na rozwiązanie konfliktu"
                 } else {
-                    realtimeLastRefresh = Date()
+                    realtimeLastRefresh = clock.now
                 }
             } else {
                 workspaceSyncStatus = .conflict(storageKeys: conflictKeys)

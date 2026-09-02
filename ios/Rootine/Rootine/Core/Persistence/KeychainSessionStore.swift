@@ -1,7 +1,13 @@
 import Foundation
 import Security
 
-final class KeychainSessionStore {
+protocol RootineSessionStoring: Sendable {
+    func load() -> SupabaseSession?
+    func save(_ session: SupabaseSession) throws
+    func clear()
+}
+
+final class KeychainSessionStore: RootineSessionStoring, @unchecked Sendable {
     private let service: String
     private let account = "supabase-session"
 

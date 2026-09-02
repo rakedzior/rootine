@@ -125,6 +125,7 @@ final class RootinePushRegistry: @unchecked Sendable {
 
 extension Notification.Name {
     static let rootineAPNsTokenDidRegister = Notification.Name("rootine.apns-token-did-register")
+    static let rootineDeepLinkDidReceive = Notification.Name("rootine.deep-link-did-receive")
 }
 
 /// A Keychain-backed installation identifier. Keychain items survive an app
@@ -134,7 +135,11 @@ extension Notification.Name {
 /// already stored by an older build is retained so it continues to address its
 /// existing `(user_id, device_id)` row; the server accepts that legacy form
 /// during migration and no duplicate is created on reinstall.
-final class RootineDeviceIdentityStore: @unchecked Sendable {
+protocol RootineDeviceIdentityProviding: Sendable {
+    func loadOrCreate() -> String
+}
+
+final class RootineDeviceIdentityStore: RootineDeviceIdentityProviding, @unchecked Sendable {
     private let service: String
     private let account = "rootine-device-id"
 
