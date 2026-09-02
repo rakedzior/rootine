@@ -11,6 +11,7 @@ enum RootineCanonicalWorkspaceMapping {
         case .work: return .workCanonicalShadow
         case .travel: return .travelCanonicalShadow
         case .health: return .healthCanonicalShadow
+        case .notes: return .notesCanonicalShadow
         default: return nil
         }
     }
@@ -24,6 +25,121 @@ enum RootineCanonicalWorkspaceMapping {
         case .health: return "rootine.health.workspace.v1"
         default: return key.rawValue
         }
+    }
+
+    // MARK: Notes
+
+    /// Notes use the shared v1 document directly (unlike the compact More
+    /// modules), but the native model intentionally does not know every field
+    /// the web editor may add. Keep this mapping at the sync boundary so a
+    /// native edit is local-first without turning an opaque web field into a
+    /// deletion.
+    static func payload(for workspace: NotesWorkspace) throws -> JSONValue {
+        try jsonValue(workspace)
+    }
+
+    static func notesWorkspace(from payload: JSONValue) throws -> NotesWorkspace {
+        try decode(NotesWorkspace.self, from: payload)
+    }
+
+    static func mergedNotesPayload(for workspace: NotesWorkspace, onto base: JSONValue) throws -> JSONValue {
+        var root = try objectValue(base)
+        let projected = try objectValue(payload(for: workspace))
+        root["version"] = projected["version"] ?? .number(1)
+        root["updatedAt"] = projected["updatedAt"] ?? .string(workspace.updatedAt)
+        root["lists"] = mergedNotesLists(existing: root["lists"], projected: projected["lists"])
+        root["notes"] = mergedNotesNotes(existing: root["notes"], projected: projected["notes"])
+        return .object(root)
+    }
+
+    private static func mergedNotesLists(existing: JSONValue?, projected: JSONValue?) -> JSONValue {
+        mergedNotesRecords(
+            existing: existing,
+            projected: projected,
+            controlledKeys: ["id", "name", "createdAt"]
+        )
+    }
+
+    private static func mergedNotesNotes(existing: JSONValue?, projected: JSONValue?) -> JSONValue {
+        let projectedRecords = deduplicatedRecords(arrayValue(projected))
+        let projectedByID = lastValueByKey(projectedRecords.compactMap { value -> (String, JSONValue)? in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return nil }
+            return (id, value)
+        })
+        var used = Set<String>()
+        var records: [JSONValue] = []
+        for value in deduplicatedRecords(arrayValue(existing)) {
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else {
+                records.append(value)
+                continue
+            }
+            guard let replacement = projectedByID[id] else { continue }
+            records.append(mergeNoteRecord(existing: value, replacement: replacement))
+            used.insert(id)
+        }
+        records.append(contentsOf: projectedRecords.filter { value in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return true }
+            return !used.contains(id)
+        })
+        return .array(records)
+    }
+
+    private static func mergedNotesRecords(existing: JSONValue?, projected: JSONValue?, controlledKeys: [String]) -> JSONValue {
+        let projectedRecords = deduplicatedRecords(arrayValue(projected))
+        let projectedByID = lastValueByKey(projectedRecords.compactMap { value -> (String, JSONValue)? in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return nil }
+            return (id, value)
+        })
+        var used = Set<String>()
+        var records: [JSONValue] = []
+        for value in deduplicatedRecords(arrayValue(existing)) {
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else {
+                records.append(value)
+                continue
+            }
+            guard let replacement = projectedByID[id] else { continue }
+            records.append(mergeObjectFields(existing: value, replacement: replacement, keys: controlledKeys))
+            used.insert(id)
+        }
+        records.append(contentsOf: projectedRecords.filter { value in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return true }
+            return !used.contains(id)
+        })
+        return .array(records)
+    }
+
+    private static func mergeNoteRecord(existing: JSONValue, replacement: JSONValue) -> JSONValue {
+        let keys = ["id", "title", "body", "kind", "tags", "listId", "color", "pinned", "archived", "createdAt", "updatedAt"]
+        let merged = mergeObjectFields(existing: existing, replacement: replacement, keys: keys)
+        guard var object = objectValueIfPresent(merged),
+              let replacementObject = objectValueIfPresent(replacement) else { return merged }
+        guard let replacementItems = replacementObject["items"] else { return merged }
+        object["items"] = mergedNotesItems(existing: object["items"], projected: replacementItems)
+        return .object(object)
+    }
+
+    private static func mergedNotesItems(existing: JSONValue?, projected: JSONValue) -> JSONValue {
+        let projectedItems = deduplicatedRecords(arrayValue(projected))
+        let projectedByID = lastValueByKey(projectedItems.compactMap { value -> (String, JSONValue)? in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return nil }
+            return (id, value)
+        })
+        var used = Set<String>()
+        var items: [JSONValue] = []
+        for value in deduplicatedRecords(arrayValue(existing)) {
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else {
+                items.append(value)
+                continue
+            }
+            guard let replacement = projectedByID[id] else { continue }
+            items.append(mergeObjectFields(existing: value, replacement: replacement, keys: ["id", "text", "checked"]))
+            used.insert(id)
+        }
+        items.append(contentsOf: projectedItems.filter { value in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return true }
+            return !used.contains(id)
+        })
+        return .array(items)
     }
 
     static func payload(for workspace: SportWorkspace) throws -> JSONValue {

@@ -18,6 +18,11 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case workCanonicalShadow = "rootine.canonical-shadow.work.v1"
     case travelCanonicalShadow = "rootine.canonical-shadow.travel.v1"
     case healthCanonicalShadow = "rootine.canonical-shadow.health.v1"
+    /// Private copy of the complete notes document. Native Notes only edits
+    /// the fields in `NoteRecord`; this shadow keeps opaque web fields (for
+    /// example future editor metadata or attachment descriptors) intact when
+    /// a note is changed offline and uploaded later.
+    case notesCanonicalShadow = "rootine.canonical-shadow.notes.v1"
     // The normalized reader keeps the last materialized relational document
     // separately from the compact aggregate cache. This is what lets an
     // incremental pull preserve fields that are intentionally not surfaced
@@ -34,7 +39,7 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
         case .notes, .sport, .goals, .work, .travel, .health: return 1
         case .affairs: return 2
         case .sportCanonicalShadow, .goalsCanonicalShadow, .workCanonicalShadow,
-             .travelCanonicalShadow, .healthCanonicalShadow:
+             .travelCanonicalShadow, .healthCanonicalShadow, .notesCanonicalShadow:
             return nil
         case .normalizedReadState:
             return nil
@@ -601,6 +606,65 @@ struct NotesWorkspace: Codable, Equatable, Sendable {
     var notes: [NoteRecord]
 
     static let empty = NotesWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), lists: [], notes: [])
+}
+
+enum RootineNotesSort: String, CaseIterable, Sendable {
+    case updated
+    case created
+    case title
+}
+
+struct RootineNotesQuery: Equatable, Sendable {
+    var search = ""
+    var listID: String?
+    var tag: String?
+    var showingArchive = false
+    var pinnedOnly = false
+    var sort: RootineNotesSort = .updated
+
+    init(
+        search: String = "",
+        listID: String? = nil,
+        tag: String? = nil,
+        showingArchive: Bool = false,
+        pinnedOnly: Bool = false,
+        sort: RootineNotesSort = .updated
+    ) {
+        self.search = search
+        self.listID = listID
+        self.tag = tag
+        self.showingArchive = showingArchive
+        self.pinnedOnly = pinnedOnly
+        self.sort = sort
+    }
+}
+
+/// Shared filtering/sorting semantics for the iOS Notes surface. Keeping the
+/// query pure makes search, folders, pinning and archive behavior consistent
+/// in the UI and easy to verify without a view or a live account.
+func rootineNotes(_ workspace: NotesWorkspace, matching query: RootineNotesQuery = RootineNotesQuery()) -> [NoteRecord] {
+    let normalizedSearch = query.search.trimmingCharacters(in: .whitespacesAndNewlines)
+    let notes = workspace.notes.filter { note in
+        guard note.archived == query.showingArchive else { return false }
+        if query.pinnedOnly && !note.pinned { return false }
+        if let listID = query.listID, note.listId != listID { return false }
+        if let tag = query.tag,
+           !note.tags.contains(where: { $0.localizedCaseInsensitiveCompare(tag) == .orderedSame }) { return false }
+        guard !normalizedSearch.isEmpty else { return true }
+        let searchable = ([note.title, note.body] + note.tags + note.items.map(\.text)).joined(separator: " ")
+        return searchable.localizedCaseInsensitiveContains(normalizedSearch)
+    }
+    return notes.sorted { lhs, rhs in
+        let order: ComparisonResult
+        switch query.sort {
+        case .title: order = lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        case .created: order = rhs.createdAt.localizedCaseInsensitiveCompare(lhs.createdAt)
+        case .updated: order = rhs.updatedAt.localizedCaseInsensitiveCompare(lhs.updatedAt)
+        }
+        if order != .orderedSame { return order == .orderedAscending }
+        if lhs.pinned != rhs.pinned { return lhs.pinned }
+        return lhs.id < rhs.id
+    }
 }
 
 // MARK: More workspaces

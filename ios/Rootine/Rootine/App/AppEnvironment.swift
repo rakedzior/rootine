@@ -96,6 +96,9 @@ final class AppEnvironment: ObservableObject {
     /// B10, matching the single aggregate-cache decision in the main plan.
     private var notificationPreferences = RootineNotificationPreferences()
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
+    /// Per-record revisions received from normalized pulls. Aggregate
+    /// revisions are not interchangeable with note revisions under B03 CAS.
+    private var normalizedRecordRevisions: [String: Int64] = [:]
     private var creationGate = WorkspaceCreationGate()
     private var refreshTask: Task<Void, Never>?
     private var realtimeClient: RootineRealtimeClient?
@@ -1009,6 +1012,47 @@ final class AppEnvironment: ObservableObject {
     }
 
     // MARK: More module actions
+
+    func createNoteList(name: String, operationID: String = UUID().uuidString) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = notesWorkspace
+        guard !next.lists.contains(where: { $0.name.localizedCaseInsensitiveCompare(trimmedName) == .orderedSame }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.lists.append(NoteList(
+            id: RootineLocalIdentifier.string(namespace: "note-list", operationID: operationID),
+            name: trimmedName,
+            createdAt: now
+        ))
+        next.updatedAt = now
+        await persistNotesWorkspace(next)
+    }
+
+    func renameNoteList(id: String, name: String) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = notesWorkspace
+        guard let index = next.lists.firstIndex(where: { $0.id == id }),
+              !next.lists.enumerated().contains(where: { $0.offset != index && $0.element.name.localizedCaseInsensitiveCompare(trimmedName) == .orderedSame }) else { return }
+        next.lists[index].name = trimmedName
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistNotesWorkspace(next)
+    }
+
+    func deleteNoteList(id: String) async {
+        var next = notesWorkspace
+        guard next.lists.contains(where: { $0.id == id }) else { return }
+        next.lists.removeAll { $0.id == id }
+        // Deleting a folder never deletes its notes. An empty list ID is the
+        // canonical unfiled state; the editor will offer the remaining lists.
+        let now = RootineDate.isoTimestamp()
+        for index in next.notes.indices where next.notes[index].listId == id {
+            next.notes[index].listId = ""
+            next.notes[index].updatedAt = now
+        }
+        next.updatedAt = now
+        await persistNotesWorkspace(next)
+    }
 
     func upsertNote(_ note: NoteRecord) async {
         var next = notesWorkspace
@@ -2027,6 +2071,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func persistNotesWorkspace(_ value: NotesWorkspace) async {
+        let previous = notesWorkspace
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
         var next = value
@@ -2037,13 +2082,115 @@ final class AppEnvironment: ObservableObject {
             return
         }
         do {
+            let mapped = try (canonicalShadows[.notes].map {
+                try RootineCanonicalWorkspaceMapping.mergedNotesPayload(for: next, onto: $0)
+            } ?? RootineCanonicalWorkspaceMapping.payload(for: next))
             try await store.save(next, key: .notes)
-            try await syncEngine.enqueue(next, key: .notes)
-            await markLocalOnly()
-            await flushPendingMutations()
+            canonicalShadows[.notes] = mapped
+            try await store.save(mapped, key: .notesCanonicalShadow)
+            if normalizedReadEnabled {
+                let canUseNormalized = try await enqueueNormalizedNoteMutations(from: previous, to: next, payload: mapped, syncEngine: syncEngine)
+                if canUseNormalized {
+                    await flushPendingNormalizedCommands()
+                } else {
+                    // A full relational bootstrap may provide a document but
+                    // no per-row revisions. CAS cannot safely update an
+                    // existing note in that state, so retain aggregate
+                    // compatibility until a pull supplies record revisions.
+                    try await syncEngine.enqueue(payload: mapped, storageKey: RootineStorageKey.notes.rawValue)
+                    await flushPendingMutations()
+                }
+            } else {
+                try await syncEngine.enqueue(payload: mapped, storageKey: RootineStorageKey.notes.rawValue)
+                await flushPendingMutations()
+            }
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
+    }
+
+    private func enqueueNormalizedNoteMutations(
+        from previous: NotesWorkspace,
+        to next: NotesWorkspace,
+        payload: JSONValue,
+        syncEngine: WorkspaceSyncEngine
+    ) async throws -> Bool {
+        let key = RootineStorageKey.notes.rawValue
+        let previousNotes = Dictionary(uniqueKeysWithValues: previous.notes.map { ($0.id, $0) })
+        let nextNotes = Dictionary(uniqueKeysWithValues: next.notes.map { ($0.id, $0) })
+        let previousLists = Dictionary(uniqueKeysWithValues: previous.lists.map { ($0.id, $0) })
+        let nextLists = Dictionary(uniqueKeysWithValues: next.lists.map { ($0.id, $0) })
+
+        func record(_ collection: String, id: String) -> JSONValue? {
+            guard case .object(let root) = payload,
+                  case .array(let values) = root[collection] else { return nil }
+            return values.first { value in
+                guard case .object(let object) = value,
+                      case .string(let candidate) = object["id"] else { return false }
+                return candidate == id
+            }
+        }
+
+        func revision(for entity: String, id: String) -> Int64? {
+            normalizedRecordRevisions["\(key)\u{1F}\(entity)\u{1F}\(id)"]
+        }
+
+        // Existing rows require a real per-record revision under B03's CAS.
+        // New rows can safely use zero; aggregate compatibility handles a
+        // bootstrap that only exposed a document/cursor revision.
+        for id in Set(previousLists.keys).union(nextLists.keys) where previousLists[id] != nextLists[id] {
+            if previousLists[id] != nil && revision(for: "notelist", id: id) == nil { return false }
+        }
+        for id in Set(previousNotes.keys).union(nextNotes.keys) where previousNotes[id] != nextNotes[id] {
+            if previousNotes[id] != nil && revision(for: "note", id: id) == nil { return false }
+        }
+
+        func baseRevision(for entity: String, id: String) -> Int64 {
+            revision(for: entity, id: id) ?? 0
+        }
+
+        for id in Set(previousLists.keys).union(nextLists.keys).sorted() {
+            if let current = nextLists[id], current != previousLists[id], let value = record("lists", id: id) {
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note_list",
+                    entityID: id,
+                    baseRevision: baseRevision(for: "notelist", id: id),
+                    payload: value
+                )
+            } else if nextLists[id] == nil, previousLists[id] != nil {
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note_list",
+                    entityID: id,
+                    kind: .delete,
+                    baseRevision: baseRevision(for: "notelist", id: id),
+                    payload: .null
+                )
+            }
+        }
+
+        for id in Set(previousNotes.keys).union(nextNotes.keys).sorted() {
+            if let current = nextNotes[id], current != previousNotes[id], let value = record("notes", id: id) {
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note",
+                    entityID: id,
+                    baseRevision: baseRevision(for: "note", id: id),
+                    payload: value
+                )
+            } else if nextNotes[id] == nil, previousNotes[id] != nil {
+                // `payload: .null` is intentional: the sync-v3 wire contract
+                // omits payload for deletes, while PendingSyncCommand keeps a
+                // JSONValue slot for one stable Codable shape.
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note",
+                    entityID: id,
+                    kind: .delete,
+                    baseRevision: baseRevision(for: "note", id: id),
+                    payload: .null
+                )
+            }
+        }
+
+        return true
     }
 
     private func persistSportWorkspace(_ value: SportWorkspace) async {
@@ -2295,6 +2442,7 @@ final class AppEnvironment: ObservableObject {
     private func configureRuntime(userID: String) {
         stopRealtimeRuntime()
         canonicalShadows.removeAll()
+        normalizedRecordRevisions.removeAll()
         lastDeviceRegistrationFingerprint = nil
         deviceRegistration = nil
         let previousScheduler = localNotificationScheduler
@@ -2634,7 +2782,7 @@ final class AppEnvironment: ObservableObject {
 
     private func loadCanonicalShadows(from store: WorkspaceFileStore) async {
         canonicalShadows.removeAll()
-        for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
+        for key in [RootineStorageKey.sport, .goals, .work, .travel, .health, .notes] {
             guard let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key),
                   let shadow = try? await store.load(JSONValue.self, key: shadowKey) else { continue }
             canonicalShadows[key] = shadow
@@ -2758,9 +2906,15 @@ final class AppEnvironment: ObservableObject {
             guard state.contractVersion == RootineRelationalWorkspaceAdapter.supportedContractVersion else {
                 throw RootineNormalizedReadError.schemaMismatch(expected: RootineRelationalWorkspaceAdapter.supportedContractVersion, actual: state.contractVersion)
             }
+            normalizedRecordRevisions = state.recordRevisions
 
-            let current = RootineRelationalMaterialization(documents: state.documents, revisions: [:])
+            let current = RootineRelationalMaterialization(
+                documents: state.documents,
+                revisions: [:],
+                recordRevisions: normalizedRecordRevisions
+            )
             let fetched = try await fetchNormalizedMaterialization(cursor: state.cursor, base: current, accessToken: accessToken)
+            normalizedRecordRevisions = fetched.recordRevisions
             let decoded = try decodeNormalizedWorkspaces(fetched)
             let pending = try await store.pendingMutations()
             let decisions = [
@@ -2780,7 +2934,7 @@ final class AppEnvironment: ObservableObject {
             // then makes aggregate files, relational state and cursor a
             // single publish point; a failed materializer never advances the
             // cursor or leaves a mixed set of workspaces.
-            for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
+            for key in [RootineStorageKey.sport, .goals, .work, .travel, .health, .notes] {
                 if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)] {
                     canonicalShadows[key] = payload
                 }
@@ -2797,10 +2951,11 @@ final class AppEnvironment: ObservableObject {
                 try await persistNormalizedDecision(decisions[7], key: .health, store: store)
                 try await persistNormalizedDecision(decisions[8], key: .affairs, store: store)
                 let nextState = RootineNormalizedReadState(
-                    contractVersion: RootineRelationalWorkspaceAdapter.supportedContractVersion,
-                    cursor: fetchedCursor,
-                    documents: fetched.documents
-                )
+                contractVersion: RootineRelationalWorkspaceAdapter.supportedContractVersion,
+                cursor: fetchedCursor,
+                documents: fetched.documents,
+                recordRevisions: fetched.recordRevisions
+            )
                 try await store.save(nextState, key: .normalizedReadState)
                 try await store.commitBatchTransaction(transaction)
             } catch {
@@ -2822,6 +2977,7 @@ final class AppEnvironment: ObservableObject {
             if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .work)] { canonicalShadows[.work] = payload }
             if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .travel)] { canonicalShadows[.travel] = payload }
             if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .health)] { canonicalShadows[.health] = payload }
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .notes)] { canonicalShadows[.notes] = payload }
             if conflictKeys.isEmpty {
                 workspaceSyncStatus = .synced
                 foundationMessage = "Relacyjny stan został bezpiecznie uzgodniony"
@@ -2987,7 +3143,11 @@ final class AppEnvironment: ObservableObject {
             switch key {
             case .tasks: try await store.save(decision.value as! TaskWorkspace, key: key)
             case .nutrition: try await store.save(decision.value as! NutritionWorkspace, key: key)
-            case .notes: try await store.save(decision.value as! NotesWorkspace, key: key)
+            case .notes:
+                if decision.shouldPersist {
+                    try await store.save(decision.value as! NotesWorkspace, key: key)
+                }
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .notesCanonicalShadow) }
             case .sport:
                 try await store.save(decision.value as! SportWorkspace, key: key)
                 if let payload = canonicalShadows[key] { try await store.save(payload, key: .sportCanonicalShadow) }
@@ -3052,7 +3212,7 @@ final class AppEnvironment: ObservableObject {
 
             let taskResult = try await reconcile(localTasks, fallback: .empty, key: .tasks, remote: remote, store: store, syncEngine: syncEngine)
             let nutritionResult = try await reconcile(localNutrition, fallback: .empty, key: .nutrition, remote: remote, store: store, syncEngine: syncEngine)
-            let notesResult = try await reconcile(localNotes, fallback: .empty, key: .notes, remote: remote, store: store, syncEngine: syncEngine)
+            let notesResult = try await reconcileCanonical(localNotes, fallback: .empty, key: .notes, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedNotesPayload, decode: RootineCanonicalWorkspaceMapping.notesWorkspace(from:))
             let sportResult = try await reconcileCanonical(localSport, fallback: .empty, key: .sport, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload, decode: RootineCanonicalWorkspaceMapping.sportWorkspace(from:))
             let goalsResult = try await reconcileCanonical(localGoals, fallback: .empty, key: .goals, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload, decode: RootineCanonicalWorkspaceMapping.goalsWorkspace(from:))
             let workResult = try await reconcileCanonical(localWork, fallback: .empty, key: .work, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:))

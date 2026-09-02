@@ -358,21 +358,51 @@ struct RootineNormalizedReadState: Codable, Equatable, Sendable {
     var contractVersion: Int
     var cursor: Int64?
     var documents: [String: JSONValue]
+    /// Survives relaunch so Notes can continue per-record CAS after an
+    /// incremental pull instead of reverting to aggregate writes.
+    var recordRevisions: [String: Int64]
 
-    init(contractVersion: Int = 1, cursor: Int64? = nil, documents: [String: JSONValue] = [:]) {
+    init(
+        contractVersion: Int = 1,
+        cursor: Int64? = nil,
+        documents: [String: JSONValue] = [:],
+        recordRevisions: [String: Int64] = [:]
+    ) {
         self.contractVersion = contractVersion
         self.cursor = cursor
         self.documents = documents
+        self.recordRevisions = recordRevisions
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case contractVersion, cursor, documents, recordRevisions
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        contractVersion = try container.decode(Int.self, forKey: .contractVersion)
+        cursor = try container.decodeIfPresent(Int64.self, forKey: .cursor)
+        documents = try container.decode([String: JSONValue].self, forKey: .documents)
+        recordRevisions = try container.decodeIfPresent([String: Int64].self, forKey: .recordRevisions) ?? [:]
     }
 }
 
 struct RootineRelationalMaterialization: Equatable, Sendable {
     var documents: [String: JSONValue]
     var revisions: [String: Int64]
+    /// Per-record revisions are retained alongside document revisions so a
+    /// normalized Notes mutation can use compare-and-swap even when the
+    /// aggregate snapshot contains many notes.
+    var recordRevisions: [String: Int64]
 
-    init(documents: [String: JSONValue] = [:], revisions: [String: Int64] = [:]) {
+    init(
+        documents: [String: JSONValue] = [:],
+        revisions: [String: Int64] = [:],
+        recordRevisions: [String: Int64] = [:]
+    ) {
         self.documents = documents
         self.revisions = revisions
+        self.recordRevisions = recordRevisions
     }
 }
 
@@ -432,6 +462,11 @@ enum RootineRelationalWorkspaceAdapter {
             }
             result.documents[key] = document
             result.revisions[key] = max(result.revisions[key] ?? 0, change.revision ?? change.cursor)
+            let recordKey = "\(key)\u{1F}\(normalized(change.entity))\u{1F}\(normalized(change.entityID))"
+            result.recordRevisions[recordKey] = max(
+                result.recordRevisions[recordKey] ?? 0,
+                change.revision ?? change.cursor
+            )
         }
         return result
     }
@@ -557,6 +592,9 @@ enum RootineRelationalWorkspaceAdapter {
                     })
                 }
             }
+        } else if key == RootineStorageKey.notes.rawValue && (name == "note" || name == "notes" || name == "notelist" || name == "notelists" || name == "list" || name == "lists") {
+            let collection = name.contains("list") ? "lists" : "notes"
+            removeArray(&root, key: collection, id: id)
         } else if key == RootineStorageKey.notes.rawValue && (name == "notechecklistitem" || name == "notechecklistitems" || name == "checklistitem" || name == "checklistitems" || name == "notetag" || name == "notetags") {
             let noteID = stringValue(row["noteId"] ?? row["note_id"]) ?? ""
             if name.contains("checklist") && !noteID.isEmpty {
@@ -761,7 +799,11 @@ enum RootineRelationalWorkspaceAdapter {
     private static func applyNotes(row: [String: JSONValue], id: String, entity: String, to root: inout [String: JSONValue]) throws {
         switch entity {
         case "notelist", "notelists", "list", "lists":
-            try upsertArray(&root, key: "lists", id: id, value: .object(row))
+            var value = row
+            value["id"] = .string(id)
+            value["name"] = row["name"] ?? row["label"] ?? .string("")
+            value["createdAt"] = row["createdAt"] ?? row["created_at"] ?? .string(RootineDate.isoTimestamp())
+            try upsertArray(&root, key: "lists", id: id, value: .object(value))
         case "note", "notes":
             var value = row
             value["id"] = .string(id)
@@ -774,13 +816,19 @@ enum RootineRelationalWorkspaceAdapter {
             value["color"] = row["color"] ?? .string("graphite")
             value["pinned"] = row["pinned"] ?? .bool(false)
             value["archived"] = row["archived"] ?? .bool(false)
+            value["createdAt"] = row["createdAt"] ?? row["created_at"] ?? .string(RootineDate.isoTimestamp())
+            value["updatedAt"] = row["updatedAt"] ?? row["updated_at"] ?? value["createdAt"] ?? .string(RootineDate.isoTimestamp())
             try upsertArray(&root, key: "notes", id: id, value: .object(value))
         case "notechecklistitem", "notechecklistitems", "checklistitem", "checklistitems":
             let noteID = stringValue(row["noteId"] ?? row["note_id"]) ?? ""
             guard !noteID.isEmpty else { throw RootineNormalizedReadError.contractMismatch("element checklisty bez notatki") }
             try updateArrayObject(&root, key: "notes", id: noteID) { note in
+                var item = row
+                item["id"] = .string(id)
+                item["text"] = row["text"] ?? .string("")
+                item["checked"] = row["checked"] ?? .bool(false)
                 var items = arrayValue(note["items"])
-                upsert(&items, id: id, value: .object(row))
+                upsert(&items, id: id, value: .object(item))
                 note["items"] = .array(items)
             }
         case "notetag", "notetags", "tag", "tags":

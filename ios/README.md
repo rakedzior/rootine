@@ -44,6 +44,14 @@ names remain as compatibility aliases for development and production.
   Notes, Sport, Goals, Work, Travel, Health, and Pozostałe/Sprawy modules.
   Their Codable snapshots are persisted locally and queued through the same
   offline/CAS sync engine as the core tabs.
+- Notes support local-first CRUD, archive, folders, checklists, pinning, and
+  search/filter/sort. Native Notes intentionally does not implement binary
+  attachment storage or a provider/upload contract; opaque web attachment
+  descriptors remain preserved in the canonical shadow for later support.
+  If normalized per-row revisions are unavailable, Notes falls back to the
+  existing aggregate queue; the v1 aggregate contract has no local tombstone
+  field, so normalized delete commands are preferred whenever CAS metadata is
+  available.
 - A nutrition quick-capture flow with a local product catalog, manual fallback,
   camera barcode scanning (when permission is granted), saved meals, weight
   measurements, editable goals, and undo-safe deletion.

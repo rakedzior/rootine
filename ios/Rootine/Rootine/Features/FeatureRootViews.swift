@@ -187,25 +187,44 @@ private struct ModuleActionButton: View {
 private struct NotesModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var editorTarget: NoteEditorTarget?
+    @State private var listEditorTarget: NoteListEditorTarget?
     @State private var searchText = ""
     @State private var showingArchive = false
+    @State private var selectedListID: String?
+    @State private var selectedTag: String?
+    @State private var pinnedOnly = false
+    @State private var sort: RootineNotesSort = .updated
     @State private var noteToDelete: NoteRecord?
     @State private var deletedNote: NoteRecord?
+    @State private var listToDelete: NoteList?
 
     private var notes: [NoteRecord] {
-        environment.notesWorkspace.notes
-            .filter { showingArchive ? $0.archived : !$0.archived }
-            .filter { note in
-                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !query.isEmpty else { return true }
-                return note.title.localizedCaseInsensitiveContains(query)
-                    || note.body.localizedCaseInsensitiveContains(query)
-                    || note.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
-            }
-            .sorted { lhs, rhs in
-                if lhs.pinned != rhs.pinned { return lhs.pinned }
-                return lhs.updatedAt > rhs.updatedAt
-            }
+        rootineNotes(environment.notesWorkspace, matching: RootineNotesQuery(
+            search: searchText,
+            listID: selectedListID,
+            tag: selectedTag,
+            showingArchive: showingArchive,
+            pinnedOnly: pinnedOnly,
+            sort: sort
+        ))
+    }
+
+    private var recentNotes: [NoteRecord] {
+        guard !pinnedOnly else { return notes }
+        // Keep the first pinned note in the feature card while leaving any
+        // additional pinned notes in the ordinary list.
+        guard let featuredID = notes.first(where: \.pinned)?.id else { return notes }
+        return notes.filter { $0.id != featuredID }
+    }
+
+    private var hasPinnedNote: Bool {
+        notes.contains(where: \.pinned)
+    }
+
+    private var availableTags: [String] {
+        Array(Set(environment.notesWorkspace.notes.flatMap(\.tags))).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
     }
 
     var body: some View {
@@ -232,19 +251,75 @@ private struct NotesModuleContent: View {
             .background(RootineTheme.ColorToken.elevated)
             .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
 
+            folderBar
+
             HStack {
                 Label(showingArchive ? "Archiwum" : "Aktywne", systemImage: showingArchive ? "archivebox.fill" : "note.text")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Button(showingArchive ? "Pokaż aktywne" : "Pokaż archiwum") {
-                    showingArchive.toggle()
+                Menu {
+                    Button {
+                        pinnedOnly.toggle()
+                    } label: {
+                        Label(pinnedOnly ? "Pokaż wszystkie" : "Tylko przypięte", systemImage: pinnedOnly ? "note.text" : "pin.fill")
+                    }
+                    Divider()
+                    Picker("Sortowanie", selection: $sort) {
+                        Text("Ostatnio zmienione").tag(RootineNotesSort.updated)
+                        Text("Utworzone ostatnio").tag(RootineNotesSort.created)
+                        Text("Alfabetycznie").tag(RootineNotesSort.title)
+                    }
+                    if !availableTags.isEmpty {
+                        Divider()
+                        Menu("Filtruj tagiem") {
+                            Button {
+                                selectedTag = nil
+                            } label: {
+                                Label("Wszystkie tagi", systemImage: selectedTag == nil ? "checkmark" : "tag")
+                            }
+                            ForEach(availableTags, id: \.self) { tag in
+                                Button {
+                                    selectedTag = tag
+                                } label: {
+                                    Label("#\(tag)", systemImage: selectedTag == tag ? "checkmark" : "tag")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button(showingArchive ? "Pokaż aktywne" : "Pokaż archiwum") {
+                        showingArchive.toggle()
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.title3)
+                        .foregroundStyle(MoreModule.notes.tint)
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.bordered)
-                .frame(minHeight: 44)
-                .accessibilityHint("Przełącza listę aktywnych i zarchiwizowanych notatek")
+                .accessibilityLabel("Filtry i sortowanie notatek")
+                .accessibilityValue(filterSummary)
             }
 
-            if let pinned = notes.first(where: { $0.pinned }) {
+            if let selectedTag {
+                HStack(spacing: RootineTheme.Spacing.xSmall) {
+                    Text("Filtr: #\(selectedTag)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MoreModule.notes.tint)
+                    Button {
+                        self.selectedTag = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Usuń filtr tagu")
+                }
+                .padding(.horizontal, RootineTheme.Spacing.small)
+                .padding(.vertical, RootineTheme.Spacing.xSmall)
+                .background(MoreModule.notes.tint.opacity(0.12))
+                .clipShape(Capsule())
+            }
+
+            if let pinned = notes.first(where: { $0.pinned }), !pinnedOnly {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                     HStack {
                         ModuleSectionTitle(title: "Przypięte", systemImage: "pin.fill")
@@ -262,23 +337,23 @@ private struct NotesModuleContent: View {
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
                 HStack {
-                    ModuleSectionTitle(title: "Ostatnie notatki", systemImage: "clock")
+                    ModuleSectionTitle(title: showingArchive ? "Zarchiwizowane notatki" : "Ostatnie notatki", systemImage: showingArchive ? "archivebox" : "clock")
                     Spacer()
                     Text("\(notes.count)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
 
-                if notes.isEmpty {
+                if recentNotes.isEmpty && !hasPinnedNote {
                     ModuleEmptyCard(
-                        title: "Zrób miejsce na pomysły",
-                        detail: "Twoje notatki pojawią się tutaj.",
+                        title: showingArchive ? "Archiwum jest puste" : (pinnedOnly ? "Brak przypiętych notatek" : "Zrób miejsce na pomysły"),
+                        detail: showingArchive ? "Zarchiwizowane notatki pojawią się tutaj." : "Twoje notatki pojawią się tutaj.",
                         systemImage: "note.text.badge.plus",
                         tint: MoreModule.notes.tint
                     )
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                        ForEach(Array(recentNotes.enumerated()), id: \.element.id) { index, note in
                             Button { editorTarget = NoteEditorTarget(note: note) } label: {
                                 NoteListRow(note: note)
                             }
@@ -313,7 +388,7 @@ private struct NotesModuleContent: View {
                                     .tint(MoreModule.notes.tint)
                                 }
                             }
-                            if index < notes.count - 1 {
+                            if index < recentNotes.count - 1 {
                                 Divider().overlay(RootineTheme.ColorToken.separator)
                             }
                         }
@@ -327,12 +402,25 @@ private struct NotesModuleContent: View {
             }
         }
         .sheet(item: $editorTarget) { target in
-            NoteEditorSheet(note: target.note) { note in
+            NoteEditorSheet(note: target.note, lists: environment.notesWorkspace.lists) { note in
                 Task { await environment.upsertNote(note) }
             } onDelete: { note in
                 requestDelete(note)
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $listEditorTarget) { target in
+            NoteListEditorSheet(list: target.list) { name in
+                Task {
+                    if let list = target.list {
+                        await environment.renameNoteList(id: list.id, name: name)
+                    } else {
+                        await environment.createNoteList(name: name)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
         .confirmationDialog(
@@ -353,6 +441,27 @@ private struct NotesModuleContent: View {
             }
             Button("Anuluj", role: .cancel) {}
         }
+        .confirmationDialog(
+            "Usunąć folder?",
+            isPresented: Binding(
+                get: { listToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { listToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let listToDelete {
+                Button("Usuń folder", role: .destructive) {
+                    if selectedListID == listToDelete.id { selectedListID = nil }
+                    Task { await environment.deleteNoteList(id: listToDelete.id) }
+                    self.listToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text("Notatki pozostaną zachowane jako bez folderu.")
+        }
         .overlay(alignment: .bottom) {
             if let deletedNote {
                 RootineUndoBanner(message: "Usunięto notatkę") {
@@ -364,6 +473,75 @@ private struct NotesModuleContent: View {
                 .padding(.bottom, RootineTheme.Spacing.small)
             }
         }
+    }
+
+    private var filterSummary: String {
+        var values = [showingArchive ? "archiwum" : "aktywne"]
+        if pinnedOnly { values.append("przypięte") }
+        if selectedListID != nil { values.append("folder") }
+        if selectedTag != nil { values.append("tag") }
+        return values.joined(separator: ", ")
+    }
+
+    private var folderBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: RootineTheme.Spacing.xSmall) {
+                folderButton(title: "Wszystkie", systemImage: "tray.full", id: nil)
+                if environment.notesWorkspace.notes.contains(where: { $0.listId.isEmpty }) {
+                    folderButton(title: "Bez folderu", systemImage: "tray", id: "")
+                }
+                ForEach(environment.notesWorkspace.lists) { list in
+                    HStack(spacing: 0) {
+                        folderButton(title: list.name, systemImage: "folder", id: list.id)
+                        Menu {
+                            Button {
+                                listEditorTarget = NoteListEditorTarget(list: list)
+                            } label: {
+                                Label("Zmień nazwę", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                listToDelete = list
+                            } label: {
+                                Label("Usuń folder", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.caption.weight(.bold))
+                                .frame(width: 28, height: 36)
+                        }
+                        .accessibilityLabel("Zarządzaj folderem \(list.name)")
+                    }
+                    .background(selectedListID == list.id ? MoreModule.notes.tint.opacity(0.18) : RootineTheme.ColorToken.elevated)
+                    .clipShape(Capsule())
+                }
+                Button {
+                    listEditorTarget = NoteListEditorTarget(list: nil)
+                } label: {
+                    Label("Nowy folder", systemImage: "folder.badge.plus")
+                        .font(.caption.weight(.semibold))
+                        .frame(minHeight: 36)
+                }
+                .buttonStyle(.bordered)
+                .tint(MoreModule.notes.tint)
+                .accessibilityLabel("Utwórz folder notatek")
+            }
+            .padding(.horizontal, RootineTheme.Spacing.xSmall)
+        }
+    }
+
+    private func folderButton(title: String, systemImage: String, id: String?) -> some View {
+        Button {
+            selectedListID = id
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(selectedListID == id ? MoreModule.notes.tint : RootineTheme.ColorToken.primaryText)
+                .frame(minHeight: 36)
+                .padding(.horizontal, RootineTheme.Spacing.small)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Folder \(title)")
+        .accessibilityAddTraits(selectedListID == id ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -415,21 +593,33 @@ private struct NoteEditorTarget: Identifiable {
 private struct NoteEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let note: NoteRecord?
+    let lists: [NoteList]
     let onSave: (NoteRecord) -> Void
     let onDelete: (NoteRecord) -> Void
     @State private var title: String
     @State private var bodyText: String
     @State private var tags: String
     @State private var pinned: Bool
+    @State private var kind: String
+    @State private var items: [NoteChecklistItem]
+    @State private var listID: String
+    @State private var color: NoteColor
 
-    init(note: NoteRecord?, onSave: @escaping (NoteRecord) -> Void, onDelete: @escaping (NoteRecord) -> Void) {
+    init(note: NoteRecord?, lists: [NoteList], onSave: @escaping (NoteRecord) -> Void, onDelete: @escaping (NoteRecord) -> Void) {
         self.note = note
+        self.lists = lists
         self.onSave = onSave
         self.onDelete = onDelete
         _title = State(initialValue: note?.title ?? "")
         _bodyText = State(initialValue: note?.body ?? "")
         _tags = State(initialValue: note?.tags.joined(separator: ", ") ?? "")
         _pinned = State(initialValue: note?.pinned ?? false)
+        // Preserve a future/web kind until the user explicitly changes it;
+        // the native picker still offers the two currently supported modes.
+        _kind = State(initialValue: note?.kind ?? "text")
+        _items = State(initialValue: note?.items ?? [])
+        _listID = State(initialValue: note?.listId ?? "")
+        _color = State(initialValue: note?.color ?? .blue)
     }
 
     var body: some View {
@@ -440,7 +630,51 @@ private struct NoteEditorSheet: View {
                     TextEditor(text: $bodyText)
                         .frame(minHeight: 120)
                     TextField("Tagi (opcjonalnie)", text: $tags)
+                    Picker("Typ", selection: $kind) {
+                        Text("Tekst").tag("text")
+                        Text("Lista kontrolna").tag("checklist")
+                    }
+                    Picker("Folder", selection: $listID) {
+                        Text("Bez folderu").tag("")
+                        ForEach(lists) { list in
+                            Text(list.name).tag(list.id)
+                        }
+                    }
+                    Picker("Kolor", selection: $color) {
+                        ForEach(NoteColor.allCases, id: \.self) { value in
+                            Text(value.localizedName).tag(value)
+                        }
+                    }
                     Toggle("Przypnij na górze", isOn: $pinned)
+                }
+                if kind == "checklist" {
+                    Section("Lista kontrolna") {
+                        ForEach(items) { item in
+                            HStack(spacing: RootineTheme.Spacing.xSmall) {
+                                Button {
+                                    toggleItem(item.id)
+                                } label: {
+                                    Image(systemName: item.checked ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(item.checked ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.secondaryText)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(item.checked ? "Oznacz jako nieukończone" : "Oznacz jako ukończone")
+                                TextField("Element listy", text: itemBinding(item.id))
+                                Button(role: .destructive) {
+                                    items.removeAll { $0.id == item.id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Usuń element listy")
+                            }
+                        }
+                        Button {
+                            items.append(NoteChecklistItem(id: UUID().uuidString, text: "", checked: false))
+                        } label: {
+                            Label("Dodaj element", systemImage: "plus.circle")
+                        }
+                    }
                 }
                 if let note {
                     Section {
@@ -464,11 +698,11 @@ private struct NoteEditorSheet: View {
                             id: note?.id ?? UUID().uuidString,
                             title: title,
                             body: bodyText,
-                            kind: note?.kind ?? "text",
-                            items: note?.items ?? [],
+                            kind: kind,
+                            items: kind == "checklist" ? items.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } : [],
                             tags: tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
-                            listId: note?.listId ?? "",
-                            color: note?.color ?? .blue,
+                            listId: listID,
+                            color: color,
                             pinned: pinned,
                             archived: false,
                             createdAt: note?.createdAt ?? now,
@@ -477,7 +711,69 @@ private struct NoteEditorSheet: View {
                         onSave(saved)
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && items.allSatisfy { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                }
+            }
+        }
+    }
+
+    private func toggleItem(_ id: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].checked.toggle()
+    }
+
+    private func itemBinding(_ id: String) -> Binding<String> {
+        Binding(
+            get: { items.first(where: { $0.id == id })?.text ?? "" },
+            set: { value in
+                guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+                items[index].text = value
+            }
+        )
+    }
+}
+
+private struct NoteListEditorTarget: Identifiable {
+    let id: String
+    let list: NoteList?
+
+    init(list: NoteList?) {
+        self.list = list
+        id = list?.id ?? "new-note-list-\(UUID().uuidString)"
+    }
+}
+
+private struct NoteListEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let list: NoteList?
+    let onSave: (String) -> Void
+    @State private var name: String
+
+    init(list: NoteList?, onSave: @escaping (String) -> Void) {
+        self.list = list
+        self.onSave = onSave
+        _name = State(initialValue: list?.name ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Nazwa folderu", text: $name)
+            }
+            .navigationTitle(list == nil ? "Nowy folder" : "Zmień nazwę folderu")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Anuluj") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(name)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -501,6 +797,11 @@ private struct NoteFeatureCard: View {
                 .font(.subheadline)
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 .lineLimit(3)
+            if note.kind == "checklist", !note.items.isEmpty {
+                Text("\(note.items.filter(\.checked).count)/\(note.items.count) ukończonych")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.success)
+            }
             if !note.tags.isEmpty {
                 HStack(spacing: RootineTheme.Spacing.xSmall) {
                     ForEach(note.tags.prefix(3), id: \.self) { tag in
@@ -534,6 +835,11 @@ private struct NoteListRow: View {
                     .font(.caption)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     .lineLimit(1)
+                if note.kind == "checklist", !note.items.isEmpty {
+                    Text("\(note.items.filter(\.checked).count)/\(note.items.count) ukończonych")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                }
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
@@ -553,6 +859,19 @@ private func noteColor(_ color: NoteColor) -> Color {
     case .amber: return RootineTheme.ColorToken.warning
     case .violet: return MoreModule.travel.tint
     case .coral: return RootineTheme.ColorToken.destructive
+    }
+}
+
+private extension NoteColor {
+    var localizedName: String {
+        switch self {
+        case .graphite: return "Grafitowy"
+        case .blue: return "Niebieski"
+        case .green: return "Zielony"
+        case .amber: return "Bursztynowy"
+        case .violet: return "Fioletowy"
+        case .coral: return "Koralowy"
+        }
     }
 }
 

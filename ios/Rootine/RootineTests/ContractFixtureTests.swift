@@ -252,6 +252,219 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(try roundTrip(workspace), workspace)
     }
 
+    func testNotesQuerySearchesChecklistItemsAndAppliesFolderTagArchiveAndSort() {
+        let older = NoteRecord(
+            id: "note-older",
+            title: "Plan",
+            body: "",
+            kind: "checklist",
+            items: [NoteChecklistItem(id: "item", text: "Kupić kawę", checked: false)],
+            tags: ["dom"],
+            listId: "list-home",
+            color: .green,
+            pinned: false,
+            archived: false,
+            createdAt: "2026-08-01T08:00:00.000Z",
+            updatedAt: "2026-08-02T08:00:00.000Z"
+        )
+        let newer = NoteRecord(
+            id: "note-newer",
+            title: "Spotkanie",
+            body: "",
+            kind: "checklist",
+            items: [NoteChecklistItem(id: "item", text: "Przygotować agendę", checked: true)],
+            tags: ["praca"],
+            listId: "list-work",
+            color: .blue,
+            pinned: true,
+            archived: false,
+            createdAt: "2026-08-03T08:00:00.000Z",
+            updatedAt: "2026-08-04T08:00:00.000Z"
+        )
+        let archived = NoteRecord(
+            id: "note-archived",
+            title: "Stare",
+            body: "",
+            kind: "text",
+            items: [],
+            tags: ["dom"],
+            listId: "list-home",
+            color: .graphite,
+            pinned: false,
+            archived: true,
+            createdAt: "2026-07-01T08:00:00.000Z",
+            updatedAt: "2026-07-02T08:00:00.000Z"
+        )
+        let workspace = NotesWorkspace(version: 1, updatedAt: newer.updatedAt, lists: [], notes: [older, newer, archived])
+
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(search: "kupić", listID: "list-home", tag: "dom")).map(\.id),
+            ["note-older"]
+        )
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(pinnedOnly: true)).map(\.id),
+            ["note-newer"]
+        )
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(showingArchive: true)).map(\.id),
+            ["note-archived"]
+        )
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(sort: .title)).map(\.id),
+            ["note-older", "note-newer"]
+        )
+    }
+
+    func testNotesMappingPreservesOpaqueWebFieldsAndNativeTombstones() throws {
+        let timestamp = "2026-08-19T09:10:00.000Z"
+        let note = NoteRecord(
+            id: "note-1",
+            title: "Natywny tytuł",
+            body: "Treść",
+            kind: "checklist",
+            items: [NoteChecklistItem(id: "item-1", text: "Krok", checked: true)],
+            tags: ["ios"],
+            listId: "list-1",
+            color: .blue,
+            pinned: true,
+            archived: false,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let base: JSONValue = .object([
+            "version": .number(1),
+            "updatedAt": .string(timestamp),
+            "webRoot": .string("keep"),
+            "lists": .array([.object([
+                "id": .string("list-1"), "name": .string("Web"), "createdAt": .string(timestamp),
+                "webListField": .string("keep")
+            ])]),
+            "notes": .array([.object([
+                "id": .string("note-1"), "title": .string("Stary"), "body": .string(""),
+                "kind": .string("text"), "items": .array([.object([
+                    "id": .string("item-1"), "text": .string("Stary krok"), "checked": .bool(false),
+                    "webItemField": .string("keep")
+                ])]), "tags": .array([]), "listId": .string("list-1"), "color": .string("blue"),
+                "pinned": .bool(false), "archived": .bool(false), "createdAt": .string(timestamp),
+                "updatedAt": .string(timestamp), "webNoteField": .string("keep")
+            ]), .object([
+                "id": .string("note-removed"), "title": .string("Usuń"), "webOnly": .bool(true)
+            ])])
+        ])
+
+        let merged = try RootineCanonicalWorkspaceMapping.mergedNotesPayload(
+            for: NotesWorkspace(version: 1, updatedAt: timestamp, lists: [NoteList(id: "list-1", name: "Natywny", createdAt: timestamp)], notes: [note]),
+            onto: base
+        )
+        guard case .object(let root) = merged,
+              case .array(let lists) = root["lists"], case .object(let list) = lists.first,
+              case .array(let notes) = root["notes"], case .object(let updated) = notes.first,
+              case .array(let items) = updated["items"], case .object(let item) = items.first else {
+            return XCTFail("Notes mapping did not produce canonical arrays")
+        }
+        XCTAssertEqual(root["webRoot"], .string("keep"))
+        XCTAssertEqual(list["webListField"], .string("keep"))
+        XCTAssertEqual(updated["webNoteField"], .string("keep"))
+        XCTAssertEqual(item["webItemField"], .string("keep"))
+        XCTAssertEqual(updated["title"], .string("Natywny tytuł"))
+        XCTAssertNil(notes.first(where: { objectValue($0)?["id"] == .string("note-removed") }))
+    }
+
+    @MainActor
+    func testNotesListLifecycleKeepsNotesWhenFolderIsDeleted() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        await environment.createNoteList(name: "  Praca  ", operationID: "folder-1")
+        await environment.createNoteList(name: "praca", operationID: "folder-duplicate")
+        XCTAssertEqual(environment.notesWorkspace.lists.count, 1)
+        let list = environment.notesWorkspace.lists.first
+        guard let list else { return XCTFail("Folder was not created") }
+
+        await environment.renameNoteList(id: list.id, name: "Projekty")
+        XCTAssertEqual(environment.notesWorkspace.lists.first?.name, "Projekty")
+        await environment.upsertNote(NoteRecord(
+            id: "note-folder",
+            title: "Plan",
+            body: "",
+            kind: "text",
+            items: [],
+            tags: [],
+            listId: list.id,
+            color: .blue,
+            pinned: false,
+            archived: false,
+            createdAt: "2026-08-19T09:10:00.000Z",
+            updatedAt: "2026-08-19T09:10:00.000Z"
+        ))
+
+        await environment.deleteNoteList(id: list.id)
+        XCTAssertTrue(environment.notesWorkspace.lists.isEmpty)
+        XCTAssertEqual(environment.notesWorkspace.notes.first?.listId, "")
+        await environment.deleteNote(id: "note-folder")
+        XCTAssertTrue(environment.notesWorkspace.notes.isEmpty)
+    }
+
+    func testRelationalNotesMapSnakeCaseAndParentTombstone() throws {
+        let timestamp = "2026-08-19T09:10:00.000Z"
+        let initial = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: RootineRelationalBootstrapResponse(
+            serverCursor: 1,
+            workspaces: [RootineRelationalWorkspace(storageKey: RootineStorageKey.notes.rawValue, payload: .object([
+                "version": .number(1), "updatedAt": .string(timestamp), "lists": .array([]), "notes": .array([])
+            ]))]
+        ))
+        let pulled = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.notes.rawValue,
+                entity: "note",
+                entityID: "note-1",
+                revision: 7,
+                record: .object([
+                    "note_id": .string("note-1"), "title": .string("Relacyjna"), "body": .string("Treść"),
+                    "kind": .string("checklist"), "created_at": .string(timestamp), "updated_at": .string(timestamp),
+                    "pinned": .bool(true), "archived": .bool(false), "items": .array([]), "tags": .array([]),
+                    "list_id": .null, "color": .string("green")
+                ])
+            )
+        ], onto: initial)
+        let decoded = try RootineRelationalWorkspaceAdapter.document(NotesWorkspace.self, key: .notes, from: pulled)
+        XCTAssertEqual(decoded.notes.first?.id, "note-1")
+        XCTAssertEqual(decoded.notes.first?.createdAt, timestamp)
+        XCTAssertEqual(decoded.notes.first?.updatedAt, timestamp)
+        XCTAssertEqual(decoded.notes.first?.listId, "")
+        XCTAssertEqual(pulled.recordRevisions["rootine.notes-workspace.v1\u{1F}note\u{1F}note-1"], 7)
+
+        let deleted = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(cursor: 3, storageKey: RootineStorageKey.notes.rawValue, entity: "note", entityID: "note-1", operation: "delete", revision: 8, deletedAt: timestamp)
+        ], onto: pulled)
+        XCTAssertTrue(try RootineRelationalWorkspaceAdapter.document(NotesWorkspace.self, key: .notes, from: deleted).notes.isEmpty)
+    }
+
+    func testNormalizedReadStateKeepsRecordRevisionsAndReadsLegacyState() throws {
+        let state = RootineNormalizedReadState(
+            contractVersion: 1,
+            cursor: 9,
+            documents: [RootineStorageKey.notes.rawValue: .object([:])],
+            recordRevisions: ["notes\u{1F}note\u{1F}n1": 4]
+        )
+        XCTAssertEqual(try roundTrip(state), state)
+
+        let legacy = try JSONSerialization.data(withJSONObject: [
+            "contractVersion": 1,
+            "cursor": 9,
+            "documents": [String: Any]()
+        ])
+        let decoded = try JSONDecoder().decode(RootineNormalizedReadState.self, from: legacy)
+        XCTAssertTrue(decoded.recordRevisions.isEmpty)
+    }
+
     func testMoreCanonicalFixturesProjectToNativeModels() throws {
         let sportPayload = try fixture("sport-planner-v5", as: JSONValue.self)
         let goalsPayload = try fixture("goals-workspace-v1", as: JSONValue.self)
