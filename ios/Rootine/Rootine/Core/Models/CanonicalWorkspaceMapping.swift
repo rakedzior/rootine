@@ -480,37 +480,38 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     static func payload(for workspace: HealthWorkspace) throws -> JSONValue {
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
         return try jsonValue(CanonicalHealthWorkspace(
             version: 1,
             entries: [],
-            updatedAt: workspace.updatedAt,
-            checkIns: workspace.checkIns,
-            reminders: deduplicatedHealthReminders(workspace.reminders)
+            updatedAt: sanitized.updatedAt,
+            checkIns: sanitized.checkIns,
+            reminders: deduplicatedHealthReminders(sanitized.reminders)
         ))
     }
 
     static func healthWorkspace(from payload: JSONValue) throws -> HealthWorkspace {
         let canonical = try decode(CanonicalHealthWorkspace.self, from: payload)
-        return HealthWorkspace(
+        return rootineSanitizedHealthWorkspace(HealthWorkspace(
             version: 1,
             updatedAt: canonical.updatedAt,
             checkIns: canonical.checkIns ?? [:],
             reminders: deduplicatedHealthReminders(canonical.reminders ?? [])
-        )
+        ))
     }
 
     static func mergedHealthPayload(for workspace: HealthWorkspace, onto base: JSONValue) throws -> JSONValue {
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
         var root = try objectValue(base)
-        root["updatedAt"] = .string(workspace.updatedAt)
-        if !workspace.checkIns.isEmpty || root["checkIns"] != nil {
-            root["checkIns"] = try jsonValue(workspace.checkIns)
+        root["updatedAt"] = .string(sanitized.updatedAt)
+        if !sanitized.checkIns.isEmpty || root["checkIns"] != nil {
+            root["checkIns"] = try jsonValue(sanitized.checkIns)
         }
-        if !workspace.reminders.isEmpty || root["reminders"] != nil {
-            if workspace.reminders.isEmpty {
-                root["reminders"] = .array(deduplicatedRecords(arrayValue(root["reminders"])))
-            } else {
-                root["reminders"] = try jsonValue(deduplicatedHealthReminders(workspace.reminders))
-            }
+        if !sanitized.reminders.isEmpty || root["reminders"] != nil {
+            // Health reminders have no web-only nested fields in the
+            // contract. An empty native collection is therefore an explicit
+            // deletion, not a signal to retain stale canonical rows.
+            root["reminders"] = try jsonValue(deduplicatedHealthReminders(sanitized.reminders))
         }
         return .object(root)
     }

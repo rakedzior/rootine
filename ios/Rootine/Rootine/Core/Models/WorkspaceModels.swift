@@ -724,11 +724,16 @@ struct TravelWorkspace: Codable, Equatable, Sendable {
     static let empty = TravelWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), trips: [])
 }
 
-struct HealthCheckIn: Codable, Equatable, Sendable {
+/// A deliberately small, user-entered health signal. The app stores no
+/// clinical interpretation and keeps the value bounded to the four options
+/// surfaced by the native check-in UI.
+struct HealthCheckIn: Codable, Equatable, Identifiable, Sendable {
     var date: String
     var energy: Int
     var note: String?
     var updatedAt: String
+
+    var id: String { date }
 }
 
 struct HealthReminder: Codable, Equatable, Identifiable, Sendable {
@@ -745,6 +750,157 @@ struct HealthWorkspace: Codable, Equatable, Sendable {
     var reminders: [HealthReminder]
 
     static let empty = HealthWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), checkIns: [:], reminders: [])
+}
+
+struct HealthMetrics: Equatable, Sendable {
+    let referenceDate: String
+    let todayEnergy: Int?
+    let checkInCount: Int
+    let averageEnergy: Double?
+    let reminderCount: Int
+    let completedReminderCount: Int
+}
+
+/// Validates a local-day key without using the device locale or timezone.
+/// This is intentionally stricter than DateFormatter so a malformed key
+/// cannot move a check-in to a neighbouring day during sync or recovery.
+func rootineHealthLocalDateIsValid(_ value: String) -> Bool {
+    let bytes = Array(value.utf8)
+    guard bytes.count == 10,
+          bytes[4] == 45,
+          bytes[7] == 45,
+          bytes.enumerated().filter({ $0.offset != 4 && $0.offset != 7 }).allSatisfy({ 48...57 ~= $0.element })
+    else { return false }
+    let components = value.split(separator: "-").compactMap { Int($0) }
+    guard components.count == 3 else { return false }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    guard let date = calendar.date(from: DateComponents(year: components[0], month: components[1], day: components[2])) else { return false }
+    let normalized = calendar.dateComponents([.year, .month, .day], from: date)
+    return normalized.year == components[0] && normalized.month == components[1] && normalized.day == components[2]
+}
+
+private func rootineHealthTrimmed(_ value: String, maxLength: Int) -> String {
+    String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxLength))
+}
+
+func rootineHealthCheckInIsValid(_ checkIn: HealthCheckIn) -> Bool {
+    rootineHealthLocalDateIsValid(checkIn.date)
+        && (1...4).contains(checkIn.energy)
+        && (checkIn.note == nil || checkIn.note!.count <= 500)
+        && RootineDate.date(from: checkIn.updatedAt) != nil
+}
+
+func rootineHealthReminderIsValid(_ reminder: HealthReminder) -> Bool {
+    let id = rootineHealthTrimmed(reminder.id, maxLength: 200)
+    let title = rootineHealthTrimmed(reminder.title, maxLength: 200)
+    return !id.isEmpty
+        && !title.isEmpty
+        && reminder.id.trimmingCharacters(in: .whitespacesAndNewlines).count <= 200
+        && reminder.title.trimmingCharacters(in: .whitespacesAndNewlines).count <= 200
+        && reminder.detail.trimmingCharacters(in: .whitespacesAndNewlines).count <= 1000
+        && reminder.completedDates.allSatisfy(rootineHealthLocalDateIsValid)
+}
+
+func rootineHealthWorkspaceIsValid(_ workspace: HealthWorkspace) -> Bool {
+    guard workspace.version == 1,
+          RootineDate.date(from: workspace.updatedAt) != nil,
+          workspace.checkIns.allSatisfy({ element in
+              element.key == element.value.date && rootineHealthCheckInIsValid(element.value)
+          }) else { return false }
+    var seenIDs = Set<String>()
+    return workspace.reminders.allSatisfy { reminder in
+        rootineHealthReminderIsValid(reminder)
+            && seenIDs.insert(reminder.id).inserted
+    }
+}
+
+/// Repairs untrusted local/remote data without inventing a medical value.
+/// Invalid check-ins are dropped, while harmless whitespace, duplicate
+/// completion days, and duplicate reminder IDs are normalized deterministically
+/// (the last record wins, matching the canonical mapping policy).
+func rootineSanitizedHealthWorkspace(_ workspace: HealthWorkspace) -> HealthWorkspace {
+    var sanitized = workspace
+    var checkIns: [String: HealthCheckIn] = [:]
+    for (rawKey, rawCheckIn) in workspace.checkIns {
+        let key = rootineHealthLocalDateIsValid(rawKey) ? rawKey : rawCheckIn.date
+        guard rootineHealthLocalDateIsValid(key),
+              (1...4).contains(rawCheckIn.energy),
+              RootineDate.date(from: rawCheckIn.updatedAt) != nil else { continue }
+        var checkIn = rawCheckIn
+        checkIn.date = key
+        if let note = checkIn.note {
+            let normalized = rootineHealthTrimmed(note, maxLength: 500)
+            checkIn.note = normalized.isEmpty ? nil : normalized
+        }
+        checkIns[key] = checkIn
+    }
+    sanitized.checkIns = checkIns
+
+    var seenIDs = Set<String>()
+    var reminders: [HealthReminder] = []
+    for rawReminder in workspace.reminders.reversed() {
+        let id = rootineHealthTrimmed(rawReminder.id, maxLength: 200)
+        let title = rootineHealthTrimmed(rawReminder.title, maxLength: 200)
+        guard !id.isEmpty, !title.isEmpty, seenIDs.insert(id).inserted else { continue }
+        var reminder = rawReminder
+        reminder.id = id
+        reminder.title = title
+        reminder.detail = rootineHealthTrimmed(rawReminder.detail, maxLength: 1000)
+        reminder.completedDates = Array(Set(rawReminder.completedDates.filter(rootineHealthLocalDateIsValid))).sorted()
+        reminders.append(reminder)
+    }
+    sanitized.reminders = Array(reminders.reversed())
+    if RootineDate.date(from: workspace.updatedAt) == nil {
+        sanitized.updatedAt = RootineDate.isoTimestamp()
+    }
+    return sanitized
+}
+
+extension HealthWorkspace {
+    /// Returns recent check-ins in stable newest-first order. The dictionary
+    /// key is authoritative, which also makes old payloads with a stale
+    /// embedded date safe to display and edit.
+    func checkInHistory(limit: Int = 30) -> [HealthCheckIn] {
+        guard limit > 0 else { return [] }
+        let valid = rootineSanitizedHealthWorkspace(self).checkIns.values
+        return valid.sorted {
+            $0.date > $1.date || ($0.date == $1.date && $0.updatedAt > $1.updatedAt)
+        }.prefix(limit).map { $0 }
+    }
+
+    func metrics(for referenceDate: String = RootineDate.localDate(), historyDays: Int = 7) -> HealthMetrics {
+        let sanitized = rootineSanitizedHealthWorkspace(self)
+        let window = max(1, historyDays)
+        let history = sanitized.checkInHistory(limit: sanitized.checkIns.count)
+        let recent = history.filter { checkIn in
+            guard rootineHealthLocalDateIsValid(referenceDate), rootineHealthLocalDateIsValid(checkIn.date) else { return false }
+            let start = rootineHealthDateByOffset(referenceDate, days: -(window - 1))
+            return checkIn.date >= start && checkIn.date <= referenceDate
+        }
+        let average = recent.isEmpty ? nil : Double(recent.reduce(0) { $0 + $1.energy }) / Double(recent.count)
+        let completed = sanitized.reminders.filter { $0.completedDates.contains(referenceDate) }.count
+        return HealthMetrics(
+            referenceDate: referenceDate,
+            todayEnergy: sanitized.checkIns[referenceDate]?.energy,
+            checkInCount: recent.count,
+            averageEnergy: average,
+            reminderCount: sanitized.reminders.count,
+            completedReminderCount: completed
+        )
+    }
+}
+
+private func rootineHealthDateByOffset(_ value: String, days: Int) -> String {
+    guard rootineHealthLocalDateIsValid(value) else { return value }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let components = value.split(separator: "-").compactMap { Int($0) }
+    guard components.count == 3,
+          let date = calendar.date(from: DateComponents(year: components[0], month: components[1], day: components[2])),
+          let offset = calendar.date(byAdding: .day, value: days, to: date) else { return value }
+    let result = calendar.dateComponents([.year, .month, .day], from: offset)
+    return String(format: "%04d-%02d-%02d", result.year ?? 0, result.month ?? 0, result.day ?? 0)
 }
 
 // MARK: Pozostałe / Sprawy

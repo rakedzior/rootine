@@ -1837,6 +1837,9 @@ private struct HealthModuleContent: View {
     @State private var editingReminder: HealthReminder?
     @State private var reminderToDelete: HealthReminder?
     @State private var deletedReminder: HealthReminder?
+    @State private var editingCheckIn: HealthCheckIn?
+    @State private var checkInToDelete: HealthCheckIn?
+    @State private var deletedCheckIn: HealthCheckIn?
 
     private var water: Double {
         let key = RootineDate.localDate()
@@ -1850,6 +1853,18 @@ private struct HealthModuleContent: View {
     private var todayEnergyLabel: String {
         guard let energy = todayEnergy else { return "Nieuzupełnione" }
         return "\(energy)/4"
+    }
+
+    private var todayCheckIn: HealthCheckIn? {
+        environment.healthWorkspace.checkIns[RootineDate.localDate()]
+    }
+
+    private var checkInHistory: [HealthCheckIn] {
+        environment.healthWorkspace.checkInHistory(limit: 7)
+    }
+
+    private var healthMetrics: HealthMetrics {
+        environment.healthWorkspace.metrics(historyDays: 7)
     }
 
     var body: some View {
@@ -1888,6 +1903,72 @@ private struct HealthModuleContent: View {
                         .accessibilityLabel("Energia: \(index + 1) z 4")
                         .accessibilityValue(todayEnergy == index + 1 ? "Wybrano" : "Niewybrano")
                         .accessibilityAddTraits(todayEnergy == index + 1 ? [.isSelected] : [])
+                    }
+                }
+                if let note = todayCheckIn?.note, !note.isEmpty {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                RootineSecondaryButton("Edytuj notatkę check-inu", systemImage: "pencil") {
+                    let key = RootineDate.localDate()
+                    editingCheckIn = todayCheckIn
+                        ?? HealthCheckIn(date: key, energy: todayEnergy ?? 3, note: nil, updatedAt: RootineDate.isoTimestamp())
+                }
+            }
+            .rootineSurface()
+
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack {
+                    ModuleSectionTitle(title: "Historia check-inów", systemImage: "clock.arrow.circlepath")
+                    Spacer()
+                    if let average = healthMetrics.averageEnergy {
+                        Text("Średnia 7 dni: \(average, specifier: "%.1f")/4")
+                            .font(.caption)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+                }
+                if checkInHistory.isEmpty {
+                    ModuleEmptyCard(
+                        title: "Brak historii energii",
+                        detail: "Uzupełnij pierwszy check-in, aby zobaczyć rytm z ostatnich dni.",
+                        systemImage: "waveform.path.ecg",
+                        tint: MoreModule.health.tint
+                    )
+                } else {
+                    ForEach(checkInHistory) { checkIn in
+                        Button {
+                            editingCheckIn = checkIn
+                        } label: {
+                            HStack(spacing: RootineTheme.Spacing.small) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(checkIn.date)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                    Text(checkIn.note?.isEmpty == false ? checkIn.note! : "Bez notatki")
+                                        .font(.caption)
+                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Text("\(checkIn.energy)/4")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(MoreModule.health.tint)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                checkInToDelete = checkIn
+                            } label: {
+                                Label("Usuń check-in", systemImage: "trash")
+                            }
+                        }
+                        if checkIn.id != checkInHistory.last?.id {
+                            Divider().overlay(RootineTheme.ColorToken.separator)
+                        }
                     }
                 }
             }
@@ -1959,6 +2040,13 @@ private struct HealthModuleContent: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: $editingCheckIn) { checkIn in
+            HealthCheckInEditorSheet(existing: checkIn) { energy, note in
+                Task { await environment.updateHealthCheckIn(date: checkIn.date, energy: energy, note: note) }
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $selectedReminder) { reminder in
             HealthReminderDetailSheet(
                 reminder: reminder,
@@ -1996,16 +2084,43 @@ private struct HealthModuleContent: View {
             }
             Button("Anuluj", role: .cancel) {}
         }
-        .overlay(alignment: .bottom) {
-            if let deletedReminder {
-                RootineUndoBanner(message: "Usunięto przypomnienie") {
-                    let reminder = deletedReminder
-                    self.deletedReminder = nil
-                    Task { await environment.restoreHealthReminder(reminder) }
+        .confirmationDialog(
+            "Usunąć check-in?",
+            isPresented: Binding(
+                get: { checkInToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { checkInToDelete = nil }
                 }
-                .padding(.horizontal, RootineTheme.Spacing.medium)
-                .padding(.bottom, RootineTheme.Spacing.small)
+            ),
+            titleVisibility: .visible
+        ) {
+            if let checkInToDelete {
+                Button("Usuń check-in", role: .destructive) {
+                    delete(checkInToDelete)
+                    self.checkInToDelete = nil
+                }
             }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: RootineTheme.Spacing.xSmall) {
+                if let deletedReminder {
+                    RootineUndoBanner(message: "Usunięto przypomnienie") {
+                        let reminder = deletedReminder
+                        self.deletedReminder = nil
+                        Task { await environment.restoreHealthReminder(reminder) }
+                    }
+                }
+                if let deletedCheckIn {
+                    RootineUndoBanner(message: "Usunięto check-in") {
+                        let checkIn = deletedCheckIn
+                        self.deletedCheckIn = nil
+                        Task { await environment.restoreHealthCheckIn(checkIn) }
+                    }
+                }
+            }
+            .padding(.horizontal, RootineTheme.Spacing.medium)
+            .padding(.bottom, RootineTheme.Spacing.small)
         }
     }
 
@@ -2016,6 +2131,11 @@ private struct HealthModuleContent: View {
     private func delete(_ reminder: HealthReminder) {
         deletedReminder = reminder
         Task { await environment.deleteHealthReminder(id: reminder.id) }
+    }
+
+    private func delete(_ checkIn: HealthCheckIn) {
+        deletedCheckIn = checkIn
+        Task { await environment.deleteHealthCheckIn(date: checkIn.date) }
     }
 }
 
@@ -2115,6 +2235,53 @@ private struct HealthReminderEditorSheet: View {
                         dismiss()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct HealthCheckInEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let existing: HealthCheckIn
+    let onSave: (Int, String?) -> Void
+    @State private var energy: Int
+    @State private var note: String
+
+    init(existing: HealthCheckIn, onSave: @escaping (Int, String?) -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        _energy = State(initialValue: existing.energy)
+        _note = State(initialValue: existing.note ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Energia") {
+                    Picker("Poziom energii", selection: $energy) {
+                        ForEach(1...4, id: \.self) { value in
+                            Text("\(value) z 4").tag(value)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                Section("Notatka") {
+                    TextField("Opcjonalnie", text: $note, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+            }
+            .navigationTitle("Edytuj check-in")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Anuluj") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(energy, note)
+                        dismiss()
+                    }
                 }
             }
         }

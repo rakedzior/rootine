@@ -1289,10 +1289,27 @@ final class AppEnvironment: ObservableObject {
     }
 
     func setHealthEnergy(_ energy: Int, date: Date = Date()) async {
+        guard (1...4).contains(energy) else { return }
+        let key = RootineDate.localDate(date)
+        await updateHealthCheckIn(
+            date: key,
+            energy: energy,
+            note: healthWorkspace.checkIns[key]?.note
+        )
+    }
+
+    /// Creates or replaces a check-in for a specific local day. The explicit
+    /// date overload is used by history editing and keeps offline mutations
+    /// deterministic instead of relying on a wall-clock timestamp.
+    func updateHealthCheckIn(date: String, energy: Int, note: String?) async {
+        let key = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard rootineHealthLocalDateIsValid(key), (1...4).contains(energy) else { return }
         var next = healthWorkspace
         let now = RootineDate.isoTimestamp()
-        let key = RootineDate.localDate(date)
-        next.checkIns[key] = HealthCheckIn(date: key, energy: min(4, max(1, energy)), note: next.checkIns[key]?.note, updatedAt: now)
+        let normalizedNote = note.map {
+            String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+        }.flatMap { $0.isEmpty ? nil : $0 }
+        next.checkIns[key] = HealthCheckIn(date: key, energy: energy, note: normalizedNote, updatedAt: now)
         next.updatedAt = now
         await persistHealthWorkspace(next)
     }
@@ -1305,6 +1322,7 @@ final class AppEnvironment: ObservableObject {
             next.reminders[index].completedDates.removeAll { $0 == key }
         } else {
             next.reminders[index].completedDates.append(key)
+            next.reminders[index].completedDates = Array(Set(next.reminders[index].completedDates)).sorted()
         }
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
@@ -1315,15 +1333,18 @@ final class AppEnvironment: ObservableObject {
         detail: String,
         operationID: String = UUID().uuidString
     ) async {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         guard !trimmedTitle.isEmpty else { return }
-        let creationFingerprint = "health-reminder|\(trimmedTitle)|\(detail)"
+        let trimmedDetail = String(detail.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1000))
+        let normalizedOperationID = operationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedOperationID.isEmpty else { return }
+        let creationFingerprint = "health-reminder|\(trimmedTitle)|\(trimmedDetail)|\(normalizedOperationID)"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = healthWorkspace
-        let recordID = RootineLocalIdentifier.string(namespace: "health-reminder", operationID: operationID)
+        let recordID = RootineLocalIdentifier.string(namespace: "health-reminder", operationID: normalizedOperationID)
         guard !next.reminders.contains(where: { $0.id == recordID }) else { return }
-        next.reminders.append(HealthReminder(id: recordID, title: trimmedTitle, detail: detail.trimmingCharacters(in: .whitespacesAndNewlines), completedDates: []))
+        next.reminders.append(HealthReminder(id: recordID, title: trimmedTitle, detail: trimmedDetail, completedDates: []))
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
@@ -1338,18 +1359,39 @@ final class AppEnvironment: ObservableObject {
     func updateHealthReminder(id: String, title: String, detail: String) async {
         var next = healthWorkspace
         guard let index = next.reminders.firstIndex(where: { $0.id == id }) else { return }
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         guard !trimmedTitle.isEmpty else { return }
         next.reminders[index].title = trimmedTitle
-        next.reminders[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.reminders[index].detail = String(detail.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1000))
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
 
     func restoreHealthReminder(_ reminder: HealthReminder) async {
         var next = healthWorkspace
-        guard !next.reminders.contains(where: { $0.id == reminder.id }) else { return }
-        next.reminders.append(reminder)
+        let restored = rootineSanitizedHealthWorkspace(
+            HealthWorkspace(version: 1, updatedAt: next.updatedAt, checkIns: [:], reminders: [reminder])
+        ).reminders.first
+        guard let restored, !next.reminders.contains(where: { $0.id == restored.id }) else { return }
+        next.reminders.append(restored)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistHealthWorkspace(next)
+    }
+
+    func deleteHealthCheckIn(date: String) async {
+        let key = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard rootineHealthLocalDateIsValid(key), healthWorkspace.checkIns[key] != nil else { return }
+        var next = healthWorkspace
+        next.checkIns.removeValue(forKey: key)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistHealthWorkspace(next)
+    }
+
+    func restoreHealthCheckIn(_ checkIn: HealthCheckIn) async {
+        guard rootineHealthCheckInIsValid(checkIn) else { return }
+        var next = healthWorkspace
+        guard next.checkIns[checkIn.date] == nil else { return }
+        next.checkIns[checkIn.date] = checkIn
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
@@ -2625,7 +2667,8 @@ final class AppEnvironment: ObservableObject {
         let localWork = (try? await store.load(WorkWorkspace.self, key: .work)) ?? .empty
         workWorkspace = await sanitizedWorkWorkspace(localWork, store: store)
         travelWorkspace = (try? await store.load(TravelWorkspace.self, key: .travel)) ?? .empty
-        healthWorkspace = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
+        let localHealth = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
+        healthWorkspace = await sanitizedHealthWorkspace(localHealth, store: store)
         let localAffairs = (try? await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
         affairsWorkspace = await sanitizedAffairsWorkspace(localAffairs, store: store, syncEngine: syncEngine, allowSync: false)
         recoveryFiles = (try? await store.recoveryFiles()) ?? []
@@ -2727,6 +2770,47 @@ final class AppEnvironment: ObservableObject {
         return normalized
     }
 
+    /// Health values are user-entered and can arrive from legacy snapshots or
+    /// relational rows. Repair only structural issues at the local boundary;
+    /// impossible energy values are discarded rather than silently rewritten.
+    /// As with Work, a repair is kept in Recovery and is not queued until
+    /// reconciliation has compared the server revision.
+    private func sanitizedHealthWorkspace(
+        _ workspace: HealthWorkspace,
+        store: WorkspaceFileStore,
+        syncEngine: WorkspaceSyncEngine? = nil,
+        allowSync: Bool = false
+    ) async -> HealthWorkspace {
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
+        guard sanitized != workspace else { return workspace }
+        if let data = try? JSONEncoder().encode(workspace) {
+            _ = try? await store.writeRecoveryCopy(data, label: "health-sanitized", kind: .diagnostic)
+        }
+        var persisted = sanitized
+        persisted.updatedAt = RootineDate.isoTimestamp()
+        try? await store.save(persisted, key: .health)
+
+        let mapped: JSONValue?
+        if let shadow = canonicalShadows[.health] {
+            mapped = try? RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: persisted, onto: shadow)
+        } else {
+            mapped = try? RootineCanonicalWorkspaceMapping.payload(for: persisted)
+        }
+        if let mapped {
+            canonicalShadows[.health] = mapped
+            if allowSync,
+               !archiveImportInProgress,
+               let syncEngine {
+                _ = try? await syncEngine.enqueue(
+                    payload: mapped,
+                    storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: .health)
+                )
+            }
+        }
+        foundationMessage = "Nieprawidłowe dane zdrowia zachowano w Recovery i bezpiecznie wyczyszczono"
+        return persisted
+    }
+
     private func loadAndReconcile(accessToken: String, flushAfterReconcile: Bool = true) async {
         if normalizedReadEnabled {
             await loadNormalizedAndReconcile(accessToken: accessToken)
@@ -2751,7 +2835,8 @@ final class AppEnvironment: ObservableObject {
             let localWorkRaw = try await store.load(WorkWorkspace.self, key: .work)
             let localWork = localWorkRaw.map(rootineSanitizedWorkWorkspace)
             let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
-            let localHealth = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealthRaw = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealth = localHealthRaw.map(rootineSanitizedHealthWorkspace)
             let localAffairsRaw = try await store.load(AffairsWorkspace.self, key: .affairs)
             let localAffairs = localAffairsRaw.map(normalizedAffairsWorkspace)
             let state = (try await store.load(RootineNormalizedReadState.self, key: .normalizedReadState)) ?? RootineNormalizedReadState()
@@ -3039,7 +3124,13 @@ final class AppEnvironment: ObservableObject {
                 localWork = nil
             }
             let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
-            let localHealth = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealthRaw = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealth: HealthWorkspace?
+            if let localHealthRaw {
+                localHealth = await sanitizedHealthWorkspace(localHealthRaw, store: store, syncEngine: syncEngine, allowSync: false)
+            } else {
+                localHealth = nil
+            }
             let localAffairsRaw = (try await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
             let localAffairs = await sanitizedAffairsWorkspace(localAffairsRaw, store: store, syncEngine: syncEngine, allowSync: false)
             let remoteRows = try await api.readSnapshots(accessToken: accessToken)
@@ -3066,7 +3157,7 @@ final class AppEnvironment: ObservableObject {
             goalsWorkspace = goalsResult.value
             workWorkspace = await sanitizedWorkWorkspace(workResult.value, store: store, allowSync: true)
             travelWorkspace = travelResult.value
-            healthWorkspace = healthResult.value
+            healthWorkspace = await sanitizedHealthWorkspace(healthResult.value, store: store, syncEngine: syncEngine, allowSync: true)
             affairsWorkspace = await sanitizedAffairsWorkspace(affairsResult.value, store: store, syncEngine: syncEngine, allowSync: true)
             await reconcileLocalNotifications()
             let reconciliationResults: [(RootineStorageKey, Bool)] = [

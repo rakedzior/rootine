@@ -620,6 +620,64 @@ final class ContractFixtureTests: XCTestCase {
         }
     }
 
+    func testHealthValidationHistoryAndMetricsAreDeterministic() {
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let workspace = HealthWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            checkIns: [
+                "2026-08-30": HealthCheckIn(date: "2026-08-30", energy: 2, note: "  spokojnie  ", updatedAt: timestamp),
+                "2026-08-29": HealthCheckIn(date: "2026-08-29", energy: 4, note: nil, updatedAt: timestamp),
+                "bad": HealthCheckIn(date: "2026-08-31", energy: 9, note: nil, updatedAt: timestamp)
+            ],
+            reminders: [
+                HealthReminder(id: "water", title: "Starsza kopia", detail: "", completedDates: []),
+                HealthReminder(id: "water", title: "  Woda  ", detail: "Szklanka", completedDates: ["2026-08-30", "2026-08-30"]),
+                HealthReminder(id: "invalid", title: "", detail: "", completedDates: [])
+            ]
+        )
+
+        XCTAssertTrue(rootineHealthLocalDateIsValid("2024-02-29"))
+        XCTAssertFalse(rootineHealthLocalDateIsValid("2023-02-29"))
+        XCTAssertTrue(rootineHealthCheckInIsValid(workspace.checkIns["2026-08-30"]!))
+        XCTAssertFalse(rootineHealthCheckInIsValid(workspace.checkIns["bad"]!))
+        XCTAssertFalse(rootineHealthWorkspaceIsValid(workspace))
+
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
+        XCTAssertEqual(sanitized.checkIns.keys.sorted(), ["2026-08-29", "2026-08-30"])
+        XCTAssertEqual(sanitized.checkIns["2026-08-30"]?.note, "spokojnie")
+        XCTAssertEqual(sanitized.reminders.count, 1)
+        XCTAssertEqual(sanitized.reminders.first?.id, "water")
+        XCTAssertEqual(sanitized.reminders.first?.completedDates, ["2026-08-30"])
+        XCTAssertTrue(rootineHealthWorkspaceIsValid(sanitized))
+
+        XCTAssertEqual(sanitized.checkInHistory(limit: 2).map(\.date), ["2026-08-30", "2026-08-29"])
+        let metrics = sanitized.metrics(for: "2026-08-30", historyDays: 7)
+        XCTAssertEqual(metrics.todayEnergy, 2)
+        XCTAssertEqual(metrics.checkInCount, 2)
+        XCTAssertEqual(metrics.averageEnergy, 3)
+        XCTAssertEqual(metrics.reminderCount, 1)
+        XCTAssertEqual(metrics.completedReminderCount, 1)
+    }
+
+    func testHealthCanonicalMergePropagatesReminderDeletion() throws {
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let base = try RootineCanonicalWorkspaceMapping.payload(for: HealthWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            checkIns: [:],
+            reminders: [HealthReminder(id: "water", title: "Woda", detail: "", completedDates: [])]
+        ))
+        let deleted = try RootineCanonicalWorkspaceMapping.mergedHealthPayload(
+            for: HealthWorkspace(version: 1, updatedAt: timestamp, checkIns: [:], reminders: []),
+            onto: base
+        )
+        guard case .object(let root) = deleted, case .array(let reminders) = root["reminders"] else {
+            return XCTFail("Health reminders should remain an array after deletion")
+        }
+        XCTAssertTrue(reminders.isEmpty)
+    }
+
     func testGoalsAndHealthLegacyAliasesMigrateAtRevisionZero() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("rootine-tests-\(UUID().uuidString)", isDirectory: true)
