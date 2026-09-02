@@ -82,6 +82,7 @@ final class AppEnvironment: ObservableObject {
     private var syncEngine: WorkspaceSyncEngine?
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
     private var creationGate = WorkspaceCreationGate()
+    private var refreshTask: Task<Void, Never>?
     private var realtimeClient: RootineRealtimeClient?
     private var syncCoordinator: RootineSyncCoordinator?
     private var networkMonitor: NWPathMonitor?
@@ -2235,6 +2236,22 @@ final class AppEnvironment: ObservableObject {
             // Recovery is best effort. Never replace the active workspace with
             // a guessed partial snapshot when the transaction itself is bad.
             foundationMessage = "Nie udało się automatycznie odzyskać przerwanego importu"
+        }
+    }
+
+    /// Compatibility polling remains available while the realtime lifecycle
+    /// is being rolled out. It also provides a fallback on networks where a
+    /// WebSocket cannot be established.
+    private func startRealtimeRefreshLoop() {
+        refreshTask?.cancel()
+        guard configuration.isAuthComplete else { return }
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await _Concurrency.Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled, let self else { return }
+                guard let token = self.session?.accessToken else { return }
+                await self.loadAndReconcile(accessToken: token)
+            }
         }
     }
 
