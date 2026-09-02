@@ -2240,6 +2240,7 @@ private struct AffairsModuleContent: View {
     @State private var selectedMatter: AffairMatter?
     @State private var matterToDelete: AffairMatter?
     @State private var deletedMatter: AffairMatter?
+    @State private var editorTarget: AffairsEditorTarget?
 
     private var activeMatters: [AffairMatter] {
         environment.affairsWorkspace.matters
@@ -2307,6 +2308,62 @@ private struct AffairsModuleContent: View {
                 Task { await environment.updateAffairMatter(id: matter.id, title: draft.title, category: draft.category, priority: draft.priority, dueDate: draft.dueDate, note: draft.note) }
             } onDelete: {
                 matterToDelete = matter
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editorTarget) { target in
+            Group {
+                switch target {
+                case .oneTime(let payment):
+                    AffairOneTimeEditorSheet(payment: payment) { draft in
+                        if let payment {
+                            Task { await environment.updateAffairOneTimePayment(id: payment.id, title: draft.title, category: draft.category, amount: draft.amount, dueDate: draft.dueDate, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairOneTimePayment(title: draft.title, category: draft.category, amount: draft.amount, dueDate: draft.dueDate, note: draft.note) }
+                        }
+                    }
+                case .payment(let payment):
+                    AffairPaymentEditorSheet(payment: payment) { draft in
+                        if let payment {
+                            Task { await environment.updateAffairPayment(id: payment.id, name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextDueDate: draft.nextDueDate, automatic: draft.automatic, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairPayment(name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextDueDate: draft.nextDueDate, automatic: draft.automatic, note: draft.note) }
+                        }
+                    }
+                case .subscription(let subscription):
+                    AffairSubscriptionEditorSheet(subscription: subscription) { draft in
+                        if let subscription {
+                            Task { await environment.updateAffairSubscription(id: subscription.id, name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextBillingDate: draft.nextBillingDate, renewal: draft.renewal, commitmentEndDate: draft.commitmentEndDate, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairSubscription(name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextBillingDate: draft.nextBillingDate, renewal: draft.renewal, commitmentEndDate: draft.commitmentEndDate, note: draft.note) }
+                        }
+                    }
+                case .document(let document):
+                    AffairDocumentEditorSheet(document: document) { draft in
+                        if let document {
+                            Task { await environment.updateAffairDocument(id: document.id, name: draft.name, category: draft.category, holder: draft.holder, expiresAt: draft.expiresAt, reminderDays: draft.reminderDays, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairDocument(name: draft.name, category: draft.category, holder: draft.holder, expiresAt: draft.expiresAt, reminderDays: draft.reminderDays, note: draft.note) }
+                        }
+                    }
+                case .vehicle(let vehicle):
+                    AffairVehicleEditorSheet(vehicle: vehicle) { draft in
+                        if let vehicle {
+                            Task { await environment.updateAffairVehicle(id: vehicle.id, name: draft.name, registration: draft.registration, mileage: draft.mileage) }
+                        } else {
+                            Task { await environment.addAffairVehicle(name: draft.name, registration: draft.registration, mileage: draft.mileage) }
+                        }
+                    }
+                case .vehicleItem(let item, let vehicleID):
+                    AffairVehicleItemEditorSheet(item: item, vehicleID: vehicleID, vehicles: environment.affairsWorkspace.vehicles) { draft in
+                        if let item {
+                            Task { await environment.updateAffairVehicleItem(id: item.id, vehicleID: draft.vehicleID, title: draft.title, type: draft.type, dueDate: draft.dueDate, dueMileage: draft.dueMileage, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairVehicleItem(vehicleID: draft.vehicleID, title: draft.title, type: draft.type, dueDate: draft.dueDate, dueMileage: draft.dueMileage, note: draft.note) }
+                        }
+                    }
+                }
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -2381,11 +2438,16 @@ private struct AffairsModuleContent: View {
     private var finances: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
             sectionHeader("Finanse", image: "creditcard")
-            if upcomingPayments.isEmpty && environment.affairsWorkspace.oneTimePayments.isEmpty {
+            if upcomingPayments.isEmpty
+                && environment.affairsWorkspace.oneTimePayments.isEmpty
+                && environment.affairsWorkspace.subscriptions.filter(\.active).isEmpty {
                 ModuleEmptyCard(title: "Brak płatności", detail: "Płatności pojawią się tutaj po zapisaniu ich w module Pozostałe.", systemImage: "creditcard", tint: RootineTheme.ColorToken.warning)
             } else {
                 ForEach(upcomingPayments) { payment in
-                    AffairsPaymentRow(payment: payment)
+                    Button { editorTarget = .payment(payment) } label: {
+                        AffairsPaymentRow(payment: payment)
+                    }
+                    .buttonStyle(.plain)
                 }
                 ForEach(environment.affairsWorkspace.oneTimePayments.sorted { $0.dueDate < $1.dueDate }) { payment in
                     HStack(spacing: RootineTheme.Spacing.small) {
@@ -2401,8 +2463,44 @@ private struct AffairsModuleContent: View {
                                 .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
                         }
                         Spacer()
+                        Button { editorTarget = .oneTime(payment) } label: {
+                            Image(systemName: "pencil")
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .frame(minHeight: 52)
+                }
+                sectionHeader("Subskrypcje", image: "repeat.circle")
+                ForEach(environment.affairsWorkspace.subscriptions.filter(\.active).sorted { $0.nextBillingDate < $1.nextBillingDate }) { subscription in
+                    Button { editorTarget = .subscription(subscription) } label: {
+                        HStack(spacing: RootineTheme.Spacing.small) {
+                            Image(systemName: "repeat.circle").foregroundStyle(RootineTheme.ColorToken.warning).frame(width: 36, height: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(subscription.name).font(.subheadline.weight(.medium))
+                                Text("Odnowienie " + subscription.nextBillingDate + " · " + affairCurrency(subscription.amount))
+                                    .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            }
+                            Spacer()
+                        }
+                        .frame(minHeight: 52)
+                    }
+                    .buttonStyle(.plain)
+                }
+                ModuleActionButton(title: "Dodaj płatność", systemImage: "plus", tint: RootineTheme.ColorToken.warning) {
+                    editorTarget = .payment(nil)
+                }
+                ModuleActionButton(title: "Dodaj subskrypcję", systemImage: "plus", tint: RootineTheme.ColorToken.warning) {
+                    editorTarget = .subscription(nil)
+                }
+                sectionHeader("Budżet", image: "chart.pie")
+                if environment.affairsWorkspace.budgets.isEmpty {
+                    ModuleEmptyCard(title: "Brak budżetu", detail: "Budżet miesięczny możesz uzupełnić w webowym module spraw.", systemImage: "chart.pie", tint: RootineTheme.ColorToken.action)
+                } else {
+                    ForEach(environment.affairsWorkspace.budgets) { budget in
+                        AffairsBudgetRow(budget: budget)
+                    }
                 }
             }
         }
@@ -2417,8 +2515,14 @@ private struct AffairsModuleContent: View {
                 ModuleEmptyCard(title: "Brak dokumentów", detail: "Dodaj dokument z terminem ważności w pełnym module spraw.", systemImage: "doc.badge.plus", tint: RootineTheme.ColorToken.action)
             } else {
                 ForEach(openDocuments) { document in
-                    AffairsInfoRow(title: document.name, detail: "\(document.holder) · ważny do \(document.expiresAt)", image: "doc.text", tint: RootineTheme.ColorToken.action)
+                    Button { editorTarget = .document(document) } label: {
+                        AffairsInfoRow(title: document.name, detail: "\(document.holder) · ważny do \(document.expiresAt)", image: "doc.text", tint: RootineTheme.ColorToken.action)
+                    }
+                    .buttonStyle(.plain)
                 }
+            }
+            ModuleActionButton(title: "Dodaj dokument", systemImage: "doc.badge.plus", tint: RootineTheme.ColorToken.action) {
+                editorTarget = .document(nil)
             }
         }
         .rootineSurface()
@@ -2432,7 +2536,35 @@ private struct AffairsModuleContent: View {
                 ModuleEmptyCard(title: "Brak terminów pojazdów", detail: "Przeglądy i ubezpieczenia pojawią się tutaj.", systemImage: "car", tint: MoreModule.affairs.tint)
             } else {
                 ForEach(vehicleItems) { item in
-                    AffairsInfoRow(title: item.title, detail: "Termin \(item.dueDate)", image: "car", tint: MoreModule.affairs.tint)
+                    HStack(spacing: RootineTheme.Spacing.small) {
+                            Button { Task { await environment.toggleAffairVehicleItem(id: item.id) } } label: {
+                                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(item.done ? RootineTheme.ColorToken.success : MoreModule.affairs.tint)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                            AffairsInfoRow(title: item.title, detail: "Termin \(item.dueDate)", image: "car", tint: MoreModule.affairs.tint)
+                            Button { editorTarget = .vehicleItem(item, item.vehicleId) } label: {
+                                Image(systemName: "pencil")
+                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+            ForEach(environment.affairsWorkspace.vehicles) { vehicle in
+                Button { editorTarget = .vehicle(vehicle) } label: {
+                    AffairsInfoRow(title: vehicle.name, detail: "\(vehicle.registration) · \(Int(vehicle.mileage)) km", image: "car.fill", tint: MoreModule.affairs.tint)
+                }
+                .buttonStyle(.plain)
+            }
+            ModuleActionButton(title: "Dodaj pojazd", systemImage: "car.badge.plus", tint: MoreModule.affairs.tint) {
+                editorTarget = .vehicle(nil)
+            }
+            if let vehicle = environment.affairsWorkspace.vehicles.first {
+                ModuleActionButton(title: "Dodaj termin pojazdu", systemImage: "calendar.badge.plus", tint: MoreModule.affairs.tint) {
+                    editorTarget = .vehicleItem(nil, vehicle.id)
                 }
             }
         }
@@ -2463,6 +2595,26 @@ private enum AffairsModuleView: String, CaseIterable, Identifiable {
         case .finances: return "Finanse"
         case .documents: return "Dokumenty"
         case .vehicles: return "Pojazdy"
+        }
+    }
+}
+
+private enum AffairsEditorTarget: Identifiable {
+    case oneTime(AffairOneTimePayment?)
+    case payment(AffairRecurringPayment?)
+    case subscription(AffairSubscription?)
+    case document(AffairDocument?)
+    case vehicle(AffairVehicle?)
+    case vehicleItem(AffairVehicleItem?, String)
+
+    var id: String {
+        switch self {
+        case .oneTime(let value): return "one-time-\(value?.id ?? "new")"
+        case .payment(let value): return "payment-\(value?.id ?? "new")"
+        case .subscription(let value): return "subscription-\(value?.id ?? "new")"
+        case .document(let value): return "document-\(value?.id ?? "new")"
+        case .vehicle(let value): return "vehicle-\(value?.id ?? "new")"
+        case .vehicleItem(let value, let vehicleID): return "vehicle-item-\(value?.id ?? "new")-\(vehicleID)"
         }
     }
 }
@@ -2569,8 +2721,30 @@ private struct AffairsInfoRow: View {
     }
 }
 
+private struct AffairsBudgetRow: View {
+    let budget: AffairBudgetMonth
+
+    private var planned: Double { AffairMoney.adding(budget.lines.map(\.planned)) }
+    private var actual: Double { AffairMoney.adding(budget.lines.map(\.actual)) }
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Image(systemName: "chart.pie").foregroundStyle(RootineTheme.ColorToken.action).frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(budget.month).font(.subheadline.weight(.medium))
+                Text("Plan \(affairCurrency(planned)) · Wykonanie \(affairCurrency(actual))")
+                    .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Spacer()
+        }
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Budżet \(budget.month): plan \(affairCurrency(planned)), wykonanie \(affairCurrency(actual))")
+    }
+}
+
 private func affairCurrency(_ amount: Double) -> String {
-    "\(String(format: "%.2f", amount)) zł"
+    AffairMoney.formatted(amount)
 }
 
 private struct AffairEditorDraft {
@@ -2642,6 +2816,447 @@ private struct AffairEditorSheet: View {
                         dismiss()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private func affairAmountText(_ amount: Double) -> String {
+    let number = AffairMoney.normalized(amount)
+    return String(format: "%.2f", number)
+}
+
+private struct AffairOneTimeDraft {
+    var title: String
+    var category: String
+    var amount: Double
+    var dueDate: String
+    var note: String
+}
+
+private struct AffairOneTimeEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let payment: AffairOneTimePayment?
+    let onSave: (AffairOneTimeDraft) -> Void
+    @State private var title: String
+    @State private var category: String
+    @State private var amount: String
+    @State private var dueDate: String
+    @State private var note: String
+
+    init(payment: AffairOneTimePayment?, onSave: @escaping (AffairOneTimeDraft) -> Void) {
+        self.payment = payment
+        self.onSave = onSave
+        _title = State(initialValue: payment?.title ?? "")
+        _category = State(initialValue: payment?.category ?? "Inne")
+        _amount = State(initialValue: affairAmountText(payment?.amount ?? 0))
+        _dueDate = State(initialValue: payment?.dueDate ?? RootineDate.localDate())
+        _note = State(initialValue: payment?.note ?? "")
+    }
+
+    private var valid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairMoney.parse(amount) != nil
+            && AffairDate.isValid(dueDate, allowingEmpty: false)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Płatność jednorazowa") {
+                    TextField("Nazwa", text: $title)
+                    TextField("Kategoria", text: $category)
+                    TextField("Kwota (PLN)", text: $amount).keyboardType(.decimalPad)
+                    TextField("Termin (RRRR-MM-DD)", text: $dueDate).keyboardType(.numbersAndPunctuation)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(payment == nil ? "Nowa płatność" : "Edytuj płatność")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsed = AffairMoney.parse(amount), valid else { return }
+                        onSave(AffairOneTimeDraft(title: title, category: category, amount: NSDecimalNumber(decimal: parsed).doubleValue, dueDate: dueDate, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairPaymentDraft {
+    var name: String
+    var category: String
+    var amount: Double
+    var cadence: String
+    var nextDueDate: String
+    var automatic: Bool
+    var note: String
+}
+
+private struct AffairPaymentEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let payment: AffairRecurringPayment?
+    let onSave: (AffairPaymentDraft) -> Void
+    @State private var name: String
+    @State private var category: String
+    @State private var amount: String
+    @State private var cadence: String
+    @State private var nextDueDate: String
+    @State private var automatic: Bool
+    @State private var note: String
+
+    init(payment: AffairRecurringPayment?, onSave: @escaping (AffairPaymentDraft) -> Void) {
+        self.payment = payment
+        self.onSave = onSave
+        _name = State(initialValue: payment?.name ?? "")
+        _category = State(initialValue: payment?.category ?? "Inne")
+        _amount = State(initialValue: affairAmountText(payment?.amount ?? 0))
+        _cadence = State(initialValue: payment?.cadence ?? "monthly")
+        _nextDueDate = State(initialValue: payment?.nextDueDate ?? RootineDate.localDate())
+        _automatic = State(initialValue: payment?.automatic ?? false)
+        _note = State(initialValue: payment?.note ?? "")
+    }
+
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairMoney.parse(amount) != nil
+            && AffairsWorkspaceRules.cadences.contains(cadence)
+            && AffairDate.isValid(nextDueDate, allowingEmpty: false)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Płatność cykliczna") {
+                    TextField("Nazwa", text: $name)
+                    TextField("Kategoria", text: $category)
+                    TextField("Kwota (PLN)", text: $amount).keyboardType(.decimalPad)
+                    Picker("Częstotliwość", selection: $cadence) {
+                        Text("Co miesiąc").tag("monthly")
+                        Text("Co kwartał").tag("quarterly")
+                        Text("Co rok").tag("yearly")
+                    }
+                    TextField("Najbliższy termin (RRRR-MM-DD)", text: $nextDueDate).keyboardType(.numbersAndPunctuation)
+                    Toggle("Płatność automatyczna", isOn: $automatic)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(payment == nil ? "Nowa płatność" : "Edytuj płatność")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsed = AffairMoney.parse(amount), valid else { return }
+                        onSave(AffairPaymentDraft(name: name, category: category, amount: NSDecimalNumber(decimal: parsed).doubleValue, cadence: cadence, nextDueDate: nextDueDate, automatic: automatic, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairSubscriptionDraft {
+    var name: String
+    var category: String
+    var amount: Double
+    var cadence: String
+    var nextBillingDate: String
+    var renewal: String
+    var commitmentEndDate: String
+    var note: String
+}
+
+private struct AffairSubscriptionEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let subscription: AffairSubscription?
+    let onSave: (AffairSubscriptionDraft) -> Void
+    @State private var name: String
+    @State private var category: String
+    @State private var amount: String
+    @State private var cadence: String
+    @State private var nextBillingDate: String
+    @State private var renewal: String
+    @State private var commitmentEndDate: String
+    @State private var note: String
+
+    init(subscription: AffairSubscription?, onSave: @escaping (AffairSubscriptionDraft) -> Void) {
+        self.subscription = subscription
+        self.onSave = onSave
+        _name = State(initialValue: subscription?.name ?? "")
+        _category = State(initialValue: subscription?.category ?? "Inne")
+        _amount = State(initialValue: affairAmountText(subscription?.amount ?? 0))
+        _cadence = State(initialValue: subscription?.cadence ?? "monthly")
+        _nextBillingDate = State(initialValue: subscription?.nextBillingDate ?? RootineDate.localDate())
+        _renewal = State(initialValue: subscription?.renewal ?? "manual")
+        _commitmentEndDate = State(initialValue: subscription?.commitmentEndDate ?? "")
+        _note = State(initialValue: subscription?.note ?? "")
+    }
+
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairMoney.parse(amount) != nil
+            && AffairsWorkspaceRules.cadences.contains(cadence)
+            && ["automatic", "manual"].contains(renewal)
+            && AffairDate.isValid(nextBillingDate, allowingEmpty: false)
+            && AffairDate.isValid(commitmentEndDate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Subskrypcja") {
+                    TextField("Nazwa", text: $name)
+                    TextField("Kategoria", text: $category)
+                    TextField("Kwota (PLN)", text: $amount).keyboardType(.decimalPad)
+                    Picker("Częstotliwość", selection: $cadence) {
+                        Text("Co miesiąc").tag("monthly")
+                        Text("Co kwartał").tag("quarterly")
+                        Text("Co rok").tag("yearly")
+                    }
+                    Picker("Odnowienie", selection: $renewal) {
+                        Text("Automatyczne").tag("automatic")
+                        Text("Ręczne").tag("manual")
+                    }
+                    TextField("Kolejne rozliczenie (RRRR-MM-DD)", text: $nextBillingDate).keyboardType(.numbersAndPunctuation)
+                    TextField("Koniec zobowiązania (opcjonalnie)", text: $commitmentEndDate).keyboardType(.numbersAndPunctuation)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(subscription == nil ? "Nowa subskrypcja" : "Edytuj subskrypcję")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsed = AffairMoney.parse(amount), valid else { return }
+                        onSave(AffairSubscriptionDraft(name: name, category: category, amount: NSDecimalNumber(decimal: parsed).doubleValue, cadence: cadence, nextBillingDate: nextBillingDate, renewal: renewal, commitmentEndDate: commitmentEndDate, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairDocumentDraft {
+    var name: String
+    var category: String
+    var holder: String
+    var expiresAt: String
+    var reminderDays: Int
+    var note: String
+}
+
+private struct AffairDocumentEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let document: AffairDocument?
+    let onSave: (AffairDocumentDraft) -> Void
+    @State private var name: String
+    @State private var category: String
+    @State private var holder: String
+    @State private var expiresAt: String
+    @State private var reminderDays: String
+    @State private var note: String
+
+    init(document: AffairDocument?, onSave: @escaping (AffairDocumentDraft) -> Void) {
+        self.document = document
+        self.onSave = onSave
+        _name = State(initialValue: document?.name ?? "")
+        _category = State(initialValue: document?.category ?? "other")
+        _holder = State(initialValue: document?.holder ?? "Ja")
+        _expiresAt = State(initialValue: document?.expiresAt ?? RootineDate.localDate())
+        _reminderDays = State(initialValue: String(document?.reminderDays ?? 30))
+        _note = State(initialValue: document?.note ?? "")
+    }
+
+    private var parsedReminderDays: Int? { Int(reminderDays.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairsWorkspaceRules.documentCategories.contains(category)
+            && AffairDate.isValid(expiresAt)
+            && parsedReminderDays.map({ (0...730).contains($0) }) == true
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Dokument") {
+                    TextField("Nazwa", text: $name)
+                    Picker("Kategoria", selection: $category) {
+                        Text("Tożsamość").tag("identity")
+                        Text("Prawo jazdy").tag("driving")
+                        Text("Ubezpieczenie").tag("insurance")
+                        Text("Zdrowie").tag("health")
+                        Text("Umowa").tag("agreement")
+                        Text("Inne").tag("other")
+                    }
+                    TextField("Osoba / właściciel", text: $holder)
+                    TextField("Ważny do (RRRR-MM-DD)", text: $expiresAt).keyboardType(.numbersAndPunctuation)
+                    TextField("Przypomnienie (dni wcześniej)", text: $reminderDays).keyboardType(.numberPad)
+                }
+                Section("Notatka") {
+                    Text("Nie wpisuj pełnych numerów dokumentów ani innych danych wrażliwych.")
+                        .font(.footnote).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    TextEditor(text: $note).frame(minHeight: 80)
+                }
+            }
+            .navigationTitle(document == nil ? "Nowy dokument" : "Edytuj dokument")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsedReminderDays, valid else { return }
+                        onSave(AffairDocumentDraft(name: name, category: category, holder: holder, expiresAt: expiresAt, reminderDays: parsedReminderDays, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairVehicleDraft {
+    var name: String
+    var registration: String
+    var mileage: Double
+}
+
+private struct AffairVehicleEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let vehicle: AffairVehicle?
+    let onSave: (AffairVehicleDraft) -> Void
+    @State private var name: String
+    @State private var registration: String
+    @State private var mileage: String
+
+    init(vehicle: AffairVehicle?, onSave: @escaping (AffairVehicleDraft) -> Void) {
+        self.vehicle = vehicle
+        self.onSave = onSave
+        _name = State(initialValue: vehicle?.name ?? "")
+        _registration = State(initialValue: vehicle?.registration ?? "")
+        _mileage = State(initialValue: vehicle.map { String(Int($0.mileage)) } ?? "0")
+    }
+
+    private var parsedMileage: Double? { Double(mileage.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: ".")) }
+    private var valid: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && parsedMileage.map { $0.isFinite && $0 >= 0 } == true }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Pojazd") {
+                    TextField("Nazwa", text: $name)
+                    TextField("Numer rejestracyjny", text: $registration).textInputAutocapitalization(.characters)
+                    TextField("Przebieg (km)", text: $mileage).keyboardType(.numberPad)
+                }
+            }
+            .navigationTitle(vehicle == nil ? "Nowy pojazd" : "Edytuj pojazd")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsedMileage, valid else { return }
+                        onSave(AffairVehicleDraft(name: name, registration: registration, mileage: parsedMileage))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairVehicleItemDraft {
+    var vehicleID: String
+    var title: String
+    var type: String
+    var dueDate: String
+    var dueMileage: Double?
+    var note: String
+}
+
+private struct AffairVehicleItemEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: AffairVehicleItem?
+    let onSave: (AffairVehicleItemDraft) -> Void
+    let vehicles: [AffairVehicle]
+    @State private var vehicleID: String
+    @State private var title: String
+    @State private var type: String
+    @State private var dueDate: String
+    @State private var dueMileage: String
+    @State private var note: String
+
+    init(item: AffairVehicleItem?, vehicleID: String, vehicles: [AffairVehicle], onSave: @escaping (AffairVehicleItemDraft) -> Void) {
+        self.item = item
+        self.onSave = onSave
+        self.vehicles = vehicles
+        _vehicleID = State(initialValue: item?.vehicleId ?? vehicleID)
+        _title = State(initialValue: item?.title ?? "")
+        _type = State(initialValue: item?.type ?? "service")
+        _dueDate = State(initialValue: item?.dueDate ?? "")
+        _dueMileage = State(initialValue: item?.dueMileage.map { String(Int($0)) } ?? "")
+        _note = State(initialValue: item?.note ?? "")
+    }
+
+    private var parsedDueMileage: Double? {
+        let value = dueMileage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        return Double(value.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: "."))
+    }
+    private var valid: Bool {
+        !vehicleID.isEmpty && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairsWorkspaceRules.vehicleItemTypes.contains(type)
+            && AffairDate.isValid(dueDate)
+            && (parsedDueMileage == nil || (parsedDueMileage?.isFinite == true && parsedDueMileage! >= 0))
+            && (!dueDate.isEmpty || parsedDueMileage != nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Termin pojazdu") {
+                    Picker("Pojazd", selection: $vehicleID) {
+                        ForEach(vehicles) { vehicle in Text(vehicle.name).tag(vehicle.id) }
+                    }
+                    TextField("Nazwa", text: $title)
+                    Picker("Typ", selection: $type) {
+                        Text("Ubezpieczenie").tag("insurance")
+                        Text("Przegląd").tag("inspection")
+                        Text("Serwis").tag("service")
+                        Text("Opony").tag("tires")
+                        Text("Leasing").tag("lease")
+                        Text("Gwarancja").tag("warranty")
+                        Text("Inne").tag("other")
+                    }
+                    TextField("Termin (opcjonalnie, RRRR-MM-DD)", text: $dueDate).keyboardType(.numbersAndPunctuation)
+                    TextField("Przebieg graniczny (opcjonalnie)", text: $dueMileage).keyboardType(.numberPad)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(item == nil ? "Nowy termin" : "Edytuj termin")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard valid else { return }
+                        onSave(AffairVehicleItemDraft(vehicleID: vehicleID, title: title, type: type, dueDate: dueDate, dueMileage: parsedDueMileage, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
                 }
             }
         }

@@ -449,7 +449,9 @@ final class AppEnvironment: ObservableObject {
             if let value = try? await store.load(WorkWorkspace.self, key: .work) { workWorkspace = value }
             if let value = try? await store.load(TravelWorkspace.self, key: .travel) { travelWorkspace = value }
             if let value = try? await store.load(HealthWorkspace.self, key: .health) { healthWorkspace = value }
-            if let value = try? await store.load(AffairsWorkspace.self, key: .affairs) { affairsWorkspace = value }
+            if let value = try? await store.load(AffairsWorkspace.self, key: .affairs) {
+                affairsWorkspace = AffairsWorkspaceRules.normalized(value)
+            }
             try? await store.save(taskWorkspace, key: .tasks)
             try? await store.save(nutritionWorkspace, key: .nutrition)
             try? await store.save(notesWorkspace, key: .notes)
@@ -702,6 +704,13 @@ final class AppEnvironment: ObservableObject {
                 found: found,
                 supported: supported
             )
+        }
+        // The compact archive has no separate schema validator. Reject an
+        // Affairs payload that still violates the native contract after its
+        // explicit v1 -> v2 migration/normalization, rather than publishing a
+        // snapshot that can only fail when a later editor opens it.
+        guard AffairsWorkspaceRules.validate(archive.affairs).isEmpty else {
+            throw RootineWorkspaceArchiveError.invalidArchive
         }
     }
 
@@ -1365,7 +1374,8 @@ final class AppEnvironment: ObservableObject {
         operationID: String = UUID().uuidString
     ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        let normalizedDueDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairDate.isValid(normalizedDueDate) else { return }
         let fingerprint = "affair|\(trimmedTitle)|\(category)|\(dueDate)"
         guard creationGate.claim(fingerprint) else { return }
         defer { creationGate.release(fingerprint) }
@@ -1380,7 +1390,7 @@ final class AppEnvironment: ObservableObject {
                 category: AffairMatterCategory.canonical(category),
                 priority: priority == "high" ? "high" : "normal",
                 status: "open",
-                dueDate: dueDate,
+                dueDate: normalizedDueDate,
                 note: note.trimmingCharacters(in: .whitespacesAndNewlines),
                 createdAt: now
             ),
@@ -1399,13 +1409,14 @@ final class AppEnvironment: ObservableObject {
         note: String
     ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        let normalizedDueDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairDate.isValid(normalizedDueDate) else { return }
         var next = affairsWorkspace
         guard let index = next.matters.firstIndex(where: { $0.id == id }) else { return }
         next.matters[index].title = trimmedTitle
         next.matters[index].category = AffairMatterCategory.canonical(category)
         next.matters[index].priority = priority == "high" ? "high" : "normal"
-        next.matters[index].dueDate = dueDate
+        next.matters[index].dueDate = normalizedDueDate
         next.matters[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
         await persistAffairsWorkspace(next)
     }
@@ -1430,6 +1441,61 @@ final class AppEnvironment: ObservableObject {
         await persistAffairsWorkspace(next)
     }
 
+    func addAffairOneTimePayment(
+        title: String,
+        category: String,
+        amount: Double,
+        dueDate: String,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        let fingerprint = "affair-one-time|\(trimmedTitle)|\(normalizedDate)|\(AffairMoney.normalized(amount))"
+        guard creationGate.claim(fingerprint) else { return }
+        defer { creationGate.release(fingerprint) }
+        let id = RootineLocalIdentifier.string(namespace: "affair-one-time", operationID: operationID)
+        guard !affairsWorkspace.oneTimePayments.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.oneTimePayments.insert(AffairOneTimePayment(
+            id: id,
+            title: trimmedTitle,
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: AffairMoney.normalized(amount),
+            dueDate: normalizedDate,
+            paid: false,
+            paidAt: "",
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairOneTimePayment(
+        id: String,
+        title: String,
+        category: String,
+        amount: Double,
+        dueDate: String,
+        note: String = ""
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        var next = affairsWorkspace
+        guard let index = next.oneTimePayments.firstIndex(where: { $0.id == id }) else { return }
+        var payment = next.oneTimePayments[index]
+        payment.title = trimmedTitle
+        payment.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        payment.amount = AffairMoney.normalized(amount)
+        payment.dueDate = normalizedDate
+        payment.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.oneTimePayments[index] = payment
+        await persistAffairsWorkspace(next)
+    }
+
     func toggleOneTimePayment(id: String) async {
         var next = affairsWorkspace
         guard let index = next.oneTimePayments.firstIndex(where: { $0.id == id }) else { return }
@@ -1441,6 +1507,398 @@ final class AppEnvironment: ObservableObject {
     func deleteOneTimePayment(id: String) async {
         var next = affairsWorkspace
         next.oneTimePayments.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairPayment(
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextDueDate: String,
+        automatic: Bool = false,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextDueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        let fingerprint = "affair-payment|\(trimmedName)|\(normalizedDate)|\(cadence)"
+        guard creationGate.claim(fingerprint) else { return }
+        defer { creationGate.release(fingerprint) }
+        let id = RootineLocalIdentifier.string(namespace: "affair-payment", operationID: operationID)
+        guard !affairsWorkspace.payments.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.payments.insert(AffairRecurringPayment(
+            id: id,
+            name: trimmedName,
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: AffairMoney.normalized(amount),
+            cadence: cadence,
+            nextDueDate: normalizedDate,
+            automatic: automatic,
+            active: true,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairPayment(
+        id: String,
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextDueDate: String,
+        automatic: Bool,
+        note: String = ""
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextDueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        var next = affairsWorkspace
+        guard let index = next.payments.firstIndex(where: { $0.id == id }) else { return }
+        var payment = next.payments[index]
+        payment.name = trimmedName
+        payment.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        payment.amount = AffairMoney.normalized(amount)
+        payment.cadence = cadence
+        payment.nextDueDate = normalizedDate
+        payment.automatic = automatic
+        payment.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.payments[index] = payment
+        await persistAffairsWorkspace(next)
+    }
+
+    func setAffairPaymentActive(id: String, active: Bool) async {
+        var next = affairsWorkspace
+        guard let index = next.payments.firstIndex(where: { $0.id == id }) else { return }
+        next.payments[index].active = active
+        await persistAffairsWorkspace(next)
+    }
+
+    func advanceAffairPayment(id: String, reference: Date = Date()) async {
+        var next = affairsWorkspace
+        guard let index = next.payments.firstIndex(where: { $0.id == id }) else { return }
+        let payment = next.payments[index]
+        let advanced = AffairDate.advanceToFuture(payment.nextDueDate, cadence: payment.cadence, reference: reference)
+        guard advanced != payment.nextDueDate else { return }
+        next.payments[index].nextDueDate = advanced
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairPayment(id: String) async {
+        var next = affairsWorkspace
+        next.payments.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairSubscription(
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextBillingDate: String,
+        renewal: String,
+        commitmentEndDate: String = "",
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextBillingDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCommitment = commitmentEndDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              ["automatic", "manual"].contains(renewal),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false),
+              AffairDate.isValid(normalizedCommitment) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-subscription", operationID: operationID)
+        guard !affairsWorkspace.subscriptions.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.subscriptions.insert(AffairSubscription(
+            id: id,
+            name: trimmedName,
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: AffairMoney.normalized(amount),
+            cadence: cadence,
+            nextBillingDate: normalizedDate,
+            renewal: renewal,
+            commitmentEndDate: normalizedCommitment,
+            active: true,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairSubscription(
+        id: String,
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextBillingDate: String,
+        renewal: String,
+        commitmentEndDate: String = "",
+        note: String = ""
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextBillingDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCommitment = commitmentEndDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              ["automatic", "manual"].contains(renewal),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false), AffairDate.isValid(normalizedCommitment) else { return }
+        var next = affairsWorkspace
+        guard let index = next.subscriptions.firstIndex(where: { $0.id == id }) else { return }
+        var subscription = next.subscriptions[index]
+        subscription.name = trimmedName
+        subscription.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        subscription.amount = AffairMoney.normalized(amount)
+        subscription.cadence = cadence
+        subscription.nextBillingDate = normalizedDate
+        subscription.renewal = renewal
+        subscription.commitmentEndDate = normalizedCommitment
+        subscription.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.subscriptions[index] = subscription
+        await persistAffairsWorkspace(next)
+    }
+
+    func setAffairSubscriptionActive(id: String, active: Bool) async {
+        var next = affairsWorkspace
+        guard let index = next.subscriptions.firstIndex(where: { $0.id == id }) else { return }
+        next.subscriptions[index].active = active
+        await persistAffairsWorkspace(next)
+    }
+
+    func advanceAffairSubscription(id: String, reference: Date = Date()) async {
+        var next = affairsWorkspace
+        guard let index = next.subscriptions.firstIndex(where: { $0.id == id }) else { return }
+        let subscription = next.subscriptions[index]
+        let advanced = AffairDate.advanceToFuture(subscription.nextBillingDate, cadence: subscription.cadence, reference: reference)
+        guard advanced != subscription.nextBillingDate else { return }
+        next.subscriptions[index].nextBillingDate = advanced
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairSubscription(id: String) async {
+        var next = affairsWorkspace
+        next.subscriptions.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairDocument(
+        name: String,
+        category: String,
+        holder: String,
+        expiresAt: String,
+        reminderDays: Int,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = expiresAt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairsWorkspaceRules.documentCategories.contains(category),
+              AffairDate.isValid(normalizedDate), (0...730).contains(reminderDays) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-document", operationID: operationID)
+        guard !affairsWorkspace.documents.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.documents.insert(AffairDocument(
+            id: id,
+            name: trimmedName,
+            category: category,
+            holder: holder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ja" : holder.trimmingCharacters(in: .whitespacesAndNewlines),
+            expiresAt: normalizedDate,
+            reminderDays: reminderDays,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairDocument(
+        id: String,
+        name: String,
+        category: String,
+        holder: String,
+        expiresAt: String,
+        reminderDays: Int,
+        note: String = ""
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = expiresAt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairsWorkspaceRules.documentCategories.contains(category),
+              AffairDate.isValid(normalizedDate), (0...730).contains(reminderDays) else { return }
+        var next = affairsWorkspace
+        guard let index = next.documents.firstIndex(where: { $0.id == id }) else { return }
+        next.documents[index].name = trimmedName
+        next.documents[index].category = category
+        next.documents[index].holder = holder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ja" : holder.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.documents[index].expiresAt = normalizedDate
+        next.documents[index].reminderDays = reminderDays
+        next.documents[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairDocument(id: String) async {
+        var next = affairsWorkspace
+        next.documents.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairVehicle(
+        name: String,
+        registration: String,
+        mileage: Double,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, mileage.isFinite, mileage >= 0 else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-vehicle", operationID: operationID)
+        guard !affairsWorkspace.vehicles.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.vehicles.insert(AffairVehicle(
+            id: id,
+            name: trimmedName,
+            registration: registration.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(with: Locale(identifier: "pl-PL")),
+            mileage: AffairMoney.normalized(mileage)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairVehicle(id: String, name: String, registration: String, mileage: Double) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, mileage.isFinite, mileage >= 0 else { return }
+        var next = affairsWorkspace
+        guard let index = next.vehicles.firstIndex(where: { $0.id == id }) else { return }
+        next.vehicles[index].name = trimmedName
+        next.vehicles[index].registration = registration.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(with: Locale(identifier: "pl-PL"))
+        next.vehicles[index].mileage = AffairMoney.normalized(mileage)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairVehicleMileage(id: String, mileage: Double) async {
+        guard mileage.isFinite, mileage >= 0 else { return }
+        var next = affairsWorkspace
+        guard let index = next.vehicles.firstIndex(where: { $0.id == id }), mileage >= next.vehicles[index].mileage else { return }
+        next.vehicles[index].mileage = AffairMoney.normalized(mileage)
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairVehicle(id: String) async {
+        var next = affairsWorkspace
+        next.vehicles.removeAll { $0.id == id }
+        next.vehicleItems.removeAll { $0.vehicleId == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairVehicleItem(
+        vehicleID: String,
+        title: String,
+        type: String,
+        dueDate: String = "",
+        dueMileage: Double? = nil,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard affairsWorkspace.vehicles.contains(where: { $0.id == vehicleID }), !trimmedTitle.isEmpty,
+              AffairsWorkspaceRules.vehicleItemTypes.contains(type), AffairDate.isValid(normalizedDate),
+              (dueMileage == nil || (dueMileage!.isFinite && dueMileage! >= 0)), !normalizedDate.isEmpty || dueMileage != nil else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-vehicle-item", operationID: operationID)
+        guard !affairsWorkspace.vehicleItems.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.vehicleItems.insert(AffairVehicleItem(
+            id: id,
+            vehicleId: vehicleID,
+            title: trimmedTitle,
+            type: type,
+            dueDate: normalizedDate,
+            dueMileage: dueMileage.map { AffairMoney.normalized($0) },
+            done: false,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairVehicleItem(
+        id: String,
+        vehicleID: String,
+        title: String,
+        type: String,
+        dueDate: String = "",
+        dueMileage: Double? = nil,
+        note: String = ""
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard affairsWorkspace.vehicles.contains(where: { $0.id == vehicleID }), !trimmedTitle.isEmpty,
+              AffairsWorkspaceRules.vehicleItemTypes.contains(type), AffairDate.isValid(normalizedDate),
+              (dueMileage == nil || (dueMileage!.isFinite && dueMileage! >= 0)), !normalizedDate.isEmpty || dueMileage != nil else { return }
+        var next = affairsWorkspace
+        guard let index = next.vehicleItems.firstIndex(where: { $0.id == id }) else { return }
+        next.vehicleItems[index].vehicleId = vehicleID
+        next.vehicleItems[index].title = trimmedTitle
+        next.vehicleItems[index].type = type
+        next.vehicleItems[index].dueDate = normalizedDate
+        next.vehicleItems[index].dueMileage = dueMileage.map { AffairMoney.normalized($0) }
+        next.vehicleItems[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        await persistAffairsWorkspace(next)
+    }
+
+    func toggleAffairVehicleItem(id: String) async {
+        var next = affairsWorkspace
+        guard let index = next.vehicleItems.firstIndex(where: { $0.id == id }) else { return }
+        next.vehicleItems[index].done.toggle()
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairVehicleItem(id: String) async {
+        var next = affairsWorkspace
+        next.vehicleItems.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func upsertAffairBudgetMonth(_ month: AffairBudgetMonth) async {
+        guard AffairDate.monthIsValid(month.month) else { return }
+        var next = affairsWorkspace
+        let normalizedLines = month.lines.map { line in
+            AffairBudgetLine(id: line.id, label: line.label.trimmingCharacters(in: .whitespacesAndNewlines), kind: AffairsWorkspaceRules.budgetKinds.contains(line.kind) ? line.kind : "flexible", planned: AffairMoney.normalized(max(0, line.planned)), actual: AffairMoney.normalized(max(0, line.actual)))
+        }
+        let normalized = AffairBudgetMonth(month: month.month, lines: normalizedLines)
+        if let index = next.budgets.firstIndex(where: { $0.month == month.month }) { next.budgets[index] = normalized }
+        else { next.budgets.append(normalized) }
+        await persistAffairsWorkspace(next)
+    }
+
+    func upsertAffairBudgetLine(month: String, line: AffairBudgetLine) async {
+        guard AffairDate.monthIsValid(month), !line.id.isEmpty else { return }
+        var next = affairsWorkspace
+        let normalized = AffairBudgetLine(id: line.id, label: line.label.trimmingCharacters(in: .whitespacesAndNewlines), kind: AffairsWorkspaceRules.budgetKinds.contains(line.kind) ? line.kind : "flexible", planned: AffairMoney.normalized(max(0, line.planned)), actual: AffairMoney.normalized(max(0, line.actual)))
+        if let monthIndex = next.budgets.firstIndex(where: { $0.month == month }) {
+            if let lineIndex = next.budgets[monthIndex].lines.firstIndex(where: { $0.id == line.id }) { next.budgets[monthIndex].lines[lineIndex] = normalized }
+            else { next.budgets[monthIndex].lines.append(normalized) }
+        } else { next.budgets.append(AffairBudgetMonth(month: month, lines: [normalized])) }
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairBudgetLine(month: String, id: String) async {
+        var next = affairsWorkspace
+        guard let monthIndex = next.budgets.firstIndex(where: { $0.month == month }) else { return }
+        next.budgets[monthIndex].lines.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func setAffairAttentionState(_ state: AffairAttentionState) async {
+        guard !state.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var next = affairsWorkspace
+        var states = next.attentionStates ?? []
+        if let index = states.firstIndex(where: { $0.key == state.key }) { states[index] = state }
+        else { states.append(state) }
+        next.attentionStates = Array(states.suffix(500))
         await persistAffairsWorkspace(next)
     }
 
@@ -2094,22 +2552,25 @@ final class AppEnvironment: ObservableObject {
     private func persistAffairsWorkspace(_ value: AffairsWorkspace) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
-        next.version = 2
+        let next = AffairsWorkspaceRules.normalized(value)
         affairsWorkspace = next
         await persistWorkspace(next, key: .affairs)
     }
 
     private func persistWorkspace<T: Codable & Sendable>(_ value: T, key: RootineStorageKey) async {
-        guard let store, let syncEngine else {
+        guard let store else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
         }
         do {
             try await store.save(value, key: key)
-            try await syncEngine.enqueue(value, key: key)
-            await markLocalOnly()
-            await flushPendingMutations()
+            if let syncEngine {
+                try await syncEngine.enqueue(value, key: key)
+                await markLocalOnly()
+                await flushPendingMutations()
+            } else {
+                workspaceSyncStatus = .localOnly(pending: 0)
+            }
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
@@ -2698,14 +3159,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func normalizedAffairsWorkspace(_ workspace: AffairsWorkspace) -> AffairsWorkspace {
-        var normalized = workspace
-        normalized.matters = workspace.matters.map { matter in
-            var matter = matter
-            matter.category = AffairMatterCategory.canonical(matter.category)
-            return matter
-        }
-        normalized.version = 2
-        return normalized
+        AffairsWorkspaceRules.normalized(workspace)
     }
 
     private func sanitizedAffairsWorkspace(
@@ -2929,7 +3383,7 @@ final class AppEnvironment: ObservableObject {
             work: try canonical(.work, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:)),
             travel: try canonical(.travel, decode: RootineCanonicalWorkspaceMapping.travelWorkspace(from:)),
             health: try canonical(.health, decode: RootineCanonicalWorkspaceMapping.healthWorkspace(from:)),
-            affairs: try direct(AffairsWorkspace.self, key: .affairs)
+            affairs: try direct(AffairsWorkspace.self, key: .affairs).map(AffairsWorkspaceRules.normalized)
         )
     }
 

@@ -773,12 +773,12 @@ enum AffairMatterCategory: String, Codable, CaseIterable, Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         switch normalized {
-        case "urzędy": return Self.urzedy.rawValue
-        case "zdrowie": return Self.zdrowie.rawValue
+        case "urzędy", "urzedy", "office", "offices": return Self.urzedy.rawValue
+        case "zdrowie", "health": return Self.zdrowie.rawValue
         case "dom": return Self.dom.rawValue
-        case "auto": return Self.auto.rawValue
-        case "finanse": return Self.finanse.rawValue
-        case "dokumenty": return Self.dokumenty.rawValue
+        case "auto", "vehicle", "vehicles": return Self.auto.rawValue
+        case "finanse", "finance", "finances": return Self.finanse.rawValue
+        case "dokumenty", "document", "documents": return Self.dokumenty.rawValue
         default: return Self.dom.rawValue
         }
     }
@@ -902,6 +902,30 @@ struct AffairsWorkspace: Codable, Equatable, Sendable {
     var budgets: [AffairBudgetMonth]
     var attentionStates: [AffairAttentionState]?
 
+    init(
+        version: Int,
+        matters: [AffairMatter],
+        oneTimePayments: [AffairOneTimePayment],
+        payments: [AffairRecurringPayment],
+        subscriptions: [AffairSubscription],
+        documents: [AffairDocument],
+        vehicles: [AffairVehicle],
+        vehicleItems: [AffairVehicleItem],
+        budgets: [AffairBudgetMonth],
+        attentionStates: [AffairAttentionState]? = nil
+    ) {
+        self.version = version
+        self.matters = matters
+        self.oneTimePayments = oneTimePayments
+        self.payments = payments
+        self.subscriptions = subscriptions
+        self.documents = documents
+        self.vehicles = vehicles
+        self.vehicleItems = vehicleItems
+        self.budgets = budgets
+        self.attentionStates = attentionStates
+    }
+
     static let empty = AffairsWorkspace(
         version: 2,
         matters: [],
@@ -914,6 +938,24 @@ struct AffairsWorkspace: Codable, Equatable, Sendable {
         budgets: [],
         attentionStates: []
     )
+
+    // v1 archives only carried matters, recurring payments and budgets. Keep
+    // decoding permissive at this boundary so AppEnvironment can validate the
+    // declared version and perform the explicit v1 -> v2 migration before
+    // publishing the snapshot.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        matters = try container.decodeIfPresent([AffairMatter].self, forKey: .matters) ?? []
+        oneTimePayments = try container.decodeIfPresent([AffairOneTimePayment].self, forKey: .oneTimePayments) ?? []
+        payments = try container.decodeIfPresent([AffairRecurringPayment].self, forKey: .payments) ?? []
+        subscriptions = try container.decodeIfPresent([AffairSubscription].self, forKey: .subscriptions) ?? []
+        documents = try container.decodeIfPresent([AffairDocument].self, forKey: .documents) ?? []
+        vehicles = try container.decodeIfPresent([AffairVehicle].self, forKey: .vehicles) ?? []
+        vehicleItems = try container.decodeIfPresent([AffairVehicleItem].self, forKey: .vehicleItems) ?? []
+        budgets = try container.decodeIfPresent([AffairBudgetMonth].self, forKey: .budgets) ?? []
+        attentionStates = try container.decodeIfPresent([AffairAttentionState].self, forKey: .attentionStates)
+    }
 }
 
 struct RootineWorkspaceExport: Codable, Equatable, Sendable {
@@ -996,4 +1038,359 @@ enum RootineDate {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
+}
+
+// MARK: Affairs domain rules
+
+/// Money in the web contract is transported as a JSON number for backwards
+/// compatibility. Native calculations must not use binary floating point for
+/// totals, however, because values such as 0.1 + 0.2 otherwise leak into
+/// budgets and recurrence summaries. This boundary rounds only at the JSON
+/// edge and performs arithmetic with Decimal in between.
+enum AffairMoney {
+    static let fractionDigits = 2
+
+    static func decimal(_ amount: Double) -> Decimal? {
+        guard amount.isFinite, amount >= 0 else { return nil }
+        // String conversion avoids importing the binary representation into
+        // Decimal (for example, Decimal(0.1) can retain a tiny tail).
+        return Decimal(string: String(format: "%.15g", amount), locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    static func parse(_ value: String) -> Decimal? {
+        var normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\u{00a0}", with: "")
+        // Polish keyboard input commonly uses a dot as the thousands
+        // separator and a comma for decimals ("1.234,56"). Once both are
+        // present, dots are grouping marks; with only a comma it is the
+        // decimal mark.
+        if normalized.contains(",") {
+            normalized = normalized.replacingOccurrences(of: ".", with: "")
+                .replacingOccurrences(of: ",", with: ".")
+        }
+        guard !normalized.isEmpty, let amount = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")), amount >= 0 else {
+            return nil
+        }
+        return rounded(amount)
+    }
+
+    static func rounded(_ amount: Decimal) -> Decimal {
+        var source = amount
+        var result = Decimal()
+        NSDecimalRound(&result, &source, fractionDigits, .bankers)
+        return result
+    }
+
+    static func normalized(_ amount: Double) -> Double {
+        guard let decimal = decimal(amount) else { return 0 }
+        return NSDecimalNumber(decimal: rounded(decimal)).doubleValue
+    }
+
+    static func adding(_ values: some Sequence<Double>) -> Double {
+        var total = Decimal.zero
+        for value in values {
+            guard let decimal = decimal(value) else { continue }
+            total += decimal
+        }
+        return NSDecimalNumber(decimal: rounded(total)).doubleValue
+    }
+
+    static func monthlyEquivalent(amount: Double, cadence: String) -> Double {
+        let divisor: Decimal
+        switch cadence {
+        case "quarterly": divisor = Decimal(3)
+        case "yearly": divisor = Decimal(12)
+        default: divisor = Decimal(1)
+        }
+        guard let value = decimal(amount) else { return 0 }
+        return NSDecimalNumber(decimal: rounded(value / divisor)).doubleValue
+    }
+
+    static func formatted(_ amount: Double, currency: String = "PLN") -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "pl-PL")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currency
+        formatter.minimumFractionDigits = fractionDigits
+        formatter.maximumFractionDigits = fractionDigits
+        return formatter.string(from: NSNumber(value: normalized(amount))) ?? "\(normalized(amount)) \(currency)"
+    }
+}
+
+/// Strict, timezone-independent date operations shared by reminders, expiry
+/// records and recurring payments. The contract uses calendar dates, not
+/// instants; using UTC noon prevents DST transitions from changing a date.
+enum AffairDate {
+    private static let datePattern = #"^\d{4}-\d{2}-\d{2}$"#
+
+    static func isValid(_ value: String, allowingEmpty: Bool = true) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return allowingEmpty }
+        guard trimmed.range(of: datePattern, options: .regularExpression) != nil else { return false }
+        return date(from: trimmed) != nil
+    }
+
+    static func monthIsValid(_ value: String) -> Bool {
+        guard value.range(of: #"^\d{4}-\d{2}$"#, options: .regularExpression) != nil else { return false }
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        return parts.count == 2 && (1...12).contains(parts[1])
+    }
+
+    static func date(from value: String) -> Date? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3, parts[0] > 0 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        guard let result = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else { return nil }
+        return calendar.dateComponents([.year, .month, .day], from: result).year == parts[0]
+            && calendar.dateComponents([.year, .month, .day], from: result).month == parts[1]
+            && calendar.dateComponents([.year, .month, .day], from: result).day == parts[2]
+            ? result
+            : nil
+    }
+
+    static func key(from date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+    }
+
+    static func advance(_ value: String, cadence: String) -> String {
+        guard let date = date(from: value) else { return value }
+        let months: Int
+        switch cadence {
+        case "quarterly": months = 3
+        case "yearly": months = 12
+        default: months = 1
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        // Calendar's month addition clamps the 31st to the last valid day,
+        // matching the web recurrence contract (Jan 31 -> Feb 28/29).
+        return key(from: calendar.date(byAdding: .month, value: months, to: date) ?? date)
+    }
+
+    static func advanceToFuture(_ value: String, cadence: String, reference: Date = Date()) -> String {
+        var next = value
+        let today = key(from: reference)
+        for _ in 0..<240 where !next.isEmpty && next <= today {
+            let advanced = advance(next, cadence: cadence)
+            if advanced == next { break }
+            next = advanced
+        }
+        return next
+    }
+
+    static func days(from start: String, to end: String) -> Int? {
+        guard let startDate = date(from: start), let endDate = date(from: end) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.dateComponents([.day], from: startDate, to: endDate).day
+    }
+}
+
+enum AffairsValidationIssue: Equatable, Sendable {
+    case duplicateID(collection: String, id: String)
+    case missingID(collection: String)
+    case emptyTitle(collection: String, id: String)
+    case invalidDate(collection: String, id: String, field: String)
+    case invalidAmount(collection: String, id: String)
+    case invalidCadence(collection: String, id: String)
+    case invalidReference(collection: String, id: String, field: String)
+
+    var message: String {
+        switch self {
+        case .duplicateID(let collection, let id): return collection + ": powielone ID " + id
+        case .missingID(let collection): return collection + ": brak ID"
+        case .emptyTitle(let collection, _): return collection + ": pusta nazwa"
+        case .invalidDate(let collection, _, let field): return collection + ": nieprawidłowa data " + field
+        case .invalidAmount(let collection, _): return collection + ": nieprawidłowa kwota"
+        case .invalidCadence(let collection, _): return collection + ": nieprawidłowa częstotliwość"
+        case .invalidReference(let collection, _, let field): return collection + ": nieprawidłowe odwołanie " + field
+        }
+    }
+}
+
+enum AffairsWorkspaceRules {
+    static let cadences = Set(["monthly", "quarterly", "yearly"])
+    static let categories = Set(AffairMatterCategory.allCases.map(\.rawValue))
+    static let documentCategories = Set(["identity", "driving", "insurance", "health", "agreement", "other"])
+    static let vehicleItemTypes = Set(["insurance", "inspection", "service", "tires", "lease", "warranty", "other"])
+    static let budgetKinds = Set(["income", "fixed", "flexible", "savings"])
+
+    static func validate(_ workspace: AffairsWorkspace) -> [AffairsValidationIssue] {
+        var issues: [AffairsValidationIssue] = []
+        func ids<T: Identifiable>(_ values: [T], collection: String, id: (T) -> String) {
+            var seen = Set<String>()
+            for value in values {
+                let valueID = id(value)
+                if valueID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.missingID(collection: collection)) }
+                else if !seen.insert(valueID).inserted { issues.append(.duplicateID(collection: collection, id: valueID)) }
+            }
+        }
+        ids(workspace.matters, collection: "matters", id: \.id)
+        ids(workspace.oneTimePayments, collection: "oneTimePayments", id: \.id)
+        ids(workspace.payments, collection: "payments", id: \.id)
+        ids(workspace.subscriptions, collection: "subscriptions", id: \.id)
+        ids(workspace.documents, collection: "documents", id: \.id)
+        ids(workspace.vehicles, collection: "vehicles", id: \.id)
+        ids(workspace.vehicleItems, collection: "vehicleItems", id: \.id)
+        ids(workspace.budgets, collection: "budgets", id: \.month)
+        for matter in workspace.matters {
+            if matter.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.emptyTitle(collection: "matters", id: matter.id)) }
+            if !categories.contains(matter.category) { issues.append(.invalidReference(collection: "matters", id: matter.id, field: "category")) }
+            if !AffairDate.isValid(matter.dueDate) { issues.append(.invalidDate(collection: "matters", id: matter.id, field: "dueDate")) }
+        }
+        for payment in workspace.oneTimePayments {
+            if payment.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.emptyTitle(collection: "oneTimePayments", id: payment.id)) }
+            if payment.amount.isNaN || payment.amount.isInfinite || payment.amount < 0 { issues.append(.invalidAmount(collection: "oneTimePayments", id: payment.id)) }
+            if !AffairDate.isValid(payment.dueDate, allowingEmpty: false) { issues.append(.invalidDate(collection: "oneTimePayments", id: payment.id, field: "dueDate")) }
+        }
+        for payment in workspace.payments {
+            if payment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.emptyTitle(collection: "payments", id: payment.id)) }
+            if payment.amount.isNaN || payment.amount.isInfinite || payment.amount < 0 { issues.append(.invalidAmount(collection: "payments", id: payment.id)) }
+            if !cadences.contains(payment.cadence) { issues.append(.invalidCadence(collection: "payments", id: payment.id)) }
+            if !AffairDate.isValid(payment.nextDueDate, allowingEmpty: false) { issues.append(.invalidDate(collection: "payments", id: payment.id, field: "nextDueDate")) }
+        }
+        for subscription in workspace.subscriptions {
+            if subscription.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.emptyTitle(collection: "subscriptions", id: subscription.id)) }
+            if subscription.amount.isNaN || subscription.amount.isInfinite || subscription.amount < 0 { issues.append(.invalidAmount(collection: "subscriptions", id: subscription.id)) }
+            if !cadences.contains(subscription.cadence) { issues.append(.invalidCadence(collection: "subscriptions", id: subscription.id)) }
+            if !AffairDate.isValid(subscription.nextBillingDate, allowingEmpty: false) { issues.append(.invalidDate(collection: "subscriptions", id: subscription.id, field: "nextBillingDate")) }
+            if !AffairDate.isValid(subscription.commitmentEndDate) { issues.append(.invalidDate(collection: "subscriptions", id: subscription.id, field: "commitmentEndDate")) }
+        }
+        for document in workspace.documents {
+            if document.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.emptyTitle(collection: "documents", id: document.id)) }
+            if !documentCategories.contains(document.category) { issues.append(.invalidReference(collection: "documents", id: document.id, field: "category")) }
+            if !AffairDate.isValid(document.expiresAt) { issues.append(.invalidDate(collection: "documents", id: document.id, field: "expiresAt")) }
+            if !(0...730).contains(document.reminderDays) { issues.append(.invalidReference(collection: "documents", id: document.id, field: "reminderDays")) }
+        }
+        let vehicleIDs = Set(workspace.vehicles.map(\.id))
+        for item in workspace.vehicleItems {
+            if item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append(.emptyTitle(collection: "vehicleItems", id: item.id)) }
+            if !vehicleIDs.contains(item.vehicleId) { issues.append(.invalidReference(collection: "vehicleItems", id: item.id, field: "vehicleId")) }
+            if !vehicleItemTypes.contains(item.type) { issues.append(.invalidReference(collection: "vehicleItems", id: item.id, field: "type")) }
+            if !AffairDate.isValid(item.dueDate) { issues.append(.invalidDate(collection: "vehicleItems", id: item.id, field: "dueDate")) }
+            if let dueMileage = item.dueMileage, dueMileage < 0 || !dueMileage.isFinite { issues.append(.invalidAmount(collection: "vehicleItems", id: item.id)) }
+        }
+        for budget in workspace.budgets {
+            if !AffairDate.monthIsValid(budget.month) { issues.append(.invalidDate(collection: "budgets", id: budget.month, field: "month")) }
+            ids(budget.lines, collection: "budget.lines", id: \.id)
+            for line in budget.lines where !budgetKinds.contains(line.kind) {
+                issues.append(.invalidReference(collection: "budget.lines", id: line.id, field: "kind"))
+            }
+            for line in budget.lines where line.planned < 0 || line.actual < 0 || !line.planned.isFinite || !line.actual.isFinite {
+                issues.append(.invalidAmount(collection: "budget.lines", id: line.id))
+            }
+        }
+        return issues
+    }
+
+    /// Normalizes values received from older snapshots and relational rows.
+    /// It never invents a document identifier or copies document contents into
+    /// logs; opaque notes remain local user data.
+    static func normalized(_ workspace: AffairsWorkspace) -> AffairsWorkspace {
+        var result = workspace
+        result.version = 2
+        result.matters = workspace.matters.map { matter in
+            var item = matter
+            item.title = matter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.category = AffairMatterCategory.canonical(matter.category)
+            item.priority = matter.priority == "high" ? "high" : "normal"
+            item.status = ["open", "waiting", "done"].contains(matter.status) ? matter.status : "open"
+            item.dueDate = matter.dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.note = matter.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let reminders = matter.reminderMinutes { item.reminderMinutes = Array(Set(reminders.filter { $0 >= 0 })).sorted() }
+            return item
+        }
+        result.oneTimePayments = workspace.oneTimePayments.map { payment in
+            var item = payment
+            item.amount = AffairMoney.normalized(max(0, payment.amount))
+            item.title = payment.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.category = payment.category.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.dueDate = payment.dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.note = payment.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item
+        }
+        result.payments = workspace.payments.map { payment in
+            var item = payment
+            item.amount = AffairMoney.normalized(max(0, payment.amount))
+            item.name = payment.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.cadence = cadences.contains(payment.cadence) ? payment.cadence : "monthly"
+            item.nextDueDate = payment.nextDueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.note = payment.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item
+        }
+        result.subscriptions = workspace.subscriptions.map { subscription in
+            var item = subscription
+            item.amount = AffairMoney.normalized(max(0, subscription.amount))
+            item.name = subscription.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.cadence = cadences.contains(subscription.cadence) ? subscription.cadence : "monthly"
+            item.renewal = ["automatic", "manual"].contains(subscription.renewal) ? subscription.renewal : "manual"
+            item.nextBillingDate = subscription.nextBillingDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.commitmentEndDate = subscription.commitmentEndDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.note = subscription.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item
+        }
+        result.documents = workspace.documents.map { document in
+            var item = document
+            item.name = document.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.category = documentCategories.contains(document.category) ? document.category : "other"
+            item.holder = document.holder.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.expiresAt = document.expiresAt.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.reminderDays = min(730, max(0, document.reminderDays))
+            item.note = document.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item
+        }
+        result.vehicles = workspace.vehicles.map { vehicle in
+            var item = vehicle
+            item.name = vehicle.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.registration = vehicle.registration.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(with: Locale(identifier: "pl-PL"))
+            item.mileage = AffairMoney.normalized(max(0, vehicle.mileage))
+            return item
+        }
+        result.vehicleItems = workspace.vehicleItems.map { vehicleItem in
+            var item = vehicleItem
+            item.vehicleId = vehicleItem.vehicleId.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.title = vehicleItem.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.type = vehicleItemTypes.contains(vehicleItem.type) ? vehicleItem.type : "other"
+            item.dueDate = vehicleItem.dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let dueMileage = vehicleItem.dueMileage { item.dueMileage = AffairMoney.normalized(max(0, dueMileage)) }
+            item.note = vehicleItem.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item
+        }
+        result.budgets = workspace.budgets.map { month in
+            AffairBudgetMonth(month: month.month.trimmingCharacters(in: .whitespacesAndNewlines), lines: month.lines.map { line in
+                var item = line
+                item.label = line.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                item.kind = budgetKinds.contains(line.kind) ? line.kind : "flexible"
+                item.planned = AffairMoney.normalized(max(0, line.planned))
+                item.actual = AffairMoney.normalized(max(0, line.actual))
+                return item
+            })
+        }
+        result.attentionStates = workspace.attentionStates?.map { state in
+            var item = state
+            item.key = state.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.status = ["snoozed", "resolved"].contains(state.status) ? state.status : "resolved"
+            item.snoozedUntil = state.snoozedUntil.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item
+        }
+        return result
+    }
+}
+
+func affairAdvancePaymentDate(_ value: String, cadence: String) -> String {
+    AffairDate.advance(value, cadence: cadence)
+}
+
+func affairAdvancePaymentDateToFuture(_ value: String, cadence: String, reference: Date = Date()) -> String {
+    AffairDate.advanceToFuture(value, cadence: cadence, reference: reference)
+}
+
+func affairMonthlyEquivalent(_ amount: Double, cadence: String) -> Double {
+    AffairMoney.monthlyEquivalent(amount: amount, cadence: cadence)
 }

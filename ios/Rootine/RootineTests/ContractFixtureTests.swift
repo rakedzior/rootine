@@ -1549,6 +1549,102 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(trip["name"], .string("Weekend nad morzem"))
     }
 
+    func testAffairsFixtureNormalizesAllSupportedCollectionsAndMoney() throws {
+        let workspace = try fixture("affairs-workspace-v2", as: AffairsWorkspace.self)
+        let normalized = AffairsWorkspaceRules.normalized(workspace)
+
+        XCTAssertEqual(normalized.version, 2)
+        XCTAssertEqual(normalized.oneTimePayments.first?.amount, 120)
+        XCTAssertEqual(normalized.subscriptions.first?.amount, 199)
+        XCTAssertEqual(normalized.documents.first?.category, "identity")
+        XCTAssertEqual(normalized.vehicleItems.first?.type, "inspection")
+        XCTAssertTrue(AffairsWorkspaceRules.validate(normalized).isEmpty)
+        XCTAssertEqual(try roundTrip(normalized), normalized)
+    }
+
+    func testAffairsV1PayloadDefaultsExpansionCollectionsForMigration() throws {
+        let data = #"{"version":1,"matters":[],"payments":[],"budgets":[]}"#.data(using: .utf8)!
+        let legacy = try JSONDecoder().decode(AffairsWorkspace.self, from: data)
+        XCTAssertEqual(legacy.version, 1)
+        XCTAssertTrue(legacy.oneTimePayments.isEmpty)
+        XCTAssertTrue(legacy.subscriptions.isEmpty)
+        XCTAssertTrue(AffairsWorkspaceRules.normalized(legacy).documents.isEmpty)
+    }
+
+    func testAffairsMoneyUsesDecimalForTotalsAndMonthlyEquivalent() {
+        XCTAssertEqual(AffairMoney.normalized(0.1 + 0.2), 0.3)
+        XCTAssertEqual(AffairMoney.adding([0.1, 0.2, 10.05]), 10.35)
+        XCTAssertEqual(AffairMoney.parse("1.234,56"), Decimal(string: "1234.56"))
+        XCTAssertEqual(affairMonthlyEquivalent(119.99, cadence: "yearly"), 10.00)
+        XCTAssertTrue(AffairMoney.formatted(23.99).contains("23,99"))
+    }
+
+    func testAffairsRecurrenceClampsMonthEndAndSkipsOverdueOccurrences() {
+        XCTAssertEqual(affairAdvancePaymentDate("2026-01-31", cadence: "monthly"), "2026-02-28")
+        XCTAssertEqual(affairAdvancePaymentDate("2024-11-30", cadence: "quarterly"), "2025-02-28")
+        XCTAssertEqual(
+            affairAdvancePaymentDateToFuture("2026-01-31", cadence: "monthly", reference: Date(timeIntervalSince1970: 1_776_247_200)),
+            "2026-04-28"
+        )
+        XCTAssertFalse(AffairDate.isValid("2026-02-30", allowingEmpty: false))
+        XCTAssertTrue(AffairDate.isValid("", allowingEmpty: true))
+    }
+
+    func testAffairsRelationalRowsConvertMinorUnitsAndTimestampsSafely() throws {
+        let change = RootineRelationalPullChange(
+            cursor: 1,
+            storageKey: RootineStorageKey.affairs.rawValue,
+            entity: "payment",
+            entityID: "payment-minor",
+            record: .object([
+                "description": .string("Rachunek"),
+                "amount_minor": .number(2399),
+                "due_date": .string("2026-09-15"),
+                "status": .string("pending")
+            ])
+        )
+        let materialized = try RootineRelationalWorkspaceAdapter.materialize(changes: [change])
+        let workspace = try RootineRelationalWorkspaceAdapter.document(AffairsWorkspace.self, key: .affairs, from: materialized)
+        XCTAssertEqual(workspace.oneTimePayments.first?.amount, 23.99)
+        XCTAssertEqual(workspace.oneTimePayments.first?.dueDate, "2026-09-15")
+
+        let documentChange = RootineRelationalPullChange(
+            cursor: 2,
+            storageKey: RootineStorageKey.affairs.rawValue,
+            entity: "document",
+            entityID: "document-expiry",
+            record: .object([
+                "name": .string("Paszport"),
+                "expires_at": .string("2030-01-01T00:00:00Z")
+            ])
+        )
+        let withDocument = try RootineRelationalWorkspaceAdapter.materialize(changes: [documentChange], onto: materialized)
+        let decoded = try RootineRelationalWorkspaceAdapter.document(AffairsWorkspace.self, key: .affairs, from: withDocument)
+        XCTAssertEqual(decoded.documents.first?.expiresAt, "2030-01-01")
+    }
+
+    @MainActor
+    func testAffairsMutationsAreDeterministicAndRejectInvalidInput() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        await environment.addAffairPayment(name: "Chmura", category: "Narzędzia", amount: 0.1 + 0.2, cadence: "monthly", nextDueDate: "2026-09-15", operationID: "payment-action")
+        await environment.addAffairPayment(name: "Błędna data", category: "Narzędzia", amount: 20, cadence: "monthly", nextDueDate: "2026-02-30", operationID: "invalid-action")
+        await environment.addAffairSubscription(name: "Muzyka", category: "Rozrywka", amount: 23.99, cadence: "monthly", nextBillingDate: "2026-09-20", renewal: "automatic", operationID: "subscription-action")
+        await environment.addAffairDocument(name: "Dowód", category: "identity", holder: "Ja", expiresAt: "2030-01-01", reminderDays: 90, operationID: "document-action")
+
+        XCTAssertEqual(environment.affairsWorkspace.payments.count, 1)
+        XCTAssertEqual(environment.affairsWorkspace.payments.first?.amount, 0.3)
+        XCTAssertEqual(environment.affairsWorkspace.subscriptions.count, 1)
+        XCTAssertEqual(environment.affairsWorkspace.documents.count, 1)
+    }
+
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         let bundle = Bundle(for: ContractFixtureTests.self)
         let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"))

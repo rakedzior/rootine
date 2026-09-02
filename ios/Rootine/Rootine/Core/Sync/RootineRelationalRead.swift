@@ -598,6 +598,23 @@ enum RootineRelationalWorkspaceAdapter {
                     })
                 }
             }
+        } else if key == RootineStorageKey.affairs.rawValue {
+            let child: String?
+            switch name {
+            case "affairmatter", "affairmatters", "matter", "matters": child = "matters"
+            case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments", "payment", "payments": child = "oneTimePayments"
+            case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments": child = "payments"
+            case "affairsubscription", "affairsubscriptions", "subscription", "subscriptions": child = "subscriptions"
+            case "affairdocument", "affairdocuments", "document", "documents": child = "documents"
+            case "affairvehicle", "affairvehicles", "vehicle", "vehicles": child = "vehicles"
+            case "affairvehicleitem", "affairvehicleitems", "vehicleserviceitem", "vehicleserviceitems", "vehicleitem", "vehicleitems": child = "vehicleItems"
+            case "affairbudgetmonth", "affairbudgetmonths", "budgetmonth", "budgetmonths": child = "budgets"
+            case "affairattentionstate", "affairattentionstates", "attentionstate", "attentionstates": child = "attentionStates"
+            default: child = nil
+            }
+            if let child {
+                removeArray(&root, key: child, id: id)
+            }
         } else if let collection = collectionKey(for: name, document: key) {
             if collection.dictionary {
                 if case .object(var dictionary) = root[collection.key] { dictionary.removeValue(forKey: id); root[collection.key] = .object(dictionary) }
@@ -1076,47 +1093,53 @@ enum RootineRelationalWorkspaceAdapter {
         case "affairmatter", "affairmatters", "matter", "matters":
             value["title"] = row["title"] ?? row["description"] ?? .string("Sprawa")
             value["category"] = row["category"] ?? .string("finanse")
-            value["priority"] = row["priority"] ?? .string("medium")
-            value["status"] = row["status"] ?? .string("open")
-            value["dueDate"] = row["dueDate"] ?? row["due_date"] ?? .string(RootineDate.localDate())
+            value["priority"] = affairMatterPriority(row["priority"])
+            value["status"] = affairMatterStatus(row["status"])
+            value["dueDate"] = affairDateValue(row["dueDate"] ?? row["due_date"]) ?? .string("")
             value["note"] = row["note"] ?? row["description"] ?? .string("")
             value["createdAt"] = row["createdAt"] ?? row["created_at"] ?? .string(RootineDate.isoTimestamp())
             collection = "matters"
-        case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments":
+        case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments", "payment", "payments":
             value["title"] = row["title"] ?? row["description"] ?? .string("Płatność")
             value["category"] = row["category"] ?? .string("finanse")
-            value["amount"] = row["amount"] ?? row["amountMinor"] ?? row["amount_minor"] ?? .number(0)
-            value["dueDate"] = row["dueDate"] ?? row["due_date"] ?? .string(RootineDate.localDate())
+            value["amount"] = affairMoneyValue(row["amount"], minor: row["amountMinor"] ?? row["amount_minor"]) ?? .number(0)
+            value["dueDate"] = affairDateValue(row["dueDate"] ?? row["due_date"]) ?? .string("")
             value["paid"] = row["paid"] ?? row["status"].map { value in stringValue(value) == "paid" ? .bool(true) : .bool(false) } ?? .bool(false)
             value["paidAt"] = row["paidAt"] ?? row["paid_at"] ?? .string("")
             value["note"] = row["note"] ?? row["description"] ?? .string("")
             collection = "oneTimePayments"
-        case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments", "payment", "payments":
+        case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments":
             value["name"] = row["name"] ?? row["description"] ?? .string("Płatność")
             value["category"] = row["category"] ?? .string("finanse")
-            value["amount"] = row["amount"] ?? row["amountMinor"] ?? row["amount_minor"] ?? .number(0)
+            value["amount"] = affairMoneyValue(row["amount"], minor: row["amountMinor"] ?? row["amount_minor"]) ?? .number(0)
             value["cadence"] = row["cadence"] ?? .string("monthly")
-            value["nextDueDate"] = row["nextDueDate"] ?? row["next_due_on"] ?? .string(RootineDate.localDate())
+            value["nextDueDate"] = affairDateValue(row["nextDueDate"] ?? row["next_due_on"]) ?? .string("")
             value["automatic"] = row["automatic"] ?? .bool(false)
-            value["active"] = row["active"] ?? (row["status"].map { .bool(stringValue($0) != "cancelled") } ?? .bool(true))
+            value["active"] = row["active"] ?? (row["status"].map {
+                let status = stringValue($0)?.lowercased() ?? ""
+                return .bool(!["paused", "cancelled", "expired", "inactive"].contains(status))
+            } ?? .bool(true))
             value["note"] = row["note"] ?? row["description"] ?? .string("")
             collection = "payments"
         case "affairsubscription", "affairsubscriptions", "subscription", "subscriptions":
             value["name"] = row["name"] ?? .string("Subskrypcja")
             value["category"] = row["category"] ?? .string("finanse")
-            value["amount"] = row["amount"] ?? row["amountMinor"] ?? row["amount_minor"] ?? .number(0)
+            value["amount"] = affairMoneyValue(row["amount"], minor: row["amountMinor"] ?? row["amount_minor"]) ?? .number(0)
             value["cadence"] = row["cadence"] ?? .string("monthly")
-            value["nextBillingDate"] = row["nextBillingDate"] ?? row["nextDueOn"] ?? row["next_due_on"] ?? .string(RootineDate.localDate())
-            value["renewal"] = row["renewal"] ?? .string("")
-            value["commitmentEndDate"] = row["commitmentEndDate"] ?? .string("")
-            value["active"] = row["active"] ?? .bool(true)
+            value["nextBillingDate"] = affairDateValue(row["nextBillingDate"] ?? row["nextDueOn"] ?? row["next_due_on"]) ?? .string("")
+            value["renewal"] = row["renewal"] ?? .string("manual")
+            value["commitmentEndDate"] = affairDateValue(row["commitmentEndDate"] ?? row["commitment_end_date"]) ?? .string("")
+            value["active"] = row["active"] ?? (row["status"].map {
+                let status = stringValue($0)?.lowercased() ?? ""
+                return .bool(!["paused", "cancelled", "expired", "inactive"].contains(status))
+            } ?? .bool(true))
             value["note"] = row["note"] ?? .string("")
             collection = "subscriptions"
         case "affairdocument", "affairdocuments", "document", "documents":
             value["name"] = row["name"] ?? .string("Dokument")
             value["category"] = row["category"] ?? row["documentType"] ?? .string("dokumenty")
             value["holder"] = row["holder"] ?? row["owner"] ?? .string("")
-            value["expiresAt"] = row["expiresAt"] ?? row["expires_at"] ?? .string("")
+            value["expiresAt"] = affairDateValue(row["expiresAt"] ?? row["expires_at"]) ?? .string("")
             value["reminderDays"] = row["reminderDays"] ?? .number(0)
             value["note"] = row["note"] ?? .string("")
             collection = "documents"
@@ -1130,7 +1153,8 @@ enum RootineRelationalWorkspaceAdapter {
             value["vehicleId"] = row["vehicleId"] ?? row["vehicle_id"] ?? .string("")
             value["title"] = row["title"] ?? row["serviceType"] ?? row["service_type"] ?? .string("Serwis")
             value["type"] = row["type"] ?? row["serviceType"] ?? row["service_type"] ?? .string("service")
-            value["dueDate"] = row["dueDate"] ?? row["nextDueOn"] ?? row["next_due_on"] ?? .string(RootineDate.localDate())
+            value["dueDate"] = affairDateValue(row["dueDate"] ?? row["nextDueOn"] ?? row["next_due_on"]) ?? .string("")
+            value["dueMileage"] = row["dueMileage"] ?? row["due_mileage"] ?? row["mileage"] ?? .null
             value["done"] = row["done"] ?? .bool(false)
             value["note"] = row["note"] ?? .string("")
             collection = "vehicleItems"
@@ -1186,7 +1210,19 @@ enum RootineRelationalWorkspaceAdapter {
         case "rootine.work-workspace.v1": return ("focusSessions", false)
         case "rootine.travel-workspace.v1": return ("trips", false)
         case "rootine.health.workspace.v1": return ("reminders", false)
-        case RootineStorageKey.affairs.rawValue: return ("matters", false)
+        case RootineStorageKey.affairs.rawValue:
+            switch entity {
+            case "affairmatter", "affairmatters", "matter", "matters": return ("matters", false)
+            case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments", "payment", "payments": return ("oneTimePayments", false)
+            case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments": return ("payments", false)
+            case "affairsubscription", "affairsubscriptions", "subscription", "subscriptions": return ("subscriptions", false)
+            case "affairdocument", "affairdocuments", "document", "documents": return ("documents", false)
+            case "affairvehicle", "affairvehicles", "vehicle", "vehicles": return ("vehicles", false)
+            case "affairvehicleitem", "affairvehicleitems", "vehicleserviceitem", "vehicleserviceitems", "vehicleitem", "vehicleitems": return ("vehicleItems", false)
+            case "affairbudgetmonth", "affairbudgetmonths", "budgetmonth", "budgetmonths": return ("budgets", false)
+            case "affairattentionstate", "affairattentionstates", "attentionstate", "attentionstates": return ("attentionStates", false)
+            default: return nil
+            }
         default: break
         }
         return nil
@@ -1203,7 +1239,18 @@ enum RootineRelationalWorkspaceAdapter {
     }
 
     private static func upsertArray(_ root: inout [String: JSONValue], key: String, id: String, value: JSONValue) throws {
-        var values = arrayValue(root[key]); upsert(&values, id: id, value: value); root[key] = .array(values)
+        var values = arrayValue(root[key])
+        if key == "budgets" {
+            if let index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["month"]) ?? "") == normalized(id) }) {
+                values[index] = value
+            } else {
+                values.append(value)
+            }
+            root[key] = .array(values)
+            return
+        }
+        upsert(&values, id: id, value: value)
+        root[key] = .array(values)
     }
 
     private static func upsert(_ values: inout [JSONValue], id: String, value: JSONValue) {
@@ -1229,7 +1276,13 @@ enum RootineRelationalWorkspaceAdapter {
 
     private static func updateArrayObject(_ root: inout [String: JSONValue], key: String, id: String, update: (inout [String: JSONValue]) -> Void) throws {
         var values = arrayValue(root[key])
-        guard let index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["id"]) ?? "") == normalized(id) }) else { return }
+        let index: Int?
+        if key == "budgets" {
+            index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["month"]) ?? "") == normalized(id) })
+        } else {
+            index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["id"]) ?? "") == normalized(id) })
+        }
+        guard let index else { return }
         guard case .object(var object) = values[index] else { return }
         update(&object); values[index] = .object(object); root[key] = .array(values)
     }
@@ -1241,7 +1294,12 @@ enum RootineRelationalWorkspaceAdapter {
     }
 
     private static func removeArray(_ root: inout [String: JSONValue], key: String, id: String) {
-        root[key] = .array(arrayValue(root[key]).filter { normalized(stringValue(objectValue($0)?["id"]) ?? "") != normalized(id) })
+        root[key] = .array(arrayValue(root[key]).filter {
+            let candidate = key == "budgets"
+                ? stringValue(objectValue($0)?["month"])
+                : stringValue(objectValue($0)?["id"])
+            return normalized(candidate ?? "") != normalized(id)
+        })
     }
 
     private static func objectValue(_ value: JSONValue?) -> [String: JSONValue]? { guard case .object(let value) = value else { return nil }; return value }
@@ -1251,6 +1309,37 @@ enum RootineRelationalWorkspaceAdapter {
         case .string(let value): return value
         case .number(let value): return value.rounded() == value ? String(Int(value)) : String(value)
         default: return nil
+        }
+    }
+
+    /// Relational finance tables use integer minor units (cents/grosze),
+    /// while the v2 aggregate contract uses major-unit JSON numbers. Prefer a
+    /// major-unit value when a compatibility row supplies both; otherwise
+    /// convert the minor-unit integer exactly before Affairs normalizes it.
+    private static func affairMoneyValue(_ major: JSONValue?, minor: JSONValue?) -> JSONValue? {
+        if let major, case .number(let value) = major, value.isFinite { return .number(value) }
+        guard let minor, case .number(let value) = minor, value.isFinite else { return nil }
+        return .number(value / 100)
+    }
+
+    private static func affairDateValue(_ value: JSONValue?) -> JSONValue? {
+        guard let raw = stringValue(value), !raw.isEmpty else { return nil }
+        let date = String(raw.prefix(10))
+        return AffairDate.isValid(date, allowingEmpty: false) ? .string(date) : nil
+    }
+
+    private static func affairMatterPriority(_ value: JSONValue?) -> JSONValue {
+        switch stringValue(value)?.lowercased() {
+        case "high", "urgent": return .string("high")
+        default: return .string("normal")
+        }
+    }
+
+    private static func affairMatterStatus(_ value: JSONValue?) -> JSONValue {
+        switch stringValue(value)?.lowercased() {
+        case "done", "completed", "resolved": return .string("done")
+        case "waiting", "in_progress", "in-progress": return .string("waiting")
+        default: return .string("open")
         }
     }
     private static func intValue(_ value: JSONValue) -> JSONValue { guard case .number(let value) = value else { return value }; return .number(value.rounded()) }
