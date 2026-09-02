@@ -1,8 +1,8 @@
 # Rootine data sync contract
 
-Status: `v2` dla legacy snapshotów; transport `sync-v3` jest przygotowany do
-wdrożenia na stagingu. Zobacz [kontrakt sync-v3](sync-v3-contract.md) oraz
-[runbook stagingu](staging-runbook.md).
+Status: `v2` dla legacy snapshotów; transport mobilny używa wersjonowanego
+`sync-v3`, przygotowanego do wdrożenia na stagingu. Zobacz
+[kontrakt sync-v3](sync-v3-contract.md) oraz [runbook stagingu](staging-runbook.md).
 
 ## Cel i granica
 
@@ -107,29 +107,91 @@ Minimalne przypadki testowe klienta:
 - obie ścieżki ręcznego rozwiązania konfliktu;
 - brak sieci, timeout i brak migracji bez blokowania trybu lokalnego.
 
-## Relacyjny sync-v3 (warstwa przygotowana w B02)
+## Sync-v3: RPC i endpoint mobilny
+
+`POST /functions/v1/mobile-sync` jest cienką granicą dla iOS. Wymaga nagłówka
+`Authorization: Bearer <access_token>` i nie przyjmuje `user_id` z body. Funkcja
+przekazuje token do ograniczonych RPC, więc właściciel jest zawsze wyznaczany
+przez `auth.uid()` po stronie Postgresa.
+
+Body ma postać `{ "action": ..., "device_id": ... }`. Dozwolone akcje:
+
+| `action` | Dodatkowe pola | RPC | Odpowiedź |
+| --- | --- | --- | --- |
+| `register_device` | `platform`, `app_version`, opcjonalnie `apns_environment`, `push_token` | `rootine_register_device` | rejestracja/rotacja urządzenia |
+| `bootstrap` | brak | `rootine_sync_bootstrap` | pełny stan rekordów, `cursor`, `oldest_cursor` |
+| `pull` | opcjonalnie `cursor` (domyślnie `0`) i `limit` | `rootine_sync_pull` | uporządkowane `changes`, `next_cursor`, `has_more` |
+| `push` | `commands` | `rootine_sync_push` | wynik per komenda i `server_cursor` |
+
+Limity są częścią kontraktu: body do 1 MiB, batch do 100 komend, pull do 500
+zmian, payload pojedynczej komendy do 512 KiB oraz 60 żądań na minutę per
+użytkownik/urządzenie/adres klienta. Timeout funkcji wynosi 8 sekund (można go
+zmienić serwerowym `MOBILE_SYNC_TIMEOUT_MS`). Komunikaty błędów nie zawierają
+treści SQL ani rekordów prywatnych.
+
+### Wyniki push
+
+Każda komenda musi zawierać `operation_id`, `entity`, `entity_id`, `kind`,
+`base_revision` i obiekt `payload` (payload może być pominięty dla `delete`).
+Dozwolone encje odpowiadają relacyjnym domenom Rootine, a nieznana encja jest
+`invalid`. Wynik ma jeden z następujących statusów:
+
+- `applied` — rekord zatwierdzony, rewizja i cursor są zwrócone;
+- `already_applied` — retry tego samego `operation_id`, bez drugiego efektu;
+- `conflict` — `base_revision` jest nieaktualna; wynik zawiera
+  `server_revision` i `server_record`, a serwer nie jest nadpisany;
+- `invalid` — zły kształt komendy, encja, payload albo limit;
+- `unauthorized` — urządzenie nie należy do `auth.uid()` albo zostało odwołane.
+
+Batch zachowuje kolejność wyników, ale pojedyncza komenda jest atomowa:
+niezależne poprawne komendy mogą zostać zatwierdzone, a błąd jednej nie wycofuje
+pozostałych. Tombstone usunięcia pozostaje w outboxie jako `operation: delete`.
+
+### Pull i wygasły cursor
+
+`rootine_sync_changes` jest append-only i ma monotoniczny cursor. Pull zwraca
+`oldest_cursor` oraz `latest_cursor`; rekordy są sortowane rosnąco po cursorze.
+Jeśli podany cursor jest starszy niż najwcześniejszy dostępny (`cursor_expired`),
+odpowiedź nie udaje pustej listy: endpoint zwraca HTTP `409` z kodem
+`cursor_expired`, a klient musi wykonać kontrolowany bootstrap. Cursor urządzenia
+jest niezależny od rewizji rekordu.
+
+### HTTP statusy
+
+| Status | Znaczenie |
+| --- | --- |
+| `200` | poprawny bootstrap/pull/push/rejestracja |
+| `400` | niepoprawny JSON, akcja lub pola |
+| `401` | brak, nieważny lub wygasły JWT |
+| `403` | urządzenie nieautoryzowane |
+| `405` | metoda inna niż POST |
+| `408` | timeout RPC/uwierzytelnienia |
+| `409` | `cursor_expired` — wymagany bootstrap |
+| `413` | body większe niż 1 MiB |
+| `429` | przekroczony limit żądań; obecny jest `Retry-After` |
+| `502`/`503` | chwilowa niedostępność usługi, bez szczegółów wewnętrznych |
+
+## Relacyjny sync-v3 (warstwa B02)
 
 Kontrakt v2 dla `rootine_workspace_snapshots` pozostaje aktywny bez zmian. B02
-dodaje obok niego addytywny model relacyjny, który będzie używany dopiero przez
-RPC z B03 i materializer z B04. Każdy rekord domenowy ma stabilne tekstowe `id`,
-`user_id`, serwerowe `created_at`/`updated_at`, opcjonalne `deleted_at` oraz
-monotoniczną w obrębie rekordu `revision`. Relacje używają klucza złożonego
-`(user_id, id)`, więc nie da się wskazać rekordu należącego do innego konta.
-
-Warstwa obejmuje tabele: `tasks`/`habits`, `notes`, `nutrition_*`, `sport_*`,
-`goals`, `work_*`, `trips`/`trip_*`, `health_*`, `affair_matters`,
-`payments`/`subscriptions`, `documents`, `vehicles`/`vehicle_service_items`
-oraz `jdg_*`. Infrastrukturę stanowią `rootine_profiles`, `rootine_devices`,
-`rootine_sync_cursors`, `rootine_sync_operations`, append-only
-`rootine_sync_changes`, `rootine_workspace_revisions`,
-`rootine_migration_quarantine` i `rootine_sync_reconciliation_log`.
+dodaje obok niego addytywny model relacyjny z tabelami domenowymi Rootine oraz
+infrastrukturą `rootine_profiles`, `rootine_devices`, `rootine_sync_cursors`,
+`rootine_sync_operations`, append-only `rootine_sync_changes`,
+`rootine_workspace_revisions`, `rootine_migration_quarantine` i
+`rootine_sync_reconciliation_log`. Każdy rekord ma stabilne `id`, `user_id`,
+serwerowe timestampy, opcjonalny `deleted_at` i monotoniczną rewizję; relacje
+używają klucza złożonego `(user_id, id)`.
 
 `rootine_sync_changes.change_cursor` jest generowany wyłącznie przez serwer.
-Aktualizacja rekordu z `deleted_at` tworzy zmianę `operation = 'delete'` —
-tombstone nie jest fizycznym brakiem rekordu. Outbox, tombstone’y i historia
-rewizji mają jawnie zapisaną retencję 90 dni w
-`rootine_sync_retention_policy`; `rootine_sync_cursor_bounds` udostępnia
-`oldest_available_cursor` oraz `latest_cursor`, aby klient mógł rozpoznać
-wygaśnięcie kursora. Tabele relacyjne mają RLS ograniczające odczyt do
-`auth.uid() = user_id`, a rola `authenticated` nie ma bezpośrednich uprawnień
-do `INSERT`/`UPDATE`/`DELETE`. Mutacje domenowe muszą wejść przez RPC.
+Retencja outboxa, tombstone'ów i historii rewizji wynosi 90 dni zgodnie z
+`rootine_sync_retention_policy`; `oldest_available_cursor` jest jawnie
+przechowywany per urządzenie, a widok `rootine_sync_cursor_bounds` pokazuje
+granice dostępne dla konta. Aktualizacja rekordu z `deleted_at` tworzy
+`operation = 'delete'` — tombstone nie jest fizycznym brakiem rekordu. RLS
+ogranicza odczyt do `auth.uid() = user_id`, a `authenticated` nie ma
+bezpośrednich uprawnień do mutacji.
+
+RPC w B03 mają kompatybilny seam `rootine_sync_records`, ponieważ pozwala to
+uruchomić kontrakt również na branchu bazowym bez nadpisywania domen. Po
+integracji B02 adapter materializuje ten seam do właściwych tabel domenowych;
+operation log, outbox i kontrakt HTTP/RPC nie wymagają zmiany.
