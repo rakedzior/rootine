@@ -45,6 +45,10 @@ async function main() {
   });
   let passed = true;
 
+  const staticChecks = runCommand(process.execPath, ["--test", "scripts/sql-migration-static.test.mjs"]);
+  evidence.checks.push({ name: "static migration ordering and hardening checks", passed: staticChecks.ok, command: staticChecks.command });
+  passed &&= staticChecks.ok;
+
   const cli = resolveSupabaseCommand();
   if (!cli) {
     const reason = "Supabase CLI is unavailable. Install it or use --allow-missing-tooling for a non-gating local check.";

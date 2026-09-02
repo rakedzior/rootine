@@ -199,6 +199,14 @@ granice dostępne dla konta. Aktualizacja rekordu z `deleted_at` tworzy
 ogranicza odczyt do `auth.uid() = user_id`, a `authenticated` nie ma
 bezpośrednich uprawnień do mutacji.
 
+Kompakcję wykonuje tylko service-role przez
+`rootine_sync_retention(interval)`. Funkcja najpierw aktualizuje granicę
+`oldest_available_cursor`, następnie usuwa wygasły outbox, operation ledger i
+historię rewizji (z zachowaniem oczekujących materializacji); bieżące rekordy
+`rootine_sync_records` oraz legacy snapshoty pozostają nietknięte.
+`p_retention` może skrócić okno tylko do minimum siedmiu dni i jest
+przeznaczony dla kontrolowanego maintenance, nie dla klienta.
+
 RPC w B03 mają kompatybilny seam `rootine_sync_records`, ponieważ pozwala to
 uruchomić kontrakt również na branchu bazowym bez nadpisywania domen. Po
 integracji B02 adapter materializuje ten seam do właściwych tabel domenowych;

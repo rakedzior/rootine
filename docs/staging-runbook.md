@@ -9,21 +9,34 @@ identyfikator w systemie sekretów CI, nie w repozytorium.
 
 1. Utwórz albo wybierz osobny projekt Supabase dla stagingu i zapisz jego
    `SUPABASE_URL` oraz klucz publishable/anon w sekretach środowiska `staging`.
-2. Zastosuj migracje w kolejności z `docs/ios-backend-setup.md`:
-   `rootine_workspace_snapshots`, `rootine_workspace_sync_v2` oraz migrację
-   feature flags `rootine_feature_flags`.
+2. Zastosuj wszystkie migracje w kolejności z
+   `docs/ios-backend-setup.md`, w tym relacyjny schemat/RLS, transport B03,
+   dual-write B06, backfill B04, rejestr urządzeń B09, powiadomienia B11 oraz
+   końcowy hardening retencji. Trzy pliki z prefiksem
+   `20260902120000` muszą zachować kolejność leksykalną: backfill, devices,
+   server_notifications.
 3. Uruchom `supabase db reset` lokalnie, aby sprawdzić reprodukowalność
    migracji; na hostowanym stagingu użyj kontrolowanego resetu projektu lub
    odtworzenia z backupu zgodnie z polityką Supabase. Nie wykonuj resetu
    produkcji.
+   W repozytorium można wcześniej uruchomić `npm run test:sql:static`; pełny
+   `npm run test:sql -- --strict` wymaga lokalnego CLI oraz
+   `ROOTINE_UPGRADE_DB_URL` wskazującego wyłącznie na jednorazową kopię
+   stagingu.
 4. Utwórz konto testowe z potwierdzonym adresem i nie wgrywaj do niego danych
    z produkcji. Zweryfikuj logowanie access tokenem oraz odrzucenie żądania bez
    tokenu.
-5. Wdróż Edge Function `mobile-sync` i sprawdź `bootstrap`, `pull`, `push`
+5. Po audycie istniejących wierszy zweryfikuj na stagingu trzy constraints
+   hardeningu oznaczone `NOT VALID` (format `device_id`, kształt tokenu oraz
+   composite FK zadań powiadomień), a następnie wykonaj ich `VALIDATE
+   CONSTRAINT`. Pozostawienie ich jako `NOT VALID` jest bezpiecznym trybem
+   upgrade dla historycznych danych, ale nie może być stanem końcowym po
+   cutoverze.
+6. Wdróż Edge Function `mobile-sync` i sprawdź `bootstrap`, `pull`, `push`
    oraz `register_device` na fixture’ach (w tym rejestrację bez pól APNs po
    odmowie permission). Klient otrzymuje wyłącznie publishable/anon key;
    `service_role` pozostaje sekretem funkcji.
-6. Włącz tylko flagę potrzebną do testu według macierzy poniżej. Każda zmiana
+7. Włącz tylko flagę potrzebną do testu według macierzy poniżej. Każda zmiana
    flagi powinna mieć operatora, czas, środowisko i zakres konta w audycie.
 
 ## Macierz flag
@@ -48,6 +61,10 @@ wartości flagi od klienta jako źródła prawdy.
 - push z tym samym `operation_id` drugi raz nie tworzy zmiany;
 - zły `base_revision` daje jawny `conflict`;
 - przeterminowany cursor daje `cursor_expired`, bez utraty lokalnej kolejki;
+- maintenance uruchamia wyłącznie worker przez
+  `rootine_sync_retention()`; funkcja używa polityki 90 dni, przesuwa
+  `oldest_available_cursor` przed kompakcją i nie usuwa bieżących rekordów
+  ani legacy snapshotów;
 - log zawiera correlation/operation/device/entity ID, ale nie zawiera treści
   prywatnej ani tokenu APNs;
 - konto kontrolne nadal używa legacy CAS, gdy wszystkie flagi są `false`.
