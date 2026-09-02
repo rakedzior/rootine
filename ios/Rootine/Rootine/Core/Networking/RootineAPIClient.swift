@@ -60,6 +60,19 @@ struct RootineConfiguration: Equatable, Sendable {
     }
 }
 
+/// Authenticated API responses must never be retained in a process-wide
+/// shared URL cache. Callers can still inject a URLSession for deterministic
+/// tests, while production clients get an isolated, cookie-free session.
+enum RootineSecureURLSession {
+    static func make() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }
+}
+
 struct SupabaseUser: Codable, Equatable, Sendable {
     var id: String
     var email: String?
@@ -294,7 +307,7 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
     private let session: URLSession
     private let syncDeviceID: String
 
-    init(configuration: RootineConfiguration, session: URLSession = .shared, deviceID: String = UUID().uuidString) {
+    init(configuration: RootineConfiguration, session: URLSession = RootineSecureURLSession.make(), deviceID: String = UUID().uuidString) {
         self.configuration = configuration
         self.session = session
         // The mobile-sync edge function scopes registrations to the iOS device
@@ -582,17 +595,26 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
         guard let url = components?.url else { throw RootineAPIError.missingConfiguration }
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.httpBody = try JSONEncoder().encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.setValue(configuration.supabasePublishableKey, forHTTPHeaderField: "apikey")
         return request
     }
 
     private func authorizedRequest(url: URL, accessToken: String, includeAPIKey: Bool = true) -> URLRequest {
         var request = URLRequest(url: url)
+        // Workspace/profile responses are account data. Do not allow
+        // URLSession/URLCache to persist an authenticated response where a
+        // later account could observe it after logout or account switching.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         if includeAPIKey {
             request.setValue(configuration.supabasePublishableKey, forHTTPHeaderField: "apikey")

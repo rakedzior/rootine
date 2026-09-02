@@ -73,6 +73,35 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertFalse(RootineDeviceIdentityStore.isLegacyIdentifier(identifier))
     }
 
+    func testLegacyDeviceIdentityRemainsReadableAcrossReinstall() {
+        XCTAssertTrue(
+            RootineDeviceIdentityStore.isLegacyIdentifier("123E4567-E89B-42D3-A456-426614174000")
+        )
+        XCTAssertFalse(RootineDeviceIdentityStore.isLegacyIdentifier("not-a-device"))
+    }
+
+    func testSessionValidationRejectsEmptySecretsWithoutPersistingThem() {
+        let valid = SupabaseSession(
+            accessToken: "access",
+            refreshToken: "refresh",
+            expiresIn: 3600,
+            expiresAt: nil,
+            tokenType: "bearer",
+            user: SupabaseUser(id: "user", email: nil)
+        )
+        let invalid = SupabaseSession(
+            accessToken: " ",
+            refreshToken: "refresh",
+            expiresIn: 3600,
+            expiresAt: nil,
+            tokenType: "bearer",
+            user: SupabaseUser(id: "user", email: nil)
+        )
+
+        XCTAssertTrue(KeychainSessionStore.isUsable(valid))
+        XCTAssertFalse(KeychainSessionStore.isUsable(invalid))
+    }
+
     func testDeviceRegistrationResponseNeverModelsAnAPNsToken() throws {
         let response = RootineDeviceRegistration(
             deviceID: "installation-1",

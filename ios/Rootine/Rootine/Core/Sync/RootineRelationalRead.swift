@@ -107,7 +107,26 @@ final class UserDefaultsRootineReadFeatureFlagStore: RootineReadFeatureFlagStore
     }
 
     func normalizedReadEnabled(accountID: String, environment: String) -> Bool {
-        defaults.object(forKey: key(accountID: accountID, environment: environment)) as? Bool ?? false
+        let currentKey = key(accountID: accountID, environment: environment)
+        if let current = defaults.object(forKey: currentKey) {
+            guard let value = current as? Bool else {
+                defaults.removeObject(forKey: currentKey)
+                return false
+            }
+            return value
+        }
+        // Keep the existing rollout decision when upgrading from the raw-key
+        // implementation, then copy it to the one-way key. Keep the legacy
+        // value read-only so a downgrade remains possible without a data-loss
+        // migration; new writes never update that raw key.
+        let legacy = legacyKey(accountID: accountID, environment: environment)
+        guard let legacyObject = defaults.object(forKey: legacy) else { return false }
+        guard let value = legacyObject as? Bool else {
+            defaults.removeObject(forKey: legacy)
+            return false
+        }
+        defaults.set(value, forKey: currentKey)
+        return value
     }
 
     func setNormalizedReadEnabled(_ enabled: Bool, accountID: String, environment: String) {
@@ -115,6 +134,14 @@ final class UserDefaultsRootineReadFeatureFlagStore: RootineReadFeatureFlagStore
     }
 
     private func key(accountID: String, environment: String) -> String {
+        RootineSecureStorageSupport.defaultsKey(
+            prefix: "\(prefix).normalized_read_enabled",
+            accountID: accountID,
+            environment: environment
+        )
+    }
+
+    private func legacyKey(accountID: String, environment: String) -> String {
         "\(prefix).normalized_read_enabled.\(environment).\(accountID)"
     }
 }

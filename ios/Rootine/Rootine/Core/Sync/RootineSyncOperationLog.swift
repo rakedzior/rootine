@@ -229,11 +229,21 @@ actor RootineSyncOperationLog {
         }
         do {
             let envelope = try decoder.decode(Envelope.self, from: Data(contentsOf: fileURL))
-            guard envelope.accountID == accountID, envelope.deviceID == deviceID else {
+            guard envelope.contractVersion == 1,
+                  envelope.accountID == accountID,
+                  envelope.deviceID == deviceID,
+                  envelope.operations.allSatisfy(isValidEntry) else {
                 throw RootineSyncOperationLogError.invalidEnvelope
             }
             return envelope
         } catch let error as RootineSyncOperationLogError {
+            // The log contains retry payloads and can include private domain
+            // records. Quarantine malformed/cross-scope bytes inside the
+            // protected account container before starting from an empty log.
+            quarantineCorruptLog()
+            if case .invalidEnvelope = error {
+                return Envelope(contractVersion: 1, accountID: accountID, deviceID: deviceID, operations: [])
+            }
             throw error
         } catch {
             quarantineCorruptLog()
@@ -258,15 +268,32 @@ actor RootineSyncOperationLog {
             && lhs.payload == rhs.payload
     }
 
+    private func isValidEntry(_ entry: RootineSyncOperationEntry) -> Bool {
+        let command = entry.command
+        return !command.operationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && command.deviceID == deviceID
+            && !command.entity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !command.entityID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && command.baseRevision >= 0
+    }
+
     private func ensureDirectories() throws {
-        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: recoveryDirectoryURL, withIntermediateDirectories: true)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: directoryURL, fileManager: fileManager)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: recoveryDirectoryURL, fileManager: fileManager)
     }
 
     private func quarantineCorruptLog() {
         guard fileManager.fileExists(atPath: fileURL.path) else { return }
         let url = recoveryDirectoryURL.appendingPathComponent("operations-corrupt-\(UUID().uuidString).json")
-        try? fileManager.moveItem(at: fileURL, to: url)
+        do {
+            try fileManager.moveItem(at: fileURL, to: url)
+            try fileManager.setAttributes(
+                [.protectionKey: RootineSecureStorageSupport.fileProtection],
+                ofItemAtPath: url.path
+            )
+        } catch {
+            // Keep the original log if the protected recovery move fails.
+        }
     }
 
     private static func safeName(_ value: String) -> String {
@@ -293,7 +320,7 @@ actor RootineSyncOperationLog {
             base = (fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? fileManager.temporaryDirectory)
                 .appendingPathComponent("Rootine/Users", isDirectory: true)
-                .appendingPathComponent(Self.safeName(accountID), isDirectory: true)
+                .appendingPathComponent(RootineSecureStorageSupport.accountPathComponent(accountID), isDirectory: true)
         }
         return base
             .appendingPathComponent("Sync", isDirectory: true)

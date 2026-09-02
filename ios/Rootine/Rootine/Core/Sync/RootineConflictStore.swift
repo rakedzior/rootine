@@ -210,7 +210,14 @@ actor RootineConflictStore {
         try ensureDirectory()
         guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
         do { return try decoder.decode([RootineSyncConflict].self, from: Data(contentsOf: fileURL)) }
-        catch { throw RootineConflictStoreError.invalidStore }
+        catch {
+            // Conflict records are recoverable support data, not a reason to
+            // strand sync forever. Keep the original bytes in the protected
+            // per-account sync directory and continue with an empty unresolved
+            // set.
+            quarantineCorruptStore()
+            return []
+        }
     }
 
     private func write(_ conflicts: [RootineSyncConflict]) throws {
@@ -219,7 +226,21 @@ actor RootineConflictStore {
     }
 
     private func ensureDirectory() throws {
-        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: directoryURL, fileManager: fileManager)
+    }
+
+    private func quarantineCorruptStore() {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
+        let url = directoryURL.appendingPathComponent("conflicts-corrupt-\(UUID().uuidString).json")
+        do {
+            try fileManager.moveItem(at: fileURL, to: url)
+            try fileManager.setAttributes(
+                [.protectionKey: RootineSecureStorageSupport.fileProtection],
+                ofItemAtPath: url.path
+            )
+        } catch {
+            // Keep the original conflict file if quarantine cannot complete.
+        }
     }
 
     private static func safeName(_ value: String) -> String {
@@ -246,7 +267,7 @@ actor RootineConflictStore {
             base = (fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? fileManager.temporaryDirectory)
                 .appendingPathComponent("Rootine/Users", isDirectory: true)
-                .appendingPathComponent(Self.safeName(accountID), isDirectory: true)
+                .appendingPathComponent(RootineSecureStorageSupport.accountPathComponent(accountID), isDirectory: true)
         }
         return base
             .appendingPathComponent("Sync", isDirectory: true)

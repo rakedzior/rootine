@@ -65,13 +65,22 @@ actor RootineSyncCursorStore {
         guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
         do {
             let envelope = try decoder.decode(Envelope.self, from: Data(contentsOf: fileURL))
-            guard envelope.accountID == accountID, envelope.deviceID == deviceID, envelope.cursor >= 0 else {
+            guard envelope.contractVersion == 1,
+                  envelope.accountID == accountID,
+                  envelope.deviceID == deviceID,
+                  envelope.cursor >= 0 else {
                 throw RootineSyncCursorError.invalid
             }
             return envelope.cursor
         } catch let error as RootineSyncCursorError {
+            // A cursor is disposable metadata. Remove malformed or
+            // cross-scope bytes so the next controlled bootstrap cannot keep
+            // failing on every launch; never copy cursor contents to a
+            // recovery export because it can reveal account/device scope.
+            try? fileManager.removeItem(at: fileURL)
             throw error
         } catch {
+            try? fileManager.removeItem(at: fileURL)
             // A malformed cursor must not silently become a guessed cursor.
             // The caller can perform a controlled bootstrap instead.
             throw RootineSyncCursorError.invalid
@@ -113,7 +122,7 @@ actor RootineSyncCursorStore {
     func location() -> URL { fileURL }
 
     private func ensureDirectory() throws {
-        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: directoryURL, fileManager: fileManager)
     }
 
     private static func safeName(_ value: String) -> String {
@@ -140,7 +149,7 @@ actor RootineSyncCursorStore {
             base = (fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? fileManager.temporaryDirectory)
                 .appendingPathComponent("Rootine/Users", isDirectory: true)
-                .appendingPathComponent(Self.safeName(accountID), isDirectory: true)
+                .appendingPathComponent(RootineSecureStorageSupport.accountPathComponent(accountID), isDirectory: true)
         }
         return base
             .appendingPathComponent("Sync", isDirectory: true)

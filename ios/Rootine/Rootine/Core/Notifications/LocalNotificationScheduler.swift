@@ -90,8 +90,35 @@ enum RootineNotificationPreferencesStore {
         defaults: UserDefaults = .standard
     ) -> RootineNotificationPreferences? {
         let key = key(for: userID)
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(RootineNotificationPreferences.self, from: data)
+        let data: Data?
+        let loadedLegacyKey: Bool
+        if let current = defaults.data(forKey: key) {
+            data = current
+            loadedLegacyKey = false
+        } else if let legacy = defaults.data(forKey: legacyKey(for: userID)) {
+            // Preserve preferences written before S19 while moving them to
+            // the one-way namespace. Keep the old value read-only so a
+            // downgrade remains possible without an irreversible migration.
+            data = legacy
+            loadedLegacyKey = true
+        } else {
+            data = nil
+            loadedLegacyKey = false
+        }
+        guard let data else { return nil }
+        do {
+            let value = try JSONDecoder().decode(RootineNotificationPreferences.self, from: data)
+            if loadedLegacyKey {
+                defaults.set(data, forKey: key)
+            }
+            return value
+        } catch {
+            // Preferences are non-sensitive opt-in metadata. Discard a
+            // malformed value so a corrupt cache cannot carry stale settings
+            // into a later login for the same account.
+            defaults.removeObject(forKey: key)
+            return nil
+        }
     }
 
     static func save(
@@ -105,9 +132,14 @@ enum RootineNotificationPreferencesStore {
 
     static func remove(userID: String, defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: key(for: userID))
+        defaults.removeObject(forKey: legacyKey(for: userID))
     }
 
     private static func key(for userID: String) -> String {
+        RootineSecureStorageSupport.defaultsKey(prefix: keyPrefix, accountID: userID)
+    }
+
+    private static func legacyKey(for userID: String) -> String {
         keyPrefix + RootineLocalIdentifier.string(
             namespace: "notification-preferences",
             operationID: userID
@@ -194,8 +226,8 @@ struct RootineNotificationRule: Codable, Equatable, Hashable, Sendable {
 
 /// The metadata is also the local half of B11's dedupe contract. Request IDs
 /// are hashed so a user's UUID or task text never appears in an OS-level
-/// identifier; the raw dedupe key is kept in userInfo for deterministic
-/// reconciliation and is not logged.
+/// identifier. OS-persisted userInfo contains only one-way fingerprints and
+/// local scheduling fields; the raw dedupe key remains in memory only.
 struct RootineNotificationOccurrence: Codable, Equatable, Hashable, Sendable {
     let entity: RootineNotificationEntity
     let entityID: String
@@ -254,8 +286,8 @@ struct RootineNotificationOccurrence: Codable, Equatable, Hashable, Sendable {
     }
 
     static func requestIdentifier(userID: String, dedupeKey: String) -> String {
-        let userHash = RootineLocalIdentifier.string(namespace: "notification-user", operationID: userID)
-        let occurrenceHash = RootineLocalIdentifier.string(namespace: "notification", operationID: dedupeKey)
+        let userHash = RootineSecureStorageSupport.accountNamespace(userID)
+        let occurrenceHash = RootineSecureStorageSupport.stableHash(dedupeKey)
         return "rootine.local." + userHash + "." + occurrenceHash
     }
 
@@ -267,12 +299,13 @@ struct RootineNotificationOccurrence: Codable, Equatable, Hashable, Sendable {
         [
             "rootine_schema_version": 1,
             "rootine_entity": entity.rawValue,
-            "rootine_entity_id": entityID,
             "rootine_local_date": localDate,
             "rootine_local_time": localTime,
-            "rootine_occurrence_id": occurrenceID,
-            "rootine_dedupe_key": dedupeKey,
-            "rootine_notification_type": notificationType
+            // Notification requests are persisted by the OS. Keep only a
+            // one-way occurrence fingerprint in that metadata so account,
+            // entity IDs, and the raw server dedupe key never reach the lock
+            // screen/request archive.
+            "rootine_occurrence_hash": RootineSecureStorageSupport.stableHash(occurrenceID)
         ]
     }
 }
@@ -393,7 +426,9 @@ actor RootineLocalNotificationScheduler: RootineNotificationScheduling {
     ) async -> RootineNotificationReconcileResult {
         let authorization = await center.authorizationStatus()
         let pending = await center.pendingNotificationRequests()
-        let owned = pending.filter { $0.identifier.hasPrefix(ownedPrefix) }
+        let owned = pending.filter { request in
+            ownedPrefixes.contains { prefix in request.identifier.hasPrefix(prefix) }
+        }
 
         guard preferences.enabled else {
             let cancelled = await remove(owned.map(\.identifier))
@@ -476,12 +511,28 @@ actor RootineLocalNotificationScheduler: RootineNotificationScheduling {
 
     func cancelAll() async -> Int {
         let pending = await center.pendingNotificationRequests()
-        return await remove(pending.filter { $0.identifier.hasPrefix(ownedPrefix) }.map(\.identifier))
+        return await remove(
+            pending.filter { request in
+                ownedPrefixes.contains { prefix in request.identifier.hasPrefix(prefix) }
+            }.map(\.identifier)
+        )
     }
 
     private var ownedPrefix: String {
-        let userHash = RootineLocalIdentifier.string(namespace: "notification-user", operationID: context.userID)
-        return "rootine.local." + userHash + "."
+        "rootine.local." + RootineSecureStorageSupport.accountNamespace(context.userID) + "."
+    }
+
+    private var ownedPrefixes: [String] {
+        [
+            ownedPrefix,
+            // Requests written before S19 used the same account-independent
+            // legacy hash. Treat them as owned during one reconciliation so
+            // logout/account switching cannot strand stale alerts.
+            "rootine.local." + RootineLocalIdentifier.string(
+                namespace: "notification-user",
+                operationID: context.userID
+            ) + "."
+        ]
     }
 
     private func remove(_ identifiers: [String]) async -> Int {
@@ -526,8 +577,8 @@ actor RootineLocalNotificationScheduler: RootineNotificationScheduling {
         guard existing.identifier == desired.identifier,
               existing.content.title == desired.content.title,
               existing.content.body == desired.content.body,
-              existing.content.userInfo["rootine_occurrence_id"] as? String
-                == desired.content.userInfo["rootine_occurrence_id"] as? String,
+              existing.content.userInfo["rootine_occurrence_hash"] as? String
+                == desired.content.userInfo["rootine_occurrence_hash"] as? String,
               existing.content.userInfo["rootine_local_date"] as? String
                 == desired.content.userInfo["rootine_local_date"] as? String,
               existing.content.userInfo["rootine_local_time"] as? String

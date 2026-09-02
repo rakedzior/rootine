@@ -70,5 +70,7 @@ defaults for bootstrapping and diagnostics only; account-scoped rollout is
 documented in [`docs/staging-runbook.md`](../docs/staging-runbook.md).
 
 Release validation is documented in [`docs/ios-release-gate.md`](../docs/ios-release-gate.md).
+The local-storage boundary, account isolation, lifecycle cleanup, and explicit
+security omissions are documented in [`docs/ios-secure-storage.md`](../docs/ios-secure-storage.md).
 The protected workflow runs executable `xcodebuild test`, SQL/RLS and Edge
 contract gates, then the isolated staging sync smoke before a TestFlight build.

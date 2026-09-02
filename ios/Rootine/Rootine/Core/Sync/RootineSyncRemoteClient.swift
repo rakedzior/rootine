@@ -31,7 +31,7 @@ final class RootineSyncRemoteClient: RootineSyncRemoteClientProtocol, @unchecked
 
     convenience init(
         configuration: RootineConfiguration,
-        session: URLSession = .shared,
+        session: URLSession = RootineSecureURLSession.make(),
         requestTimeout: TimeInterval = 20,
         sessionRefresher: SessionRefresher? = nil,
         apiKey: String? = nil,
@@ -52,7 +52,7 @@ final class RootineSyncRemoteClient: RootineSyncRemoteClientProtocol, @unchecked
 
     init(
         endpoint: URL,
-        session: URLSession = .shared,
+        session: URLSession = RootineSecureURLSession.make(),
         requestTimeout: TimeInterval = 20,
         sessionRefresher: SessionRefresher? = nil,
         apiKey: String? = nil,
@@ -197,8 +197,11 @@ final class RootineSyncRemoteClient: RootineSyncRemoteClientProtocol, @unchecked
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = requestTimeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         if let apiKey { request.setValue(apiKey, forHTTPHeaderField: "apikey") }
         request.httpBody = try encoder.encode(JSONValue.object(body))

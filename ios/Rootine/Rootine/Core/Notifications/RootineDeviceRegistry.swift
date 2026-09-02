@@ -148,16 +148,17 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
 
     static func isV3Identifier(_ identifier: String) -> Bool {
         guard identifier.hasPrefix("ios_") else { return false }
-        return isUUIDv4(String(identifier.dropFirst(4)))
+        return isUUIDv4(String(identifier.dropFirst(4)), requireLowercase: true)
     }
 
     static func isLegacyIdentifier(_ identifier: String) -> Bool {
         isUUIDv4(identifier)
     }
 
-    private static func isUUIDv4(_ value: String) -> Bool {
-        let characters = Array(value)
-        guard value == value.lowercased(),
+    private static func isUUIDv4(_ value: String, requireLowercase: Bool = false) -> Bool {
+        let normalized = value.lowercased()
+        let characters = Array(normalized)
+        guard !requireLowercase || value == normalized,
               characters.count == 36,
               characters[8] == "-",
               characters[13] == "-",
@@ -165,16 +166,22 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
               characters[23] == "-",
               characters[14] == "4",
               "89ab".contains(characters[19]),
-              UUID(uuidString: value) != nil else {
+              UUID(uuidString: normalized) != nil else {
             return false
         }
         return true
     }
 
     func loadOrCreate() -> String {
-        if let existing = load(), !existing.isEmpty {
+        if let existing = load(),
+           Self.isV3Identifier(existing) || Self.isLegacyIdentifier(existing) {
             return existing
         }
+
+        // Treat malformed Keychain bytes as disposable installation metadata.
+        // Never return an attacker-controlled device ID to the registration
+        // endpoint or use it as a sync namespace.
+        clear()
 
         let identifier = Self.makeIdentifier()
         let query: [String: Any] = [
@@ -182,7 +189,8 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: Data(identifier.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
         if status == errSecDuplicateItem, let existing = load(), !existing.isEmpty {
@@ -196,6 +204,7 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -206,5 +215,15 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
             return nil
         }
         return value
+    }
+
+    private func clear() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

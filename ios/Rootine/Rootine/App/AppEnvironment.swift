@@ -489,6 +489,11 @@ final class AppEnvironment: ObservableObject {
         refreshTask?.cancel()
         refreshTask = nil
         stopRealtimeRuntime()
+        // Authenticated URLSession responses can outlive the Swift session
+        // object in a shared URLCache. The request boundary is no-store, and
+        // this belt-and-suspenders purge also removes responses created by an
+        // older build before the account is discarded.
+        URLCache.shared.removeAllCachedResponses()
         keychain.clear()
         session = nil
         store = nil
@@ -2367,8 +2372,24 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func syncDeviceIdentifier(for userID: String) -> String {
-        let key = "rootine.sync.device-id.\(userID)"
-        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+        let key = RootineSecureStorageSupport.defaultsKey(
+            prefix: "rootine.sync.device-id",
+            accountID: userID,
+            environment: configuration.environment
+        )
+        if let existing = UserDefaults.standard.string(forKey: key),
+           RootineDeviceIdentityStore.isV3Identifier(existing)
+            || RootineDeviceIdentityStore.isLegacyIdentifier(existing) {
+            return existing
+        }
+        if UserDefaults.standard.object(forKey: key) != nil {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        let legacyKey = "rootine.sync.device-id.\(userID)"
+        if let existing = UserDefaults.standard.string(forKey: legacyKey),
+           RootineDeviceIdentityStore.isV3Identifier(existing)
+           || RootineDeviceIdentityStore.isLegacyIdentifier(existing) {
+            UserDefaults.standard.set(existing, forKey: key)
             return existing
         }
         let identifier = RootineSyncIdentifiers.deviceID()
