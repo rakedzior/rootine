@@ -91,9 +91,17 @@ export const registerDeviceRequestSchema = syncV3RequestEnvelopeSchema.extend({
   platform: z.literal("ios"),
   app_version: z.string().min(1).max(40),
   environment: environmentSchema,
-  apns_environment: z.enum(["sandbox", "production"]),
-  push_token: z.string().min(1).max(512),
-}).strict();
+  apns_environment: z.enum(["sandbox", "production"]).optional(),
+  push_token: z.string().min(1).max(512).optional(),
+}).strict().superRefine((request, context) => {
+  if (Boolean(request.push_token) !== Boolean(request.apns_environment)) {
+    context.addIssue({
+      code: "custom",
+      path: [request.push_token ? "apns_environment" : "push_token"],
+      message: "push_token and apns_environment must be supplied together",
+    });
+  }
+});
 
 const responseEnvelope = z.object({
   contract_version: z.literal(SYNC_V3_CONTRACT_VERSION),
@@ -129,6 +137,7 @@ export const pushResultSchema = z.object({
   entity_id: entityIdSchema,
   revision: z.number().int().nonnegative().optional(),
   server_revision: z.number().int().nonnegative().optional(),
+  server_record: z.unknown().optional(),
 }).strict();
 
 export const pushResponseSchema = responseEnvelope.extend({

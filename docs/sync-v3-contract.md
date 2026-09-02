@@ -40,18 +40,25 @@ jest jedną z nazw w tabeli poniżej. W nagłówku należy przesłać
 | `bootstrap` | `correlation_id`, `device_id` | `server_cursor`, `next_cursor`, `has_more`, `changes[]` |
 | `pull` | `correlation_id`, `device_id`, `cursor` (`null` oznacza początek), `limit` 1–500 | `from_cursor`, `next_cursor`, `has_more`, `changes[]` |
 | `push` | `correlation_id`, `device_id`, 1–100 komend | `server_cursor`, `results[]` per komenda |
-| `register_device` | `correlation_id`, `device_id`, platforma `ios`, wersja aplikacji, środowisko, środowisko APNs i token | `device_id`, `environment`, `registered_at` |
+| `register_device` | `correlation_id`, `device_id`, platforma `ios`, wersja aplikacji i środowisko; opcjonalnie para środowisko APNs + token | `device_id`, `environment`, `registered_at` |
 
 Komenda `push` ma `operation_id`, `entity`, `entity_id`, `kind`,
 `base_revision` i `payload` dla `upsert`. `delete` jest soft-delete i nie
 przyjmuje payloadu. Ponowienie tego samego `operation_id` zwraca
 `already_applied`, nie wykonując drugiego efektu ubocznego. Konflikt rewizji
-zwraca wynik `conflict` z techniczną rewizją serwera; nie zwraca prywatnej
-treści rekordu.
+zwraca wynik `conflict` z techniczną rewizją serwera oraz opcjonalnym
+`server_record` dla właściciela danych. Rekord jest częścią odpowiedzi
+autoryzowanej, ale nie wolno go kopiować do logów; logger stosuje redakcję.
 
 Zmiany w `pull` i `bootstrap` są uporządkowane rosnąco po `cursor`. Realtime
 może jedynie zasygnalizować dostępność zmian — klient zawsze pobiera treść
 przez `pull`.
+
+`register_device` nie blokuje synchronizacji, gdy użytkownik odmówił
+uprawnienia do powiadomień. W takim przypadku klient pomija zarówno
+`push_token`, jak i `apns_environment`. Jeśli uprawnienie jest przyznane,
+wysyła oba pola razem; kontrakt odrzuca niepełną parę. Token jest przechowywany
+i redagowany wyłącznie po stronie serwera.
 
 ## Błędy
 

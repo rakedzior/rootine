@@ -1,0 +1,15 @@
+{
+  "contract_version": 3,
+  "correlation_id": "rt3_staging_123e4567-e89b-42d3-a456-426614174000",
+  "server_cursor": 1844,
+  "results": [
+    {
+      "operation_id": "op3_123e4567-e89b-42d3-a456-426614174000",
+      "status": "conflict",
+      "entity": "task",
+      "entity_id": "task-technical-fixture",
+      "server_revision": 13,
+      "server_record": { "state": "server-version" }
+    }
+  ]
+}

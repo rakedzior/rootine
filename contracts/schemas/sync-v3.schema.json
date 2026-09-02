@@ -128,7 +128,7 @@
         { "$ref": "#/$defs/requestEnvelope" },
         {
           "type": "object",
-          "required": ["device_id", "platform", "app_version", "environment", "apns_environment", "push_token"],
+          "required": ["device_id", "platform", "app_version", "environment"],
           "properties": {
             "device_id": { "$ref": "#/$defs/deviceId" },
             "platform": { "const": "ios" },
@@ -137,7 +137,15 @@
             "apns_environment": { "enum": ["sandbox", "production"] },
             "push_token": { "type": "string", "minLength": 1, "maxLength": 512 }
           },
-          "description": "Register-device request fields."
+          "description": "Register-device request fields. APNs fields are optional when notification permission is not granted and must appear together when present."
+        },
+        {
+          "if": { "required": ["push_token"] },
+          "then": { "required": ["apns_environment"] }
+        },
+        {
+          "if": { "required": ["apns_environment"] },
+          "then": { "required": ["push_token"] }
         }
       ],
       "unevaluatedProperties": false
@@ -197,7 +205,8 @@
         "entity": { "$ref": "#/$defs/entity" },
         "entity_id": { "$ref": "#/$defs/entityId" },
         "revision": { "type": "integer", "minimum": 0 },
-        "server_revision": { "type": "integer", "minimum": 0 }
+        "server_revision": { "type": "integer", "minimum": 0 },
+        "server_record": {}
       },
       "additionalProperties": false
     },

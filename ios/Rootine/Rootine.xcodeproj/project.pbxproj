@@ -370,6 +370,7 @@
 /* Begin XCBuildConfiguration section */
 		C000000000000000000000011 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
@@ -387,6 +388,7 @@
 		};
 		C000000000000000000000012 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
@@ -399,9 +401,39 @@
 			};
 			name = Release;
 		};
+		C000000000000000000000013 /* Development */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
+			buildSettings = {
+				ENABLE_TESTABILITY = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Development;
+		};
+		C000000000000000000000014 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000019 /* Staging.xcconfig */;
+			buildSettings = {
+				ENABLE_TESTABILITY = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Staging;
+		};
+		C000000000000000000000015 /* Production */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
+			buildSettings = {
+				ENABLE_TESTABILITY = YES;
+			};
+			name = Production;
+		};
 		C000000000000000000000021 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
 				ENABLE_PREVIEWS = YES;
@@ -416,7 +448,7 @@
 		};
 		C000000000000000000000022 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -428,9 +460,53 @@
 			};
 			name = Release;
 		};
+		C000000000000000000000023 /* Development */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rootine/Resources/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Development;
+		};
+		C000000000000000000000024 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000019 /* Staging.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rootine/Resources/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Staging;
+		};
+		C000000000000000000000025 /* Production */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Rootine/Resources/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Production;
+		};
 		C000000000000000000000031 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -445,7 +521,7 @@
 		};
 		C000000000000000000000032 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F0000000000000000000000C /* Shared.xcconfig */;
+			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -458,6 +534,51 @@
 			};
 			name = Release;
 		};
+		C000000000000000000000033 /* Development */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine";
+			};
+			name = Development;
+		};
+		C000000000000000000000034 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000019 /* Staging.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine";
+			};
+			name = Staging;
+		};
+		C000000000000000000000035 /* Production */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rootine.app/Rootine";
+			};
+			name = Production;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -466,27 +587,36 @@
 			buildConfigurations = (
 				C000000000000000000000011 /* Debug */,
 				C000000000000000000000012 /* Release */,
+				C000000000000000000000013 /* Development */,
+				C000000000000000000000014 /* Staging */,
+				C000000000000000000000015 /* Production */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Development;
 		};
 		C000000000000000000000002 /* Build configuration list for PBXNativeTarget "Rootine" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C000000000000000000000021 /* Debug */,
 				C000000000000000000000022 /* Release */,
+				C000000000000000000000023 /* Development */,
+				C000000000000000000000024 /* Staging */,
+				C000000000000000000000025 /* Production */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Development;
 		};
 		C000000000000000000000003 /* Build configuration list for PBXNativeTarget "RootineTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C000000000000000000000031 /* Debug */,
 				C000000000000000000000032 /* Release */,
+				C000000000000000000000033 /* Development */,
+				C000000000000000000000034 /* Staging */,
+				C000000000000000000000035 /* Production */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Development;
 		};
 /* End XCConfigurationList section */
 	};

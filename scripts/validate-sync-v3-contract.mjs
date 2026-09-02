@@ -67,7 +67,9 @@ const fixtureNames = [
   "sync-v3-pull-response.json",
   "sync-v3-push-request.json",
   "sync-v3-push-response.json",
+  "sync-v3-push-conflict-response.json",
   "sync-v3-register-device-request.json",
+  "sync-v3-register-device-no-apns-request.json",
   "sync-v3-register-device-response.json",
   "sync-v3-error-cursor-expired.json",
 ];

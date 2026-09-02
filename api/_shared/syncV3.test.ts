@@ -53,6 +53,21 @@ describe("sync-v3 contract", () => {
       apns_environment: "sandbox",
       push_token: "fixture-token-that-is-not-a-real-apns-token",
     })).toMatchObject({ device_id, platform: "ios" });
+    expect(registerDeviceRequestSchema.parse({
+      correlation_id,
+      device_id,
+      platform: "ios",
+      app_version: "0.1.0",
+      environment: "staging",
+    })).toMatchObject({ device_id, platform: "ios" });
+    expect(() => registerDeviceRequestSchema.parse({
+      correlation_id,
+      device_id,
+      platform: "ios",
+      app_version: "0.1.0",
+      environment: "staging",
+      push_token: "token-without-apns-environment",
+    })).toThrow();
   });
 
   it("requires contract_version 3 on each response and rejects a legacy version", () => {
@@ -91,6 +106,19 @@ describe("sync-v3 contract", () => {
       server_cursor: 12,
       results: [{ operation_id, status: "applied", entity: "task", entity_id: "task-1", revision: 4 }],
     })).toMatchObject({ server_cursor: 12 });
+    expect(pushResponseSchema.parse({
+      contract_version: 3,
+      correlation_id,
+      server_cursor: 13,
+      results: [{
+        operation_id,
+        status: "conflict",
+        entity: "task",
+        entity_id: "task-1",
+        server_revision: 12,
+        server_record: { state: "complete" },
+      }],
+    })).toMatchObject({ results: [{ status: "conflict", server_record: { state: "complete" } }] });
     expect(registerDeviceResponseSchema.parse({
       contract_version: 3,
       correlation_id,

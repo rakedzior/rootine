@@ -6,11 +6,16 @@ Native SwiftUI foundation for the Rootine MVP. The project targets iOS 26.0+ and
 
 1. Copy `Rootine/Config/Secrets.xcconfig.example` to `Rootine/Config/Secrets.xcconfig`.
 2. Fill in values for the selected environment; never add a service-role key.
-3. Select `Development.xcconfig`, `Staging.xcconfig`, or `Production.xcconfig` as the base configuration in Xcode (all rollout flags default to `NO`).
+3. Select the matching `Development`, `Staging`, or `Production` build configuration in Xcode (each is explicitly bound to its xcconfig; all rollout flags default to `NO`).
 4. Open `Rootine/Rootine.xcodeproj` in Xcode 26.3.
 5. Select the `Rootine` scheme and the installed iOS 26.x simulator runtime. The current verified simulator destination is iPhone 17 Pro on iOS 26.3; the physical iPhone target remains unchanged.
 
 `Secrets.xcconfig` is ignored by Git. Never put a service-role key in an iOS build.
+
+The shared `Rootine` scheme runs/tests with `Development` and archives with
+`Production`. CI builds all three named configurations explicitly; use
+`-configuration Staging` for a staging build. The legacy `Debug` and `Release`
+names remain as compatibility aliases for development and production.
 
 ## What this stage contains
 

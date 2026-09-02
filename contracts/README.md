@@ -36,3 +36,7 @@ versioned transport envelope used by `bootstrap`, `pull`, `push`, and
 separate from each domain's `version`. The contract deliberately uses
 technical-only fixtures. Do not add note, health, finance, authentication, or
 APNs token content to examples or logs.
+
+`register_device` accepts an iOS device without APNs fields when notification
+permission was not granted. `push_token` and `apns_environment` are optional as
+a pair and must be supplied together when permission is available.

@@ -14,6 +14,16 @@ jobs:
   build-for-testing:
     runs-on: macos-15
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: development
+            configuration: Development
+          - environment: staging
+            configuration: Staging
+          - environment: production
+            configuration: Production
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
@@ -27,12 +37,16 @@ jobs:
       - name: Validate sync-v3 contract fixtures
         run: node scripts/validate-sync-v3-contract.mjs
 
+      - name: Validate effective iOS environment configuration
+        if: matrix.environment == 'development'
+        run: node scripts/ios-project-audit.mjs
+
       - name: Compile app and contract tests
         run: >-
           xcodebuild build-for-testing
           -project ios/Rootine/Rootine.xcodeproj
           -scheme Rootine
-          -configuration Debug
+          -configuration ${{ matrix.configuration }}
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath "$RUNNER_TEMP/RootineDerivedData"
           CODE_SIGNING_ALLOWED=NO

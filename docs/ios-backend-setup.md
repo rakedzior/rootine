@@ -4,10 +4,17 @@ This is the operational checklist for connecting the native app to the same Supa
 
 ## Environments and required deployment
 
-The app has separate development, staging, and production xcconfig examples.
-Use only the publishable/anon Supabase key in iOS. The environment and feature
+The app has explicit `Development`, `Staging`, and `Production` build
+configurations, each bound to its matching xcconfig. Use only the
+publishable/anon Supabase key in iOS. The environment and feature
 flag values are visible configuration, not secrets; server-side account flag
 evaluation remains authoritative.
+
+The shared `Rootine` scheme uses `Development` for local run/test and
+`Production` for archive. CI invokes all three named configurations with
+`xcodebuild -configuration`; use the same mapping for local staging smoke
+tests. `Debug`/`Release` remain compatibility aliases for development and
+production respectively.
 
 1. Apply the migrations in chronological order:
    - `20260806120000_rootine_workspace_snapshots.sql`

@@ -20,8 +20,9 @@ identyfikator w systemie sekretów CI, nie w repozytorium.
    z produkcji. Zweryfikuj logowanie access tokenem oraz odrzucenie żądania bez
    tokenu.
 5. Wdróż Edge Function `mobile-sync` i sprawdź `bootstrap`, `pull`, `push`
-   oraz `register_device` na fixture’ach. Klient otrzymuje wyłącznie
-   publishable/anon key; `service_role` pozostaje sekretem funkcji.
+   oraz `register_device` na fixture’ach (w tym rejestrację bez pól APNs po
+   odmowie permission). Klient otrzymuje wyłącznie publishable/anon key;
+   `service_role` pozostaje sekretem funkcji.
 6. Włącz tylko flagę potrzebną do testu według macierzy poniżej. Każda zmiana
    flagi powinna mieć operatora, czas, środowisko i zakres konta w audycie.
 

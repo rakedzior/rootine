@@ -1,13 +1,25 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { basename, join, resolve } from "node:path";
 
 const projectRoot = resolve("ios/Rootine");
 const sourceRoot = join(projectRoot, "Rootine");
 const testsRoot = join(projectRoot, "RootineTests");
+const projectContainer = join(projectRoot, "Rootine.xcodeproj");
 const projectFile = join(projectRoot, "Rootine.xcodeproj/project.pbxproj");
 const sharedConfig = join(projectRoot, "Config/Shared.xcconfig");
 const environmentConfigs = ["Development.xcconfig", "Staging.xcconfig", "Production.xcconfig"]
   .map((name) => join(projectRoot, `Config/${name}`));
+const environmentBuildConfigurations = [
+  { name: "Development", file: "Development.xcconfig", environment: "development" },
+  { name: "Staging", file: "Staging.xcconfig", environment: "staging" },
+  { name: "Production", file: "Production.xcconfig", environment: "production" },
+];
+const rolloutFlags = [
+  "ROOTINE_NORMALIZED_SYNC_ENABLED",
+  "ROOTINE_NORMALIZED_READ_ENABLED",
+  "ROOTINE_NOTIFICATIONS_ENABLED",
+];
 const infoPlist = join(sourceRoot, "Resources/Info.plist");
 const entitlements = join(sourceRoot, "Resources/Rootine.entitlements");
 const failures = [];
@@ -17,6 +29,36 @@ function walk(directory) {
     const path = join(directory, name);
     return statSync(path).isDirectory() ? walk(path) : [path];
   });
+}
+
+function readEffectiveXcconfig(path, seen = new Set()) {
+  if (seen.has(path) || !existsSync(path)) return {};
+  seen.add(path);
+  const values = {};
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const include = line.match(/^\s*#include\??\s+["<]([^">]+)[">]/);
+    if (include) Object.assign(values, readEffectiveXcconfig(join(path.slice(0, path.lastIndexOf("/")), include[1]), seen));
+    const assignment = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (assignment) values[assignment[1]] = assignment[2];
+  }
+  return values;
+}
+
+function readXcodeBuildSettings(configuration) {
+  if (process.platform !== "darwin") return null;
+  try {
+    const output = execFileSync("xcodebuild", [
+      "-project", projectContainer,
+      "-scheme", "Rootine",
+      "-configuration", configuration,
+      "-showBuildSettings",
+    ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return Object.fromEntries([...output.matchAll(/^\s*(ROOTINE_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/gm)]
+      .map(([, key, value]) => [key, value]));
+  } catch {
+    failures.push(`xcodebuild could not resolve effective settings for ${configuration}`);
+    return null;
+  }
 }
 
 for (const path of [projectFile, sharedConfig, ...environmentConfigs, infoPlist, entitlements, sourceRoot, testsRoot]) {
@@ -58,9 +100,44 @@ if (failures.length === 0) {
     if (!environmentConfigContents[index]?.includes(`ROOTINE_ENVIRONMENT = ${environment}`)) {
       failures.push(`iOS environment config is missing ROOTINE_ENVIRONMENT = ${environment}`);
     }
-    for (const flag of ["ROOTINE_NORMALIZED_SYNC_ENABLED", "ROOTINE_NORMALIZED_READ_ENABLED", "ROOTINE_NOTIFICATIONS_ENABLED"]) {
+    for (const flag of rolloutFlags) {
       if (!environmentConfigContents[index]?.includes(`${flag} = NO`)) {
         failures.push(`${environment} iOS config must keep ${flag} disabled by default`);
+      }
+    }
+  }
+
+  for (const { name, file, environment } of environmentBuildConfigurations) {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const blocks = [...project.matchAll(new RegExp(
+      `\\n\\t\\t[A-F0-9]+ \\/\\* ${escapedName} \\*\\/ = \\{[\\s\\S]*?\\n\\t\\t\\};`,
+      "g",
+    ))].map(([block]) => block);
+    if (blocks.length < 3) {
+      failures.push(`Xcode project must define ${name} for the project, app target, and test target`);
+    }
+    for (const block of blocks) {
+      if (!block.includes(`baseConfigurationReference = `) || !block.includes(`/* ${file} */`)) {
+        failures.push(`Xcode ${name} configuration must use ${file}`);
+        break;
+      }
+    }
+
+    const effectiveConfig = readEffectiveXcconfig(join(projectRoot, `Config/${file}`));
+    if (effectiveConfig.ROOTINE_ENVIRONMENT !== environment) {
+      failures.push(`${name} xcconfig resolves ROOTINE_ENVIRONMENT = ${effectiveConfig.ROOTINE_ENVIRONMENT ?? "<missing>"}, expected ${environment}`);
+    }
+    for (const flag of rolloutFlags) {
+      if (effectiveConfig[flag] !== "NO") failures.push(`${name} xcconfig resolves ${flag} = ${effectiveConfig[flag] ?? "<missing>"}, expected NO`);
+    }
+
+    const xcodeSettings = readXcodeBuildSettings(name);
+    if (xcodeSettings) {
+      if (xcodeSettings.ROOTINE_ENVIRONMENT !== environment) {
+        failures.push(`xcodebuild resolves ${name} ROOTINE_ENVIRONMENT = ${xcodeSettings.ROOTINE_ENVIRONMENT ?? "<missing>"}, expected ${environment}`);
+      }
+      for (const flag of rolloutFlags) {
+        if (xcodeSettings[flag] !== "NO") failures.push(`xcodebuild resolves ${name} ${flag} = ${xcodeSettings[flag] ?? "<missing>"}, expected NO`);
       }
     }
   }
