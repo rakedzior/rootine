@@ -21,6 +21,142 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(try roundTrip(workspace), workspace)
     }
 
+    func testNutritionPortionParserKeepsAmountAndUnitInSync() {
+        let physical = NutritionPortion.parse("150 g")
+        XCTAssertEqual(physical.amount, 150)
+        XCTAssertEqual(physical.unit, "g")
+        XCTAssertEqual(NutritionPortion.multiplier(amount: physical.amount, unit: physical.unit), 1.5)
+
+        let compact = NutritionPortion.parse("2 szt.")
+        XCTAssertEqual(compact.amount, 2)
+        XCTAssertEqual(compact.unit, "szt.")
+        XCTAssertEqual(NutritionPortion.multiplier(amount: compact.amount, unit: compact.unit), 2)
+
+        let fallback = NutritionPortion.parse("", fallbackAmount: 60, fallbackUnit: "g")
+        XCTAssertEqual(fallback, NutritionPortion(amount: 60, unit: "g"))
+    }
+
+    @MainActor
+    func testCustomMealRetryWithSameIDDoesNotCreateDuplicate() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let ingredient = CustomMealIngredient(
+            id: "ingredient-retry",
+            name: "Owies",
+            amount: 60,
+            unit: "g",
+            per100g: NutritionValues(calories: 370, protein: 13, carbs: 60, fat: 7)
+        )
+        let meal = CustomMeal(
+            id: "custom-meal-retry",
+            name: "Śniadanie retry",
+            ingredients: [ingredient],
+            totalWeightG: 60,
+            servings: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+
+        await environment.upsertCustomMeal(meal)
+        await environment.upsertCustomMeal(meal)
+
+        XCTAssertEqual(environment.nutritionWorkspace.customMeals?.count, 1)
+        XCTAssertEqual(environment.nutritionWorkspace.customMeals?.first?.id, meal.id)
+        XCTAssertEqual(environment.nutritionWorkspace.customMeals?.first?.ingredients.first?.id, ingredient.id)
+    }
+
+    @MainActor
+    func testBarcodeLookupQueuesNormalizedRequestWhenOffline() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        let firstLookup = await environment.lookupNutritionProduct(barcode: " 590-123-ABC ")
+        let secondLookup = await environment.lookupNutritionProduct(barcode: "590 123 abc")
+        XCTAssertNil(firstLookup)
+        XCTAssertNil(secondLookup)
+
+        let pending = environment.nutritionWorkspace.pendingBarcodeLookups
+        XCTAssertEqual(pending?.count, 1)
+        XCTAssertEqual(pending?.first?.barcode, "590123ABC")
+        XCTAssertEqual(pending?.first?.attemptCount, 2)
+        XCTAssertEqual(pending?.first?.id, NutritionBarcode.requestID(for: "590123ABC"))
+    }
+
+    @MainActor
+    func testNutritionEntryDerivesAmountAndUnitFromPortionWhenOmitted() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        await environment.addNutritionEntry(
+            dateKey: "2026-09-02",
+            meal: "breakfast",
+            name: "Płatki",
+            portion: "125 g",
+            calories: 462.5,
+            protein: 16.25,
+            carbs: 75,
+            fat: 8.75,
+            per100g: NutritionValues(calories: 370, protein: 13, carbs: 60, fat: 7),
+            operationID: "portion-consistency"
+        )
+
+        let entry = environment.nutritionWorkspace.days["2026-09-02"]?.entries.breakfast.first
+        XCTAssertEqual(entry?.amount, 125)
+        XCTAssertEqual(entry?.unit, "g")
+        XCTAssertEqual(entry?.id, RootineLocalIdentifier.string(namespace: "nutrition-entry", operationID: "portion-consistency"))
+    }
+
+    func testLegacyNutritionWorkspaceDecodesWithoutPendingBarcodeQueue() throws {
+        var legacy = NutritionWorkspace.empty
+        legacy.pendingBarcodeLookups = nil
+        let data = try JSONEncoder().encode(legacy)
+        let decoded = try JSONDecoder().decode(NutritionWorkspace.self, from: data)
+        XCTAssertNil(decoded.pendingBarcodeLookups)
+    }
+
+    func testNutritionBarcodeQueueRoundTripsDurableAttemptState() throws {
+        var workspace = NutritionWorkspace.empty
+        let product = NutritionProduct(
+            id: "barcode-product",
+            barcode: "590123",
+            name: "Jogurt testowy",
+            brand: "Rootine",
+            source: "remote",
+            defaultAmount: 180,
+            unit: "g",
+            per100g: NutritionValues(calories: 62, protein: 4.3, carbs: 4.7, fat: 3.3)
+        )
+        workspace.pendingBarcodeLookups = [NutritionBarcodeRequest(
+            id: NutritionBarcode.requestID(for: "590123"),
+            barcode: "590123",
+            createdAt: "2026-09-02T10:00:00.000Z",
+            lastAttemptAt: "2026-09-02T10:01:00.000Z",
+            attemptCount: 2,
+            resolvedProduct: product
+        )]
+
+        XCTAssertEqual(try roundTrip(workspace), workspace)
+    }
+
     func testNotesFixtureDecodesChecklistAndPolishText() throws {
         let workspace = try fixture("notes-workspace-v1", as: NotesWorkspace.self)
 
@@ -689,6 +825,28 @@ final class ContractFixtureTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testWorkspaceArchiveRejectsMalformedDataWithRecoveryMessage() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        do {
+            try await environment.importWorkspaceArchive(Data("{\"tasks\":\"broken\"}".utf8))
+            XCTFail("Malformed archive should be rejected")
+        } catch let error as RootineWorkspaceArchiveError {
+            XCTAssertEqual(error, .invalidArchive)
+            XCTAssertTrue(error.localizedDescription.contains("bieżących danych nie zmieniono"))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testAffairCategoryMigrationNeverEmitsUnknownWebValues() {
         XCTAssertEqual(AffairMatterCategory.canonical("dokumenty"), "dokumenty")
         XCTAssertEqual(AffairMatterCategory.canonical("Dokumenty"), "dokumenty")
@@ -768,6 +926,209 @@ final class ContractFixtureTests: XCTestCase {
         try Data("sentinel".utf8).write(to: outside.url, options: .atomic)
         try await store.deleteRecoveryFile(outside)
         XCTAssertEqual(try Data(contentsOf: outside.url), Data("sentinel".utf8))
+    }
+
+    func testRecoveryKindsKeepDiagnosticsSupportOnly() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-recovery-kinds-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "recovery-kinds-user", rootURL: root)
+
+        let archive = try await store.writeRecoveryCopy(
+            Data("full archive".utf8),
+            label: "before-import",
+            kind: .workspaceArchive
+        )
+        let diagnostic = try await store.writeRecoveryCopy(
+            Data("raw diagnostics".utf8),
+            label: "work-focus-corrupt",
+            kind: .diagnostic
+        )
+
+        let files = try await store.recoveryFiles()
+        XCTAssertTrue(files.contains(where: { $0.name == archive.name && $0.isRestorable }))
+        XCTAssertTrue(files.contains(where: { $0.name == diagnostic.name && !$0.isRestorable }))
+        XCTAssertEqual(WorkspaceRecoveryKind.infer(from: "work-focus-corrupt-123.json"), .diagnostic)
+        XCTAssertEqual(WorkspaceRecoveryKind.infer(from: "before-import-123.json"), .workspaceArchive)
+    }
+
+    func testBatchTransactionRollsBackWorkspaceAndPendingQueueTogether() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-transaction-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "transaction-user", rootURL: root)
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let oldWorkspace = TaskWorkspace(
+            version: 2,
+            updatedAt: timestamp,
+            tasks: [WorkspaceTask(id: 1, text: "Stary rekord", done: false, view: "dzis")],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        let newWorkspace = TaskWorkspace(
+            version: 2,
+            updatedAt: timestamp,
+            tasks: [WorkspaceTask(id: 2, text: "Nowy rekord", done: false, view: "dzis")],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        try await store.save(oldWorkspace, key: .tasks)
+        let oldPayload = try jsonValue(oldWorkspace)
+        let newPayload = try jsonValue(newWorkspace)
+        let oldMutation = PendingWorkspaceMutation(
+            id: "old-mutation",
+            storageKey: RootineStorageKey.tasks.rawValue,
+            payload: oldPayload,
+            contentHash: "old",
+            expectedRevision: 0,
+            createdAt: timestamp
+        )
+        let newMutation = PendingWorkspaceMutation(
+            id: "new-mutation",
+            storageKey: RootineStorageKey.tasks.rawValue,
+            payload: newPayload,
+            contentHash: "new",
+            expectedRevision: 1,
+            createdAt: timestamp
+        )
+        try await store.replacePendingMutations([oldMutation])
+
+        let transaction = try await store.beginBatchTransaction()
+        try await store.replaceWorkspaceBatch([
+            WorkspaceBatchDocument(key: .tasks, data: try JSONEncoder().encode(newWorkspace))
+        ])
+        try await store.replacePendingMutations([newMutation])
+        try await store.rollbackBatchTransaction(transaction)
+
+        let restoredWorkspace = try await store.load(TaskWorkspace.self, key: .tasks)
+        let restoredMutations = try await store.pendingMutations()
+        XCTAssertEqual(restoredWorkspace, oldWorkspace)
+        XCTAssertEqual(restoredMutations, [oldMutation])
+    }
+
+    func testStartupRecoveryRollsBackOrphanedTransactionButSkipsLiveOne() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-orphaned-transaction-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let liveStore = WorkspaceFileStore(userID: "orphaned-transaction-user", rootURL: root)
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let oldWorkspace = TaskWorkspace(
+            version: 2,
+            updatedAt: timestamp,
+            tasks: [WorkspaceTask(id: 11, text: "Stan przed przerwanym importem", done: false, view: "dzis")],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        let newWorkspace = TaskWorkspace(
+            version: 2,
+            updatedAt: timestamp,
+            tasks: [WorkspaceTask(id: 12, text: "Niepełny import", done: false, view: "dzis")],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        try await liveStore.save(oldWorkspace, key: .tasks)
+        let oldMutation = PendingWorkspaceMutation(
+            id: "orphan-old",
+            storageKey: RootineStorageKey.tasks.rawValue,
+            payload: try jsonValue(oldWorkspace),
+            contentHash: "orphan-old",
+            expectedRevision: 0,
+            createdAt: timestamp
+        )
+        let newMutation = PendingWorkspaceMutation(
+            id: "orphan-new",
+            storageKey: RootineStorageKey.tasks.rawValue,
+            payload: try jsonValue(newWorkspace),
+            contentHash: "orphan-new",
+            expectedRevision: 1,
+            createdAt: timestamp
+        )
+        try await liveStore.replacePendingMutations([oldMutation])
+
+        _ = try await liveStore.beginBatchTransaction()
+        try await liveStore.replaceWorkspaceBatch([
+            WorkspaceBatchDocument(key: .tasks, data: try JSONEncoder().encode(newWorkspace))
+        ])
+        try await liveStore.replacePendingMutations([newMutation])
+
+        // A foreground recovery scan must not touch the transaction currently
+        // owned by the live store.
+        let liveRecoveryCount = try await liveStore.recoverOrphanedBatchTransactions()
+        let liveWorkspace = try await liveStore.load(TaskWorkspace.self, key: .tasks)
+        XCTAssertEqual(liveRecoveryCount, 0)
+        XCTAssertEqual(liveWorkspace, newWorkspace)
+
+        // A new store models the next process launch: its in-memory active
+        // token is empty, so it restores the complete snapshot atomically.
+        let restartedStore = WorkspaceFileStore(userID: "orphaned-transaction-user", rootURL: root)
+        let restartedRecoveryCount = try await restartedStore.recoverOrphanedBatchTransactions()
+        let restartedWorkspace = try await restartedStore.load(TaskWorkspace.self, key: .tasks)
+        let restartedMutations = try await restartedStore.pendingMutations()
+        XCTAssertEqual(restartedRecoveryCount, 1)
+        XCTAssertEqual(restartedWorkspace, oldWorkspace)
+        XCTAssertEqual(restartedMutations, [oldMutation])
+    }
+
+    func testSportMappingDeduplicatesMalformedIDsAndCarriesUpdatedAt() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let duplicateA = SportWorkout(
+            id: "duplicate-workout",
+            title: "Pierwsza wersja",
+            date: "2026-09-02",
+            minutes: 20,
+            kind: "Bieg",
+            completed: true,
+            createdAt: timestamp,
+            updatedAt: "2026-09-02T10:01:00.000Z"
+        )
+        let duplicateB = SportWorkout(
+            id: "duplicate-workout",
+            title: "Ostatnia wersja",
+            date: "2026-09-02",
+            minutes: 30,
+            kind: "Bieg",
+            completed: true,
+            createdAt: timestamp,
+            updatedAt: "2026-09-02T10:02:00.000Z"
+        )
+        let payload = try RootineCanonicalWorkspaceMapping.payload(for: SportWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            workouts: [duplicateA, duplicateB]
+        ))
+        let decoded = try RootineCanonicalWorkspaceMapping.sportWorkspace(from: payload)
+
+        XCTAssertEqual(decoded.workouts.count, 1)
+        XCTAssertEqual(decoded.workouts.first?.title, duplicateB.title)
+        XCTAssertEqual(decoded.workouts.first?.updatedAt, duplicateB.updatedAt)
+        guard case .object(let object) = payload,
+              case .array(let history) = object["history"],
+              case .object(let record) = history.first,
+              case .string(let updatedAt) = record["updatedAt"] else {
+            return XCTFail("Sport history should retain a deterministic updatedAt")
+        }
+        XCTAssertEqual(updatedAt, duplicateB.updatedAt)
+    }
+
+    func testWorkSanitizationClearsInvalidFocusAndKeepsLastDuplicate() {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let first = WorkFocusSession(id: "focus", startedAt: timestamp, endedAt: timestamp, minutes: 10)
+        let last = WorkFocusSession(id: "focus", startedAt: timestamp, endedAt: timestamp, minutes: 20)
+        let malformed = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: "not-a-timestamp",
+            focusSessions: [first, last, WorkFocusSession(id: "", startedAt: timestamp, endedAt: timestamp, minutes: 4)]
+        )
+
+        let sanitized = rootineSanitizedWorkWorkspace(malformed)
+        XCTAssertNil(sanitized.activeFocusStartedAt)
+        XCTAssertEqual(sanitized.focusSessions.map(\.id), ["focus"])
+        XCTAssertEqual(sanitized.focusSessions.first?.minutes, 20)
     }
 
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {

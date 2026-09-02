@@ -762,16 +762,23 @@ private struct RootineDataCenterView: View {
                                 .font(.caption)
                                 .lineLimit(2)
                             Spacer()
-                            Button {
-                                restoreCandidate = file
-                                isConfirmingRestore = true
-                            } label: {
-                                Image(systemName: "arrow.counterclockwise")
-                                    .frame(width: 44, height: 44)
+                            if file.isRestorable {
+                                Button {
+                                    restoreCandidate = file
+                                    isConfirmingRestore = true
+                                } label: {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(RootineTheme.ColorToken.action)
+                                .accessibilityLabel("Przywróć kopię \(file.name)")
+                            } else {
+                                Label("Diagnostyka", systemImage: "stethoscope")
+                                    .font(.caption2)
+                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    .accessibilityHint("Plik pomocniczy dla wsparcia; nie można go przywrócić jako kopii danych.")
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(RootineTheme.ColorToken.action)
-                            .accessibilityLabel("Przywróć kopię \(file.name)")
                             Button(role: .destructive) {
                                 Task { await environment.deleteRecoveryFile(file) }
                             } label: {

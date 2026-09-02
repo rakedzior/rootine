@@ -280,6 +280,113 @@ struct NutritionValues: Codable, Equatable, Sendable {
     var fat: Double
 }
 
+/// The amount typed in the nutrition editor is the source of truth for a
+/// catalog entry. Keeping the parser next to the model makes the same
+/// amount/unit semantics available to the view and persistence layer.
+struct NutritionPortion: Equatable, Sendable {
+    let amount: Double?
+    let unit: String?
+
+    static func parse(
+        _ value: String,
+        fallbackAmount: Double? = nil,
+        fallbackUnit: String? = nil
+    ) -> NutritionPortion {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard !normalized.isEmpty else {
+            return NutritionPortion(amount: fallbackAmount, unit: fallbackUnit)
+        }
+
+        let tokens = normalized.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard let first = tokens.first else {
+            return NutritionPortion(amount: fallbackAmount, unit: fallbackUnit)
+        }
+
+        // Accept both “120 g” and compact input such as “120g”. A second
+        // numeric token is treated as a thousands separator ("1 250 ml").
+        var numericToken = first
+        var consumedTokens = 1
+        if tokens.count > 1,
+           Double(numericToken) != nil,
+           Double(tokens[1]) != nil {
+            numericToken += tokens[1]
+            consumedTokens = 2
+        }
+
+        let numericPrefix = numericToken.prefix { character in
+            character.isNumber || character == "." || character == "-"
+        }
+        guard let parsedAmount = Double(numericPrefix), parsedAmount >= 0 else {
+            return NutritionPortion(amount: fallbackAmount, unit: fallbackUnit)
+        }
+
+        var unitParts: [String] = []
+        let inlineUnit = String(numericToken.dropFirst(numericPrefix.count))
+        if !inlineUnit.isEmpty { unitParts.append(inlineUnit) }
+        if tokens.count > consumedTokens {
+            unitParts.append(contentsOf: tokens.dropFirst(consumedTokens))
+        }
+        let parsedUnit = unitParts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return NutritionPortion(
+            amount: parsedAmount,
+            unit: parsedUnit.isEmpty ? fallbackUnit : parsedUnit
+        )
+    }
+
+    /// Nutrition catalog values are expressed per 100 g/ml. Count-based
+    /// units (szt., porcja, etc.) are expressed per one item and scale by the
+    /// entered count.
+    static func multiplier(amount: Double?, unit: String?) -> Double {
+        guard let amount, amount >= 0 else { return 1 }
+        let normalizedUnit: String?
+        if let unit {
+            normalizedUnit = unit
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .split(whereSeparator: { $0.isWhitespace })
+                .first
+                .map(String.init)
+                .map { $0.replacingOccurrences(of: ".", with: "") }
+        } else {
+            normalizedUnit = nil
+        }
+        switch normalizedUnit {
+        case "g", "gram", "grams", "gramy", "ml", "millilitr", "millilitry":
+            return amount / 100
+        default:
+            return amount
+        }
+    }
+}
+
+struct NutritionBarcodeRequest: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var barcode: String
+    var createdAt: String
+    var lastAttemptAt: String? = nil
+    var attemptCount: Int = 0
+    /// A successful lookup stays durable until the user consumes it in the
+    /// add-entry flow. This prevents a background retry from finding a
+    /// product and then losing it before the person can act on the result.
+    var resolvedProduct: NutritionProduct? = nil
+}
+
+enum NutritionBarcode {
+    /// Keep only stable barcode characters so camera separators and scanner
+    /// whitespace cannot create duplicate pending requests.
+    static func normalized(_ value: String) -> String {
+        value
+            .uppercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    static func requestID(for barcode: String) -> String {
+        RootineLocalIdentifier.string(namespace: "nutrition-barcode", operationID: normalized(barcode))
+    }
+}
+
 struct NutritionEntry: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
@@ -405,6 +512,9 @@ struct NutritionWorkspace: Codable, Equatable, Sendable {
     var bodyMeasurements: [String: [BodyMeasurement]]? = nil
     var customMeals: [CustomMeal]? = nil
     var days: [String: NutritionDay]
+    /// A camera lookup is persisted with the nutrition workspace before any
+    /// network request. Optional keeps v6 payloads backward compatible.
+    var pendingBarcodeLookups: [NutritionBarcodeRequest]? = nil
 
     static let empty = NutritionWorkspace(
         version: 6,
@@ -414,7 +524,8 @@ struct NutritionWorkspace: Codable, Equatable, Sendable {
         weightMeasurements: [:],
         bodyMeasurements: [:],
         customMeals: [],
-        days: [:]
+        days: [:],
+        pendingBarcodeLookups: []
     )
 }
 
@@ -476,6 +587,9 @@ struct SportWorkout: Codable, Equatable, Identifiable, Sendable {
     var kind: String
     var completed: Bool
     var createdAt: String
+    /// Optional for backwards-compatible decoding of v1 native snapshots.
+    /// New mutations carry the same timestamp into canonical Sport records.
+    var updatedAt: String? = nil
 }
 
 struct SportWorkspace: Codable, Equatable, Sendable {
@@ -524,6 +638,33 @@ struct WorkWorkspace: Codable, Equatable, Sendable {
     var focusSessions: [WorkFocusSession]
 
     static let empty = WorkWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), activeFocusStartedAt: nil, focusSessions: [])
+}
+
+/// Normalizes the small Work projection at the persistence boundary. A
+/// malformed timestamp or session must not strand the Work screen in an
+/// active state, and duplicate IDs must not be allowed to fan out into
+/// duplicate canonical records. The last occurrence wins, matching the
+/// deterministic merge policy used for backend rows.
+func rootineSanitizedWorkWorkspace(_ workspace: WorkWorkspace) -> WorkWorkspace {
+    var sanitized = workspace
+    if let activeStart = workspace.activeFocusStartedAt,
+       RootineDate.date(from: activeStart) == nil
+    {
+        sanitized.activeFocusStartedAt = nil
+    }
+
+    var seenIDs = Set<String>()
+    var retained: [WorkFocusSession] = []
+    for session in workspace.focusSessions.reversed() {
+        guard !session.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              RootineDate.date(from: session.startedAt) != nil,
+              RootineDate.date(from: session.endedAt) != nil,
+              session.minutes >= 0,
+              seenIDs.insert(session.id).inserted else { continue }
+        retained.append(session)
+    }
+    sanitized.focusSessions = Array(retained.reversed())
+    return sanitized
 }
 
 struct TravelItineraryItem: Codable, Equatable, Identifiable, Sendable {

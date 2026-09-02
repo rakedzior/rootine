@@ -16,9 +16,49 @@ struct WorkspaceWriteReceipt: Sendable {
     fileprivate let replacementData: Data
 }
 
+/// Recovery entries are deliberately typed. Diagnostic snapshots are useful
+/// for support, but they are not complete archives and must never be offered
+/// as a restore source in the app UI.
+enum WorkspaceRecoveryKind: String, Codable, Equatable, Sendable {
+    case diagnostic
+    case workspaceArchive
+
+    var isRestorable: Bool {
+        self == .workspaceArchive
+    }
+
+    static func infer(from name: String) -> WorkspaceRecoveryKind {
+        let normalized = name.lowercased()
+        let archivePrefixes = [
+            "archive-",
+            "before-import-",
+            "manual-export-",
+            "workspace-archive-"
+        ]
+        return archivePrefixes.contains(where: normalized.hasPrefix) ? .workspaceArchive : .diagnostic
+    }
+}
+
 struct WorkspaceRecoveryFile: Equatable, Sendable {
     let name: String
     let url: URL
+    let kind: WorkspaceRecoveryKind
+
+    init(name: String, url: URL, kind: WorkspaceRecoveryKind? = nil) {
+        self.name = name
+        self.url = url
+        self.kind = kind ?? WorkspaceRecoveryKind.infer(from: name)
+    }
+
+    var isRestorable: Bool {
+        kind.isRestorable
+    }
+}
+
+/// Opaque token for an on-disk transaction. The token never exposes paths;
+/// WorkspaceFileStore validates it before reading or removing a staging area.
+struct WorkspaceBatchTransaction: Equatable, Sendable {
+    fileprivate let id: String
 }
 
 struct WorkspaceBatchDocument: Sendable {
@@ -39,6 +79,11 @@ actor WorkspaceFileStore {
     private let rootURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    /// An in-memory guard protects a transaction that is currently being
+    /// prepared or committed. A fresh AppEnvironment starts with no active
+    /// token, so a later launch can safely recover any complete snapshot left
+    /// behind by a crashed import.
+    private var activeTransactionID: String?
 
     init(userID: String, fileManager: FileManager = .default, rootURL: URL? = nil) {
         self.fileManager = fileManager
@@ -79,6 +124,199 @@ actor WorkspaceFileStore {
 
     func save<T: Encodable & Sendable>(_ value: T, key: RootineStorageKey) throws {
         _ = try saveWithReceipt(value, key: key)
+    }
+
+    /// Captures the local workspace directory and pending queue before a
+    /// multi-file import. The caller must either commit or roll back the
+    /// returned token; no partially written import is considered successful.
+    func beginBatchTransaction() throws -> WorkspaceBatchTransaction {
+        try ensureDirectories()
+        try fileManager.createDirectory(at: transactionsDirectory, withIntermediateDirectories: true)
+        guard activeTransactionID == nil else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+        let transaction = WorkspaceBatchTransaction(id: UUID().uuidString)
+        let transactionURL = try validatedTransactionURL(for: transaction, requireExisting: false)
+        try fileManager.createDirectory(at: transactionURL, withIntermediateDirectories: true)
+        do {
+            try fileManager.copyItem(at: workspaceDirectory, to: transactionURL.appendingPathComponent("Workspaces", isDirectory: true))
+            if fileManager.fileExists(atPath: queueURL.path) {
+                try fileManager.copyItem(at: queueURL, to: transactionURL.appendingPathComponent("pending-mutations.json"))
+            } else {
+                try Data().write(to: transactionURL.appendingPathComponent("queue-absent"), options: .atomic)
+            }
+            activeTransactionID = transaction.id
+            return transaction
+        } catch {
+            try? fileManager.removeItem(at: transactionURL)
+            throw error
+        }
+    }
+
+    /// Restores the exact bytes captured by `beginBatchTransaction`. The
+    /// swap keeps a temporary backup until both workspace and queue are back
+    /// in place, so a failed restore can still put the previous state back.
+    func rollbackBatchTransaction(_ transaction: WorkspaceBatchTransaction) throws {
+        defer {
+            if activeTransactionID == transaction.id {
+                activeTransactionID = nil
+            }
+        }
+        let transactionURL = try validatedTransactionURL(for: transaction)
+        if isCommittedTransaction(at: transactionURL) {
+            // A commit marker is durable before cleanup. If the process was
+            // interrupted while removing the transaction directory, the
+            // imported workspace is already authoritative; never roll it back
+            // to the pre-import snapshot.
+            try fileManager.removeItem(at: transactionURL)
+            return
+        }
+        let snapshotWorkspaceURL = transactionURL.appendingPathComponent("Workspaces", isDirectory: true)
+        guard fileManager.fileExists(atPath: snapshotWorkspaceURL.path) else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+
+        let rollbackID = UUID().uuidString
+        let restoreWorkspaceURL = rootURL.appendingPathComponent("Workspaces.rollback-\(rollbackID)", isDirectory: true)
+        let backupWorkspaceURL = rootURL.appendingPathComponent("Workspaces.rollback-backup-\(rollbackID)", isDirectory: true)
+        let restoreQueueURL = rootURL.appendingPathComponent("pending-mutations.rollback-\(rollbackID).json")
+        let backupQueueURL = rootURL.appendingPathComponent("pending-mutations.rollback-backup-\(rollbackID).json")
+        let snapshotQueueURL = transactionURL.appendingPathComponent("pending-mutations.json")
+        let snapshotQueueWasAbsent = fileManager.fileExists(atPath: transactionURL.appendingPathComponent("queue-absent").path)
+
+        do {
+            try fileManager.copyItem(at: snapshotWorkspaceURL, to: restoreWorkspaceURL)
+            if fileManager.fileExists(atPath: snapshotQueueURL.path) {
+                try fileManager.copyItem(at: snapshotQueueURL, to: restoreQueueURL)
+            }
+        } catch {
+            // Preparation happens before the swap. Remove any temporary copy
+            // created by the first step so a failed queue snapshot cannot
+            // accumulate rollback directories in the account container.
+            try? fileManager.removeItem(at: restoreWorkspaceURL)
+            try? fileManager.removeItem(at: restoreQueueURL)
+            throw error
+        }
+
+        var workspaceMoved = false
+        var queueMoved = false
+        var workspaceRestored = false
+        do {
+            if fileManager.fileExists(atPath: workspaceDirectory.path) {
+                try fileManager.moveItem(at: workspaceDirectory, to: backupWorkspaceURL)
+                workspaceMoved = true
+            }
+            try fileManager.moveItem(at: restoreWorkspaceURL, to: workspaceDirectory)
+            workspaceRestored = true
+
+            if fileManager.fileExists(atPath: queueURL.path) {
+                try fileManager.moveItem(at: queueURL, to: backupQueueURL)
+                queueMoved = true
+            }
+            if snapshotQueueWasAbsent {
+                // The old transaction had no queue; leave the current queue
+                // absent rather than manufacturing an empty mutation file.
+                try? fileManager.removeItem(at: queueURL)
+            } else {
+                try fileManager.moveItem(at: restoreQueueURL, to: queueURL)
+            }
+
+            try? fileManager.removeItem(at: backupWorkspaceURL)
+            try? fileManager.removeItem(at: backupQueueURL)
+            try? fileManager.removeItem(at: transactionURL)
+        } catch {
+            // Put whichever side was moved back before surfacing the failure.
+            if workspaceRestored, fileManager.fileExists(atPath: workspaceDirectory.path) {
+                try? fileManager.removeItem(at: workspaceDirectory)
+            }
+            if workspaceMoved, fileManager.fileExists(atPath: backupWorkspaceURL.path) {
+                if fileManager.fileExists(atPath: workspaceDirectory.path) {
+                    try? fileManager.removeItem(at: workspaceDirectory)
+                }
+                try? fileManager.moveItem(at: backupWorkspaceURL, to: workspaceDirectory)
+            }
+            if queueMoved, fileManager.fileExists(atPath: backupQueueURL.path) {
+                if fileManager.fileExists(atPath: queueURL.path) {
+                    try? fileManager.removeItem(at: queueURL)
+                }
+                try? fileManager.moveItem(at: backupQueueURL, to: queueURL)
+            }
+            try? fileManager.removeItem(at: restoreWorkspaceURL)
+            try? fileManager.removeItem(at: restoreQueueURL)
+            throw error
+        }
+    }
+
+    func commitBatchTransaction(_ transaction: WorkspaceBatchTransaction) throws {
+        defer {
+            if activeTransactionID == transaction.id {
+                activeTransactionID = nil
+            }
+        }
+        let transactionURL = try validatedTransactionURL(for: transaction)
+        guard fileManager.fileExists(atPath: transactionURL.path) else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+        let markerURL = transactionURL.appendingPathComponent("committed")
+        try protectedWrite(Data("committed\n".utf8), to: markerURL)
+        // Cleanup is deliberately best effort. The marker makes a crash
+        // between this write and directory removal safe and idempotent.
+        try? fileManager.removeItem(at: transactionURL)
+    }
+
+    /// Recovers snapshots left by a process that terminated during an import.
+    /// Only complete transaction directories are considered. Malformed or
+    /// partial entries remain untouched for diagnostics, while the token owned
+    /// by this live store is always skipped so a foreground import cannot be
+    /// rolled back from underneath itself.
+    @discardableResult
+    func recoverOrphanedBatchTransactions() throws -> Int {
+        try ensureDirectories()
+        guard fileManager.fileExists(atPath: transactionsDirectory.path) else { return 0 }
+
+        let entries = try fileManager.contentsOfDirectory(
+            at: transactionsDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        )
+        var recovered = 0
+        for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
+            guard let id = UUID(uuidString: entry.lastPathComponent), id.uuidString == entry.lastPathComponent else { continue }
+            guard id.uuidString != activeTransactionID else { continue }
+
+            if isCommittedTransaction(at: entry) {
+                // The data swap and queue commit completed before the process
+                // stopped; only the cleanup directory is left behind.
+                try? fileManager.removeItem(at: entry)
+                continue
+            }
+            // A malformed marker is left untouched for support diagnostics.
+            // Never guess whether an import was committed from partial bytes.
+            let markerURL = entry.appendingPathComponent("committed")
+            if fileManager.fileExists(atPath: markerURL.path) { continue }
+
+            let snapshotWorkspaceURL = entry.appendingPathComponent("Workspaces", isDirectory: true)
+            let snapshotQueueURL = entry.appendingPathComponent("pending-mutations.json")
+            let queueAbsentURL = entry.appendingPathComponent("queue-absent")
+            let hasQueueSnapshot = fileManager.fileExists(atPath: snapshotQueueURL.path)
+            let queueWasAbsent = fileManager.fileExists(atPath: queueAbsentURL.path)
+            let snapshotValues = try? snapshotWorkspaceURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard snapshotValues?.isDirectory == true,
+                  snapshotValues?.isSymbolicLink != true,
+                  hasQueueSnapshot != queueWasAbsent else { continue }
+
+            do {
+                try rollbackBatchTransaction(WorkspaceBatchTransaction(id: id.uuidString))
+                recovered += 1
+            } catch {
+                // A partial transaction is deliberately left in place. The
+                // next launch can retry after the file system is healthy,
+                // while the current workspace remains untouched.
+            }
+        }
+        return recovered
     }
 
     /// Stages every workspace document before swapping the directory. This
@@ -238,14 +476,20 @@ actor WorkspaceFileStore {
     /// Saves a user-readable recovery copy without touching the active
     /// workspace. Import/export uses this before replacing local documents.
     @discardableResult
-    func writeRecoveryCopy(_ data: Data, label: String) throws -> WorkspaceRecoveryFile {
+    func writeRecoveryCopy(
+        _ data: Data,
+        label: String,
+        kind: WorkspaceRecoveryKind? = nil
+    ) throws -> WorkspaceRecoveryFile {
         try ensureDirectories()
         let safeLabel = safeName(label).isEmpty ? "workspace" : safeName(label)
+        let resolvedKind = kind ?? WorkspaceRecoveryKind.infer(from: safeLabel)
+        let prefix = resolvedKind == .workspaceArchive ? "archive" : "diagnostic"
         let url = recoveryDirectory.appendingPathComponent(
-            "\(safeLabel)-\(UUID().uuidString).json"
+            "\(prefix)-\(safeLabel)-\(UUID().uuidString).json"
         )
         try protectedWrite(data, to: url)
-        return WorkspaceRecoveryFile(name: url.lastPathComponent, url: url)
+        return WorkspaceRecoveryFile(name: url.lastPathComponent, url: url, kind: resolvedKind)
     }
 
     func deleteRecoveryFile(_ file: WorkspaceRecoveryFile) throws {
@@ -265,6 +509,7 @@ actor WorkspaceFileStore {
 
     private var workspaceDirectory: URL { rootURL.appendingPathComponent("Workspaces", isDirectory: true) }
     private var recoveryDirectory: URL { rootURL.appendingPathComponent("Recovery", isDirectory: true) }
+    private var transactionsDirectory: URL { rootURL.appendingPathComponent("Transactions", isDirectory: true) }
     private var queueURL: URL { rootURL.appendingPathComponent("pending-mutations.json") }
     private var metadataURL: URL { rootURL.appendingPathComponent("sync-metadata.json") }
 
@@ -279,6 +524,31 @@ actor WorkspaceFileStore {
     private func ensureDirectories() throws {
         try fileManager.createDirectory(at: workspaceDirectory, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: recoveryDirectory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: transactionsDirectory, withIntermediateDirectories: true)
+    }
+
+    private func validatedTransactionURL(
+        for transaction: WorkspaceBatchTransaction,
+        requireExisting: Bool = true
+    ) throws -> URL {
+        guard UUID(uuidString: transaction.id) != nil else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+        let candidate = transactionsDirectory.appendingPathComponent(transaction.id, isDirectory: true)
+        let rootPath = transactionsDirectory.standardizedFileURL.path
+        guard candidate.standardizedFileURL.path.hasPrefix(rootPath + "/") else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+        guard !requireExisting || fileManager.fileExists(atPath: candidate.path) else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+        return candidate
+    }
+
+    private func isCommittedTransaction(at transactionURL: URL) -> Bool {
+        let markerURL = transactionURL.appendingPathComponent("committed")
+        guard let data = try? Data(contentsOf: markerURL) else { return false }
+        return data == Data("committed\n".utf8)
     }
 
     private func loadMetadata() throws -> SyncMetadata {
@@ -295,7 +565,7 @@ actor WorkspaceFileStore {
 
     private func quarantine(data: Data, sourceURL: URL, label: String) {
         let recoveryURL = recoveryDirectory.appendingPathComponent(
-            "\(label)-corrupt-\(UUID().uuidString).json"
+            "diagnostic-\(label)-corrupt-\(UUID().uuidString).json"
         )
         do {
             try protectedWrite(data, to: recoveryURL)
@@ -318,4 +588,5 @@ actor WorkspaceFileStore {
 
 enum WorkspaceFileStoreError: Error, Equatable {
     case unsupportedVersion(key: String, found: Int, supported: Int)
+    case invalidTransaction
 }

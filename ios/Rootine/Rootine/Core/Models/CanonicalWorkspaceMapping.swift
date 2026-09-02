@@ -27,7 +27,8 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     static func payload(for workspace: SportWorkspace) throws -> JSONValue {
-        let history = workspace.workouts.filter(\.completed).map { workout in
+        let workouts = deduplicatedSportWorkouts(workspace.workouts)
+        let history = workouts.filter(\.completed).map { workout in
             CanonicalSportHistory(
                 id: workout.id,
                 title: workout.title,
@@ -35,10 +36,11 @@ enum RootineCanonicalWorkspaceMapping {
                 date: validDate(workout.date),
                 plannedDurationMinutes: max(1, workout.minutes),
                 durationMinutes: max(1, workout.minutes),
-                status: "completed"
+                status: "completed",
+                updatedAt: workout.updatedAt ?? workspace.updatedAt
             )
         }
-        let scheduled = workspace.workouts.filter { !$0.completed }.map { workout in
+        let scheduled = workouts.filter { !$0.completed }.map { workout in
             CanonicalSportScheduled(
                 id: workout.id,
                 planId: "native-ios",
@@ -50,7 +52,7 @@ enum RootineCanonicalWorkspaceMapping {
                 contentSnapshot: [],
                 notes: workout.kind,
                 createdAt: workout.createdAt,
-                updatedAt: workout.createdAt
+                updatedAt: workout.updatedAt ?? workout.createdAt
             )
         }
         let sessions = history.map { item in
@@ -63,11 +65,12 @@ enum RootineCanonicalWorkspaceMapping {
                 plannedDurationMinutes: item.plannedDurationMinutes,
                 durationMinutes: item.durationMinutes,
                 status: "completed",
-                exercises: []
+                exercises: [],
+                updatedAt: item.updatedAt ?? workspace.updatedAt
             )
         }
-        let outcomes = Dictionary(uniqueKeysWithValues: history.map { item in
-            (item.id, CanonicalSportOutcome(status: "completed", sessionId: item.id, updatedAt: workspace.updatedAt))
+        let outcomes = lastValueByKey(history.map { item in
+            (item.id, CanonicalSportOutcome(status: "completed", sessionId: item.id, updatedAt: item.updatedAt ?? workspace.updatedAt))
         })
         let nativeCycles = try canonicalCycles(for: scheduled, updatedAt: workspace.updatedAt)
         return try jsonValue(CanonicalSportWorkspace(
@@ -88,11 +91,12 @@ enum RootineCanonicalWorkspaceMapping {
 
     static func sportWorkspace(from payload: JSONValue) throws -> SportWorkspace {
         let canonical = try decode(CanonicalSportWorkspace.self, from: payload)
-        let sessionWorkoutIDs = Dictionary(uniqueKeysWithValues: canonical.sessions.map { ($0.id, $0.cycleWorkoutId ?? $0.id) })
+        let sessionWorkoutIDs = lastValueByKey(canonical.sessions.map { ($0.id, $0.cycleWorkoutId ?? $0.id) })
         var workouts: [SportWorkout] = []
         var seen = Set<String>()
         for item in canonical.history {
             let workoutID = sessionWorkoutIDs[item.id] ?? item.id
+            guard !workoutID.isEmpty, seen.insert(workoutID).inserted else { continue }
             workouts.append(SportWorkout(
                 id: workoutID,
                 title: item.title,
@@ -100,11 +104,12 @@ enum RootineCanonicalWorkspaceMapping {
                 minutes: max(1, item.durationMinutes, item.plannedDurationMinutes ?? 1),
                 kind: kind(for: item.discipline),
                 completed: item.status == "completed",
-                createdAt: canonicalSportUpdatedAt(canonical)
+                createdAt: canonicalSportUpdatedAt(canonical),
+                updatedAt: item.updatedAt
             ))
-            seen.insert(workoutID)
         }
-        for item in canonical.scheduledWorkouts ?? [] where !seen.contains(item.id) {
+        for item in canonical.scheduledWorkouts ?? [] {
+            guard !item.id.isEmpty, seen.insert(item.id).inserted else { continue }
             workouts.append(SportWorkout(
                 id: item.id,
                 title: item.name,
@@ -112,13 +117,13 @@ enum RootineCanonicalWorkspaceMapping {
                 minutes: max(1, item.plannedDuration),
                 kind: kind(for: item.sportCategory),
                 completed: item.status == "completed",
-                createdAt: item.createdAt
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt
             ))
-            seen.insert(item.id)
         }
         for item in canonical.sessions {
             let workoutID = item.cycleWorkoutId ?? item.id
-            guard !seen.contains(workoutID) else { continue }
+            guard !workoutID.isEmpty, seen.insert(workoutID).inserted else { continue }
             workouts.append(SportWorkout(
                 id: workoutID,
                 title: item.title,
@@ -126,13 +131,14 @@ enum RootineCanonicalWorkspaceMapping {
                 minutes: max(1, item.durationMinutes, item.plannedDurationMinutes ?? 1),
                 kind: kind(for: item.discipline),
                 completed: item.status == "completed",
-                createdAt: canonicalSportUpdatedAt(canonical)
+                createdAt: canonicalSportUpdatedAt(canonical),
+                updatedAt: item.updatedAt
             ))
-            seen.insert(workoutID)
         }
         for cycleValue in canonical.cycles {
             guard let cycle = try? decode(CanonicalSportCycle.self, from: cycleValue) else { continue }
-            for item in cycle.workouts where !seen.contains(item.id) {
+            for item in cycle.workouts where !item.id.isEmpty {
+                guard seen.insert(item.id).inserted else { continue }
                 workouts.append(SportWorkout(
                     id: item.id,
                     title: item.title,
@@ -140,9 +146,9 @@ enum RootineCanonicalWorkspaceMapping {
                     minutes: max(1, item.durationMinutes),
                     kind: kind(for: item.discipline),
                     completed: false,
-                    createdAt: cycle.updatedAt
+                    createdAt: cycle.updatedAt,
+                    updatedAt: cycle.updatedAt
                 ))
-                seen.insert(item.id)
             }
         }
         return SportWorkspace(version: 1, updatedAt: canonicalSportUpdatedAt(canonical), workouts: workouts)
@@ -153,22 +159,25 @@ enum RootineCanonicalWorkspaceMapping {
         let projectedPayload = try payload(for: workspace)
         let projected = try objectValue(projectedPayload)
         let canonical = try decode(CanonicalSportWorkspace.self, from: base)
-        let nativeIDs = Set(workspace.workouts.map(\.id))
+        let nativeIDs = Set(deduplicatedSportWorkouts(workspace.workouts).map(\.id))
         let originalNativeIDs = Set((try? sportWorkspace(from: base))?.workouts.map(\.id) ?? [])
-        let sessionIDsByWorkoutID: [String: String] = Dictionary(uniqueKeysWithValues: canonical.sessions.compactMap { session in
+        let sessionIDsByWorkoutID: [String: String] = lastValueByKey(canonical.sessions.compactMap { session in
             guard let workoutID = session.cycleWorkoutId else { return nil }
             return (workoutID, session.id)
         })
         let managedWorkoutIDs = originalNativeIDs.union(nativeIDs)
         let managedRecordIDs = managedWorkoutIDs.union(sessionIDsByWorkoutID.values)
-        let workoutIDBySessionID: [String: String] = Dictionary(uniqueKeysWithValues: sessionIDsByWorkoutID.map { ($0.value, $0.key) })
+        let workoutIDBySessionID: [String: String] = lastValueByKey(canonical.sessions.compactMap { session in
+            guard let workoutID = session.cycleWorkoutId else { return nil }
+            return (session.id, workoutID)
+        })
         let preservedHistoryIDs = Set(canonical.history.filter { $0.status != "completed" && nativeIDs.contains(workoutIDBySessionID[$0.id] ?? $0.id) }.map(\.id)).intersection(managedRecordIDs)
         let preservedSessionIDs = Set(canonical.sessions.filter { $0.status != "completed" && nativeIDs.contains(workoutIDBySessionID[$0.id] ?? $0.id) }.map(\.id)).intersection(managedRecordIDs)
         let preservedWorkoutIDs = Set(preservedHistoryIDs.union(preservedSessionIDs).map { workoutIDBySessionID[$0] ?? $0 }).intersection(nativeIDs)
         let projectedHistory = remappedRecordIDs(projected["history"], using: sessionIDsByWorkoutID)
         let projectedSessions = remappedRecordIDs(projected["sessions"], using: sessionIDsByWorkoutID)
-        root["history"] = mergedSportRecords(existing: root["history"], projected: projectedHistory, managedIDs: managedRecordIDs, preservedIDs: preservedHistoryIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status"])
-        root["sessions"] = mergedSportRecords(existing: root["sessions"], projected: projectedSessions, managedIDs: managedRecordIDs, preservedIDs: preservedSessionIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status"])
+        root["history"] = mergedSportRecords(existing: root["history"], projected: projectedHistory, managedIDs: managedRecordIDs, preservedIDs: preservedHistoryIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status", "updatedAt"])
+        root["sessions"] = mergedSportRecords(existing: root["sessions"], projected: projectedSessions, managedIDs: managedRecordIDs, preservedIDs: preservedSessionIDs, controlledKeys: ["id", "title", "discipline", "date", "plannedDurationMinutes", "durationMinutes", "status", "updatedAt"])
         root["scheduledWorkouts"] = mergedSportRecords(existing: root["scheduledWorkouts"], projected: projected["scheduledWorkouts"], managedIDs: managedWorkoutIDs, preservedIDs: [], controlledKeys: ["id", "date", "name", "sportCategory", "plannedDuration"])
         if var outcomes = objectValueIfPresent(root["workoutOutcomes"]) {
             if let projectedOutcomes = objectValueIfPresent(projected["workoutOutcomes"]) {
@@ -233,7 +242,7 @@ enum RootineCanonicalWorkspaceMapping {
         let categories = [
             CanonicalGoalCategory(id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle")
         ]
-        let goals = workspace.goals.map { goal in
+        let goals = deduplicatedGoals(workspace.goals).map { goal in
             let start = validDate(String(goal.createdAt.prefix(10)))
             let progress = CanonicalGoalProgress(
                 id: "ios-progress-\(goal.id)",
@@ -288,7 +297,7 @@ enum RootineCanonicalWorkspaceMapping {
                 updatedAt: goal.updatedAt
             )
         }
-        return GoalsWorkspace(version: 1, updatedAt: canonicalUpdatedAt(canonical.goals), goals: goals)
+        return GoalsWorkspace(version: 1, updatedAt: canonicalUpdatedAt(canonical.goals), goals: deduplicatedGoals(goals))
     }
 
     static func mergedGoalsPayload(for workspace: GoalsWorkspace, onto base: JSONValue) throws -> JSONValue {
@@ -296,7 +305,7 @@ enum RootineCanonicalWorkspaceMapping {
         let projectedPayload = try payload(for: workspace)
         let projected = try objectValue(projectedPayload)
         let nativeGoals = dictionaryByID(projected["goals"])
-        let canonicalGoals = arrayValue(root["goals"])
+        let canonicalGoals = deduplicatedRecords(arrayValue(root["goals"]))
         let decodedCanonical = try decode(CanonicalGoalsWorkspace.self, from: base)
         let decodedNative = try decode(CanonicalGoalsWorkspace.self, from: projectedPayload)
         var existingIDs = Set<String>()
@@ -330,16 +339,16 @@ enum RootineCanonicalWorkspaceMapping {
         }
         var allGoals = mergedGoals
         if let projectedGoalValues = projected["goals"], case .array(let values) = projectedGoalValues {
-            allGoals.append(contentsOf: values.filter { value in
+            allGoals.append(contentsOf: deduplicatedRecords(values).filter { value in
                 guard let id = stringValue(objectValueIfPresent(value)?["id"]) else { return false }
                 return !existingIDs.contains(id)
             })
         }
         root["goals"] = .array(allGoals)
         if !decodedCanonical.categories.contains(where: { $0.id == "personal" }), let categories = projected["categories"] {
-            var currentCategories = arrayValue(root["categories"])
-            if case .array(let projectedCategories) = categories { currentCategories.append(contentsOf: projectedCategories) }
-            root["categories"] = .array(currentCategories)
+            var currentCategories = deduplicatedRecords(arrayValue(root["categories"]))
+            if case .array(let projectedCategories) = categories { currentCategories.append(contentsOf: deduplicatedRecords(projectedCategories)) }
+            root["categories"] = .array(deduplicatedRecords(currentCategories))
         }
         return .object(root)
     }
@@ -352,7 +361,7 @@ enum RootineCanonicalWorkspaceMapping {
             projects: [],
             tasks: [],
             activeFocusStartedAt: workspace.activeFocusStartedAt,
-            focusSessions: workspace.focusSessions
+            focusSessions: deduplicatedWorkFocusSessions(workspace.focusSessions)
         ))
     }
 
@@ -362,7 +371,7 @@ enum RootineCanonicalWorkspaceMapping {
             version: 1,
             updatedAt: canonical.updatedAt,
             activeFocusStartedAt: canonical.activeFocusStartedAt,
-            focusSessions: canonical.focusSessions ?? []
+            focusSessions: deduplicatedWorkFocusSessions(canonical.focusSessions ?? [])
         )
     }
 
@@ -375,13 +384,17 @@ enum RootineCanonicalWorkspaceMapping {
             root.removeValue(forKey: "activeFocusStartedAt")
         }
         if !workspace.focusSessions.isEmpty || root["focusSessions"] != nil {
-            root["focusSessions"] = try jsonValue(workspace.focusSessions)
+            if workspace.focusSessions.isEmpty {
+                root["focusSessions"] = .array(deduplicatedRecords(arrayValue(root["focusSessions"])))
+            } else {
+                root["focusSessions"] = try jsonValue(deduplicatedWorkFocusSessions(workspace.focusSessions))
+            }
         }
         return .object(root)
     }
 
     static func payload(for workspace: TravelWorkspace) throws -> JSONValue {
-        let trips = workspace.trips.map { trip in
+        let trips = deduplicatedTravelTrips(workspace.trips).map { trip in
             let dates = travelDates(trip.dateRange, createdAt: trip.createdAt)
             return CanonicalTravelTrip(
                 id: trip.id,
@@ -423,7 +436,7 @@ enum RootineCanonicalWorkspaceMapping {
                 updatedAt: canonical.updatedAt
             )
         }
-        return TravelWorkspace(version: 1, updatedAt: canonical.updatedAt, trips: trips)
+        return TravelWorkspace(version: 1, updatedAt: canonical.updatedAt, trips: deduplicatedTravelTrips(trips))
     }
 
     static func mergedTravelPayload(for workspace: TravelWorkspace, onto base: JSONValue) throws -> JSONValue {
@@ -431,7 +444,7 @@ enum RootineCanonicalWorkspaceMapping {
         let projected = try objectValue(payload(for: workspace))
         let nativeTrips = dictionaryByID(projected["trips"])
         let originalNative = try? travelWorkspace(from: base)
-        let trips = arrayValue(root["trips"]).compactMap { value -> JSONValue? in
+        let trips = deduplicatedRecords(arrayValue(root["trips"])).compactMap { value -> JSONValue? in
             guard var trip = objectValueIfPresent(value), let id = stringValue(trip["id"]), let native = nativeTrips[id] else {
                 // Native projection contains every canonical trip; a missing
                 // id is a native deletion, while nested web-only fields stay
@@ -454,7 +467,9 @@ enum RootineCanonicalWorkspaceMapping {
         }
         let existingIDs = Set(trips.compactMap { stringValue(objectValueIfPresent($0)?["id"]) })
         var allTrips = trips
-        if case .array(let values) = projected["trips"] { allTrips.append(contentsOf: values.filter { !existingIDs.contains(stringValue(objectValueIfPresent($0)?["id"]) ?? "") }) }
+        if case .array(let values) = projected["trips"] {
+            allTrips.append(contentsOf: deduplicatedRecords(values).filter { !existingIDs.contains(stringValue(objectValueIfPresent($0)?["id"]) ?? "") })
+        }
         root["trips"] = .array(allTrips)
         root["updatedAt"] = .string(workspace.updatedAt)
         return .object(root)
@@ -466,13 +481,18 @@ enum RootineCanonicalWorkspaceMapping {
             entries: [],
             updatedAt: workspace.updatedAt,
             checkIns: workspace.checkIns,
-            reminders: workspace.reminders
+            reminders: deduplicatedHealthReminders(workspace.reminders)
         ))
     }
 
     static func healthWorkspace(from payload: JSONValue) throws -> HealthWorkspace {
         let canonical = try decode(CanonicalHealthWorkspace.self, from: payload)
-        return HealthWorkspace(version: 1, updatedAt: canonical.updatedAt, checkIns: canonical.checkIns ?? [:], reminders: canonical.reminders ?? [])
+        return HealthWorkspace(
+            version: 1,
+            updatedAt: canonical.updatedAt,
+            checkIns: canonical.checkIns ?? [:],
+            reminders: deduplicatedHealthReminders(canonical.reminders ?? [])
+        )
     }
 
     static func mergedHealthPayload(for workspace: HealthWorkspace, onto base: JSONValue) throws -> JSONValue {
@@ -482,7 +502,11 @@ enum RootineCanonicalWorkspaceMapping {
             root["checkIns"] = try jsonValue(workspace.checkIns)
         }
         if !workspace.reminders.isEmpty || root["reminders"] != nil {
-            root["reminders"] = try jsonValue(workspace.reminders)
+            if workspace.reminders.isEmpty {
+                root["reminders"] = .array(deduplicatedRecords(arrayValue(root["reminders"])))
+            } else {
+                root["reminders"] = try jsonValue(deduplicatedHealthReminders(workspace.reminders))
+            }
         }
         return .object(root)
     }
@@ -518,6 +542,90 @@ enum RootineCanonicalWorkspaceMapping {
         }
     }
 
+    /// Keeps the final occurrence for duplicate IDs while preserving the
+    /// order of the retained records. The unique-keys initializer traps on
+    /// malformed backend payloads; a deterministic last-write-wins policy
+    /// keeps reconciliation recoverable instead.
+    private static func lastValueByKey<Value>(_ pairs: [(String, Value)]) -> [String: Value] {
+        pairs.reduce(into: [String: Value]()) { result, pair in
+            guard !pair.0.isEmpty else { return }
+            result[pair.0] = pair.1
+        }
+    }
+
+    private static func deduplicatedSportWorkouts(_ workouts: [SportWorkout]) -> [SportWorkout] {
+        var seen = Set<String>()
+        var retained: [SportWorkout] = []
+        for workout in workouts.reversed() {
+            guard !workout.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  seen.insert(workout.id).inserted else { continue }
+            retained.append(workout)
+        }
+        return Array(retained.reversed())
+    }
+
+    private static func deduplicatedWorkFocusSessions(_ sessions: [WorkFocusSession]) -> [WorkFocusSession] {
+        var seen = Set<String>()
+        var retained: [WorkFocusSession] = []
+        for session in sessions.reversed() {
+            guard !session.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  seen.insert(session.id).inserted else { continue }
+            retained.append(session)
+        }
+        return Array(retained.reversed())
+    }
+
+    private static func deduplicatedGoals(_ goals: [GoalRecord]) -> [GoalRecord] {
+        var seen = Set<String>()
+        var retained: [GoalRecord] = []
+        for goal in goals.reversed() {
+            guard !goal.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  seen.insert(goal.id).inserted else { continue }
+            retained.append(goal)
+        }
+        return Array(retained.reversed())
+    }
+
+    private static func deduplicatedTravelTrips(_ trips: [TravelRecord]) -> [TravelRecord] {
+        var seen = Set<String>()
+        var retained: [TravelRecord] = []
+        for trip in trips.reversed() {
+            guard !trip.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  seen.insert(trip.id).inserted else { continue }
+            retained.append(trip)
+        }
+        return Array(retained.reversed())
+    }
+
+    private static func deduplicatedHealthReminders(_ reminders: [HealthReminder]) -> [HealthReminder] {
+        var seen = Set<String>()
+        var retained: [HealthReminder] = []
+        for reminder in reminders.reversed() {
+            guard !reminder.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  seen.insert(reminder.id).inserted else { continue }
+            retained.append(reminder)
+        }
+        return Array(retained.reversed())
+    }
+
+    private static func deduplicatedRecords(_ records: [JSONValue]) -> [JSONValue] {
+        var seen = Set<String>()
+        var retained: [JSONValue] = []
+        for record in records.reversed() {
+            guard let id = stringValue(objectValueIfPresent(record)?["id"]) else {
+                retained.append(record)
+                continue
+            }
+            guard !id.isEmpty else {
+                retained.append(record)
+                continue
+            }
+            guard seen.insert(id).inserted else { continue }
+            retained.append(record)
+        }
+        return Array(retained.reversed())
+    }
+
     private static func remappedRecordIDs(_ value: JSONValue?, using mapping: [String: String]) -> JSONValue {
         .array(arrayValue(value).map { record in
             guard var object = objectValueIfPresent(record), let id = stringValue(object["id"]), let mappedID = mapping[id] else { return record }
@@ -527,14 +635,14 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     private static func mergedNativeRecords(existing: JSONValue?, projected: JSONValue?, nativeIDs: Set<String>, controlledKeys: [String]) -> JSONValue {
-        let projectedRecords = arrayValue(projected)
-        let projectedByID = Dictionary(uniqueKeysWithValues: projectedRecords.compactMap { record -> (String, JSONValue)? in
+        let projectedRecords = deduplicatedRecords(arrayValue(projected))
+        let projectedByID = lastValueByKey(projectedRecords.compactMap { record -> (String, JSONValue)? in
             guard let id = stringValue(objectValueIfPresent(record)?["id"]) else { return nil }
             return (id, record)
         })
         var usedIDs = Set<String>()
         var records: [JSONValue] = []
-        for record in arrayValue(existing) {
+        for record in deduplicatedRecords(arrayValue(existing)) {
             guard let id = stringValue(objectValueIfPresent(record)?["id"]), nativeIDs.contains(id) else {
                 records.append(record)
                 continue
@@ -552,14 +660,14 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     private static func mergedSportRecords(existing: JSONValue?, projected: JSONValue?, managedIDs: Set<String>, preservedIDs: Set<String>, controlledKeys: [String]) -> JSONValue {
-        let projectedRecords = arrayValue(projected)
-        let projectedByID = Dictionary(uniqueKeysWithValues: projectedRecords.compactMap { record -> (String, JSONValue)? in
+        let projectedRecords = deduplicatedRecords(arrayValue(projected))
+        let projectedByID = lastValueByKey(projectedRecords.compactMap { record -> (String, JSONValue)? in
             guard let id = stringValue(objectValueIfPresent(record)?["id"]) else { return nil }
             return (id, record)
         })
         var usedIDs = Set<String>()
         var records: [JSONValue] = []
-        for record in arrayValue(existing) {
+        for record in deduplicatedRecords(arrayValue(existing)) {
             guard let id = stringValue(objectValueIfPresent(record)?["id"]) else {
                 records.append(record)
                 continue
@@ -614,9 +722,9 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     private static func mergedTravelItinerary(existing: JSONValue, native: [TravelItineraryItem], original: [TravelItineraryItem]) -> JSONValue {
-        let nativeByID = Dictionary(uniqueKeysWithValues: native.map { ($0.id, $0) })
-        let originalByID = Dictionary(uniqueKeysWithValues: original.map { ($0.id, $0) })
-        let values = arrayValue(existing).map { value -> JSONValue in
+        let nativeByID = lastValueByKey(native.map { ($0.id, $0) })
+        let originalByID = lastValueByKey(original.map { ($0.id, $0) })
+        let values = deduplicatedRecords(arrayValue(existing)).map { value -> JSONValue in
             guard var item = objectValueIfPresent(value), let id = stringValue(item["id"]), let nativeItem = nativeByID[id] else { return value }
             if let originalItem = originalByID[id],
                nativeItem.day != originalItem.day || nativeItem.title != originalItem.title || nativeItem.detail != originalItem.detail
@@ -770,6 +878,8 @@ enum RootineCanonicalWorkspaceMapping {
 
     private static func canonicalSportUpdatedAt(_ workspace: CanonicalSportWorkspace) -> String {
         let timestamps = (workspace.scheduledWorkouts ?? []).map(\.updatedAt)
+            + workspace.history.compactMap(\.updatedAt)
+            + workspace.sessions.compactMap(\.updatedAt)
             + workspace.cycles.compactMap { try? decode(CanonicalSportCycle.self, from: $0) }.map(\.updatedAt)
             + workspace.workoutOutcomes.values.map(\.updatedAt)
         return timestamps.max() ?? RootineDate.isoTimestamp()
@@ -875,6 +985,7 @@ private struct CanonicalSportHistory: Codable {
     var plannedDurationMinutes: Int?
     var durationMinutes: Int
     var status: String
+    var updatedAt: String?
 }
 
 private struct CanonicalSportSession: Codable {
@@ -887,6 +998,7 @@ private struct CanonicalSportSession: Codable {
     var durationMinutes: Int
     var status: String
     var exercises: [JSONValue]
+    var updatedAt: String?
 }
 
 private struct CanonicalSportOutcome: Codable {

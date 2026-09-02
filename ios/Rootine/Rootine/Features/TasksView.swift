@@ -226,12 +226,18 @@ struct TasksView: View {
 
     private var counts: [TasksFilter: Int] {
         let today = RootineDate.localDate()
+        let todayHabitCount = environment.taskWorkspace.habits.filter {
+            isHabitScheduled($0, dateKey: today)
+        }.count
         return [
             .all: activeTasks.count,
             .open: activeTasks.filter { !isDone($0) }.count,
             .completed: activeTasks.filter { isDone($0) }.count,
             .habits: environment.taskWorkspace.habits.count,
-            .today: activeTasks.filter { isVisibleToday($0, today: today) }.count,
+            // Dzisiaj renders tasks and scheduled habits together; keep the
+            // filter badge aligned with that first-viewport list instead of
+            // silently omitting habits from its count.
+            .today: activeTasks.filter { isVisibleToday($0, today: today) }.count + todayHabitCount,
             .upcoming: activeTasks.filter { ($0.calendarDate ?? "") > today }.count,
             .undated: activeTasks.filter { $0.calendarDate == nil && !isDone($0) }.count,
             .trash: deletedTasks.count

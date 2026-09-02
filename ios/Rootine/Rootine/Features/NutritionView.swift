@@ -9,6 +9,7 @@ import UIKit
 struct NutritionView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedDate = Date()
     @State private var selectedMeal: NutritionMealKind = .breakfast
     @State private var isShowingAddEntry = false
@@ -16,6 +17,7 @@ struct NutritionView: View {
     @State private var hasAppeared = false
     @State private var entryToDelete: DeletedNutritionEntry?
     @State private var deletedEntry: DeletedNutritionEntry?
+    @State private var resolvedBarcodeRequest: NutritionBarcodeRequest?
 
     private var dateKey: String { RootineDate.localDate(selectedDate) }
     private var day: NutritionDay {
@@ -41,6 +43,22 @@ struct NutritionView: View {
                     RootineOfflineBanner(message: "Dane są zapisane na tym iPhonie. Synchronizacja wróci online automatycznie.")
                 } else if case .conflict = environment.workspaceSyncStatus {
                     RootineOfflineBanner(message: "Wykryto konflikt synchronizacji. Twoje lokalne wpisy są bezpieczne.")
+                }
+
+                if let pendingBarcodes = environment.nutritionWorkspace.pendingBarcodeLookups,
+                   !pendingBarcodes.isEmpty {
+                    let resolved = pendingBarcodes.filter { $0.resolvedProduct != nil }
+                    let waiting = pendingBarcodes.filter { $0.resolvedProduct == nil }
+                    if !resolved.isEmpty {
+                        resolvedBarcodeSection(resolved)
+                    }
+                    if !waiting.isEmpty {
+                        RootineOfflineBanner(
+                            message: waiting.count == 1
+                                ? "Kod produktu zapisany lokalnie. Ponowimy wyszukiwanie po połączeniu."
+                                : "\(waiting.count) kody produktów zapisane lokalnie. Ponowimy wyszukiwanie po połączeniu."
+                        )
+                    }
                 }
 
                 NutritionSummaryCard(
@@ -143,8 +161,23 @@ struct NutritionView: View {
                 withAnimation(.easeOut(duration: 0.42)) { hasAppeared = true }
             }
         }
-        .sheet(isPresented: $isShowingAddEntry) {
-            AddNutritionEntrySheet(dateKey: dateKey, meal: selectedMeal, existingEntry: nil)
+        .task {
+            await environment.retryPendingNutritionBarcodes()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await environment.retryPendingNutritionBarcodes() }
+        }
+        .sheet(isPresented: $isShowingAddEntry, onDismiss: {
+            resolvedBarcodeRequest = nil
+        }) {
+            AddNutritionEntrySheet(
+                dateKey: dateKey,
+                meal: selectedMeal,
+                existingEntry: nil,
+                prefilledProduct: resolvedBarcodeRequest?.resolvedProduct,
+                barcodeToConsume: resolvedBarcodeRequest?.barcode
+            )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -181,6 +214,46 @@ struct NutritionView: View {
         case 15..<19: return .snack
         default: return .dinner
         }
+    }
+
+    private func resolvedBarcodeSection(_ requests: [NutritionBarcodeRequest]) -> some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+            Label("Produkty znalezione po skanowaniu", systemImage: "barcode.viewfinder")
+                .font(.headline)
+                .foregroundStyle(RootineTheme.ColorToken.primaryText)
+
+            ForEach(requests) { request in
+                if let product = request.resolvedProduct {
+                    Button {
+                        selectedMeal = suggestedMeal
+                        resolvedBarcodeRequest = request
+                        isShowingAddEntry = true
+                    } label: {
+                        HStack(spacing: RootineTheme.Spacing.small) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(product.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                Text("Kod \(request.barcode) · gotowy do dodania")
+                                    .font(.caption)
+                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            }
+                            Spacer(minLength: RootineTheme.Spacing.small)
+                            Label("Dodaj", systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RootineTheme.ColorToken.action)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dodaj znaleziony produkt: \(product.name)")
+                    .accessibilityHint("Otwiera formularz z zachowaną porcją i wartościami produktu")
+                }
+            }
+        }
+        .padding(RootineTheme.Spacing.medium)
+        .rootineSurface()
     }
 
     private func entries(for meal: NutritionMealKind) -> [NutritionEntry] {
@@ -655,6 +728,7 @@ private struct NutritionCustomMealsView: View {
     let dateKey: String
     let meal: NutritionMealKind
     @State private var isShowingEditor = false
+    @State private var editorOperationID = UUID().uuidString
     @State private var mealToDelete: CustomMeal?
     @State private var isShowingDeleteDialog = false
 
@@ -672,6 +746,7 @@ private struct NutritionCustomMealsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    editorOperationID = UUID().uuidString
                     isShowingEditor = true
                 } label: {
                     Image(systemName: "plus")
@@ -681,8 +756,8 @@ private struct NutritionCustomMealsView: View {
             }
         }
         .sheet(isPresented: $isShowingEditor) {
-            CustomMealEditorSheet { meal in
-                Task { await environment.upsertCustomMeal(meal) }
+            CustomMealEditorSheet(operationID: editorOperationID) { meal in
+                await environment.upsertCustomMeal(meal)
             }
             .presentationDetents([.medium, .large])
         }
@@ -751,7 +826,10 @@ private struct NutritionCustomMealsView: View {
 
     private func mealCalories(_ customMeal: CustomMeal) -> Int {
         let total = customMeal.ingredients.reduce(0.0) { partial, ingredient in
-            partial + ingredient.per100g.calories * (ingredient.amount / 100)
+            partial + ingredient.per100g.calories * NutritionPortion.multiplier(
+                amount: ingredient.amount,
+                unit: ingredient.unit
+            )
         }
         return Int(total.rounded())
     }
@@ -759,7 +837,9 @@ private struct NutritionCustomMealsView: View {
 
 private struct CustomMealEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let onSave: (CustomMeal) -> Void
+    let operationID: String
+    let onSave: (CustomMeal) async -> Void
+    @State private var isSaving = false
     @State private var name = ""
     @State private var ingredientName = ""
     @State private var amount = "100"
@@ -789,19 +869,29 @@ private struct CustomMealEditorSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
+                        guard !isSaving else { return }
                         let now = RootineDate.isoTimestamp()
+                        let mealID = RootineLocalIdentifier.string(namespace: "custom-meal", operationID: operationID)
                         let ingredient = CustomMealIngredient(
-                            id: UUID().uuidString,
+                            id: RootineLocalIdentifier.string(namespace: "custom-meal-ingredient", operationID: "\(operationID):0"),
                             name: ingredientName.trimmingCharacters(in: .whitespacesAndNewlines),
                             brand: nil,
                             amount: number(amount),
                             unit: "g",
                             per100g: NutritionValues(calories: number(calories), protein: number(protein), carbs: number(carbs), fat: number(fat))
                         )
-                        onSave(CustomMeal(id: UUID().uuidString, name: name, ingredients: [ingredient], totalWeightG: number(amount), servings: 1, createdAt: now, updatedAt: now))
-                        dismiss()
+                        let meal = CustomMeal(id: mealID, name: name, ingredients: [ingredient], totalWeightG: number(amount), servings: 1, createdAt: now, updatedAt: now)
+                        isSaving = true
+                        Task {
+                            await onSave(meal)
+                            dismiss()
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ingredientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        isSaving
+                            || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || ingredientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                 }
             }
         }
@@ -941,6 +1031,8 @@ private struct AddNutritionEntrySheet: View {
     let dateKey: String
     let meal: NutritionMealKind
     let existingEntry: NutritionEntry?
+    let prefilledProduct: NutritionProduct?
+    let barcodeToConsume: String?
     @State private var selectedMeal: NutritionMealKind
     @State private var query = ""
     @State private var selectedProduct: NutritionProduct?
@@ -950,24 +1042,60 @@ private struct AddNutritionEntrySheet: View {
     @State private var protein = ""
     @State private var carbs = ""
     @State private var fat = ""
+    /// Remembers the values last filled from the catalog. If the user edits
+    /// any macro field afterwards, submit must preserve that deliberate
+    /// override instead of silently replacing it with a catalog calculation.
+    @State private var generatedNutritionValues: NutritionValues?
+    @State private var pendingBarcodeToConsume: String?
     @State private var isShowingScanner = false
     @State private var scanMessage: String?
 
-    init(dateKey: String, meal: NutritionMealKind, existingEntry: NutritionEntry? = nil) {
+    init(
+        dateKey: String,
+        meal: NutritionMealKind,
+        existingEntry: NutritionEntry? = nil,
+        prefilledProduct: NutritionProduct? = nil,
+        barcodeToConsume: String? = nil
+    ) {
         self.dateKey = dateKey
         self.meal = meal
         self.existingEntry = existingEntry
+        self.prefilledProduct = prefilledProduct
+        self.barcodeToConsume = barcodeToConsume
         _selectedMeal = State(initialValue: meal)
-        _selectedProduct = State(initialValue: existingEntry.flatMap { entry in
+        let catalogProduct: NutritionProduct? = existingEntry.flatMap { entry in
             guard let catalogId = entry.catalogId else { return nil }
             return NutritionCatalog.products.first { $0.id == catalogId }
-        })
-        _name = State(initialValue: existingEntry?.name ?? "")
-        _portion = State(initialValue: existingEntry?.portion ?? "1 porcja")
-        _calories = State(initialValue: existingEntry.map { String($0.calories) } ?? "")
-        _protein = State(initialValue: existingEntry.map { String($0.protein) } ?? "")
-        _carbs = State(initialValue: existingEntry.map { String($0.carbs) } ?? "")
-        _fat = State(initialValue: existingEntry.map { String($0.fat) } ?? "")
+        }
+        let initialProduct = prefilledProduct ?? catalogProduct
+        _selectedProduct = State(initialValue: initialProduct)
+        _name = State(initialValue: existingEntry?.name ?? prefilledProduct?.name ?? "")
+        _portion = State(
+            initialValue: existingEntry?.portion
+                ?? prefilledProduct.map { "\(Int($0.defaultAmount)) \($0.unit)" }
+                ?? "1 porcja"
+        )
+        let initialValues: NutritionValues? = existingEntry.map {
+            NutritionValues(calories: $0.calories, protein: $0.protein, carbs: $0.carbs, fat: $0.fat)
+        } ?? prefilledProduct.map {
+            let multiplier = NutritionPortion.multiplier(amount: $0.defaultAmount, unit: $0.unit)
+            return NutritionValues(
+                calories: $0.per100g.calories * multiplier,
+                protein: $0.per100g.protein * multiplier,
+                carbs: $0.per100g.carbs * multiplier,
+                fat: $0.per100g.fat * multiplier
+            )
+        }
+        _calories = State(initialValue: initialValues.map { String($0.calories) } ?? "")
+        _protein = State(initialValue: initialValues.map { String($0.protein) } ?? "")
+        _carbs = State(initialValue: initialValues.map { String($0.carbs) } ?? "")
+        _fat = State(initialValue: initialValues.map { String($0.fat) } ?? "")
+        // An existing entry may intentionally contain hand-entered macros.
+        // Treat those values as authoritative until the user explicitly
+        // selects a catalog product again; only a fresh catalog/prefill value
+        // is eligible for automatic portion-based recalculation.
+        _generatedNutritionValues = State(initialValue: existingEntry == nil ? initialValues : nil)
+        _pendingBarcodeToConsume = State(initialValue: barcodeToConsume)
     }
 
     private var filteredProducts: [NutritionProduct] {
@@ -977,6 +1105,25 @@ private struct AddNutritionEntrySheet: View {
             $0.name.localizedCaseInsensitiveContains(normalized)
                 || ($0.brand?.localizedCaseInsensitiveContains(normalized) ?? false)
         }
+    }
+
+    private var parsedPortion: NutritionPortion {
+        NutritionPortion.parse(
+            portion,
+            fallbackAmount: selectedProduct?.defaultAmount ?? existingEntry?.amount,
+            fallbackUnit: selectedProduct?.unit ?? existingEntry?.unit
+        )
+    }
+
+    private var scaledNutritionValues: NutritionValues? {
+        guard let base = selectedProduct?.per100g ?? existingEntry?.per100g else { return nil }
+        let multiplier = NutritionPortion.multiplier(amount: parsedPortion.amount, unit: parsedPortion.unit)
+        return NutritionValues(
+            calories: max(0, base.calories * multiplier),
+            protein: max(0, base.protein * multiplier),
+            carbs: max(0, base.carbs * multiplier),
+            fat: max(0, base.fat * multiplier)
+        )
     }
 
     var body: some View {
@@ -1078,7 +1225,7 @@ private struct AddNutritionEntrySheet: View {
                 }
             }
             .task {
-                guard !reduceMotion else { return }
+                guard !reduceMotion, prefilledProduct == nil else { return }
                 try? await _Concurrency.Task.sleep(for: .milliseconds(180))
                 focusedField = .search
             }
@@ -1089,52 +1236,84 @@ private struct AddNutritionEntrySheet: View {
         selectedProduct = product
         name = product.name
         portion = "\(Int(product.defaultAmount)) \(product.unit)"
-        let multiplier = product.unit.lowercased() == "g" || product.unit.lowercased() == "ml"
-            ? product.defaultAmount / 100
-            : 1
-        calories = String(Int((product.per100g.calories * multiplier).rounded()))
-        protein = String(format: "%.1f", product.per100g.protein * multiplier)
-        carbs = String(format: "%.1f", product.per100g.carbs * multiplier)
-        fat = String(format: "%.1f", product.per100g.fat * multiplier)
+        let multiplier = NutritionPortion.multiplier(amount: product.defaultAmount, unit: product.unit)
+        let values = NutritionValues(
+            calories: product.per100g.calories * multiplier,
+            protein: product.per100g.protein * multiplier,
+            carbs: product.per100g.carbs * multiplier,
+            fat: product.per100g.fat * multiplier
+        )
+        generatedNutritionValues = values
+        calories = String(Int(values.calories.rounded()))
+        protein = String(format: "%.1f", values.protein)
+        carbs = String(format: "%.1f", values.carbs)
+        fat = String(format: "%.1f", values.fat)
         focusedField = .name
     }
 
     private func handleBarcode(_ code: String) {
         query = code
+        pendingBarcodeToConsume = nil
         scanMessage = "Szukam produktu dla kodu \(code)…"
         _Concurrency.Task {
             if let product = await environment.lookupNutritionProduct(barcode: code) {
                 select(product)
+                pendingBarcodeToConsume = NutritionBarcode.normalized(code)
                 scanMessage = nil
             } else {
-                scanMessage = "Nie znaleziono produktu. Uzupełnij dane ręcznie poniżej."
+                let normalized = NutritionBarcode.normalized(code)
+                let wasQueued = environment.nutritionWorkspace.pendingBarcodeLookups?.contains { $0.barcode == normalized } == true
+                scanMessage = wasQueued
+                    ? "Nie znaleziono produktu online. Kod zapisano — ponowimy próbę po połączeniu; możesz też wpisać dane ręcznie."
+                    : "Nie znaleziono produktu. Uzupełnij dane ręcznie poniżej."
                 focusedField = .name
             }
         }
     }
 
     private func submit() {
+        let parsed = parsedPortion
+        let entered = NutritionValues(
+            calories: number(calories),
+            protein: number(protein),
+            carbs: number(carbs),
+            fat: number(fat)
+        )
+        let calculated = generatedNutritionValues.map { generated in
+            let caloriesUnchanged = abs(entered.calories - generated.calories) < 0.6
+            let proteinUnchanged = abs(entered.protein - generated.protein) < 0.06
+            let carbsUnchanged = abs(entered.carbs - generated.carbs) < 0.06
+            let fatUnchanged = abs(entered.fat - generated.fat) < 0.06
+            return caloriesUnchanged && proteinUnchanged && carbsUnchanged && fatUnchanged
+                ? scaledNutritionValues
+                : nil
+        } ?? nil
+        let finalValues = calculated ?? entered
         let draft = NutritionEntryDraft(
             meal: selectedMeal.rawValue,
             name: name,
             portion: portion,
-            calories: number(calories),
-            protein: number(protein),
-            carbs: number(carbs),
-            fat: number(fat),
-            amount: selectedProduct?.defaultAmount ?? existingEntry?.amount,
-            unit: selectedProduct?.unit ?? existingEntry?.unit,
+            calories: finalValues.calories,
+            protein: finalValues.protein,
+            carbs: finalValues.carbs,
+            fat: finalValues.fat,
+            amount: parsed.amount,
+            unit: parsed.unit,
             brand: selectedProduct?.brand ?? existingEntry?.brand,
             catalogId: selectedProduct?.id ?? existingEntry?.catalogId,
             catalogSource: selectedProduct?.source ?? existingEntry?.catalogSource,
             per100g: selectedProduct?.per100g ?? existingEntry?.per100g
         )
         let existing = existingEntry
+        let barcodeToConsume = pendingBarcodeToConsume
         _Concurrency.Task<Void, Never> {
             if let existing {
                 await save(existing, draft: draft)
             } else {
                 await add(draft)
+            }
+            if let barcodeToConsume {
+                _ = await environment.consumeNutritionBarcode(barcode: barcodeToConsume)
             }
             dismiss()
         }
