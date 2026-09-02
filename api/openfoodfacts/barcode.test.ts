@@ -84,4 +84,27 @@ describe("Open Food Facts barcode proxy", () => {
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "Open Food Facts is temporarily unavailable" });
   });
+
+  it("enforces the lookup window per client and resets it deterministically", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ status: 0 })));
+
+    for (let index = 0; index < 20; index += 1) {
+      const response = await handler("5901234123457");
+      expect(response.status).toBe(404);
+    }
+    const limited = await handler("5901234123457");
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+
+    const otherClient = await handler("5901234123457", {
+      headers: { "x-forwarded-for": "203.0.113.10" },
+    });
+    expect(otherClient.status).toBe(404);
+
+    now.mockReturnValue(61_001);
+    const afterReset = await handler("5901234123457");
+    expect(afterReset.status).toBe(404);
+    now.mockRestore();
+  });
 });

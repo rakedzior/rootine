@@ -122,6 +122,36 @@ final class SyncV3Tests: XCTestCase {
         }
     }
 
+    func testCursorStoreSeparatesAccountsAndDevicesAndRejectsMalformedEnvelope() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("rootine-cursor-scope-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let accountA = RootineSyncCursorStore(accountID: "account-a", deviceID: "device-1", rootURL: root)
+        try await accountA.save(9)
+        let accountB = RootineSyncCursorStore(accountID: "account-b", deviceID: "device-1", rootURL: root)
+        let deviceTwo = RootineSyncCursorStore(accountID: "account-a", deviceID: "device-2", rootURL: root)
+        XCTAssertNil(try await accountB.load())
+        XCTAssertNil(try await deviceTwo.load())
+
+        let cursorURL = await accountA.location()
+        try Data("{\"contractVersion\":1,\"accountID\":\"other\",\"deviceID\":\"device-1\",\"cursor\":9,\"updatedAt\":\"2026-09-03T10:00:00Z\"}".utf8)
+            .write(to: cursorURL, options: .atomic)
+        do {
+            _ = try await accountA.load()
+            XCTFail("A cursor envelope from another account must be rejected")
+        } catch {
+            XCTAssertEqual(error as? RootineSyncCursorError, .invalid)
+        }
+
+        try Data("not-json".utf8).write(to: cursorURL, options: .atomic)
+        do {
+            _ = try await accountA.load()
+            XCTFail("Malformed cursor data must be rejected")
+        } catch {
+            XCTAssertEqual(error as? RootineSyncCursorError, .invalid)
+        }
+    }
+
     func testOperationLogDeduplicatesByOperationIDAndSerializesSameRecord() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("rootine-oplog-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
