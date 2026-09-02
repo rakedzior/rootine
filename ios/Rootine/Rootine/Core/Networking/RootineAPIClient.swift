@@ -7,6 +7,8 @@ struct RootineConfiguration: Equatable, Sendable {
     var authCallbackScheme: String
     var termsURL: URL?
     var privacyURL: URL?
+    var appVersion: String = ""
+    var apnsEnvironment: RootineAPNsEnvironment = .currentBuild
 
     var isAuthComplete: Bool {
         supabaseURL != nil && !supabasePublishableKey.isEmpty && !authCallbackScheme.isEmpty
@@ -43,7 +45,13 @@ struct RootineConfiguration: Equatable, Sendable {
             backendURL: url("ROOTINE_BACKEND_URL"),
             authCallbackScheme: value("ROOTINE_AUTH_CALLBACK_SCHEME"),
             termsURL: url("ROOTINE_TERMS_URL"),
-            privacyURL: url("ROOTINE_PRIVACY_URL")
+            privacyURL: url("ROOTINE_PRIVACY_URL"),
+            appVersion: value("CFBundleShortVersionString").isEmpty
+                ? value("CFBundleVersion")
+                : value("CFBundleShortVersionString"),
+            apnsEnvironment: RootineAPNsEnvironment(
+                rawValue: value("ROOTINE_APNS_ENVIRONMENT").lowercased()
+            ) ?? .currentBuild
         )
     }
 }
@@ -385,6 +393,45 @@ final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
         return first
     }
 
+    /// Registers one authenticated app installation. The APNs token is sent
+    /// only to the server-side RPC and the response intentionally contains
+    /// metadata, never the token itself.
+    func registerDevice(
+        deviceID: String,
+        appVersion: String,
+        apnsEnvironment: RootineAPNsEnvironment,
+        pushToken: String?,
+        permissionState: RootineNotificationPermissionState,
+        accessToken: String
+    ) async throws -> RootineDeviceRegistration {
+        guard let baseURL = configuration.supabaseURL else { throw RootineAPIError.missingConfiguration }
+        let url = baseURL.appendingPathComponent("rest/v1/rpc/rootine_register_device")
+        var request = authorizedRequest(url: url, accessToken: accessToken)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(RegisterDeviceRequest(
+            deviceID: deviceID,
+            platform: "ios",
+            appVersion: appVersion,
+            apnsEnvironment: apnsEnvironment,
+            pushToken: pushToken,
+            permissionState: permissionState
+        ))
+        let rows = try await send(request, as: [RootineDeviceRegistration].self)
+        guard let first = rows.first else { throw RootineAPIError.invalidResponse }
+        return first
+    }
+
+    func revokeDevice(deviceID: String, accessToken: String) async throws -> RootineDeviceRevocation {
+        guard let baseURL = configuration.supabaseURL else { throw RootineAPIError.missingConfiguration }
+        let url = baseURL.appendingPathComponent("rest/v1/rpc/rootine_revoke_device")
+        var request = authorizedRequest(url: url, accessToken: accessToken)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(RevokeDeviceRequest(deviceID: deviceID))
+        let rows = try await send(request, as: [RootineDeviceRevocation].self)
+        guard let first = rows.first else { throw RootineAPIError.invalidResponse }
+        return first
+    }
+
     func searchProducts(query: String, accessToken: String) async throws -> [NutritionProduct] {
         guard let baseURL = configuration.backendURL else { throw RootineAPIError.missingConfiguration }
         var components = URLComponents(url: baseURL.appendingPathComponent("api/openfoodfacts/search"), resolvingAgainstBaseURL: false)
@@ -423,6 +470,32 @@ final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
             accessToken: accessToken
         )
         return try await send(request, as: SupabaseUser.self)
+    }
+
+    private struct RegisterDeviceRequest: Encodable {
+        var deviceID: String
+        var platform: String
+        var appVersion: String
+        var apnsEnvironment: RootineAPNsEnvironment
+        var pushToken: String?
+        var permissionState: RootineNotificationPermissionState
+
+        enum CodingKeys: String, CodingKey {
+            case deviceID = "p_device_id"
+            case platform = "p_platform"
+            case appVersion = "p_app_version"
+            case apnsEnvironment = "p_apns_environment"
+            case pushToken = "p_push_token"
+            case permissionState = "p_permission_state"
+        }
+    }
+
+    private struct RevokeDeviceRequest: Encodable {
+        var deviceID: String
+
+        enum CodingKeys: String, CodingKey {
+            case deviceID = "p_device_id"
+        }
     }
 
     private func authRequest(

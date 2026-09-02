@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import UIKit
 
 private enum WorkspaceEncodingError: Error {
     case invalidValue(for: RootineStorageKey)
@@ -66,10 +67,13 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var workspaceSyncStatus = WorkspaceSyncStatus.unavailable
     @Published private(set) var realtimeLastRefresh: Date?
     @Published private(set) var recoveryFiles: [WorkspaceRecoveryFile] = []
+    @Published private(set) var deviceRegistration: RootineDeviceRegistration?
+    @Published private(set) var notificationPermissionState: RootineNotificationPermissionState = .notDetermined
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
     private let keychain: KeychainSessionStore
+    private let deviceIdentity: RootineDeviceIdentityStore
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
@@ -87,6 +91,8 @@ final class AppEnvironment: ObservableObject {
     private var activeMutationFlushes = 0
     private var mutationFlushWaiters: [CheckedContinuation<Void, Never>] = []
     private var reconciliationWaiters: [CheckedContinuation<Void, Never>] = []
+    private var deviceRegistrationTask: Task<Void, Never>?
+    private var lastDeviceRegistrationFingerprint: String?
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
@@ -95,6 +101,7 @@ final class AppEnvironment: ObservableObject {
         self.configuration = configuration
         self.keychain = keychain
         api = RootineAPIClient(configuration: configuration)
+        deviceIdentity = RootineDeviceIdentityStore()
         let storedSession = keychain.load()
         session = storedSession
         if let storedSession {
@@ -221,6 +228,7 @@ final class AppEnvironment: ObservableObject {
         await recoverOrphanedTransactions()
         await loadAndReconcile(accessToken: activeSession.accessToken)
         startRealtimeRefreshLoop()
+        scheduleDeviceRegistration()
         await refreshRecoveryFiles()
     }
 
@@ -432,6 +440,21 @@ final class AppEnvironment: ObservableObject {
             signOutAfterArchiveImport = true
             return
         }
+        let accessToken = session?.accessToken
+        let currentDeviceID = deviceIdentity.loadOrCreate()
+        deviceRegistrationTask?.cancel()
+        deviceRegistrationTask = nil
+        lastDeviceRegistrationFingerprint = nil
+        if let accessToken {
+            // Sign-out is synchronous at the UI boundary. Revoke with the
+            // captured token before dropping local session state; failures
+            // are deliberately best effort so an offline user can still
+            // leave the account without losing local data.
+            let api = api
+            Task {
+                try? await api.revokeDevice(deviceID: currentDeviceID, accessToken: accessToken)
+            }
+        }
         refreshTask?.cancel()
         refreshTask = nil
         keychain.clear()
@@ -450,6 +473,8 @@ final class AppEnvironment: ObservableObject {
         affairsWorkspace = .empty
         realtimeLastRefresh = nil
         recoveryFiles = []
+        deviceRegistration = nil
+        notificationPermissionState = .notDetermined
         foundationMessage = "Sesja usunięta z Keychain"
         workspaceSyncStatus = .unavailable
     }
@@ -673,6 +698,7 @@ final class AppEnvironment: ObservableObject {
     func refreshActiveSession() async {
         guard let accessToken = session?.accessToken else { return }
         await loadAndReconcile(accessToken: accessToken)
+        scheduleDeviceRegistration()
         await refreshRecoveryFiles()
     }
 
@@ -2133,6 +2159,8 @@ final class AppEnvironment: ObservableObject {
 
     private func configureRuntime(userID: String) {
         canonicalShadows.removeAll()
+        lastDeviceRegistrationFingerprint = nil
+        deviceRegistration = nil
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
         syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
@@ -2185,7 +2213,72 @@ final class AppEnvironment: ObservableObject {
         await recoverOrphanedTransactions()
         await loadAndReconcile(accessToken: newSession.accessToken)
         startRealtimeRefreshLoop()
+        scheduleDeviceRegistration()
         await refreshRecoveryFiles()
+    }
+
+    /// Registers the current installation after authentication. Reading the
+    /// notification permission is intentionally observational: B09 does not
+    /// present a permission prompt, and denial is represented as metadata
+    /// rather than a sync failure.
+    func registerDeviceForCurrentSession() async {
+        guard let accessToken = session?.accessToken else { return }
+        await registerDevice(accessToken: accessToken)
+    }
+
+    private func scheduleDeviceRegistration() {
+        deviceRegistrationTask?.cancel()
+        guard session?.accessToken != nil else { return }
+        deviceRegistrationTask = Task { [weak self] in
+            guard let self else { return }
+            await self.registerDeviceForCurrentSession()
+        }
+    }
+
+    private func registerDevice(accessToken: String) async {
+        guard configuration.isAuthComplete,
+              session?.accessToken == accessToken,
+              let userID = session?.user.id else { return }
+
+        let permission = await RootineNotificationPermissionState.current()
+        notificationPermissionState = permission
+        let pushToken = RootinePushRegistry.shared.tokenString()
+        if permission.canRegisterWithAPNs, pushToken == nil {
+            // APNs registration does not show the permission prompt. The
+            // permission flow remains owned by a later feature; this only
+            // asks UIKit for a token when authorization already exists.
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+
+        let deviceID = deviceIdentity.loadOrCreate()
+        let appVersion = configuration.appVersion.isEmpty ? "0.0.0" : configuration.appVersion
+        let fingerprint = [
+            userID,
+            deviceID,
+            appVersion,
+            configuration.apnsEnvironment.rawValue,
+            permission.rawValue,
+            pushToken ?? ""
+        ].joined(separator: "|")
+        guard fingerprint != lastDeviceRegistrationFingerprint else { return }
+
+        do {
+            let registration = try await api.registerDevice(
+                deviceID: deviceID,
+                appVersion: appVersion,
+                apnsEnvironment: configuration.apnsEnvironment,
+                pushToken: pushToken,
+                permissionState: permission,
+                accessToken: accessToken
+            )
+            guard session?.accessToken == accessToken else { return }
+            deviceRegistration = registration
+            lastDeviceRegistrationFingerprint = fingerprint
+        } catch {
+            // Device registration is auxiliary to bootstrap and workspace
+            // sync. Keep the token out of logs and do not turn a missing
+            // mobile-sync/B03 deployment into a sync error.
+        }
     }
 
     private func loadLocalCopies() async {

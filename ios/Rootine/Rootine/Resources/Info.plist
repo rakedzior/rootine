@@ -39,6 +39,10 @@
 	<string>Rootine używa aparatu wyłącznie do skanowania kodów produktów.</string>
 	<key>ROOTINE_AUTH_CALLBACK_SCHEME</key>
 	<string>$(ROOTINE_AUTH_CALLBACK_SCHEME)</string>
+	<key>ROOTINE_APNS_ENVIRONMENT</key>
+	<string>$(ROOTINE_APNS_ENVIRONMENT)</string>
+	<key>ROOTINE_APNS_ENTITLEMENT_ENVIRONMENT</key>
+	<string>$(ROOTINE_APNS_ENTITLEMENT_ENVIRONMENT)</string>
 	<key>ROOTINE_BACKEND_URL</key>
 	<string>$(ROOTINE_BACKEND_URL)</string>
 	<key>ROOTINE_PRIVACY_URL</key>

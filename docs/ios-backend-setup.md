@@ -7,8 +7,11 @@ This is the operational checklist for connecting the native app to the same Supa
 1. Apply the migrations in chronological order:
    - `20260806120000_rootine_workspace_snapshots.sql`
    - `20260819090000_rootine_workspace_sync_v2.sql`
+   - `20260902120000_rootine_devices.sql`
 2. Deploy the `delete-account` Edge Function.
-3. Deploy the web backend with these server variables:
+3. Optionally deploy `register-device` until B03's `mobile-sync` router is
+   available; both boundaries delegate to `rootine_register_device`.
+4. Deploy the web backend with these server variables:
    - `OPEN_FOOD_FACTS_CONTACT`
    - `SUPABASE_URL`
    - `SUPABASE_PUBLISHABLE_KEY` or the legacy `SUPABASE_ANON_KEY`
@@ -35,6 +38,32 @@ Copy `ios/Rootine/Config/Secrets.xcconfig.example` to `Secrets.xcconfig` and set
 - the deployed Rootine backend URL;
 - the Apple Team ID and final bundle identifier;
 - real public URLs for the Terms and Privacy Policy.
+
+APNs device registration is enabled by the `rootine_devices` migration. The
+iOS client sends only an installation identifier, app version, permission
+state and (when authorized) the APNs token to the server-side RPC. The RPC
+returns metadata and never returns the token. Debug builds use `sandbox`;
+TestFlight/App Store builds must set `ROOTINE_APNS_ENVIRONMENT = production` in
+private CI configuration. Notification denial is recorded as metadata and does
+not block bootstrap or workspace synchronization.
+
+Keep Apple provider credentials only in Supabase Edge Function secrets or the
+CI secret store used for deployment. See [`apns-credentials.md`](apns-credentials.md)
+for the credential checklist. No `.p8` key, APNs JWT, access token or user
+token belongs in this repository.
+
+## B03/B07 integration contract
+
+This ticket is intentionally usable before B03 and B07 are merged. The iOS
+client calls `POST /rest/v1/rpc/rootine_register_device` and
+`POST /rest/v1/rpc/rootine_revoke_device` with the current Supabase bearer
+token. B03's `mobile-sync` router may expose the same operations by delegating
+to these RPCs; it must preserve the parameter names, ownership derived from
+`auth.uid()`, metadata-only response, and `401`/validation error semantics.
+B07's lifecycle coordinator should call the existing
+`registerDeviceForCurrentSession()` hook after sign-in/refresh/foreground and
+stop callbacks after sign-out. APNs token callbacks are delivered through
+`RootinePushRegistry`; no permission prompt is triggered by B09.
 
 The legal URLs are required for self-registration. Missing URLs disable only the
 registration action and explain why; existing users can still sign in.

@@ -43,4 +43,40 @@ final class AuthenticationTests: XCTestCase {
         )
         XCTAssertTrue(session.shouldRefresh)
     }
+
+    func testAPNsEnvironmentContractKeepsSandboxAndProductionDistinct() {
+        XCTAssertEqual(RootineAPNsEnvironment(rawValue: "sandbox"), .sandbox)
+        XCTAssertEqual(RootineAPNsEnvironment(rawValue: "production"), .production)
+        XCTAssertNil(RootineAPNsEnvironment(rawValue: "development"))
+        XCTAssertEqual(RootineAPNsEnvironment.sandbox.appleEntitlementValue, "development")
+        XCTAssertEqual(RootineAPNsEnvironment.production.appleEntitlementValue, "production")
+    }
+
+    func testNotificationPermissionMappingDoesNotTreatDenialAsRegistrationFailure() {
+        XCTAssertFalse(RootineNotificationPermissionState.denied.canRegisterWithAPNs)
+        XCTAssertFalse(RootineNotificationPermissionState.notDetermined.canRegisterWithAPNs)
+        XCTAssertTrue(RootineNotificationPermissionState.authorized.canRegisterWithAPNs)
+        XCTAssertTrue(RootineNotificationPermissionState.provisional.canRegisterWithAPNs)
+    }
+
+    func testAPNsTokenIsNormalizedToPrivateHexString() {
+        RootinePushRegistry.shared.update(tokenData: Data([0x00, 0xAB, 0xFF]))
+        XCTAssertEqual(RootinePushRegistry.shared.tokenString(), "00abff")
+    }
+
+    func testDeviceRegistrationResponseNeverModelsAnAPNsToken() throws {
+        let response = RootineDeviceRegistration(
+            deviceID: "installation-1",
+            platform: "ios",
+            appVersion: "1.2.3",
+            apnsEnvironment: .sandbox,
+            permissionState: .authorized,
+            lastSeenAt: "2026-09-02T12:00:00Z",
+            revokedAt: nil
+        )
+        let encoded = try JSONEncoder().encode(response)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertNil(json["apns_token"])
+        XCTAssertEqual(json["apns_environment"] as? String, "sandbox")
+    }
 }

@@ -76,6 +76,10 @@ struct RootineEntryView: View {
         .onOpenURL { url in
             Task { await environment.receiveAuthCallback(url) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .rootineAPNsTokenDidRegister)) { _ in
+            guard !isPreviewLaunch else { return }
+            Task { await environment.registerDeviceForCurrentSession() }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, !isPreviewLaunch else { return }
             Task { await environment.refreshActiveSession() }

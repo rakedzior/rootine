@@ -14,6 +14,12 @@ ROOTINE_SUPABASE_URL =
 ROOTINE_SUPABASE_PUBLISHABLE_KEY =
 ROOTINE_BACKEND_URL =
 ROOTINE_AUTH_CALLBACK_SCHEME = rootine
+// Debug/simulator builds use the APNs sandbox. Release CI must set this to
+// production in its private xcconfig or xcodebuild settings.
+ROOTINE_APNS_ENVIRONMENT = sandbox
+// Apple calls the sandbox entitlement "development"; the server contract
+// intentionally calls the same environment "sandbox".
+ROOTINE_APNS_ENTITLEMENT_ENVIRONMENT = development
 ROOTINE_TERMS_URL =
 ROOTINE_PRIVACY_URL =
 
