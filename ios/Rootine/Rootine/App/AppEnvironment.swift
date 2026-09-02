@@ -703,6 +703,9 @@ final class AppEnvironment: ObservableObject {
                 supported: supported
             )
         }
+        guard rootineValidateTravelWorkspace(archive.travel).isEmpty else {
+            throw RootineWorkspaceArchiveError.invalidArchive
+        }
     }
 
     func refreshRecoveryFiles() async {
@@ -1273,7 +1276,17 @@ final class AppEnvironment: ObservableObject {
         let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDestination.isEmpty else { return }
         next.trips[index].destination = trimmedDestination
+        next.trips[index].name = trimmedDestination
         next.trips[index].dateRange = dateRange.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pieces = next.trips[index].dateRange
+            .components(separatedBy: "–")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if pieces.count == 2,
+           RootineDate.isLocalDateKey(pieces[0]),
+           RootineDate.isLocalDateKey(pieces[1]) {
+            next.trips[index].startDate = pieces[0]
+            next.trips[index].endDate = pieces[1]
+        }
         next.trips[index].nights = max(1, nights)
         next.trips[index].updatedAt = RootineDate.isoTimestamp()
         next.updatedAt = RootineDate.isoTimestamp()
@@ -1286,6 +1299,119 @@ final class AppEnvironment: ObservableObject {
         next.trips.append(trip)
         next.updatedAt = RootineDate.isoTimestamp()
         await persistTravelWorkspace(next)
+    }
+
+    /// Applies one serialized mutation to a trip dossier. Keeping nested
+    /// travel writes behind this boundary makes retries idempotent at the
+    /// workspace level and gives offline callers the same validation path as
+    /// the compact trip editor.
+    func updateTravelTrip(id: String, mutate: (inout TravelRecord) -> Void) async {
+        var next = travelWorkspace
+        guard let index = next.trips.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&next.trips[index])
+        next.trips[index].updatedAt = RootineDate.isoTimestamp()
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistTravelWorkspace(next)
+    }
+
+    func setTravelStatus(_ status: String, tripID: String) async {
+        await updateTravelTrip(id: tripID) { trip in trip.status = status }
+    }
+
+    func upsertTravelItineraryItem(_ item: TravelItineraryItem, tripID: String) async {
+        await updateTravelTrip(id: tripID) { trip in
+            if let index = trip.itinerary.firstIndex(where: { $0.id == item.id }) {
+                trip.itinerary[index] = item
+            } else {
+                trip.itinerary.append(item)
+            }
+        }
+    }
+
+    func addTravelItineraryItem(
+        tripID: String,
+        date: String,
+        time: String,
+        title: String,
+        location: String = "",
+        kind: String = "activity",
+        note: String = "",
+        reserved: Bool = false,
+        timezone: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let itemID = RootineLocalIdentifier.string(namespace: "travel-itinerary", operationID: "\(tripID):\(operationID)")
+        await upsertTravelItineraryItem(
+            TravelItineraryItem(id: itemID, date: date, time: time, title: title, location: location, kind: kind, note: note, reserved: reserved, timezone: timezone),
+            tripID: tripID
+        )
+    }
+
+    func upsertTravelBooking(_ booking: TravelBooking, tripID: String) async {
+        await updateTravelTrip(id: tripID) { trip in
+            if let index = trip.bookings.firstIndex(where: { $0.id == booking.id }) {
+                trip.bookings[index] = booking
+            } else {
+                trip.bookings.append(booking)
+            }
+        }
+    }
+
+    func addTravelBooking(
+        tripID: String,
+        provider: String,
+        bookingReference: String,
+        status: String = "planned",
+        amountMinor: Int64? = nil,
+        currencyCode: String? = nil,
+        startsAt: String? = nil,
+        endsAt: String? = nil,
+        timezone: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let bookingID = RootineLocalIdentifier.string(namespace: "travel-booking", operationID: "\(tripID):\(operationID)")
+        await upsertTravelBooking(
+            TravelBooking(id: bookingID, provider: provider, bookingReference: bookingReference, status: status, amountMinor: amountMinor, currencyCode: currencyCode, startsAt: startsAt, endsAt: endsAt, timezone: timezone),
+            tripID: tripID
+        )
+    }
+
+    func addTravelBudgetLine(
+        tripID: String,
+        category: String,
+        label: String,
+        planned: Double,
+        actual: Double = 0,
+        paid: Bool = false,
+        currency: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let lineID = RootineLocalIdentifier.string(namespace: "travel-budget", operationID: "\(tripID):\(operationID)")
+        await updateTravelTrip(id: tripID) { trip in
+            let line = TravelBudgetLine(id: lineID, category: category, label: label, planned: planned, actual: actual, paid: paid, currency: currency)
+            if let index = trip.budget.firstIndex(where: { $0.id == lineID }) { trip.budget[index] = line } else { trip.budget.append(line) }
+        }
+    }
+
+    func addTravelPackingItem(
+        tripID: String,
+        label: String,
+        quantity: Int = 1,
+        packed: Bool = false,
+        operationID: String = UUID().uuidString
+    ) async {
+        let itemID = RootineLocalIdentifier.string(namespace: "travel-packing", operationID: "\(tripID):\(operationID)")
+        await updateTravelTrip(id: tripID) { trip in
+            let item = TravelPackingItem(id: itemID, label: label, quantity: quantity, packed: packed)
+            if let index = trip.packingItems.firstIndex(where: { $0.id == itemID }) { trip.packingItems[index] = item } else { trip.packingItems.append(item) }
+        }
+    }
+
+    func toggleTravelPackingItem(id: String, tripID: String) async {
+        await updateTravelTrip(id: tripID) { trip in
+            guard let index = trip.packingItems.firstIndex(where: { $0.id == id }) else { return }
+            trip.packingItems[index].packed.toggle()
+        }
     }
 
     func setHealthEnergy(_ energy: Int, date: Date = Date()) async {
@@ -2078,6 +2204,10 @@ final class AppEnvironment: ObservableObject {
         defer { endWorkspacePersistence() }
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
+        guard rootineValidateTravelWorkspace(next).isEmpty else {
+            foundationMessage = "Nie zapisano podróży — dane wymagają korekty"
+            return
+        }
         travelWorkspace = next
         await persistCanonicalWorkspace(next, key: .travel, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload)
     }
@@ -2120,7 +2250,11 @@ final class AppEnvironment: ObservableObject {
         key: RootineStorageKey,
         merge: (T, JSONValue) throws -> JSONValue
     ) async {
-        guard let store, let syncEngine else {
+        // Local-first is also valid before authentication is fully restored
+        // (for example after an offline launch). Persist the compact native
+        // snapshot and canonical shadow whenever a store exists; enqueue only
+        // when a sync engine is available.
+        guard let store else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
         }
@@ -2131,6 +2265,10 @@ final class AppEnvironment: ObservableObject {
             canonicalShadows[key] = mapped
             if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
                 try await store.save(mapped, key: shadowKey)
+            }
+            guard let syncEngine else {
+                foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+                return
             }
             try await syncEngine.enqueue(
                 payload: mapped,

@@ -497,7 +497,7 @@ enum RootineRelationalWorkspaceAdapter {
         case let name where name.hasPrefix("sport") || name == "workout" || name == "workouts" || name == "exercise" || name == "exercises" || name == "template" || name == "templates" || name == "cycle" || name == "cycles" || name == "session" || name == "sessions" || name == "history" || name == "execution" || name == "executions": return canonicalStorageKey(for: .sport)
         case let name where name.hasPrefix("goal") || name == "goals" || name == "milestone" || name == "milestones" || name == "progressentry" || name == "progressentries" || name == "category" || name == "categories": return canonicalStorageKey(for: .goals)
         case let name where name.hasPrefix("work") || name == "company" || name == "companies" || name == "project" || name == "projects" || name == "focussession" || name == "focussessions": return canonicalStorageKey(for: .work)
-        case let name where name.hasPrefix("travel") || name == "trip" || name == "trips" || name.hasPrefix("tripitinerary") || name == "itineraryitem" || name == "itineraryitems" || name.hasPrefix("tripbooking") || name == "booking" || name == "bookings" || name.hasPrefix("tripbudget") || name == "budgetitem" || name == "budgetitems" || name.hasPrefix("tripdocument") || name == "stay" || name == "stays" || name.hasPrefix("trippacking") || name == "packingitem" || name == "packingitems": return canonicalStorageKey(for: .travel)
+        case let name where name.hasPrefix("travel") || name == "trip" || name == "trips" || name.hasPrefix("tripitinerary") || name == "itineraryitem" || name == "itineraryitems" || name.hasPrefix("tripbooking") || name == "booking" || name == "bookings" || name.hasPrefix("tripbudget") || name == "budgetitem" || name == "budgetitems" || name.hasPrefix("tripdocument") || name.hasPrefix("triptransport") || name == "stay" || name == "stays" || name == "transport" || name == "transports" || name.hasPrefix("trippacking") || name == "packingitem" || name == "packingitems": return canonicalStorageKey(for: .travel)
         case let name where name.hasPrefix("health") || name == "checkin" || name == "checkins" || name == "reminder" || name == "reminders" || name == "visit" || name == "visits" || name == "test" || name == "tests" || name == "prescription" || name == "prescriptions" || name == "vaccination" || name == "vaccinations": return canonicalStorageKey(for: .health)
         case let name where name.hasPrefix("affair") || name.hasPrefix("jdg") || name == "matter" || name == "matters" || name == "payment" || name == "payments" || name == "subscription" || name == "subscriptions" || name == "document" || name == "documents" || name == "vehicle" || name == "vehicles" || name == "budgetline" || name == "budgetlines" || name == "budgetmonth" || name == "budgetmonths" || name == "attentionstate" || name == "attentionstates": return RootineStorageKey.affairs.rawValue
         default: throw RootineNormalizedReadError.contractMismatch("nieznana encja \(entityName)")
@@ -575,7 +575,9 @@ enum RootineRelationalWorkspaceAdapter {
             let child: String
             switch name {
             case "travelitineraryitem", "travelitineraryitems", "itineraryitem", "itineraryitems": child = "itinerary"
-            case "travelbooking", "travelbookings", "booking", "bookings", "travelstay", "travelstays", "stay", "stays": child = "stays"
+            case "travelbooking", "travelbookings", "booking", "bookings": child = "bookings"
+            case "travelstay", "travelstays", "stay", "stays": child = "stays"
+            case "traveltransport", "traveltransports", "transport", "transports": child = "transports"
             case "travelbudgetitem", "travelbudgetitems", "budgetitem", "budgetitems": child = "budget"
             case "traveldocument", "traveldocuments": child = "documents"
             case "travelpackingitem", "travelpackingitems", "packingitem", "packingitems": child = "packingItems"
@@ -988,16 +990,27 @@ enum RootineRelationalWorkspaceAdapter {
             value["destination"] = row["destination"] ?? .string("")
             value["startDate"] = row["startDate"] ?? row["start_date"] ?? .string(RootineDate.localDate())
             value["endDate"] = row["endDate"] ?? row["end_date"] ?? value["startDate"]!
-            value["status"] = row["status"] ?? .string("planning")
+            // The relational table has a few operational states that are not
+            // part of the web travel contract. Keep the materialized payload
+            // valid instead of leaking an un-decodable status downstream.
+            let rawStatus = stringValue(row["status"]) ?? "planning"
+            let status = ["idea", "planning", "ready", "completed"].contains(rawStatus)
+                ? rawStatus
+                : (rawStatus == "archived" || rawStatus == "cancelled" ? "completed" : "planning")
+            value["status"] = .string(status)
             value["travelers"] = row["travelers"] ?? .array([])
             value["baseCurrency"] = row["baseCurrency"] ?? row["base_currency"] ?? .string("PLN")
             value["note"] = row["note"] ?? .string("")
+            value["archivedAt"] = row["archivedAt"] ?? row["archived_at"] ?? .null
             value["stays"] = row["stays"] ?? .array([])
             value["transports"] = row["transports"] ?? .array([])
+            value["bookings"] = row["bookings"] ?? .array([])
             value["itinerary"] = row["itinerary"] ?? .array([])
             value["budget"] = row["budget"] ?? .array([])
             value["documents"] = row["documents"] ?? .array([])
             value["tasks"] = row["tasks"] ?? .array([])
+            value["packingItems"] = row["packingItems"] ?? .array([])
+            value["timezone"] = row["timezone"] ?? .null
             try upsertArray(&root, key: "trips", id: id, value: .object(value)); return
         }
         let tripID = stringValue(row["tripId"] ?? row["trip_id"]) ?? ""
@@ -1005,7 +1018,9 @@ enum RootineRelationalWorkspaceAdapter {
         let child: String
         switch entity {
         case "travelitineraryitem", "travelitineraryitems", "tripitineraryitem", "tripitineraryitems", "itineraryitem", "itineraryitems": child = "itinerary"
-        case "travelbooking", "travelbookings", "tripbooking", "tripbookings", "booking", "bookings", "travelstay", "travelstays", "tripstay", "tripstays", "stay", "stays": child = "stays"
+        case "travelbooking", "travelbookings", "tripbooking", "tripbookings", "booking", "bookings": child = "bookings"
+        case "travelstay", "travelstays", "tripstay", "tripstays", "stay", "stays": child = "stays"
+        case "traveltransport", "traveltransports", "triptransport", "triptransports", "transport", "transports": child = "transports"
         case "travelbudgetitem", "travelbudgetitems", "tripbudgetitem", "tripbudgetitems", "budgetitem", "budgetitems": child = "budget"
         case "traveldocument", "traveldocuments", "tripdocument", "tripdocuments": child = "documents"
         case "travelpackingitem", "travelpackingitems", "trippackingitem", "trippackingitems", "packingitem", "packingitems": child = "packingItems"
@@ -1022,6 +1037,84 @@ enum RootineRelationalWorkspaceAdapter {
             value["kind"] = row["kind"] ?? .string("activity")
             value["note"] = row["note"] ?? .string("")
             value["reserved"] = row["reserved"] ?? .bool(false)
+            value["startsAt"] = row["startsAt"] ?? row["starts_at"] ?? .null
+            value["endsAt"] = row["endsAt"] ?? row["ends_at"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "stays" {
+            value["name"] = row["name"] ?? row["provider"] ?? .string("Nocleg")
+            value["city"] = row["city"] ?? .string("")
+            value["address"] = row["address"] ?? .string("")
+            value["checkIn"] = row["checkIn"] ?? row["check_in"] ?? row["startsAt"] ?? row["starts_at"] ?? .string("")
+            value["checkOut"] = row["checkOut"] ?? row["check_out"] ?? row["endsAt"] ?? row["ends_at"] ?? .string("")
+            value["bookingRef"] = row["bookingRef"] ?? row["booking_reference"] ?? .string("")
+            let rawStayStatus = stringValue(row["status"]) ?? "planned"
+            value["status"] = .string(["planned", "booked", "paid"].contains(rawStayStatus) ? rawStayStatus : "planned")
+            let amountMinor: Double = {
+                if case .number(let number) = row["amountMinor"] ?? row["amount_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            value["amount"] = row["amount"] ?? .number(amountMinor / 100)
+            value["currency"] = row["currency"] ?? row["currencyCode"] ?? row["currency_code"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "bookings" {
+            value["provider"] = row["provider"] ?? .string("")
+            value["bookingReference"] = row["bookingReference"] ?? row["booking_reference"] ?? .string("")
+            let rawBookingStatus = stringValue(row["status"]) ?? "planned"
+            value["status"] = .string(["planned", "booked", "paid", "cancelled", "completed"].contains(rawBookingStatus) ? rawBookingStatus : "planned")
+            value["amountMinor"] = row["amountMinor"] ?? row["amount_minor"] ?? .null
+            value["currencyCode"] = row["currencyCode"] ?? row["currency_code"] ?? .null
+            value["startsAt"] = row["startsAt"] ?? row["starts_at"] ?? .null
+            value["endsAt"] = row["endsAt"] ?? row["ends_at"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "transports" {
+            value["mode"] = row["mode"] ?? .string("other")
+            value["title"] = row["title"] ?? .string("Transport")
+            value["from"] = row["from"] ?? .string("")
+            value["to"] = row["to"] ?? .string("")
+            value["departure"] = row["departure"] ?? row["startsAt"] ?? row["starts_at"] ?? .string("")
+            value["arrival"] = row["arrival"] ?? row["endsAt"] ?? row["ends_at"] ?? .string("")
+            value["bookingRef"] = row["bookingRef"] ?? row["booking_reference"] ?? .string("")
+            let rawTransportStatus = stringValue(row["status"]) ?? "planned"
+            value["status"] = .string(["planned", "booked", "paid"].contains(rawTransportStatus) ? rawTransportStatus : "planned")
+            let amountMinor: Double = {
+                if case .number(let number) = row["amountMinor"] ?? row["amount_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            value["amount"] = row["amount"] ?? .number(amountMinor / 100)
+            value["currency"] = row["currency"] ?? row["currencyCode"] ?? row["currency_code"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "budget" {
+            value["category"] = row["category"] ?? .string("other")
+            value["label"] = row["label"] ?? row["name"] ?? .string("Budżet")
+            let plannedMinor: Double = {
+                if case .number(let number) = row["plannedMinor"] ?? row["planned_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            let actualMinor: Double = {
+                if case .number(let number) = row["actualMinor"] ?? row["actual_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            value["planned"] = row["planned"] ?? .number(plannedMinor / 100)
+            value["actual"] = row["actual"] ?? .number(actualMinor / 100)
+            value["paid"] = row["paid"] ?? .bool(false)
+            value["currency"] = row["currency"] ?? row["currencyCode"] ?? row["currency_code"] ?? .null
+        } else if child == "documents" {
+            value["name"] = row["name"] ?? row["title"] ?? .string("Dokument")
+            value["owner"] = row["owner"] ?? .string("")
+            let rawStatus = stringValue(row["status"]) ?? "todo"
+            value["status"] = .string(["todo", "pending", "ready"].contains(rawStatus) ? rawStatus : "pending")
+            value["expiresAt"] = row["expiresAt"] ?? row["expires_at"] ?? .string("")
+            value["note"] = row["note"] ?? .string("")
+            value["storagePath"] = row["storagePath"] ?? row["storage_path"] ?? .null
+        } else if child == "packingItems" {
+            value["label"] = row["label"] ?? row["name"] ?? .string("Rzecz")
+            value["quantity"] = row["quantity"] ?? .number(1)
+            value["packed"] = row["packed"] ?? .bool(false)
+        } else if child == "tasks" {
+            value["title"] = row["title"] ?? row["name"] ?? .string("Zadanie")
+            value["category"] = row["category"] ?? .string("other")
+            value["dueDate"] = row["dueDate"] ?? row["due_date"] ?? .string("")
+            value["completed"] = row["completed"] ?? row["done"] ?? .bool(false)
         }
         try updateArrayObject(&root, key: "trips", id: tripID) { trip in
             var values = arrayValue(trip[child]); upsert(&values, id: id, value: .object(value)); trip[child] = .array(values)

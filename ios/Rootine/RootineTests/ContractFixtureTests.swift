@@ -1549,6 +1549,177 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(trip["name"], .string("Weekend nad morzem"))
     }
 
+    func testTravelFixtureRetainsFullTripDossierAcrossNativeProjection() throws {
+        let payload = try fixture("travel-workspace-v2", as: JSONValue.self)
+        let native = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: payload)
+        let trip = try XCTUnwrap(native.trips.first)
+
+        XCTAssertEqual(native.version, 1)
+        XCTAssertEqual(trip.name, "Gdańsk")
+        XCTAssertEqual(trip.startDate, "2026-09-12")
+        XCTAssertEqual(trip.endDate, "2026-09-15")
+        XCTAssertEqual(trip.status, "ready")
+        XCTAssertEqual(trip.stays.first?.bookingRef, "ABC")
+        XCTAssertEqual(trip.itinerary.first?.location, "Stare Miasto")
+        XCTAssertEqual(trip.budget.first?.actual, 900)
+        XCTAssertEqual(trip.documents.first?.status, "ready")
+        XCTAssertEqual(trip.tasks.first?.category, "booking")
+        XCTAssertTrue(rootineValidateTravelWorkspace(native).isEmpty)
+        XCTAssertEqual(try roundTrip(native), native)
+
+        let remapped = try RootineCanonicalWorkspaceMapping.payload(for: native)
+        guard case .object(let root) = remapped,
+              case .array(let trips) = root["trips"],
+              case .object(let remappedTrip) = trips.first else {
+            return XCTFail("Travel payload should contain a canonical trip")
+        }
+        XCTAssertEqual(remappedTrip["status"], .string("ready"))
+        XCTAssertNotNil(remappedTrip["stays"])
+        XCTAssertNotNil(remappedTrip["budget"])
+        XCTAssertNotNil(remappedTrip["documents"])
+        XCTAssertNotNil(remappedTrip["tasks"])
+    }
+
+    func testTravelBudgetSummaryDoesNotDoubleCountReservations() {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        var trip = TravelRecord(id: "budget-trip", destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, itinerary: [], createdAt: timestamp, updatedAt: timestamp)
+        trip.stays = [TravelStay(id: "stay", name: "Hotel", city: "Gdańsk", address: "", checkIn: "2026-09-12", checkOut: "2026-09-15", bookingRef: "", status: "paid", amount: 900)]
+        trip.transports = [TravelTransport(id: "train", mode: "train", title: "PKP", from: "Warszawa", to: "Gdańsk", departure: "2026-09-12", arrival: "2026-09-12", bookingRef: "", status: "booked", amount: 100)]
+        trip.budget = [TravelBudgetLine(id: "stay-budget", category: "stay", label: "Hotel", planned: 900, actual: 900, paid: true)]
+
+        let summary = summarizeTravelBudget(trip)
+        XCTAssertEqual(summary.planned, 1_000)
+        XCTAssertEqual(summary.actual, 1_000)
+        XCTAssertEqual(summary.paid, 900)
+        XCTAssertEqual(summary.remaining, 0)
+        XCTAssertEqual(summary.reservationCommitted, 1_000)
+        XCTAssertEqual(summary.unbudgetedReservations, 100)
+    }
+
+    func testTravelValidationRejectsDatesTimezoneMoneyAndPackingErrors() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let item = TravelItineraryItem(
+            id: "item-1",
+            date: "2026-09-12",
+            time: "16:20",
+            title: "Spacer",
+            location: "Stare Miasto",
+            kind: "sightseeing",
+            note: "",
+            reserved: false,
+            timezone: "Europe/Warsaw"
+        )
+        let trip = TravelRecord(
+            id: "trip-validation",
+            name: "Gdańsk",
+            destination: "Gdańsk",
+            startDate: "2026-09-12",
+            endDate: "2026-09-15",
+            status: "planning",
+            travelers: ["Rafał"],
+            baseCurrency: "PLN",
+            note: "",
+            archivedAt: nil,
+            stays: [TravelStay(id: "stay-1", name: "Hotel", city: "Gdańsk", address: "Długa 1", checkIn: "2026-09-12T15:00:00.000Z", checkOut: "2026-09-15T10:00:00.000Z", bookingRef: "", status: "planned", amount: 900)],
+            transports: [],
+            bookings: [],
+            itinerary: [item],
+            budget: [TravelBudgetLine(id: "budget-1", category: "stay", label: "Hotel", planned: 900, actual: 0, paid: false)],
+            documents: [],
+            tasks: [],
+            packingItems: [TravelPackingItem(id: "bag-1", label: "Kurtka", quantity: 1, packed: false)],
+            timezone: "Europe/Warsaw",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let valid = TravelWorkspace(version: 1, updatedAt: timestamp, trips: [trip])
+        XCTAssertTrue(rootineValidateTravelWorkspace(valid).isEmpty)
+
+        var invalid = trip
+        invalid.baseCurrency = "ZZZ"
+        invalid.timezone = "Mars/Phobos"
+        invalid.itinerary[0].time = "25:61"
+        invalid.stays[0].amount = -1
+        invalid.packingItems[0].quantity = 0
+        let issues = rootineValidateTravelWorkspace(TravelWorkspace(version: 1, updatedAt: timestamp, trips: [invalid]))
+        XCTAssertTrue(issues.contains { if case .invalidCurrency("trip-validation") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidTimezone("trip-validation") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidClockTime(tripID: "trip-validation", id: "item-1") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidAmount(tripID: "trip-validation", collection: "stays", id: "stay-1") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidQuantity(tripID: "trip-validation", id: "bag-1") = $0 { return true }; return false })
+
+        var reversed = trip
+        reversed.endDate = "2026-09-11"
+        XCTAssertTrue(rootineValidateTravelWorkspace(TravelWorkspace(version: 1, updatedAt: timestamp, trips: [reversed])).contains { if case .invalidTripDates = $0 { return true }; return false })
+    }
+
+    func testTravelLocalDatesRejectNonexistentDSTWallClock() {
+        XCTAssertNotNil(RootineDate.date(fromLocalDateTime: "2026-03-29T01:30", timezone: "Europe/Warsaw"))
+        XCTAssertNil(RootineDate.date(fromLocalDateTime: "2026-03-29T02:30", timezone: "Europe/Warsaw"))
+        XCTAssertEqual(RootineDate.localDate(RootineDate.dateOnly(from: "2026-09-12", timezone: "Pacific/Auckland")!, timezone: "Pacific/Auckland"), "2026-09-12")
+    }
+
+    func testRelationalTravelBookingsDoNotMaterializeAsStays() throws {
+        let materialized = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 1,
+                storageKey: RootineStorageKey.travel.rawValue,
+                entity: "trip",
+                entityID: "trip-relational",
+                record: .object([
+                    "name": .string("Podróż"),
+                    "destination": .string("Gdańsk"),
+                    "start_date": .string("2026-09-12"),
+                    "end_date": .string("2026-09-15"),
+                    "status": .string("ongoing"),
+                    "base_currency": .string("PLN")
+                ])
+            ),
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.travel.rawValue,
+                entity: "trip_bookings",
+                entityID: "booking-1",
+                record: .object([
+                    "trip_id": .string("trip-relational"),
+                    "provider": .string("PKP"),
+                    "booking_reference": .string("ABC"),
+                    "status": .string("booked"),
+                    "amount_minor": .number(12000),
+                    "currency_code": .string("PLN")
+                ])
+            )
+        ])
+        let payload = try XCTUnwrap(materialized.documents[RootineCanonicalWorkspaceMapping.canonicalStorageKey(for: .travel)])
+        let native = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: payload)
+        let trip = try XCTUnwrap(native.trips.first)
+        XCTAssertEqual(trip.status, "planning")
+        XCTAssertTrue(trip.stays.isEmpty)
+        XCTAssertEqual(trip.bookings.first?.bookingReference, "ABC")
+        XCTAssertEqual(trip.bookings.first?.amountMinor, 12000)
+    }
+
+    @MainActor
+    func testTravelMutationsUseStableIDsAndRejectInvalidOfflineDrafts() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        await environment.addTrip(destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, operationID: "retry-trip")
+        await environment.addTrip(destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, operationID: "retry-trip")
+        let tripID = try! XCTUnwrap(environment.travelWorkspace.trips.first?.id)
+        await environment.addTravelPackingItem(tripID: tripID, label: "Paszport", operationID: "passport")
+        await environment.addTravelPackingItem(tripID: tripID, label: "Paszport", operationID: "passport")
+        XCTAssertEqual(environment.travelWorkspace.trips.count, 1)
+        XCTAssertEqual(environment.travelWorkspace.trips.first?.packingItems.count, 1)
+        await environment.setTravelStatus("not-a-status", tripID: tripID)
+        XCTAssertEqual(environment.travelWorkspace.trips.first?.status, "planning")
+    }
+
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         let bundle = Bundle(for: ContractFixtureTests.self)
         let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"))

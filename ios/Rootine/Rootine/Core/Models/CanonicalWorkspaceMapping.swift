@@ -400,25 +400,30 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     static func payload(for workspace: TravelWorkspace) throws -> JSONValue {
-        let trips = deduplicatedTravelTrips(workspace.trips).map { trip in
-            let dates = travelDates(trip.dateRange, createdAt: trip.createdAt)
+        let trips = try deduplicatedTravelTrips(workspace.trips).map { trip -> CanonicalTravelTrip in
+            let dates = travelDates(trip, createdAt: trip.createdAt)
             return CanonicalTravelTrip(
                 id: trip.id,
-                name: trip.destination,
+                name: trip.name.isEmpty ? trip.destination : trip.name,
                 destination: trip.destination,
                 startDate: dates.start,
                 endDate: dates.end,
-                status: "planning",
-                travelers: [],
-                baseCurrency: "PLN",
-                note: travelMigrationNote(trip, dates: dates),
-                archivedAt: nil,
-                stays: [],
-                transports: [],
-                itinerary: deduplicatedTravelItinerary(trip.itinerary).map(canonicalTravelItinerary),
-                budget: [],
-                documents: [],
-                tasks: []
+                status: trip.status,
+                travelers: trip.travelers,
+                baseCurrency: trip.baseCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+                note: trip.note.isEmpty ? travelMigrationNote(trip, dates: dates) : trip.note,
+                archivedAt: trip.archivedAt,
+                stays: try jsonArray(trip.stays),
+                transports: try jsonArray(trip.transports),
+                bookings: try jsonArray(trip.bookings),
+                itinerary: deduplicatedTravelItinerary(trip.itinerary).map {
+                    canonicalTravelItinerary($0, fallbackDate: dates.start)
+                },
+                budget: try jsonArray(trip.budget),
+                documents: try jsonArray(trip.documents),
+                tasks: try jsonArray(trip.tasks),
+                packingItems: try jsonArray(trip.packingItems),
+                timezone: trip.timezone
             )
         }
         return try jsonValue(CanonicalTravelWorkspace(version: 2, updatedAt: workspace.updatedAt, trips: trips))
@@ -426,21 +431,54 @@ enum RootineCanonicalWorkspaceMapping {
 
     static func travelWorkspace(from payload: JSONValue) throws -> TravelWorkspace {
         let canonical = try decode(CanonicalTravelWorkspace.self, from: payload)
-        let trips = canonical.trips.map { trip in
+        guard canonical.version == 2 else {
+            throw RootineNormalizedReadError.materializationFailed("nieobsługiwana wersja podróży \(canonical.version)")
+        }
+        let trips = try canonical.trips.map { trip in
             let nights = max(1, calendarDays(from: trip.startDate, to: trip.endDate))
             return TravelRecord(
                 id: trip.id,
+                name: trip.name,
                 destination: trip.destination,
-                dateRange: "\(trip.startDate) – \(trip.endDate)",
-                nights: nights,
-                itinerary: deduplicatedCanonicalTravelItinerary(trip.itinerary).map { item in
-                    TravelItineraryItem(id: item.id, day: item.date, title: item.title, detail: [item.location, item.note].filter { !$0.isEmpty }.joined(separator: " · "))
+                startDate: trip.startDate,
+                endDate: trip.endDate,
+                status: trip.status,
+                travelers: trip.travelers,
+                baseCurrency: trip.baseCurrency,
+                note: trip.note,
+                archivedAt: trip.archivedAt,
+                stays: try decodeArray(TravelStay.self, from: trip.stays),
+                transports: try decodeArray(TravelTransport.self, from: trip.transports),
+                bookings: try decodeArray(TravelBooking.self, from: trip.bookings),
+                itinerary: deduplicatedCanonicalTravelItinerary(trip.itinerary ?? []).map { item in
+                    TravelItineraryItem(
+                        id: item.id,
+                        date: item.date,
+                        time: item.time,
+                        title: item.title,
+                        location: item.location,
+                        kind: item.kind,
+                        note: item.note,
+                        reserved: item.reserved,
+                        startsAt: item.startsAt,
+                        endsAt: item.endsAt,
+                        timezone: item.timezone
+                    )
                 },
+                budget: try decodeArray(TravelBudgetLine.self, from: trip.budget),
+                documents: try decodeArray(TravelDocument.self, from: trip.documents),
+                tasks: try decodeArray(TravelTask.self, from: trip.tasks),
+                packingItems: try decodeArray(TravelPackingItem.self, from: trip.packingItems),
+                timezone: trip.timezone,
                 createdAt: canonical.updatedAt,
                 updatedAt: canonical.updatedAt
             )
         }
-        return TravelWorkspace(version: 1, updatedAt: canonical.updatedAt, trips: deduplicatedTravelTrips(trips))
+        let workspace = TravelWorkspace(version: 1, updatedAt: canonical.updatedAt, trips: deduplicatedTravelTrips(trips))
+        guard rootineValidateTravelWorkspace(workspace).isEmpty else {
+            throw RootineNormalizedReadError.materializationFailed("nieprawidłowe dane podróży")
+        }
+        return workspace
     }
 
     static func mergedTravelPayload(for workspace: TravelWorkspace, onto base: JSONValue) throws -> JSONValue {
@@ -456,7 +494,7 @@ enum RootineCanonicalWorkspaceMapping {
                 return nil
             }
             let originalTrip = originalNative?.trips.first(where: { normalizedIdentifier($0.id) == id })
-            for key in ["destination", "startDate", "endDate", "itinerary"] {
+            for key in ["name", "destination", "startDate", "endDate", "status", "travelers", "baseCurrency", "note", "archivedAt"] {
                 if key == "itinerary" { continue }
                 if let replacement = native[key] { trip[key] = replacement }
             }
@@ -466,6 +504,17 @@ enum RootineCanonicalWorkspaceMapping {
                     native: workspace.trips.first(where: { normalizedIdentifier($0.id) == id })?.itinerary ?? [],
                     original: originalTrip?.itinerary ?? []
                 )
+            }
+            if let originalTrip,
+               let currentTrip = workspace.trips.first(where: { normalizedIdentifier($0.id) == id }) {
+                if currentTrip.stays != originalTrip.stays { trip["stays"] = try? jsonValue(currentTrip.stays) }
+                if currentTrip.transports != originalTrip.transports { trip["transports"] = try? jsonValue(currentTrip.transports) }
+                if currentTrip.bookings != originalTrip.bookings { trip["bookings"] = try? jsonValue(currentTrip.bookings) }
+                if currentTrip.budget != originalTrip.budget { trip["budget"] = try? jsonValue(currentTrip.budget) }
+                if currentTrip.documents != originalTrip.documents { trip["documents"] = try? jsonValue(currentTrip.documents) }
+                if currentTrip.tasks != originalTrip.tasks { trip["tasks"] = try? jsonValue(currentTrip.tasks) }
+                if currentTrip.packingItems != originalTrip.packingItems { trip["packingItems"] = try? jsonValue(currentTrip.packingItems) }
+                if currentTrip.timezone != originalTrip.timezone { trip["timezone"] = currentTrip.timezone.map(JSONValue.string) ?? .null }
             }
             return .object(trip)
         }
@@ -677,16 +726,19 @@ enum RootineCanonicalWorkspaceMapping {
         return Array(retained.reversed())
     }
 
-    private static func canonicalTravelItinerary(_ item: TravelItineraryItem) -> CanonicalTravelItinerary {
+    private static func canonicalTravelItinerary(_ item: TravelItineraryItem, fallbackDate: String? = nil) -> CanonicalTravelItinerary {
         CanonicalTravelItinerary(
             id: normalizedIdentifier(item.id),
-            date: validDate(item.day),
-            time: "",
+            date: validDate(item.date.isEmpty ? item.day : item.date, fallback: fallbackDate ?? "1970-01-01"),
+            time: item.time,
             title: item.title,
-            location: "",
-            kind: "activity",
-            note: travelItineraryNote(item),
-            reserved: false
+            location: item.location,
+            kind: item.kind,
+            note: item.note.isEmpty ? travelItineraryNote(item) : item.note,
+            reserved: item.reserved,
+            startsAt: item.startsAt,
+            endsAt: item.endsAt,
+            timezone: item.timezone
         )
     }
 
@@ -911,10 +963,23 @@ enum RootineCanonicalWorkspaceMapping {
         try JSONDecoder().decode(T.self, from: JSONEncoder().encode(value))
     }
 
+    private static func decodeArray<T: Decodable>(_ type: T.Type, from value: [JSONValue]?) throws -> [T] {
+        try (value ?? []).map { try decode(type, from: $0) }
+    }
+
+    private static func jsonArray<T: Encodable>(_ value: T) throws -> [JSONValue] {
+        guard case .array(let values) = try jsonValue(value) else { return [] }
+        return values
+    }
+
     private static func validDate(_ value: String) -> String {
+        validDate(value, fallback: nil)
+    }
+
+    private static func validDate(_ value: String, fallback: String?) -> String {
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isLocalDate(normalized), date(from: normalized) != nil else {
-            return RootineDate.localDate()
+            return fallback.flatMap { isLocalDate($0) && date(from: $0) != nil ? $0 : nil } ?? RootineDate.localDate()
         }
         return normalized
     }
@@ -963,11 +1028,12 @@ enum RootineCanonicalWorkspaceMapping {
         }
     }
 
-    private static func travelDates(_ value: String, createdAt: String) -> (start: String, end: String) {
+    private static func travelDates(_ trip: TravelRecord, createdAt: String) -> (start: String, end: String) {
+        let value = trip.dateRange
         let pieces = value.components(separatedBy: "–").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let fallback = validDate(String(createdAt.prefix(10)))
-        let start = validDate(pieces.first ?? fallback)
-        let end = validDate(pieces.count > 1 ? pieces[1] : start)
+        let fallback = validDate(String(createdAt.prefix(10)), fallback: "1970-01-01")
+        let start = validDate(trip.startDate.isEmpty ? (pieces.first ?? fallback) : trip.startDate, fallback: fallback)
+        let end = validDate(trip.endDate.isEmpty ? (pieces.count > 1 ? pieces[1] : start) : trip.endDate, fallback: start)
         return (start, end >= start ? end : start)
     }
 
@@ -1255,12 +1321,15 @@ private struct CanonicalTravelTrip: Codable {
     var baseCurrency: String
     var note: String
     var archivedAt: String?
-    var stays: [JSONValue]
-    var transports: [JSONValue]
-    var itinerary: [CanonicalTravelItinerary]
-    var budget: [JSONValue]
-    var documents: [JSONValue]
-    var tasks: [JSONValue]
+    var stays: [JSONValue]?
+    var transports: [JSONValue]?
+    var bookings: [JSONValue]?
+    var itinerary: [CanonicalTravelItinerary]?
+    var budget: [JSONValue]?
+    var documents: [JSONValue]?
+    var tasks: [JSONValue]?
+    var packingItems: [JSONValue]?
+    var timezone: String?
 }
 
 private struct CanonicalTravelItinerary: Codable {
@@ -1272,6 +1341,9 @@ private struct CanonicalTravelItinerary: Codable {
     var kind: String
     var note: String
     var reserved: Bool
+    var startsAt: String?
+    var endsAt: String?
+    var timezone: String?
 }
 
 private struct CanonicalHealthWorkspace: Codable {
