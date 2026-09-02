@@ -83,6 +83,14 @@ final class AppEnvironment: ObservableObject {
     private let deviceIdentity: RootineDeviceIdentityStore
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
+    /// Local reminders consume the same task aggregate as the sync boundary.
+    /// The scheduler is optional so permission/API failures never gate local
+    /// persistence or the sync queue.
+    private var localNotificationScheduler: RootineLocalNotificationScheduler?
+    /// B08 can replace this in-memory value with the profile payload once its
+    /// normalized read is available. It intentionally has no SQLite shadow in
+    /// B10, matching the single aggregate-cache decision in the main plan.
+    private var notificationPreferences = RootineNotificationPreferences()
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
     private var creationGate = WorkspaceCreationGate()
     private var refreshTask: Task<Void, Never>?
@@ -476,6 +484,9 @@ final class AppEnvironment: ObservableObject {
         session = nil
         store = nil
         syncEngine = nil
+        let scheduler = localNotificationScheduler
+        localNotificationScheduler = nil
+        Task { await scheduler?.cancelAll() }
         canonicalShadows.removeAll()
         taskWorkspace = .empty
         nutritionWorkspace = .empty
@@ -722,6 +733,24 @@ final class AppEnvironment: ObservableObject {
             await flushPendingMutations()
         }
         await refreshRecoveryFiles()
+    }
+
+    /// Profile sync (B08) can feed notification preferences without coupling
+    /// the local scheduler to a transport or persistence implementation.
+    func updateNotificationPreferences(_ preferences: RootineNotificationPreferences) async {
+        notificationPreferences = preferences
+        if let userID = session?.user.id {
+            RootineNotificationPreferencesStore.save(preferences, userID: userID)
+        }
+        await reconcileLocalNotifications()
+    }
+
+    /// Permission UX remains outside B10. This method is intentionally safe to
+    /// call from login/foreground flows: a denial or OS error is a value, not
+    /// a thrown error that could interrupt sync.
+    func requestNotificationAuthorization() async -> RootineNotificationAuthorization {
+        guard let scheduler = localNotificationScheduler else { return .unavailable }
+        return await scheduler.requestAuthorization()
     }
 
     func toggleTaskCompletion(id: Int, on date: Date = Date()) async {
@@ -1934,6 +1963,10 @@ final class AppEnvironment: ObservableObject {
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
         taskWorkspace = next
+        // Schedule from the just-published local aggregate before attempting
+        // the network queue. This keeps reminders working while offline and
+        // ensures an edit/completion/delete invalidates its old occurrence.
+        await reconcileLocalNotifications()
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
@@ -2220,13 +2253,40 @@ final class AppEnvironment: ObservableObject {
         workspaceSyncStatus = .localOnly(pending: pending)
     }
 
+    /// Reconciliation is deliberately fire-and-report: notification
+    /// permission, an unavailable simulator service, or an OS request error
+    /// must never fail a local workspace write or the sync queue. B08 can
+    /// update `notificationPreferences` from the profile before calling this
+    /// same boundary; B09 can later fill the device ID in the context.
+    private func reconcileLocalNotifications() async {
+        guard let scheduler = localNotificationScheduler else { return }
+        _ = await scheduler.reconcile(
+            workspace: taskWorkspace,
+            preferences: notificationPreferences,
+            now: Date()
+        )
+    }
+
     private func configureRuntime(userID: String) {
         stopRealtimeRuntime()
         canonicalShadows.removeAll()
         lastDeviceRegistrationFingerprint = nil
         deviceRegistration = nil
+        let previousScheduler = localNotificationScheduler
+        // Preferences are account-scoped. Never carry an opt-in or lock-screen
+        // detail setting across an account switch before B08 has supplied the
+        // new profile payload.
+        notificationPreferences = RootineNotificationPreferencesStore.load(userID: userID)
+            ?? RootineNotificationPreferences()
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
+        localNotificationScheduler = RootineLocalNotificationScheduler(
+            context: RootineNotificationAccountContext(userID: userID)
+        )
+        // Login/account switching must not strand the previous account's
+        // pending requests. The old actor retains its own hashed ownership
+        // prefix, so this cancellation cannot touch the new account.
+        Task { await previousScheduler?.cancelAll() }
         guard let normalizedRemote = try? RootineSyncRemoteClient(configuration: configuration) else {
             syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
             return
@@ -2539,6 +2599,7 @@ final class AppEnvironment: ObservableObject {
         let localAffairs = (try? await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
         affairsWorkspace = await sanitizedAffairsWorkspace(localAffairs, store: store, syncEngine: syncEngine, allowSync: false)
         recoveryFiles = (try? await store.recoveryFiles()) ?? []
+        await reconcileLocalNotifications()
     }
 
     private func loadCanonicalShadows(from store: WorkspaceFileStore) async {
@@ -2690,6 +2751,7 @@ final class AppEnvironment: ObservableObject {
             travelWorkspace = travelResult.value
             healthWorkspace = healthResult.value
             affairsWorkspace = await sanitizedAffairsWorkspace(affairsResult.value, store: store, syncEngine: syncEngine, allowSync: true)
+            await reconcileLocalNotifications()
             let reconciliationResults: [(RootineStorageKey, Bool)] = [
                 (.tasks, taskResult.conflict),
                 (.nutrition, nutritionResult.conflict),
