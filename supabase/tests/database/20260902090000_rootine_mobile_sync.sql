@@ -5,7 +5,7 @@
 -- These metadata checks keep the migration safe to run on a fresh database.
 begin;
 
-select plan(16);
+select plan(21);
 
 select ok(
   to_regclass('public.rootine_sync_records') is not null,
@@ -88,6 +88,33 @@ select ok(
       and tgname = 'rootine_sync_changes_append_only'
   ),
   'outbox append-only guard exists'
+);
+select ok(
+  pg_get_functiondef(to_regprocedure('public.rootine_sync_bootstrap(text)')) like '%limit 501%'
+    and pg_get_functiondef(to_regprocedure('public.rootine_sync_bootstrap(text)')) like '%has_more%',
+  'bootstrap is bounded and reports pagination'
+);
+select ok(
+  pg_get_functiondef(to_regprocedure('public.rootine_sync_pull(bigint,integer,text)')) like '%limit requested_limit + 1%'
+    and pg_get_functiondef(to_regprocedure('public.rootine_sync_pull(bigint,integer,text)')) like '%cursor_expired%',
+  'pull is bounded and handles cursor expiry'
+);
+select ok(
+  pg_get_functiondef(to_regprocedure('public.rootine_sync_push(text,jsonb)')) like '%already_applied%'
+    and pg_get_functiondef(to_regprocedure('public.rootine_sync_push(text,jsonb)')) like '%server_revision%',
+  'push contains idempotency and conflict paths'
+);
+select ok(
+  pg_get_functiondef(to_regprocedure('public.rootine_sync_push(text,jsonb)')) like '%deleted_at%'
+    and pg_get_functiondef(to_regprocedure('public.rootine_sync_push(text,jsonb)')) like '%rootine_sync_revisions%',
+  'push records tombstones and revision history'
+);
+select ok(
+  strpos(
+    pg_get_functiondef(to_regprocedure('public.rootine_register_device(text,text,text,text,text)')),
+    $$'contract_version', 3$$
+  ) > 0,
+  'five-argument registration RPC remains the v3 transport body after device registry migrations'
 );
 
 select * from finish();

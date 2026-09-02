@@ -9,7 +9,7 @@
 create table if not exists public.rootine_devices (
   id text primary key default gen_random_uuid()::text,
   user_id uuid not null references auth.users (id) on delete cascade,
-  device_id text not null check (char_length(device_id) between 1 and 180),
+  device_id text not null check (device_id ~ '^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
   platform text not null default 'ios' check (platform in ('ios', 'web', 'android', 'other')),
   app_version text check (app_version is null or char_length(app_version) between 1 and 80),
   apns_environment text check (apns_environment is null or apns_environment in ('sandbox', 'production')),
@@ -227,15 +227,27 @@ begin
   if current_user_id is null then
     raise exception 'Authentication is required.' using errcode = '42501';
   end if;
-  if normalized_device_id is null or char_length(normalized_device_id) > 180
-    or normalized_version is null or char_length(normalized_version) > 64
-    or normalized_platform not in ('ios', 'web', 'android', 'other') then
+  if normalized_device_id is null
+    or p_device_id is distinct from normalized_device_id
+    or normalized_device_id !~ '^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    or normalized_version is null or char_length(normalized_version) > 40
+    or normalized_platform <> 'ios'
+    or p_platform is distinct from normalized_platform then
     raise exception 'Invalid device registration.' using errcode = '22023';
   end if;
-  if normalized_environment is not null and normalized_environment not in ('sandbox', 'production') then
+  -- Notification permission may be unavailable on iOS. APNs metadata is
+  -- optional, but a supplied environment and token must arrive as a pair.
+  if (p_apns_environment is null) <> (p_push_token is null) then
+    raise exception 'APNs environment and push token must be supplied together.' using errcode = '22023';
+  end if;
+  if p_apns_environment is not null and (
+    normalized_environment is null
+    or normalized_environment not in ('sandbox', 'production')
+    or p_apns_environment is distinct from normalized_environment
+  ) then
     raise exception 'Invalid APNs environment.' using errcode = '22023';
   end if;
-  if normalized_push_token is not null and char_length(normalized_push_token) > 4096 then
+  if p_push_token is not null and (normalized_push_token is null or char_length(normalized_push_token) > 512) then
     raise exception 'Invalid push token.' using errcode = '22023';
   end if;
 
@@ -260,10 +272,9 @@ begin
   on conflict (user_id, device_id) do nothing;
 
   return jsonb_build_object(
-    'contract_version', 1,
+    'contract_version', 3,
     'device_id', normalized_device_id,
-    'registered', true,
-    'last_seen_at', now_utc
+    'registered_at', now_utc
   );
 end;
 $$;
@@ -286,6 +297,7 @@ as $$
     from public.rootine_devices devices
     where devices.user_id = p_user_id
       and devices.device_id = trim(coalesce(p_device_id, ''))
+      and devices.device_id ~ '^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
       and devices.revoked_at is null
       and devices.deleted_at is null
   );
@@ -302,54 +314,71 @@ as $$
 declare
   current_user_id uuid := auth.uid();
   normalized_device_id text := nullif(trim(p_device_id), '');
-  current_cursor bigint;
-  oldest_cursor bigint;
-  records jsonb;
+  server_cursor bigint;
+  next_cursor bigint;
+  changes jsonb;
+  has_more boolean;
 begin
   if current_user_id is null then
     raise exception 'Authentication is required.' using errcode = '42501';
   end if;
   if not public.rootine_sync_device_is_authorized(current_user_id, normalized_device_id) then
     return jsonb_build_object(
-      'contract_version', 1,
-      'error_code', 'unauthorized',
-      'error', 'Device is not authorized'
+      'contract_version', 3,
+      'error', 'unauthorized'
     );
   end if;
 
-  select coalesce(max(changes.change_cursor), 0), coalesce(min(changes.change_cursor), 0)
-  into current_cursor, oldest_cursor
-  from public.rootine_sync_changes changes
-  where changes.user_id = current_user_id;
+  select coalesce(max(sync_changes.change_cursor), 0)
+  into server_cursor
+  from public.rootine_sync_changes sync_changes
+  where sync_changes.user_id = current_user_id;
 
-  select coalesce(jsonb_agg(
-    jsonb_build_object(
-      'entity', sync_record.entity,
-      'entity_id', sync_record.entity_id,
-      'revision', sync_record.revision,
-      'operation', case when sync_record.deleted_at is null then 'upsert' else 'delete' end,
-      'record', sync_record.payload,
-      'deleted_at', sync_record.deleted_at,
-      'updated_at', sync_record.updated_at
-    ) order by sync_record.entity, sync_record.entity_id
-  ), '[]'::jsonb)
-  into records
-  from public.rootine_sync_records sync_record
-  where sync_record.user_id = current_user_id;
+  select coalesce(jsonb_agg(change_page.item order by (change_page.item->>'cursor')::bigint), '[]'::jsonb),
+         count(*) > 500
+  into changes, has_more
+  from (
+    select jsonb_build_object(
+      'cursor', latest.change_cursor,
+      'entity', latest.entity,
+      'entity_id', latest.entity_id,
+      'operation', latest.operation,
+      'record', case when latest.operation = 'delete'
+        then latest.payload || jsonb_build_object('deleted_at', coalesce(latest.deleted_at::text, latest.payload->>'deleted_at'))
+        else latest.payload end
+    ) as item
+    from (
+      select distinct on (sync_changes.entity, sync_changes.entity_id) sync_changes.*
+      from public.rootine_sync_changes sync_changes
+      where sync_changes.user_id = current_user_id
+      order by sync_changes.entity, sync_changes.entity_id, sync_changes.change_cursor desc
+    ) latest
+    order by latest.change_cursor
+    limit 501
+  ) change_page;
+
+  if has_more then
+    select ((changes->(jsonb_array_length(changes) - 2))->>'cursor')::bigint into next_cursor;
+    changes := changes - (jsonb_array_length(changes) - 1);
+  else
+    next_cursor := coalesce(
+      ((changes->(jsonb_array_length(changes) - 1))->>'cursor')::bigint,
+      0
+    );
+  end if;
 
   insert into public.rootine_sync_cursors (user_id, device_id, last_cursor, updated_at)
-  values (current_user_id, normalized_device_id, current_cursor, timezone('utc', now()))
+  values (current_user_id, normalized_device_id, next_cursor, timezone('utc', now()))
   on conflict (user_id, device_id) do update set
     last_cursor = greatest(public.rootine_sync_cursors.last_cursor, excluded.last_cursor),
     updated_at = excluded.updated_at;
 
   return jsonb_build_object(
-    'contract_version', 1,
-    'device_id', normalized_device_id,
-    'cursor', current_cursor,
-    'next_cursor', current_cursor,
-    'oldest_cursor', oldest_cursor,
-    'records', records
+    'contract_version', 3,
+    'server_cursor', server_cursor,
+    'next_cursor', next_cursor,
+    'has_more', has_more,
+    'changes', changes
   );
 end;
 $$;
@@ -387,10 +416,8 @@ begin
   end if;
   if not public.rootine_sync_device_is_authorized(current_user_id, normalized_device_id) then
     return jsonb_build_object(
-      'contract_version', 1,
-      'from_cursor', requested_cursor,
-      'error_code', 'unauthorized',
-      'error', 'Device is not authorized'
+      'contract_version', 3,
+      'error', 'unauthorized'
     );
   end if;
 
@@ -411,14 +438,8 @@ begin
 
   if oldest_cursor > 0 and requested_cursor < oldest_cursor - 1 then
     return jsonb_build_object(
-      'contract_version', 1,
-      'from_cursor', requested_cursor,
-      'next_cursor', requested_cursor,
-      'oldest_cursor', oldest_cursor,
-      'has_more', false,
-      'cursor_expired', true,
-      'error_code', 'cursor_expired',
-      'changes', '[]'::jsonb
+      'contract_version', 3,
+      'error', 'cursor_expired'
     );
   end if;
 
@@ -430,13 +451,10 @@ begin
       'cursor', sync_changes.change_cursor,
       'entity', sync_changes.entity,
       'entity_id', sync_changes.entity_id,
-      'revision', sync_changes.revision,
       'operation', sync_changes.operation,
-      'record', sync_changes.payload,
-      'deleted_at', case when sync_changes.operation = 'delete'
-        then coalesce(sync_changes.deleted_at::text, sync_changes.payload->>'deleted_at')
-        else null end,
-      'updated_at', sync_changes.updated_at
+      'record', case when sync_changes.operation = 'delete'
+        then sync_changes.payload || jsonb_build_object('deleted_at', coalesce(sync_changes.deleted_at::text, sync_changes.payload->>'deleted_at'))
+        else sync_changes.payload end
     ) as item
     from public.rootine_sync_changes sync_changes
     where sync_changes.user_id = current_user_id
@@ -462,13 +480,10 @@ begin
     updated_at = excluded.updated_at;
 
   return jsonb_build_object(
-    'contract_version', 1,
+    'contract_version', 3,
     'from_cursor', requested_cursor,
     'next_cursor', next_cursor,
-    'oldest_cursor', oldest_cursor,
-    'latest_cursor', latest_cursor,
     'has_more', has_more,
-    'cursor_expired', false,
     'changes', changes
   );
 end;
@@ -517,7 +532,7 @@ begin
     raise exception 'Commands must be an array.' using errcode = '22023';
   end if;
   command_count := jsonb_array_length(p_commands);
-  if command_count > 100 then
+  if command_count < 1 or command_count > 100 then
     raise exception 'Command batch is too large.' using errcode = '22023';
   end if;
   if pg_column_size(p_commands) > 1024 * 1024 then
@@ -532,9 +547,9 @@ begin
       ));
     end loop;
     return jsonb_build_object(
-      'contract_version', 1,
+      'contract_version', 3,
       'server_cursor', coalesce((select max(change_cursor) from public.rootine_sync_changes where user_id = current_user_id), 0),
-      'error_code', 'unauthorized',
+      'error', 'unauthorized',
       'results', results
     );
   end if;
@@ -544,7 +559,7 @@ begin
     entity_name := lower(trim(coalesce(command->>'entity', '')));
     entity_id_value := nullif(trim(command->>'entity_id'), '');
     requested_kind := lower(trim(coalesce(command->>'kind', '')));
-    kind_value := case when requested_kind in ('create', 'update') then 'upsert' else requested_kind end;
+    kind_value := requested_kind;
     payload_value := command->'payload';
     base_revision_value := null;
     if jsonb_typeof(command->'base_revision') = 'number'
@@ -556,7 +571,9 @@ begin
 
     -- A malformed command still receives an idempotency record when it has a
     -- usable operation ID, so a retry cannot turn invalid input into a write.
-    if operation_id is null or char_length(operation_id) > 180 then
+    if operation_id is null
+      or operation_id !~ '^op3_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      or command->>'operation_id' <> operation_id then
       results := results || jsonb_build_array(jsonb_build_object(
         'operation_id', operation_id,
         'status', 'invalid',
@@ -638,12 +655,12 @@ begin
 
     begin
       if not public.rootine_sync_allowed_entity(entity_name)
+        or command->>'entity' <> entity_name
         or entity_id_value is null or char_length(entity_id_value) > 180
-        or requested_kind not in ('create', 'update', 'upsert', 'delete')
+        or command->>'kind' <> requested_kind
+        or requested_kind not in ('upsert', 'delete')
         or base_revision_value is null or base_revision_value < 0
-        or (requested_kind = 'create' and base_revision_value <> 0)
-        or (requested_kind = 'update' and base_revision_value = 0)
-        or (kind_value = 'delete' and payload_value is not null and jsonb_typeof(payload_value) <> 'object')
+        or (kind_value = 'delete' and payload_value is not null)
         or (kind_value <> 'delete' and (payload_value is null or jsonb_typeof(payload_value) <> 'object'))
         or (payload_value is not null and pg_column_size(payload_value) > 512 * 1024)
         or (jsonb_typeof(payload_value) = 'object' and payload_value->>'user_id' is not null
@@ -784,7 +801,7 @@ begin
   where user_id = current_user_id and device_id = normalized_device_id;
 
   return jsonb_build_object(
-    'contract_version', 1,
+    'contract_version', 3,
     'server_cursor', current_cursor,
     'results', results
   );

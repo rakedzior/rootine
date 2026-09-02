@@ -114,14 +114,20 @@ Minimalne przypadki testowe klienta:
 przekazuje token do ograniczonych RPC, więc właściciel jest zawsze wyznaczany
 przez `auth.uid()` po stronie Postgresa.
 
-Body ma postać `{ "action": ..., "device_id": ... }`. Dozwolone akcje:
+Każde żądanie ma `correlation_id` w formacie
+`rt3_<development|staging|production>_<uuidv4>`, a `device_id` ma postać
+`ios_<uuidv4>`. Dozwolone akcje:
 
 | `action` | Dodatkowe pola | RPC | Odpowiedź |
 | --- | --- | --- | --- |
-| `register_device` | `platform`, `app_version`, opcjonalnie `apns_environment`, `push_token` | `rootine_register_device` | rejestracja/rotacja urządzenia |
-| `bootstrap` | brak | `rootine_sync_bootstrap` | pełny stan rekordów, `cursor`, `oldest_cursor` |
-| `pull` | opcjonalnie `cursor` (domyślnie `0`) i `limit` | `rootine_sync_pull` | uporządkowane `changes`, `next_cursor`, `has_more` |
+| `register_device` | `platform=ios`, `app_version`, `environment`, `apns_environment`, `push_token` | `rootine_register_device` | `device_id`, `environment`, `registered_at` |
+| `bootstrap` | brak | `rootine_sync_bootstrap` | `server_cursor`, `next_cursor`, `has_more`, `changes` |
+| `pull` | `cursor` (liczba albo `null`) i opcjonalnie `limit` | `rootine_sync_pull` | `from_cursor`, `next_cursor`, `has_more`, `changes` |
 | `push` | `commands` | `rootine_sync_push` | wynik per komenda i `server_cursor` |
+
+Każda odpowiedź HTTP od funkcji zawiera `contract_version: 3` oraz echo
+`correlation_id`. `operation_id` w push ma format `op3_<uuidv4>`; komendy
+używają wyłącznie `kind: upsert|delete`.
 
 Limity są częścią kontraktu: body do 1 MiB, batch do 100 komend, pull do 500
 zmian, payload pojedynczej komendy do 512 KiB oraz 60 żądań na minutę per
@@ -139,7 +145,9 @@ Dozwolone encje odpowiadają relacyjnym domenom Rootine, a nieznana encja jest
 - `applied` — rekord zatwierdzony, rewizja i cursor są zwrócone;
 - `already_applied` — retry tego samego `operation_id`, bez drugiego efektu;
 - `conflict` — `base_revision` jest nieaktualna; wynik zawiera
-  `server_revision` i `server_record`, a serwer nie jest nadpisany;
+  `server_revision` oraz bezpiecznie znormalizowany `server_record` (wyłącznie
+  `entity`, `entity_id`, `revision`, `record`, `deleted_at`, `updated_at`), a
+  serwer nie jest nadpisany;
 - `invalid` — zły kształt komendy, encja, payload albo limit;
 - `unauthorized` — urządzenie nie należy do `auth.uid()` albo zostało odwołane.
 
@@ -150,8 +158,8 @@ pozostałych. Tombstone usunięcia pozostaje w outboxie jako `operation: delete`
 ### Pull i wygasły cursor
 
 `rootine_sync_changes` jest append-only i ma monotoniczny cursor. Pull zwraca
-`oldest_cursor` oraz `latest_cursor`; rekordy są sortowane rosnąco po cursorze.
-Jeśli podany cursor jest starszy niż najwcześniejszy dostępny (`cursor_expired`),
+rekordy są sortowane rosnąco po cursorze. Jeśli podany cursor jest starszy niż
+jawnie utrzymywana granica retencji (`cursor_expired`),
 odpowiedź nie udaje pustej listy: endpoint zwraca HTTP `409` z kodem
 `cursor_expired`, a klient musi wykonać kontrolowany bootstrap. Cursor urządzenia
 jest niezależny od rewizji rekordu.
