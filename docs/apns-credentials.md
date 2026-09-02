@@ -29,7 +29,7 @@ Apple Developer.
 
 The iOS app does not need `APNS_AUTH_KEY`, `APNS_KEY_ID`, or a service-role key.
 It sends its APNs device token to `rootine_register_device`, which stores it in
-the server-only `rootine_devices.apns_token` column. Authenticated clients
+the server-only `rootine_devices.push_token` column. Authenticated clients
 cannot select that table or the `rootine_active_devices` worker view.
 
 ## Deployment verification

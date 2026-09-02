@@ -14,6 +14,8 @@ type RegisterDeviceBody = {
   platform?: unknown;
   app_version?: unknown;
   apns_environment?: unknown;
+  push_token?: unknown;
+  /** Deprecated alias kept for clients of the pre-B03 bridge. */
   apns_token?: unknown;
   permission_state?: unknown;
 };
@@ -45,14 +47,15 @@ Deno.serve(async (request) => {
   const permissionState = typeof body.permission_state === "string"
     ? body.permission_state
     : "not_determined";
-  const pushToken = body.apns_token === null || body.apns_token === undefined
+  const rawPushToken = body.push_token ?? body.apns_token;
+  const pushToken = rawPushToken === null || rawPushToken === undefined
     ? null
-    : typeof body.apns_token === "string" ? body.apns_token : "";
+    : typeof rawPushToken === "string" ? rawPushToken : "";
 
   if (!deviceID || !platform || !appVersion || !apnsEnvironment) {
     return errorResponse("Device id, platform, app version and APNs environment are required", 400);
   }
-  if (body.apns_token !== null && body.apns_token !== undefined && pushToken === "") {
+  if (rawPushToken !== null && rawPushToken !== undefined && pushToken === "") {
     return errorResponse("APNs token must be a string or null", 400);
   }
 
