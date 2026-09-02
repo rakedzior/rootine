@@ -104,3 +104,30 @@ Minimalne przypadki testowe klienta:
 - konflikt Realtime po równoległej edycji;
 - obie ścieżki ręcznego rozwiązania konfliktu;
 - brak sieci, timeout i brak migracji bez blokowania trybu lokalnego.
+
+## Relacyjny sync-v3 (warstwa przygotowana w B02)
+
+Kontrakt v2 dla `rootine_workspace_snapshots` pozostaje aktywny bez zmian. B02
+dodaje obok niego addytywny model relacyjny, który będzie używany dopiero przez
+RPC z B03 i materializer z B04. Każdy rekord domenowy ma stabilne tekstowe `id`,
+`user_id`, serwerowe `created_at`/`updated_at`, opcjonalne `deleted_at` oraz
+monotoniczną w obrębie rekordu `revision`. Relacje używają klucza złożonego
+`(user_id, id)`, więc nie da się wskazać rekordu należącego do innego konta.
+
+Warstwa obejmuje tabele: `tasks`/`habits`, `notes`, `nutrition_*`, `sport_*`,
+`goals`, `work_*`, `trips`/`trip_*`, `health_*`, `affair_matters`,
+`payments`/`subscriptions`, `documents`, `vehicles`/`vehicle_service_items`
+oraz `jdg_*`. Infrastrukturę stanowią `rootine_profiles`, `rootine_devices`,
+`rootine_sync_cursors`, `rootine_sync_operations`, append-only
+`rootine_sync_changes`, `rootine_workspace_revisions`,
+`rootine_migration_quarantine` i `rootine_sync_reconciliation_log`.
+
+`rootine_sync_changes.change_cursor` jest generowany wyłącznie przez serwer.
+Aktualizacja rekordu z `deleted_at` tworzy zmianę `operation = 'delete'` —
+tombstone nie jest fizycznym brakiem rekordu. Outbox, tombstone’y i historia
+rewizji mają jawnie zapisaną retencję 90 dni w
+`rootine_sync_retention_policy`; `rootine_sync_cursor_bounds` udostępnia
+`oldest_available_cursor` oraz `latest_cursor`, aby klient mógł rozpoznać
+wygaśnięcie kursora. Tabele relacyjne mają RLS ograniczające odczyt do
+`auth.uid() = user_id`, a rola `authenticated` nie ma bezpośrednich uprawnień
+do `INSERT`/`UPDATE`/`DELETE`. Mutacje domenowe muszą wejść przez RPC.
