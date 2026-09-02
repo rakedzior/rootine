@@ -164,7 +164,7 @@ actor WorkspaceSyncEngine {
                 contentHash: digest,
                 expectedRevision: expectedRevision,
                 createdAt: RootineDate.isoTimestamp(),
-                cursor: try await cursorStore.current()
+                cursor: try await cursorStore?.load() ?? 0
             )
             queue.removeAll { $0.storageKey == request.storageKey }
             queue.append(mutation)
