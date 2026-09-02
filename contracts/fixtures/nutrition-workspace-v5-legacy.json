@@ -1,0 +1,8 @@
+{
+  "version": 5,
+  "updatedAt": "2024-01-02T10:00:00+01:00",
+  "goals": { "calories": 2000, "protein": 120, "carbs": 220, "fat": 70, "waterMl": 2000 },
+  "macroConfiguration": { "mode": "grams", "preset": "balanced", "proteinPercent": 25, "carbsPercent": 45, "fatPercent": 30 },
+  "weightMeasurements": {},
+  "days": {}
+}

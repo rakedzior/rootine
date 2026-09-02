@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "updatedAt": "2026-09-01T08:00:00.000Z",
+  "completion": {
+    "101": { "done": true, "completedAt": "2026-09-01T07:00:00.000Z" },
+    "102": { "done": false }
+  }
+}

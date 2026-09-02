@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "matters": [{
+    "id": "matter-tax",
+    "title": "Wysłać deklarację",
+    "category": "urzedy",
+    "priority": "high",
+    "status": "open",
+    "dueDate": "2026-09-20",
+    "note": "",
+    "createdAt": "2026-09-01T08:00:00.000Z",
+    "kind": "task",
+    "time": "",
+    "location": "",
+    "reminderMinutes": [60]
+  }],
+  "oneTimePayments": [{
+    "id": "payment-office",
+    "title": "Opłata urzędowa",
+    "category": "Dokumenty",
+    "amount": 120,
+    "dueDate": "2026-09-21",
+    "paid": false,
+    "paidAt": "",
+    "note": ""
+  }],
+  "payments": [{
+    "id": "payment-rent",
+    "name": "Czynsz",
+    "category": "Mieszkanie",
+    "amount": 2400,
+    "cadence": "monthly",
+    "nextDueDate": "2026-09-05",
+    "automatic": true,
+    "active": true,
+    "note": ""
+  }],
+  "subscriptions": [{
+    "id": "subscription-accounting",
+    "name": "Księgowość",
+    "category": "Narzędzia",
+    "amount": 199,
+    "cadence": "monthly",
+    "nextBillingDate": "2026-09-10",
+    "renewal": "automatic",
+    "commitmentEndDate": "",
+    "active": true,
+    "note": ""
+  }],
+  "documents": [{
+    "id": "document-id",
+    "name": "Dowód osobisty",
+    "category": "identity",
+    "holder": "Ja",
+    "expiresAt": "2030-01-01",
+    "reminderDays": 90,
+    "note": ""
+  }],
+  "vehicles": [{
+    "id": "vehicle-1",
+    "name": "Samochód",
+    "registration": "WI1234A",
+    "mileage": 42000
+  }],
+  "vehicleItems": [{
+    "id": "vehicle-service-1",
+    "vehicleId": "vehicle-1",
+    "title": "Przegląd",
+    "type": "inspection",
+    "dueDate": "2026-10-01",
+    "dueMileage": null,
+    "done": false,
+    "note": ""
+  }],
+  "budgets": [{
+    "month": "2026-09",
+    "lines": [{
+      "id": "budget-income",
+      "label": "Przychód",
+      "kind": "income",
+      "planned": 12000,
+      "actual": 0
+    }]
+  }],
+  "attentionStates": [{
+    "key": "matter-tax",
+    "status": "snoozed",
+    "snoozedUntil": "2026-09-03T08:00:00.000Z",
+    "updatedAt": "2026-09-01T08:00:00.000Z"
+  }]
+}

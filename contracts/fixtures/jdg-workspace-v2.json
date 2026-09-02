@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "months": [{
+    "month": "2026-09",
+    "note": "",
+    "items": [{
+      "id": "zus-payment",
+      "label": "Opłacić składki",
+      "group": "settlements",
+      "done": false,
+      "doneAt": "",
+      "required": true,
+      "dueDay": 10
+    }]
+  }],
+  "taxProfile": {
+    "taxForm": "linear",
+    "vatStatus": "active",
+    "vatCadence": "monthly",
+    "zusScheme": "standard",
+    "accountingMode": "self",
+    "updatedAt": "2026-09-01T08:00:00.000Z"
+  },
+  "templates": [{
+    "id": "template-default",
+    "name": "Miesięczna checklista",
+    "description": "",
+    "source": "custom",
+    "items": [{
+      "id": "zus-payment",
+      "label": "Opłacić składki",
+      "group": "settlements",
+      "required": true,
+      "dueDay": 10
+    }],
+    "createdAt": "2026-09-01T08:00:00.000Z",
+    "updatedAt": "2026-09-01T08:00:00.000Z"
+  }],
+  "defaultTemplateId": "template-default",
+  "history": []
+}

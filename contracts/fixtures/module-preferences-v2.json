@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "updatedAt": "2026-09-01T08:00:00.000Z",
+  "order": ["today", "tasks", "nutrition", "sport", "work", "goals", "travel", "notes", "affairs"],
+  "disabled": []
+}
