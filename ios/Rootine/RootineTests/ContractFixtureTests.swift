@@ -929,6 +929,192 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertFalse(rootineTaskIsDoneOnDate(task, dateKey: "2026-09-02"))
     }
 
+    func testCalendarProjectionExpandsRecurrenceWithMonthEndClampingAndEndDate() {
+        let task = WorkspaceTask(
+            id: 42,
+            text: "Rozliczenie",
+            done: false,
+            view: "wszystkie",
+            calendarDate: "2026-01-31",
+            schedule: WorkspaceTaskSchedule(
+                allDay: false,
+                startTime: "09:00",
+                endDate: "2026-04-30",
+                recurrence: "monthly",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let occurrences = rootineCalendarOccurrences(
+            [task],
+            from: "2026-01-01",
+            through: "2026-12-31"
+        )
+
+        XCTAssertEqual(occurrences.map(\.calendarDate), [
+            "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"
+        ])
+        XCTAssertEqual(occurrences.first?.key, "task:42@2026-01-31")
+        XCTAssertEqual(occurrences.dropFirst().map(\.isVirtual), [true, true, true])
+        XCTAssertEqual(occurrences.dropFirst().map(\.time), ["09:00", "09:00", "09:00"])
+    }
+
+    func testCalendarProjectionClampsLeapDayUntilTheNextLeapYear() {
+        let task = WorkspaceTask(
+            id: 43,
+            text: "Urodziny",
+            done: false,
+            view: "wszystkie",
+            calendarDate: "2024-02-29",
+            schedule: WorkspaceTaskSchedule(
+                allDay: true,
+                startTime: "",
+                recurrence: "yearly",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        XCTAssertEqual(
+            rootineTaskOccurrences([task], from: "2024-01-01", through: "2028-12-31")
+                .map(\.calendarDate),
+            ["2024-02-29", "2025-02-28", "2026-02-28", "2027-02-28", "2028-02-29"]
+        )
+    }
+
+    func testCalendarProjectionKeepsDailyDatesStableAcrossDSTAndScopesCompletion() {
+        let task = WorkspaceTask(
+            id: 7,
+            text: "Poranny spacer",
+            done: false,
+            view: "wszystkie",
+            calendarDate: "2026-03-27",
+            schedule: WorkspaceTaskSchedule(
+                allDay: false,
+                startTime: "02:30",
+                recurrence: "daily",
+                completedDates: ["2026-03-29"],
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let occurrences = rootineTaskOccurrences([task], from: "2026-03-27", through: "2026-03-31")
+        XCTAssertEqual(occurrences.map(\.calendarDate), [
+            "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31"
+        ])
+        XCTAssertEqual(occurrences.map(\.isDone), [false, false, true, false, false])
+        XCTAssertEqual(
+            RootineDate.instant(
+                localDate: "2026-03-29",
+                time: "02:30",
+                timeZone: TimeZone(identifier: "Europe/Warsaw")!
+            ),
+            Date(timeIntervalSince1970: 1774747800)
+        )
+        XCTAssertEqual(
+            RootineDate.instant(
+                localDate: "2026-10-25",
+                time: "02:30",
+                timeZone: TimeZone(identifier: "Europe/Warsaw")!
+            ),
+            Date(timeIntervalSince1970: 1792888200)
+        )
+    }
+
+    func testCalendarCompletionMutatesOnlyTheRequestedRecurringOccurrence() {
+        let task = WorkspaceTask(
+            id: 8,
+            text: "Raport",
+            done: true,
+            view: "wszystkie",
+            calendarDate: "2026-09-01",
+            schedule: WorkspaceTaskSchedule(
+                allDay: true,
+                startTime: "",
+                recurrence: "weekly",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let completed = rootineTaskSettingCompletion(
+            task,
+            dateKey: "2026-09-08",
+            done: true,
+            completedAt: "2026-09-08T08:00:00.000Z"
+        )
+        XCTAssertTrue(completed.done)
+        XCTAssertEqual(completed.schedule?.completedDates, ["2026-09-08"])
+        XCTAssertEqual(completed.schedule?.completedAtByDate?["2026-09-08"], "2026-09-08T08:00:00.000Z")
+        XCTAssertNil(completed.schedule?.completedDates?.first(where: { $0 == "2026-09-01" }))
+        XCTAssertTrue(rootineTaskIsDoneOnDate(completed, dateKey: "2026-09-08"))
+        XCTAssertFalse(rootineTaskIsDoneOnDate(completed, dateKey: "2026-09-15"))
+
+        let undone = rootineTaskSettingCompletion(completed, dateKey: "2026-09-08", done: false)
+        XCTAssertEqual(undone.schedule?.completedDates, [])
+        XCTAssertNil(undone.schedule?.completedAtByDate)
+        XCTAssertFalse(rootineTaskIsDoneOnDate(undone, dateKey: "2026-09-08"))
+
+        let anchorCompleted = rootineTaskSettingCompletion(task, dateKey: "2026-09-01", done: false)
+        XCTAssertFalse(anchorCompleted.done)
+        XCTAssertNil(anchorCompleted.schedule?.completedDates)
+    }
+
+    func testRelationalTaskScheduleAndCompletionChangesFeedCalendarProjection() throws {
+        let base = TaskWorkspace(
+            version: 2,
+            updatedAt: "2026-09-03T08:00:00.000Z",
+            tasks: [],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        let materialized = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 1,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "task",
+                entityID: "42",
+                record: .object([
+                    "text": .string("Rozliczenie"),
+                    "done": .bool(false),
+                    "view": .string("wszystkie"),
+                    "calendarDate": .string("2026-09-01")
+                ])
+            ),
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "schedule",
+                entityID: "schedule-42",
+                record: .object([
+                    "taskId": .number(42),
+                    "allDay": .bool(true),
+                    "startTime": .string(""),
+                    "recurrence": .string("weekly"),
+                    "timezone": .string("Europe/Warsaw")
+                ])
+            ),
+            RootineRelationalPullChange(
+                cursor: 3,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "completion",
+                entityID: "completion-42-2026-09-08",
+                record: .object([
+                    "taskId": .number(42),
+                    "date": .string("2026-09-08"),
+                    "completedAt": .string("2026-09-08T08:00:00.000Z")
+                ])
+            )
+        ], onto: RootineRelationalMaterialization(
+            documents: [RootineStorageKey.tasks.rawValue: try jsonValue(base)],
+            revisions: [:]
+        ))
+
+        let workspace = try RootineRelationalWorkspaceAdapter.document(TaskWorkspace.self, key: .tasks, from: materialized)
+        let occurrences = rootineTaskOccurrences(workspace.tasks, from: "2026-09-01", through: "2026-09-15")
+        XCTAssertEqual(occurrences.map(\.calendarDate), ["2026-09-01", "2026-09-08", "2026-09-15"])
+        XCTAssertEqual(occurrences.map(\.isDone), [false, true, false])
+    }
+
     func testRootineDateParsesBothTimestampPrecisions() {
         XCTAssertNotNil(RootineDate.date(from: "2026-09-01T08:00:00.123Z"))
         XCTAssertNotNil(RootineDate.date(from: "2026-09-01T08:00:00Z"))

@@ -147,13 +147,260 @@ struct WorkspaceTask: Codable, Equatable, Identifiable, Sendable {
 /// global `done` flag so older server payloads remain fully compatible.
 func rootineTaskIsDoneOnDate(_ task: WorkspaceTask, dateKey: String = RootineDate.localDate()) -> Bool {
     guard let schedule = task.schedule else { return task.done }
+    let anchorDate = task.calendarDate ?? task.date
+    // The source occurrence keeps the legacy global flag. Per-date maps are
+    // for virtual recurring occurrences, so an anchor completed on its own
+    // date remains complete even when a map contains only another date.
+    if schedule.recurrence != nil, anchorDate == dateKey, task.done { return true }
     // Some web payloads contain both maps, while older records contain only
     // one. Treat either source as authoritative and avoid an empty
     // `completedDates` array masking a populated timestamp map.
     if schedule.completedDates?.contains(dateKey) == true { return true }
     if schedule.completedAtByDate?[dateKey] != nil { return true }
     if schedule.completedDates != nil || schedule.completedAtByDate != nil { return false }
+    // A legacy recurring record can have only the global `done` flag. That
+    // flag belongs to the source occurrence, not to every future occurrence.
+    // Once a per-date map exists it is authoritative above.
+    if schedule.recurrence != nil {
+        return task.done && (anchorDate == nil || anchorDate == dateKey)
+    }
     return task.done
+}
+
+/// Applies completion to one occurrence without mutating the source task's
+/// other dates. This is the model-level counterpart of the Today and Calendar
+/// actions, and accepts an explicit timestamp so sync/replay tests do not need
+/// to depend on wall-clock time.
+func rootineTaskSettingCompletion(
+    _ task: WorkspaceTask,
+    dateKey: String,
+    done: Bool,
+    completedAt: String? = nil
+) -> WorkspaceTask {
+    guard RootineDate.isValidLocalDate(dateKey) else { return task }
+    guard var schedule = task.schedule,
+          schedule.recurrence != nil
+            || schedule.completedDates != nil
+            || schedule.completedAtByDate != nil else {
+        var result = task
+        result.done = done
+        result.completedAt = done ? completedAt : nil
+        return result
+    }
+
+    let anchorDate = task.calendarDate ?? task.date
+    // The persisted source row owns its anchor occurrence. Keep that state in
+    // the legacy fields and reserve completion maps for virtual dates, which
+    // matches the web task-schedule contract and avoids redundant anchor keys.
+    if schedule.recurrence != nil, anchorDate == dateKey {
+        var result = task
+        result.done = done
+        result.completedAt = done ? completedAt : nil
+        return result
+    }
+
+    var completedDates = Set((schedule.completedDates ?? []).filter(RootineDate.isValidLocalDate))
+    var completedAtByDate = schedule.completedAtByDate ?? [:]
+    if done {
+        completedDates.insert(dateKey)
+        if let completedAt { completedAtByDate[dateKey] = completedAt }
+    } else {
+        completedDates.remove(dateKey)
+        completedAtByDate.removeValue(forKey: dateKey)
+    }
+    schedule.completedDates = completedDates.sorted()
+    schedule.completedAtByDate = completedAtByDate.isEmpty ? nil : completedAtByDate
+
+    var result = task
+    result.schedule = schedule
+    if schedule.recurrence == nil, anchorDate == dateKey {
+        result.done = done
+        result.completedAt = done ? completedAt : nil
+    }
+    return result
+}
+
+/// A stable task occurrence projected from a canonical workspace task. The
+/// source task ID remains available for completion/edit actions while `key`
+/// identifies a particular date, including virtual recurring occurrences.
+struct RootineCalendarOccurrence: Equatable, Identifiable, Sendable {
+    let key: String
+    let task: WorkspaceTask
+    let calendarDate: String
+    let isVirtual: Bool
+
+    var id: String { key }
+    var sourceTaskID: Int { task.id }
+    var title: String { task.text }
+    var time: String? {
+        guard task.schedule?.allDay != true else { return nil }
+        return task.schedule?.startTime.isEmpty == false ? task.schedule?.startTime : task.time
+    }
+    var endTime: String? {
+        guard task.schedule?.allDay != true else { return nil }
+        return task.schedule?.endTime ?? task.endTime
+    }
+    var isDone: Bool { rootineTaskIsDoneOnDate(task, dateKey: calendarDate) }
+}
+
+/// Deterministically expands dated task records into calendar occurrences.
+/// Date-only arithmetic is deliberately independent of elapsed seconds, so a
+/// DST transition cannot skip or duplicate a daily/weekly occurrence.
+func rootineTaskOccurrences(
+    _ tasks: [WorkspaceTask],
+    from rangeStart: String,
+    through rangeEnd: String
+) -> [RootineCalendarOccurrence] {
+    guard RootineDate.isValidLocalDate(rangeStart),
+          RootineDate.isValidLocalDate(rangeEnd),
+          rangeStart <= rangeEnd else { return [] }
+
+    var result: [RootineCalendarOccurrence] = []
+    for task in tasks where task.deleted != true {
+        guard let anchorDate = task.calendarDate ?? task.date,
+              RootineDate.isValidLocalDate(anchorDate) else { continue }
+        let recurrence = rootineTaskRecurrence(task.schedule?.recurrence)
+        let recurrenceEnd = task.schedule?.endDate.flatMap { RootineDate.isValidLocalDate($0) ? $0 : nil }
+        let effectiveEnd = min(rangeEnd, recurrenceEnd ?? rangeEnd)
+        guard rangeStart <= effectiveEnd else { continue }
+        let dates = rootineRecurrenceDates(
+            anchorDate: anchorDate,
+            recurrence: recurrence,
+            rangeStart: rangeStart,
+            rangeEnd: effectiveEnd
+        )
+        for date in dates {
+            result.append(RootineCalendarOccurrence(
+                key: "task:\(task.id)@\(date)",
+                task: task,
+                calendarDate: date,
+                isVirtual: date != anchorDate
+            ))
+        }
+    }
+    return result.sorted {
+        $0.calendarDate < $1.calendarDate
+            || ($0.calendarDate == $1.calendarDate && ($0.time ?? "") < ($1.time ?? ""))
+            || ($0.calendarDate == $1.calendarDate && ($0.time ?? "") == ($1.time ?? "") && $0.key < $1.key)
+    }
+}
+
+/// Alias named after the owning surface; keeping both names makes the seam
+/// readable from Calendar and from Today without duplicating implementation.
+func rootineCalendarOccurrences(
+    _ tasks: [WorkspaceTask],
+    from rangeStart: String,
+    through rangeEnd: String
+) -> [RootineCalendarOccurrence] {
+    rootineTaskOccurrences(tasks, from: rangeStart, through: rangeEnd)
+}
+
+private enum RootineTaskRecurrence: Equatable {
+    case oneOff
+    case daily
+    case weekly(interval: Int)
+    case monthly
+    case yearly
+}
+
+private func rootineTaskRecurrence(_ rawValue: String?) -> RootineTaskRecurrence {
+    let raw = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        .replacingOccurrences(of: "_", with: "-")
+        .replacingOccurrences(of: " ", with: "-")
+    guard let raw, !raw.isEmpty else { return .oneOff }
+    if raw == "daily" || raw == "every-day" || raw == "everyday" || raw.contains("freq=daily") { return .daily }
+    if raw == "biweekly" || raw == "every-2-weeks" || raw == "every-two-weeks" {
+        return .weekly(interval: 2)
+    }
+    if raw == "weekly" || raw == "every-week" || raw.contains("freq=weekly") {
+        let interval = raw.split(separator: ";").compactMap { component -> Int? in
+            let pair = component.split(separator: "=", maxSplits: 1).map(String.init)
+            guard pair.count == 2, pair[0] == "interval", let value = Int(pair[1]), value > 0 else { return nil }
+            return value
+        }.first ?? 1
+        return .weekly(interval: interval)
+    }
+    if raw == "monthly" || raw == "every-month" || raw.contains("freq=monthly") { return .monthly }
+    if raw == "yearly" || raw == "annually" || raw == "every-year" || raw.contains("freq=yearly") { return .yearly }
+    return .oneOff
+}
+
+private func rootineRecurrenceDates(
+    anchorDate: String,
+    recurrence: RootineTaskRecurrence,
+    rangeStart: String,
+    rangeEnd: String
+) -> [String] {
+    guard anchorDate <= rangeEnd else { return [] }
+    let firstDate = max(anchorDate, rangeStart)
+    switch recurrence {
+    case .oneOff:
+        return anchorDate >= rangeStart && anchorDate <= rangeEnd ? [anchorDate] : []
+    case .daily:
+        let step = 1
+        let distance = RootineDate.daysBetween(anchorDate, firstDate) ?? 0
+        let firstOffset = max(0, Int(ceil(Double(distance) / Double(step))) * step)
+        var result: [String] = []
+        var date = RootineDate.shiftLocalDate(anchorDate, by: firstOffset)
+        while date <= rangeEnd {
+            if date >= rangeStart { result.append(date) }
+            date = RootineDate.shiftLocalDate(date, by: step)
+        }
+        return result
+    case .weekly(let interval):
+        let step = max(1, interval) * 7
+        let distance = RootineDate.daysBetween(anchorDate, firstDate) ?? 0
+        let firstOffset = max(0, Int(ceil(Double(distance) / Double(step))) * step)
+        var result: [String] = []
+        var date = RootineDate.shiftLocalDate(anchorDate, by: firstOffset)
+        while date <= rangeEnd {
+            if date >= rangeStart { result.append(date) }
+            date = RootineDate.shiftLocalDate(date, by: step)
+        }
+        return result
+    case .monthly:
+        guard let anchor = rootineDateParts(anchorDate),
+              let start = rootineDateParts(firstDate),
+              let end = rootineDateParts(rangeEnd) else { return [] }
+        let anchorMonth = anchor.year * 12 + anchor.month - 1
+        let startMonth = start.year * 12 + start.month - 1
+        let endMonth = end.year * 12 + end.month - 1
+        return (max(anchorMonth, startMonth)...endMonth).compactMap { monthIndex in
+            let year = monthIndex / 12
+            let month = monthIndex % 12 + 1
+            let day = min(anchor.day, rootineDaysInMonth(year: year, month: month))
+            let candidate = rootineDateKey(year: year, month: month, day: day)
+            return candidate >= anchorDate && candidate >= rangeStart && candidate <= rangeEnd ? candidate : nil
+        }
+    case .yearly:
+        guard let anchor = rootineDateParts(anchorDate),
+              let start = rootineDateParts(firstDate),
+              let end = rootineDateParts(rangeEnd) else { return [] }
+        return (max(anchor.year, start.year)...end.year).compactMap { year in
+            let day = min(anchor.day, rootineDaysInMonth(year: year, month: anchor.month))
+            let candidate = rootineDateKey(year: year, month: anchor.month, day: day)
+            return candidate >= anchorDate && candidate >= rangeStart && candidate <= rangeEnd ? candidate : nil
+        }
+    }
+}
+
+private func rootineDateParts(_ value: String) -> (year: Int, month: Int, day: Int)? {
+    let parts = value.split(separator: "-").compactMap { Int($0) }
+    guard parts.count == 3 else { return nil }
+    return (parts[0], parts[1], parts[2])
+}
+
+private func rootineDateKey(year: Int, month: Int, day: Int) -> String {
+    String(format: "%04d-%02d-%02d", year, month, day)
+}
+
+private func rootineDaysInMonth(year: Int, month: Int) -> Int {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+    let nextMonth = month == 12 ? 1 : month + 1
+    let nextYear = month == 12 ? year + 1 : year
+    let firstOfNext = calendar.date(from: DateComponents(year: nextYear, month: nextMonth, day: 1, hour: 12)) ?? Date.distantPast
+    return calendar.date(byAdding: .day, value: -1, to: firstOfNext).map { calendar.component(.day, from: $0) } ?? 28
 }
 
 struct WorkspaceHabitSchedule: Codable, Equatable, Sendable {
@@ -978,6 +1225,8 @@ enum JSONValue: Codable, Equatable, Sendable {
 }
 
 enum RootineDate {
+    private static let utc = TimeZone(secondsFromGMT: 0) ?? .current
+
     static func isoTimestamp(_ date: Date = Date()) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -995,5 +1244,125 @@ enum RootineDate {
     static func localDate(_ date: Date = Date(), calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    /// Strictly validates a canonical date-only value. Date-only fields are
+    /// intentionally never parsed through an ISO timestamp because that would
+    /// apply the device timezone before the calendar day is known.
+    static func isValidLocalDate(_ value: String) -> Bool {
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false).compactMap { Int($0) }
+        guard parts.count == 3, value.count == 10,
+              parts[0] >= 1, parts[1] >= 1, parts[1] <= 12, parts[2] >= 1 else { return false }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        guard let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12)) else { return false }
+        return localDate(date, calendar: calendar) == value
+    }
+
+    /// Parses a date-only contract value at noon in the supplied calendar.
+    /// Noon avoids the small set of historical midnight timezone transitions
+    /// and keeps day arithmetic stable around DST boundaries.
+    static func localDateValue(_ value: String, calendar: Calendar = .current) -> Date? {
+        guard isValidLocalDate(value) else { return nil }
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        var components = DateComponents()
+        components.year = parts[0]
+        components.month = parts[1]
+        components.day = parts[2]
+        components.hour = 12
+        return calendar.date(from: components)
+    }
+
+    static func shiftLocalDate(_ value: String, by days: Int, calendar: Calendar = .current) -> String {
+        guard let date = localDateValue(value, calendar: calendar),
+              let shifted = calendar.date(byAdding: .day, value: days, to: date) else { return value }
+        return localDate(shifted, calendar: calendar)
+    }
+
+    static func daysBetween(_ start: String, _ end: String) -> Int? {
+        guard isValidLocalDate(start), isValidLocalDate(end) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        guard let startDate = localDateValue(start, calendar: calendar),
+              let endDate = localDateValue(end, calendar: calendar) else { return nil }
+        return calendar.dateComponents([.day], from: startDate, to: endDate).day
+    }
+
+    /// Resolves a wall-clock value to an instant in the saved timezone. A
+    /// spring-forward gap is moved to its first valid wall-clock instant; an
+    /// autumn overlap chooses the earlier instant. Both choices are explicit,
+    /// making reminder and calendar tests deterministic across devices.
+    static func instant(
+        localDate date: String,
+        time: String,
+        timeZone: TimeZone
+    ) -> Date? {
+        guard isValidLocalDate(date),
+              let timeParts = clockTimeParts(time),
+              let desired = wallClockDate(yearMonthDay: dateParts(date), hour: timeParts.hour, minute: timeParts.minute) else { return nil }
+        let zone = timeZone
+        let desiredEpoch = desired.timeIntervalSince1970
+        let offsets = Set([-86_400.0, 0, 86_400.0].compactMap { delta -> TimeInterval? in
+            let probe = Date(timeIntervalSince1970: desiredEpoch + delta)
+            guard let wall = wallClockDate(in: probe, timeZone: zone) else { return nil }
+            return wall.timeIntervalSince1970 - (desiredEpoch + delta)
+        })
+        let candidates = offsets.map { desiredEpoch - $0 }.sorted()
+        if let exact = candidates.first(where: { candidate in
+            wallClockDate(in: Date(timeIntervalSince1970: candidate), timeZone: zone)?.timeIntervalSince1970 == desiredEpoch
+        }) {
+            return Date(timeIntervalSince1970: exact)
+        }
+        if let afterGap = candidates
+            .compactMap({ candidate -> (Double, Double)? in
+                guard let wall = wallClockDate(in: Date(timeIntervalSince1970: candidate), timeZone: zone) else { return nil }
+                return (candidate, wall.timeIntervalSince1970)
+            })
+            .filter({ $0.1 > desiredEpoch })
+            .sorted(by: { $0.1 < $1.1 })
+            .first {
+            return Date(timeIntervalSince1970: afterGap.0)
+        }
+        return candidates.first.map { Date(timeIntervalSince1970: $0) }
+    }
+
+    private static func dateParts(_ value: String) -> (year: Int, month: Int, day: Int)? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return (parts[0], parts[1], parts[2])
+    }
+
+    private static func clockTimeParts(_ value: String) -> (hour: Int, minute: Int)? {
+        let parts = value.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2, value.count == 5,
+              parts[0] >= 0, parts[0] <= 23, parts[1] >= 0, parts[1] <= 59 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private static func wallClockDate(
+        yearMonthDay: (year: Int, month: Int, day: Int)?,
+        hour: Int,
+        minute: Int
+    ) -> Date? {
+        guard let yearMonthDay else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        return calendar.date(from: DateComponents(
+            year: yearMonthDay.year,
+            month: yearMonthDay.month,
+            day: yearMonthDay.day,
+            hour: hour,
+            minute: minute
+        ))
+    }
+
+    private static func wallClockDate(in instant: Date, timeZone: TimeZone) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: instant)
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = utc
+        return utcCalendar.date(from: components)
     }
 }

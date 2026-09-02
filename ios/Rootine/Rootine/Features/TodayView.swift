@@ -66,12 +66,22 @@ private struct TodaySnapshot {
         let calendar = Calendar.current
         let todayKey = RootineDate.localDate(date)
 
-        tasks = taskWorkspace.tasks
-            .filter { task in
-                guard task.deleted != true, task.source?.kind != "work" else { return false }
-                return task.calendarDate == todayKey || (task.calendarDate == nil && task.view == "dzis")
-            }
-            .sorted(by: Self.taskSort)
+        let projectedToday = rootineTaskOccurrences(
+            taskWorkspace.tasks.filter { $0.source?.kind != "work" },
+            from: todayKey,
+            through: todayKey
+        ).map(Self.taskForOccurrence)
+        let projectedTaskIDs = Set(projectedToday.map(\.id))
+        let undatedToday = taskWorkspace.tasks.filter { task in
+            task.deleted != true
+                && task.source?.kind != "work"
+                && task.calendarDate == nil
+                && !projectedTaskIDs.contains(task.id)
+                && task.view == "dzis"
+        }
+        // Keep the legacy undated Today capture visible while making all dated
+        // and recurring tasks use the same projection as Calendar.
+        tasks = (projectedToday + undatedToday).sorted(by: Self.taskSort)
 
         overdueTasks = taskWorkspace.tasks
             .filter { task in
@@ -126,6 +136,13 @@ private struct TodaySnapshot {
             default: return lhs.id < rhs.id
             }
         }
+    }
+
+    private static func taskForOccurrence(_ occurrence: RootineCalendarOccurrence) -> WorkspaceTask {
+        var task = occurrence.task
+        task.time = occurrence.time
+        task.endTime = occurrence.endTime
+        return task
     }
 
     private static func isDone(_ item: TodayFocusItem, dateKey: String) -> Bool {

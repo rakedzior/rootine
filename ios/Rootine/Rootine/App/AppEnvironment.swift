@@ -782,30 +782,16 @@ final class AppEnvironment: ObservableObject {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
         let dateKey = RootineDate.localDate(date)
-        if var schedule = next.tasks[index].schedule {
-            // Recurring tasks are completed per local day. Keep the legacy
-            // global flag in sync only for the current day so Today, Tasks and
-            // Calendar never leak yesterday's state into another date.
-            var completedDates = schedule.completedDates ?? []
-            var completedAtByDate = schedule.completedAtByDate ?? [:]
-            if completedDates.contains(dateKey) {
-                completedDates.removeAll { $0 == dateKey }
-                completedAtByDate[dateKey] = nil
-            } else {
-                completedDates.append(dateKey)
-                completedDates.sort()
-                completedAtByDate[dateKey] = RootineDate.isoTimestamp(date)
-            }
-            schedule.completedDates = completedDates
-            schedule.completedAtByDate = completedAtByDate
-            next.tasks[index].schedule = schedule
-            let todayKey = RootineDate.localDate()
-            next.tasks[index].done = rootineTaskIsDoneOnDate(next.tasks[index], dateKey: todayKey)
-            next.tasks[index].completedAt = completedAtByDate[todayKey]
-        } else {
-            next.tasks[index].done.toggle()
-            next.tasks[index].completedAt = next.tasks[index].done ? RootineDate.isoTimestamp(date) : nil
-        }
+        let done = !rootineTaskIsDoneOnDate(next.tasks[index], dateKey: dateKey)
+        // Recurring records use the explicit per-date map; a schedule object
+        // without recurrence remains a one-off task and keeps its legacy
+        // global completion flag.
+        next.tasks[index] = rootineTaskSettingCompletion(
+            next.tasks[index],
+            dateKey: dateKey,
+            done: done,
+            completedAt: RootineDate.isoTimestamp()
+        )
         await persistTaskWorkspace(next)
     }
 
