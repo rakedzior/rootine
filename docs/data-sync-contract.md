@@ -203,3 +203,27 @@ RPC w B03 mają kompatybilny seam `rootine_sync_records`, ponieważ pozwala to
 uruchomić kontrakt również na branchu bazowym bez nadpisywania domen. Po
 integracji B02 adapter materializuje ten seam do właściwych tabel domenowych;
 operation log, outbox i kontrakt HTTP/RPC nie wymagają zmiany.
+## Bridge dual-write (B06)
+
+W okresie przejściowym web i iOS używają tej samej granicy RPC. Overload
+`rootine_apply_workspace_snapshot` przyjmuje dodatkowo:
+
+```text
+p_operation_id, p_client_source, p_correlation_id, p_cursor
+```
+
+`p_operation_id` jest kluczem idempotencji `(user_id, operation_id)`, a
+`p_cursor` jest niezależnym od `revision` punktem postępu outboxa. Dane są
+zapisywane przez wspólny adapter `rootine_sync_records`, a wpis
+`rootine_sync_changes` i historia `rootine_workspace_revisions` są zatwierdzane jako pierwsze.
+Dopiero po tym commitcie funkcja próbuje jawnie zmaterializować
+`rootine_workspace_snapshots`; błąd materializatora nie wycofuje relacyjnego
+zapisu, tylko tworzy bezpieczny wpis recovery w
+`rootine_sync_reconciliation_log`.
+
+Tryb dual-write można wyłączyć per konto przez
+`rootine_set_dual_write_enabled(false, reason)`. Lokalna kolejka/zmiany
+pozostają nietknięte i mogą zostać ponowione po włączeniu flagi. Shadow read
+porównuje canonical JSON bez zapisywania prywatnych payloadów — log zawiera
+wyłącznie domenę, encję, revision, klienta, correlation ID, hashe i ścieżki
+różnic. Raport agregowany udostępnia `rootine_sync_reconciliation_summary()`.

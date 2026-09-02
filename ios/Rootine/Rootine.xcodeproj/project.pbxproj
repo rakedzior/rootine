@@ -16,6 +16,7 @@
 		B00000000000000000000007 /* Persistence/KeychainSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */; };
 		B00000000000000000000008 /* Persistence/WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */; };
 		B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */; };
+		B0000000000000000000001B /* Sync/DualWriteBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001B /* Sync/DualWriteBridge.swift */; };
 		B0000000000000000000000A /* FeatureRootViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* FeatureRootViews.swift */; };
 		B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* Auth/AuthenticationSupport.swift */; };
 		B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* Authentication/AuthenticationViews.swift */; };
@@ -59,6 +60,7 @@
 		F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/KeychainSessionStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/WorkspaceSyncEngine.swift; sourceTree = "<group>"; };
+		F0000000000000000000001B /* Sync/DualWriteBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/DualWriteBridge.swift; sourceTree = "<group>"; };
 		F0000000000000000000000A /* FeatureRootViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRootViews.swift; sourceTree = "<group>"; };
 		F0000000000000000000000B /* Rootine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rootine.entitlements; sourceTree = "<group>"; };
 		F0000000000000000000000C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
@@ -145,6 +147,7 @@
 				F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */,
 				F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */,
 				F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */,
+				F0000000000000000000001B /* Sync/DualWriteBridge.swift */,
 				F0000000000000000000000E /* Auth/AuthenticationSupport.swift */,
 			);
 			path = Rootine/Core;
@@ -337,6 +340,7 @@
 				B00000000000000000000008 /* Persistence/WorkspaceFileStore.swift in Sources */,
 				B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */,
 				B00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift in Sources */,
+				B0000000000000000000001B /* Sync/DualWriteBridge.swift in Sources */,
 				B0000000000000000000000A /* FeatureRootViews.swift in Sources */,
 				B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */,
 				B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */,

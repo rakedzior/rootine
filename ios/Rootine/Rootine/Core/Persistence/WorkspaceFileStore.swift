@@ -7,6 +7,42 @@ struct PendingWorkspaceMutation: Codable, Equatable, Identifiable, Sendable {
     var contentHash: String
     var expectedRevision: Int64
     var createdAt: String
+    /// Last server cursor known when this operation was queued. It is not a
+    /// substitute for expectedRevision; the two values advance independently.
+    var cursor: Int64 = 0
+
+    enum CodingKeys: String, CodingKey {
+        case id, storageKey, payload, contentHash, expectedRevision, createdAt, cursor
+    }
+
+    init(
+        id: String,
+        storageKey: String,
+        payload: JSONValue,
+        contentHash: String,
+        expectedRevision: Int64,
+        createdAt: String,
+        cursor: Int64 = 0
+    ) {
+        self.id = id
+        self.storageKey = storageKey
+        self.payload = payload
+        self.contentHash = contentHash
+        self.expectedRevision = expectedRevision
+        self.createdAt = createdAt
+        self.cursor = cursor
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        storageKey = try container.decode(String.self, forKey: .storageKey)
+        payload = try container.decode(JSONValue.self, forKey: .payload)
+        contentHash = try container.decode(String.self, forKey: .contentHash)
+        expectedRevision = try container.decode(Int64.self, forKey: .expectedRevision)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        cursor = try container.decodeIfPresent(Int64.self, forKey: .cursor) ?? 0
+    }
 }
 
 struct WorkspaceWriteReceipt: Sendable {
@@ -69,6 +105,22 @@ struct WorkspaceBatchDocument: Sendable {
 actor WorkspaceFileStore {
     private struct SyncMetadata: Codable {
         var revisions: [String: Int64] = [:]
+        var cursor: Int64 = 0
+
+        enum CodingKeys: String, CodingKey {
+            case revisions, cursor
+        }
+
+        init(revisions: [String: Int64] = [:], cursor: Int64 = 0) {
+            self.revisions = revisions
+            self.cursor = cursor
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            revisions = try container.decodeIfPresent([String: Int64].self, forKey: .revisions) ?? [:]
+            cursor = try container.decodeIfPresent(Int64.self, forKey: .cursor) ?? 0
+        }
     }
 
     private struct VersionEnvelope: Decodable {
@@ -444,11 +496,25 @@ actor WorkspaceFileStore {
         try protectedWrite(try encoder.encode(metadata), to: metadataURL)
     }
 
+    func syncCursor() throws -> Int64 {
+        max(0, try loadMetadata().cursor)
+    }
+
+    func setSyncCursor(_ cursor: Int64) throws {
+        guard cursor >= 0 else { return }
+        var metadata = try loadMetadata()
+        metadata.cursor = max(metadata.cursor, cursor)
+        try protectedWrite(try encoder.encode(metadata), to: metadataURL)
+    }
+
     /// Commits a successful CAS response and rebases a newer coalesced local
     /// mutation that arrived while the acknowledged request was in flight.
-    func acknowledgeMutation(id: String, storageKey: String, revision: Int64) throws {
+    func acknowledgeMutation(id: String, storageKey: String, revision: Int64, cursor: Int64? = nil) throws {
         var metadata = try loadMetadata()
         metadata.revisions[storageKey] = revision
+        if let cursor, cursor >= 0 {
+            metadata.cursor = max(metadata.cursor, cursor)
+        }
 
         var queue = try pendingMutations()
         queue.removeAll { $0.id == id }

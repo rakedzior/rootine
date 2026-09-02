@@ -4,6 +4,14 @@ import {
   importAllLocalWorkspaces,
 } from "../../app/data/localRepository";
 import { supabase } from "./client";
+import {
+  canonicalDiff,
+  commitWorkspaceThroughBridge,
+  newCorrelationId,
+  operationIdFor,
+  recordCanonicalDiff,
+  type DualWriteCommit,
+} from "./dualWriteBridge";
 
 export const ROOTINE_WORKSPACE_TABLE = "rootine_workspace_snapshots";
 
@@ -41,6 +49,12 @@ type RemoteWorkspaceSyncOutcome = {
 
 type ReconciliationControl = {
   changedDuringInitialSync?: (storageKey: string) => boolean;
+  recordShadowDiff?: (input: {
+    storageKey: string;
+    localPayload: unknown;
+    remotePayload: unknown;
+    revision: number;
+  }) => Promise<void> | void;
 };
 
 type RemoteWorkspaceRow = {
@@ -51,13 +65,10 @@ type RemoteWorkspaceRow = {
   updated_at: string;
 };
 
-type RemoteWorkspaceRpcRow = RemoteWorkspaceRow & {
-  applied: boolean;
-};
-
 type WorkspaceUploadResult = {
   confirmed: RemoteWorkspaceRow[];
   conflicts: RemoteWorkspaceRow[];
+  commits: DualWriteCommit[];
   error: { code?: string; message: string } | null;
 };
 
@@ -157,39 +168,45 @@ async function readRemoteRows(userId: string) {
 }
 
 async function uploadWorkspaces(
+  userId: string,
   entries: Array<[string, string]>,
   expectedRemoteRows: ReadonlyMap<string, RemoteWorkspaceRow>,
 ): Promise<WorkspaceUploadResult> {
-  const result: WorkspaceUploadResult = { confirmed: [], conflicts: [], error: null };
+  const result: WorkspaceUploadResult = { confirmed: [], conflicts: [], commits: [], error: null };
   if (!supabase || entries.length === 0) return result;
 
   for (const [storageKey, raw] of entries) {
     const payload = rawPayload(raw);
     if (payload === null) continue;
     const expectedRevision = expectedRemoteRows.get(storageKey)?.revision ?? 0;
-    const { data, error } = await supabase.rpc("rootine_apply_workspace_snapshot", {
-      p_storage_key: storageKey,
-      p_payload: payload,
-      p_content_hash: hashRaw(raw),
-      p_expected_revision: expectedRevision,
+    const contentHash = hashRaw(raw);
+    const commitResult = await commitWorkspaceThroughBridge(userId, {
+      operationId: operationIdFor(storageKey, expectedRevision, contentHash, "web"),
+      storageKey,
+      payload,
+      contentHash,
+      baseRevision: expectedRevision,
+      clientSource: "web",
+      correlationId: newCorrelationId(),
     });
-    if (error) {
-      result.error = error;
+    if (commitResult.error) {
+      result.error = commitResult.error;
       return result;
     }
-    const row = (Array.isArray(data) ? data[0] : data) as RemoteWorkspaceRpcRow | null;
-    if (!row) {
+    const commit = commitResult.commit;
+    if (!commit) {
       result.error = { message: "Serwer nie zwrócił wyniku zapisu workspace’u." };
       return result;
     }
+    result.commits.push(commit);
     const remoteRow: RemoteWorkspaceRow = {
-      storage_key: row.storage_key,
-      payload: row.payload,
-      content_hash: row.content_hash,
-      revision: row.revision,
-      updated_at: row.updated_at,
+      storage_key: commit.storageKey,
+      payload: commit.payload,
+      content_hash: commit.contentHash,
+      revision: commit.revision,
+      updated_at: commit.updatedAt,
     };
-    if (row.applied) result.confirmed.push(remoteRow);
+    if (commit.applied) result.confirmed.push(remoteRow);
     else result.conflicts.push(remoteRow);
   }
 
@@ -273,6 +290,17 @@ async function reconcileRemoteWorkspaces(
     // have no top-level updatedAt. Preserve both and ask the user instead of
     // turning a timestamp heuristic into silent data loss.
     reconciliationConflictKeys.add(storageKey);
+    if (control.recordShadowDiff) {
+      const diff = canonicalDiff(rawPayload(raw), remote.payload);
+      if (diff) {
+        await control.recordShadowDiff({
+          storageKey,
+          localPayload: rawPayload(raw),
+          remotePayload: remote.payload,
+          revision: remote.revision,
+        });
+      }
+    }
   }
 
   for (const remote of rows) {
@@ -339,7 +367,7 @@ async function reconcileRemoteWorkspaces(
 
   const finalUploadEntries = [...uploadEntries.entries()];
   const finalUploadRawByKey = new Map(finalUploadEntries);
-  const uploadResult = await uploadWorkspaces(finalUploadEntries, remoteByKey);
+  const uploadResult = await uploadWorkspaces(userId, finalUploadEntries, remoteByKey);
   uploadResult.confirmed.forEach((row) => {
     knownRemoteRows.set(row.storage_key, row);
     const raw = finalUploadRawByKey.get(row.storage_key);
@@ -457,7 +485,7 @@ export async function resolveRemoteWorkspaceConflicts(
       .map((key) => [key, localBackup.workspaces[key]] as const)
       .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string")
       .map(([key, raw]) => [key, raw] as [string, string]);
-    const uploadResult = await uploadWorkspaces(entries, remoteByKey);
+    const uploadResult = await uploadWorkspaces(userId, entries, remoteByKey);
     if (uploadResult.error) {
       return {
         status: isMissingSchemaError(uploadResult.error) || isMissingSyncContractError(uploadResult.error)
@@ -536,6 +564,18 @@ export async function startRemoteWorkspaceSync(
       changedDuringInitialSync: (storageKey) => (
         everyWorkspaceChangedDuringInitialSync || changedDuringInitialSync.has(storageKey)
       ),
+      recordShadowDiff: async ({ storageKey, localPayload, remotePayload, revision }) => {
+        const diff = canonicalDiff(localPayload, remotePayload);
+        if (!diff) return;
+        await recordCanonicalDiff({
+          domain: storageKey.split(/[.-]/)[1] ?? "workspace",
+          entity: "workspace",
+          entityId: storageKey,
+          revision,
+          clientSource: "web",
+          diff,
+        });
+      },
     });
   } catch (error) {
     if (typeof window !== "undefined") {
@@ -576,7 +616,7 @@ export async function startRemoteWorkspaceSync(
         .filter((entry): entry is readonly [string, string] => typeof entry[1] === "string")
         .map(([key, raw]) => [key, raw] as [string, string]);
       const rawByKey = new Map(entries);
-      const uploadResult = await uploadWorkspaces(entries, knownRemoteRows);
+      const uploadResult = await uploadWorkspaces(userId, entries, knownRemoteRows);
       uploadResult.confirmed.forEach((row) => {
         knownRemoteRows.set(row.storage_key, row);
         const raw = rawByKey.get(row.storage_key);
@@ -760,6 +800,17 @@ export async function startRemoteWorkspaceSync(
     const localIsUnchanged = localRaw === undefined
       || (knownLocalHash !== undefined && localHash === knownLocalHash);
     if (!localIsUnchanged) {
+      const diff = localRaw === undefined ? null : canonicalDiff(rawPayload(localRaw), row.payload);
+      if (diff) {
+        void recordCanonicalDiff({
+          domain: row.storage_key.split(/[.-]/)[1] ?? "workspace",
+          entity: "workspace",
+          entityId: row.storage_key,
+          revision: row.revision,
+          clientSource: "web",
+          diff,
+        });
+      }
       reportRemoteConflict(row);
       return;
     }

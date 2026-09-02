@@ -174,6 +174,13 @@ struct ApplySnapshotResponse: Codable, Equatable, Sendable {
     var contentHash: String
     var revision: Int64
     var updatedAt: String
+    var operationID: String? = nil
+    var operationStatus: DualWriteOperationStatus? = nil
+    var changeCursor: Int64? = nil
+    var clientSource: DualWriteClientSource? = nil
+    var materialized: Bool? = nil
+    var reconciliationID: String? = nil
+    var errorMessage: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case applied
@@ -182,6 +189,13 @@ struct ApplySnapshotResponse: Codable, Equatable, Sendable {
         case contentHash = "content_hash"
         case revision
         case updatedAt = "updated_at"
+        case operationID = "operation_id"
+        case operationStatus = "operation_status"
+        case changeCursor = "change_cursor"
+        case clientSource = "client_source"
+        case materialized
+        case reconciliationID = "reconciliation_id"
+        case errorMessage = "error_message"
     }
 }
 
@@ -382,11 +396,15 @@ final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
         let url = baseURL.appendingPathComponent("rest/v1/rpc/rootine_apply_workspace_snapshot")
         var request = authorizedRequest(url: url, accessToken: accessToken)
         request.httpMethod = "POST"
-        request.httpBody = try JSONEncoder().encode(ApplySnapshotRequest(
+        request.httpBody = try JSONEncoder().encode(DualWriteApplySnapshotRequest(
             storageKey: mutation.storageKey,
             payload: mutation.payload,
             contentHash: mutation.contentHash,
-            expectedRevision: mutation.expectedRevision
+            expectedRevision: mutation.expectedRevision,
+            operationID: mutation.id,
+            clientSource: .ios,
+            correlationID: UUID().uuidString,
+            cursor: mutation.cursor
         ))
         let rows = try await send(request, as: [ApplySnapshotResponse].self)
         guard let first = rows.first else { throw RootineAPIError.invalidResponse }

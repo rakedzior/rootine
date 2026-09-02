@@ -14,6 +14,7 @@ struct WorkspaceSyncPayload: Sendable {
 
 actor WorkspaceSyncEngine {
     private let store: WorkspaceFileStore
+    private let cursorStore: RootineSyncCursorStore
     private let remote: WorkspaceRemoteClient
     private let encoder: JSONEncoder
     private let decoder = JSONDecoder()
@@ -24,6 +25,7 @@ actor WorkspaceSyncEngine {
 
     init(store: WorkspaceFileStore, remote: WorkspaceRemoteClient) {
         self.store = store
+        cursorStore = RootineSyncCursorStore(store: store)
         self.remote = remote
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -62,7 +64,7 @@ actor WorkspaceSyncEngine {
             let data = try encoder.encode(request.payload)
             let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
             let expectedRevision = try await store.revision(for: request.storageKey)
-            let mutationIDData = Data("\(request.storageKey):\(expectedRevision):\(digest)".utf8)
+            let mutationIDData = Data("ios:\(request.storageKey):\(expectedRevision):\(digest)".utf8)
             let mutationID = SHA256.hash(data: mutationIDData).map { String(format: "%02x", $0) }.joined()
             if let duplicate = queue.first(where: {
                 $0.storageKey == request.storageKey
@@ -78,7 +80,8 @@ actor WorkspaceSyncEngine {
                 payload: request.payload,
                 contentHash: digest,
                 expectedRevision: expectedRevision,
-                createdAt: RootineDate.isoTimestamp()
+                createdAt: RootineDate.isoTimestamp(),
+                cursor: try await cursorStore.current()
             )
             queue.removeAll { $0.storageKey == request.storageKey }
             queue.append(mutation)
@@ -115,7 +118,8 @@ actor WorkspaceSyncEngine {
                 try await store.acknowledgeMutation(
                     id: mutation.id,
                     storageKey: mutation.storageKey,
-                    revision: response.revision
+                    revision: response.revision,
+                    cursor: response.changeCursor
                 )
                 applied += 1
             } else {
