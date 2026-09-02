@@ -5,6 +5,10 @@ struct RootineConfiguration: Equatable, Sendable {
     var supabasePublishableKey: String
     var backendURL: URL?
     var authCallbackScheme: String
+    /// The native bundle identifier used as Apple's `aud` claim. It is kept
+    /// separate from the Supabase URL so tests can inject a deterministic
+    /// audience without touching signing configuration.
+    var appleClientID: String = Bundle.main.bundleIdentifier ?? "app.rootine.ios"
     var termsURL: URL?
     var privacyURL: URL?
     var appVersion: String = ""
@@ -42,11 +46,15 @@ struct RootineConfiguration: Equatable, Sendable {
                   url.host != nil else { return nil }
             return url
         }
+        let configuredAppleClientID = value("PRODUCT_BUNDLE_IDENTIFIER")
         return RootineConfiguration(
             supabaseURL: url("ROOTINE_SUPABASE_URL"),
             supabasePublishableKey: value("ROOTINE_SUPABASE_PUBLISHABLE_KEY"),
             backendURL: url("ROOTINE_BACKEND_URL"),
             authCallbackScheme: value("ROOTINE_AUTH_CALLBACK_SCHEME"),
+            appleClientID: configuredAppleClientID.isEmpty
+                ? (bundle.bundleIdentifier ?? "app.rootine.ios")
+                : configuredAppleClientID,
             termsURL: url("ROOTINE_TERMS_URL"),
             privacyURL: url("ROOTINE_PRIVACY_URL"),
             appVersion: value("CFBundleShortVersionString").isEmpty
@@ -60,9 +68,124 @@ struct RootineConfiguration: Equatable, Sendable {
     }
 }
 
+enum RootineIdentityProvider: String, Codable, CaseIterable, Sendable {
+    case email
+    case google
+    case apple
+
+    var title: String {
+        switch self {
+        case .email: return "E-mail"
+        case .google: return "Google"
+        case .apple: return "Apple"
+        }
+    }
+}
+
+struct SupabaseIdentity: Codable, Equatable, Sendable, Identifiable {
+    /// Supabase calls this field `identity_id`; older responses have also
+    /// exposed `id`, so decoding accepts both without weakening ownership
+    /// checks before unlinking.
+    var identityID: String
+    var provider: String
+    var identityData: [String: JSONValue]?
+    var createdAt: String?
+    var lastSignInAt: String?
+
+    var id: String { identityID }
+
+    init(
+        identityID: String,
+        provider: String,
+        identityData: [String: JSONValue]? = nil,
+        createdAt: String? = nil,
+        lastSignInAt: String? = nil
+    ) {
+        self.identityID = identityID
+        self.provider = provider
+        self.identityData = identityData
+        self.createdAt = createdAt
+        self.lastSignInAt = lastSignInAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case identityID = "identity_id"
+        case legacyID = "id"
+        case provider
+        case identityData = "identity_data"
+        case createdAt = "created_at"
+        case lastSignInAt = "last_sign_in_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let value = try container.decodeIfPresent(String.self, forKey: .identityID) {
+            identityID = value
+        } else {
+            identityID = try container.decode(String.self, forKey: .legacyID)
+        }
+        provider = try container.decode(String.self, forKey: .provider)
+        identityData = try container.decodeIfPresent([String: JSONValue].self, forKey: .identityData)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        lastSignInAt = try container.decodeIfPresent(String.self, forKey: .lastSignInAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(identityID, forKey: .identityID)
+        try container.encode(provider, forKey: .provider)
+        try container.encodeIfPresent(identityData, forKey: .identityData)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(lastSignInAt, forKey: .lastSignInAt)
+    }
+}
+
 struct SupabaseUser: Codable, Equatable, Sendable {
     var id: String
     var email: String?
+    var emailConfirmedAt: String?
+    var identities: [SupabaseIdentity]?
+
+    init(
+        id: String,
+        email: String?,
+        emailConfirmedAt: String? = nil,
+        identities: [SupabaseIdentity]? = nil
+    ) {
+        self.id = id
+        self.email = email
+        self.emailConfirmedAt = emailConfirmedAt
+        self.identities = identities
+    }
+
+    var linkedProviders: Set<RootineIdentityProvider> {
+        Set((identities ?? []).compactMap { RootineIdentityProvider(rawValue: $0.provider.lowercased()) })
+    }
+
+    var isEmailConfirmed: Bool {
+        emailConfirmedAt != nil || linkedProviders.contains(.email)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case email
+        case emailConfirmedAt = "email_confirmed_at"
+        case identities
+    }
+}
+
+struct RootineAccountState: Equatable, Sendable {
+    var userID: String
+    var email: String?
+    var isEmailConfirmed: Bool
+    var linkedProviders: Set<RootineIdentityProvider>
+
+    init(user: SupabaseUser) {
+        userID = user.id
+        email = user.email
+        isEmailConfirmed = user.isEmailConfirmed
+        linkedProviders = user.linkedProviders
+    }
 }
 
 struct SupabaseSession: Codable, Equatable, Sendable {
@@ -72,6 +195,19 @@ struct SupabaseSession: Codable, Equatable, Sendable {
     var expiresAt: Int?
     var tokenType: String
     var user: SupabaseUser
+
+    var isValid: Bool {
+        !accessToken.isEmpty
+            && !refreshToken.isEmpty
+            && expiresIn > 0
+            && !tokenType.isEmpty
+            && !user.id.isEmpty
+    }
+
+    func validated() throws -> SupabaseSession {
+        guard isValid else { throw RootineAPIError.invalidResponse }
+        return self
+    }
 
     var shouldRefresh: Bool {
         guard let expiresAt else { return false }
@@ -106,37 +242,71 @@ struct SupabaseAuthCallback: Equatable, Sendable {
     var tokenType: String
     var isPasswordRecovery: Bool
 
-    static func parse(_ url: URL) throws -> SupabaseAuthCallback {
-        var parameters: [String: String] = [:]
-        let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        urlComponents?.queryItems?.forEach { parameters[$0.name] = $0.value }
+    static func parse(
+        _ url: URL,
+        expectedScheme: String? = nil,
+        expectedHost: String? = "auth-callback",
+        now: Date = Date()
+    ) throws -> SupabaseAuthCallback {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if let expectedScheme,
+           url.scheme?.caseInsensitiveCompare(expectedScheme) != .orderedSame {
+            throw RootineAPIError.invalidResponse
+        }
+        if let expectedHost,
+           url.host?.caseInsensitiveCompare(expectedHost) != .orderedSame {
+            throw RootineAPIError.invalidResponse
+        }
 
-        if let fragment = urlComponents?.fragment,
+        var parameters: [String: String] = [:]
+        components?.queryItems?.forEach { parameters[$0.name] = $0.value }
+
+        if let fragment = components?.fragment,
            let fragmentComponents = URLComponents(string: "rootine://callback?\(fragment)") {
             fragmentComponents.queryItems?.forEach { parameters[$0.name] = $0.value }
         }
 
         if let error = parameters["error_description"] ?? parameters["error"] {
             let normalized = error.lowercased()
+            if normalized.contains("identity_already_exists") {
+                throw RootineAPIError.identityAlreadyExists
+            }
+            if normalized.contains("identity_not_found") {
+                throw RootineAPIError.identityNotFound
+            }
+            if normalized.contains("single_identity_not_deletable") {
+                throw RootineAPIError.lastIdentityNotDeletable
+            }
             if normalized.contains("cancel") || normalized.contains("denied") || normalized.contains("access_denied") {
                 throw RootineAPIError.cancelled
             }
             throw RootineAPIError.providerUnavailable
         }
 
-        guard let accessToken = parameters["access_token"],
-              let refreshToken = parameters["refresh_token"] else {
+        guard let accessToken = parameters["access_token"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let refreshToken = parameters["refresh_token"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !accessToken.isEmpty,
+              !refreshToken.isEmpty,
+              !accessToken.contains(where: { $0.isNewline || $0.isWhitespace }),
+              !refreshToken.contains(where: { $0.isNewline || $0.isWhitespace }) else {
             throw RootineAPIError.invalidResponse
         }
+
+        let expiresIn = Int(parameters["expires_in"] ?? "") ?? 3_600
+        guard expiresIn > 0 else { throw RootineAPIError.invalidResponse }
+        let expiresAt = Int(parameters["expires_at"] ?? "")
+            ?? Int(now.timeIntervalSince1970) + expiresIn
+        guard expiresAt > Int(now.timeIntervalSince1970) else { throw RootineAPIError.unauthorized }
+        let tokenType = (parameters["token_type"] ?? "bearer").lowercased()
+        guard tokenType == "bearer" else { throw RootineAPIError.invalidResponse }
 
         return SupabaseAuthCallback(
             accessToken: accessToken,
             refreshToken: refreshToken,
-            expiresIn: Int(parameters["expires_in"] ?? "") ?? 3_600,
-            expiresAt: Int(parameters["expires_at"] ?? "")
-                ?? Int(Date().timeIntervalSince1970) + (Int(parameters["expires_in"] ?? "") ?? 3_600),
-            tokenType: parameters["token_type"] ?? "bearer",
-            isPasswordRecovery: parameters["type"] == "recovery"
+            expiresIn: expiresIn,
+            expiresAt: expiresAt,
+            tokenType: tokenType,
+            isPasswordRecovery: parameters["type"]?.lowercased() == "recovery"
         )
     }
 }
@@ -241,6 +411,7 @@ private struct NormalizedSyncDataEnvelope<Value: Decodable>: Decodable {
 enum RootineAPIError: LocalizedError, Equatable, Sendable {
     case missingConfiguration
     case invalidResponse
+    case invalidEmail
     case unauthorized
     case invalidCredentials
     case emailNotConfirmed
@@ -249,6 +420,10 @@ enum RootineAPIError: LocalizedError, Equatable, Sendable {
     case rateLimited
     case registrationsDisabled
     case providerUnavailable
+    case identityAlreadyExists
+    case identityNotFound
+    case lastIdentityNotDeletable
+    case accountMismatch
     case cancelled
     case network
     case server(status: Int)
@@ -259,6 +434,8 @@ enum RootineAPIError: LocalizedError, Equatable, Sendable {
             return "Logowanie nie jest jeszcze skonfigurowane w tej wersji aplikacji."
         case .invalidResponse:
             return "Usługa konta zwróciła nieprawidłową odpowiedź. Spróbuj ponownie."
+        case .invalidEmail:
+            return "Wpisz poprawny adres e-mail."
         case .unauthorized:
             return "Sesja wygasła. Zaloguj się ponownie."
         case .invalidCredentials:
@@ -275,6 +452,14 @@ enum RootineAPIError: LocalizedError, Equatable, Sendable {
             return "Tworzenie nowych kont jest obecnie wyłączone."
         case .providerUnavailable:
             return "Ta metoda logowania nie jest jeszcze dostępna w tym środowisku."
+        case .identityAlreadyExists:
+            return "To konto jest już połączone albo należy do innego użytkownika."
+        case .identityNotFound:
+            return "Nie znaleziono tego połączenia konta. Odśwież profil i spróbuj ponownie."
+        case .lastIdentityNotDeletable:
+            return "Nie można usunąć ostatniej metody logowania z konta."
+        case .accountMismatch:
+            return "To połączenie należy do innego konta Rootine. Nie zmieniono bieżącej sesji."
         case .cancelled:
             return "Logowanie zostało anulowane. Możesz spróbować ponownie."
         case .network:
@@ -285,11 +470,27 @@ enum RootineAPIError: LocalizedError, Equatable, Sendable {
     }
 }
 
+protocol RootineAuthClient: Sendable {
+    func signIn(email: String, password: String) async throws -> SupabaseSession
+    func signUp(email: String, password: String) async throws -> EmailRegistrationResult
+    func resendConfirmation(email: String) async throws
+    func requestPasswordReset(email: String) async throws
+    func updatePassword(_ password: String, accessToken: String) async throws
+    func refreshSession(refreshToken: String) async throws -> SupabaseSession
+    func signInWithApple(idToken: String, nonce: String) async throws -> SupabaseSession
+    func googleAuthorizationURL() throws -> URL
+    func session(from callbackURL: URL) async throws -> AuthCallbackResult
+    func googleIdentityAuthorizationURL(accessToken: String) async throws -> URL
+    func linkAppleIdentity(idToken: String, nonce: String, accessToken: String) async throws -> SupabaseSession
+    func identities(accessToken: String) async throws -> [SupabaseIdentity]
+    func unlinkIdentity(identityID: String, accessToken: String) async throws
+}
+
 protocol WorkspaceRemoteClient: Sendable {
     func apply(_ mutation: PendingWorkspaceMutation, accessToken: String) async throws -> ApplySnapshotResponse
 }
 
-final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient, @unchecked Sendable {
+final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient, RootineAuthClient, @unchecked Sendable {
     private let configuration: RootineConfiguration
     private let session: URLSession
     private let syncDeviceID: String
@@ -384,12 +585,37 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
     }
 
     func signInWithApple(idToken: String, nonce: String) async throws -> SupabaseSession {
+        guard !idToken.isEmpty, !nonce.isEmpty else { throw RootineAPIError.invalidResponse }
         let request = try authRequest(
             path: "auth/v1/token",
             method: "POST",
             queryItems: [URLQueryItem(name: "grant_type", value: "id_token")],
             body: ["provider": "apple", "id_token": idToken, "nonce": nonce]
         )
+        return try await send(request, as: SupabaseSession.self)
+    }
+
+    func linkAppleIdentity(idToken: String, nonce: String, accessToken: String) async throws -> SupabaseSession {
+        guard !idToken.isEmpty, !nonce.isEmpty, !accessToken.isEmpty else {
+            throw RootineAPIError.invalidResponse
+        }
+        guard let baseURL = configuration.supabaseURL else {
+            throw RootineAPIError.missingConfiguration
+        }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("auth/v1/token"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "grant_type", value: "id_token")]
+        guard let url = components?.url else { throw RootineAPIError.missingConfiguration }
+        var request = authorizedRequest(url: url, accessToken: accessToken)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(AppleTokenRequest(
+            provider: "apple",
+            idToken: idToken,
+            nonce: nonce,
+            linkIdentity: true
+        ))
         return try await send(request, as: SupabaseSession.self)
     }
 
@@ -410,8 +636,36 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
         return url
     }
 
+    func googleIdentityAuthorizationURL(accessToken: String) async throws -> URL {
+        guard !accessToken.isEmpty,
+              let baseURL = configuration.supabaseURL,
+              let redirectURL = configuration.authCallbackURL else {
+            throw RootineAPIError.missingConfiguration
+        }
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("auth/v1/user/identities/authorize"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "provider", value: "google"),
+            URLQueryItem(name: "redirect_to", value: redirectURL.absoluteString),
+            URLQueryItem(name: "skip_http_redirect", value: "true")
+        ]
+        guard let url = components?.url else { throw RootineAPIError.missingConfiguration }
+        let envelope = try await send(authorizedRequest(url: url, accessToken: accessToken), as: IdentityAuthorizationEnvelope.self)
+        guard let providerURL = envelope.url,
+              providerURL.scheme?.lowercased() == "https",
+              providerURL.host != nil else {
+            throw RootineAPIError.invalidResponse
+        }
+        return providerURL
+    }
+
     func session(from callbackURL: URL) async throws -> AuthCallbackResult {
-        let callback = try SupabaseAuthCallback.parse(callbackURL)
+        let callback = try SupabaseAuthCallback.parse(
+            callbackURL,
+            expectedScheme: configuration.authCallbackScheme.isEmpty ? nil : configuration.authCallbackScheme
+        )
         let user = try await currentUser(accessToken: callback.accessToken)
         let session = SupabaseSession(
             accessToken: callback.accessToken,
@@ -422,6 +676,32 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
             user: user
         )
         return AuthCallbackResult(session: session, isPasswordRecovery: callback.isPasswordRecovery)
+    }
+
+    func identities(accessToken: String) async throws -> [SupabaseIdentity] {
+        guard !accessToken.isEmpty,
+              let baseURL = configuration.supabaseURL else {
+            throw RootineAPIError.missingConfiguration
+        }
+        let user = try await send(
+            authorizedRequest(
+                url: baseURL.appendingPathComponent("auth/v1/user"),
+                accessToken: accessToken
+            ),
+            as: SupabaseUser.self
+        )
+        return user.identities ?? []
+    }
+
+    func unlinkIdentity(identityID: String, accessToken: String) async throws {
+        guard !identityID.isEmpty, !accessToken.isEmpty,
+              let baseURL = configuration.supabaseURL else {
+            throw RootineAPIError.missingConfiguration
+        }
+        let url = baseURL
+            .appendingPathComponent("auth/v1/user/identities")
+            .appendingPathComponent(identityID)
+        _ = try await sendRaw(authorizedRequest(url: url, accessToken: accessToken))
     }
 
     func readSnapshots(accessToken: String) async throws -> [RemoteWorkspaceSnapshot] {
@@ -542,6 +822,24 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
             accessToken: accessToken
         )
         return try await send(request, as: SupabaseUser.self)
+    }
+
+    private struct AppleTokenRequest: Encodable {
+        var provider: String
+        var idToken: String
+        var nonce: String
+        var linkIdentity: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case provider
+            case idToken = "id_token"
+            case nonce
+            case linkIdentity = "link_identity"
+        }
+    }
+
+    private struct IdentityAuthorizationEnvelope: Decodable {
+        var url: URL?
     }
 
     private struct RegisterDeviceRequest: Encodable {
@@ -723,6 +1021,19 @@ final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient
         }
         if details.contains("provider") && (details.contains("enabled") || details.contains("unsupported")) {
             throw RootineAPIError.providerUnavailable
+        }
+        if details.contains("identity_already_exists")
+            || details.contains("identity is already linked") {
+            throw RootineAPIError.identityAlreadyExists
+        }
+        if details.contains("identity_not_found")
+            || details.contains("identity not found") {
+            throw RootineAPIError.identityNotFound
+        }
+        if details.contains("single_identity_not_deletable")
+            || details.contains("at least 2")
+            || details.contains("last identity") {
+            throw RootineAPIError.lastIdentityNotDeletable
         }
         if details.contains("refresh token") && (details.contains("invalid") || details.contains("not found")) {
             throw RootineAPIError.unauthorized

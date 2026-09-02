@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -619,12 +620,29 @@ private struct MoreAccountSheet: View {
 
 private struct RootineProfileView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var oauthSession = OAuthWebSession()
+    @State private var pendingProvider: RootineIdentityProvider?
+    @State private var appleNonce: String?
+    @State private var feedback: String?
 
     var body: some View {
         List {
             Section("Konto") {
                 LabeledContent("E-mail", value: environment.session?.user.email ?? "Nie podano")
                 LabeledContent("Identyfikator", value: environment.session?.user.id ?? "Lokalnie")
+            }
+            Section("Metody logowania") {
+                ForEach(RootineIdentityProvider.allCases, id: \.rawValue) { provider in
+                    providerRow(provider)
+                }
+                if let feedback {
+                    Text(feedback)
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.warning)
+                }
+                Text("Połączenie dodatkowej metody ułatwia odzyskanie dostępu. Nie można usunąć ostatniej metody logowania.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
             }
             Section("Połączenie") {
                 ConfigurationStatusRow(title: "Logowanie", ready: environment.configuration.isAuthComplete)
@@ -641,6 +659,134 @@ private struct RootineProfileView: View {
         }
         .navigationTitle("Profil")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            try? await environment.refreshAccountState()
+        }
+    }
+
+    @ViewBuilder
+    private func providerRow(_ provider: RootineIdentityProvider) -> some View {
+        let identities = environment.session?.user.identities ?? []
+        let identity = identities.first { $0.provider.lowercased() == provider.rawValue }
+        if let identity {
+            HStack {
+                Label(provider.title, systemImage: provider == .email ? "envelope" : provider == .google ? "g.circle" : "apple.logo")
+                Spacer()
+                Text("Połączono")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.success)
+                if provider != .email {
+                    Button("Odłącz", role: .destructive) {
+                        unlink(identityID: identity.identityID)
+                    }
+                    .disabled(pendingProvider != nil || identities.count < 2)
+                }
+            }
+        } else {
+            switch provider {
+            case .email:
+                Label("E-mail", systemImage: "envelope")
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            case .google:
+                Button {
+                    linkGoogle()
+                } label: {
+                    Label(pendingProvider == .google ? "Łączę z Google…" : "Połącz Google", systemImage: "g.circle")
+                }
+                .disabled(pendingProvider != nil)
+            case .apple:
+                ZStack {
+                    SignInWithAppleButton(.continue, onRequest: prepareAppleRequest, onCompletion: completeAppleLink)
+                        .signInWithAppleButtonStyle(.white)
+                        .frame(height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+                        .opacity(pendingProvider == .apple ? 0.45 : 1)
+                        .disabled(pendingProvider != nil)
+                    if pendingProvider == .apple {
+                        ProgressView().tint(RootineTheme.ColorToken.canvas)
+                    }
+                }
+            }
+        }
+    }
+
+    private func linkGoogle() {
+        feedback = nil
+        pendingProvider = .google
+        Task {
+            defer {
+                pendingProvider = nil
+                environment.cancelPendingIdentityLink()
+            }
+            do {
+                let authorizationURL = try await environment.googleIdentityAuthorizationURLForLinking()
+                let callbackURL = try await oauthSession.start(
+                    url: authorizationURL,
+                    callbackScheme: environment.configuration.authCallbackScheme
+                )
+                try await environment.establishGoogleIdentityLink(callbackURL: callbackURL)
+                try await environment.refreshAccountState()
+            } catch {
+                feedback = error.localizedDescription
+            }
+        }
+    }
+
+    private func prepareAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        feedback = nil
+        environment.clearAuthCallbackError()
+        do {
+            let nonce = try AuthNonce.random()
+            appleNonce = nonce
+            request.requestedScopes = [.email]
+            request.nonce = AuthNonce.hashed(nonce)
+        } catch {
+            appleNonce = nil
+            feedback = RootineAPIError.invalidResponse.localizedDescription
+        }
+    }
+
+    private func completeAppleLink(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .failure(let error):
+            feedback = (error as? ASAuthorizationError)?.code == .canceled
+                ? RootineAPIError.cancelled.localizedDescription
+                : RootineAPIError.providerUnavailable.localizedDescription
+            appleNonce = nil
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let tokenData = credential.identityToken,
+                  let idToken = String(data: tokenData, encoding: .utf8),
+                  let nonce = appleNonce else {
+                feedback = RootineAPIError.invalidResponse.localizedDescription
+                return
+            }
+            pendingProvider = .apple
+            Task {
+                defer {
+                    pendingProvider = nil
+                    appleNonce = nil
+                }
+                do {
+                    try await environment.establishAppleIdentityLink(idToken: idToken, nonce: nonce)
+                    try await environment.refreshAccountState()
+                } catch {
+                    feedback = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func unlink(identityID: String) {
+        feedback = nil
+        Task {
+            do {
+                try await environment.unlinkIdentity(identityID)
+                try await environment.refreshAccountState()
+            } catch {
+                feedback = error.localizedDescription
+            }
+        }
     }
 }
 

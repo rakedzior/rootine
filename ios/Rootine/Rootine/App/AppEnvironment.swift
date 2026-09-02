@@ -68,6 +68,7 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var isLaunching = true
     @Published private(set) var isPasswordRecovery = false
     @Published private(set) var authCallbackError: String?
+    @Published private(set) var accountState: RootineAccountState?
     @Published private(set) var foundationMessage = "Szkielet techniczny gotowy"
     @Published private(set) var workspaceSyncStatus = WorkspaceSyncStatus.unavailable
     @Published private(set) var realtimeLastRefresh: Date?
@@ -81,9 +82,10 @@ final class AppEnvironment: ObservableObject {
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
+    private let authClient: any RootineAuthClient
     private let normalizedReadClient: any RootineRelationalReadClient
     private let readFeatureFlags: any RootineReadFeatureFlagStore
-    private let keychain: KeychainSessionStore
+    private let keychain: any RootineSessionStore
     private let deviceIdentity: RootineDeviceIdentityStore
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
@@ -117,32 +119,42 @@ final class AppEnvironment: ObservableObject {
     private var reconciliationWaiters: [CheckedContinuation<Void, Never>] = []
     private var deviceRegistrationTask: Task<Void, Never>?
     private var lastDeviceRegistrationFingerprint: String?
+    /// Invalidates in-flight authentication work when the user signs out or
+    /// switches account. Main-actor methods can interleave at an await, so a
+    /// completed network request must never resurrect a cleared session.
+    private var authGeneration = 0
+    private var pendingGoogleIdentityLink = false
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
-        keychain: KeychainSessionStore = KeychainSessionStore(),
+        keychain: any RootineSessionStore = KeychainSessionStore(),
         normalizedReadClient: (any RootineRelationalReadClient)? = nil,
-        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil
+        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil,
+        authClient: (any RootineAuthClient)? = nil
     ) {
         self.configuration = configuration
         self.keychain = keychain
         let configuredAPI = RootineAPIClient(configuration: configuration)
         self.api = configuredAPI
+        self.authClient = authClient ?? configuredAPI
         self.deviceIdentity = RootineDeviceIdentityStore()
         self.normalizedReadClient = normalizedReadClient ?? configuredAPI
         self.readFeatureFlags = readFeatureFlags ?? UserDefaultsRootineReadFeatureFlagStore()
         let storedSession = keychain.load()
         session = storedSession
         if let storedSession {
+            accountState = RootineAccountState(user: storedSession.user)
             configureRuntime(userID: storedSession.user.id)
         }
     }
 
     func establishEmailSession(email: String, password: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
+        guard !password.isEmpty else { throw RootineAPIError.invalidCredentials }
         isWorking = true
         defer { isWorking = false }
-        let signedIn = try await api.signIn(
+        let signedIn = try await authClient.signIn(
             email: normalizedEmail(email),
             password: password
         )
@@ -151,9 +163,11 @@ final class AppEnvironment: ObservableObject {
 
     func register(email: String, password: String) async throws -> Bool {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
+        guard AuthInputValidator.passwordError(password) == nil else { throw RootineAPIError.weakPassword }
         isWorking = true
         defer { isWorking = false }
-        switch try await api.signUp(email: normalizedEmail(email), password: password) {
+        switch try await authClient.signUp(email: normalizedEmail(email), password: password) {
         case .session(let newSession):
             try await accept(newSession)
             return false
@@ -164,40 +178,51 @@ final class AppEnvironment: ObservableObject {
 
     func resendConfirmation(email: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
-        try await api.resendConfirmation(email: normalizedEmail(email))
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
+        try await authClient.resendConfirmation(email: normalizedEmail(email))
     }
 
     func requestPasswordReset(email: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
         isWorking = true
         defer { isWorking = false }
-        try await api.requestPasswordReset(email: normalizedEmail(email))
+        try await authClient.requestPasswordReset(email: normalizedEmail(email))
     }
 
     func googleAuthorizationURL() throws -> URL {
-        try api.googleAuthorizationURL()
+        try authClient.googleAuthorizationURL()
     }
 
     func establishGoogleSession(callbackURL: URL) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
         isWorking = true
         defer { isWorking = false }
-        let result = try await api.session(from: callbackURL)
+        let result = try await authClient.session(from: callbackURL)
         try await accept(result.session, passwordRecovery: result.isPasswordRecovery)
     }
 
     func establishAppleSession(idToken: String, nonce: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        try AuthProtocolValidator.validateAppleIdentityToken(
+            idToken,
+            rawNonce: nonce,
+            expectedAudience: configuration.appleClientID
+        )
         isWorking = true
         defer { isWorking = false }
-        let signedIn = try await api.signInWithApple(idToken: idToken, nonce: nonce)
+        let signedIn = try await authClient.signInWithApple(idToken: idToken, nonce: nonce)
         try await accept(signedIn)
     }
 
     func handleAuthCallback(_ url: URL) async throws {
-        guard url.scheme?.lowercased() == configuration.authCallbackScheme.lowercased(),
-              url.host == "auth-callback" else { return }
-        try await establishGoogleSession(callbackURL: url)
+        guard url.scheme?.caseInsensitiveCompare(configuration.authCallbackScheme) == .orderedSame,
+              url.host?.caseInsensitiveCompare("auth-callback") == .orderedSame else { return }
+        if pendingGoogleIdentityLink {
+            try await establishGoogleIdentityLink(callbackURL: url)
+        } else {
+            try await establishGoogleSession(callbackURL: url)
+        }
     }
 
     func receiveAuthCallback(_ url: URL) async {
@@ -213,11 +238,138 @@ final class AppEnvironment: ObservableObject {
         authCallbackError = nil
     }
 
-    func completePasswordRecovery(password: String) async throws {
+    /// Starts the explicit linking flow for an already authenticated account.
+    /// Supabase manual linking must be enabled server-side; a disabled provider
+    /// is reported as a normal auth error and never signs the account out.
+    func googleIdentityAuthorizationURLForLinking() async throws -> URL {
+        guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
         guard let accessToken = session?.accessToken else { throw RootineAPIError.unauthorized }
+        let generation = authGeneration
+        pendingGoogleIdentityLink = true
+        do {
+            let url = try await authClient.googleIdentityAuthorizationURL(accessToken: accessToken)
+            guard generation == authGeneration, session?.accessToken == accessToken else {
+                pendingGoogleIdentityLink = false
+                throw RootineAPIError.cancelled
+            }
+            return url
+        } catch {
+            pendingGoogleIdentityLink = false
+            throw error
+        }
+    }
+
+    func establishGoogleIdentityLink(callbackURL: URL) async throws {
+        guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        let generation = authGeneration
+        isWorking = true
+        defer {
+            isWorking = false
+            pendingGoogleIdentityLink = false
+        }
+        let result = try await authClient.session(from: callbackURL)
+        guard generation == authGeneration,
+              result.session.user.id == currentSession.user.id,
+              session?.accessToken == currentSession.accessToken else {
+            throw RootineAPIError.accountMismatch
+        }
+        try await acceptLinkedIdentitySession(result.session)
+    }
+
+    func cancelPendingIdentityLink() {
+        pendingGoogleIdentityLink = false
+    }
+
+    func establishAppleIdentityLink(idToken: String, nonce: String) async throws {
+        guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        try AuthProtocolValidator.validateAppleIdentityToken(
+            idToken,
+            rawNonce: nonce,
+            expectedAudience: configuration.appleClientID
+        )
         isWorking = true
         defer { isWorking = false }
-        try await api.updatePassword(password, accessToken: accessToken)
+        let linkedSession = try await authClient.linkAppleIdentity(
+            idToken: idToken,
+            nonce: nonce,
+            accessToken: currentSession.accessToken
+        )
+        guard linkedSession.user.id == currentSession.user.id else {
+            throw RootineAPIError.accountMismatch
+        }
+        try await acceptLinkedIdentitySession(linkedSession)
+    }
+
+    func refreshAccountState() async throws {
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        let generation = authGeneration
+        let originalIdentities = currentSession.user.identities
+        let identities = try await authClient.identities(accessToken: currentSession.accessToken)
+        guard generation == authGeneration,
+              session?.user.id == currentSession.user.id,
+              session?.accessToken == currentSession.accessToken,
+              session?.user.identities == originalIdentities else {
+            throw RootineAPIError.cancelled
+        }
+        var user = currentSession.user
+        user.identities = identities
+        let updated = SupabaseSession(
+            accessToken: currentSession.accessToken,
+            refreshToken: currentSession.refreshToken,
+            expiresIn: currentSession.expiresIn,
+            expiresAt: currentSession.expiresAt,
+            tokenType: currentSession.tokenType,
+            user: user
+        )
+        try keychain.save(updated)
+        session = updated
+        accountState = RootineAccountState(user: user)
+    }
+
+    func unlinkIdentity(_ identityID: String) async throws {
+        guard let currentSession = session,
+              let identities = currentSession.user.identities else {
+            throw RootineAPIError.unauthorized
+        }
+        let generation = authGeneration
+        guard identities.contains(where: { $0.identityID == identityID }) else {
+            throw RootineAPIError.identityNotFound
+        }
+        guard identities.count > 1 else { throw RootineAPIError.lastIdentityNotDeletable }
+        try await authClient.unlinkIdentity(identityID: identityID, accessToken: currentSession.accessToken)
+        guard generation == authGeneration,
+              session?.user.id == currentSession.user.id,
+              session?.accessToken == currentSession.accessToken,
+              session?.user.identities == identities else {
+            throw RootineAPIError.cancelled
+        }
+        var user = currentSession.user
+        user.identities = identities.filter { $0.identityID != identityID }
+        let updated = SupabaseSession(
+            accessToken: currentSession.accessToken,
+            refreshToken: currentSession.refreshToken,
+            expiresIn: currentSession.expiresIn,
+            expiresAt: currentSession.expiresAt,
+            tokenType: currentSession.tokenType,
+            user: user
+        )
+        try keychain.save(updated)
+        session = updated
+        accountState = RootineAccountState(user: user)
+    }
+
+    func completePasswordRecovery(password: String) async throws {
+        guard let accessToken = session?.accessToken else { throw RootineAPIError.unauthorized }
+        guard AuthInputValidator.passwordError(password) == nil else { throw RootineAPIError.weakPassword }
+        let generation = authGeneration
+        isWorking = true
+        defer { isWorking = false }
+        try await authClient.updatePassword(password, accessToken: accessToken)
+        guard generation == authGeneration, session?.accessToken == accessToken else {
+            throw RootineAPIError.cancelled
+        }
         isPasswordRecovery = false
         await loadAndReconcile(accessToken: accessToken)
     }
@@ -228,8 +380,10 @@ final class AppEnvironment: ObservableObject {
     }
 
     func start() async {
+        let generation = authGeneration
         defer { isLaunching = false }
         guard var activeSession = session else {
+            accountState = nil
             workspaceSyncStatus = .unavailable
             foundationMessage = configuration.isAuthComplete
                 ? "Zaloguj się, aby połączyć dane Rootine"
@@ -239,14 +393,18 @@ final class AppEnvironment: ObservableObject {
 
         if activeSession.shouldRefresh && configuration.isAuthComplete {
             do {
-                activeSession = try await api.refreshSession(refreshToken: activeSession.refreshToken)
+                activeSession = try await authClient.refreshSession(refreshToken: activeSession.refreshToken)
+                guard generation == authGeneration else { return }
                 try keychain.save(activeSession)
                 session = activeSession
+                accountState = RootineAccountState(user: activeSession.user)
                 configureRuntime(userID: activeSession.user.id)
             } catch RootineAPIError.unauthorized {
+                guard generation == authGeneration else { return }
                 signOutFoundationSession()
                 return
             } catch {
+                guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
                 await recoverOrphanedTransactions()
                 await loadLocalCopies()
                 await markLocalOnly()
@@ -254,8 +412,11 @@ final class AppEnvironment: ObservableObject {
                 return
             }
         }
+        guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
         await recoverOrphanedTransactions()
+        guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
         await loadAndReconcile(accessToken: activeSession.accessToken)
+        guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
         await flushPendingMutations()
         startRealtimeRuntime()
         startRealtimeRefreshLoop()
@@ -471,6 +632,8 @@ final class AppEnvironment: ObservableObject {
             signOutAfterArchiveImport = true
             return
         }
+        authGeneration &+= 1
+        pendingGoogleIdentityLink = false
         let accessToken = session?.accessToken
         let currentDeviceID = deviceIdentity.loadOrCreate()
         deviceRegistrationTask?.cancel()
@@ -491,6 +654,9 @@ final class AppEnvironment: ObservableObject {
         stopRealtimeRuntime()
         keychain.clear()
         session = nil
+        accountState = nil
+        isPasswordRecovery = false
+        authCallbackError = nil
         store = nil
         syncEngine = nil
         let scheduler = localNotificationScheduler
@@ -2532,18 +2698,48 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func accept(_ newSession: SupabaseSession, passwordRecovery: Bool = false) async throws {
+        let requestGeneration = authGeneration
+        guard newSession.isValid else { throw RootineAPIError.invalidResponse }
+        guard requestGeneration == authGeneration else { throw RootineAPIError.cancelled }
+        // A successful login supersedes any work started for the previous
+        // account/session. Increment only after the response has passed the
+        // stale-request guard so a sign-out cannot be undone by a late reply.
+        authGeneration &+= 1
+        let generation = authGeneration
         try keychain.save(newSession)
         session = newSession
+        accountState = RootineAccountState(user: newSession.user)
         isPasswordRecovery = passwordRecovery
         configureRuntime(userID: newSession.user.id)
         guard !passwordRecovery else { return }
+        guard generation == authGeneration else { throw RootineAPIError.cancelled }
         await recoverOrphanedTransactions()
+        guard generation == authGeneration else { throw RootineAPIError.cancelled }
         await loadAndReconcile(accessToken: newSession.accessToken)
+        guard generation == authGeneration else { throw RootineAPIError.cancelled }
         await flushPendingMutations()
         startRealtimeRuntime()
         startRealtimeRefreshLoop()
         scheduleDeviceRegistration()
         await refreshRecoveryFiles()
+    }
+
+    private func acceptLinkedIdentitySession(_ newSession: SupabaseSession) async throws {
+        let requestGeneration = authGeneration
+        guard let currentUserID = session?.user.id,
+              currentUserID == newSession.user.id,
+              requestGeneration == authGeneration else {
+            throw RootineAPIError.accountMismatch
+        }
+        guard newSession.isValid else { throw RootineAPIError.invalidResponse }
+        authGeneration &+= 1
+        try keychain.save(newSession)
+        session = newSession
+        accountState = RootineAccountState(user: newSession.user)
+        // Linking can rotate the Supabase access token. Rebuild the realtime
+        // client with the new bearer while preserving the account's workspace.
+        configureRuntime(userID: newSession.user.id)
+        startRealtimeRuntime()
     }
 
     /// Registers the current installation after authentication. Reading the

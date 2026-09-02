@@ -29,6 +29,9 @@ names remain as compatibility aliases for development and production.
   `ASWebAuthenticationSession`, and native Sign in with Apple.
 - Session refresh, OAuth/recovery deep links, Keychain persistence, and explicit
   online/offline bootstrap states.
+- Strict callback and Apple identity-token protocol validation, deterministic
+  auth-client mocks, and account provider linking/unlinking with ownership and
+  last-identity guards.
 - An initial native `Dzisiaj` screen with day progress, timed queue, overdue
   attention, task/habit completion, nutrition totals, and notes activity.
 - An initial native `Zadania` screen with smart-view filters, overdue and
@@ -72,3 +75,6 @@ documented in [`docs/staging-runbook.md`](../docs/staging-runbook.md).
 Release validation is documented in [`docs/ios-release-gate.md`](../docs/ios-release-gate.md).
 The protected workflow runs executable `xcodebuild test`, SQL/RLS and Edge
 contract gates, then the isolated staging sync smoke before a TestFlight build.
+
+Production Apple/Google credentials, provider-console settings, and redirect
+allowlists are intentionally not committed or configured by this repository.

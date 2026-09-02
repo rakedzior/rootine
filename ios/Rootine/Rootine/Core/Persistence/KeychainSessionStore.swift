@@ -1,7 +1,13 @@
 import Foundation
 import Security
 
-final class KeychainSessionStore {
+protocol RootineSessionStore {
+    func load() -> SupabaseSession?
+    func save(_ session: SupabaseSession) throws
+    func clear()
+}
+
+final class KeychainSessionStore: RootineSessionStore {
     private let service: String
     private let account = "supabase-session"
 
@@ -20,10 +26,21 @@ final class KeychainSessionStore {
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { return nil }
-        return try? JSONDecoder().decode(SupabaseSession.self, from: data)
+        do {
+            let session = try JSONDecoder().decode(SupabaseSession.self, from: data)
+            guard session.isValid else { throw RootineAPIError.invalidResponse }
+            return session
+        } catch {
+            // A corrupt or legacy blob must not remain in Keychain and be
+            // retried on every launch. Clearing only this exact service/account
+            // pair keeps other app secrets untouched.
+            clear()
+            return nil
+        }
     }
 
     func save(_ session: SupabaseSession) throws {
+        guard session.isValid else { throw RootineAPIError.invalidResponse }
         let data = try JSONEncoder().encode(session)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -32,7 +49,8 @@ final class KeychainSessionStore {
         ]
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any
         ]
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
