@@ -1,0 +1,148 @@
+name: Rootine PR quality gate
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'scripts/*gate*.mjs'
+      - 'scripts/staging-smoke.mjs'
+      - 'contracts/**'
+      - 'ios/**'
+      - 'docs/ios-release-gate.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release-gate-pr.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rootine-pr-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sql-local:
+    name: SQL/RLS local migration gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    env:
+      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-pr-quality
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Test empty database without staging credentials
+        run: npm run test:sql -- --strict --local-only
+
+      - name: Upload SQL evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr-quality-sql-${{ github.sha }}
+          path: ${{ runner.temp }}/rootine-pr-quality
+          if-no-files-found: ignore
+          retention-days: 7
+
+  edge:
+    name: Edge contract local gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    env:
+      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-pr-quality
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: "Install Node dependencies for npm: imports"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test Edge Function contracts without staging credentials
+        run: npm run test:edge -- --strict
+
+      - name: Upload Edge evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr-quality-edge-${{ github.sha }}
+          path: ${{ runner.temp }}/rootine-pr-quality
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ios:
+    name: XCTest local gate
+    runs-on: macos-15
+    timeout-minutes: 30
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      ROOTINE_UI_SMOKE: "0"
+      ROOTINE_CONTRACT_VERSION: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Execute XCTest on simulator
+        run: >-
+          xcodebuild test
+          -project ios/Rootine/Rootine.xcodeproj
+          -scheme Rootine
+          -configuration Debug
+          -destination "${IOS_SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
+          -derivedDataPath "$RUNNER_TEMP/RootineDerivedData"
+          -resultBundlePath "$RUNNER_TEMP/RootineTests.xcresult"
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Write XCTest evidence metadata
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/rootine-pr-quality"
+          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:"pr",migration_version:"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||1),feature_flags:{normalized_sync_enabled:"pr-quality",normalized_read_enabled:"pr-quality",notifications_enabled:"pr-quality"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-pr-quality/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
+
+      - name: Upload XCTest evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr-quality-ios-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/RootineTests.xcresult
+            ${{ runner.temp }}/RootineDerivedData/Logs/Test
+            ${{ runner.temp }}/rootine-pr-quality/ios-xctest.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gate:
+    name: PR quality decision
+    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+    needs: [sql-local, edge, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block merge when a local quality gate fails
+        run: |
+          set -eu
+          echo "sql=${{ needs['sql-local'].result }} edge=${{ needs.edge.result }} ios=${{ needs.ios.result }}"
+          test "${{ needs['sql-local'].result }}" = success
+          test "${{ needs.edge.result }}" = success
+          test "${{ needs.ios.result }}" = success

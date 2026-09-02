@@ -1,0 +1,199 @@
+name: Rootine release gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - 'scripts/*gate*.mjs'
+      - 'scripts/staging-smoke.mjs'
+      - 'contracts/**'
+      - 'ios/**'
+      - 'docs/ios-release-gate.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rootine-release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ROOTINE_ENVIRONMENT: staging
+  ROOTINE_CONTRACT_VERSION: "1"
+  ROOTINE_REQUIRE_NORMALIZED_SYNC: "1"
+  ROOTINE_FLAG_NORMALIZED_SYNC: "release-gate"
+  ROOTINE_FLAG_NORMALIZED_READ: "release-gate"
+  ROOTINE_FLAG_NOTIFICATIONS: "release-gate"
+
+jobs:
+  sql:
+    name: SQL migration and RLS gate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    env:
+      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-release-gate
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Test empty database and staging upgrade copy
+        run: npm run test:sql -- --strict
+        env:
+          ROOTINE_UPGRADE_DB_URL: ${{ secrets.ROOTINE_UPGRADE_DB_URL }}
+
+      - name: Upload SQL gate evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-gate-sql-${{ github.sha }}
+          path: ${{ runner.temp }}/rootine-release-gate
+          if-no-files-found: ignore
+          retention-days: 14
+
+  edge:
+    name: Edge Function contract gate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-release-gate
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: "Install Node dependencies for npm: imports"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Test Edge Function contracts
+        run: npm run test:edge -- --strict
+
+      - name: Upload Edge gate evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-gate-edge-${{ github.sha }}
+          path: ${{ runner.temp }}/rootine-release-gate
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ios:
+    name: Executable XCTest gate
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      ROOTINE_UI_SMOKE: "0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Show selected toolchain
+        run: xcodebuild -version
+
+      - name: Execute XCTest on simulator
+        run: >-
+          xcodebuild test
+          -project ios/Rootine/Rootine.xcodeproj
+          -scheme Rootine
+          -configuration Debug
+          -destination "${IOS_SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
+          -derivedDataPath "$RUNNER_TEMP/RootineDerivedData"
+          -resultBundlePath "$RUNNER_TEMP/RootineTests.xcresult"
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Write XCTest evidence metadata
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/rootine-release-gate"
+          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:process.env.ROOTINE_ENVIRONMENT||"ci",migration_version:process.env.ROOTINE_MIGRATION_VERSION||"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||1),feature_flags:{normalized_sync_enabled:process.env.ROOTINE_FLAG_NORMALIZED_SYNC||"unknown",normalized_read_enabled:process.env.ROOTINE_FLAG_NORMALIZED_READ||"unknown",notifications_enabled:process.env.ROOTINE_FLAG_NOTIFICATIONS||"unknown"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-release-gate/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
+
+      - name: Upload XCTest evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-gate-ios-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/RootineTests.xcresult
+            ${{ runner.temp }}/RootineDerivedData/Logs/Test
+            ${{ runner.temp }}/rootine-release-gate/ios-xctest.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  staging-smoke:
+    name: Isolated staging Auth-to-delete smoke
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-release-gate
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run two-client staging smoke
+        run: npm run test:staging-smoke -- --strict
+        env:
+          ROOTINE_STAGING_URL: ${{ secrets.ROOTINE_STAGING_URL }}
+          ROOTINE_STAGING_PUBLISHABLE_KEY: ${{ secrets.ROOTINE_STAGING_PUBLISHABLE_KEY }}
+          ROOTINE_STAGING_SERVICE_ROLE_KEY: ${{ secrets.ROOTINE_STAGING_SERVICE_ROLE_KEY }}
+          ROOTINE_SMOKE_REQUIRE_REALTIME_SIGNAL: "0"
+
+      - name: Upload staging smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-gate-staging-${{ github.sha }}
+          path: ${{ runner.temp }}/rootine-release-gate
+          if-no-files-found: ignore
+          retention-days: 14
+
+  release:
+    name: Release gate decision
+    if: always() && github.ref == 'refs/heads/main'
+    needs: [sql, edge, ios, staging-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block release when any gate is not green
+        run: |
+          set -eu
+          statuses="sql=${{ needs.sql.result }} edge=${{ needs.edge.result }} ios=${{ needs.ios.result }} staging=${{ needs['staging-smoke'].result }}"
+          echo "$statuses"
+          test "${{ needs.sql.result }}" = success
+          test "${{ needs.edge.result }}" = success
+          test "${{ needs.ios.result }}" = success
+          test "${{ needs['staging-smoke'].result }}" = success
+          echo "Rootine release gate passed"

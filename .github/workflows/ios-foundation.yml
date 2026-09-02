@@ -1,6 +1,11 @@
 name: iOS foundation
 
 on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'contracts/**'
+      - '.github/workflows/ios-foundation.yml'
   workflow_dispatch:
 
 permissions:
@@ -11,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-for-testing:
+  test:
     runs-on: macos-15
     timeout-minutes: 20
     strategy:
@@ -41,12 +46,33 @@ jobs:
         if: matrix.environment == 'development'
         run: node scripts/ios-project-audit.mjs
 
-      - name: Compile app and contract tests
+      - name: Execute XCTest for selected environment
         run: >-
-          xcodebuild build-for-testing
+          xcodebuild test
           -project ios/Rootine/Rootine.xcodeproj
           -scheme Rootine
           -configuration ${{ matrix.configuration }}
-          -destination 'generic/platform=iOS Simulator'
+          -destination "${IOS_SIMULATOR_DESTINATION:-platform=iOS Simulator,name=iPhone 17 Pro}"
           -derivedDataPath "$RUNNER_TEMP/RootineDerivedData"
+          -resultBundlePath "$RUNNER_TEMP/RootineTests.xcresult"
           CODE_SIGNING_ALLOWED=NO
+        env:
+          ROOTINE_UI_SMOKE: "0"
+
+      - name: Write XCTest evidence metadata
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/rootine-release-gate"
+          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:1}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-release-gate/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
+
+      - name: Upload XCTest result bundle
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-xcresult-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/RootineTests.xcresult
+            ${{ runner.temp }}/RootineDerivedData/Logs/Test
+            ${{ runner.temp }}/rootine-release-gate/ios-xctest.json
+          if-no-files-found: ignore
+          retention-days: 14

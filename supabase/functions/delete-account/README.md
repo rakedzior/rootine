@@ -15,3 +15,9 @@ supabase functions deploy delete-account
 ```
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` in the web app, iOS app, repository, or CI logs.
+
+The exported `handleDeleteAccount` is the stable HTTP boundary used by the B12
+Edge contract gate. `index.test.ts` covers method/auth/confirmation/configuration
+contracts without calling Supabase Admin or deleting a real account. Keep the
+deployment entry point (`Deno.serve(handleDeleteAccount)`) unchanged when the
+function is extended.

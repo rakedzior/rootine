@@ -68,3 +68,7 @@ The server is authoritative for `normalized_sync_enabled`,
 `normalized_read_enabled`, and `notifications_enabled`. Bundle values are safe
 defaults for bootstrapping and diagnostics only; account-scoped rollout is
 documented in [`docs/staging-runbook.md`](../docs/staging-runbook.md).
+
+Release validation is documented in [`docs/ios-release-gate.md`](../docs/ios-release-gate.md).
+The protected workflow runs executable `xcodebuild test`, SQL/RLS and Edge
+contract gates, then the isolated staging sync smoke before a TestFlight build.

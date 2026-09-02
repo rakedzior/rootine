@@ -9,7 +9,7 @@ function errorResponse(error: string, status: number) {
   return new Response(JSON.stringify({ error }), { status, headers: noStoreHeaders });
 }
 
-Deno.serve(async (request) => {
+export async function handleDeleteAccount(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -60,4 +60,9 @@ Deno.serve(async (request) => {
     status: 204,
     headers: { "cache-control": "no-store" },
   });
-});
+}
+
+// Keeping the handler export separate makes the HTTP contract testable without
+// starting a listener or provisioning a real account. Deno runs this branch
+// only when the function is deployed or invoked directly.
+if (import.meta.main) Deno.serve(handleDeleteAccount);

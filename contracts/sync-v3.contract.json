@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rootine.example/contracts/sync-v3.contract.json",
+  "title": "Rootine sync-v3 request",
+  "description": "Versioned request schema for the shared iOS/web sync boundary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "action", "device_id"],
+  "properties": {
+    "contract_version": {"const": 1},
+    "action": {
+      "type": "string",
+      "enum": ["register_device", "bootstrap", "pull", "push"]
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "cursor": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["operation_id", "entity", "entity_id", "kind", "base_revision", "payload"],
+        "properties": {
+          "operation_id": {"type": "string", "minLength": 1, "maxLength": 160},
+          "entity": {"type": "string", "minLength": 1, "maxLength": 80},
+          "entity_id": {"type": "string", "minLength": 1, "maxLength": 160},
+          "kind": {"type": "string", "enum": ["upsert", "delete"]},
+          "base_revision": {"type": "integer", "minimum": 0},
+          "payload": {"type": ["object", "null"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "platform": {"type": "string", "enum": ["ios", "web"]},
+    "app_version": {"type": "string", "minLength": 1, "maxLength": 80},
+    "apns_environment": {"type": ["string", "null"], "enum": ["sandbox", "production", null]},
+    "push_token": {"type": ["string", "null"], "maxLength": 512}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "push"}}},
+      "then": {"required": ["commands"]}
+    },
+    {
+      "if": {"properties": {"action": {"const": "pull"}}},
+      "then": {"required": ["cursor", "limit"]}
+    }
+  ],
+  "x-transport": {
+    "method": "POST",
+    "path": "/functions/v1/mobile-sync",
+    "authorization": "Bearer access token",
+    "content_type": "application/json"
+  },
+  "x-response": {
+    "required": ["contract_version"],
+    "properties": {
+      "contract_version": {"const": 1},
+      "server_cursor": {"type": "integer", "minimum": 0},
+      "next_cursor": {"type": "integer", "minimum": 0},
+      "has_more": {"type": "boolean"},
+      "domains": {"type": "array", "items": {"type": "string"}},
+      "round_trip_domains": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["domain", "client_a_to_b", "client_b_to_a"],
+          "properties": {
+            "domain": {"type": "string"},
+            "client_a_to_b": {"const": true},
+            "client_b_to_a": {"const": true},
+            "records": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": true
+        }
+      },
+      "results": {"type": "array"},
+      "changes": {"type": "array"}
+    }
+  },
+  "x-error-codes": [
+    "unauthorized",
+    "invalid_request",
+    "already_applied",
+    "conflict",
+    "cursor_expired",
+    "schema_mismatch"
+  ],
+  "x-privacy": {
+    "realtime_is_signal_only": true,
+    "logs_must_not_include_payloads": true,
+    "logs_must_not_include_tokens": true
+  }
+}

@@ -3,6 +3,7 @@ dist/
 playwright-report/
 test-results/
 test-results-*/
+.tmp-release-gate/
 .tmp-design-assessment-b/
 *.tsbuildinfo
 vite.config.js
