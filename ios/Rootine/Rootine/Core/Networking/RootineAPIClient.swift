@@ -9,6 +9,9 @@ struct RootineConfiguration: Equatable, Sendable {
     var privacyURL: URL?
     var appVersion: String = ""
     var apnsEnvironment: RootineAPNsEnvironment = .currentBuild
+    /// B01/B08 rollout namespace. Keeping it in the configuration makes a
+    /// flag written for staging impossible to accidentally enable production.
+    var environment: String = "production"
 
     var isAuthComplete: Bool {
         supabaseURL != nil && !supabasePublishableKey.isEmpty && !authCallbackScheme.isEmpty
@@ -52,6 +55,7 @@ struct RootineConfiguration: Equatable, Sendable {
             apnsEnvironment: RootineAPNsEnvironment(
                 rawValue: value("ROOTINE_APNS_ENVIRONMENT").lowercased()
             ) ?? .currentBuild
+            environment: value("ROOTINE_ENVIRONMENT").isEmpty ? "production" : value("ROOTINE_ENVIRONMENT")
         )
     }
 }
@@ -199,6 +203,41 @@ struct ApplySnapshotResponse: Codable, Equatable, Sendable {
     }
 }
 
+private struct NormalizedSyncRequest: Encodable {
+    let contractVersion: Int
+    let action: String
+    let cursor: Int64?
+    let limit: Int
+    let deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case contractVersion = "contract_version"
+        case action
+        case cursor
+        case limit
+        case deviceID = "device_id"
+    }
+}
+
+private struct NormalizedSyncErrorEnvelope: Decodable {
+    let code: String?
+    let error: String?
+    let message: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(String.self, forKey: .code)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+    }
+
+    private enum CodingKeys: String, CodingKey { case code, error, message }
+}
+
+private struct NormalizedSyncDataEnvelope<Value: Decodable>: Decodable {
+    let data: Value
+}
+
 enum RootineAPIError: LocalizedError, Equatable, Sendable {
     case missingConfiguration
     case invalidResponse
@@ -250,13 +289,18 @@ protocol WorkspaceRemoteClient: Sendable {
     func apply(_ mutation: PendingWorkspaceMutation, accessToken: String) async throws -> ApplySnapshotResponse
 }
 
-final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
+final class RootineAPIClient: WorkspaceRemoteClient, RootineRelationalReadClient, @unchecked Sendable {
     private let configuration: RootineConfiguration
     private let session: URLSession
+    private let syncDeviceID: String
 
-    init(configuration: RootineConfiguration, session: URLSession = .shared) {
+    init(configuration: RootineConfiguration, session: URLSession = .shared, deviceID: String = UUID().uuidString) {
         self.configuration = configuration
         self.session = session
+        // The mobile-sync edge function scopes registrations to the iOS device
+        // namespace. Keep injected IDs usable in tests while normalizing the
+        // production default to the contract's `ios_<uuid>` shape.
+        syncDeviceID = deviceID.hasPrefix("ios_") ? deviceID : "ios_\(deviceID.lowercased())"
     }
 
     func signIn(email: String, password: String) async throws -> SupabaseSession {
@@ -450,6 +494,16 @@ final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
         return first
     }
 
+    func bootstrap(accessToken: String) async throws -> RootineRelationalBootstrapResponse {
+        let request = try normalizedSyncRequest(action: "bootstrap", cursor: nil, limit: 500, accessToken: accessToken)
+        return try await sendNormalized(request, as: RootineRelationalBootstrapResponse.self)
+    }
+
+    func pullChanges(cursor: Int64?, limit: Int, accessToken: String) async throws -> RootineRelationalPullResponse {
+        let request = try normalizedSyncRequest(action: "pull", cursor: cursor, limit: min(max(limit, 1), 500), accessToken: accessToken)
+        return try await sendNormalized(request, as: RootineRelationalPullResponse.self)
+    }
+
     func searchProducts(query: String, accessToken: String) async throws -> [NutritionProduct] {
         guard let baseURL = configuration.backendURL else { throw RootineAPIError.missingConfiguration }
         var components = URLComponents(url: baseURL.appendingPathComponent("api/openfoodfacts/search"), resolvingAgainstBaseURL: false)
@@ -544,6 +598,63 @@ final class RootineAPIClient: WorkspaceRemoteClient, @unchecked Sendable {
             request.setValue(configuration.supabasePublishableKey, forHTTPHeaderField: "apikey")
         }
         return request
+    }
+
+    private func normalizedSyncRequest(action: String, cursor: Int64?, limit: Int, accessToken: String) throws -> URLRequest {
+        guard let baseURL = configuration.supabaseURL else { throw RootineAPIError.missingConfiguration }
+        var request = authorizedRequest(url: baseURL.appendingPathComponent("functions/v1/mobile-sync"), accessToken: accessToken)
+        request.httpMethod = "POST"
+        request.httpBody = try JSONEncoder().encode(NormalizedSyncRequest(
+            contractVersion: 3,
+            action: action,
+            cursor: cursor,
+            limit: limit,
+            deviceID: syncDeviceID
+        ))
+        return request
+    }
+
+    private func sendNormalized<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch is CancellationError {
+            throw RootineAPIError.cancelled
+        } catch {
+            throw RootineAPIError.network
+        }
+        guard let http = response as? HTTPURLResponse else { throw RootineAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 401 { throw RootineAPIError.unauthorized }
+            let errorEnvelope = try? JSONDecoder().decode(NormalizedSyncErrorEnvelope.self, from: data)
+            let errorCode = [errorEnvelope?.code, errorEnvelope?.error, errorEnvelope?.message]
+                .compactMap { $0?.lowercased() }
+                .joined(separator: " ")
+            if http.statusCode == 410 || errorCode.contains("cursor_expired") || errorCode.contains("cursorexpired") {
+                throw RootineNormalizedReadError.cursorExpired
+            }
+            switch errorCode {
+            case let code where code.contains("schema_mismatch") || code.contains("schemamismatch"):
+                throw RootineNormalizedReadError.schemaMismatch(expected: RootineRelationalWorkspaceAdapter.supportedContractVersion, actual: nil)
+            case let code where code.contains("contract_mismatch") || code.contains("contractmismatch"):
+                throw RootineNormalizedReadError.contractMismatch("serwer odrzucił kontrakt")
+            case let code where code.contains("materializer_error") || code.contains("materialization_failed"):
+                throw RootineNormalizedReadError.materializationFailed("serwer")
+            default: try validate(data: data, response: response)
+            }
+            throw RootineAPIError.server(status: http.statusCode)
+        }
+        do {
+            let decoder = JSONDecoder()
+            if let direct = try? decoder.decode(type, from: data) { return direct }
+            if let envelope = try? decoder.decode(NormalizedSyncDataEnvelope<T>.self, from: data) { return envelope.data }
+            throw RootineNormalizedReadError.contractMismatch("nieprawidłowa odpowiedź")
+        } catch {
+            // A syntactically valid HTTP response with the wrong envelope is
+            // a contract issue, not a missing/empty account.
+            throw RootineNormalizedReadError.contractMismatch("nieprawidłowa odpowiedź")
+        }
     }
 
     private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {

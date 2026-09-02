@@ -35,6 +35,7 @@
 		B00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */; };
 		B0000000000000000000001C /* Configuration/RootineFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001C /* RootineFeatureFlags.swift */; };
 		B00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */; };
+		B00000000000000000000025 /* Sync/RootineRelationalRead.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* Sync/RootineRelationalRead.swift */; };
 		B00000000000000000000101 /* ContractFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* ContractFixtureTests.swift */; };
 		B00000000000000000000102 /* task-workspace-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* task-workspace-v2.json */; };
 		B00000000000000000000103 /* nutrition-workspace-v6.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* nutrition-workspace-v6.json */; };
@@ -98,6 +99,7 @@
 		F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/RootineDeviceRegistry.swift; sourceTree = "<group>"; };
 		F0000000000000000000001C /* Configuration/RootineFeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configuration/RootineFeatureFlags.swift; sourceTree = "<group>"; };
 		F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/LocalNotificationScheduler.swift; sourceTree = "<group>"; };
+		F00000000000000000000025 /* Sync/RootineRelationalRead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineRelationalRead.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* ContractFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractFixtureTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* task-workspace-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "task-workspace-v2.json"; sourceTree = "<group>"; };
 		F00000000000000000000103 /* nutrition-workspace-v6.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-workspace-v6.json"; sourceTree = "<group>"; };
@@ -180,6 +182,7 @@
 					F00000000000000000000022 /* Sync/RootineConflictStore.swift */,
 					F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */,
 					F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */,
+					F00000000000000000000025 /* Sync/RootineRelationalRead.swift */,
 				F0000000000000000000000E /* Auth/AuthenticationSupport.swift */,
 			);
 			path = Rootine/Core;
@@ -386,6 +389,7 @@
 				B00000000000000000000021 /* Sync/RootineSyncOperationLog.swift in Sources */,
 				B00000000000000000000022 /* Sync/RootineConflictStore.swift in Sources */,
 				B00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift in Sources */,
+				B00000000000000000000025 /* Sync/RootineRelationalRead.swift in Sources */,
 				B0000000000000000000000A /* FeatureRootViews.swift in Sources */,
 				B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */,
 				B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */,

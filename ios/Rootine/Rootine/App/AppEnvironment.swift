@@ -76,9 +76,13 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var recoveryFiles: [WorkspaceRecoveryFile] = []
     @Published private(set) var deviceRegistration: RootineDeviceRegistration?
     @Published private(set) var notificationPermissionState: RootineNotificationPermissionState = .notDetermined
+    @Published private(set) var normalizedReadEnabled = false
+    @Published private(set) var normalizedReadFallbackReason: String?
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
+    private let normalizedReadClient: any RootineRelationalReadClient
+    private let readFeatureFlags: any RootineReadFeatureFlagStore
     private let keychain: KeychainSessionStore
     private let deviceIdentity: RootineDeviceIdentityStore
     private var store: WorkspaceFileStore?
@@ -116,12 +120,18 @@ final class AppEnvironment: ObservableObject {
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
-        keychain: KeychainSessionStore = KeychainSessionStore()
+        keychain: KeychainSessionStore = KeychainSessionStore(),
+        normalizedReadClient: (any RootineRelationalReadClient)? = nil,
+        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil
     ) {
         self.configuration = configuration
         self.keychain = keychain
         api = RootineAPIClient(configuration: configuration)
         deviceIdentity = RootineDeviceIdentityStore()
+        let configuredAPI = RootineAPIClient(configuration: configuration)
+        api = configuredAPI
+        self.normalizedReadClient = normalizedReadClient ?? configuredAPI
+        self.readFeatureFlags = readFeatureFlags ?? UserDefaultsRootineReadFeatureFlagStore()
         let storedSession = keychain.load()
         session = storedSession
         if let storedSession {
@@ -503,6 +513,8 @@ final class AppEnvironment: ObservableObject {
         recoveryFiles = []
         deviceRegistration = nil
         notificationPermissionState = .notDetermined
+        normalizedReadEnabled = false
+        normalizedReadFallbackReason = nil
         foundationMessage = "Sesja usunięta z Keychain"
         workspaceSyncStatus = .unavailable
     }
@@ -751,6 +763,20 @@ final class AppEnvironment: ObservableObject {
     func requestNotificationAuthorization() async -> RootineNotificationAuthorization {
         guard let scheduler = localNotificationScheduler else { return .unavailable }
         return await scheduler.requestAuthorization()
+    }
+
+    /// B08 rollout control. The flag is scoped to the signed-in account and
+    /// environment; turning it off never clears the relational shadow,
+    /// cursor, local drafts, or pending commands.
+    func setNormalizedReadEnabled(_ enabled: Bool, accountID: String? = nil) {
+        let account = accountID ?? session?.user.id
+        guard let account, !account.isEmpty else { return }
+        readFeatureFlags.setNormalizedReadEnabled(
+            enabled,
+            accountID: account,
+            environment: configuration.environment
+        )
+        if account == session?.user.id { normalizedReadEnabled = enabled }
     }
 
     func toggleTaskCompletion(id: Int, on date: Date = Date()) async {
@@ -2287,6 +2313,11 @@ final class AppEnvironment: ObservableObject {
         // pending requests. The old actor retains its own hashed ownership
         // prefix, so this cancellation cannot touch the new account.
         Task { await previousScheduler?.cancelAll() }
+        normalizedReadEnabled = readFeatureFlags.normalizedReadEnabled(
+            accountID: userID,
+            environment: configuration.environment
+        )
+        normalizedReadFallbackReason = nil
         guard let normalizedRemote = try? RootineSyncRemoteClient(configuration: configuration) else {
             syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
             return
@@ -2698,6 +2729,283 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func loadAndReconcile(accessToken: String, flushAfterReconcile: Bool = true) async {
+        if normalizedReadEnabled {
+            await loadNormalizedAndReconcile(accessToken: accessToken)
+            return
+        }
+        await loadLegacyAndReconcile(accessToken: accessToken, flushAfterReconcile: flushAfterReconcile)
+    }
+
+    private func loadNormalizedAndReconcile(accessToken: String) async {
+        guard let store, let syncEngine else { return }
+        guard !archiveImportInProgress, !isReconciling else { return }
+        isReconciling = true
+        defer { finishReconciliation() }
+        normalizedReadFallbackReason = nil
+
+        do {
+            let localTasks = try await store.load(TaskWorkspace.self, key: .tasks)
+            let localNutrition = try await store.load(NutritionWorkspace.self, key: .nutrition)
+            let localNotes = try await store.load(NotesWorkspace.self, key: .notes)
+            let localSport = try await store.load(SportWorkspace.self, key: .sport)
+            let localGoals = try await store.load(GoalsWorkspace.self, key: .goals)
+            let localWorkRaw = try await store.load(WorkWorkspace.self, key: .work)
+            let localWork = localWorkRaw.map(rootineSanitizedWorkWorkspace)
+            let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
+            let localHealth = try await store.load(HealthWorkspace.self, key: .health)
+            let localAffairsRaw = try await store.load(AffairsWorkspace.self, key: .affairs)
+            let localAffairs = localAffairsRaw.map(normalizedAffairsWorkspace)
+            let state = (try await store.load(RootineNormalizedReadState.self, key: .normalizedReadState)) ?? RootineNormalizedReadState()
+            guard state.contractVersion == RootineRelationalWorkspaceAdapter.supportedContractVersion else {
+                throw RootineNormalizedReadError.schemaMismatch(expected: RootineRelationalWorkspaceAdapter.supportedContractVersion, actual: state.contractVersion)
+            }
+
+            let current = RootineRelationalMaterialization(documents: state.documents, revisions: [:])
+            let fetched = try await fetchNormalizedMaterialization(cursor: state.cursor, base: current, accessToken: accessToken)
+            let decoded = try decodeNormalizedWorkspaces(fetched)
+            let pending = try await store.pendingMutations()
+            let decisions = [
+                try await normalizedDecision(key: .tasks, local: localTasks, remote: decoded.tasks, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .nutrition, local: localNutrition, remote: decoded.nutrition, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .notes, local: localNotes, remote: decoded.notes, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .sport, local: localSport, remote: decoded.sport, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .goals, local: localGoals, remote: decoded.goals, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .work, local: localWork, remote: decoded.work, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .travel, local: localTravel, remote: decoded.travel, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .health, local: localHealth, remote: decoded.health, materialization: fetched, pending: pending, store: store),
+                try await normalizedDecision(key: .affairs, local: localAffairs, remote: decoded.affairs, materialization: fetched, pending: pending, store: store)
+            ]
+            let conflictKeys = decisions.compactMap { $0.conflict ? $0.key.rawValue : nil }
+
+            // Decode every domain before touching disk. The transaction below
+            // then makes aggregate files, relational state and cursor a
+            // single publish point; a failed materializer never advances the
+            // cursor or leaves a mixed set of workspaces.
+            for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
+                if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)] {
+                    canonicalShadows[key] = payload
+                }
+            }
+            let transaction = try await store.beginBatchTransaction()
+            do {
+                try await persistNormalizedDecision(decisions[0], key: .tasks, store: store)
+                try await persistNormalizedDecision(decisions[1], key: .nutrition, store: store)
+                try await persistNormalizedDecision(decisions[2], key: .notes, store: store)
+                try await persistNormalizedDecision(decisions[3], key: .sport, store: store)
+                try await persistNormalizedDecision(decisions[4], key: .goals, store: store)
+                try await persistNormalizedDecision(decisions[5], key: .work, store: store)
+                try await persistNormalizedDecision(decisions[6], key: .travel, store: store)
+                try await persistNormalizedDecision(decisions[7], key: .health, store: store)
+                try await persistNormalizedDecision(decisions[8], key: .affairs, store: store)
+                let nextState = RootineNormalizedReadState(
+                    contractVersion: RootineRelationalWorkspaceAdapter.supportedContractVersion,
+                    cursor: fetchedCursor,
+                    documents: fetched.documents
+                )
+                try await store.save(nextState, key: .normalizedReadState)
+                try await store.commitBatchTransaction(transaction)
+            } catch {
+                try? await store.rollbackBatchTransaction(transaction)
+                throw error
+            }
+
+            taskWorkspace = decisions[0].value as? TaskWorkspace ?? .empty
+            nutritionWorkspace = decisions[1].value as? NutritionWorkspace ?? .empty
+            notesWorkspace = decisions[2].value as? NotesWorkspace ?? .empty
+            sportWorkspace = decisions[3].value as? SportWorkspace ?? .empty
+            goalsWorkspace = decisions[4].value as? GoalsWorkspace ?? .empty
+            workWorkspace = decisions[5].value as? WorkWorkspace ?? .empty
+            travelWorkspace = decisions[6].value as? TravelWorkspace ?? .empty
+            healthWorkspace = decisions[7].value as? HealthWorkspace ?? .empty
+            affairsWorkspace = decisions[8].value as? AffairsWorkspace ?? .empty
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .sport)] { canonicalShadows[.sport] = payload }
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .goals)] { canonicalShadows[.goals] = payload }
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .work)] { canonicalShadows[.work] = payload }
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .travel)] { canonicalShadows[.travel] = payload }
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .health)] { canonicalShadows[.health] = payload }
+            if conflictKeys.isEmpty {
+                workspaceSyncStatus = .synced
+                foundationMessage = "Relacyjny stan został bezpiecznie uzgodniony"
+                realtimeLastRefresh = Date()
+            } else {
+                workspaceSyncStatus = .conflict(storageKeys: conflictKeys)
+                foundationMessage = "Relacyjny konflikt wymaga decyzji dla: \(conflictKeys.count)"
+            }
+            _ = syncEngine
+        } catch let error as RootineNormalizedReadError {
+            await fallbackToLegacyRead(error: error, accessToken: accessToken)
+        } catch let error as RootineAPIError {
+            await fallbackToLegacyRead(error: .contractMismatch(error.localizedDescription), accessToken: accessToken)
+        } catch {
+            await fallbackToLegacyRead(error: .materializationFailed("nieznany błąd"), accessToken: accessToken)
+        }
+    }
+
+    private var fetchedCursor: Int64? = nil
+
+    private func fetchNormalizedMaterialization(
+        cursor: Int64?,
+        base: RootineRelationalMaterialization,
+        accessToken: String
+    ) async throws -> RootineRelationalMaterialization {
+        if cursor == nil {
+            let response = try await normalizedReadClient.bootstrap(accessToken: accessToken)
+            let result = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: response)
+            fetchedCursor = response.serverCursor
+            return result
+        }
+        var result = base
+        var nextCursor = cursor
+        var hasMore = true
+        while hasMore {
+            let response: RootineRelationalPullResponse
+            do {
+                response = try await normalizedReadClient.pullChanges(cursor: nextCursor, limit: 500, accessToken: accessToken)
+            } catch RootineNormalizedReadError.cursorExpired {
+                let bootstrap = try await normalizedReadClient.bootstrap(accessToken: accessToken)
+                result = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: bootstrap)
+                nextCursor = bootstrap.serverCursor
+                fetchedCursor = nextCursor
+                return result
+            }
+            guard RootineRelationalWorkspaceAdapter.supportedTransportContractVersions.contains(response.contractVersion) else {
+                throw RootineNormalizedReadError.schemaMismatch(expected: RootineRelationalWorkspaceAdapter.supportedContractVersion, actual: response.contractVersion)
+            }
+            result = try RootineRelationalWorkspaceAdapter.materialize(changes: response.changes, onto: result)
+            guard response.nextCursor >= (nextCursor ?? 0) else { throw RootineNormalizedReadError.contractMismatch("cursor cofa się") }
+            nextCursor = response.nextCursor
+            hasMore = response.hasMore
+        }
+        fetchedCursor = nextCursor
+        return result
+    }
+
+    private func fallbackToLegacyRead(error: RootineNormalizedReadError, accessToken: String) async {
+        normalizedReadFallbackReason = error.errorDescription
+        foundationMessage = "Relacyjny odczyt niedostępny — używam legacy Recovery"
+        if case .schemaMismatch = error { workspaceSyncStatus = .schemaMismatch }
+        // The normalized path owns the reconciliation guard while it is
+        // running. Hand ownership to legacy without waking waiters yet: the
+        // outer normalized defer publishes completion only after legacy has
+        // finished, so a refresh cannot race the fallback.
+        if isReconciling { isReconciling = false }
+        await loadLegacyAndReconcile(accessToken: accessToken)
+    }
+
+    private struct DecodedNormalizedWorkspaces {
+        let tasks: TaskWorkspace?
+        let nutrition: NutritionWorkspace?
+        let notes: NotesWorkspace?
+        let sport: SportWorkspace?
+        let goals: GoalsWorkspace?
+        let work: WorkWorkspace?
+        let travel: TravelWorkspace?
+        let health: HealthWorkspace?
+        let affairs: AffairsWorkspace?
+    }
+
+    private struct NormalizedDecision {
+        let key: RootineStorageKey
+        let value: Any
+        let shouldPersist: Bool
+        let conflict: Bool
+    }
+
+    private func decodeNormalizedWorkspaces(_ materialization: RootineRelationalMaterialization) throws -> DecodedNormalizedWorkspaces {
+        func direct<T: Decodable>(_ type: T.Type, key: RootineStorageKey) throws -> T? {
+            guard materialization.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)] != nil else { return nil }
+            return try RootineRelationalWorkspaceAdapter.document(type, key: key, from: materialization)
+        }
+        func canonical<T>(_ key: RootineStorageKey, decode: (JSONValue) throws -> T) throws -> T? {
+            guard let payload = materialization.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)] else { return nil }
+            return try decode(payload)
+        }
+        return DecodedNormalizedWorkspaces(
+            tasks: try direct(TaskWorkspace.self, key: .tasks),
+            nutrition: try direct(NutritionWorkspace.self, key: .nutrition),
+            notes: try direct(NotesWorkspace.self, key: .notes),
+            sport: try canonical(.sport, decode: RootineCanonicalWorkspaceMapping.sportWorkspace(from:)),
+            goals: try canonical(.goals, decode: RootineCanonicalWorkspaceMapping.goalsWorkspace(from:)),
+            work: try canonical(.work, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:)),
+            travel: try canonical(.travel, decode: RootineCanonicalWorkspaceMapping.travelWorkspace(from:)),
+            health: try canonical(.health, decode: RootineCanonicalWorkspaceMapping.healthWorkspace(from:)),
+            affairs: try direct(AffairsWorkspace.self, key: .affairs)
+        )
+    }
+
+    private func normalizedDecision<T: Codable & Equatable & Sendable>(
+        key: RootineStorageKey,
+        local: T?,
+        remote: T?,
+        materialization: RootineRelationalMaterialization,
+        pending: [PendingWorkspaceMutation],
+        store: WorkspaceFileStore
+    ) async throws -> NormalizedDecision {
+        let value: T
+        if let remote { value = remote }
+        else if let local { value = local }
+        else { value = try emptyWorkspace(for: key) }
+        guard let remote else { return NormalizedDecision(key: key, value: value, shouldPersist: false, conflict: false) }
+        guard let local else { return NormalizedDecision(key: key, value: remote, shouldPersist: true, conflict: false) }
+        let canonicalKey = RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)
+        let localRevision = try await store.revision(for: canonicalKey)
+        let hasPending = pending.contains { $0.storageKey == canonicalKey || $0.storageKey == key.rawValue }
+        if local == remote {
+            try await store.setRevision(max(localRevision, materialization.revisions[canonicalKey] ?? 0), for: canonicalKey)
+            return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: false)
+        }
+        let remoteRevision = materialization.revisions[canonicalKey] ?? 0
+        if !hasPending && remoteRevision > localRevision {
+            return NormalizedDecision(key: key, value: remote, shouldPersist: true, conflict: false)
+        }
+        if hasPending && remoteRevision > localRevision {
+            return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: true)
+        }
+        return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: false)
+    }
+
+    private func emptyWorkspace<T>(for key: RootineStorageKey) throws -> T {
+        switch key {
+        case .tasks: return TaskWorkspace.empty as! T
+        case .nutrition: return NutritionWorkspace.empty as! T
+        case .notes: return NotesWorkspace.empty as! T
+        case .sport: return SportWorkspace.empty as! T
+        case .goals: return GoalsWorkspace.empty as! T
+        case .work: return WorkWorkspace.empty as! T
+        case .travel: return TravelWorkspace.empty as! T
+        case .health: return HealthWorkspace.empty as! T
+        case .affairs: return AffairsWorkspace.empty as! T
+        default: throw RootineNormalizedReadError.materializationFailed("nieznany workspace")
+        }
+    }
+
+    private func persistNormalizedDecision(_ decision: NormalizedDecision, key: RootineStorageKey, store: WorkspaceFileStore) async throws {
+        guard decision.shouldPersist else { return }
+        switch key {
+        case .tasks: try await store.save(decision.value as! TaskWorkspace, key: key)
+        case .nutrition: try await store.save(decision.value as! NutritionWorkspace, key: key)
+        case .notes: try await store.save(decision.value as! NotesWorkspace, key: key)
+        case .sport:
+            try await store.save(decision.value as! SportWorkspace, key: key)
+            if let payload = canonicalShadows[key] { try await store.save(payload, key: .sportCanonicalShadow) }
+        case .goals:
+            try await store.save(decision.value as! GoalsWorkspace, key: key)
+            if let payload = canonicalShadows[key] { try await store.save(payload, key: .goalsCanonicalShadow) }
+        case .work:
+            try await store.save(decision.value as! WorkWorkspace, key: key)
+            if let payload = canonicalShadows[key] { try await store.save(payload, key: .workCanonicalShadow) }
+        case .travel:
+            try await store.save(decision.value as! TravelWorkspace, key: key)
+            if let payload = canonicalShadows[key] { try await store.save(payload, key: .travelCanonicalShadow) }
+        case .health:
+            try await store.save(decision.value as! HealthWorkspace, key: key)
+            if let payload = canonicalShadows[key] { try await store.save(payload, key: .healthCanonicalShadow) }
+        case .affairs: try await store.save(decision.value as! AffairsWorkspace, key: key)
+        default: break
+        }
+    }
+
+    private func loadLegacyAndReconcile(accessToken: String, flushAfterReconcile: Bool = true) async {
         guard let store, let syncEngine else { return }
         guard !archiveImportInProgress else { return }
         guard !isReconciling else { return }

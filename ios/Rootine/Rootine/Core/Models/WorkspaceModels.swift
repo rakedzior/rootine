@@ -18,6 +18,11 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
     case workCanonicalShadow = "rootine.canonical-shadow.work.v1"
     case travelCanonicalShadow = "rootine.canonical-shadow.travel.v1"
     case healthCanonicalShadow = "rootine.canonical-shadow.health.v1"
+    // The normalized reader keeps the last materialized relational document
+    // separately from the compact aggregate cache. This is what lets an
+    // incremental pull preserve fields that are intentionally not surfaced
+    // by a native screen (for example booking, budget, or custom web fields).
+    case normalizedReadState = "rootine.normalized-read-state.v1"
 
     /// Local snapshots use the same version numbers as their canonical web
     /// contracts. A future version must be migrated explicitly instead of
@@ -30,6 +35,8 @@ enum RootineStorageKey: String, CaseIterable, Codable, Sendable {
         case .affairs: return 2
         case .sportCanonicalShadow, .goalsCanonicalShadow, .workCanonicalShadow,
              .travelCanonicalShadow, .healthCanonicalShadow:
+            return nil
+        case .normalizedReadState:
             return nil
         }
     }

@@ -266,6 +266,143 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(try RootineCanonicalWorkspaceMapping.healthWorkspace(from: healthPayload).version, 1)
     }
 
+    func testRelationalBootstrapMaterializesEveryAggregateAndRetainsWebOnlyFields() throws {
+        let taskPayload = try fixture("task-workspace-v2", as: JSONValue.self)
+        let nutritionPayload = try fixture("nutrition-workspace-v6", as: JSONValue.self)
+        let notesPayload = try fixture("notes-workspace-v1", as: JSONValue.self)
+        let sportPayload = try fixture("sport-planner-v5", as: JSONValue.self)
+        let goalsPayload = try fixture("goals-workspace-v1", as: JSONValue.self)
+        let workPayload = try fixture("work-workspace-v3", as: JSONValue.self)
+        let travelPayload = try fixture("travel-workspace-v2", as: JSONValue.self)
+        let healthPayload = try fixture("health-workspace-v1", as: JSONValue.self)
+        let affairsPayload = try jsonValue(AffairsWorkspace.empty)
+
+        let response = RootineRelationalBootstrapResponse(
+            contractVersion: 3,
+            serverCursor: 42,
+            workspaces: [
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.tasks.rawValue, payload: taskPayload),
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.nutrition.rawValue, payload: nutritionPayload),
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.notes.rawValue, payload: notesPayload),
+                // The relational service may still return the pre-canonical
+                // aliases while B04/B06 are rolled out independently.
+                RootineRelationalWorkspace(storageKey: "rootine.sport-workspace.v1", payload: sportPayload),
+                RootineRelationalWorkspace(storageKey: "rootine.goals-workspace.v1", payload: goalsPayload),
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.work.rawValue, payload: workPayload),
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.travel.rawValue, payload: travelPayload),
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.health.rawValue, payload: healthPayload),
+                RootineRelationalWorkspace(storageKey: RootineStorageKey.affairs.rawValue, payload: affairsPayload)
+            ]
+        )
+
+        let materialized = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: response)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(TaskWorkspace.self, key: .tasks, from: materialized).version, 2)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(NutritionWorkspace.self, key: .nutrition, from: materialized).version, 6)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(NotesWorkspace.self, key: .notes, from: materialized).version, 1)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(SportWorkspace.self, key: .sport, from: materialized).version, 1)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(GoalsWorkspace.self, key: .goals, from: materialized).goals.first?.id, "goal-rich")
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(WorkWorkspace.self, key: .work, from: materialized).version, 1)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(TravelWorkspace.self, key: .travel, from: materialized).trips.first?.id, "trip-rich")
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(HealthWorkspace.self, key: .health, from: materialized).version, 1)
+        XCTAssertEqual(try RootineRelationalWorkspaceAdapter.document(AffairsWorkspace.self, key: .affairs, from: materialized).version, 2)
+
+        // These keys are intentionally not part of compact native models but
+        // must survive a relational bootstrap for the web client.
+        if case .object(let goals) = materialized.documents["rootine.goals.v1"],
+           case .array(let records) = goals["goals"],
+           case .object(let first) = records.first {
+            XCTAssertEqual(first["customIcon"], .string("data:image/png;base64,AA=="))
+        } else { XCTFail("Goals canonical payload was not materialized") }
+        if case .object(let travel) = materialized.documents["rootine.travel-workspace.v1"],
+           case .array(let trips) = travel["trips"],
+           case .object(let first) = trips.first {
+            XCTAssertNotNil(first["stays"])
+            XCTAssertNotNil(first["budget"])
+            XCTAssertNotNil(first["documents"])
+        } else { XCTFail("Travel canonical payload was not materialized") }
+    }
+
+    func testRelationalPullMergesWebOnlyKeysAndAppliesTombstone() throws {
+        var taskPayload = try fixture("task-workspace-v2", as: JSONValue.self)
+        if case .object(var root) = taskPayload,
+           case .array(var tasks) = root["tasks"],
+           case .object(var task) = tasks.first {
+            task["webOnlyReminder"] = .object(["channel": .string("email")])
+            tasks[0] = .object(task)
+            root["tasks"] = .array(tasks)
+            taskPayload = .object(root)
+        }
+
+        let initial = try RootineRelationalWorkspaceAdapter.materialize(
+            bootstrap: RootineRelationalBootstrapResponse(
+                serverCursor: 1,
+                workspaces: [RootineRelationalWorkspace(storageKey: RootineStorageKey.tasks.rawValue, payload: taskPayload)]
+            )
+        )
+        let pulled = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "tasks",
+                entityID: "101",
+                record: .object(["text": .string("Zmienione lokalnie")])
+            ),
+            RootineRelationalPullChange(
+                cursor: 3,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "task",
+                entityID: "102",
+                operation: "delete",
+                deletedAt: "2026-09-02T12:00:00.000Z"
+            )
+        ], onto: initial)
+        let tasks = try RootineRelationalWorkspaceAdapter.document(TaskWorkspace.self, key: .tasks, from: pulled)
+        XCTAssertEqual(tasks.tasks.first(where: { $0.id == 101 })?.text, "Zmienione lokalnie")
+        if case .object(let root) = pulled.documents[RootineStorageKey.tasks.rawValue],
+           case .array(let rows) = root["tasks"],
+           case .object(let updated) = rows.first(where: { objectValue($0)?["id"] == .number(101) }) {
+            XCTAssertEqual(updated["webOnlyReminder"], .object(["channel": .string("email")]))
+        } else { XCTFail("Incremental task merge dropped web-only data") }
+        XCTAssertTrue(tasks.tasks.contains(where: { $0.id == 102 && $0.deleted == true }))
+    }
+
+    func testB05ChangeAdapterKeepsStableTransportFields() {
+        let change = RootineB05RelationalReadAdapter.change(
+            cursor: 7,
+            entity: "task",
+            entityID: "101",
+            operation: "upsert",
+            record: .object(["text": .string("Zadanie")]),
+            revision: 4
+        )
+        XCTAssertEqual(change.cursor, 7)
+        XCTAssertEqual(change.entityID, "101")
+        XCTAssertEqual(change.operation, "upsert")
+        XCTAssertEqual(change.revision, 4)
+
+        let pull = RootineB05RelationalReadAdapter.pull(
+            fromCursor: 6,
+            nextCursor: 7,
+            hasMore: false,
+            changes: [change]
+        )
+        XCTAssertEqual(pull.contractVersion, 3)
+        XCTAssertEqual(pull.changes, [change])
+    }
+
+    func testNormalizedReadFlagIsScopedByAccountAndEnvironment() {
+        let suite = "rootine-b08-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let flags = UserDefaultsRootineReadFeatureFlagStore(defaults: defaults)
+
+        XCTAssertFalse(flags.normalizedReadEnabled(accountID: "account-a", environment: "staging"))
+        flags.setNormalizedReadEnabled(true, accountID: "account-a", environment: "staging")
+        XCTAssertTrue(flags.normalizedReadEnabled(accountID: "account-a", environment: "staging"))
+        XCTAssertFalse(flags.normalizedReadEnabled(accountID: "account-b", environment: "staging"))
+        XCTAssertFalse(flags.normalizedReadEnabled(accountID: "account-a", environment: "production"))
+        defaults.removePersistentDomain(forName: suite)
+    }
+
     func testNativeNoOpMergePreservesRichWebOnlyFields() throws {
         var goalsPayload = try fixture("goals-workspace-v1", as: JSONValue.self)
         var travelPayload = try fixture("travel-workspace-v2", as: JSONValue.self)
