@@ -2272,6 +2272,8 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func stopRealtimeRuntime() {
+        refreshTask?.cancel()
+        refreshTask = nil
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshTaskIdentifier)
         networkMonitor?.cancel()
         networkMonitor = nil
