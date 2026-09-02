@@ -955,8 +955,19 @@ private struct GoalsModuleContent: View {
     @State private var editingGoal: GoalRecord?
     @State private var goalToDelete: GoalRecord?
     @State private var deletedGoal: GoalRecord?
+    @State private var showingArchive = false
+    @State private var categoryFilter: String?
 
-    private var goals: [GoalRecord] { environment.goalsWorkspace.goals }
+    private var goals: [GoalRecord] {
+        environment.goalsWorkspace.goals
+            .filter { showingArchive ? $0.status == .archived : $0.status != .archived }
+            .filter { categoryFilter == nil || $0.categoryId == categoryFilter }
+            .sorted { lhs, rhs in
+                if lhs.status != rhs.status { return lhs.status == .active }
+                if lhs.dueDate != rhs.dueDate { return lhs.dueDate < rhs.dueDate }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
     private var averageProgress: Double {
         guard !goals.isEmpty else { return 0 }
         return goals.reduce(0) { $0 + $1.progress } / Double(goals.count)
@@ -974,20 +985,40 @@ private struct GoalsModuleContent: View {
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                     Spacer(minLength: RootineTheme.Spacing.small)
-                    Text("\(Int(averageProgress * 100))%")
+                    Text("\(Int((averageProgress * 100).rounded(.toNearestOrAwayFromZero)))%")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(MoreModule.goals.tint)
                 }
                 ProgressView(value: averageProgress)
                     .tint(MoreModule.goals.tint)
                     .accessibilityLabel("Średni postęp celów")
-                    .accessibilityValue("\(Int(averageProgress * 100)) procent")
+                    .accessibilityValue("\(Int((averageProgress * 100).rounded(.toNearestOrAwayFromZero))) procent")
             }
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
             .rootineSurface()
 
+            HStack(spacing: RootineTheme.Spacing.small) {
+                Button(showingArchive ? "Aktywne" : "Archiwum") {
+                    showingArchive.toggle()
+                    categoryFilter = nil
+                }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: RootineTheme.Spacing.xSmall) {
+                        ForEach(environment.goalsWorkspace.categories) { category in
+                            Button(category.label) {
+                                categoryFilter = categoryFilter == category.id ? nil : category.id
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(categoryFilter == category.id ? MoreModule.goals.tint : RootineTheme.ColorToken.secondaryText)
+                        }
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                ModuleSectionTitle(title: "Aktywne cele", systemImage: "target")
+                ModuleSectionTitle(title: showingArchive ? "Archiwum celów" : "Aktywne cele", systemImage: showingArchive ? "archivebox" : "target")
                 if goals.isEmpty {
                     ModuleEmptyCard(title: "Zacznij od jednego celu", detail: "Wybierz mały, konkretny krok na dziś.", systemImage: "target", tint: MoreModule.goals.tint)
                 } else {
@@ -999,6 +1030,15 @@ private struct GoalsModuleContent: View {
                             .contextMenu {
                                 Button { Task { await environment.advanceGoal(id: goal.id) } } label: {
                                     Label("Dodaj krok", systemImage: "plus.circle")
+                                }
+                                if goal.status == .archived {
+                                    Button { Task { await environment.restoreArchivedGoal(id: goal.id) } } label: {
+                                        Label("Przywróć cel", systemImage: "arrow.uturn.backward")
+                                    }
+                                } else {
+                                    Button { Task { await environment.archiveGoal(id: goal.id) } } label: {
+                                        Label("Archiwizuj cel", systemImage: "archivebox")
+                                    }
                                 }
                                 Button(role: .destructive) { requestDelete(goal) } label: {
                                     Label("Usuń cel", systemImage: "trash")
@@ -1014,6 +1054,17 @@ private struct GoalsModuleContent: View {
                                     Label("Edytuj", systemImage: "pencil")
                                 }
                                 .tint(MoreModule.goals.tint)
+                                if goal.status == .archived {
+                                    Button { Task { await environment.restoreArchivedGoal(id: goal.id) } } label: {
+                                        Label("Przywróć", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .tint(RootineTheme.ColorToken.success)
+                                } else {
+                                    Button { Task { await environment.archiveGoal(id: goal.id) } } label: {
+                                        Label("Archiwizuj", systemImage: "archivebox")
+                                    }
+                                    .tint(MoreModule.goals.tint)
+                                }
                             }
                             if index < goals.count - 1 {
                                 Divider().overlay(RootineTheme.ColorToken.separator)
@@ -1029,8 +1080,21 @@ private struct GoalsModuleContent: View {
             }
         }
         .sheet(isPresented: $isShowingGoalEditor) {
-            GoalEditorSheet { title, detail, target, icon in
-                Task { await environment.addGoal(title: title, detail: detail, target: target, icon: icon) }
+            GoalEditorSheet(categories: environment.goalsWorkspace.categories) { draft in
+                Task { _ = await environment.createGoal(
+                    title: draft.title,
+                    description: draft.detail,
+                    categoryId: draft.categoryId,
+                    iconKey: draft.icon,
+                    status: draft.status,
+                    priority: draft.priority,
+                    startDate: draft.startDate,
+                    dueDate: draft.dueDate,
+                    progressMode: draft.progressMode,
+                    targetValue: draft.target,
+                    unit: draft.unit,
+                    note: draft.note
+                ) }
             }
         }
         .sheet(item: $selectedGoal) { goal in
@@ -1043,8 +1107,21 @@ private struct GoalsModuleContent: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $editingGoal) { goal in
-            GoalEditorSheet(existing: goal) { title, detail, target, icon in
-                Task { await environment.updateGoal(id: goal.id, title: title, detail: detail, target: target, icon: icon) }
+            GoalEditorSheet(existing: goal, categories: environment.goalsWorkspace.categories) { draft in
+                Task { await environment.updateGoal(
+                    id: goal.id,
+                    title: draft.title,
+                    description: draft.detail,
+                    categoryId: draft.categoryId,
+                    status: draft.status,
+                    priority: draft.priority,
+                    startDate: draft.startDate,
+                    dueDate: draft.dueDate,
+                    progressMode: draft.progressMode,
+                    targetValue: draft.target,
+                    unit: draft.unit,
+                    note: draft.note
+                ) }
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -1105,12 +1182,15 @@ private struct GoalRow: View {
                     HStack {
                         Text(goal.title).font(.subheadline.weight(.semibold))
                         Spacer()
-                        Text("\(Int(goal.progress * 100))%")
+                        Text("\(goal.progressPercent)%")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(MoreModule.goals.tint)
                     }
                     Text(goal.detail.isEmpty ? "Postęp celu" : goal.detail)
                         .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    Text("Termin \(goal.dueDate) · \(goal.status.rawValue)")
+                        .font(.caption2)
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     ProgressView(value: goal.progress)
                         .tint(MoreModule.goals.tint)
@@ -1135,19 +1215,37 @@ private struct GoalRow: View {
 private struct GoalEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let existing: GoalRecord?
-    let onSave: (String, String, Double, String) -> Void
+    let categories: [GoalCategory]
+    let onSave: (GoalEditorDraft) -> Void
     @State private var title: String
     @State private var detail: String
     @State private var target: String
     @State private var icon: String
+    @State private var categoryId: String
+    @State private var status: GoalStatus
+    @State private var priority: GoalPriority
+    @State private var startDate: String
+    @State private var dueDate: String
+    @State private var progressMode: GoalProgressMode
+    @State private var unit: String
+    @State private var note: String
 
-    init(existing: GoalRecord? = nil, onSave: @escaping (String, String, Double, String) -> Void) {
+    init(existing: GoalRecord? = nil, categories: [GoalCategory] = [], onSave: @escaping (GoalEditorDraft) -> Void) {
         self.existing = existing
+        self.categories = categories.isEmpty ? [GoalCategory(id: "personal", label: "Osobiste", color: "#8793A1", iconKey: "circle")] : categories
         self.onSave = onSave
         _title = State(initialValue: existing?.title ?? "")
         _detail = State(initialValue: existing?.detail ?? "")
         _target = State(initialValue: String(existing?.target ?? 10))
         _icon = State(initialValue: existing?.icon ?? "target")
+        _categoryId = State(initialValue: existing?.categoryId ?? "personal")
+        _status = State(initialValue: existing?.status ?? .active)
+        _priority = State(initialValue: existing?.priority ?? .medium)
+        _startDate = State(initialValue: existing?.startDate ?? RootineDate.localDate())
+        _dueDate = State(initialValue: existing?.dueDate ?? RootineDate.localDate())
+        _progressMode = State(initialValue: existing?.progressMode ?? .numeric)
+        _unit = State(initialValue: existing?.unit ?? "kroków")
+        _note = State(initialValue: existing?.note ?? existing?.detail ?? "")
     }
 
     var body: some View {
@@ -1159,6 +1257,24 @@ private struct GoalEditorSheet: View {
                     TextField("Liczba kroków", text: $target)
                         .keyboardType(.decimalPad)
                     TextField("Ikona SF Symbol", text: $icon)
+                    Picker("Kategoria", selection: $categoryId) {
+                        ForEach(categories) { category in
+                            Text(category.label).tag(category.id)
+                        }
+                    }
+                    Picker("Status", selection: $status) {
+                        ForEach(GoalStatus.allCases, id: \.self) { value in Text(value.rawValue).tag(value) }
+                    }
+                    Picker("Priorytet", selection: $priority) {
+                        ForEach(GoalPriority.allCases, id: \.self) { value in Text(value.rawValue).tag(value) }
+                    }
+                    Picker("Typ postępu", selection: $progressMode) {
+                        ForEach(GoalProgressMode.allCases, id: \.self) { value in Text(value.rawValue).tag(value) }
+                    }
+                    TextField("Jednostka", text: $unit)
+                    TextField("Start (RRRR-MM-DD)", text: $startDate)
+                    TextField("Termin (RRRR-MM-DD)", text: $dueDate)
+                    TextField("Notatka", text: $note, axis: .vertical)
                 }
             }
             .navigationTitle(existing == nil ? "Dodaj cel" : "Edytuj cel")
@@ -1167,7 +1283,20 @@ private struct GoalEditorSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
-                        onSave(title, detail, Double(target.replacingOccurrences(of: ",", with: ".")) ?? 10, icon)
+                        onSave(GoalEditorDraft(
+                            title: title,
+                            detail: detail,
+                            target: Double(target.replacingOccurrences(of: ",", with: ".")) ?? 10,
+                            icon: icon,
+                            categoryId: categoryId,
+                            status: status,
+                            priority: priority,
+                            startDate: startDate,
+                            dueDate: dueDate,
+                            progressMode: progressMode,
+                            unit: unit,
+                            note: note
+                        ))
                         dismiss()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1177,8 +1306,24 @@ private struct GoalEditorSheet: View {
     }
 }
 
+private struct GoalEditorDraft {
+    let title: String
+    let detail: String
+    let target: Double
+    let icon: String
+    let categoryId: String
+    let status: GoalStatus
+    let priority: GoalPriority
+    let startDate: String
+    let dueDate: String
+    let progressMode: GoalProgressMode
+    let unit: String
+    let note: String
+}
+
 private struct GoalDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var environment: AppEnvironment
     let goal: GoalRecord
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -1194,12 +1339,69 @@ private struct GoalDetailSheet: View {
                 ProgressView(value: goal.progress)
                     .tint(MoreModule.goals.tint)
                     .accessibilityLabel("Postęp celu")
-                    .accessibilityValue("\(Int(goal.progress * 100)) procent")
+                    .accessibilityValue("\(goal.progressPercent) procent")
                 Text("\(Int(goal.current.rounded())) z \(Int(goal.target.rounded())) kroków")
                     .font(.subheadline.weight(.semibold))
+                HStack {
+                    Label("Termin", systemImage: "calendar")
+                    Spacer()
+                    Text(goal.dueDate)
+                }
+                .font(.subheadline)
+                HStack {
+                    Label("Status", systemImage: "circle.fill")
+                    Spacer()
+                    Text(goal.status.rawValue)
+                }
+                if !goal.milestones.isEmpty {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                        ModuleSectionTitle(title: "Etapy", systemImage: "checklist")
+                        ForEach(goal.milestones) { milestone in
+                            Button {
+                                Task { await environment.updateGoalMilestone(id: goal.id, milestoneID: milestone.id, done: !milestone.done) }
+                            } label: {
+                                HStack {
+                                    Image(systemName: milestone.done ? "checkmark.circle.fill" : "circle")
+                                    VStack(alignment: .leading) {
+                                        Text(milestone.title)
+                                        Text(milestone.dueDate).font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                if !goal.linkedTaskIds.isEmpty {
+                    Label("Powiązane zadania: \(goal.linkedTaskIds.map(String.init).joined(separator: ", "))", systemImage: "link")
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if !goal.history.isEmpty {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                        ModuleSectionTitle(title: "Historia", systemImage: "clock.arrow.circlepath")
+                        ForEach(goal.history.suffix(5)) { entry in
+                            Text("\(entry.label) · \(entry.createdAt.prefix(10))")
+                                .font(.caption)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }
+                    }
+                }
                 RootineSecondaryButton("Edytuj cel", systemImage: "pencil") {
                     onEdit()
                     dismiss()
+                }
+                if goal.status == .archived {
+                    RootineSecondaryButton("Przywróć cel", systemImage: "arrow.uturn.backward") {
+                        Task { await environment.restoreArchivedGoal(id: goal.id) }
+                        dismiss()
+                    }
+                } else {
+                    RootineSecondaryButton("Archiwizuj cel", systemImage: "archivebox") {
+                        Task { await environment.archiveGoal(id: goal.id) }
+                        dismiss()
+                    }
                 }
                 Button("Usuń cel", role: .destructive) { showDeleteConfirmation = true }
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)

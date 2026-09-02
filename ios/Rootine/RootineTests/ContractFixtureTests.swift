@@ -1549,6 +1549,89 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(trip["name"], .string("Weekend nad morzem"))
     }
 
+    func testGoalsFixtureProjectsAllGoalFieldsAndLegacyHistoryDate() throws {
+        let payload = try fixture("goals-workspace-v1", as: JSONValue.self)
+        let workspace = try RootineCanonicalWorkspaceMapping.goalsWorkspace(from: payload)
+        let goal = try XCTUnwrap(workspace.goals.first)
+
+        XCTAssertEqual(goal.categoryId, "sport")
+        XCTAssertEqual(goal.customIcon, "data:image/png;base64,AA==")
+        XCTAssertEqual(goal.priority, .high)
+        XCTAssertEqual(goal.dueDate, "2026-12-31")
+        XCTAssertEqual(goal.milestones.count, 2)
+        XCTAssertEqual(goal.milestones.first?.done, true)
+        XCTAssertEqual(goal.linkedTaskIds, [42])
+        XCTAssertEqual(goal.history.first?.date, "2026-08-02")
+        XCTAssertEqual(rootineGoalProgressPercent(goal), 50)
+    }
+
+    func testGoalsProgressIsDeterministicForWeightedMilestonesAndFrequencyPeriods() throws {
+        let timestamp = "2026-09-03T10:00:00.000Z"
+        let weighted = GoalRecord(
+            id: "weighted",
+            title: "Etapy",
+            detail: "",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            progressMode: .milestones,
+            targetValue: 3,
+            milestones: [
+                GoalMilestone(id: "one", title: "Pierwszy", dueDate: "2026-09-03", done: true, weight: 1),
+                GoalMilestone(id: "two", title: "Drugi", dueDate: "2026-09-03", done: false, weight: 2)
+            ]
+        )
+        XCTAssertEqual(rootineGoalProgress(weighted), 1.0 / 3.0, accuracy: 0.000001)
+        XCTAssertEqual(rootineGoalProgressPercent(weighted), 33)
+
+        let frequency = GoalRecord(
+            id: "frequency",
+            title: "Sesje",
+            detail: "",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            startDate: "2026-09-01",
+            dueDate: "2026-09-08",
+            progressMode: .regularity,
+            regularityMode: .frequency,
+            frequencyTarget: 2,
+            frequencyPeriod: .week,
+            targetValue: 1
+        )
+        XCTAssertEqual(rootineGoalRegularityTarget(frequency), 4)
+    }
+
+    func testGoalsMappingIsStableAndDeleteProjectsAnEmptyCanonicalCollection() throws {
+        let timestamp = "2026-09-03T10:00:00.000Z"
+        let goal = GoalRecord(
+            id: "stable-goal",
+            title: "Stabilny cel",
+            detail: "Opis",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            categoryId: "personal",
+            status: .paused,
+            priority: .high,
+            startDate: "2026-09-01",
+            dueDate: "2026-10-01",
+            progressMode: .numeric,
+            targetValue: 10,
+            unit: "km",
+            linkedTaskIds: [7],
+            history: [GoalHistoryEntry(id: "history", type: .statusChanged, label: "Wstrzymano", createdAt: timestamp)]
+        )
+        let workspace = GoalsWorkspace(version: 1, updatedAt: timestamp, goals: [goal])
+        let first = try RootineCanonicalWorkspaceMapping.payload(for: workspace)
+        let second = try RootineCanonicalWorkspaceMapping.payload(for: workspace)
+        XCTAssertEqual(first, second)
+
+        let deleted = try RootineCanonicalWorkspaceMapping.mergedGoalsPayload(for: .empty, onto: first)
+        if case .object(let root) = deleted, case .array(let goals) = root["goals"] {
+            XCTAssertTrue(goals.isEmpty)
+        } else {
+            XCTFail("Goal deletion should produce an empty canonical collection")
+        }
+    }
+
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         let bundle = Bundle(for: ContractFixtureTests.self)
         let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: "json"))

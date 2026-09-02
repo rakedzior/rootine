@@ -245,42 +245,53 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     static func payload(for workspace: GoalsWorkspace) throws -> JSONValue {
-        let categories = [
-            CanonicalGoalCategory(id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle")
-        ]
+        let categories = deduplicatedGoalCategories(workspace.categories.isEmpty
+            ? [CanonicalGoalCategory(id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle")]
+            : workspace.categories.map { CanonicalGoalCategory(id: $0.id, label: $0.label, color: $0.color, iconKey: $0.iconKey) })
         let goals = deduplicatedGoals(workspace.goals).map { goal in
-            let start = validDate(String(goal.createdAt.prefix(10)))
-            let progress = CanonicalGoalProgress(
-                id: "ios-progress-\(goal.id)",
-                date: validDate(String(goal.updatedAt.prefix(10))),
-                value: max(0, goal.current),
-                kind: "absolute",
-                note: "Postęp z aplikacji iOS",
-                createdAt: goal.updatedAt
-            )
             return CanonicalGoal(
                 id: goal.id,
                 title: goal.title,
                 description: goal.detail,
-                categoryId: "personal",
-                iconKey: goalIcon(for: goal.icon),
-                color: "#7FA6C9",
-                status: goal.progress >= 1 ? "completed" : "active",
-                health: "ontrack",
-                priority: "medium",
-                startDate: start,
-                dueDate: maxDate(start, validDate(String(goal.updatedAt.prefix(10)))),
-                progressMode: "numeric",
-                regularityMode: nil,
-                frequencyTarget: nil,
-                frequencyPeriod: nil,
-                initialValue: 0,
-                targetValue: max(1, goal.target),
-                unit: "kroków",
-                manualProgress: 0,
-                milestones: [],
-                progressEntries: [progress],
-                note: goal.detail,
+                categoryId: categories.contains(where: { $0.id == goal.categoryId }) ? goal.categoryId : "personal",
+                iconKey: goal.iconKey.isEmpty ? goalIcon(for: goal.icon) : goal.iconKey,
+                customIcon: goal.customIcon,
+                color: goal.color,
+                status: goal.status.rawValue,
+                health: goal.health.rawValue,
+                priority: goal.priority.rawValue,
+                startDate: validDate(goal.startDate),
+                dueDate: maxDate(validDate(goal.startDate), validDate(goal.dueDate)),
+                progressMode: goal.progressMode.rawValue,
+                regularityMode: goal.regularityMode?.rawValue,
+                frequencyTarget: goal.frequencyTarget,
+                frequencyPeriod: goal.frequencyPeriod?.rawValue,
+                initialValue: goal.initialValue,
+                targetValue: max(0, goal.targetValue > 0 ? goal.targetValue : goal.target),
+                unit: goal.progressMode == .milestones ? "etapów" : goal.unit,
+                manualProgress: goal.manualProgress,
+                milestones: goal.milestones.map { milestone in
+                    CanonicalGoalMilestone(
+                        id: milestone.id,
+                        title: milestone.title,
+                        note: milestone.note,
+                        dueDate: validDate(milestone.dueDate),
+                        done: milestone.done,
+                        completedAt: milestone.completedAt,
+                        weight: max(0.01, milestone.weight),
+                        order: milestone.order,
+                        isNext: milestone.isNext,
+                        linkedTaskIds: milestone.linkedTaskIds
+                    )
+                },
+                progressEntries: goal.progressEntries.map { entry in
+                    CanonicalGoalProgress(id: entry.id, date: validDate(entry.date), value: entry.value, kind: entry.kind.rawValue, note: entry.note, createdAt: entry.createdAt)
+                },
+                linkedTaskIds: goal.linkedTaskIds,
+                history: goal.history.map { entry in
+                    CanonicalGoalHistory(id: entry.id, type: entry.type.rawValue, label: entry.label, detail: entry.detail, createdAt: entry.createdAt)
+                },
+                note: goal.note,
                 createdAt: goal.createdAt,
                 updatedAt: goal.updatedAt
             )
@@ -291,19 +302,47 @@ enum RootineCanonicalWorkspaceMapping {
     static func goalsWorkspace(from payload: JSONValue) throws -> GoalsWorkspace {
         let canonical = try decode(CanonicalGoalsWorkspace.self, from: payload)
         let goals = canonical.goals.map { goal in
-            let current = goalCurrentValue(goal)
             return GoalRecord(
                 id: goal.id,
                 title: goal.title,
                 detail: goal.description,
-                current: max(0, current),
+                current: max(0, goalCurrentValue(goal)),
                 target: max(1, goal.targetValue),
                 icon: nativeIcon(for: goal.iconKey),
                 createdAt: goal.createdAt,
-                updatedAt: goal.updatedAt
+                updatedAt: goal.updatedAt,
+                categoryId: goal.categoryId,
+                iconKey: goal.iconKey,
+                customIcon: goal.customIcon,
+                color: goal.color,
+                status: GoalStatus(rawValue: goal.status) ?? .active,
+                health: GoalHealth(rawValue: goal.health) ?? .ontrack,
+                priority: GoalPriority(rawValue: goal.priority) ?? .medium,
+                startDate: goal.startDate,
+                dueDate: goal.dueDate,
+                progressMode: GoalProgressMode(rawValue: goal.progressMode) ?? .numeric,
+                regularityMode: goal.regularityMode.flatMap(GoalRegularityMode.init(rawValue:)),
+                frequencyTarget: goal.frequencyTarget,
+                frequencyPeriod: goal.frequencyPeriod.flatMap(GoalRegularityPeriod.init(rawValue:)),
+                initialValue: goal.initialValue,
+                targetValue: goal.targetValue,
+                unit: goal.unit,
+                manualProgress: goal.manualProgress,
+                milestones: goal.milestones.map { milestone in
+                    GoalMilestone(id: milestone.id, title: milestone.title, note: milestone.note ?? "", dueDate: milestone.dueDate, done: milestone.done, completedAt: milestone.completedAt, weight: milestone.weight, order: milestone.order, isNext: milestone.isNext, linkedTaskIds: milestone.linkedTaskIds ?? [])
+                },
+                progressEntries: goal.progressEntries.map { entry in
+                    GoalProgressEntry(id: entry.id, date: entry.date, value: entry.value, kind: GoalProgressEntry.Kind(rawValue: entry.kind) ?? .absolute, note: entry.note, createdAt: entry.createdAt)
+                },
+                linkedTaskIds: goal.linkedTaskIds ?? [],
+                history: goal.history?.map { entry in
+                    GoalHistoryEntry(id: entry.id, type: GoalHistoryEntry.EntryType(rawValue: entry.type ?? "updated") ?? .updated, label: entry.label, detail: entry.detail, createdAt: entry.createdAt)
+                } ?? [],
+                note: goal.note
             )
         }
-        return GoalsWorkspace(version: 1, updatedAt: canonicalUpdatedAt(canonical.goals), goals: deduplicatedGoals(goals))
+        let categories = canonical.categories.map { GoalCategory(id: $0.id, label: $0.label, color: $0.color, iconKey: $0.iconKey) }
+        return GoalsWorkspace(version: 1, updatedAt: canonicalUpdatedAt(canonical.goals), goals: deduplicatedGoals(goals), categories: categories)
     }
 
     static func mergedGoalsPayload(for workspace: GoalsWorkspace, onto base: JSONValue) throws -> JSONValue {
@@ -312,8 +351,6 @@ enum RootineCanonicalWorkspaceMapping {
         let projected = try objectValue(projectedPayload)
         let nativeGoals = dictionaryByID(projected["goals"])
         let canonicalGoals = deduplicatedRecords(arrayValue(root["goals"]))
-        let decodedCanonical = try decode(CanonicalGoalsWorkspace.self, from: base)
-        let decodedNative = try decode(CanonicalGoalsWorkspace.self, from: projectedPayload)
         var existingIDs = Set<String>()
         let mergedGoals = canonicalGoals.compactMap { value -> JSONValue? in
             guard var goal = objectValueIfPresent(value), let id = identifier(goal["id"]), let native = nativeGoals[id] else {
@@ -322,24 +359,13 @@ enum RootineCanonicalWorkspaceMapping {
                 return nil
             }
             existingIDs.insert(id)
-            for key in ["title", "description", "iconKey", "targetValue", "updatedAt"] {
+            for key in [
+                "title", "description", "categoryId", "iconKey", "customIcon", "color", "status", "health", "priority",
+                "startDate", "dueDate", "progressMode", "regularityMode", "frequencyTarget", "frequencyPeriod",
+                "initialValue", "targetValue", "unit", "manualProgress", "milestones", "progressEntries", "linkedTaskIds",
+                "history", "note", "createdAt", "updatedAt"
+            ] {
                 if let replacement = native[key] { goal[key] = replacement }
-            }
-            if let canonicalGoal = decodedCanonical.goals.first(where: { normalizedIdentifier($0.id) == id }),
-               let nativeGoal = decodedNative.goals.first(where: { normalizedIdentifier($0.id) == id })
-            {
-                let current = goalCurrentValue(canonicalGoal)
-                let nativeCurrent = goalCurrentValue(nativeGoal)
-                if canonicalGoal.progressMode == "milestones", abs(current - nativeCurrent) > 0.0001 {
-                    goal["milestones"] = updatedMilestones(goal["milestones"], desiredValue: nativeCurrent)
-                } else if canonicalGoal.progressMode != "milestones", abs(current - nativeCurrent) > 0.0001 {
-                    goal["progressEntries"] = updatedNumericProgressEntries(
-                        existing: goal["progressEntries"],
-                        goalID: id,
-                        value: nativeCurrent,
-                        updatedAt: stringValue(native["updatedAt"]) ?? RootineDate.isoTimestamp()
-                    )
-                }
             }
             return .object(goal)
         }
@@ -351,11 +377,7 @@ enum RootineCanonicalWorkspaceMapping {
             })
         }
         root["goals"] = .array(allGoals)
-        if !decodedCanonical.categories.contains(where: { $0.id == "personal" }), let categories = projected["categories"] {
-            var currentCategories = deduplicatedRecords(arrayValue(root["categories"]))
-            if case .array(let projectedCategories) = categories { currentCategories.append(contentsOf: deduplicatedRecords(projectedCategories)) }
-            root["categories"] = .array(deduplicatedRecords(currentCategories))
-        }
+        if let categories = projected["categories"] { root["categories"] = categories }
         return .object(root)
     }
 
@@ -629,6 +651,19 @@ enum RootineCanonicalWorkspaceMapping {
             guard !normalizedID.isEmpty,
                   seen.insert(normalizedID).inserted else { continue }
             var normalized = goal
+            normalized.id = normalizedID
+            retained.append(normalized)
+        }
+        return Array(retained.reversed())
+    }
+
+    private static func deduplicatedGoalCategories(_ categories: [CanonicalGoalCategory]) -> [CanonicalGoalCategory] {
+        var seen = Set<String>()
+        var retained: [CanonicalGoalCategory] = []
+        for category in categories.reversed() {
+            let normalizedID = normalizedIdentifier(category.id)
+            guard !normalizedID.isEmpty, seen.insert(normalizedID).inserted else { continue }
+            var normalized = category
             normalized.id = normalizedID
             retained.append(normalized)
         }
@@ -1013,13 +1048,13 @@ enum RootineCanonicalWorkspaceMapping {
 
     private static func goalCurrentValue(_ goal: CanonicalGoal) -> Double {
         if goal.progressMode == "milestones" {
-            return goal.milestones.filter(\.done).reduce(0) { $0 + $1.weight }
+            return goal.milestones.filter(\.done).reduce(0) { $0 + max(0, $1.weight) }
         }
         if goal.progressMode == "manual", goal.progressEntries.isEmpty {
             return goal.manualProgress
         }
         return goal.progressEntries
-            .sorted { "\($0.date)-\($0.createdAt)" < "\($1.date)-\($1.createdAt)" }
+            .sorted { "\($0.date)|\($0.createdAt)|\($0.id)" < "\($1.date)|\($1.createdAt)|\($1.id)" }
             .reduce(goal.initialValue) { current, entry in
                 entry.kind == "absolute" ? entry.value : current + entry.value
             }
@@ -1190,6 +1225,7 @@ private struct CanonicalGoal: Codable {
     var description: String
     var categoryId: String
     var iconKey: String
+    var customIcon: String?
     var color: String
     var status: String
     var health: String
@@ -1206,6 +1242,8 @@ private struct CanonicalGoal: Codable {
     var manualProgress: Double
     var milestones: [CanonicalGoalMilestone]
     var progressEntries: [CanonicalGoalProgress]
+    var linkedTaskIds: [Int]?
+    var history: [CanonicalGoalHistory]?
     var note: String
     var createdAt: String
     var updatedAt: String
@@ -1223,9 +1261,54 @@ private struct CanonicalGoalProgress: Codable {
 private struct CanonicalGoalMilestone: Codable {
     var id: String
     var title: String
+    var note: String?
     var dueDate: String
     var done: Bool
+    var completedAt: String?
     var weight: Double
+    var order: Int?
+    var isNext: Bool?
+    var linkedTaskIds: [Int]?
+}
+
+private struct CanonicalGoalHistory: Codable {
+    var id: String
+    var type: String?
+    var label: String
+    var detail: String?
+    var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, label, detail, createdAt, date
+    }
+
+    init(id: String, type: String?, label: String, detail: String?, createdAt: String) {
+        self.id = id
+        self.type = type
+        self.label = label
+        self.detail = detail
+        self.createdAt = createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        label = try container.decode(String.self, forKey: .label)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+            ?? (try container.decodeIfPresent(String.self, forKey: .date))
+            ?? RootineDate.isoTimestamp()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(type, forKey: .type)
+        try container.encode(label, forKey: .label)
+        try container.encodeIfPresent(detail, forKey: .detail)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
 }
 
 private struct CanonicalWorkWorkspace: Codable {

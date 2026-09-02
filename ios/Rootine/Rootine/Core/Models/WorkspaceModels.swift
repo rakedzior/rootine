@@ -629,6 +629,194 @@ struct SportWorkspace: Codable, Equatable, Sendable {
     static let empty = SportWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), workouts: [])
 }
 
+enum GoalStatus: String, Codable, CaseIterable, Sendable {
+    case planned
+    case active
+    case paused
+    case completed
+    case archived
+}
+
+enum GoalHealth: String, Codable, CaseIterable, Sendable {
+    case ontrack
+    case risk
+}
+
+enum GoalPriority: String, Codable, CaseIterable, Sendable {
+    case high
+    case medium
+    case low
+}
+
+enum GoalProgressMode: String, Codable, CaseIterable, Sendable {
+    case numeric
+    case milestones
+    case regularity
+    case manual
+}
+
+enum GoalRegularityMode: String, Codable, CaseIterable, Sendable {
+    case streak
+    case frequency
+}
+
+enum GoalRegularityPeriod: String, Codable, CaseIterable, Sendable {
+    case day
+    case week
+    case month
+}
+
+struct GoalCategory: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var label: String
+    var color: String
+    var iconKey: String
+
+    init(id: String, label: String, color: String, iconKey: String) {
+        self.id = id
+        self.label = label
+        self.color = color
+        self.iconKey = iconKey
+    }
+}
+
+struct GoalMilestone: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var title: String
+    var note: String
+    var dueDate: String
+    var done: Bool
+    var completedAt: String?
+    var weight: Double
+    var order: Int?
+    var isNext: Bool?
+    var linkedTaskIds: [Int]
+
+    init(
+        id: String,
+        title: String,
+        note: String = "",
+        dueDate: String,
+        done: Bool = false,
+        completedAt: String? = nil,
+        weight: Double = 1,
+        order: Int? = nil,
+        isNext: Bool? = nil,
+        linkedTaskIds: [Int] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.note = note
+        self.dueDate = dueDate
+        self.done = done
+        self.completedAt = completedAt
+        self.weight = weight
+        self.order = order
+        self.isNext = isNext
+        self.linkedTaskIds = linkedTaskIds
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, note, dueDate, done, completedAt, weight, order, isNext, linkedTaskIds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+        dueDate = try container.decode(String.self, forKey: .dueDate)
+        done = try container.decode(Bool.self, forKey: .done)
+        completedAt = try container.decodeIfPresent(String.self, forKey: .completedAt)
+        weight = try container.decodeIfPresent(Double.self, forKey: .weight) ?? 1
+        order = try container.decodeIfPresent(Int.self, forKey: .order)
+        isNext = try container.decodeIfPresent(Bool.self, forKey: .isNext)
+        linkedTaskIds = try container.decodeIfPresent([Int].self, forKey: .linkedTaskIds) ?? []
+    }
+}
+
+struct GoalProgressEntry: Codable, Equatable, Identifiable, Sendable {
+    enum Kind: String, Codable, CaseIterable, Sendable {
+        case absolute
+        case delta
+    }
+
+    var id: String
+    var date: String
+    var value: Double
+    var kind: Kind
+    var note: String
+    var createdAt: String
+
+    init(id: String, date: String, value: Double, kind: Kind = .absolute, note: String = "", createdAt: String) {
+        self.id = id
+        self.date = date
+        self.value = value
+        self.kind = kind
+        self.note = note
+        self.createdAt = createdAt
+    }
+}
+
+struct GoalHistoryEntry: Codable, Equatable, Identifiable, Sendable {
+    enum EntryType: String, Codable, CaseIterable, Sendable {
+        case progress
+        case stageCompleted = "stage_completed"
+        case stageAdded = "stage_added"
+        case deadlineChanged = "deadline_changed"
+        case statusChanged = "status_changed"
+        case noteAdded = "note_added"
+        case resumed
+        case paused
+        case updated
+    }
+
+    var id: String
+    var type: EntryType
+    var label: String
+    var detail: String?
+    var createdAt: String
+
+    init(id: String, type: EntryType = .updated, label: String, detail: String? = nil, createdAt: String) {
+        self.id = id
+        self.type = type
+        self.label = label
+        self.detail = detail
+        self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, label, detail, createdAt, date
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decodeIfPresent(EntryType.self, forKey: .type) ?? .updated
+        label = try container.decode(String.self, forKey: .label)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+            ?? (try container.decodeIfPresent(String.self, forKey: .date))
+            ?? RootineDate.isoTimestamp()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+        try container.encode(label, forKey: .label)
+        try container.encodeIfPresent(detail, forKey: .detail)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
+
+    /// The v1 fixture used `date`; exposing it as an alias keeps old clients
+    /// source-compatible without writing two competing timestamps.
+    var date: String {
+        get { createdAt }
+        set { createdAt = newValue }
+    }
+}
+
 struct GoalRecord: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var title: String
@@ -638,19 +826,309 @@ struct GoalRecord: Codable, Equatable, Identifiable, Sendable {
     var icon: String
     var createdAt: String
     var updatedAt: String
+    var categoryId: String
+    var iconKey: String
+    var customIcon: String?
+    var color: String
+    var status: GoalStatus
+    var health: GoalHealth
+    var priority: GoalPriority
+    var startDate: String
+    var dueDate: String
+    var progressMode: GoalProgressMode
+    var regularityMode: GoalRegularityMode?
+    var frequencyTarget: Double?
+    var frequencyPeriod: GoalRegularityPeriod?
+    var initialValue: Double
+    var targetValue: Double
+    var unit: String
+    var manualProgress: Double
+    var milestones: [GoalMilestone]
+    var progressEntries: [GoalProgressEntry]
+    var linkedTaskIds: [Int]
+    var history: [GoalHistoryEntry]
+    var note: String
 
-    var progress: Double {
-        guard target > 0 else { return 0 }
-        return min(1, max(0, current / target))
+    /// Legacy native constructor used by earlier More-module screens.
+    init(id: String, title: String, detail: String, current: Double, target: Double, icon: String, createdAt: String, updatedAt: String) {
+        self.init(
+            id: id,
+            title: title,
+            detail: detail,
+            current: current,
+            target: target,
+            icon: icon,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            categoryId: "personal",
+            iconKey: "target",
+            customIcon: nil,
+            color: "#7FA6C9",
+            status: current >= target && target > 0 ? .completed : .active,
+            health: .ontrack,
+            priority: .medium,
+            startDate: String(createdAt.prefix(10)),
+            dueDate: String(updatedAt.prefix(10)),
+            progressMode: .numeric,
+            regularityMode: nil,
+            frequencyTarget: nil,
+            frequencyPeriod: nil,
+            initialValue: 0,
+            targetValue: max(1, target),
+            unit: "kroków",
+            manualProgress: 0,
+            milestones: [],
+            progressEntries: [GoalProgressEntry(id: "ios-progress-\(id)", date: String(updatedAt.prefix(10)), value: current, kind: .absolute, note: "Postęp z aplikacji iOS", createdAt: updatedAt)],
+            linkedTaskIds: [],
+            history: [],
+            note: detail
+        )
     }
+
+    init(
+        id: String,
+        title: String,
+        detail: String,
+        current: Double = 0,
+        target: Double = 1,
+        icon: String = "target",
+        createdAt: String,
+        updatedAt: String,
+        categoryId: String = "personal",
+        iconKey: String = "target",
+        customIcon: String? = nil,
+        color: String = "#7FA6C9",
+        status: GoalStatus = .active,
+        health: GoalHealth = .ontrack,
+        priority: GoalPriority = .medium,
+        startDate: String? = nil,
+        dueDate: String? = nil,
+        progressMode: GoalProgressMode = .numeric,
+        regularityMode: GoalRegularityMode? = nil,
+        frequencyTarget: Double? = nil,
+        frequencyPeriod: GoalRegularityPeriod? = nil,
+        initialValue: Double = 0,
+        targetValue: Double? = nil,
+        unit: String = "kroków",
+        manualProgress: Double = 0,
+        milestones: [GoalMilestone] = [],
+        progressEntries: [GoalProgressEntry] = [],
+        linkedTaskIds: [Int] = [],
+        history: [GoalHistoryEntry] = [],
+        note: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.detail = detail
+        self.current = current
+        self.target = max(1, target)
+        self.icon = icon
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.categoryId = categoryId
+        self.iconKey = iconKey
+        self.customIcon = customIcon
+        self.color = color
+        self.status = status
+        self.health = health
+        self.priority = priority
+        self.startDate = startDate ?? String(createdAt.prefix(10))
+        self.dueDate = dueDate ?? String(updatedAt.prefix(10))
+        self.progressMode = progressMode
+        self.regularityMode = regularityMode
+        self.frequencyTarget = frequencyTarget
+        self.frequencyPeriod = frequencyPeriod
+        self.initialValue = initialValue
+        self.targetValue = max(0, targetValue ?? target)
+        self.unit = unit
+        self.manualProgress = manualProgress
+        self.milestones = milestones
+        self.progressEntries = progressEntries
+        self.linkedTaskIds = linkedTaskIds
+        self.history = history
+        self.note = note
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, detail, current, target, icon, createdAt, updatedAt
+        case categoryId, iconKey, customIcon, color, status, health, priority, startDate, dueDate
+        case progressMode, regularityMode, frequencyTarget, frequencyPeriod, initialValue, targetValue
+        case unit, manualProgress, milestones, progressEntries, linkedTaskIds, note, history
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decodeIfPresent(String.self, forKey: .description)
+            ?? (try container.decodeIfPresent(String.self, forKey: .detail))
+            ?? ""
+        let decodedEntries = try container.decodeIfPresent([GoalProgressEntry].self, forKey: .progressEntries) ?? []
+        progressEntries = decodedEntries
+        current = try container.decodeIfPresent(Double.self, forKey: .current)
+            ?? rootineGoalCurrentValue(
+                initialValue: try container.decodeIfPresent(Double.self, forKey: .initialValue) ?? 0,
+                progressEntries: decodedEntries
+            )
+        target = max(1, try container.decodeIfPresent(Double.self, forKey: .target)
+            ?? (try container.decodeIfPresent(Double.self, forKey: .targetValue))
+            ?? 1)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
+            ?? container.decodeIfPresent(String.self, forKey: .iconKey)
+            ?? "target"
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? RootineDate.isoTimestamp()
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? createdAt
+        categoryId = try container.decodeIfPresent(String.self, forKey: .categoryId) ?? "personal"
+        iconKey = try container.decodeIfPresent(String.self, forKey: .iconKey) ?? "target"
+        customIcon = try container.decodeIfPresent(String.self, forKey: .customIcon)
+        color = try container.decodeIfPresent(String.self, forKey: .color) ?? "#7FA6C9"
+        status = try container.decodeIfPresent(GoalStatus.self, forKey: .status) ?? (current >= target ? .completed : .active)
+        health = try container.decodeIfPresent(GoalHealth.self, forKey: .health) ?? .ontrack
+        priority = try container.decodeIfPresent(GoalPriority.self, forKey: .priority) ?? .medium
+        startDate = try container.decodeIfPresent(String.self, forKey: .startDate) ?? String(createdAt.prefix(10))
+        dueDate = try container.decodeIfPresent(String.self, forKey: .dueDate) ?? String(updatedAt.prefix(10))
+        progressMode = try container.decodeIfPresent(GoalProgressMode.self, forKey: .progressMode) ?? .numeric
+        regularityMode = try container.decodeIfPresent(GoalRegularityMode.self, forKey: .regularityMode)
+        frequencyTarget = try container.decodeIfPresent(Double.self, forKey: .frequencyTarget)
+        frequencyPeriod = try container.decodeIfPresent(GoalRegularityPeriod.self, forKey: .frequencyPeriod)
+        initialValue = try container.decodeIfPresent(Double.self, forKey: .initialValue) ?? 0
+        targetValue = max(0, try container.decodeIfPresent(Double.self, forKey: .targetValue) ?? target)
+        unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? "kroków"
+        manualProgress = try container.decodeIfPresent(Double.self, forKey: .manualProgress) ?? 0
+        milestones = try container.decodeIfPresent([GoalMilestone].self, forKey: .milestones) ?? []
+        linkedTaskIds = try container.decodeIfPresent([Int].self, forKey: .linkedTaskIds) ?? []
+        history = try container.decodeIfPresent([GoalHistoryEntry].self, forKey: .history) ?? []
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? detail
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        // `description` is the canonical contract name. The legacy aliases
+        // remain encoded as well so older native snapshots can round-trip.
+        try container.encode(detail, forKey: .description)
+        try container.encode(detail, forKey: .detail)
+        try container.encode(current, forKey: .current)
+        try container.encode(target, forKey: .target)
+        try container.encode(icon, forKey: .icon)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(categoryId, forKey: .categoryId)
+        try container.encode(iconKey, forKey: .iconKey)
+        try container.encodeIfPresent(customIcon, forKey: .customIcon)
+        try container.encode(color, forKey: .color)
+        try container.encode(status, forKey: .status)
+        try container.encode(health, forKey: .health)
+        try container.encode(priority, forKey: .priority)
+        try container.encode(startDate, forKey: .startDate)
+        try container.encode(dueDate, forKey: .dueDate)
+        try container.encode(progressMode, forKey: .progressMode)
+        try container.encodeIfPresent(regularityMode, forKey: .regularityMode)
+        try container.encodeIfPresent(frequencyTarget, forKey: .frequencyTarget)
+        try container.encodeIfPresent(frequencyPeriod, forKey: .frequencyPeriod)
+        try container.encode(initialValue, forKey: .initialValue)
+        try container.encode(targetValue, forKey: .targetValue)
+        try container.encode(unit, forKey: .unit)
+        try container.encode(manualProgress, forKey: .manualProgress)
+        try container.encode(milestones, forKey: .milestones)
+        try container.encode(progressEntries, forKey: .progressEntries)
+        try container.encode(linkedTaskIds, forKey: .linkedTaskIds)
+        try container.encode(history, forKey: .history)
+        try container.encode(note, forKey: .note)
+    }
+
+    var progress: Double { rootineGoalProgress(self) }
+    var progressPercent: Int { rootineGoalProgressPercent(self) }
 }
 
 struct GoalsWorkspace: Codable, Equatable, Sendable {
     var version: Int
     var updatedAt: String
     var goals: [GoalRecord]
+    var categories: [GoalCategory]
+
+    init(version: Int, updatedAt: String, goals: [GoalRecord], categories: [GoalCategory] = [GoalCategory(id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle")]) {
+        self.version = version
+        self.updatedAt = updatedAt
+        self.goals = goals
+        self.categories = categories
+    }
+
+    enum CodingKeys: String, CodingKey { case version, updatedAt, goals, categories }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? RootineDate.isoTimestamp()
+        goals = try container.decodeIfPresent([GoalRecord].self, forKey: .goals) ?? []
+        categories = try container.decodeIfPresent([GoalCategory].self, forKey: .categories)
+            ?? [GoalCategory(id: "personal", label: "Sprawy osobiste", color: "#8793A1", iconKey: "circle")]
+    }
 
     static let empty = GoalsWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), goals: [])
+}
+
+private func rootineGoalCurrentValue(initialValue: Double, progressEntries: [GoalProgressEntry]) -> Double {
+    progressEntries
+        .sorted { lhs, rhs in
+            let left = "\(lhs.date)|\(lhs.createdAt)|\(lhs.id)"
+            let right = "\(rhs.date)|\(rhs.createdAt)|\(rhs.id)"
+            return left < right
+        }
+        .reduce(initialValue) { current, entry in
+            entry.kind == .absolute ? entry.value : current + entry.value
+        }
+}
+
+func rootineGoalCurrentValue(_ goal: GoalRecord) -> Double {
+    if goal.progressMode == .milestones {
+        return goal.milestones.filter(\.done).reduce(0) { $0 + max(0, $1.weight) }
+    }
+    if goal.progressMode == .manual, goal.progressEntries.isEmpty {
+        return goal.manualProgress
+    }
+    return rootineGoalCurrentValue(initialValue: goal.initialValue, progressEntries: goal.progressEntries)
+}
+
+func rootineGoalRegularityTarget(_ goal: GoalRecord) -> Double {
+    guard goal.progressMode == .regularity, goal.regularityMode == .frequency else { return max(0, goal.targetValue) }
+    let days = rootineGoalCalendarDaysInclusive(from: goal.startDate, to: goal.dueDate)
+    let periods: Double
+    switch goal.frequencyPeriod {
+    case .month: periods = ceil(Double(days) / 30.44)
+    case .week: periods = ceil(Double(days) / 7)
+    default: periods = Double(days)
+    }
+    return max(1, (goal.frequencyTarget ?? 1) * periods)
+}
+
+func rootineGoalProgress(_ goal: GoalRecord) -> Double {
+    if goal.progressMode == .milestones {
+        let total = goal.milestones.reduce(0) { $0 + max(0, $1.weight) }
+        guard total > 0 else { return 0 }
+        return min(1, max(0, goal.milestones.filter(\.done).reduce(0) { $0 + max(0, $1.weight) } / total))
+    }
+    let target = goal.progressMode == .regularity ? rootineGoalRegularityTarget(goal) : goal.progressMode == .manual ? 100 : goal.targetValue
+    guard target > 0 else { return 0 }
+    let value = goal.progressMode == .manual && goal.progressEntries.isEmpty ? goal.manualProgress : rootineGoalCurrentValue(goal)
+    return min(1, max(0, value / target))
+}
+
+func rootineGoalProgressPercent(_ goal: GoalRecord) -> Int {
+    Int((rootineGoalProgress(goal) * 100).rounded(.toNearestOrAwayFromZero))
+}
+
+private func rootineGoalCalendarDaysInclusive(from start: String, to end: String) -> Int {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "yyyy-MM-dd"
+    guard let first = formatter.date(from: start), let last = formatter.date(from: end) else { return 1 }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    return max(1, calendar.dateComponents([.day], from: first, to: last).day.map { $0 + 1 } ?? 1)
 }
 
 struct WorkFocusSession: Codable, Equatable, Identifiable, Sendable {

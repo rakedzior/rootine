@@ -48,6 +48,37 @@ enum WorkspaceSyncStatus: Equatable, Sendable {
     case error
 }
 
+private func normalizedGoalStartDate(_ value: String) -> String {
+    rootineGoalIsLocalDate(value) ? value : RootineDate.localDate()
+}
+
+private func normalizedGoalDueDate(startDate: String, dueDate: String) -> String {
+    let start = normalizedGoalStartDate(startDate)
+    guard rootineGoalIsLocalDate(dueDate) else { return start }
+    return dueDate < start ? start : dueDate
+}
+
+private func normalizedMilestones(_ milestones: [GoalMilestone]) -> [GoalMilestone] {
+    milestones.enumerated().map { index, item in
+        var result = item
+        result.title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.weight = max(0.01, item.weight)
+        result.order = item.order ?? index
+        return result
+    }.filter { !$0.title.isEmpty }
+}
+
+private func rootineGoalIsLocalDate(_ value: String) -> Bool {
+    let parts = value.split(separator: "-")
+    guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+          let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]) else { return false }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return false }
+    let components = calendar.dateComponents([.year, .month, .day], from: date)
+    return components.year == year && components.month == month && components.day == day
+}
+
 @MainActor
 final class AppEnvironment: ObservableObject {
     @Published private(set) var session: SupabaseSession?
@@ -1134,22 +1165,23 @@ final class AppEnvironment: ObservableObject {
         await persistSportWorkspace(next)
     }
 
+    @discardableResult
     func addGoal(
         title: String,
         detail: String,
         target: Double,
         icon: String,
         operationID: String = UUID().uuidString
-    ) async {
+    ) async -> String? {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        guard !trimmedTitle.isEmpty else { return nil }
         let creationFingerprint = "goal|\(trimmedTitle)|\(detail)|\(target)|\(icon)"
-        guard creationGate.claim(creationFingerprint) else { return }
+        guard creationGate.claim(creationFingerprint) else { return nil }
         defer { creationGate.release(creationFingerprint) }
         var next = goalsWorkspace
         let now = RootineDate.isoTimestamp()
         let recordID = RootineLocalIdentifier.string(namespace: "goal", operationID: operationID)
-        guard !next.goals.contains(where: { $0.id == recordID }) else { return }
+        guard !next.goals.contains(where: { $0.id == recordID }) else { return recordID }
         next.goals.append(GoalRecord(
             id: recordID,
             title: trimmedTitle,
@@ -1158,18 +1190,160 @@ final class AppEnvironment: ObservableObject {
             target: max(1, target),
             icon: icon.isEmpty ? "target" : icon,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            categoryId: "personal",
+            iconKey: icon.isEmpty ? "target" : icon,
+            status: .active,
+            startDate: RootineDate.localDate(),
+            dueDate: RootineDate.localDate(),
+            progressMode: .numeric,
+            targetValue: max(1, target),
+            unit: "kroków",
+            history: [GoalHistoryEntry(id: "history-\(recordID)-created", type: .updated, label: "Cel utworzony", createdAt: now)],
+            note: detail.trimmingCharacters(in: .whitespacesAndNewlines)
         ))
         next.updatedAt = now
         await persistGoalsWorkspace(next)
+        return recordID
+    }
+
+    /// Full canonical goal creation entry point. The compact More-module
+    /// form above remains as a backwards-compatible convenience.
+    @discardableResult
+    func createGoal(
+        title: String,
+        description: String = "",
+        categoryId: String = "personal",
+        iconKey: String = "target",
+        customIcon: String? = nil,
+        color: String = "#7FA6C9",
+        status: GoalStatus = .active,
+        health: GoalHealth = .ontrack,
+        priority: GoalPriority = .medium,
+        startDate: String = RootineDate.localDate(),
+        dueDate: String = RootineDate.localDate(),
+        progressMode: GoalProgressMode = .numeric,
+        regularityMode: GoalRegularityMode? = nil,
+        frequencyTarget: Double? = nil,
+        frequencyPeriod: GoalRegularityPeriod? = nil,
+        initialValue: Double = 0,
+        targetValue: Double = 1,
+        unit: String = "kroków",
+        manualProgress: Double = 0,
+        milestones: [GoalMilestone] = [],
+        progressEntries: [GoalProgressEntry] = [],
+        linkedTaskIds: [Int] = [],
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async -> String? {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return nil }
+        let now = RootineDate.isoTimestamp()
+        let recordID = RootineLocalIdentifier.string(namespace: "goal", operationID: operationID)
+        guard !goalsWorkspace.goals.contains(where: { $0.id == recordID }) else { return recordID }
+        let normalizedCategory = goalsWorkspace.categories.contains(where: { $0.id == categoryId }) ? categoryId : "personal"
+        let normalizedMode = progressMode
+        var goal = GoalRecord(
+            id: recordID,
+            title: trimmedTitle,
+            detail: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            current: 0,
+            target: max(1, targetValue),
+            icon: iconKey.isEmpty ? "target" : iconKey,
+            createdAt: now,
+            updatedAt: now,
+            categoryId: normalizedCategory,
+            iconKey: iconKey.isEmpty ? "target" : iconKey,
+            customIcon: customIcon,
+            color: color,
+            status: status,
+            health: health,
+            priority: priority,
+            startDate: normalizedGoalStartDate(startDate),
+            dueDate: normalizedGoalDueDate(startDate: startDate, dueDate: dueDate),
+            progressMode: normalizedMode,
+            regularityMode: regularityMode,
+            frequencyTarget: frequencyTarget,
+            frequencyPeriod: frequencyPeriod,
+            initialValue: initialValue,
+            targetValue: max(0, targetValue),
+            unit: unit,
+            manualProgress: min(100, max(0, manualProgress)),
+            milestones: normalizedMilestones(milestones),
+            progressEntries: progressEntries,
+            linkedTaskIds: linkedTaskIds,
+            history: [GoalHistoryEntry(id: "history-\(recordID)-created", type: .updated, label: "Cel utworzony", createdAt: now)],
+            note: note
+        )
+        goal.current = rootineGoalCurrentValue(goal)
+        var next = goalsWorkspace
+        next.goals.append(goal)
+        await persistGoalsWorkspace(next)
+        return recordID
     }
 
     func advanceGoal(id: String, by amount: Double = 1) async {
         var next = goalsWorkspace
         guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
-        next.goals[index].current = min(next.goals[index].target, max(0, next.goals[index].current + amount))
-        next.goals[index].updatedAt = RootineDate.isoTimestamp()
-        next.updatedAt = RootineDate.isoTimestamp()
+        let now = RootineDate.isoTimestamp()
+        if next.goals[index].progressMode == .milestones {
+            guard let milestoneIndex = next.goals[index].milestones.firstIndex(where: { !$0.done }) else { return }
+            next.goals[index].milestones[milestoneIndex].done = true
+            next.goals[index].milestones[milestoneIndex].completedAt = now
+        } else {
+            next.goals[index].progressEntries.append(GoalProgressEntry(
+                id: RootineLocalIdentifier.string(namespace: "goal-progress", operationID: now + id),
+                date: RootineDate.localDate(),
+                value: amount,
+                kind: .delta,
+                note: "Postęp z aplikacji iOS",
+                createdAt: now
+            ))
+        }
+        next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-\(now)", type: .progress, label: "Zaktualizowano postęp", detail: "\(amount)", createdAt: now))
+        next.updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func addGoalProgress(id: String, date: String, value: Double, kind: GoalProgressEntry.Kind = .delta, note: String = "", operationID: String = UUID().uuidString) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        let entry = GoalProgressEntry(id: RootineLocalIdentifier.string(namespace: "goal-progress", operationID: operationID), date: date, value: value, kind: kind, note: note, createdAt: now)
+        guard !next.goals[index].progressEntries.contains(where: { $0.id == entry.id }) else { return }
+        next.goals[index].progressEntries.append(entry)
+        next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(entry.id)", type: .progress, label: "Zaktualizowano postęp", detail: note.isEmpty ? nil : note, createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalProgress(id: String, progressID: String, date: String? = nil, value: Double? = nil, kind: GoalProgressEntry.Kind? = nil, note: String? = nil) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }),
+              let entryIndex = next.goals[goalIndex].progressEntries.firstIndex(where: { $0.id == progressID }) else { return }
+        var entry = next.goals[goalIndex].progressEntries[entryIndex]
+        if let date { entry.date = date }
+        if let value { entry.value = value }
+        if let kind { entry.kind = kind }
+        if let note { entry.note = note }
+        next.goals[goalIndex].progressEntries[entryIndex] = entry
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].current = rootineGoalCurrentValue(next.goals[goalIndex])
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(progressID)-\(now)", type: .updated, label: "Zaktualizowano wpis postępu", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalProgress(id: String, progressID: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[goalIndex].progressEntries.removeAll { $0.id == progressID }
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].current = rootineGoalCurrentValue(next.goals[goalIndex])
+        next.goals[goalIndex].updatedAt = now
         await persistGoalsWorkspace(next)
     }
 
@@ -1177,6 +1351,26 @@ final class AppEnvironment: ObservableObject {
         var next = goalsWorkspace
         next.goals.removeAll { $0.id == id }
         next.updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func archiveGoal(id: String) async {
+        await setGoalStatus(id: id, status: .archived)
+    }
+
+    func restoreArchivedGoal(id: String) async {
+        await setGoalStatus(id: id, status: .active)
+    }
+
+    func setGoalStatus(id: String, status: GoalStatus) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        guard next.goals[index].status != status else { return }
+        let old = next.goals[index].status.rawValue
+        next.goals[index].status = status
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-status-\(now)", type: status == .paused ? .paused : status == .active && old == GoalStatus.paused.rawValue ? .resumed : .statusChanged, label: "Zmieniono status", detail: "\(old) → \(status.rawValue)", createdAt: now))
         await persistGoalsWorkspace(next)
     }
 
@@ -1188,10 +1382,247 @@ final class AppEnvironment: ObservableObject {
         next.goals[index].title = trimmedTitle
         next.goals[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         next.goals[index].target = max(1, target)
-        next.goals[index].current = min(next.goals[index].current, next.goals[index].target)
+        next.goals[index].targetValue = max(1, target)
+        next.goals[index].current = min(rootineGoalCurrentValue(next.goals[index]), next.goals[index].target)
         next.goals[index].icon = icon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "target" : icon
+        next.goals[index].iconKey = next.goals[index].icon
+        let now = RootineDate.isoTimestamp()
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-updated-\(now)", type: .updated, label: "Zaktualizowano cel", createdAt: now))
+        next.updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalTarget(id: String, targetValue: Double, unit: String? = nil) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.goals[index].targetValue = max(0, targetValue)
+        next.goals[index].target = max(1, targetValue)
+        if let unit { next.goals[index].unit = unit }
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-target-\(now)", type: .updated, label: "Zmieniono wartość docelową", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoal(
+        id: String,
+        title: String,
+        description: String,
+        categoryId: String,
+        status: GoalStatus,
+        priority: GoalPriority,
+        startDate: String,
+        dueDate: String,
+        progressMode: GoalProgressMode,
+        targetValue: Double,
+        unit: String,
+        note: String
+    ) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        guard next.categories.contains(where: { $0.id == categoryId }) else { return }
+        next.goals[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.goals[index].title.isEmpty else { return }
+        next.goals[index].detail = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.goals[index].categoryId = categoryId
+        next.goals[index].status = status
+        next.goals[index].priority = priority
+        next.goals[index].startDate = normalizedGoalStartDate(startDate)
+        next.goals[index].dueDate = normalizedGoalDueDate(startDate: startDate, dueDate: dueDate)
+        next.goals[index].progressMode = progressMode
+        next.goals[index].target = max(1, targetValue)
+        next.goals[index].targetValue = max(0, targetValue)
+        next.goals[index].unit = unit
+        next.goals[index].note = note
+        next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-full-update-\(now)", type: .updated, label: "Zaktualizowano cel", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalDeadline(id: String, startDate: String? = nil, dueDate: String) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        let oldDate = next.goals[index].dueDate
+        let start = startDate ?? next.goals[index].startDate
+        next.goals[index].startDate = normalizedGoalStartDate(start)
+        next.goals[index].dueDate = normalizedGoalDueDate(startDate: start, dueDate: dueDate)
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-deadline-\(now)", type: .deadlineChanged, label: "Zmieniono termin", detail: "\(oldDate) → \(next.goals[index].dueDate)", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalCategory(id: String, categoryId: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }),
+              next.categories.contains(where: { $0.id == categoryId }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].categoryId = categoryId
+        next.goals[goalIndex].updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func addGoalMilestone(id: String, title: String, dueDate: String, note: String = "", weight: Double = 1, linkedTaskIds: [Int] = [], operationID: String = UUID().uuidString) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }), !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let milestoneID = RootineLocalIdentifier.string(namespace: "goal-milestone", operationID: operationID)
+        guard !next.goals[goalIndex].milestones.contains(where: { $0.id == milestoneID }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].milestones.append(GoalMilestone(id: milestoneID, title: title.trimmingCharacters(in: .whitespacesAndNewlines), note: note, dueDate: dueDate, weight: max(0.01, weight), order: next.goals[goalIndex].milestones.count, linkedTaskIds: linkedTaskIds))
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(milestoneID)", type: .stageAdded, label: "Dodano etap", detail: title, createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalMilestone(
+        id: String,
+        milestoneID: String,
+        title: String? = nil,
+        dueDate: String? = nil,
+        note: String? = nil,
+        weight: Double? = nil,
+        done: Bool? = nil,
+        order: Int? = nil,
+        isNext: Bool? = nil,
+        linkedTaskIds: [Int]? = nil
+    ) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }), let milestoneIndex = next.goals[goalIndex].milestones.firstIndex(where: { $0.id == milestoneID }) else { return }
+        let now = RootineDate.isoTimestamp()
+        var milestone = next.goals[goalIndex].milestones[milestoneIndex]
+        if let title { milestone.title = title.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let dueDate { milestone.dueDate = dueDate }
+        if let note { milestone.note = note }
+        if let weight { milestone.weight = max(0.01, weight) }
+        if let done {
+            milestone.done = done
+            milestone.completedAt = done ? now : nil
+        }
+        if let order { milestone.order = max(0, order) }
+        if let isNext {
+            milestone.isNext = isNext
+            if isNext {
+                for index in next.goals[goalIndex].milestones.indices {
+                    next.goals[goalIndex].milestones[index].isNext = index == milestoneIndex
+                }
+            }
+        }
+        if let linkedTaskIds { milestone.linkedTaskIds = linkedTaskIds }
+        next.goals[goalIndex].milestones[milestoneIndex] = milestone
+        next.goals[goalIndex].current = rootineGoalCurrentValue(next.goals[goalIndex])
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(milestoneID)-\(now)", type: done == true ? .stageCompleted : .updated, label: done == true ? "Ukończono etap" : "Zaktualizowano etap", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func setGoalMilestoneDone(id: String, milestoneID: String, done: Bool) async {
+        await updateGoalMilestone(id: id, milestoneID: milestoneID, done: done)
+    }
+
+    func reorderGoalMilestones(id: String, sourceID: String, targetID: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }), sourceID != targetID else { return }
+        var ordered = next.goals[goalIndex].milestones.sorted { lhs, rhs in
+            let leftOrder = lhs.order ?? 0
+            let rightOrder = rhs.order ?? 0
+            if leftOrder != rightOrder { return leftOrder < rightOrder }
+            return lhs.id < rhs.id
+        }
+        guard let sourceIndex = ordered.firstIndex(where: { $0.id == sourceID }),
+              let targetIndex = ordered.firstIndex(where: { $0.id == targetID }) else { return }
+        let source = ordered.remove(at: sourceIndex)
+        ordered.insert(source, at: min(targetIndex, ordered.count))
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].milestones = ordered.enumerated().map { index, milestone in
+            var result = milestone
+            result.order = index
+            return result
+        }
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(id)-reorder-\(now)", type: .updated, label: "Zmieniono kolejność etapów", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func reorderMilestones(id: String, sourceID: String, targetID: String) async {
+        await reorderGoalMilestones(id: id, sourceID: sourceID, targetID: targetID)
+    }
+
+    func addGoalHistory(id: String, type: GoalHistoryEntry.EntryType = .updated, label: String, detail: String? = nil, operationID: String = UUID().uuidString) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        let entry = GoalHistoryEntry(id: RootineLocalIdentifier.string(namespace: "goal-history", operationID: operationID), type: type, label: label, detail: detail, createdAt: now)
+        guard !next.goals[goalIndex].history.contains(where: { $0.id == entry.id }) else { return }
+        next.goals[goalIndex].history.append(entry)
+        next.goals[goalIndex].updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalHistory(id: String, historyID: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[goalIndex].history.removeAll { $0.id == historyID }
+        next.goals[goalIndex].updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalMilestone(id: String, milestoneID: String) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[index].milestones.removeAll { $0.id == milestoneID }
+        let now = RootineDate.isoTimestamp()
+        next.goals[index].updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func linkGoalTask(id: String, taskID: Int) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }), !next.goals[index].linkedTaskIds.contains(taskID) else { return }
+        next.goals[index].linkedTaskIds.append(taskID)
         next.goals[index].updatedAt = RootineDate.isoTimestamp()
-        next.updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func unlinkGoalTask(id: String, taskID: Int) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[index].linkedTaskIds.removeAll { $0 == taskID }
+        next.goals[index].updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    @discardableResult
+    func addGoalCategory(label: String, color: String = "#7FA6C9", iconKey: String = "circle", operationID: String = UUID().uuidString) async -> String? {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let id = RootineLocalIdentifier.string(namespace: "goal-category", operationID: operationID)
+        guard !goalsWorkspace.categories.contains(where: { $0.id == id }) else { return id }
+        var next = goalsWorkspace
+        next.categories.append(GoalCategory(id: id, label: trimmed, color: color, iconKey: iconKey))
+        await persistGoalsWorkspace(next)
+        return id
+    }
+
+    func updateGoalCategory(id: String, label: String, color: String, iconKey: String) async {
+        var next = goalsWorkspace
+        guard let index = next.categories.firstIndex(where: { $0.id == id }) else { return }
+        next.categories[index] = GoalCategory(id: id, label: label.trimmingCharacters(in: .whitespacesAndNewlines), color: color, iconKey: iconKey)
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalCategory(id: String) async {
+        guard id != "personal" else { return }
+        var next = goalsWorkspace
+        next.categories.removeAll { $0.id == id }
+        next.goals = next.goals.map { goal in
+            guard goal.categoryId == id else { return goal }
+            var updated = goal
+            updated.categoryId = "personal"
+            return updated
+        }
         await persistGoalsWorkspace(next)
     }
 
