@@ -921,12 +921,18 @@ final class AppEnvironment: ObservableObject {
         await persistTaskWorkspace(next)
     }
 
-    func addTodayTask(text: String, time: String?, operationID: String = UUID().uuidString) async {
+    func addTodayTask(
+        text: String,
+        time: String?,
+        priority: TaskPriority? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
         await addTask(
             text: text,
             time: time,
             calendarDate: RootineDate.localDate(),
             view: "dzis",
+            priority: priority,
             operationID: operationID
         )
     }

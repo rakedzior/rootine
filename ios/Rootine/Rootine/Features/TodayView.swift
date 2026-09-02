@@ -31,128 +31,120 @@ private struct TodaySnapshot {
     let notes: [NoteRecord]
     let now: TodayFocusItem?
     let next: [TodayFocusItem]
+    let aggregation: TodayAggregation
 
     var completedTasks: Int { tasks.filter { rootineTaskIsDoneOnDate($0, dateKey: dateKey) }.count }
     var completedHabits: Int { habits.filter { isHabitDone($0, dateKey: dateKey) }.count }
     var nutritionCompleted: Bool { nutritionDay?.closedAt != nil }
     var nutritionEntries: [NutritionEntry] {
         guard let nutritionDay else { return [] }
-        return nutritionDay.entries.breakfast
+        let entries = nutritionDay.entries.breakfast
             + nutritionDay.entries.lunch
             + nutritionDay.entries.snack
             + nutritionDay.entries.dinner
+        var seen = Set<String>()
+        return entries.filter { seen.insert($0.id).inserted }
     }
     var nutritionCalories: Double { nutritionEntries.reduce(0) { $0 + $1.calories } }
     var nutritionProtein: Double { nutritionEntries.reduce(0) { $0 + $1.protein } }
     var nutritionCarbs: Double { nutritionEntries.reduce(0) { $0 + $1.carbs } }
     var nutritionFat: Double { nutritionEntries.reduce(0) { $0 + $1.fat } }
     var activeNotes: [NoteRecord] { notes.filter { !$0.archived } }
-    var notesUpdatedToday: Int { activeNotes.filter { $0.updatedAt.hasPrefix(dateKey) }.count }
-    var totalItems: Int { tasks.count + habits.count + (nutritionDay == nil ? 0 : 1) }
-    var completedItems: Int { completedTasks + completedHabits + (nutritionCompleted ? 1 : 0) }
-    var remainingItems: Int { max(0, totalItems - completedItems) }
-    var progress: Double { totalItems == 0 ? 0 : Double(completedItems) / Double(totalItems) }
-    var priorityTotal: Int {
-        tasks.filter { $0.priority != nil }.count + habits.filter { $0.priority != nil }.count
+    var notesUpdatedToday: Int {
+        activeNotes.filter {
+            guard let updatedAt = RootineDate.date(from: $0.updatedAt) else { return false }
+            return aggregation.boundary.contains(updatedAt)
+        }.count
     }
-    var priorityCompleted: Int {
-        tasks.filter { $0.priority != nil && rootineTaskIsDoneOnDate($0, dateKey: dateKey) }.count
-            + habits.filter { $0.priority != nil && isHabitDone($0, dateKey: dateKey) }.count
-    }
+    var totalItems: Int { aggregation.totalDailyItems }
+    var completedItems: Int { aggregation.completedDailyItems }
+    var remainingItems: Int { aggregation.remainingDailyItems }
+    var progress: Double { aggregation.progress }
+    var priorityTotal: Int { aggregation.priorityTotal }
+    var priorityCompleted: Int { aggregation.priorityCompleted }
 
-    init(taskWorkspace: TaskWorkspace, nutritionWorkspace: NutritionWorkspace, notesWorkspace: NotesWorkspace, date: Date) {
+    init(
+        accountID: String,
+        taskWorkspace: TaskWorkspace,
+        nutritionWorkspace: NutritionWorkspace,
+        notesWorkspace: NotesWorkspace,
+        sportWorkspace: SportWorkspace,
+        goalsWorkspace: GoalsWorkspace,
+        workWorkspace: WorkWorkspace,
+        travelWorkspace: TravelWorkspace,
+        healthWorkspace: HealthWorkspace,
+        affairsWorkspace: AffairsWorkspace,
+        date: Date,
+        syncStatus: WorkspaceSyncStatus,
+        calendar: Calendar = .current
+    ) {
+        let input = TodayAggregationInput(
+            accountID: accountID,
+            referenceDate: date,
+            calendar: calendar,
+            taskWorkspace: taskWorkspace,
+            nutritionWorkspace: nutritionWorkspace,
+            notesWorkspace: notesWorkspace,
+            sportWorkspace: sportWorkspace,
+            goalsWorkspace: goalsWorkspace,
+            workWorkspace: workWorkspace,
+            travelWorkspace: travelWorkspace,
+            healthWorkspace: healthWorkspace,
+            affairsWorkspace: affairsWorkspace,
+            statuses: Self.statuses(for: syncStatus)
+        )
+        let aggregation = TodayAggregationService.aggregate(input)
+        self.aggregation = aggregation
         self.date = date
-        dateKey = RootineDate.localDate(date)
-        let calendar = Calendar.current
-        let todayKey = RootineDate.localDate(date)
-
-        tasks = taskWorkspace.tasks
-            .filter { task in
-                guard task.deleted != true, task.source?.kind != "work" else { return false }
-                return task.calendarDate == todayKey || (task.calendarDate == nil && task.view == "dzis")
-            }
-            .sorted(by: Self.taskSort)
-
-        overdueTasks = taskWorkspace.tasks
-            .filter { task in
-                task.deleted != true
-                    && task.source?.kind != "work"
-                    && !rootineTaskIsDoneOnDate(task, dateKey: todayKey)
-                    && task.calendarDate != nil
-                    && task.calendarDate! < todayKey
-            }
-            .sorted(by: Self.taskSort)
-
-        habits = taskWorkspace.habits
-            .filter { rootineHabitIsScheduledOnDate($0, dateKey: todayKey, calendar: calendar) }
-            .sorted { lhs, rhs in
-                switch (lhs.time, rhs.time) {
-                case let (left?, right?) where left != right: return left < right
-                case (_?, nil): return true
-                case (nil, _?): return false
-                default: return lhs.id < rhs.id
-                }
-            }
-        nutritionDay = nutritionWorkspace.days[todayKey]
-        notes = notesWorkspace.notes
-
-        let timedItems = Self.makeFocusItems(tasks: tasks, habits: habits)
-        let currentMinutes = Self.minutesSinceMidnight(date)
-        now = timedItems.last(where: { item in
-            guard let time = item.time, let minutes = Self.parseMinutes(time) else { return false }
-            return minutes <= currentMinutes && !Self.isDone(item, dateKey: todayKey)
-        })
-        next = timedItems
-            .filter { item in
-                guard let time = item.time, let minutes = Self.parseMinutes(time) else { return false }
-                return minutes > currentMinutes && !Self.isDone(item, dateKey: todayKey)
-            }
-            .prefix(3)
-            .map { $0 }
+        dateKey = aggregation.boundary.dateKey
+        tasks = aggregation.todayTasks
+        overdueTasks = aggregation.overdueTasks
+        habits = aggregation.todayHabits
+        nutritionDay = aggregation.nutritionDay
+        notes = aggregation.notes
+        now = Self.focusItem(from: aggregation.now)
+        next = aggregation.next.compactMap { Self.focusItem(from: $0) }
     }
 
-    private static func makeFocusItems(tasks: [WorkspaceTask], habits: [WorkspaceHabit]) -> [TodayFocusItem] {
-        let taskItems = tasks.map {
-            TodayFocusItem(id: "task-\($0.id)", title: $0.text, time: $0.time, kind: .task, task: $0, habit: nil)
-        }
-        let habitItems = habits.map {
-            TodayFocusItem(id: "habit-\($0.id)", title: $0.name, time: $0.time, kind: .habit, task: nil, habit: $0)
-        }
-        return (taskItems + habitItems).sorted { lhs, rhs in
-            switch (lhs.time, rhs.time) {
-            case let (left?, right?) where left != right: return left < right
-            case (_?, nil): return true
-            case (nil, _?): return false
-            default: return lhs.id < rhs.id
-            }
-        }
-    }
-
-    private static func isDone(_ item: TodayFocusItem, dateKey: String) -> Bool {
+    private static func focusItem(from item: TodayQueueItem?) -> TodayFocusItem? {
+        guard let item else { return nil }
         switch item.kind {
-        case .task: return item.task.map { rootineTaskIsDoneOnDate($0, dateKey: dateKey) } ?? false
-        case .habit: return item.habit.map { isHabitDone($0, dateKey: dateKey) } ?? false
+        case .task, .workTask:
+            guard let task = item.task else { return nil }
+            return TodayFocusItem(id: item.id, title: item.title, time: item.time, kind: .task, task: task, habit: nil)
+        case .habit:
+            guard let habit = item.habit else { return nil }
+            return TodayFocusItem(id: item.id, title: item.title, time: item.time, kind: .habit, task: nil, habit: habit)
+        case .workout, .reminder, .affair:
+            return nil
         }
     }
 
-    private static func taskSort(_ lhs: WorkspaceTask, _ rhs: WorkspaceTask) -> Bool {
-        switch (lhs.time, rhs.time) {
-        case let (left?, right?) where left != right: return left < right
-        case (_?, nil): return true
-        case (nil, _?): return false
-        default: return lhs.id < rhs.id
+    private static func statuses(for syncStatus: WorkspaceSyncStatus) -> [TodayDomain: TodayDomainStatus] {
+        switch syncStatus {
+        case .synced:
+            return [:]
+        case .localOnly:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.stale())
+            })
+        case .syncing:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.stale(message: "Synchronizuję zmiany; dane lokalne są dostępne."))
+            })
+        case .conflict:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.stale(message: "Wykryto konflikt; zachowuję dane lokalne do czasu rozwiązania."))
+            })
+        case .schemaMismatch, .error:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.failed("Nie udało się odświeżyć tego obszaru."))
+            })
+        case .unauthorized, .unavailable:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.unavailable("Dane będą dostępne po połączeniu z kontem."))
+            })
         }
-    }
-
-    private static func parseMinutes(_ value: String) -> Int? {
-        let parts = value.split(separator: ":").compactMap { Int($0) }
-        guard parts.count == 2, (0...23).contains(parts[0]), (0...59).contains(parts[1]) else { return nil }
-        return parts[0] * 60 + parts[1]
-    }
-
-    private static func minutesSinceMidnight(_ date: Date) -> Int {
-        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
-        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
     }
 }
 
@@ -183,10 +175,18 @@ struct TodayView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let snapshot = TodaySnapshot(
+                accountID: environment.session?.user.id ?? "preview",
                 taskWorkspace: environment.taskWorkspace,
                 nutritionWorkspace: environment.nutritionWorkspace,
                 notesWorkspace: environment.notesWorkspace,
-                date: context.date
+                sportWorkspace: environment.sportWorkspace,
+                goalsWorkspace: environment.goalsWorkspace,
+                workWorkspace: environment.workWorkspace,
+                travelWorkspace: environment.travelWorkspace,
+                healthWorkspace: environment.healthWorkspace,
+                affairsWorkspace: environment.affairsWorkspace,
+                date: context.date,
+                syncStatus: environment.workspaceSyncStatus
             )
 
             TodayContentView(

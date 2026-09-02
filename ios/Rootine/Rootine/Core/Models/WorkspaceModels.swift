@@ -75,7 +75,7 @@ struct WorkspaceCreationGate {
     }
 }
 
-enum TaskPriority: String, Codable, CaseIterable, Sendable {
+enum TaskPriority: String, Codable, CaseIterable, Equatable, Sendable {
     case high
     case medium
     case low
