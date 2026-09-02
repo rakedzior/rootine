@@ -31,7 +31,6 @@ struct WorkspaceSyncPayload: Sendable {
 
 actor WorkspaceSyncEngine {
     private let store: WorkspaceFileStore
-    private let cursorStore: RootineSyncCursorStore
     private let remote: WorkspaceRemoteClient
     private let normalizedRemote: (any RootineSyncRemoteClientProtocol)?
     private let operationLog: RootineSyncOperationLog?
@@ -49,7 +48,6 @@ actor WorkspaceSyncEngine {
 
     init(store: WorkspaceFileStore, remote: WorkspaceRemoteClient) {
         self.store = store
-        cursorStore = RootineSyncCursorStore(store: store)
         self.remote = remote
         normalizedRemote = nil
         operationLog = nil
