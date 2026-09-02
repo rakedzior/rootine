@@ -54,7 +54,7 @@ struct RootineConfiguration: Equatable, Sendable {
                 : value("CFBundleShortVersionString"),
             apnsEnvironment: RootineAPNsEnvironment(
                 rawValue: value("ROOTINE_APNS_ENVIRONMENT").lowercased()
-            ) ?? .currentBuild
+            ) ?? .currentBuild,
             environment: value("ROOTINE_ENVIRONMENT").isEmpty ? "production" : value("ROOTINE_ENVIRONMENT")
         )
     }

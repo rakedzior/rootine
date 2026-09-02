@@ -126,10 +126,9 @@ final class AppEnvironment: ObservableObject {
     ) {
         self.configuration = configuration
         self.keychain = keychain
-        api = RootineAPIClient(configuration: configuration)
-        deviceIdentity = RootineDeviceIdentityStore()
         let configuredAPI = RootineAPIClient(configuration: configuration)
-        api = configuredAPI
+        self.api = configuredAPI
+        self.deviceIdentity = RootineDeviceIdentityStore()
         self.normalizedReadClient = normalizedReadClient ?? configuredAPI
         self.readFeatureFlags = readFeatureFlags ?? UserDefaultsRootineReadFeatureFlagStore()
         let storedSession = keychain.load()
