@@ -4,6 +4,16 @@
 # working directory name when running `supabase init`.
 project_id = "rootine"
 
+# Scheduler and the one-job replay endpoint authenticate with the dedicated
+# worker secret. Supabase's JWT gate is disabled so trusted cron can invoke the
+# scheduler without fabricating a user session; the function still rejects
+# every request without x-notifications-worker-secret.
+[functions.notifications-scheduler]
+verify_jwt = false
+
+[functions.notifications-apns]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

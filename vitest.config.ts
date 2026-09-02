@@ -7,6 +7,7 @@ export default defineConfig({
     include: [
       "src/**/*.{test,spec}.{ts,tsx}",
       "api/**/*.{test,spec}.ts",
+      "supabase/functions/**/*.test.ts",
     ],
     environment: "jsdom",
     environmentOptions: {
