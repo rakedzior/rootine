@@ -48,7 +48,14 @@ artefaktach:
 | `ROOTINE_STAGING_SERVICE_ROLE_KEY` | awaryjne sprzątnięcie konta, wyłącznie sekret CI |
 | `ROOTINE_SMOKE_REALTIME_URL` | opcjonalny jawny WebSocket URL; domyślnie wyliczany z URL projektu |
 | `ROOTINE_SMOKE_APNS_URL` | opcjonalny sandbox/mock provider dla dedupe/retry APNs; bez niego obowiązuje test fizycznego iPhone’a |
+| `ROOTINE_SMOKE_SYNC_PATH` | opcjonalny endpoint testowy; domyślnie `/functions/v1/mobile-sync`, `{operation}` wybiera ścieżkę per operacja |
 | `ROOTINE_SMOKE_DEVICE_A/B` | opcjonalne identyfikatory; domyślnie jednorazowe UUID |
+
+Smoke korzysta z kanonicznego B01 endpointu `/functions/v1/mobile-sync` z polem
+`action` oraz obwiedni `contract_version: 3` z
+`correlation_id` w formacie `rt3_<environment>_<uuidv4>`. Tymczasowy adapter
+per-operation można lokalnie wskazać przez `ROOTINE_SMOKE_SYNC_PATH` zawierający
+`{operation}`; chroniony workflow używa wspólnego endpointu z B03.
 
 `ROOTINE_SMOKE_REQUIRE_REALTIME_SIGNAL=1` zaostrza smoke o obowiązkowy
 sygnał WebSocket; domyślnie gate akceptuje kontrolowany fallback do pull, ale
@@ -82,7 +89,8 @@ jednorazowego konta testowego, trzeba jawnie ustawić
    testy po upgrade. Tryb `--strict` sprawdza obecność funkcji B02/B03.
 3. `test:edge` instaluje zależności Node dla importów `npm:` i uruchamia Deno z
    `--node-modules-dir=auto`, uruchamia wszystkie `*.test.ts`/`*.contract.ts`,
-   waliduje executable sync-v3 contract i
+   waliduje executable sync-v3 contract z kanonicznego
+   `contracts/schemas/sync-v3.schema.json` i
    wymaga implementacji `mobile-sync` oraz jego testu, gdy gate jest strict.
 4. `xcodebuild test` uruchamia XCTest na symulatorze i zapisuje `.xcresult`.
 5. `test:staging-smoke -- --strict` wykonuje pełny scenariusz dwóch klientów.

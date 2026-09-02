@@ -5,6 +5,7 @@ on:
     paths:
       - 'supabase/**'
       - 'scripts/*gate*.mjs'
+      - 'scripts/sync-contract-validation.mjs'
       - 'scripts/staging-smoke.mjs'
       - 'contracts/**'
       - 'ios/**'
@@ -74,6 +75,9 @@ jobs:
       - name: "Install Node dependencies for npm: imports"
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Run sync-v3 release-gate regression
+        run: npm run test:edge:regression
+
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
@@ -99,7 +103,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       ROOTINE_UI_SMOKE: "0"
-      ROOTINE_CONTRACT_VERSION: "1"
+      ROOTINE_CONTRACT_VERSION: "3"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -119,7 +123,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/rootine-pr-quality"
-          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:"pr",migration_version:"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||1),feature_flags:{normalized_sync_enabled:"pr-quality",normalized_read_enabled:"pr-quality",notifications_enabled:"pr-quality"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-pr-quality/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
+          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:"pr",migration_version:"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||3),feature_flags:{normalized_sync_enabled:"pr-quality",normalized_read_enabled:"pr-quality",notifications_enabled:"pr-quality"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-pr-quality/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
 
       - name: Upload XCTest evidence
         if: always()

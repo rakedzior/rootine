@@ -6,6 +6,7 @@ on:
     paths:
       - 'supabase/**'
       - 'scripts/*gate*.mjs'
+      - 'scripts/sync-contract-validation.mjs'
       - 'scripts/staging-smoke.mjs'
       - 'contracts/**'
       - 'ios/**'
@@ -24,7 +25,7 @@ concurrency:
 
 env:
   ROOTINE_ENVIRONMENT: staging
-  ROOTINE_CONTRACT_VERSION: "1"
+  ROOTINE_CONTRACT_VERSION: "3"
   ROOTINE_REQUIRE_NORMALIZED_SYNC: "1"
   ROOTINE_FLAG_NORMALIZED_SYNC: "release-gate"
   ROOTINE_FLAG_NORMALIZED_READ: "release-gate"
@@ -83,6 +84,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Run sync-v3 release-gate regression
+        run: npm run test:edge:regression
+
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
@@ -133,7 +137,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/rootine-release-gate"
-          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:process.env.ROOTINE_ENVIRONMENT||"ci",migration_version:process.env.ROOTINE_MIGRATION_VERSION||"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||1),feature_flags:{normalized_sync_enabled:process.env.ROOTINE_FLAG_NORMALIZED_SYNC||"unknown",normalized_read_enabled:process.env.ROOTINE_FLAG_NORMALIZED_READ||"unknown",notifications_enabled:process.env.ROOTINE_FLAG_NOTIFICATIONS||"unknown"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-release-gate/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
+          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:process.env.ROOTINE_ENVIRONMENT||"ci",migration_version:process.env.ROOTINE_MIGRATION_VERSION||"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||3),feature_flags:{normalized_sync_enabled:process.env.ROOTINE_FLAG_NORMALIZED_SYNC||"unknown",normalized_read_enabled:process.env.ROOTINE_FLAG_NORMALIZED_READ||"unknown",notifications_enabled:process.env.ROOTINE_FLAG_NOTIFICATIONS||"unknown"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-release-gate/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
 
       - name: Upload XCTest evidence
         if: always()

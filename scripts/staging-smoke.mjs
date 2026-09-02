@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { baseEvidence, finishEvidence, hasFlag, redact, safeError, writeEvidence } from "./release-gate-utils.mjs";
 
 const strict = hasFlag("--strict") || process.env.CI === "true";
-const expectedContractVersion = Number(process.env.ROOTINE_CONTRACT_VERSION || 1);
+const expectedContractVersion = Number(process.env.ROOTINE_CONTRACT_VERSION || 3);
 const timeoutMs = Number(process.env.ROOTINE_SMOKE_TIMEOUT_MS || 15_000);
 const domainMatrix = (process.env.ROOTINE_SMOKE_DOMAINS
   || "tasks,habits,notes,nutrition,sport,goals,work,travel,health,affairs,finance,jdg")
@@ -63,6 +63,23 @@ function normalizedBase(input) {
 
 function jsonBody(value) {
   return JSON.stringify(value);
+}
+
+function syncEnvironment() {
+  const environment = (process.env.ROOTINE_ENVIRONMENT || "staging").trim().toLowerCase();
+  if (!["development", "staging", "production"].includes(environment)) {
+    throw new SmokeFailure("configuration", "ROOTINE_ENVIRONMENT must be development, staging, or production");
+  }
+  return environment;
+}
+
+function correlationId(environment) {
+  return `rt3_${environment}_${randomUUID()}`;
+}
+
+function syncPath(action) {
+  const configured = process.env.ROOTINE_SMOKE_SYNC_PATH?.trim() || "/functions/v1/mobile-sync";
+  return configured.includes("{operation}") ? configured.replace("{operation}", action) : configured;
 }
 
 async function verifyOfflineRestart(commands) {
@@ -227,16 +244,22 @@ async function main() {
   };
 
   const sync = async (action, deviceId, body = {}) => {
-    const result = await request(action, process.env.ROOTINE_SMOKE_SYNC_PATH || "/functions/v1/mobile-sync", {
+    const environment = syncEnvironment();
+    const requestCorrelationId = correlationId(environment);
+    const requestBody = { action, correlation_id: requestCorrelationId, device_id: deviceId, ...body };
+    const result = await request(action, syncPath(action), {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: jsonBody({ action, contract_version: expectedContractVersion, device_id: deviceId, ...body }),
+      body: jsonBody(requestBody),
     });
     if (result.response.status < 200 || result.response.status >= 300) {
       throw new SmokeFailure(action, `mobile-sync returned HTTP ${result.response.status}`);
     }
     if (responseContractVersion(result.body) !== expectedContractVersion) {
       throw new SmokeFailure(action, "mobile-sync returned an unexpected contract version");
+    }
+    if (result.body?.correlation_id !== requestCorrelationId) {
+      throw new SmokeFailure(action, "mobile-sync did not echo correlation_id");
     }
     return result.body;
   };
@@ -283,13 +306,13 @@ async function main() {
     userId = auth.body.id;
     check("Auth", "passed");
 
-    const deviceA = process.env.ROOTINE_SMOKE_DEVICE_A?.trim() || `b12-${randomUUID()}-ios`;
-    const deviceB = process.env.ROOTINE_SMOKE_DEVICE_B?.trim() || `b12-${randomUUID()}-web`;
-    const bootstrap = await sync("bootstrap", deviceA, { app_version: "b12-ci", platform: "ios" });
+    const deviceA = process.env.ROOTINE_SMOKE_DEVICE_A?.trim() || `ios_${randomUUID()}`;
+    const deviceB = process.env.ROOTINE_SMOKE_DEVICE_B?.trim() || `ios_${randomUUID()}`;
+    const bootstrap = await sync("bootstrap", deviceA);
     check("Bootstrap", "passed", { cursor: responseCursor(bootstrap) });
 
     const commands = domainMatrix.map((domain) => ({
-      operation_id: randomUUID(),
+      operation_id: `op3_${randomUUID()}`,
       entity: domain,
       entity_id: `b12-smoke-${domain}-${randomUUID()}`,
       kind: "upsert",
@@ -356,7 +379,7 @@ async function main() {
 
     const reverseCommands = commands.map((command, index) => ({
       ...command,
-      operation_id: randomUUID(),
+      operation_id: `op3_${randomUUID()}`,
       base_revision: Number(pushResults[index]?.revision) || revision,
       payload: { ...command.payload, title: `${command.payload.title} web update` },
     }));
@@ -380,7 +403,7 @@ async function main() {
 
     const conflict = await sync("push", deviceB, { commands: [{
       ...commands[0],
-      operation_id: randomUUID(),
+      operation_id: `op3_${randomUUID()}`,
       base_revision: 0,
       payload: { ...commands[0].payload, title: "B12 synthetic stale write" },
     }] });

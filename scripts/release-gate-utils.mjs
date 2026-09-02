@@ -89,7 +89,7 @@ export function baseEvidence(kind, extra = {}) {
     ...gitMetadata(),
     environment: process.env.ROOTINE_ENVIRONMENT?.trim() || "ci",
     migration_version: process.env.ROOTINE_MIGRATION_VERSION?.trim() || "from-repository",
-    contract_version: Number(process.env.ROOTINE_CONTRACT_VERSION || 1),
+    contract_version: Number(process.env.ROOTINE_CONTRACT_VERSION || 3),
     feature_flags: {
       normalized_sync_enabled: process.env.ROOTINE_FLAG_NORMALIZED_SYNC ?? "unknown",
       normalized_read_enabled: process.env.ROOTINE_FLAG_NORMALIZED_READ ?? "unknown",

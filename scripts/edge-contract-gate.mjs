@@ -1,11 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { baseEvidence, finishEvidence, hasFlag, runCommand, safeError, writeEvidence, commandExists } from "./release-gate-utils.mjs";
+import { validateSyncContractShape } from "./sync-contract-validation.mjs";
 
 const strict = hasFlag("--strict") || process.env.CI === "true";
 const allowMissingTooling = hasFlag("--allow-missing-tooling");
 const skipMissingTooling = allowMissingTooling && !strict;
 const root = new URL("../supabase/functions/", import.meta.url);
+const canonicalSchema = new URL("../contracts/schemas/sync-v3.schema.json", import.meta.url);
 
 async function findTests(directory, prefix = "") {
   const tests = [];
@@ -17,33 +20,32 @@ async function findTests(directory, prefix = "") {
   return tests.sort();
 }
 
+async function findApiContractTests(directory, prefix = "") {
+  const tests = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const relative = join(prefix, entry.name);
+    if (entry.isDirectory()) tests.push(...await findApiContractTests(new URL(`${entry.name}/`, directory), relative));
+    else if (/mobile-sync\.test\.ts$/.test(entry.name)) tests.push(relative);
+  }
+  return tests.sort();
+}
+
 function resolveDeno() {
   const configured = process.env.DENO_BIN?.trim();
   if (configured) return configured;
   return commandExists("deno") ? "deno" : null;
 }
 
+function resolveVitest() {
+  const configured = process.env.VITEST_BIN?.trim();
+  if (configured) return configured;
+  if (existsSync("node_modules/.bin/vitest")) return "node_modules/.bin/vitest";
+  return commandExists("vitest") ? "vitest" : null;
+}
+
 async function validateSyncContract() {
-  const contract = JSON.parse(await readFile(new URL("../contracts/sync-v3.contract.json", import.meta.url), "utf8"));
-  const required = new Set(contract.required || []);
-  const actions = contract.properties?.action?.enum || [];
-  const valid = contract.type === "object"
-    && contract.properties?.contract_version?.const === 1
-    && required.has("contract_version")
-    && required.has("action")
-    && required.has("device_id")
-    && actions.includes("register_device")
-    && actions.includes("bootstrap")
-    && actions.includes("pull")
-    && actions.includes("push")
-    && contract["x-transport"]?.method === "POST"
-    && contract["x-transport"]?.path === "/functions/v1/mobile-sync"
-    && contract["x-response"]?.required?.includes("contract_version")
-    && contract["x-response"]?.properties?.round_trip_domains?.type === "array"
-    && contract["x-response"]?.properties?.round_trip_domains?.items?.required?.includes("client_a_to_b")
-    && contract["x-response"]?.properties?.round_trip_domains?.items?.required?.includes("client_b_to_a")
-    && contract["x-privacy"]?.logs_must_not_include_tokens === true;
-  return { valid, contract_version: contract.properties?.contract_version?.const, actions };
+  const contract = JSON.parse(await readFile(canonicalSchema, "utf8"));
+  return validateSyncContractShape(contract);
 }
 
 async function main() {
@@ -56,7 +58,12 @@ async function main() {
   let passed = true;
   const deno = resolveDeno();
   const tests = await findTests(root);
+  const apiDirectory = new URL("../api/", import.meta.url);
+  const apiTests = existsSync(new URL("../api/", import.meta.url))
+    ? await findApiContractTests(apiDirectory)
+    : [];
   evidence.functions = tests;
+  evidence.api_contract_tests = apiTests;
 
   try {
     const contract = await validateSyncContract();
@@ -65,12 +72,20 @@ async function main() {
       passed: contract.valid,
       status: contract.valid ? "present" : "blocked",
       contract_version: contract.contract_version,
-      actions: contract.actions,
+      definitions: contract.definitions,
     });
     passed &&= contract.valid;
   } catch (error) {
-    evidence.checks.push({ name: "sync-v3 executable contract schema", passed: false, status: "blocked", reason: safeError(error) });
-    passed = false;
+    const missing = error?.code === "ENOENT";
+    evidence.checks.push({
+      name: "sync-v3 executable contract schema",
+      passed: missing && !strict,
+      status: missing ? (strict ? "blocked" : "scaffold-pending") : "blocked",
+      reason: missing
+        ? "B01 canonical contracts/schemas/sync-v3.schema.json is required; strict release gate blocks until it is integrated."
+        : safeError(error),
+    });
+    passed = missing ? (missing && !strict) : false;
   }
 
   if (!deno) {
@@ -104,6 +119,26 @@ async function main() {
     }
   }
 
+  const vitest = resolveVitest();
+  if (apiTests.length > 0) {
+    if (!vitest) {
+      const reason = "Vitest is required for the mobile-sync API contract test; CI installs it with npm ci.";
+      evidence.checks.push({ name: "mobile-sync API contract tooling", passed: !strict, status: strict ? "blocked" : "scaffold-pending", reason });
+      passed &&= !strict;
+    } else {
+      for (const test of apiTests) {
+        const result = runCommand(vitest, ["run", join("api", test)], { env: process.env });
+        evidence.checks.push({
+          name: `mobile-sync API contract: ${test}`,
+          passed: result.ok,
+          command: result.command,
+          output: result.ok ? undefined : `${result.stdout}\n${result.stderr}`.trim().slice(-8_000),
+        });
+        passed &&= result.ok;
+      }
+    }
+  }
+
   const mobileSyncDirectory = new URL("mobile-sync/", root);
   let mobileSyncExists = true;
   try {
@@ -112,7 +147,8 @@ async function main() {
   } catch {
     mobileSyncExists = false;
   }
-  const mobileSyncTestExists = tests.some((test) => test.startsWith("mobile-sync/"));
+  const mobileSyncTestExists = tests.some((test) => test.startsWith("mobile-sync/"))
+    || apiTests.some((test) => test === "mobile-sync.test.ts");
   evidence.checks.push({
     name: "mobile-sync Edge Function and contract test",
     passed: (mobileSyncExists && mobileSyncTestExists) || !strict,

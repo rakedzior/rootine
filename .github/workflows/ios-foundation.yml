@@ -63,7 +63,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/rootine-release-gate"
-          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:1}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-release-gate/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
+          node -e 'const fs=require("node:fs"); const cp=require("node:child_process"); const value={schema_version:1,kind:"ios-xctest",commit:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),branch:cp.execFileSync("git",["branch","--show-current"],{encoding:"utf8"}).trim(),environment:"pr",migration_version:"from-repository",destination:process.env.IOS_SIMULATOR_DESTINATION||"platform=iOS Simulator,name=iPhone 17 Pro",result_bundle:"RootineTests.xcresult",contract_version:Number(process.env.ROOTINE_CONTRACT_VERSION||3),feature_flags:{normalized_sync_enabled:"unknown",normalized_read_enabled:"unknown",notifications_enabled:"unknown"}}; fs.writeFileSync(`${process.env.RUNNER_TEMP}/rootine-release-gate/ios-xctest.json`,JSON.stringify(value,null,2)+"\n")'
 
       - name: Upload XCTest result bundle
         if: always()
