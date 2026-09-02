@@ -1,17 +1,18 @@
 # Rootine — staging sync-v3 i rollback
 
 Runbook opisuje izolowane środowisko testowe. Staging korzysta z osobnego
-projektu Supabase i testowego konta; nigdy nie używa produkcyjnych tokenów,
-kluczy APNs, danych ani snapshotów. Konto testowe powinno mieć jawnie zapisany
-identyfikator w systemie sekretów CI, nie w repozytorium.
+projektu Supabase i syntetycznego, jednorazowego konta; nigdy nie używa
+produkcyjnych tokenów, kluczy APNs, danych ani snapshotów. Konto testowe jest
+tworzone przez smoke i usuwane przez `delete-account`; service-role cleanup jest
+wyłącznie bezpiecznikiem po awarii i pozostaje sekretem środowiska CI.
 
 ## Przygotowanie lub odtworzenie stagingu
 
 1. Utwórz albo wybierz osobny projekt Supabase dla stagingu i zapisz jego
    `SUPABASE_URL` oraz klucz publishable/anon w sekretach środowiska `staging`.
-2. Zastosuj migracje w kolejności z `docs/ios-backend-setup.md`:
-   `rootine_workspace_snapshots`, `rootine_workspace_sync_v2` oraz migrację
-   feature flags `rootine_feature_flags`.
+2. Zastosuj wszystkie wersjonowane migracje z repozytorium w kolejności
+   timestampów (`supabase db push --include-all`); nie pomijaj migracji
+   relacyjnych, sync-v3, urządzeń ani powiadomień.
 3. Uruchom `supabase db reset` lokalnie, aby sprawdzić reprodukowalność
    migracji; na hostowanym stagingu użyj kontrolowanego resetu projektu lub
    odtworzenia z backupu zgodnie z polityką Supabase. Nie wykonuj resetu
@@ -42,6 +43,13 @@ wartości flagi od klienta jako źródła prawdy.
 
 ## Smoke i obserwacja
 
+`npm run test:staging-smoke -- --strict` jest bramką fail-closed. Wymaga
+jednorazowego konta, sprzątania, transportowego round-trip oraz jawnego
+potwierdzenia `round_trip_domains` z obu rzeczywistych klientów. Sama wymiana
+syntetycznych HTTP fixtures jest oznaczona w evidence jako scaffolding i nie
+może udawać natywnego iOS/web round-trip, force-quit/restart ani dostawy APNs.
+Brak tych danych jest blokadą release, a nie zielonym fallbackiem.
+
 - bez tokenu: `401` i `error: unauthorized`;
 - z tokenem testowym: bootstrap ma `contract_version: 3` i correlation ID;
 - pull od najstarszego dopuszczalnego cursora jest paginowany do 500 zmian;
@@ -51,6 +59,12 @@ wartości flagi od klienta jako źródła prawdy.
 - log zawiera correlation/operation/device/entity ID, ale nie zawiera treści
   prywatnej ani tokenu APNs;
 - konto kontrolne nadal używa legacy CAS, gdy wszystkie flagi są `false`.
+
+Smoke odrzuca URL-e z osadzonymi danymi logowania oraz absolutne ścieżki dla
+nadpisywalnych endpointów sync/delete, aby bearer token pozostał na stagingu. Opcjonalny
+`ROOTINE_SMOKE_APNS_URL` otrzymuje wyłącznie syntetyczny probe bez bearer tokenu
+i publishable key; odpowiedź bez jawnego `delivery_rate` pozostaje statusem
+`manual-required`.
 
 ## Wyłączenie i rollback
 
@@ -65,6 +79,11 @@ wartości flagi od klienta jako źródła prawdy.
    tokeny urządzeń i sesje testowe. Odtwórz izolowany projekt z migracji.
 5. Nigdy nie usuwaj produkcyjnych snapshotów jako części rollbacku. Usunięcie
    legacy lub migracja produkcyjnych danych wymaga osobnej decyzji po B08/B12.
+
+Jeśli smoke przerwie się po utworzeniu konta i nie wykona `delete-account`,
+brak `ROOTINE_STAGING_SERVICE_ROLE_KEY` powoduje czerwony gate. Nie zastępuj
+tego ręcznym tokenem ani kontem produkcyjnym; uruchom bezpiecznik wyłącznie na
+izolowanym stagingu i zachowaj zredagowane evidence.
 
 ## Brakujące sekrety i właściciele
 

@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { baseEvidence, finishEvidence, hasFlag, runCommand, safeError, writeEvidence, commandExists } from "./release-gate-utils.mjs";
+import { baseEvidence, finishEvidence, hasFlag, redact, runCommand, safeError, writeEvidence, commandExists } from "./release-gate-utils.mjs";
 
 const strict = hasFlag("--strict") || process.env.CI === "true";
 const allowMissingTooling = hasFlag("--allow-missing-tooling");
@@ -29,9 +29,23 @@ function resolveSupabaseCommand() {
 
 function runSupabase(cli, args) {
   const result = runCommand(cli.command, [...cli.prefix, ...args]);
-  console.log(`${result.ok ? "PASS" : "FAIL"} ${result.command}`);
+  const displayArgs = [...cli.prefix, ...args];
+  const dbUrlIndex = displayArgs.indexOf("--db-url");
+  if (dbUrlIndex >= 0 && displayArgs[dbUrlIndex + 1]) displayArgs[dbUrlIndex + 1] = "[REDACTED_DB_URL]";
+  const displayCommand = redact([cli.command, ...displayArgs].join(" "));
+  console.log(`${result.ok ? "PASS" : "FAIL"} ${displayCommand}`);
   if (!result.ok && result.stderr) console.error(result.stderr.trim());
-  return result;
+  return { ...result, command: displayCommand };
+}
+
+function validateUpgradeDatabaseURL(value) {
+  if (!value || /[\u0000-\u001f\u007f]/.test(value)) return false;
+  try {
+    const parsed = new URL(value);
+    return ["postgres:", "postgresql:"].includes(parsed.protocol) && Boolean(parsed.hostname);
+  } catch {
+    return false;
+  }
 }
 
 async function main() {
@@ -65,13 +79,23 @@ async function main() {
 
     const upgradeURL = process.env.ROOTINE_UPGRADE_DB_URL?.trim();
     if (upgradeURL) {
-      const upgrade = runSupabase(cli, ["db", "push", "--db-url", upgradeURL, "--include-all", "--yes"]);
-      evidence.checks.push({ name: "staging copy upgrade", passed: upgrade.ok, command: upgrade.command });
-      passed &&= upgrade.ok;
-      if (upgrade.ok) {
-        const upgradeTests = runSupabase(cli, ["test", "db", "--db-url", upgradeURL]);
-        evidence.checks.push({ name: "staging copy SQL and RLS", passed: upgradeTests.ok, command: upgradeTests.command });
-        passed &&= upgradeTests.ok;
+      if (!validateUpgradeDatabaseURL(upgradeURL)) {
+        evidence.checks.push({
+          name: "staging copy upgrade",
+          passed: false,
+          status: "blocked",
+          reason: "ROOTINE_UPGRADE_DB_URL must be a valid PostgreSQL URL; the value is never written to evidence.",
+        });
+        passed = false;
+      } else {
+        const upgrade = runSupabase(cli, ["db", "push", "--db-url", upgradeURL, "--include-all", "--yes"]);
+        evidence.checks.push({ name: "staging copy upgrade", passed: upgrade.ok, command: upgrade.command });
+        passed &&= upgrade.ok;
+        if (upgrade.ok) {
+          const upgradeTests = runSupabase(cli, ["test", "db", "--db-url", upgradeURL]);
+          evidence.checks.push({ name: "staging copy SQL and RLS", passed: upgradeTests.ok, command: upgradeTests.command });
+          passed &&= upgradeTests.ok;
+        }
       }
     } else if (localOnly) {
       const configured = { name: "staging copy upgrade", passed: true, status: "local-only", reason: "PR quality gate intentionally omits secret-bearing staging upgrade; protected main release gate runs it after merge." };

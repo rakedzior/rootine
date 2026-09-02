@@ -31,9 +31,30 @@ export function gitMetadata() {
 
 export function redact(value) {
   if (typeof value !== "string") return value;
-  return value
+  let candidate = value;
+  try {
+    const parsed = JSON.parse(value);
+    const redactStructured = (entry) => {
+      if (Array.isArray(entry)) return entry.map(redactStructured);
+      if (!entry || typeof entry !== "object") return entry;
+      return Object.fromEntries(Object.entries(entry).map(([key, nested]) => [
+        key,
+        /^(?:authorization|apikey|api_key|service_role|access_token|refresh_token|password|token|payload|record|server_record|private|title|text|note|content|email|body|secret)$/i.test(key)
+          ? "[REDACTED]"
+          : redactStructured(nested),
+      ]));
+    };
+    if (parsed && typeof parsed === "object") candidate = JSON.stringify(redactStructured(parsed));
+  } catch {
+    // Human-readable command/error output is handled by the patterns below.
+  }
+  return candidate
     .replace(/Bearer\s+[^\s"']+/gi, "Bearer [REDACTED]")
     .replace(/(authorization|apikey|api_key|service_role|access_token|refresh_token|password|token)[=:]\s*[^\s,}"']+/gi, "$1=[REDACTED]")
+    .replace(/(authorization|apikey|api_key|service_role|access_token|refresh_token|password|token)\s*:\s*[^,}\n]+/gi, "$1: [REDACTED]")
+    .replace(/(\"(?:authorization|apikey|api_key|service_role|access_token|refresh_token|password|token)\"\s*:\s*)\"(?:\\\\.|[^\"\\\\])*\"/gi, "$1\"[REDACTED]\"")
+    .replace(/(\"(?:payload|record|server_record|private|title|text|note|content|email|body|secret)\"\s*:\s*)\"(?:\\\\.|[^\"\\\\])*\"/gi, "$1\"[REDACTED]\"")
+    .replace(/((?:payload|record|server_record|private|title|text|note|content|email|body|secret)\s*[=:]\s*)[^,}\n]+/gi, "$1[REDACTED]")
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/:@]+:[^\s/@]+@/gi, "$1[REDACTED]:[REDACTED]@")
     .replace(/[A-Za-z0-9._-]{32,}/g, "[REDACTED]");
 }

@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { validateSyncContractFixtures, validateSyncContractShape } from "./sync-contract-validation.mjs";
 
 const root = resolve(".");
 const schemaPath = resolve(root, "contracts/schemas/sync-v3.schema.json");
 const manifestPath = resolve(root, "contracts/manifest.json");
 const fixtureDirectory = resolve(root, "contracts/fixtures");
 const failures = [];
+const syncFixtures = {};
 const correlationPattern = /^rt3_(development|staging|production)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const operationPattern = /^op3_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const devicePattern = /^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -78,6 +80,7 @@ const fixtureNames = [
 for (const fixtureName of fixtureNames) {
   const fixture = readJson(resolve(fixtureDirectory, fixtureName));
   if (!fixture) continue;
+  syncFixtures[fixtureName] = fixture;
   if (typeof fixture.correlation_id !== "string" || !correlationPattern.test(fixture.correlation_id)) {
     failures.push(`${fixtureName} has an invalid correlation_id`);
   }
@@ -92,6 +95,15 @@ for (const fixtureName of fixtureNames) {
       failures.push(`${fixtureName} contains a private payload marker`);
     }
   });
+}
+
+if (schema) {
+  const shape = validateSyncContractShape(schema);
+  if (!shape.valid) failures.push("sync-v3 schema failed executable shape validation");
+  const fixtureValidation = validateSyncContractFixtures(schema, syncFixtures);
+  for (const result of fixtureValidation.results) {
+    if (!result.valid) failures.push(`${result.name} does not validate against sync-v3.schema.json: ${result.errors.join("; ")}`);
+  }
 }
 
 const pushRequest = readJson(resolve(fixtureDirectory, "sync-v3-push-request.json"));

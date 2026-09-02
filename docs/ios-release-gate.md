@@ -29,7 +29,9 @@ access/service-role tokenów ani payloadów prywatnych domen.
 
 Workflow `release-gate.yml` uruchamia sekretne joby staging/upgrade wyłącznie
 po pushu na chroniony `main` albo przez ręczne `workflow_dispatch` z akceptacją
-Environment `staging` i wyłącznie ref `main`. Nie uruchamia tych jobów z
+Environment `staging` i wyłącznie ref `main`. Każdy sekretowy job (SQL,
+staging smoke) deklaruje to środowisko; preflight i decyzja końcowa blokują
+wywołanie z innego refu. Nie uruchamia tych jobów z
 `pull_request` ani z ręcznego workflow na innej gałęzi, ponieważ
 workflow wykonuje kod repozytorium i otrzymuje service-role/DB credentials.
 Kontrola PR pozostaje w sekretless `ios-foundation.yml`; pełny release gate jest
@@ -48,7 +50,7 @@ artefaktach:
 | `ROOTINE_STAGING_SERVICE_ROLE_KEY` | awaryjne sprzątnięcie konta, wyłącznie sekret CI |
 | `ROOTINE_SMOKE_REALTIME_URL` | opcjonalny jawny WebSocket URL; domyślnie wyliczany z URL projektu |
 | `ROOTINE_SMOKE_APNS_URL` | opcjonalny sandbox/mock provider dla dedupe/retry APNs; bez niego obowiązuje test fizycznego iPhone’a |
-| `ROOTINE_SMOKE_SYNC_PATH` | opcjonalny endpoint testowy; domyślnie `/functions/v1/mobile-sync`, `{operation}` wybiera ścieżkę per operacja |
+| `ROOTINE_SMOKE_SYNC_PATH` | opcjonalna względna ścieżka endpointu testowego bez query/fragmentu; domyślnie `/functions/v1/mobile-sync`, `{operation}` wybiera ścieżkę per operacja |
 | `ROOTINE_SMOKE_DEVICE_A/B` | opcjonalne identyfikatory; domyślnie jednorazowe UUID |
 
 Smoke korzysta z kanonicznego B01 endpointu `/functions/v1/mobile-sync` z polem
@@ -87,16 +89,26 @@ jednorazowego konta testowego, trzeba jawnie ustawić
    migracjami na pustej bazie, pgTAP/RLS oraz — jeśli
    dostarczono `ROOTINE_UPGRADE_DB_URL` — migrację kopii stagingowej i te same
    testy po upgrade. Tryb `--strict` sprawdza obecność funkcji B02/B03.
-3. `test:edge` instaluje zależności Node dla importów `npm:` i uruchamia Deno z
+3. `test:edge` instaluje zależności Node (`npm ci --ignore-scripts`) dla importów `npm:` i uruchamia Deno z
    `--node-modules-dir=auto`, uruchamia wszystkie `*.test.ts`/`*.contract.ts`,
    waliduje executable sync-v3 contract z kanonicznego
    `contracts/schemas/sync-v3.schema.json` i
    wymaga implementacji `mobile-sync` oraz jego testu, gdy gate jest strict.
 4. `xcodebuild test` uruchamia XCTest na symulatorze i zapisuje `.xcresult`.
-5. `test:staging-smoke -- --strict` wykonuje pełny scenariusz dwóch klientów.
+5. `test:staging-smoke -- --strict` wykonuje scenariusz dwóch klientów. Jego
+   statusy `manual-required` nie są zaliczane do `passed` i w trybie strict
+   blokują gate, jeśli brakuje natywnego offline/restart, fizycznego web↔iOS
+   round-trip lub wymaganej metryki. Syntetyczny transport HTTP nie jest
+   dowodem natywnej integracji.
 6. Release job scala wyniki; dowolny błąd, brak migracji, brak RLS, brak
    sync-v3, konflikt niejawny, utrata danych po pull lub brak cleanup blokuje
    merge/release.
+
+Evidence rozdziela `automated_gate_passed` od `release_ready`. Wartości
+`cursor_lag_seconds`, `outbox_lag_seconds` i APNs delivery pozostają `null` oraz
+mają `thresholds_evaluated: false`, dopóki nie dostarczy ich stagingowy provider
+metryk/mock. Nie wolno interpretować statusu joba jako potwierdzenia tych
+progów.
 
 Nie pomijaj `--strict` na branchu chronionym. Brak B02/B03/B08/B11 w tej
 gałęzi jest oczekiwanym stanem scaffoldu: po ich scaleniu migracje i

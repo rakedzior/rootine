@@ -603,7 +603,7 @@ export async function handleMobileSync(
 }
 
 const runtime = globalThis as Runtime;
-if (runtime.Deno?.serve) {
+if (runtime.Deno?.serve && import.meta.main) {
   runtime.Deno.serve((request) => handleMobileSync(request));
 }
 
