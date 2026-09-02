@@ -169,6 +169,7 @@ actor RootineRealtimeClient {
     private let sleep: Sleep
     private let onEvent: EventHandler?
     private let onStatus: StatusHandler?
+    private let observability: RootineObservability
 
     private var runTask: Task<Void, Never>?
     private var activeSocket: (any RootineRealtimeSocket)?
@@ -188,13 +189,15 @@ actor RootineRealtimeClient {
             try await Task.sleep(for: duration)
         },
         onEvent: EventHandler? = nil,
-        onStatus: StatusHandler? = nil
+        onStatus: StatusHandler? = nil,
+        observability: RootineObservability = .shared
     ) {
         self.configuration = configuration
         self.socketFactory = socketFactory
         self.sleep = sleep
         self.onEvent = onEvent
         self.onStatus = onStatus
+        self.observability = observability
     }
 
     init(
@@ -207,7 +210,8 @@ actor RootineRealtimeClient {
             try await Task.sleep(for: duration)
         },
         onEvent: EventHandler? = nil,
-        onStatus: StatusHandler? = nil
+        onStatus: StatusHandler? = nil,
+        observability: RootineObservability = .shared
     ) {
         self.configuration = RootineRealtimeConfiguration(
             supabaseURL: configuration.supabaseURL,
@@ -219,6 +223,7 @@ actor RootineRealtimeClient {
         self.sleep = sleep
         self.onEvent = onEvent
         self.onStatus = onStatus
+        self.observability = observability
     }
 
     var status: RootineRealtimeStatus {
@@ -570,6 +575,37 @@ actor RootineRealtimeClient {
 
     private func setStatus(_ status: RootineRealtimeStatus) {
         statusValue = status
+        let outcome: RootineTelemetryOutcome
+        var attributes: [String: String] = [:]
+        switch status {
+        case .connected:
+            observability.increment(.realtimeConnected)
+            outcome = .success
+            attributes["status"] = "connected"
+        case let .reconnecting(attempt, _):
+            observability.increment(.realtimeReconnect)
+            outcome = .degraded
+            attributes["status"] = "reconnecting"
+            attributes["attempt"] = String(attempt)
+        case let .degraded(failure):
+            observability.increment(.realtimeFailure)
+            outcome = .degraded
+            attributes["status"] = "degraded"
+            attributes["reason"] = failure.rawValue
+        case let .failed(failure):
+            observability.increment(.realtimeFailure)
+            outcome = .failure
+            attributes["status"] = "failed"
+            attributes["reason"] = failure.rawValue
+        case let .connecting(attempt):
+            outcome = .unknown
+            attributes["status"] = "connecting"
+            attributes["attempt"] = String(attempt)
+        case .stopped:
+            outcome = .unknown
+            attributes["status"] = "stopped"
+        }
+        observability.record(name: "realtime_health", outcome: outcome, attributes: attributes)
         guard let onStatus else { return }
         Task { await onStatus(status) }
     }

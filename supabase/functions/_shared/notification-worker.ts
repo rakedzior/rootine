@@ -24,13 +24,15 @@ type NotificationDevice = {
   apns_environment: "sandbox" | "production";
 };
 
-type DeliveryResult = {
+export type DeliveryResult = {
   device_id: string;
   status: ApnsSendResult["status"];
   retryable: boolean;
   provider_response_code: number | null;
   provider_reason: string | null;
 };
+
+export type NotificationDeliveryObserver = (delivery: Readonly<DeliveryResult>) => void | Promise<void>;
 
 function supabaseError(error: { message?: string } | null | undefined, fallback: string): Error {
   // Provider/database errors may contain request details. The error is kept
@@ -124,6 +126,7 @@ export async function deliverNotificationJob(
   provider: Pick<ApnsHttpProvider, "send">,
   job: NotificationJob,
   lockOwner: string,
+  options: { onDelivery?: NotificationDeliveryObserver } = {},
 ): Promise<{ outcome: "delivered" | "retry" | "failed" | "expired"; deliveryCount: number }> {
   if (Date.parse(job.expires_at) <= Date.now()) {
     await finalizeNotificationJob(admin, job, lockOwner, "expired", [], "Notification occurrence expired");
@@ -141,13 +144,15 @@ export async function deliverNotificationJob(
       environment: device.apns_environment,
       payload: apnsPayload(job.payload ?? {}),
     });
-    results.push({
+    const delivery = {
       device_id: device.device_id,
       status: result.status,
       retryable: result.retryable,
       provider_response_code: result.responseCode,
       provider_reason: result.reason,
-    });
+    } satisfies DeliveryResult;
+    results.push(delivery);
+    await options.onDelivery?.(delivery);
     if (result.revokeDevice) await revokeDevice(admin, device.device_id);
   }
 

@@ -542,6 +542,14 @@ final class AppEnvironment: ObservableObject {
         return try encoder.encode(archive)
     }
 
+    /// Exports only bounded, redacted operational diagnostics. Workspace
+    /// contents, tokens, account identifiers and notification payloads are
+    /// intentionally excluded; a support workflow can attach this next to a
+    /// user-provided issue description.
+    func exportDiagnostics() -> Data {
+        RootineObservability.shared.exportDiagnostics()
+    }
+
     func importWorkspaceArchive(_ data: Data) async throws {
         // A second import is not allowed to interleave with this one. The
         // import lock is set before decoding so validation and disk staging
@@ -1604,7 +1612,10 @@ final class AppEnvironment: ObservableObject {
 
     func lookupNutritionProduct(barcode: String) async -> NutritionProduct? {
         let normalized = NutritionBarcode.normalized(barcode)
-        guard !normalized.isEmpty else { return nil }
+        guard !normalized.isEmpty else {
+            RootineObservability.shared.recordQR(outcome: .failure, format: "barcode", error: "invalid barcode")
+            return nil
+        }
         let lookupFingerprint = "nutrition-barcode-lookup|\(normalized)"
         guard creationGate.claim(lookupFingerprint) else { return nil }
         defer { creationGate.release(lookupFingerprint) }
@@ -1612,19 +1623,23 @@ final class AppEnvironment: ObservableObject {
         if let resolved = nutritionWorkspace.pendingBarcodeLookups?
             .first(where: { $0.id == NutritionBarcode.requestID(for: normalized) })?
             .resolvedProduct {
+            RootineObservability.shared.recordQR(outcome: .success, format: "barcode")
             return resolved
         }
         guard let token = session?.accessToken, !token.isEmpty else {
             await recordNutritionBarcodeFailure(normalized)
+            RootineObservability.shared.recordQR(outcome: .failure, format: "barcode", error: "network unavailable")
             foundationMessage = "Kod zapisany lokalnie — spróbujemy ponownie po połączeniu. Możesz też wpisać produkt ręcznie."
             return nil
         }
         do {
             let product = try await api.product(barcode: normalized, accessToken: token)
             await storeNutritionBarcodeResult(normalized, product: product)
+            RootineObservability.shared.recordQR(outcome: .success, format: "barcode")
             return product
         } catch {
             await recordNutritionBarcodeFailure(normalized)
+            RootineObservability.shared.recordQR(outcome: .failure, format: "barcode", error: String(describing: error))
             foundationMessage = "Kod zapisany lokalnie — ponowimy próbę po połączeniu. Możesz też wpisać produkt ręcznie."
             return nil
         }
@@ -2603,10 +2618,21 @@ final class AppEnvironment: ObservableObject {
             guard session?.accessToken == accessToken else { return }
             deviceRegistration = registration
             lastDeviceRegistrationFingerprint = fingerprint
+            RootineObservability.shared.recordDeviceHealth(
+                outcome: .success,
+                permission: permission.rawValue,
+                environment: configuration.apnsEnvironment.rawValue
+            )
         } catch {
             // Device registration is auxiliary to bootstrap and workspace
             // sync. Keep the token out of logs and do not turn a missing
             // mobile-sync/B03 deployment into a sync error.
+            RootineObservability.shared.recordDeviceHealth(
+                outcome: .failure,
+                permission: permission.rawValue,
+                environment: configuration.apnsEnvironment.rawValue,
+                error: String(describing: error)
+            )
         }
     }
 

@@ -36,6 +36,7 @@
 		B0000000000000000000001C /* Configuration/RootineFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001C /* RootineFeatureFlags.swift */; };
 		B00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */; };
 		B00000000000000000000025 /* Sync/RootineRelationalRead.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* Sync/RootineRelationalRead.swift */; };
+		B00000000000000000000026 /* Observability.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* Observability.swift */; };
 		B00000000000000000000101 /* ContractFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* ContractFixtureTests.swift */; };
 		B00000000000000000000102 /* task-workspace-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* task-workspace-v2.json */; };
 		B00000000000000000000103 /* nutrition-workspace-v6.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* nutrition-workspace-v6.json */; };
@@ -46,6 +47,7 @@
 		B00000000000000000000112 /* SyncV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000112 /* SyncV3Tests.swift */; };
 		B00000000000000000000113 /* sync-v3-register-device-response.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000113 /* sync-v3-register-device-response.json */; };
 		B00000000000000000000114 /* LocalNotificationSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */; };
+		B00000000000000000000115 /* ObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000115 /* ObservabilityTests.swift */; };
 		B00000000000000000000107 /* sport-planner-v5.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000107 /* sport-planner-v5.json */; };
 		B00000000000000000000108 /* goals-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000108 /* goals-workspace-v1.json */; };
 		B00000000000000000000109 /* work-workspace-v3.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000109 /* work-workspace-v3.json */; };
@@ -100,6 +102,7 @@
 		F0000000000000000000001C /* Configuration/RootineFeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configuration/RootineFeatureFlags.swift; sourceTree = "<group>"; };
 		F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/LocalNotificationScheduler.swift; sourceTree = "<group>"; };
 		F00000000000000000000025 /* Sync/RootineRelationalRead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineRelationalRead.swift; sourceTree = "<group>"; };
+		F00000000000000000000026 /* Observability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Observability.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* ContractFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractFixtureTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* task-workspace-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "task-workspace-v2.json"; sourceTree = "<group>"; };
 		F00000000000000000000103 /* nutrition-workspace-v6.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-workspace-v6.json"; sourceTree = "<group>"; };
@@ -110,6 +113,7 @@
 		F00000000000000000000112 /* SyncV3Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncV3Tests.swift; sourceTree = "<group>"; };
 		F00000000000000000000113 /* sync-v3-register-device-response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sync-v3-register-device-response.json"; sourceTree = "<group>"; };
 		F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationSchedulerTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000115 /* ObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservabilityTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000107 /* sport-planner-v5.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sport-planner-v5.json"; sourceTree = "<group>"; };
 		F00000000000000000000108 /* goals-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "goals-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000109 /* work-workspace-v3.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "work-workspace-v3.json"; sourceTree = "<group>"; };
@@ -182,7 +186,8 @@
 					F00000000000000000000022 /* Sync/RootineConflictStore.swift */,
 					F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */,
 					F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */,
-					F00000000000000000000025 /* Sync/RootineRelationalRead.swift */,
+				F00000000000000000000025 /* Sync/RootineRelationalRead.swift */,
+				F00000000000000000000026 /* Observability.swift */,
 				F0000000000000000000000E /* Auth/AuthenticationSupport.swift */,
 			);
 			path = Rootine/Core;
@@ -218,6 +223,7 @@
 					F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */,
 					F00000000000000000000112 /* SyncV3Tests.swift */,
 					F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */,
+					F00000000000000000000115 /* ObservabilityTests.swift */,
 			);
 			path = RootineTests;
 			sourceTree = "<group>";
@@ -390,6 +396,7 @@
 				B00000000000000000000022 /* Sync/RootineConflictStore.swift in Sources */,
 				B00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift in Sources */,
 				B00000000000000000000025 /* Sync/RootineRelationalRead.swift in Sources */,
+				B00000000000000000000026 /* Observability.swift in Sources */,
 				B0000000000000000000000A /* FeatureRootViews.swift in Sources */,
 				B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */,
 				B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */,
@@ -410,6 +417,7 @@
 				B00000000000000000000110 /* RootineRealtimeLifecycleTests.swift in Sources */,
 				B00000000000000000000112 /* SyncV3Tests.swift in Sources */,
 				B00000000000000000000114 /* LocalNotificationSchedulerTests.swift in Sources */,
+				B00000000000000000000115 /* ObservabilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

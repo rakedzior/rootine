@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { ApnsHttpProvider } from "../_shared/apns.ts";
 import { deliverNotificationJob, finalizeNotificationJob } from "../_shared/notification-worker.ts";
+import { emitRootineDiagnostic, RootineHealthCounters } from "../_shared/observability.ts";
 
 const headers = {
   "cache-control": "no-store",
@@ -71,8 +72,26 @@ const handler = async (request: Request): Promise<Response> => {
     const job = Array.isArray(data) ? data[0] : data;
     if (!job) return response({ error: "Notification job is unavailable" }, 404);
 
+    const diagnostics = new RootineHealthCounters();
+    const startedAt = Date.now();
     try {
-      const result = await deliverNotificationJob(admin, provider, job, lockOwner);
+      const result = await deliverNotificationJob(admin, provider, job, lockOwner, {
+        onDelivery: (delivery) => {
+          if (delivery.status === "delivered") diagnostics.increment("apns_delivered");
+          if (delivery.status === "failed") diagnostics.increment("apns_failed");
+          if (delivery.status === "unregistered") diagnostics.increment("apns_unregistered");
+          if (delivery.retryable) diagnostics.increment("apns_retry");
+        },
+      });
+      const event = diagnostics.record({
+        name: "notification_delivery",
+        outcome: result.outcome === "delivered" ? "success" : result.outcome === "retry" ? "degraded" : "failure",
+        duration_ms: Date.now() - startedAt,
+        attributes: { status: result.outcome, change_count: result.deliveryCount },
+      });
+      if (env.ROOTINE_DIAGNOSTICS_LOGGING?.toLowerCase() === "true") {
+        emitRootineDiagnostic(event, (message, details) => console.info(message, details));
+      }
       return response({ job_id: job.id, status: result.outcome, deliveries: result.deliveryCount });
     } catch {
       // Do not leave a direct replay stuck in processing until stale-lock

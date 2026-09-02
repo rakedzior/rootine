@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { ApnsHttpProvider } from "../_shared/apns.ts";
 import { deliverNotificationJob, finalizeNotificationJob } from "../_shared/notification-worker.ts";
+import { emitRootineDiagnostic, RootineHealthCounters } from "../_shared/observability.ts";
 
 const headers = {
   "cache-control": "no-store",
@@ -75,10 +76,27 @@ const handler = async (request: Request): Promise<Response> => {
     let retried = 0;
     let failed = 0;
     let expired = 0;
+    const diagnostics = new RootineHealthCounters();
+    const startedAt = Date.now();
 
     for (const job of jobs) {
       try {
-        const result = await deliverNotificationJob(admin, provider, job, lockOwner);
+        const result = await deliverNotificationJob(admin, provider, job, lockOwner, {
+          onDelivery: (delivery) => {
+            if (delivery.status === "delivered") diagnostics.increment("apns_delivered");
+            if (delivery.status === "failed") diagnostics.increment("apns_failed");
+            if (delivery.status === "unregistered") diagnostics.increment("apns_unregistered");
+            if (delivery.retryable) diagnostics.increment("apns_retry");
+            diagnostics.record({
+              name: "notification_delivery",
+              outcome: delivery.status === "delivered" ? "success" : delivery.retryable ? "degraded" : "failure",
+              attributes: {
+                status: delivery.status,
+                ...(delivery.provider_response_code === null ? {} : { http_status: delivery.provider_response_code }),
+              },
+            });
+          },
+        });
         if (result.outcome === "delivered") delivered += 1;
         if (result.outcome === "retry") retried += 1;
         if (result.outcome === "failed") failed += 1;
@@ -133,6 +151,21 @@ const handler = async (request: Request): Promise<Response> => {
         expiredLast24h: Number(health.expired_last_24h ?? 0),
         oldestPendingLagSeconds: Number(health.oldest_pending_lag_seconds ?? 0),
       });
+    }
+
+    const event = diagnostics.record({
+      name: "notification_delivery",
+      outcome: failed > 0 ? "failure" : retried > 0 ? "degraded" : "success",
+      duration_ms: Date.now() - startedAt,
+      attributes: {
+        status: "batch",
+        batch_size: jobs.length,
+        change_count: delivered,
+        queue_depth: Number(health?.queued_jobs ?? 0),
+      },
+    });
+    if (env.ROOTINE_DIAGNOSTICS_LOGGING?.toLowerCase() === "true") {
+      emitRootineDiagnostic(event, (message, details) => console.info(message, details));
     }
 
     return response({ claimed: jobs.length, delivered, retried, failed, expired });

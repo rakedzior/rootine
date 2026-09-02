@@ -6,6 +6,8 @@
  * PostgREST, so auth.uid() in every RPC remains the source of ownership.
  */
 
+import { emitRootineDiagnostic, RootineHealthCounters } from "../_shared/observability.ts";
+
 const MAX_BODY_BYTES = 1_048_576;
 const MAX_BATCH = 100;
 const MAX_PULL_LIMIT = 500;
@@ -502,6 +504,42 @@ export async function handleMobileSync(
   const parsed = actionBody(body);
   if (!parsed) return syncErrorResponse("invalid", 400, correlationId);
 
+  const diagnostics = new RootineHealthCounters();
+  const operationStartedAt = Date.now();
+  const operationId = parsed.action === "push" && typeof parsed.commands[0]?.operation_id === "string"
+    ? parsed.commands[0].operation_id
+    : undefined;
+  const finish = (response: Response, error?: unknown) => {
+    const successful = response.status >= 200 && response.status < 300;
+    const outcome = successful ? "success" : response.status === 409 ? "degraded" : "failure";
+    const actionCounter = parsed.action === "pull" || parsed.action === "bootstrap"
+      ? (successful ? "sync_pull_success" : "sync_pull_failure")
+      : parsed.action === "push"
+      ? (successful ? "sync_push_success" : "sync_push_failure")
+      : null;
+    if (actionCounter) diagnostics.increment(actionCounter);
+    if (response.status === 401 || response.status === 403) diagnostics.increment("sync_unauthorized");
+    if (response.status === 409) diagnostics.increment("sync_cursor_expired");
+    if (response.status === 429) diagnostics.increment("sync_retry");
+    const event = diagnostics.record({
+      name: "sync_operation",
+      outcome,
+      duration_ms: Date.now() - operationStartedAt,
+      correlation_id: correlationId,
+      ...(operationId ? { operation_id: operationId } : {}),
+      attributes: {
+        action: parsed.action,
+        http_status: response.status,
+        ...(error === undefined ? {} : { error }),
+        ...(parsed.action === "push" ? { batch_size: parsed.commands.length } : {}),
+      },
+    });
+    if (runtimeEnv("ROOTINE_DIAGNOSTICS_LOGGING") === "true") {
+      emitRootineDiagnostic(event, (message, details) => console.info(message, details));
+    }
+    return response;
+  };
+
   const configuredTimeoutMs = Number.parseInt(runtimeEnv("MOBILE_SYNC_TIMEOUT_MS") ?? "", 10);
   const timeoutMs = Number.isSafeInteger(options.timeoutMs) && (options.timeoutMs ?? 0) > 0
     ? options.timeoutMs as number
@@ -525,18 +563,18 @@ export async function handleMobileSync(
     if (!authorization.ok) {
       const authStatus = authorization.response.status;
       const authCode = authStatus === 401 ? "unauthorized" : "server_error";
-      return syncErrorResponse(authCode, authStatus >= 500 ? 503 : 401, correlationId);
+      return finish(syncErrorResponse(authCode, authStatus >= 500 ? 503 : 401, correlationId), authCode);
     }
 
     const key = options.clientKey?.(request, authorization.userId, parsed.deviceId)
       ?? clientKey(request, authorization.userId, parsed.deviceId);
     const rateLimit = consumeRateLimit(key, options.now?.() ?? Date.now());
     if (!rateLimit.allowed) {
-      return syncErrorResponse("rate_limited", 429, correlationId, {
+      return finish(syncErrorResponse("rate_limited", 429, correlationId, {
         "retry-after": String(rateLimit.retryAfter),
         "x-ratelimit-limit": String(RATE_LIMIT),
         "x-ratelimit-remaining": "0",
-      }, rateLimit.retryAfter);
+      }, rateLimit.retryAfter), "rate_limited");
     }
 
     let rpcName = "";
@@ -577,26 +615,26 @@ export async function handleMobileSync(
       invokeRpc(rpcName, args, controller.signal),
       timeoutPromise,
     ]);
-    if (!isRecord(data)) return syncErrorResponse("server_error", 502, correlationId);
+    if (!isRecord(data)) return finish(syncErrorResponse("server_error", 502, correlationId), "server_error");
 
     const errorCode = responseErrorCode(data);
-    if (errorCode === "unauthorized") return syncErrorResponse("unauthorized", 403, correlationId);
-    if (errorCode === "cursor_expired") return syncErrorResponse("cursor_expired", 409, correlationId);
-    if (errorCode === "rate_limited") return syncErrorResponse("rate_limited", 429, correlationId);
-    if (errorCode === "invalid") return syncErrorResponse("invalid", 400, correlationId);
-    if (errorCode === "server_error") return syncErrorResponse("server_error", 502, correlationId);
+    if (errorCode === "unauthorized") return finish(syncErrorResponse("unauthorized", 403, correlationId), errorCode);
+    if (errorCode === "cursor_expired") return finish(syncErrorResponse("cursor_expired", 409, correlationId), errorCode);
+    if (errorCode === "rate_limited") return finish(syncErrorResponse("rate_limited", 429, correlationId), errorCode);
+    if (errorCode === "invalid") return finish(syncErrorResponse("invalid", 400, correlationId), errorCode);
+    if (errorCode === "server_error") return finish(syncErrorResponse("server_error", 502, correlationId), errorCode);
 
-    return jsonResponse(normalizeSuccess(parsed.action, data, parsed, correlationId), 200, {
+    return finish(jsonResponse(normalizeSuccess(parsed.action, data, parsed, correlationId), 200, {
       "x-ratelimit-limit": String(RATE_LIMIT),
       "x-ratelimit-remaining": String(rateLimit.remaining),
-    });
+    }));
   } catch (error) {
     if (error instanceof MobileSyncTimeoutError || controller.signal.aborted) {
-      return syncErrorResponse("server_error", 408, correlationId);
+      return finish(syncErrorResponse("server_error", 408, correlationId), "timeout");
     }
     const status = rpcErrorStatus(error);
     const code = rpcErrorCode(status);
-    return syncErrorResponse(code, status, correlationId, status === 429 ? { "retry-after": "60" } : {});
+    return finish(syncErrorResponse(code, status, correlationId, status === 429 ? { "retry-after": "60" } : {}), code);
   } finally {
     if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }

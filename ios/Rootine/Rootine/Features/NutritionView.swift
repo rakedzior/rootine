@@ -1556,6 +1556,7 @@ private final class BarcodeScannerViewController: UIViewController, @preconcurre
               let code = object.stringValue,
               !code.isEmpty else { return }
         hasDeliveredCode = true
+        RootineObservability.shared.recordQRDetected(format: object.type == .qr ? "qr" : "barcode")
         captureQueue.async { [weak self] in
             guard let self, self.captureSession.isRunning else { return }
             self.captureSession.stopRunning()

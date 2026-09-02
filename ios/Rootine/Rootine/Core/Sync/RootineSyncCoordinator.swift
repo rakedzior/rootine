@@ -58,9 +58,12 @@ actor RootineSyncCoordinator {
     private let pollingInterval: Duration
     private let sleep: Sleep
     private let onStatus: StatusHandler?
+    private let observability: RootineObservability
 
     private var pullTask: Task<OperationResult, Never>?
     private var pushTask: Task<OperationResult, Never>?
+    private var pullStartedAt: Date?
+    private var pushStartedAt: Date?
     private var pollingTask: Task<Void, Never>?
     private var needsAnotherPullValue = false
     private var needsAnotherPush = false
@@ -76,12 +79,14 @@ actor RootineSyncCoordinator {
         sleep: @escaping Sleep = { duration in
             try await Task.sleep(for: duration)
         },
-        onStatus: StatusHandler? = nil
+        onStatus: StatusHandler? = nil,
+        observability: RootineObservability = .shared
     ) {
         self.operations = operations
         self.pollingInterval = pollingInterval
         self.sleep = sleep
         self.onStatus = onStatus
+        self.observability = observability
     }
 
     var status: RootineSyncCoordinatorStatus {
@@ -142,6 +147,7 @@ actor RootineSyncCoordinator {
             }
         }
         pullTask = task
+        pullStartedAt = Date()
         setStatus(.syncing)
         Task { [weak self, task] in
             let result = await task.value
@@ -166,6 +172,7 @@ actor RootineSyncCoordinator {
             }
         }
         pushTask = task
+        pushStartedAt = Date()
         setStatus(.syncing)
         Task { [weak self, task] in
             let result = await task.value
@@ -251,6 +258,18 @@ actor RootineSyncCoordinator {
 
     private func finishPull(_ result: OperationResult, reason: RootineSyncTrigger) {
         pullTask = nil
+        let (outcome, error): (RootineTelemetryOutcome, String?) = switch result {
+        case .success: (.success, nil)
+        case let .failure(message): (.failure, message)
+        }
+        observability.recordSync(
+            endpoint: "pull",
+            outcome: outcome,
+            duration: pullStartedAt.map { Date().timeIntervalSince($0) },
+            trigger: reason.rawValue,
+            error: error
+        )
+        pullStartedAt = nil
         guard !hasBeenStopped else { return }
         switch result {
         case .success:
@@ -266,6 +285,18 @@ actor RootineSyncCoordinator {
 
     private func finishPush(_ result: OperationResult, reason: RootineSyncTrigger) {
         pushTask = nil
+        let (outcome, error): (RootineTelemetryOutcome, String?) = switch result {
+        case .success: (.success, nil)
+        case let .failure(message): (.failure, message)
+        }
+        observability.recordSync(
+            endpoint: "push",
+            outcome: outcome,
+            duration: pushStartedAt.map { Date().timeIntervalSince($0) },
+            trigger: reason.rawValue,
+            error: error
+        )
+        pushStartedAt = nil
         guard !hasBeenStopped else { return }
         switch result {
         case .success:

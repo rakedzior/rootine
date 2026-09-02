@@ -15,6 +15,7 @@ import {
   supabase,
   supabaseConfigurationIssue,
 } from "./client";
+import { rootineObservability } from "../../app/observability";
 
 export type AuthActionResult = {
   error: string | null;
@@ -136,13 +137,17 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         setSession(sessionError ? null : data.session);
         if (initializationError) {
+          rootineObservability.recordAuthOutcome({ action: "initialize", outcome: "failure", error: initializationError });
           setAuthError(errorMessage(initializationError));
           clearOAuthErrorFromUrl();
+        } else {
+          rootineObservability.recordAuthOutcome({ action: "initialize", outcome: "success" });
         }
         setLoading(false);
       })
       .catch(() => {
         if (!active) return;
+        rootineObservability.recordAuthOutcome({ action: "initialize", outcome: "failure", error: "network" });
         setSession(null);
         setLoading(false);
       });
@@ -164,69 +169,124 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = useCallback(async (): Promise<AuthActionResult> => {
-    if (!supabase) return { error: "Logowanie kontem Google nie jest dostępne w tym środowisku." };
+    if (!supabase) {
+      rootineObservability.recordAuthOutcome({ action: "sign_in_google", outcome: "failure", error: "missing configuration" });
+      return { error: "Logowanie kontem Google nie jest dostępne w tym środowisku." };
+    }
     setAuthError(null);
     try {
       const googleEnabled = await isSupabaseAuthProviderEnabled("google");
       if (!googleEnabled) {
+        rootineObservability.recordAuthOutcome({ action: "sign_in_google", outcome: "failure", provider: "google", error: "provider unavailable" });
         return { error: "Logowanie kontem Google nie jest jeszcze włączone dla tego środowiska." };
       }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: authRedirectUrl() },
       });
+      rootineObservability.recordAuthOutcome({ action: "sign_in_google", outcome: error ? "failure" : "success", provider: "google", error });
       return { error: error ? errorMessage(error) : null };
     } catch (error) {
+      rootineObservability.recordAuthOutcome({ action: "sign_in_google", outcome: "failure", provider: "google", error });
       return { error: errorMessage(error) };
     }
   }, []);
 
   const signIn = useCallback(async (email: string, password: string): Promise<AuthActionResult> => {
-    if (!supabase) return { error: "Supabase nie jest skonfigurowane." };
+    if (!supabase) {
+      rootineObservability.recordAuthOutcome({ action: "sign_in", outcome: "failure", error: "missing configuration" });
+      return { error: "Supabase nie jest skonfigurowane." };
+    }
     const { data, error } = await supabase.auth.signInWithPassword({
       email: normalizeEmail(email),
       password,
     });
-    if (error) return { error: errorMessage(error) };
+    if (error) {
+      rootineObservability.recordAuthOutcome({ action: "sign_in", outcome: "failure", error });
+      return { error: errorMessage(error) };
+    }
     setSession(data.session);
+    rootineObservability.recordAuthOutcome({ action: "sign_in", outcome: "success" });
     return { error: null };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string): Promise<AuthActionResult> => {
-    if (!supabase) return { error: "Supabase nie jest skonfigurowane." };
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizeEmail(email),
-      password,
-      options: { emailRedirectTo: authRedirectUrl() },
-    });
-    if (error) return { error: errorMessage(error) };
-    setSession(data.session);
-    return { error: null, needsEmailConfirmation: !data.session };
+    if (!supabase) {
+      rootineObservability.recordAuthOutcome({ action: "sign_up", outcome: "failure", error: "missing configuration" });
+      return { error: "Supabase nie jest skonfigurowane." };
+    }
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizeEmail(email),
+        password,
+        options: { emailRedirectTo: authRedirectUrl() },
+      });
+      if (error) {
+        rootineObservability.recordAuthOutcome({ action: "sign_up", outcome: "failure", error });
+        return { error: errorMessage(error) };
+      }
+      setSession(data.session);
+      rootineObservability.recordAuthOutcome({ action: "sign_up", outcome: "success" });
+      return { error: null, needsEmailConfirmation: !data.session };
+    } catch (error) {
+      rootineObservability.recordAuthOutcome({ action: "sign_up", outcome: "failure", error });
+      return { error: errorMessage(error) };
+    }
   }, []);
 
   const requestPasswordReset = useCallback(async (email: string): Promise<AuthActionResult> => {
-    if (!supabase) return { error: "Odzyskiwanie hasła nie jest dostępne w tym środowisku." };
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-      redirectTo: authRedirectUrl(),
-    });
-    return { error: error ? errorMessage(error) : null };
+    if (!supabase) {
+      rootineObservability.recordAuthOutcome({ action: "password_reset", outcome: "failure", error: "missing configuration" });
+      return { error: "Odzyskiwanie hasła nie jest dostępne w tym środowisku." };
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
+        redirectTo: authRedirectUrl(),
+      });
+      rootineObservability.recordAuthOutcome({ action: "password_reset", outcome: error ? "failure" : "success", error });
+      return { error: error ? errorMessage(error) : null };
+    } catch (error) {
+      rootineObservability.recordAuthOutcome({ action: "password_reset", outcome: "failure", error });
+      return { error: errorMessage(error) };
+    }
   }, []);
 
   const updatePassword = useCallback(async (password: string): Promise<AuthActionResult> => {
-    if (!supabase) return { error: "Zmiana hasła nie jest dostępna w tym środowisku." };
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) return { error: errorMessage(error) };
-    setPasswordRecovery(false);
-    return { error: null };
+    if (!supabase) {
+      rootineObservability.recordAuthOutcome({ action: "password_update", outcome: "failure", error: "missing configuration" });
+      return { error: "Zmiana hasła nie jest dostępna w tym środowisku." };
+    }
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        rootineObservability.recordAuthOutcome({ action: "password_update", outcome: "failure", error });
+        return { error: errorMessage(error) };
+      }
+      setPasswordRecovery(false);
+      rootineObservability.recordAuthOutcome({ action: "password_update", outcome: "success" });
+      return { error: null };
+    } catch (error) {
+      rootineObservability.recordAuthOutcome({ action: "password_update", outcome: "failure", error });
+      return { error: errorMessage(error) };
+    }
   }, []);
 
   const signOut = useCallback(async (): Promise<AuthActionResult> => {
     if (!supabase) return { error: null };
-    const { error } = await supabase.auth.signOut();
-    if (error) return { error: errorMessage(error) };
-    setSession(null);
-    setPasswordRecovery(false);
-    return { error: null };
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        rootineObservability.recordAuthOutcome({ action: "sign_out", outcome: "failure", error });
+        return { error: errorMessage(error) };
+      }
+      setSession(null);
+      setPasswordRecovery(false);
+      rootineObservability.recordAuthOutcome({ action: "sign_out", outcome: "success" });
+      return { error: null };
+    } catch (error) {
+      rootineObservability.recordAuthOutcome({ action: "sign_out", outcome: "failure", error });
+      return { error: errorMessage(error) };
+    }
   }, []);
 
   const value = useMemo<SupabaseAuthContextValue>(() => ({

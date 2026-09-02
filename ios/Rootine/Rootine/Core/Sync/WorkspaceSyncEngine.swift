@@ -38,6 +38,7 @@ actor WorkspaceSyncEngine {
     private let conflictStore: RootineConflictStore?
     private let deviceID: String?
     private let now: @Sendable () -> Date
+    private let observability: RootineObservability
     private let encoder: JSONEncoder
     private let decoder = JSONDecoder()
     // Share one awaitable result between concurrent callers. Returning `.idle`
@@ -55,6 +56,7 @@ actor WorkspaceSyncEngine {
         conflictStore = nil
         deviceID = nil
         now = Date.init
+        observability = .shared
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -70,7 +72,8 @@ actor WorkspaceSyncEngine {
         cursorStore: RootineSyncCursorStore? = nil,
         operationLog: RootineSyncOperationLog? = nil,
         conflictStore: RootineConflictStore? = nil,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        observability: RootineObservability = .shared
     ) {
         self.store = store
         self.remote = remote
@@ -80,6 +83,7 @@ actor WorkspaceSyncEngine {
         self.cursorStore = cursorStore ?? RootineSyncCursorStore(accountID: accountID, deviceID: deviceID)
         self.operationLog = operationLog ?? RootineSyncOperationLog(accountID: accountID, deviceID: deviceID)
         self.conflictStore = conflictStore ?? RootineConflictStore(accountID: accountID, deviceID: deviceID)
+        self.observability = observability
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -95,7 +99,8 @@ actor WorkspaceSyncEngine {
         operationLog: RootineSyncOperationLog,
         conflictStore: RootineConflictStore,
         deviceID: String,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        observability: RootineObservability = .shared
     ) {
         self.store = store
         self.remote = remote
@@ -105,6 +110,7 @@ actor WorkspaceSyncEngine {
         self.conflictStore = conflictStore
         self.deviceID = deviceID
         self.now = now
+        self.observability = observability
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -288,14 +294,21 @@ actor WorkspaceSyncEngine {
         } catch let error as RootineSyncRemoteError {
             switch error {
             case .unauthorized:
+                observability.increment(.syncUnauthorized)
+                observability.recordSync(endpoint: "push", outcome: .failure, error: error.localizedDescription, attributes: ["status": "unauthorized"])
                 return .unauthorized
             case .cursorExpired:
+                observability.increment(.syncCursorExpired)
+                observability.recordSync(endpoint: "push", outcome: .degraded, error: error.localizedDescription, attributes: ["status": "cursor_expired"])
                 try await cursorStore?.reset()
                 return .cursorExpired
             case .timeout, .rateLimited, .server, .network:
+                observability.increment(.syncRetry)
+                observability.recordSync(endpoint: "push", outcome: .degraded, error: error.localizedDescription)
                 let next = try await scheduleRetries(batch, error: error)
                 return .retryScheduled(next)
             default:
+                observability.recordSync(endpoint: "push", outcome: .failure, error: error.localizedDescription)
                 for command in batch {
                     try await operationLog.markDeadLetter(operationID: command.operationID, reason: error.localizedDescription, at: now())
                 }
@@ -323,14 +336,18 @@ actor WorkspaceSyncEngine {
             switch result.status {
             case .applied, .alreadyApplied:
                 try await operationLog.markApplied(operationID: command.operationID)
+                observability.recordSync(endpoint: "push", outcome: .success, operationID: command.operationID, attributes: ["status": result.status.rawValue])
                 applied += 1
             case .conflict:
                 try await recordConflict(command: command, result: result)
                 try await operationLog.markDeadLetter(operationID: command.operationID, reason: "conflict", at: now())
+                observability.increment(.syncConflict)
+                observability.recordSync(endpoint: "push", outcome: .degraded, operationID: command.operationID, attributes: ["status": "conflict"])
                 conflictKeys.append("\(command.entity):\(command.entityID)")
             case .invalid, .unauthorized, .custom:
                 let reason = result.message ?? result.status.rawValue
                 try await operationLog.markDeadLetter(operationID: command.operationID, reason: reason, at: now())
+                observability.recordSync(endpoint: "push", outcome: .failure, operationID: command.operationID, error: reason, attributes: ["status": result.status.rawValue])
             }
         }
         if !conflictKeys.isEmpty { return .conflict(conflictKeys) }

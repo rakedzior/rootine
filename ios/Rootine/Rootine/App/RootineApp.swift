@@ -26,6 +26,7 @@ final class RootineAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        RootineObservability.shared.installCrashReporter()
         // B09 observes the user's existing authorization state; it does not
         // request permission. The delegate only receives APNs callbacks once
         // a later permission flow has authorized notifications.
@@ -38,6 +39,14 @@ final class RootineAppDelegate: NSObject, UIApplicationDelegate {
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         RootinePushRegistry.shared.update(tokenData: deviceToken)
+        RootineObservability.shared.record(
+            name: "device_health",
+            outcome: .success,
+            attributes: [
+                "status": "token_received",
+                "environment": RootineAPNsEnvironment.currentBuild.rawValue
+            ]
+        )
         NotificationCenter.default.post(name: .rootineAPNsTokenDidRegister, object: nil)
     }
 
@@ -47,6 +56,11 @@ final class RootineAppDelegate: NSObject, UIApplicationDelegate {
     ) {
         // Registration failures are expected in simulator/offline builds and
         // must not block local-first sync. Do not log the error or token.
+        RootineObservability.shared.record(
+            name: "device_health",
+            outcome: .failure,
+            attributes: ["error": String(describing: error)]
+        )
     }
 }
 
