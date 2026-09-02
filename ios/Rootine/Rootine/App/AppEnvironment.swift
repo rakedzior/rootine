@@ -2908,6 +2908,7 @@ final class AppEnvironment: ObservableObject {
         let value: Any
         let shouldPersist: Bool
         let conflict: Bool
+        let revision: Int64?
     }
 
     private func decodeNormalizedWorkspaces(_ materialization: RootineRelationalMaterialization) throws -> DecodedNormalizedWorkspaces {
@@ -2944,23 +2945,26 @@ final class AppEnvironment: ObservableObject {
         if let remote { value = remote }
         else if let local { value = local }
         else { value = try emptyWorkspace(for: key) }
-        guard let remote else { return NormalizedDecision(key: key, value: value, shouldPersist: false, conflict: false) }
-        guard let local else { return NormalizedDecision(key: key, value: remote, shouldPersist: true, conflict: false) }
+        guard let remote else {
+            return NormalizedDecision(key: key, value: value, shouldPersist: false, conflict: false, revision: nil)
+        }
         let canonicalKey = RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)
+        let remoteRevision = materialization.revisions[canonicalKey] ?? 0
+        guard let local else {
+            return NormalizedDecision(key: key, value: remote, shouldPersist: true, conflict: false, revision: remoteRevision)
+        }
         let localRevision = try await store.revision(for: canonicalKey)
         let hasPending = pending.contains { $0.storageKey == canonicalKey || $0.storageKey == key.rawValue }
         if local == remote {
-            try await store.setRevision(max(localRevision, materialization.revisions[canonicalKey] ?? 0), for: canonicalKey)
-            return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: false)
+            return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: false, revision: max(localRevision, remoteRevision))
         }
-        let remoteRevision = materialization.revisions[canonicalKey] ?? 0
         if !hasPending && remoteRevision > localRevision {
-            return NormalizedDecision(key: key, value: remote, shouldPersist: true, conflict: false)
+            return NormalizedDecision(key: key, value: remote, shouldPersist: true, conflict: false, revision: remoteRevision)
         }
         if hasPending && remoteRevision > localRevision {
-            return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: true)
+            return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: true, revision: nil)
         }
-        return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: false)
+        return NormalizedDecision(key: key, value: local, shouldPersist: false, conflict: false, revision: nil)
     }
 
     private func emptyWorkspace<T>(for key: RootineStorageKey) throws -> T {
@@ -2979,28 +2983,34 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func persistNormalizedDecision(_ decision: NormalizedDecision, key: RootineStorageKey, store: WorkspaceFileStore) async throws {
-        guard decision.shouldPersist else { return }
-        switch key {
-        case .tasks: try await store.save(decision.value as! TaskWorkspace, key: key)
-        case .nutrition: try await store.save(decision.value as! NutritionWorkspace, key: key)
-        case .notes: try await store.save(decision.value as! NotesWorkspace, key: key)
-        case .sport:
-            try await store.save(decision.value as! SportWorkspace, key: key)
-            if let payload = canonicalShadows[key] { try await store.save(payload, key: .sportCanonicalShadow) }
-        case .goals:
-            try await store.save(decision.value as! GoalsWorkspace, key: key)
-            if let payload = canonicalShadows[key] { try await store.save(payload, key: .goalsCanonicalShadow) }
-        case .work:
-            try await store.save(decision.value as! WorkWorkspace, key: key)
-            if let payload = canonicalShadows[key] { try await store.save(payload, key: .workCanonicalShadow) }
-        case .travel:
-            try await store.save(decision.value as! TravelWorkspace, key: key)
-            if let payload = canonicalShadows[key] { try await store.save(payload, key: .travelCanonicalShadow) }
-        case .health:
-            try await store.save(decision.value as! HealthWorkspace, key: key)
-            if let payload = canonicalShadows[key] { try await store.save(payload, key: .healthCanonicalShadow) }
-        case .affairs: try await store.save(decision.value as! AffairsWorkspace, key: key)
-        default: break
+        if decision.shouldPersist {
+            switch key {
+            case .tasks: try await store.save(decision.value as! TaskWorkspace, key: key)
+            case .nutrition: try await store.save(decision.value as! NutritionWorkspace, key: key)
+            case .notes: try await store.save(decision.value as! NotesWorkspace, key: key)
+            case .sport:
+                try await store.save(decision.value as! SportWorkspace, key: key)
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .sportCanonicalShadow) }
+            case .goals:
+                try await store.save(decision.value as! GoalsWorkspace, key: key)
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .goalsCanonicalShadow) }
+            case .work:
+                try await store.save(decision.value as! WorkWorkspace, key: key)
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .workCanonicalShadow) }
+            case .travel:
+                try await store.save(decision.value as! TravelWorkspace, key: key)
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .travelCanonicalShadow) }
+            case .health:
+                try await store.save(decision.value as! HealthWorkspace, key: key)
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .healthCanonicalShadow) }
+            case .affairs: try await store.save(decision.value as! AffairsWorkspace, key: key)
+            default: break
+            }
+        }
+        if let revision = decision.revision {
+            let canonicalKey = RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)
+            let currentRevision = try await store.revision(for: canonicalKey)
+            try await store.setRevision(max(currentRevision, revision), for: canonicalKey)
         }
     }
 
