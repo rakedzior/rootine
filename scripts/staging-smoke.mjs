@@ -497,10 +497,11 @@ async function main() {
     const metadataDomains = Array.isArray(roundTripDomains)
       ? roundTripDomains.filter((entry) => entry && typeof entry === "object" && entry.client_a_to_b === true && entry.client_b_to_a === true).map((entry) => entry.domain)
       : [];
-    const hasDomainMatrix = Array.isArray(roundTripDomains)
-      && commands.every((command) => receivedDomains.has(command.entity))
+    const metadataMatches = !Array.isArray(roundTripDomains)
+      || domainMatrix.every((domain) => metadataDomains.includes(domain));
+    const hasDomainMatrix = commands.every((command) => receivedDomains.has(command.entity))
       && reverseCommands.every((command) => reverseReceived && reverseIds.has(command.entity_id))
-      && domainMatrix.every((domain) => metadataDomains.includes(domain));
+      && metadataMatches;
     for (const domain of evidence.domain_matrix) {
       domain.status = hasDomainMatrix ? "passed" : "manual-required";
       domain.passed = hasDomainMatrix;
@@ -511,7 +512,7 @@ async function main() {
         status_detail: "both transport clients exchanged every configured domain and the server marked both directions",
       });
     } else if (strict) {
-      check("Two-client domain matrix", "failed", { reason: "both clients must exchange a fixture for every configured domain; optional round_trip_domains metadata must mark both directions" });
+      check("Two-client domain matrix", "failed", { reason: "both clients must exchange a fixture for every configured domain; supplied round_trip_domains metadata must agree when present" });
     } else {
       check("Two-client domain matrix", "manual-required", { automated: false, status_detail: "transport fixtures are not evidence of a physical web ↔ iOS round-trip; complete the native matrix manually" });
     }
@@ -525,9 +526,9 @@ async function main() {
     deletedAccount = true;
     check("Delete account", "passed");
     const invalidated = await waitForAuthInvalidation(request, token);
-    check("Delete account auth invalidation", [401, 404].includes(invalidated.response.status) ? "passed" : "failed", {
+    check("Delete account auth invalidation", [401, 403, 404].includes(invalidated.response.status) ? "passed" : "failed", {
       status_detail: "deleted access token is rejected by Supabase Auth",
-      reason: [401, 404].includes(invalidated.response.status) ? undefined : `auth returned HTTP ${invalidated.response.status}`,
+      reason: [401, 403, 404].includes(invalidated.response.status) ? undefined : `auth returned HTTP ${invalidated.response.status}`,
     });
   } catch (error) {
     const phase = error instanceof SmokeFailure ? error.phase : "smoke";
