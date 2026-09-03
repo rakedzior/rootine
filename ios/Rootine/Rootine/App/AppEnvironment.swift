@@ -2049,8 +2049,12 @@ final class AppEnvironment: ObservableObject {
     private func persistSportWorkspace(_ value: SportWorkspace) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
+        var next = value.normalizedForPersistence()
         next.updatedAt = RootineDate.isoTimestamp()
+        guard (try? next.validate()) != nil else {
+            foundationMessage = "Nieprawidłowe dane aktywności"
+            return
+        }
         sportWorkspace = next
         await persistCanonicalWorkspace(next, key: .sport, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload)
     }
