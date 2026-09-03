@@ -69,7 +69,7 @@ staging/produkcji (`cursor_lag_seconds`, `outbox_lag_seconds`, APNs delivery),
 które pozostają `null` i mają status `manual-required`, dopóki nie zostanie
 podłączony istniejący provider/eksport metryk.
 
-Smoke bez `ROOTINE_SMOKE_ACCESS_TOKEN` tworzy konto pod `example.invalid`,
+Smoke bez `ROOTINE_SMOKE_ACCESS_TOKEN` tworzy konto pod `example.com`,
 wykonuje Auth → bootstrap → offline serialization → push → idempotency → Realtime
 lub fallback pull → konflikt → delete-account, a następnie weryfikuje
 unieważnienie tokenu. Konto jest syntetyczne i usuwane przez Edge Function;

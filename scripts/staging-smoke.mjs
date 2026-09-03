@@ -296,7 +296,10 @@ async function main() {
     } else {
       generatedAccount = true;
       const suffix = `${Date.now()}-${process.pid}-${randomUUID().slice(0, 8)}`;
-      const email = `rootine-smoke-${suffix}@example.invalid`;
+      // Supabase's email validator rejects the reserved .invalid TLD. Use the
+      // reserved example.com domain instead; disposable staging should have
+      // mailer autoconfirm enabled so no message delivery is required.
+      const email = `rootine-smoke-${suffix}@example.com`;
       const password = `${randomUUID()}aA9!`;
       const signup = await request("auth", "/auth/v1/signup", {
         method: "POST",
