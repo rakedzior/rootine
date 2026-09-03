@@ -330,6 +330,15 @@ async function main() {
 
     const deviceA = process.env.ROOTINE_SMOKE_DEVICE_A?.trim() || `ios_${randomUUID()}`;
     const deviceB = process.env.ROOTINE_SMOKE_DEVICE_B?.trim() || `ios_${randomUUID()}`;
+    const deviceMetadata = {
+      platform: "ios",
+      app_version: "staging-smoke",
+      environment: syncEnvironment(),
+      permission_state: "not_determined",
+    };
+    await sync("register_device", deviceA, deviceMetadata);
+    await sync("register_device", deviceB, deviceMetadata);
+    check("Device registration", "passed", { devices: 2, apns: "not_determined" });
     const bootstrap = await sync("bootstrap", deviceA);
     check("Bootstrap", "passed", { cursor: responseCursor(bootstrap) });
 
