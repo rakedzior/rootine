@@ -75,8 +75,8 @@ select ok(
 );
 select has_column('public', 'rootine_active_devices', 'push_token', 'worker view reads B11 push_token');
 select ok(
-  to_regprocedure('public.rootine_revoke_notification_device(text)') is not null,
-  'B11 notification revoke RPC remains available to the worker'
+  to_regprocedure('public.rootine_revoke_notification_device(text,uuid)') is not null,
+  'B11 notification revoke RPC remains available to the worker and is owner-scoped'
 );
 
 select * from finish();

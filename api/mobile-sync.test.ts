@@ -30,7 +30,15 @@ function request(body: unknown, init: RequestInit = {}) {
   });
 }
 
-const rpc = vi.fn(async () => ({ contract_version: 1, ok: true }));
+const rpc = vi.fn(async () => ({
+  contract_version: 3,
+  server_cursor: 0,
+  from_cursor: 0,
+  next_cursor: 0,
+  has_more: false,
+  changes: [],
+  results: [],
+}));
 
 describe("mobile-sync Edge Function", () => {
   beforeEach(() => {
@@ -98,8 +106,21 @@ describe("mobile-sync Edge Function", () => {
       push_token: "token",
       user_id: "attacker",
     }), { authorize, invokeRpc: rpc });
-    expect(register.status).toBe(200);
-    expect(await register.json()).toMatchObject({
+    expect(register.status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+
+    const validRegister = await handleMobileSync(request({
+      contract_version: 3,
+      action: "register_device",
+      device_id: deviceId,
+      platform: "ios",
+      app_version: "3.0.0",
+      environment: "staging",
+      apns_environment: "sandbox",
+      push_token: "token",
+    }), { authorize, invokeRpc: rpc });
+    expect(validRegister.status).toBe(200);
+    expect(await validRegister.json()).toMatchObject({
       contract_version: 3,
       correlation_id: correlationId,
       device_id: deviceId,
@@ -169,6 +190,42 @@ describe("mobile-sync Edge Function", () => {
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards permission state and never accepts APNs values for a denied state", async () => {
+    const denied = await handleMobileSync(request({
+      action: "register_device",
+      device_id: deviceId,
+      platform: "ios",
+      app_version: "3.0.0",
+      environment: "staging",
+      apns_environment: null,
+      push_token: null,
+      permission_state: "denied",
+    }), { authorize, invokeRpc: rpc });
+    expect(denied.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      "rootine_register_device",
+      expect.objectContaining({
+        p_apns_environment: null,
+        p_push_token: null,
+        p_permission_state: "denied",
+      }),
+      expect.any(AbortSignal),
+    );
+
+    const invalid = await handleMobileSync(request({
+      action: "register_device",
+      device_id: deviceId,
+      platform: "ios",
+      app_version: "3.0.0",
+      environment: "staging",
+      apns_environment: "sandbox",
+      push_token: "token",
+      permission_state: "denied",
+    }), { authorize, invokeRpc: rpc });
+    expect(invalid.status).toBe(400);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
   it("normalizes push conflicts with a whitelisted server record", async () => {
     const response = await handleMobileSync(request({
       action: "push",
@@ -184,6 +241,7 @@ describe("mobile-sync Edge Function", () => {
     }), {
       authorize,
       invokeRpc: vi.fn(async () => ({
+        contract_version: 3,
         server_cursor: 42,
         results: [{
           operation_id: operationId,
@@ -290,7 +348,7 @@ describe("mobile-sync Edge Function", () => {
     const response = await handleMobileSync(request({ action: "bootstrap", device_id: deviceId }), {
       authorize,
       invokeRpc: vi.fn(async () => ({
-        contract_version: 1,
+        contract_version: 3,
         device_id: deviceId,
         server_cursor: 12,
         next_cursor: 7,
@@ -354,5 +412,92 @@ describe("mobile-sync Edge Function", () => {
     }), { authorize, invokeRpc: rpc });
     expect(invalidPush.status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("rejects undeclared request and command fields and a legacy RPC envelope", async () => {
+    const extraRequestField = await handleMobileSync(request({
+      action: "bootstrap",
+      device_id: deviceId,
+      user_id: "must-not-be-accepted",
+    }), { authorize, invokeRpc: rpc });
+    expect(extraRequestField.status).toBe(400);
+
+    const wrongRequestVersion = await handleMobileSync(request({
+      contract_version: 2,
+      action: "bootstrap",
+      device_id: deviceId,
+    }), { authorize, invokeRpc: rpc });
+    expect(wrongRequestVersion.status).toBe(400);
+
+    const extraCommandField = await handleMobileSync(request({
+      action: "push",
+      device_id: deviceId,
+      commands: [{
+        operation_id: operationId,
+        entity: "task",
+        entity_id: "task-1",
+        kind: "upsert",
+        base_revision: 0,
+        payload: {},
+        retry_count: 1,
+      }],
+    }), { authorize, invokeRpc: rpc });
+    expect(extraCommandField.status).toBe(400);
+
+    const legacyRpc = await handleMobileSync(request({ action: "bootstrap", device_id: deviceId }), {
+      authorize,
+      invokeRpc: vi.fn(async () => ({ contract_version: 2 })),
+    });
+    expect(legacyRpc.status).toBe(502);
+    expect(await legacyRpc.json()).toEqual({
+      contract_version: 3,
+      correlation_id: correlationId,
+      error: "server_error",
+    });
+
+    const missingRpcVersion = await handleMobileSync(request({ action: "bootstrap", device_id: deviceId }), {
+      authorize,
+      invokeRpc: vi.fn(async () => ({
+        server_cursor: 0,
+        next_cursor: 0,
+        has_more: false,
+        changes: [],
+      })),
+    });
+    expect(missingRpcVersion.status).toBe(502);
+    expect(await missingRpcVersion.json()).toEqual({
+      contract_version: 3,
+      correlation_id: correlationId,
+      error: "server_error",
+    });
+
+    const malformedChanges = await handleMobileSync(request({ action: "pull", device_id: deviceId, cursor: 0 }), {
+      authorize,
+      invokeRpc: vi.fn(async () => ({
+        contract_version: 3,
+        from_cursor: 0,
+        next_cursor: 1,
+        has_more: false,
+        changes: [{ cursor: 1, entity: "task", entity_id: "task-1", operation: "upsert" }],
+      })),
+    });
+    expect(malformedChanges.status).toBe(502);
+
+    const malformedResults = await handleMobileSync(request({
+      action: "push",
+      device_id: deviceId,
+      commands: [{
+        operation_id: operationId,
+        entity: "task",
+        entity_id: "task-1",
+        kind: "upsert",
+        base_revision: 0,
+        payload: {},
+      }],
+    }), {
+      authorize,
+      invokeRpc: vi.fn(async () => ({ contract_version: 3, server_cursor: 1, results: [] })),
+    });
+    expect(malformedResults.status).toBe(502);
   });
 });

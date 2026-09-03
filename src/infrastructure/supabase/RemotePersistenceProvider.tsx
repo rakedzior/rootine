@@ -11,6 +11,7 @@ import {
 import { Toast, ToastViewport } from "../../app/ui";
 import { useSupabaseAuth } from "./auth";
 import { isSupabaseConfigured } from "./client";
+import { redactSyncError } from "./dualWriteBridge";
 import {
   resolveRemoteWorkspaceConflicts,
   startRemoteWorkspaceSync,
@@ -74,9 +75,9 @@ export function RemotePersistenceProvider({ children }: { children: ReactNode })
       setState((current) => ({
         ...current,
         status: "error",
-        message: error instanceof Error
-          ? error.message
-          : "Nie udało się rozwiązać konfliktu. Obie wersje danych pozostały bez zmian.",
+        message: redactSyncError(error,
+          "Nie udało się rozwiązać konfliktu. Obie wersje danych pozostały bez zmian."
+        ).message,
       }));
     }
   }, [state.conflictKeys, userId]);
@@ -181,7 +182,7 @@ export function RemotePersistenceProvider({ children }: { children: ReactNode })
         status: "error",
         uploaded: 0,
         downloaded: 0,
-        message: error instanceof Error ? error.message : "Synchronizacja nie powiodła się.",
+        message: redactSyncError(error).message,
         initialSyncAttempt: attempt,
         initialSyncElapsedMs: elapsedMs(),
         initialSyncTimedOut: timedOut,

@@ -235,11 +235,82 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(try roundTrip(workspace), workspace)
     }
 
+    func testNutritionProductCacheRoundTripsSeparatelyFromWorkspace() throws {
+        let product = NutritionProduct(
+            id: "cached-product",
+            barcode: "5901234123457",
+            name: "Jogurt z cache",
+            source: "remote",
+            defaultAmount: 180,
+            unit: "g",
+            per100g: NutritionValues(calories: 62, protein: 4.3, carbs: 4.7, fat: 3.3)
+        )
+        XCTAssertEqual(
+            try roundTrip(NutritionProductCache(products: [product])),
+            NutritionProductCache(products: [product])
+        )
+    }
+
     func testNutritionBarcodeFormattingSharesOneStableRequestIdentity() {
         XCTAssertEqual(NutritionBarcode.normalized(" 590-123 456 "), "590123456")
         XCTAssertEqual(
             NutritionBarcode.requestID(for: " 590-123 456 "),
             NutritionBarcode.requestID(for: "590123456")
+        )
+    }
+
+    func testNutritionScanParserAcceptsSupportedProductCodeFamilies() {
+        let codes = ["96385074", "036000291452", "5901234123457", "00012345600012"]
+        for code in codes {
+            XCTAssertEqual(NutritionBarcode.parseScanPayload(code), .productCode(code), code)
+            XCTAssertEqual(
+                NutritionBarcode.parseScanPayload(code.enumerated().map { $0.offset.isMultiple(of: 2) ? String($0.element) : "-\($0.element)" }.joined()),
+                .productCode(code),
+                code
+            )
+        }
+        XCTAssertEqual(NutritionBarcode.parseScanPayload("]E0 5901234123457"), .productCode("5901234123457"))
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("04252614"),
+            .productCode("042100005264")
+        )
+    }
+
+    func testNutritionScanParserAcceptsNumericAndRootineQRPayloads() {
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("rootine:nutrition:v1:5901234123457"),
+            .productCode("5901234123457")
+        )
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("rootine://nutrition/product?barcode=5901234123457"),
+            .productCode("5901234123457")
+        )
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("https://rootine.app/nutrition/product?gtin=5901234123457"),
+            .productCode("5901234123457")
+        )
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("{\"type\":\"rootine.nutrition.product\",\"version\":1,\"code\":\"5901234123457\"}"),
+            .productCode("5901234123457")
+        )
+    }
+
+    func testNutritionScanParserRejectsMalformedAndUntrustedPayloads() {
+        XCTAssertEqual(NutritionBarcode.parseScanPayload(""), .malformed)
+        XCTAssertEqual(NutritionBarcode.parseScanPayload("590123"), .malformed)
+        XCTAssertEqual(NutritionBarcode.parseScanPayload("5901234123456"), .malformed)
+        XCTAssertEqual(NutritionBarcode.parseScanPayload("hello"), .unsupported)
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("https://evil.example/product?code=5901234123457"),
+            .unsupported
+        )
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("https://rootine.app/nutrition/product?code=5901234123457&gtin=5901234123457"),
+            .unsupported
+        )
+        XCTAssertEqual(
+            NutritionBarcode.parseScanPayload("rootine://nutrition/product?code=not-a-code"),
+            .unsupported
         )
     }
 
@@ -250,6 +321,219 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(workspace.notes.first?.items.count, 2)
         XCTAssertEqual(workspace.notes.first?.title, "Pytania na rozmowę")
         XCTAssertEqual(try roundTrip(workspace), workspace)
+    }
+
+    func testNotesQuerySearchesChecklistItemsAndAppliesFolderTagArchiveAndSort() {
+        let older = NoteRecord(
+            id: "note-older",
+            title: "Plan",
+            body: "",
+            kind: "checklist",
+            items: [NoteChecklistItem(id: "item", text: "Kupić kawę", checked: false)],
+            tags: ["dom"],
+            listId: "list-home",
+            color: .green,
+            pinned: false,
+            archived: false,
+            createdAt: "2026-08-01T08:00:00.000Z",
+            updatedAt: "2026-08-02T08:00:00.000Z"
+        )
+        let newer = NoteRecord(
+            id: "note-newer",
+            title: "Spotkanie",
+            body: "",
+            kind: "checklist",
+            items: [NoteChecklistItem(id: "item", text: "Przygotować agendę", checked: true)],
+            tags: ["praca"],
+            listId: "list-work",
+            color: .blue,
+            pinned: true,
+            archived: false,
+            createdAt: "2026-08-03T08:00:00.000Z",
+            updatedAt: "2026-08-04T08:00:00.000Z"
+        )
+        let archived = NoteRecord(
+            id: "note-archived",
+            title: "Stare",
+            body: "",
+            kind: "text",
+            items: [],
+            tags: ["dom"],
+            listId: "list-home",
+            color: .graphite,
+            pinned: false,
+            archived: true,
+            createdAt: "2026-07-01T08:00:00.000Z",
+            updatedAt: "2026-07-02T08:00:00.000Z"
+        )
+        let workspace = NotesWorkspace(version: 1, updatedAt: newer.updatedAt, lists: [], notes: [older, newer, archived])
+
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(search: "kupić", listID: "list-home", tag: "dom")).map(\.id),
+            ["note-older"]
+        )
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(pinnedOnly: true)).map(\.id),
+            ["note-newer"]
+        )
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(showingArchive: true)).map(\.id),
+            ["note-archived"]
+        )
+        XCTAssertEqual(
+            rootineNotes(workspace, matching: RootineNotesQuery(sort: .title)).map(\.id),
+            ["note-older", "note-newer"]
+        )
+    }
+
+    func testNotesMappingPreservesOpaqueWebFieldsAndNativeTombstones() throws {
+        let timestamp = "2026-08-19T09:10:00.000Z"
+        let note = NoteRecord(
+            id: "note-1",
+            title: "Natywny tytuł",
+            body: "Treść",
+            kind: "checklist",
+            items: [NoteChecklistItem(id: "item-1", text: "Krok", checked: true)],
+            tags: ["ios"],
+            listId: "list-1",
+            color: .blue,
+            pinned: true,
+            archived: false,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let base: JSONValue = .object([
+            "version": .number(1),
+            "updatedAt": .string(timestamp),
+            "webRoot": .string("keep"),
+            "lists": .array([.object([
+                "id": .string("list-1"), "name": .string("Web"), "createdAt": .string(timestamp),
+                "webListField": .string("keep")
+            ])]),
+            "notes": .array([.object([
+                "id": .string("note-1"), "title": .string("Stary"), "body": .string(""),
+                "kind": .string("text"), "items": .array([.object([
+                    "id": .string("item-1"), "text": .string("Stary krok"), "checked": .bool(false),
+                    "webItemField": .string("keep")
+                ])]), "tags": .array([]), "listId": .string("list-1"), "color": .string("blue"),
+                "pinned": .bool(false), "archived": .bool(false), "createdAt": .string(timestamp),
+                "updatedAt": .string(timestamp), "webNoteField": .string("keep")
+            ]), .object([
+                "id": .string("note-removed"), "title": .string("Usuń"), "webOnly": .bool(true)
+            ])])
+        ])
+
+        let merged = try RootineCanonicalWorkspaceMapping.mergedNotesPayload(
+            for: NotesWorkspace(version: 1, updatedAt: timestamp, lists: [NoteList(id: "list-1", name: "Natywny", createdAt: timestamp)], notes: [note]),
+            onto: base
+        )
+        guard case .object(let root) = merged,
+              case .array(let lists) = root["lists"], case .object(let list) = lists.first,
+              case .array(let notes) = root["notes"], case .object(let updated) = notes.first,
+              case .array(let items) = updated["items"], case .object(let item) = items.first else {
+            return XCTFail("Notes mapping did not produce canonical arrays")
+        }
+        XCTAssertEqual(root["webRoot"], .string("keep"))
+        XCTAssertEqual(list["webListField"], .string("keep"))
+        XCTAssertEqual(updated["webNoteField"], .string("keep"))
+        XCTAssertEqual(item["webItemField"], .string("keep"))
+        XCTAssertEqual(updated["title"], .string("Natywny tytuł"))
+        XCTAssertNil(notes.first(where: { objectValue($0)?["id"] == .string("note-removed") }))
+    }
+
+    @MainActor
+    func testNotesListLifecycleKeepsNotesWhenFolderIsDeleted() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+
+        await environment.createNoteList(name: "  Praca  ", operationID: "folder-1")
+        await environment.createNoteList(name: "praca", operationID: "folder-duplicate")
+        XCTAssertEqual(environment.notesWorkspace.lists.count, 1)
+        let list = environment.notesWorkspace.lists.first
+        guard let list else { return XCTFail("Folder was not created") }
+
+        await environment.renameNoteList(id: list.id, name: "Projekty")
+        XCTAssertEqual(environment.notesWorkspace.lists.first?.name, "Projekty")
+        await environment.upsertNote(NoteRecord(
+            id: "note-folder",
+            title: "Plan",
+            body: "",
+            kind: "text",
+            items: [],
+            tags: [],
+            listId: list.id,
+            color: .blue,
+            pinned: false,
+            archived: false,
+            createdAt: "2026-08-19T09:10:00.000Z",
+            updatedAt: "2026-08-19T09:10:00.000Z"
+        ))
+
+        await environment.deleteNoteList(id: list.id)
+        XCTAssertTrue(environment.notesWorkspace.lists.isEmpty)
+        XCTAssertEqual(environment.notesWorkspace.notes.first?.listId, "")
+        await environment.deleteNote(id: "note-folder")
+        XCTAssertTrue(environment.notesWorkspace.notes.isEmpty)
+    }
+
+    func testRelationalNotesMapSnakeCaseAndParentTombstone() throws {
+        let timestamp = "2026-08-19T09:10:00.000Z"
+        let initial = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: RootineRelationalBootstrapResponse(
+            serverCursor: 1,
+            workspaces: [RootineRelationalWorkspace(storageKey: RootineStorageKey.notes.rawValue, payload: .object([
+                "version": .number(1), "updatedAt": .string(timestamp), "lists": .array([]), "notes": .array([])
+            ]))]
+        ))
+        let pulled = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.notes.rawValue,
+                entity: "note",
+                entityID: "note-1",
+                revision: 7,
+                record: .object([
+                    "note_id": .string("note-1"), "title": .string("Relacyjna"), "body": .string("Treść"),
+                    "kind": .string("checklist"), "created_at": .string(timestamp), "updated_at": .string(timestamp),
+                    "pinned": .bool(true), "archived": .bool(false), "items": .array([]), "tags": .array([]),
+                    "list_id": .null, "color": .string("green")
+                ])
+            )
+        ], onto: initial)
+        let decoded = try RootineRelationalWorkspaceAdapter.document(NotesWorkspace.self, key: .notes, from: pulled)
+        XCTAssertEqual(decoded.notes.first?.id, "note-1")
+        XCTAssertEqual(decoded.notes.first?.createdAt, timestamp)
+        XCTAssertEqual(decoded.notes.first?.updatedAt, timestamp)
+        XCTAssertEqual(decoded.notes.first?.listId, "")
+        XCTAssertEqual(pulled.recordRevisions["rootine.notes-workspace.v1\u{1F}note\u{1F}note-1"], 7)
+
+        let deleted = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(cursor: 3, storageKey: RootineStorageKey.notes.rawValue, entity: "note", entityID: "note-1", operation: "delete", revision: 8, deletedAt: timestamp)
+        ], onto: pulled)
+        XCTAssertTrue(try RootineRelationalWorkspaceAdapter.document(NotesWorkspace.self, key: .notes, from: deleted).notes.isEmpty)
+    }
+
+    func testNormalizedReadStateKeepsRecordRevisionsAndReadsLegacyState() throws {
+        let state = RootineNormalizedReadState(
+            contractVersion: 1,
+            cursor: 9,
+            documents: [RootineStorageKey.notes.rawValue: .object([:])],
+            recordRevisions: ["notes\u{1F}note\u{1F}n1": 4]
+        )
+        XCTAssertEqual(try roundTrip(state), state)
+
+        let legacy = try JSONSerialization.data(withJSONObject: [
+            "contractVersion": 1,
+            "cursor": 9,
+            "documents": [String: Any]()
+        ])
+        let decoded = try JSONDecoder().decode(RootineNormalizedReadState.self, from: legacy)
+        XCTAssertTrue(decoded.recordRevisions.isEmpty)
     }
 
     func testMoreCanonicalFixturesProjectToNativeModels() throws {
@@ -366,6 +650,41 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertTrue(tasks.tasks.contains(where: { $0.id == 102 && $0.deleted == true }))
     }
 
+    func testRelationalPullPreservesOpaqueWebOnlyWorkspaceDocuments() throws {
+        let key = "rootine.web-only.calendar.v7"
+        let initial = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 8,
+                storageKey: nil,
+                entity: "workspace",
+                entityID: key,
+                record: .object([
+                    "version": .number(7),
+                    "webOnlyRule": .object(["timezone": .string("Europe/Warsaw")])
+                ])
+            )
+        ])
+        XCTAssertEqual(
+            initial.documents[key],
+            .object([
+                "version": .number(7),
+                "webOnlyRule": .object(["timezone": .string("Europe/Warsaw")])
+            ])
+        )
+
+        let deleted = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 9,
+                storageKey: nil,
+                entity: "workspace",
+                entityID: key,
+                operation: "delete"
+            )
+        ], onto: initial)
+        XCTAssertNil(deleted.documents[key])
+        XCTAssertEqual(deleted.revisions[key], 9)
+    }
+
     func testB05ChangeAdapterKeepsStableTransportFields() {
         let change = RootineB05RelationalReadAdapter.change(
             cursor: 7,
@@ -388,6 +707,52 @@ final class ContractFixtureTests: XCTestCase {
         )
         XCTAssertEqual(pull.contractVersion, 3)
         XCTAssertEqual(pull.changes, [change])
+    }
+
+    func testB05BootstrapAdapterRoundTripsPaginationFields() throws {
+        let response = RootineB05RelationalReadAdapter.bootstrap(
+            serverCursor: 12,
+            nextCursor: 5,
+            hasMore: true,
+            changes: []
+        )
+
+        let encoded = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(RootineRelationalBootstrapResponse.self, from: encoded)
+        XCTAssertEqual(decoded.contractVersion, 3)
+        XCTAssertEqual(decoded.serverCursor, 12)
+        XCTAssertEqual(decoded.nextCursor, 5)
+        XCTAssertTrue(decoded.hasMore)
+    }
+
+    func testNormalizedRequestOmitsBootstrapOnlyFields() throws {
+        let encoder = JSONEncoder()
+        let bootstrap = try JSONSerialization.jsonObject(
+            with: encoder.encode(NormalizedSyncRequest(
+                contractVersion: 3,
+                action: "bootstrap",
+                cursor: nil,
+                limit: 500,
+                deviceID: "device"
+            ))
+        ) as? [String: Any]
+        XCTAssertEqual(bootstrap?["contract_version"] as? Int, 3)
+        XCTAssertEqual(bootstrap?["action"] as? String, "bootstrap")
+        XCTAssertEqual(bootstrap?["device_id"] as? String, "device")
+        XCTAssertNil(bootstrap?["cursor"])
+        XCTAssertNil(bootstrap?["limit"])
+
+        let pull = try JSONSerialization.jsonObject(
+            with: encoder.encode(NormalizedSyncRequest(
+                contractVersion: 3,
+                action: "pull",
+                cursor: 4,
+                limit: 500,
+                deviceID: "device"
+            ))
+        ) as? [String: Any]
+        XCTAssertEqual(pull?["cursor"] as? Int, 4)
+        XCTAssertEqual(pull?["limit"] as? Int, 500)
     }
 
     func testNormalizedReadFlagIsScopedByAccountAndEnvironment() {
@@ -618,6 +983,90 @@ final class ContractFixtureTests: XCTestCase {
         } else {
             XCTFail("Legacy alias should be rewritten as the canonical Sport payload")
         }
+    }
+
+    func testHealthValidationHistoryAndMetricsAreDeterministic() {
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let workspace = HealthWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            checkIns: [
+                "2026-08-30": HealthCheckIn(date: "2026-08-30", energy: 2, note: "  spokojnie  ", updatedAt: timestamp),
+                "2026-08-29": HealthCheckIn(date: "2026-08-29", energy: 4, note: nil, updatedAt: timestamp),
+                "bad": HealthCheckIn(date: "2026-08-31", energy: 9, note: nil, updatedAt: timestamp)
+            ],
+            reminders: [
+                HealthReminder(id: "water", title: "Starsza kopia", detail: "", completedDates: []),
+                HealthReminder(id: "water", title: "  Woda  ", detail: "Szklanka", completedDates: ["2026-08-30", "2026-08-30"]),
+                HealthReminder(id: "invalid", title: "", detail: "", completedDates: [])
+            ]
+        )
+
+        XCTAssertTrue(rootineHealthLocalDateIsValid("2024-02-29"))
+        XCTAssertFalse(rootineHealthLocalDateIsValid("2023-02-29"))
+        XCTAssertTrue(rootineHealthCheckInIsValid(workspace.checkIns["2026-08-30"]!))
+        XCTAssertFalse(rootineHealthCheckInIsValid(workspace.checkIns["bad"]!))
+        XCTAssertFalse(rootineHealthWorkspaceIsValid(workspace))
+
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
+        XCTAssertEqual(sanitized.checkIns.keys.sorted(), ["2026-08-29", "2026-08-30"])
+        XCTAssertEqual(sanitized.checkIns["2026-08-30"]?.note, "spokojnie")
+        XCTAssertEqual(sanitized.reminders.count, 1)
+        XCTAssertEqual(sanitized.reminders.first?.id, "water")
+        XCTAssertEqual(sanitized.reminders.first?.completedDates, ["2026-08-30"])
+        XCTAssertTrue(rootineHealthWorkspaceIsValid(sanitized))
+
+        XCTAssertEqual(sanitized.checkInHistory(limit: 2).map(\.date), ["2026-08-30", "2026-08-29"])
+        let metrics = sanitized.metrics(for: "2026-08-30", historyDays: 7)
+        XCTAssertEqual(metrics.todayEnergy, 2)
+        XCTAssertEqual(metrics.checkInCount, 2)
+        XCTAssertEqual(metrics.averageEnergy, 3)
+        XCTAssertEqual(metrics.reminderCount, 1)
+        XCTAssertEqual(metrics.completedReminderCount, 1)
+    }
+
+    func testHealthSanitizationResolvesRepairedDateCollisionsDeterministically() {
+        let older = HealthCheckIn(
+            date: "2026-08-30",
+            energy: 1,
+            note: "older",
+            updatedAt: "2026-08-30T10:00:00.000Z"
+        )
+        let newer = HealthCheckIn(
+            date: "2026-08-30",
+            energy: 4,
+            note: "newer",
+            updatedAt: "2026-08-30T11:00:00.000Z"
+        )
+        let workspace = HealthWorkspace(
+            version: 1,
+            updatedAt: "2026-08-30T12:00:00.000Z",
+            checkIns: ["malformed-a": older, "malformed-b": newer],
+            reminders: []
+        )
+
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
+        XCTAssertEqual(sanitized.checkIns["2026-08-30"]?.energy, 4)
+        XCTAssertEqual(sanitized.checkIns["2026-08-30"]?.note, "newer")
+        XCTAssertEqual(rootineSanitizedHealthWorkspace(workspace), sanitized)
+    }
+
+    func testHealthCanonicalMergePropagatesReminderDeletion() throws {
+        let timestamp = "2026-08-30T12:00:00.000Z"
+        let base = try RootineCanonicalWorkspaceMapping.payload(for: HealthWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            checkIns: [:],
+            reminders: [HealthReminder(id: "water", title: "Woda", detail: "", completedDates: [])]
+        ))
+        let deleted = try RootineCanonicalWorkspaceMapping.mergedHealthPayload(
+            for: HealthWorkspace(version: 1, updatedAt: timestamp, checkIns: [:], reminders: []),
+            onto: base
+        )
+        guard case .object(let root) = deleted, case .array(let reminders) = root["reminders"] else {
+            return XCTFail("Health reminders should remain an array after deletion")
+        }
+        XCTAssertTrue(reminders.isEmpty)
     }
 
     func testGoalsAndHealthLegacyAliasesMigrateAtRevisionZero() async throws {
@@ -927,6 +1376,192 @@ final class ContractFixtureTests: XCTestCase {
 
         XCTAssertTrue(rootineTaskIsDoneOnDate(task, dateKey: "2026-09-01"))
         XCTAssertFalse(rootineTaskIsDoneOnDate(task, dateKey: "2026-09-02"))
+    }
+
+    func testCalendarProjectionExpandsRecurrenceWithMonthEndClampingAndEndDate() {
+        let task = WorkspaceTask(
+            id: 42,
+            text: "Rozliczenie",
+            done: false,
+            view: "wszystkie",
+            calendarDate: "2026-01-31",
+            schedule: WorkspaceTaskSchedule(
+                allDay: false,
+                startTime: "09:00",
+                endDate: "2026-04-30",
+                recurrence: "monthly",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let occurrences = rootineCalendarOccurrences(
+            [task],
+            from: "2026-01-01",
+            through: "2026-12-31"
+        )
+
+        XCTAssertEqual(occurrences.map(\.calendarDate), [
+            "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"
+        ])
+        XCTAssertEqual(occurrences.first?.key, "task:42@2026-01-31")
+        XCTAssertEqual(occurrences.dropFirst().map(\.isVirtual), [true, true, true])
+        XCTAssertEqual(occurrences.dropFirst().map(\.time), ["09:00", "09:00", "09:00"])
+    }
+
+    func testCalendarProjectionClampsLeapDayUntilTheNextLeapYear() {
+        let task = WorkspaceTask(
+            id: 43,
+            text: "Urodziny",
+            done: false,
+            view: "wszystkie",
+            calendarDate: "2024-02-29",
+            schedule: WorkspaceTaskSchedule(
+                allDay: true,
+                startTime: "",
+                recurrence: "yearly",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        XCTAssertEqual(
+            rootineTaskOccurrences([task], from: "2024-01-01", through: "2028-12-31")
+                .map(\.calendarDate),
+            ["2024-02-29", "2025-02-28", "2026-02-28", "2027-02-28", "2028-02-29"]
+        )
+    }
+
+    func testCalendarProjectionKeepsDailyDatesStableAcrossDSTAndScopesCompletion() {
+        let task = WorkspaceTask(
+            id: 7,
+            text: "Poranny spacer",
+            done: false,
+            view: "wszystkie",
+            calendarDate: "2026-03-27",
+            schedule: WorkspaceTaskSchedule(
+                allDay: false,
+                startTime: "02:30",
+                recurrence: "daily",
+                completedDates: ["2026-03-29"],
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let occurrences = rootineTaskOccurrences([task], from: "2026-03-27", through: "2026-03-31")
+        XCTAssertEqual(occurrences.map(\.calendarDate), [
+            "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31"
+        ])
+        XCTAssertEqual(occurrences.map(\.isDone), [false, false, true, false, false])
+        XCTAssertEqual(
+            RootineDate.instant(
+                localDate: "2026-03-29",
+                time: "02:30",
+                timeZone: TimeZone(identifier: "Europe/Warsaw")!
+            ),
+            Date(timeIntervalSince1970: 1774747800)
+        )
+        XCTAssertEqual(
+            RootineDate.instant(
+                localDate: "2026-10-25",
+                time: "02:30",
+                timeZone: TimeZone(identifier: "Europe/Warsaw")!
+            ),
+            Date(timeIntervalSince1970: 1792888200)
+        )
+    }
+
+    func testCalendarCompletionMutatesOnlyTheRequestedRecurringOccurrence() {
+        let task = WorkspaceTask(
+            id: 8,
+            text: "Raport",
+            done: true,
+            view: "wszystkie",
+            calendarDate: "2026-09-01",
+            schedule: WorkspaceTaskSchedule(
+                allDay: true,
+                startTime: "",
+                recurrence: "weekly",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let completed = rootineTaskSettingCompletion(
+            task,
+            dateKey: "2026-09-08",
+            done: true,
+            completedAt: "2026-09-08T08:00:00.000Z"
+        )
+        XCTAssertTrue(completed.done)
+        XCTAssertEqual(completed.schedule?.completedDates, ["2026-09-08"])
+        XCTAssertEqual(completed.schedule?.completedAtByDate?["2026-09-08"], "2026-09-08T08:00:00.000Z")
+        XCTAssertNil(completed.schedule?.completedDates?.first(where: { $0 == "2026-09-01" }))
+        XCTAssertTrue(rootineTaskIsDoneOnDate(completed, dateKey: "2026-09-08"))
+        XCTAssertFalse(rootineTaskIsDoneOnDate(completed, dateKey: "2026-09-15"))
+
+        let undone = rootineTaskSettingCompletion(completed, dateKey: "2026-09-08", done: false)
+        XCTAssertEqual(undone.schedule?.completedDates, [])
+        XCTAssertNil(undone.schedule?.completedAtByDate)
+        XCTAssertFalse(rootineTaskIsDoneOnDate(undone, dateKey: "2026-09-08"))
+
+        let anchorCompleted = rootineTaskSettingCompletion(task, dateKey: "2026-09-01", done: false)
+        XCTAssertFalse(anchorCompleted.done)
+        XCTAssertNil(anchorCompleted.schedule?.completedDates)
+    }
+
+    func testRelationalTaskScheduleAndCompletionChangesFeedCalendarProjection() throws {
+        let base = TaskWorkspace(
+            version: 2,
+            updatedAt: "2026-09-03T08:00:00.000Z",
+            tasks: [],
+            habits: [],
+            lists: [],
+            tags: []
+        )
+        let materialized = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 1,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "task",
+                entityID: "42",
+                record: .object([
+                    "text": .string("Rozliczenie"),
+                    "done": .bool(false),
+                    "view": .string("wszystkie"),
+                    "calendarDate": .string("2026-09-01")
+                ])
+            ),
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "schedule",
+                entityID: "schedule-42",
+                record: .object([
+                    "taskId": .number(42),
+                    "allDay": .bool(true),
+                    "startTime": .string(""),
+                    "recurrence": .string("weekly"),
+                    "timezone": .string("Europe/Warsaw")
+                ])
+            ),
+            RootineRelationalPullChange(
+                cursor: 3,
+                storageKey: RootineStorageKey.tasks.rawValue,
+                entity: "completion",
+                entityID: "completion-42-2026-09-08",
+                record: .object([
+                    "taskId": .number(42),
+                    "date": .string("2026-09-08"),
+                    "completedAt": .string("2026-09-08T08:00:00.000Z")
+                ])
+            )
+        ], onto: RootineRelationalMaterialization(
+            documents: [RootineStorageKey.tasks.rawValue: try jsonValue(base)],
+            revisions: [:]
+        ))
+
+        let workspace = try RootineRelationalWorkspaceAdapter.document(TaskWorkspace.self, key: .tasks, from: materialized)
+        let occurrences = rootineTaskOccurrences(workspace.tasks, from: "2026-09-01", through: "2026-09-15")
+        XCTAssertEqual(occurrences.map(\.calendarDate), ["2026-09-01", "2026-09-08", "2026-09-15"])
+        XCTAssertEqual(occurrences.map(\.isDone), [false, true, false])
     }
 
     func testRootineDateParsesBothTimestampPrecisions() {
@@ -1398,6 +2033,123 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(sanitized.focusSessions.first?.minutes, 20)
     }
 
+    func testLegacyCompactWorkSnapshotDoesNotDeleteCanonicalCollections() throws {
+        let data = Data("""
+        {"version":1,"updatedAt":"2026-09-02T10:00:00.000Z","activeFocusStartedAt":null,"focusSessions":[]}
+        """.utf8)
+        let legacy = try JSONDecoder().decode(WorkWorkspace.self, from: data)
+        XCTAssertFalse(legacy.hasFullProjection)
+        let compactRoundTrip = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(legacy))
+        if case .object(let compactObject) = compactRoundTrip {
+            XCTAssertNil(compactObject["companies"])
+            XCTAssertNil(compactObject["projects"])
+            XCTAssertNil(compactObject["tasks"])
+        } else {
+            XCTFail("Legacy Work snapshot should remain compact on local save")
+        }
+
+        let base = try RootineCanonicalWorkspaceMapping.payload(for: WorkWorkspace(
+            version: 1,
+            updatedAt: "2026-09-02T10:00:00.000Z",
+            activeFocusStartedAt: nil,
+            focusSessions: [],
+            companies: [WorkCompany(id: "company", name: "Acme")],
+            projects: [WorkProject(id: "project", companyId: "company", name: "Launch")],
+            tasks: [WorkItem(id: "task", projectId: "project", title: "Ship", createdAt: "2026-09-02T10:00:00.000Z")]
+        ))
+        let merged = try RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: legacy, onto: base)
+        guard case .object(let object) = merged,
+              case .array(let companies) = object["companies"],
+              case .array(let projects) = object["projects"],
+              case .array(let tasks) = object["tasks"] else {
+            return XCTFail("Legacy compact Work merge should keep canonical collections")
+        }
+        XCTAssertEqual(companies.count, 1)
+        XCTAssertEqual(projects.count, 1)
+        XCTAssertEqual(tasks.count, 1)
+    }
+
+    func testWorkProjectionRoundTripsCollectionsAndPreservesUnknownRecordFields() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let workspace = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: nil,
+            focusSessions: [WorkFocusSession(id: " focus-1 ", startedAt: timestamp, endedAt: timestamp, minutes: 25, projectId: "project-1")],
+            companies: [WorkCompany(id: " company-1 ", name: "Acme", description: "Studio")],
+            projects: [WorkProject(id: "project-1", companyId: "company-1", name: "Launch", status: .active)],
+            tasks: [WorkItem(id: "task-1", companyId: "company-1", projectId: "project-1", title: "Ship", completed: false, status: .todo, priority: .high, dueDate: "2026-09-04", createdAt: timestamp)]
+        )
+        var base = try RootineCanonicalWorkspaceMapping.payload(for: workspace)
+        if case .object(var root) = base,
+           case .array(let companies) = root["companies"],
+           case .object(var company) = companies[0] {
+            company["webOnlyField"] = .string("preserve")
+            root["companies"] = .array([.object(company)])
+            base = .object(root)
+        }
+        let decoded = try RootineCanonicalWorkspaceMapping.workWorkspace(from: base)
+        XCTAssertEqual(decoded.companies.first?.id, "company-1")
+        XCTAssertEqual(decoded.projects.first?.companyId, "company-1")
+        XCTAssertEqual(decoded.tasks.first?.priority, .high)
+        XCTAssertEqual(decoded.focusSessions.first?.minutes, 25)
+
+        let merged = try RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: decoded, onto: base)
+        guard case .object(let root) = merged,
+              case .array(let companies) = root["companies"],
+              case .object(let company) = companies[0] else {
+            return XCTFail("Work payload should contain canonical company records")
+        }
+        XCTAssertEqual(company["webOnlyField"], .string("preserve"))
+    }
+
+    func testWorkValidationBreaksDanglingRelationshipsAndComputesTotals() {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let workspace = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: timestamp,
+            focusSessions: [WorkFocusSession(id: "focus", startedAt: timestamp, endedAt: timestamp, minutes: 25)],
+            companies: [WorkCompany(id: "company", name: "Acme")],
+            projects: [WorkProject(id: "project", companyId: "missing", name: "Launch")],
+            tasks: [
+                WorkItem(id: "task", projectId: "missing", parentId: "task", title: "Ship", completed: false, priority: .urgent, createdAt: timestamp),
+                WorkItem(id: "done", projectId: "project", title: "Done", completed: true, status: .completed, createdAt: timestamp)
+            ]
+        )
+        let sanitized = rootineSanitizedWorkWorkspace(workspace)
+        XCTAssertNil(sanitized.projects.first?.companyId)
+        XCTAssertNil(sanitized.tasks.first?.projectId)
+        XCTAssertNil(sanitized.tasks.first?.parentId)
+        let totals = rootineWorkTotals(sanitized)
+        XCTAssertEqual(totals.projectCount, 1)
+        XCTAssertEqual(totals.openTaskCount, 1)
+        XCTAssertEqual(totals.completedTaskCount, 1)
+        XCTAssertEqual(totals.focusMinutes, 25)
+        let now = RootineDate.date(from: timestamp)!.addingTimeInterval(90)
+        XCTAssertEqual(rootineFocusElapsedSeconds(startedAt: timestamp, at: now), 90)
+        XCTAssertNil(rootineFocusElapsedSeconds(startedAt: "not-a-timestamp", at: now))
+    }
+
+    func testPausedFocusMarkerRoundTripsAndRequiresKnownHistory() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let session = WorkFocusSession(id: "focus-segment", startedAt: timestamp, endedAt: timestamp, minutes: 25)
+        let paused = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: nil,
+            pausedFocusSessionID: session.id,
+            focusSessions: [session]
+        )
+        XCTAssertEqual(try roundTrip(paused), paused)
+        XCTAssertEqual(try objectValue(RootineCanonicalWorkspaceMapping.payload(for: paused))?["pausedFocusSessionID"], .string(session.id))
+
+        var unknown = paused
+        unknown.pausedFocusSessionID = "missing"
+        XCTAssertNil(rootineSanitizedWorkWorkspace(unknown).pausedFocusSessionID)
+        XCTAssertEqual(RootineLocalIdentifier.string(namespace: "focus", operationID: timestamp), RootineLocalIdentifier.string(namespace: "focus", operationID: timestamp))
+    }
+
     func testCanonicalMergesDeduplicateWhitespaceAndRepeatedBaseIDs() throws {
         let timestamp = "2026-09-02T10:00:00.000Z"
 
@@ -1547,6 +2299,177 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(objectValue(itinerary[0])?["location"], .string(""))
         XCTAssertEqual(objectValue(itinerary[1])?["title"], .string("Latarnia"))
         XCTAssertEqual(trip["name"], .string("Weekend nad morzem"))
+    }
+
+    func testTravelFixtureRetainsFullTripDossierAcrossNativeProjection() throws {
+        let payload = try fixture("travel-workspace-v2", as: JSONValue.self)
+        let native = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: payload)
+        let trip = try XCTUnwrap(native.trips.first)
+
+        XCTAssertEqual(native.version, 1)
+        XCTAssertEqual(trip.name, "Gdańsk")
+        XCTAssertEqual(trip.startDate, "2026-09-12")
+        XCTAssertEqual(trip.endDate, "2026-09-15")
+        XCTAssertEqual(trip.status, "ready")
+        XCTAssertEqual(trip.stays.first?.bookingRef, "ABC")
+        XCTAssertEqual(trip.itinerary.first?.location, "Stare Miasto")
+        XCTAssertEqual(trip.budget.first?.actual, 900)
+        XCTAssertEqual(trip.documents.first?.status, "ready")
+        XCTAssertEqual(trip.tasks.first?.category, "booking")
+        XCTAssertTrue(rootineValidateTravelWorkspace(native).isEmpty)
+        XCTAssertEqual(try roundTrip(native), native)
+
+        let remapped = try RootineCanonicalWorkspaceMapping.payload(for: native)
+        guard case .object(let root) = remapped,
+              case .array(let trips) = root["trips"],
+              case .object(let remappedTrip) = trips.first else {
+            return XCTFail("Travel payload should contain a canonical trip")
+        }
+        XCTAssertEqual(remappedTrip["status"], .string("ready"))
+        XCTAssertNotNil(remappedTrip["stays"])
+        XCTAssertNotNil(remappedTrip["budget"])
+        XCTAssertNotNil(remappedTrip["documents"])
+        XCTAssertNotNil(remappedTrip["tasks"])
+    }
+
+    func testTravelBudgetSummaryDoesNotDoubleCountReservations() {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        var trip = TravelRecord(id: "budget-trip", destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, itinerary: [], createdAt: timestamp, updatedAt: timestamp)
+        trip.stays = [TravelStay(id: "stay", name: "Hotel", city: "Gdańsk", address: "", checkIn: "2026-09-12", checkOut: "2026-09-15", bookingRef: "", status: "paid", amount: 900)]
+        trip.transports = [TravelTransport(id: "train", mode: "train", title: "PKP", from: "Warszawa", to: "Gdańsk", departure: "2026-09-12", arrival: "2026-09-12", bookingRef: "", status: "booked", amount: 100)]
+        trip.budget = [TravelBudgetLine(id: "stay-budget", category: "stay", label: "Hotel", planned: 900, actual: 900, paid: true)]
+
+        let summary = summarizeTravelBudget(trip)
+        XCTAssertEqual(summary.planned, 1_000)
+        XCTAssertEqual(summary.actual, 1_000)
+        XCTAssertEqual(summary.paid, 900)
+        XCTAssertEqual(summary.remaining, 0)
+        XCTAssertEqual(summary.reservationCommitted, 1_000)
+        XCTAssertEqual(summary.unbudgetedReservations, 100)
+    }
+
+    func testTravelValidationRejectsDatesTimezoneMoneyAndPackingErrors() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let item = TravelItineraryItem(
+            id: "item-1",
+            date: "2026-09-12",
+            time: "16:20",
+            title: "Spacer",
+            location: "Stare Miasto",
+            kind: "sightseeing",
+            note: "",
+            reserved: false,
+            timezone: "Europe/Warsaw"
+        )
+        let trip = TravelRecord(
+            id: "trip-validation",
+            name: "Gdańsk",
+            destination: "Gdańsk",
+            startDate: "2026-09-12",
+            endDate: "2026-09-15",
+            status: "planning",
+            travelers: ["Rafał"],
+            baseCurrency: "PLN",
+            note: "",
+            archivedAt: nil,
+            stays: [TravelStay(id: "stay-1", name: "Hotel", city: "Gdańsk", address: "Długa 1", checkIn: "2026-09-12T15:00:00.000Z", checkOut: "2026-09-15T10:00:00.000Z", bookingRef: "", status: "planned", amount: 900)],
+            transports: [],
+            bookings: [],
+            itinerary: [item],
+            budget: [TravelBudgetLine(id: "budget-1", category: "stay", label: "Hotel", planned: 900, actual: 0, paid: false)],
+            documents: [],
+            tasks: [],
+            packingItems: [TravelPackingItem(id: "bag-1", label: "Kurtka", quantity: 1, packed: false)],
+            timezone: "Europe/Warsaw",
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        let valid = TravelWorkspace(version: 1, updatedAt: timestamp, trips: [trip])
+        XCTAssertTrue(rootineValidateTravelWorkspace(valid).isEmpty)
+
+        var invalid = trip
+        invalid.baseCurrency = "ZZZ"
+        invalid.timezone = "Mars/Phobos"
+        invalid.itinerary[0].time = "25:61"
+        invalid.stays[0].amount = -1
+        invalid.packingItems[0].quantity = 0
+        let issues = rootineValidateTravelWorkspace(TravelWorkspace(version: 1, updatedAt: timestamp, trips: [invalid]))
+        XCTAssertTrue(issues.contains { if case .invalidCurrency("trip-validation") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidTimezone("trip-validation") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidClockTime(tripID: "trip-validation", id: "item-1") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidAmount(tripID: "trip-validation", collection: "stays", id: "stay-1") = $0 { return true }; return false })
+        XCTAssertTrue(issues.contains { if case .invalidQuantity(tripID: "trip-validation", id: "bag-1") = $0 { return true }; return false })
+
+        var reversed = trip
+        reversed.endDate = "2026-09-11"
+        XCTAssertTrue(rootineValidateTravelWorkspace(TravelWorkspace(version: 1, updatedAt: timestamp, trips: [reversed])).contains { if case .invalidTripDates = $0 { return true }; return false })
+    }
+
+    func testTravelLocalDatesRejectNonexistentDSTWallClock() {
+        XCTAssertNotNil(RootineDate.date(fromLocalDateTime: "2026-03-29T01:30", timezone: "Europe/Warsaw"))
+        XCTAssertNil(RootineDate.date(fromLocalDateTime: "2026-03-29T02:30", timezone: "Europe/Warsaw"))
+        XCTAssertEqual(RootineDate.localDate(RootineDate.dateOnly(from: "2026-09-12", timezone: "Pacific/Auckland")!, timezone: "Pacific/Auckland"), "2026-09-12")
+    }
+
+    func testRelationalTravelBookingsDoNotMaterializeAsStays() throws {
+        let materialized = try RootineRelationalWorkspaceAdapter.materialize(changes: [
+            RootineRelationalPullChange(
+                cursor: 1,
+                storageKey: RootineStorageKey.travel.rawValue,
+                entity: "trip",
+                entityID: "trip-relational",
+                record: .object([
+                    "name": .string("Podróż"),
+                    "destination": .string("Gdańsk"),
+                    "start_date": .string("2026-09-12"),
+                    "end_date": .string("2026-09-15"),
+                    "status": .string("ongoing"),
+                    "base_currency": .string("PLN")
+                ])
+            ),
+            RootineRelationalPullChange(
+                cursor: 2,
+                storageKey: RootineStorageKey.travel.rawValue,
+                entity: "trip_bookings",
+                entityID: "booking-1",
+                record: .object([
+                    "trip_id": .string("trip-relational"),
+                    "provider": .string("PKP"),
+                    "booking_reference": .string("ABC"),
+                    "status": .string("booked"),
+                    "amount_minor": .number(12000),
+                    "currency_code": .string("PLN")
+                ])
+            )
+        ])
+        let payload = try XCTUnwrap(materialized.documents[RootineCanonicalWorkspaceMapping.canonicalStorageKey(for: .travel)])
+        let native = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: payload)
+        let trip = try XCTUnwrap(native.trips.first)
+        XCTAssertEqual(trip.status, "planning")
+        XCTAssertTrue(trip.stays.isEmpty)
+        XCTAssertEqual(trip.bookings.first?.bookingReference, "ABC")
+        XCTAssertEqual(trip.bookings.first?.amountMinor, 12000)
+    }
+
+    @MainActor
+    func testTravelMutationsUseStableIDsAndRejectInvalidOfflineDrafts() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        await environment.addTrip(destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, operationID: "retry-trip")
+        await environment.addTrip(destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, operationID: "retry-trip")
+        let tripID = try! XCTUnwrap(environment.travelWorkspace.trips.first?.id)
+        await environment.addTravelPackingItem(tripID: tripID, label: "Paszport", operationID: "passport")
+        await environment.addTravelPackingItem(tripID: tripID, label: "Paszport", operationID: "passport")
+        XCTAssertEqual(environment.travelWorkspace.trips.count, 1)
+        XCTAssertEqual(environment.travelWorkspace.trips.first?.packingItems.count, 1)
+        await environment.setTravelStatus("not-a-status", tripID: tripID)
+        XCTAssertEqual(environment.travelWorkspace.trips.first?.status, "planning")
     }
 
     private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T {

@@ -122,6 +122,179 @@ final class SyncV3Tests: XCTestCase {
         }
     }
 
+    func testCursorStoreSeparatesAccountsAndDevicesAndRejectsMalformedEnvelope() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("rootine-cursor-scope-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let accountA = RootineSyncCursorStore(accountID: "account-a", deviceID: "device-1", rootURL: root)
+        try await accountA.save(9)
+        let accountB = RootineSyncCursorStore(accountID: "account-b", deviceID: "device-1", rootURL: root)
+        let deviceTwo = RootineSyncCursorStore(accountID: "account-a", deviceID: "device-2", rootURL: root)
+        XCTAssertNil(try await accountB.load())
+        XCTAssertNil(try await deviceTwo.load())
+
+        let cursorURL = await accountA.location()
+        try Data("{\"contractVersion\":1,\"accountID\":\"other\",\"deviceID\":\"device-1\",\"cursor\":9,\"updatedAt\":\"2026-09-03T10:00:00Z\"}".utf8)
+            .write(to: cursorURL, options: .atomic)
+        do {
+            _ = try await accountA.load()
+            XCTFail("A cursor envelope from another account must be rejected")
+        } catch {
+            XCTAssertEqual(error as? RootineSyncCursorError, .invalid)
+        }
+
+        try Data("not-json".utf8).write(to: cursorURL, options: .atomic)
+        do {
+            _ = try await accountA.load()
+            XCTFail("Malformed cursor data must be rejected")
+        } catch {
+            XCTAssertEqual(error as? RootineSyncCursorError, .invalid)
+        }
+    }
+
+    func testSecureStorageNamespacesAccountsWithoutEmbeddingIdentifiers() {
+        let first = RootineSecureStorageSupport.accountNamespace("user-a@example.com")
+        let second = RootineSecureStorageSupport.accountNamespace("user-b@example.com")
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertFalse(first.contains("user-a"))
+        XCTAssertFalse(first.contains("@"))
+        XCTAssertEqual(first, RootineSecureStorageSupport.accountNamespace("user-a@example.com"))
+        XCTAssertEqual(first.count, "account-".count + 64)
+
+        let unsafe = RootineSecureStorageSupport.accountPathComponent("../other-account")
+        XCTAssertFalse(unsafe.contains("/"))
+        XCTAssertFalse(unsafe.contains(".."))
+        XCTAssertTrue(unsafe.contains("-"))
+    }
+
+    func testProductionNetworkSessionDoesNotPersistCookiesOrResponses() {
+        let session = RootineSecureURLSession.make()
+        defer { session.invalidateAndCancel() }
+
+        XCTAssertNil(session.configuration.urlCache)
+        XCTAssertNil(session.configuration.httpCookieStorage)
+        XCTAssertEqual(session.configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
+    }
+
+    func testCorruptRolloutFlagIsIgnoredAndDefaultsOff() {
+        let suite = "RootineSecureStorageFeatureFlag.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accountID = "account-a"
+        let environment = "staging"
+        let legacyKey = "rootine.feature.normalized_read_enabled.\(environment).\(accountID)"
+        defaults.set("not-a-bool", forKey: legacyKey)
+
+        let flags = UserDefaultsRootineReadFeatureFlagStore(defaults: defaults)
+        XCTAssertFalse(flags.normalizedReadEnabled(accountID: accountID, environment: environment))
+        // A corrupt legacy key is ignored but retained so this release does
+        // not perform an irreversible downgrade-breaking migration.
+        XCTAssertEqual(defaults.object(forKey: legacyKey) as? String, "not-a-bool")
+    }
+
+    func testWorkspaceFilesUseDataProtectionAndRefuseBroadRootDeletion() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-protection-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = WorkspaceFileStore(userID: "protected-user", rootURL: root)
+        let workspace = TaskWorkspace(version: 2, updatedAt: "2026-09-02T10:00:00Z", tasks: [], habits: [], lists: [], tags: [])
+
+        try await store.save(workspace, key: .tasks)
+        let file = root.appendingPathComponent("Workspaces/rootine-task-workspace-v1.json")
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        XCTAssertEqual(attributes[.protectionKey] as? FileProtectionType, .completeUntilFirstUserAuthentication)
+
+        let broadStore = WorkspaceFileStore(
+            userID: "protected-user",
+            rootURL: FileManager.default.temporaryDirectory
+        )
+        do {
+            try await broadStore.clearAllLocalData()
+            XCTFail("A broad temporary root must not be deleted")
+        } catch {
+            XCTAssertEqual(error as? WorkspaceFileStoreError, .invalidRoot)
+        }
+    }
+
+    func testCorruptCursorIsRemovedForControlledBootstrap() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-corrupt-cursor-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Sync/device", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let cursorURL = directory.appendingPathComponent("cursor.json")
+        try Data("not-a-cursor".utf8).write(to: cursorURL, options: .atomic)
+
+        let store = RootineSyncCursorStore(accountID: "account", deviceID: "device", rootURL: root)
+        do {
+            _ = try await store.load()
+            XCTFail("A corrupt cursor must not be accepted")
+        } catch {
+            XCTAssertEqual(error as? RootineSyncCursorError, .invalid)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cursorURL.path))
+    }
+
+    func testCorruptOperationAndConflictCachesAreQuarantined() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rootine-corrupt-sync-caches-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Sync/device", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let operationURL = directory.appendingPathComponent("operations.json")
+        try Data("broken-operation-log".utf8).write(to: operationURL, options: .atomic)
+        let log = RootineSyncOperationLog(accountID: "account", deviceID: "device", rootURL: root)
+        XCTAssertTrue(try await log.allEntries().isEmpty)
+
+        let operationQuarantine = try FileManager.default.contentsOfDirectory(
+            atPath: directory.appendingPathComponent("Recovery", isDirectory: true).path
+        )
+            .first(where: { $0.hasPrefix("operations-corrupt-") })
+        XCTAssertNotNil(operationQuarantine)
+
+        let conflictURL = directory.appendingPathComponent("conflicts.json")
+        try Data("broken-conflicts".utf8).write(to: conflictURL, options: .atomic)
+        let conflicts = RootineConflictStore(accountID: "account", deviceID: "device", rootURL: root)
+        XCTAssertTrue(try await conflicts.list().isEmpty)
+        let conflictQuarantine = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .first(where: { $0.hasPrefix("conflicts-corrupt-") })
+        XCTAssertNotNil(conflictQuarantine)
+    }
+
+    func testCorruptNotificationPreferencesResetToSafeDefaults() {
+        let suite = "RootineSecureStoragePreferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = RootineSecureStorageSupport.defaultsKey(
+            prefix: "rootine.notification.preferences.",
+            accountID: "account-a"
+        )
+        defaults.set(Data("broken-preferences".utf8), forKey: key)
+
+        XCTAssertNil(RootineNotificationPreferencesStore.load(userID: "account-a", defaults: defaults))
+        XCTAssertNil(defaults.data(forKey: key))
+    }
+
+    func testNotificationRequestMetadataDoesNotContainAccountOrEntityIdentifiers() {
+        let occurrence = RootineNotificationOccurrence(
+            entity: .task,
+            entityID: "private-task-id",
+            localDate: "2026-09-02",
+            localTime: "08:45",
+            scheduledAt: Date(timeIntervalSince1970: 10),
+            userID: "private-account-id"
+        )
+
+        let metadata = occurrence.userInfo
+        XCTAssertNil(metadata["rootine_dedupe_key"])
+        XCTAssertNil(metadata["rootine_entity_id"])
+        XCTAssertNil(metadata["rootine_occurrence_id"])
+        XCTAssertNotNil(metadata["rootine_occurrence_hash"] as? String)
+        XCTAssertFalse(occurrence.requestIdentifier(for: "private-account-id").contains("private-account-id"))
+    }
+
     func testOperationLogDeduplicatesByOperationIDAndSerializesSameRecord() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("rootine-oplog-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -185,6 +358,8 @@ final class SyncV3Tests: XCTestCase {
         await remote.setPushResponse(RootineSyncPushResponse(results: [RootineSyncCommandResult(
             operationID: "conflict-op",
             status: .conflict,
+            entity: "note",
+            entityID: "note-1",
             serverRevision: 9,
             serverRecord: .object(["title": .string("server")])
         )]))
@@ -234,6 +409,39 @@ final class SyncV3Tests: XCTestCase {
         XCTAssertEqual(pending.map(\.operationID), ["first"])
         let entries = try await log.allEntries()
         XCTAssertEqual(entries.first?.command.retry.attemptCount, 1)
+    }
+
+    func testRetryLimitMovesExhaustedCommandToDeadLetter() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("rootine-retry-limit-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = RootineSyncOperationLog(accountID: "account", deviceID: "device", rootURL: root)
+        let exhausted = PendingSyncCommand(
+            operationID: "exhausted",
+            deviceID: "device",
+            entity: "task",
+            entityID: "1",
+            baseRevision: 0,
+            payload: .null,
+            // Seven recorded failures means this timeout is failure eight and
+            // must be dead-lettered without scheduling a ninth request.
+            retry: SyncRetryMetadata(attemptCount: RootineSyncRetryPolicy.maxAttempts - 1)
+        )
+        _ = try await log.append(exhausted)
+        let remote = MockRootineSyncRemoteClient()
+        await remote.queue(error: .timeout)
+        let engine = WorkspaceSyncEngine(
+            store: WorkspaceFileStore(userID: "account", rootURL: root),
+            remote: NoopWorkspaceRemote(),
+            normalizedRemote: remote,
+            cursorStore: RootineSyncCursorStore(accountID: "account", deviceID: "device", rootURL: root),
+            operationLog: log,
+            conflictStore: RootineConflictStore(accountID: "account", deviceID: "device", rootURL: root),
+            deviceID: "device"
+        )
+
+        XCTAssertEqual(try await engine.flushNormalized(accessToken: "token"), .error)
+        XCTAssertTrue(try await log.pending().isEmpty)
+        XCTAssertEqual(try await log.entry(operationID: "exhausted")?.state, .deadLetter)
     }
 
     func testCursorExpiryClearsOnlyCursorAndLeavesOperationLog() async throws {

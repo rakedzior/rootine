@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SYNC_CONTRACT_ID, SYNC_CONTRACT_VERSION, validateSyncContractShape } from "./sync-contract-validation.mjs";
+import { readdirSync, readFileSync } from "node:fs";
+import { SYNC_CONTRACT_ID, SYNC_CONTRACT_VERSION, SYNC_SCHEMA_DIALECT, validateSyncContractFixtures, validateSyncContractShape } from "./sync-contract-validation.mjs";
 
 function contractFixture(overrides = {}) {
   const definitions = [
@@ -15,6 +16,7 @@ function contractFixture(overrides = {}) {
     "errorResponse",
   ];
   return {
+    $schema: SYNC_SCHEMA_DIALECT,
     $id: SYNC_CONTRACT_ID,
     oneOf: definitions.map((definition) => ({ $ref: `#/$defs/${definition}` })),
     $defs: {
@@ -51,5 +53,23 @@ test("sync-v3 gate rejects a response envelope without correlation_id", () => {
   const invalid = contractFixture();
   invalid.$defs.responseEnvelope.required = ["contract_version"];
   const result = validateSyncContractShape(invalid);
+  assert.equal(result.valid, false);
+});
+
+test("canonical sync-v3 fixtures validate against the executable schema", () => {
+  const schema = JSON.parse(readFileSync("contracts/schemas/sync-v3.schema.json", "utf8"));
+  const fixtures = Object.fromEntries(readdirSync("contracts/fixtures")
+    .filter((name) => name.startsWith("sync-v3-") && name.endsWith(".json"))
+    .map((name) => [name, JSON.parse(readFileSync(`contracts/fixtures/${name}`, "utf8"))]));
+  const result = validateSyncContractFixtures(schema, fixtures);
+  assert.equal(result.valid, true);
+  assert.equal(result.results.length, 11);
+});
+
+test("executable sync-v3 schema rejects an out-of-range pull limit", () => {
+  const schema = JSON.parse(readFileSync("contracts/schemas/sync-v3.schema.json", "utf8"));
+  const fixture = JSON.parse(readFileSync("contracts/fixtures/sync-v3-pull-request.json", "utf8"));
+  fixture.limit = 501;
+  const result = validateSyncContractFixtures(schema, { fixture });
   assert.equal(result.valid, false);
 });

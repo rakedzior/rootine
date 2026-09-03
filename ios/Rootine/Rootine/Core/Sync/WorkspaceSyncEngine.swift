@@ -38,6 +38,7 @@ actor WorkspaceSyncEngine {
     private let conflictStore: RootineConflictStore?
     private let deviceID: String?
     private let now: @Sendable () -> Date
+    private let observability: RootineObservability
     private let encoder: JSONEncoder
     private let decoder = JSONDecoder()
     // Share one awaitable result between concurrent callers. Returning `.idle`
@@ -55,6 +56,7 @@ actor WorkspaceSyncEngine {
         conflictStore = nil
         deviceID = nil
         now = Date.init
+        observability = .shared
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -70,7 +72,8 @@ actor WorkspaceSyncEngine {
         cursorStore: RootineSyncCursorStore? = nil,
         operationLog: RootineSyncOperationLog? = nil,
         conflictStore: RootineConflictStore? = nil,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        observability: RootineObservability = .shared
     ) {
         self.store = store
         self.remote = remote
@@ -80,6 +83,7 @@ actor WorkspaceSyncEngine {
         self.cursorStore = cursorStore ?? RootineSyncCursorStore(accountID: accountID, deviceID: deviceID)
         self.operationLog = operationLog ?? RootineSyncOperationLog(accountID: accountID, deviceID: deviceID)
         self.conflictStore = conflictStore ?? RootineConflictStore(accountID: accountID, deviceID: deviceID)
+        self.observability = observability
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -95,7 +99,8 @@ actor WorkspaceSyncEngine {
         operationLog: RootineSyncOperationLog,
         conflictStore: RootineConflictStore,
         deviceID: String,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        observability: RootineObservability = .shared
     ) {
         self.store = store
         self.remote = remote
@@ -105,6 +110,7 @@ actor WorkspaceSyncEngine {
         self.conflictStore = conflictStore
         self.deviceID = deviceID
         self.now = now
+        self.observability = observability
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
     }
@@ -288,23 +294,26 @@ actor WorkspaceSyncEngine {
         } catch let error as RootineSyncRemoteError {
             switch error {
             case .unauthorized:
+                observability.increment(.syncUnauthorized)
+                observability.recordSync(endpoint: "push", outcome: .failure, error: error.localizedDescription, attributes: ["status": "unauthorized"])
                 return .unauthorized
             case .cursorExpired:
+                observability.increment(.syncCursorExpired)
+                observability.recordSync(endpoint: "push", outcome: .degraded, error: error.localizedDescription, attributes: ["status": "cursor_expired"])
                 try await cursorStore?.reset()
                 return .cursorExpired
             case .timeout, .rateLimited, .server, .network:
-                let next = try await scheduleRetries(batch, error: error)
-                return .retryScheduled(next)
+                observability.increment(.syncRetry)
+                observability.recordSync(endpoint: "push", outcome: .degraded, error: error.localizedDescription)
+                let schedule = try await scheduleRetries(batch, error: error)
+                return schedule.scheduled ? .retryScheduled(schedule.next) : .error
             default:
+                observability.recordSync(endpoint: "push", outcome: .failure, error: error.localizedDescription)
                 for command in batch {
                     try await operationLog.markDeadLetter(operationID: command.operationID, reason: error.localizedDescription, at: now())
                 }
                 return .error
             }
-        }
-
-        if let serverCursor = response.serverCursor {
-            try await cursorStore?.save(serverCursor)
         }
 
         var applied = 0
@@ -315,33 +324,65 @@ actor WorkspaceSyncEngine {
         let results = response.results.reduce(into: [String: RootineSyncCommandResult]()) { resultByID, result in
             resultByID[result.operationID] = result
         }
+        if results.count != response.results.count
+            || response.results.contains(where: { result in
+                !batch.contains(where: { command in command.operationID == result.operationID })
+            }) {
+            let schedule = try await scheduleRetries(batch, error: RootineSyncRemoteError.invalidResponse)
+            return schedule.scheduled ? .retryScheduled(schedule.next) : .error
+        }
         for command in batch {
             guard let result = results[command.operationID] else {
-                let next = try await scheduleRetries([command], error: RootineSyncRemoteError.invalidResponse)
-                return .retryScheduled(next)
+                let schedule = try await scheduleRetries([command], error: RootineSyncRemoteError.invalidResponse)
+                return schedule.scheduled ? .retryScheduled(schedule.next) : .error
+            }
+            if result.entity != command.entity
+                || result.entityID != command.entityID
+                || (result.status == .applied && (result.revision == nil || result.revision! < 0)) {
+                let schedule = try await scheduleRetries([command], error: RootineSyncRemoteError.invalidResponse)
+                return schedule.scheduled ? .retryScheduled(schedule.next) : .error
             }
             switch result.status {
             case .applied, .alreadyApplied:
                 try await operationLog.markApplied(operationID: command.operationID)
+                observability.recordSync(endpoint: "push", outcome: .success, operationID: command.operationID, attributes: ["status": result.status.rawValue])
                 applied += 1
             case .conflict:
                 try await recordConflict(command: command, result: result)
                 try await operationLog.markDeadLetter(operationID: command.operationID, reason: "conflict", at: now())
+                observability.increment(.syncConflict)
+                observability.recordSync(endpoint: "push", outcome: .degraded, operationID: command.operationID, attributes: ["status": "conflict"])
                 conflictKeys.append("\(command.entity):\(command.entityID)")
             case .invalid, .unauthorized, .custom:
                 let reason = result.message ?? result.status.rawValue
                 try await operationLog.markDeadLetter(operationID: command.operationID, reason: reason, at: now())
+                observability.recordSync(endpoint: "push", outcome: .failure, operationID: command.operationID, error: reason, attributes: ["status": result.status.rawValue])
             }
         }
         if !conflictKeys.isEmpty { return .conflict(conflictKeys) }
         return applied == 0 ? .idle : .applied(applied)
     }
 
-    private func scheduleRetries(_ commands: [PendingSyncCommand], error: Error) async throws -> Date {
+    private func scheduleRetries(
+        _ commands: [PendingSyncCommand],
+        error: Error
+    ) async throws -> (next: Date, scheduled: Bool) {
         guard let operationLog else { throw RootineSyncEngineError.normalizedSyncUnavailable }
         let timestamp = now()
         var next = timestamp
+        var scheduled = false
         for command in commands {
+            // attemptCount is the number of failures already recorded. The
+            // current failure is the next attempt, so dead-letter on the
+            // eighth failure rather than permitting a ninth request.
+            if command.retry.attemptCount + 1 >= RootineSyncRetryPolicy.maxAttempts {
+                try await operationLog.markDeadLetter(
+                    operationID: command.operationID,
+                    reason: "retry_limit_exceeded",
+                    at: timestamp
+                )
+                continue
+            }
             let policyDelay = RootineSyncRetryPolicy.delay(attempt: command.retry.attemptCount)
             let serverDelay: TimeInterval
             if case let RootineSyncRemoteError.rateLimited(retryAfter) = error {
@@ -352,6 +393,7 @@ actor WorkspaceSyncEngine {
             let delay = max(policyDelay, serverDelay)
             let attemptNext = timestamp.addingTimeInterval(delay)
             next = max(next, attemptNext)
+            scheduled = true
             try await operationLog.recordRetry(
                 operationID: command.operationID,
                 at: timestamp,
@@ -359,7 +401,7 @@ actor WorkspaceSyncEngine {
                 nextAttemptAt: attemptNext
             )
         }
-        return next
+        return (next, scheduled)
     }
 
     private func recordConflict(command: PendingSyncCommand, result: RootineSyncCommandResult) async throws {

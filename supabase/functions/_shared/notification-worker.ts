@@ -24,13 +24,15 @@ type NotificationDevice = {
   apns_environment: "sandbox" | "production";
 };
 
-type DeliveryResult = {
+export type DeliveryResult = {
   device_id: string;
   status: ApnsSendResult["status"];
   retryable: boolean;
   provider_response_code: number | null;
   provider_reason: string | null;
 };
+
+export type NotificationDeliveryObserver = (delivery: Readonly<DeliveryResult>) => void | Promise<void>;
 
 function supabaseError(error: { message?: string } | null | undefined, fallback: string): Error {
   // Provider/database errors may contain request details. The error is kept
@@ -39,18 +41,45 @@ function supabaseError(error: { message?: string } | null | undefined, fallback:
   return new Error(fallback);
 }
 
-function apnsPayload(payload: Record<string, unknown>): Record<string, unknown> {
-  if (payload.aps && typeof payload.aps === "object") return payload;
+const SAFE_DEEP_LINK = /^rootine:\/\/notification\/(task|habit)\/([A-Za-z0-9._~-]{1,180})\?date=(\d{4}-\d{2}-\d{2})$/;
 
-  const { title, body, subtitle, sound, badge, ...custom } = payload;
+function safeText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= 256 ? normalized : null;
+}
+
+function safeDeepLink(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 512) return null;
+  return SAFE_DEEP_LINK.test(value) ? value : null;
+}
+
+function apnsPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const apsInput = payload.aps && typeof payload.aps === "object" && !Array.isArray(payload.aps)
+    ? payload.aps as Record<string, unknown>
+    : payload;
+  const alertInput = apsInput.alert && typeof apsInput.alert === "object" && !Array.isArray(apsInput.alert)
+    ? apsInput.alert as Record<string, unknown>
+    : apsInput;
   const alert: Record<string, unknown> = {};
-  if (typeof title === "string") alert.title = title;
-  if (typeof subtitle === "string") alert.subtitle = subtitle;
-  if (typeof body === "string") alert.body = body;
+  const title = safeText(alertInput.title);
+  const subtitle = safeText(alertInput.subtitle);
+  const body = safeText(alertInput.body);
+  if (title) alert.title = title;
+  if (subtitle) alert.subtitle = subtitle;
+  if (body) alert.body = body;
   const aps: Record<string, unknown> = { alert };
-  if (typeof sound === "string") aps.sound = sound;
-  if (typeof badge === "number") aps.badge = badge;
-  return { ...custom, aps };
+  const sound = safeText(apsInput.sound);
+  if (sound) aps.sound = sound;
+  if (typeof apsInput.badge === "number" && Number.isInteger(apsInput.badge) && apsInput.badge >= 0) {
+    aps.badge = apsInput.badge;
+  }
+
+  // The APNs custom envelope is intentionally tiny. In particular, never
+  // forward user IDs, task text, auth material, or arbitrary keys from a job
+  // payload. A deep link is accepted only for the internal opaque-ID route.
+  const deepLink = safeDeepLink(payload.rootine_deep_link);
+  return deepLink ? { rootine_deep_link: deepLink, aps } : { aps };
 }
 
 async function activeDevices(
@@ -63,7 +92,9 @@ async function activeDevices(
     .eq("user_id", job.user_id)
     .eq("platform", "ios")
     .is("revoked_at", null)
-    .in("permission_state", ["authorized", "provisional", "unknown"]);
+    .is("deleted_at", null)
+    .gte("last_seen_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+    .in("permission_state", ["authorized", "provisional", "ephemeral"]);
   if (job.device_id) query = query.eq("device_id", job.device_id);
   const { data, error } = await query;
   if (error) throw supabaseError(error, "Unable to load notification devices");
@@ -91,9 +122,10 @@ async function deliveredDeviceIds(
   );
 }
 
-async function revokeDevice(admin: SupabaseAdmin, deviceId: string): Promise<void> {
+async function revokeDevice(admin: SupabaseAdmin, userID: string, deviceId: string): Promise<void> {
   const { error } = await admin.rpc("rootine_revoke_notification_device", {
     p_device_id: deviceId,
+    p_user_id: userID,
   });
   // A failed revoke is intentionally not logged with a token. The delivery
   // remains unregistered and the next registry reconciliation can retry it.
@@ -124,6 +156,7 @@ export async function deliverNotificationJob(
   provider: Pick<ApnsHttpProvider, "send">,
   job: NotificationJob,
   lockOwner: string,
+  options: { onDelivery?: NotificationDeliveryObserver } = {},
 ): Promise<{ outcome: "delivered" | "retry" | "failed" | "expired"; deliveryCount: number }> {
   if (Date.parse(job.expires_at) <= Date.now()) {
     await finalizeNotificationJob(admin, job, lockOwner, "expired", [], "Notification occurrence expired");
@@ -148,7 +181,7 @@ export async function deliverNotificationJob(
       provider_response_code: result.responseCode,
       provider_reason: result.reason,
     });
-    if (result.revokeDevice) await revokeDevice(admin, device.device_id);
+    if (result.revokeDevice) await revokeDevice(admin, job.user_id, device.device_id);
   }
 
   const hasDelivered = results.some((result) => result.status === "delivered") || pendingDevices.length < devices.length;

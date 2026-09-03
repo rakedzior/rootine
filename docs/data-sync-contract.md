@@ -120,7 +120,7 @@ Każde żądanie ma `correlation_id` w formacie
 
 | `action` | Dodatkowe pola | RPC | Odpowiedź |
 | --- | --- | --- | --- |
-| `register_device` | `platform=ios`, `app_version`, `environment`, `apns_environment`, `push_token` | `rootine_register_device` | `device_id`, `environment`, `registered_at` |
+| `register_device` | `platform=ios`, `app_version`, `environment`, optional `permission_state` and APNs environment/token pair | `rootine_register_device` | `device_id`, `environment`, `registered_at` |
 | `bootstrap` | brak | `rootine_sync_bootstrap` | `server_cursor`, `next_cursor`, `has_more`, `changes` |
 | `pull` | `cursor` (liczba albo `null`) i opcjonalnie `limit` | `rootine_sync_pull` | `from_cursor`, `next_cursor`, `has_more`, `changes` |
 | `push` | `commands` | `rootine_sync_push` | wynik per komenda i `server_cursor` |
@@ -158,7 +158,7 @@ pozostałych. Tombstone usunięcia pozostaje w outboxie jako `operation: delete`
 ### Pull i wygasły cursor
 
 `rootine_sync_changes` jest append-only i ma monotoniczny cursor. Pull zwraca
-rekordy są sortowane rosnąco po cursorze. Jeśli podany cursor jest starszy niż
+rekordy sortowane rosnąco po cursorze. Jeśli podany cursor jest starszy niż
 jawnie utrzymywana granica retencji (`cursor_expired`),
 odpowiedź nie udaje pustej listy: endpoint zwraca HTTP `409` z kodem
 `cursor_expired`, a klient musi wykonać kontrolowany bootstrap. Cursor urządzenia
@@ -198,6 +198,14 @@ granice dostępne dla konta. Aktualizacja rekordu z `deleted_at` tworzy
 `operation = 'delete'` — tombstone nie jest fizycznym brakiem rekordu. RLS
 ogranicza odczyt do `auth.uid() = user_id`, a `authenticated` nie ma
 bezpośrednich uprawnień do mutacji.
+
+Kompakcję wykonuje tylko service-role przez
+`rootine_sync_retention(interval)`. Funkcja najpierw aktualizuje granicę
+`oldest_available_cursor`, następnie usuwa wygasły outbox, operation ledger i
+historię rewizji (z zachowaniem oczekujących materializacji); bieżące rekordy
+`rootine_sync_records` oraz legacy snapshoty pozostają nietknięte.
+`p_retention` może skrócić okno tylko do minimum siedmiu dni i jest
+przeznaczony dla kontrolowanego maintenance, nie dla klienta.
 
 RPC w B03 mają kompatybilny seam `rootine_sync_records`, ponieważ pozwala to
 uruchomić kontrakt również na branchu bazowym bez nadpisywania domen. Po

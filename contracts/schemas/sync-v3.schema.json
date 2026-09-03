@@ -53,6 +53,7 @@
       "type": "object",
       "required": ["correlation_id", "action"],
       "properties": {
+        "contract_version": { "const": 3 },
         "correlation_id": { "$ref": "#/$defs/correlationId" },
         "action": { "enum": ["bootstrap", "pull", "push", "register_device"] }
       },

@@ -138,7 +138,8 @@ alter table public.rootine_sync_operations
   add column if not exists error_code text,
   add column if not exists error_message text,
   add column if not exists updated_at timestamptz default timezone('utc', now()),
-  add column if not exists deleted_at timestamptz;
+  add column if not exists deleted_at timestamptz,
+  add column if not exists expires_at timestamptz;
 alter table public.rootine_sync_changes
   add column if not exists storage_key text,
   add column if not exists operation_id text,
@@ -155,6 +156,12 @@ alter table public.rootine_sync_reconciliation_log
   add column if not exists client_source text,
   add column if not exists diff_metadata jsonb default '{}'::jsonb;
 
+-- B02 rows may predate the expiry column. Give those historical entries the
+-- same bounded idempotency horizon without changing their recorded result.
+update public.rootine_sync_operations
+set expires_at = coalesce(applied_at, created_at) + interval '90 days'
+where expires_at is null;
+
 -- Existing B02/B03 operation ledgers do not include the account kill-switch
 -- result. Extend their status check without weakening any other invariant.
 alter table public.rootine_sync_operations
@@ -167,6 +174,9 @@ create index if not exists rootine_sync_records_storage_updated_idx
   on public.rootine_sync_records(user_id, storage_key, updated_at desc);
 create index if not exists rootine_sync_operations_user_created_idx
   on public.rootine_sync_operations(user_id, created_at desc);
+create index if not exists rootine_sync_operations_expires_idx
+  on public.rootine_sync_operations(expires_at)
+  where expires_at is not null;
 create index if not exists rootine_sync_changes_user_cursor_idx
   on public.rootine_sync_changes(user_id, change_cursor);
 create index if not exists rootine_sync_reconciliation_user_created_idx
@@ -231,6 +241,24 @@ returns text language sql immutable as $$
   end;
 $$;
 
+-- The legacy CAS trigger increments revision for ordinary updates. A
+-- materializer supplies the already-committed bridge revision explicitly, so
+-- preserve that value when it is newer; otherwise the two representations can
+-- diverge after a dual-write update.
+create or replace function public.rootine_workspace_snapshots_bump_revision()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if new.revision <= old.revision then
+    new.revision := old.revision + 1;
+  end if;
+  return new;
+end;
+$$;
+
 create or replace function public.rootine_materialize_legacy_snapshot(
   p_user_id uuid, p_storage_key text, p_payload jsonb, p_content_hash text,
   p_revision bigint
@@ -247,8 +275,17 @@ begin
     payload = excluded.payload,
     content_hash = excluded.content_hash,
     revision = excluded.revision,
-    updated_at = timezone('utc', now());
-  return true;
+    updated_at = timezone('utc', now())
+  where snapshots.revision < excluded.revision;
+  return exists (
+    select 1
+    from public.rootine_workspace_snapshots snapshots
+    where snapshots.user_id = p_user_id
+      and snapshots.storage_key = p_storage_key
+      and snapshots.revision = p_revision
+      and snapshots.payload is not distinct from p_payload
+      and snapshots.content_hash = p_content_hash
+  );
 end;
 $$;
 revoke all on function public.rootine_materialize_legacy_snapshot(uuid, text, jsonb, text, bigint) from public;
@@ -272,7 +309,13 @@ returns table (
 language plpgsql security definer set search_path = public as $$
 declare
   uid uuid := auth.uid();
-  op_id text := coalesce(nullif(p_operation_id, ''), 'legacy:' || md5(coalesce(p_storage_key, '') || ':' || clock_timestamp()::text));
+  -- The four-argument compatibility overload has no client operation ID, so
+  -- derive one from the complete command. A retry of the same legacy CAS
+  -- request must not create a second write merely because the clock moved.
+  op_id text := coalesce(nullif(p_operation_id, ''), 'legacy:' || md5(
+    coalesce(p_storage_key, '') || ':' || coalesce(p_payload::text, '') || ':'
+      || coalesce(p_content_hash, '') || ':' || coalesce(p_expected_revision::text, '')
+  ));
   correlation text := coalesce(nullif(p_correlation_id, ''), op_id);
   source text := coalesce(nullif(p_client_source, ''), 'legacy');
   bridge_row public.rootine_sync_records%rowtype;
@@ -284,6 +327,8 @@ declare
   new_cursor bigint;
   log_id text;
   after_payload jsonb;
+  after_content_hash text;
+  deleted_at_value timestamptz;
 begin
   if uid is null then raise exception 'Authentication is required.' using errcode = '42501'; end if;
   if p_storage_key is null or char_length(p_storage_key) not between 1 and 180 then
@@ -294,6 +339,12 @@ begin
   end if;
   if jsonb_typeof(p_payload) <> 'object' then
     raise exception 'Bridge payload must be a JSON object.' using errcode = '22023';
+  end if;
+  if coalesce(nullif(p_payload->>'deletedAt', ''), nullif(p_payload->>'deleted_at', '')) is not null then
+    deleted_at_value := coalesce(
+      nullif(p_payload->>'deletedAt', ''),
+      nullif(p_payload->>'deleted_at', '')
+    )::timestamptz;
   end if;
   if p_expected_revision is null or p_expected_revision < 0 then
     raise exception 'Expected revision cannot be negative.' using errcode = '22023';
@@ -311,8 +362,17 @@ begin
 
   select * into old_op from public.rootine_sync_operations
     where user_id = uid and operation_id = op_id for update;
+  if found and old_op.expires_at is not null
+    and old_op.expires_at <= timezone('utc', now()) then
+    delete from public.rootine_sync_operations
+    where user_id = uid and operation_id = op_id;
+    found := false;
+  end if;
   if found then
-    if old_op.storage_key <> p_storage_key or old_op.content_hash <> p_content_hash then
+    if old_op.storage_key is distinct from p_storage_key
+      or old_op.content_hash is distinct from p_content_hash
+      or old_op.payload is distinct from p_payload
+      or old_op.base_revision is distinct from p_expected_revision then
       return query select false, 'invalid', old_op.operation_id, old_op.storage_key,
         old_op.payload, old_op.content_hash, old_op.revision, old_op.change_cursor,
         coalesce(old_op.applied_at, old_op.created_at), old_op.client_source,
@@ -321,8 +381,14 @@ begin
       return;
     end if;
     return query select old_op.status in ('applied', 'already_applied'),
-      case when old_op.status = 'applied' then 'already_applied' else old_op.status end,
-      old_op.operation_id, old_op.storage_key, old_op.payload, old_op.content_hash,
+      case
+        when old_op.status = 'applied' then 'already_applied'
+        when old_op.status in ('conflict', 'invalid', 'disabled') then old_op.status
+        else 'invalid'
+      end,
+      old_op.operation_id, old_op.storage_key,
+      coalesce(old_op.result->'payload', old_op.payload),
+      coalesce(old_op.result->>'content_hash', old_op.content_hash),
       old_op.revision, old_op.change_cursor, coalesce(old_op.applied_at, old_op.created_at),
       old_op.client_source, old_op.materialized, old_op.reconciliation_id, old_op.error_message;
     return;
@@ -349,14 +415,21 @@ begin
   if not enabled then
     insert into public.rootine_sync_operations
       (user_id, operation_id, entity, entity_id, storage_key, kind, base_revision,
-       status, payload, content_hash, revision, client_source, correlation_id,
-       error_message, result, updated_at)
+      status, payload, content_hash, revision, client_source, correlation_id,
+      error_message, result, expires_at, updated_at)
     values (uid, op_id, public.rootine_bridge_domain(p_storage_key), p_storage_key,
-      p_storage_key, 'upsert', p_expected_revision, 'disabled',
-      coalesce(bridge_row.payload, '{}'::jsonb), coalesce(bridge_row.content_hash, ''),
+      p_storage_key, case when deleted_at_value is not null then 'delete' else 'upsert' end,
+      p_expected_revision, 'disabled',
+      p_payload, p_content_hash,
       greatest(coalesce(bridge_row.revision, 0), 1), source, correlation,
       'Dual-write is disabled for this account.',
-      jsonb_build_object('status', 'disabled', 'operation_id', op_id), timezone('utc', now()));
+      jsonb_build_object(
+        'status', 'disabled',
+        'operation_id', op_id,
+        'payload', coalesce(bridge_row.payload, '{}'::jsonb),
+        'content_hash', coalesce(bridge_row.content_hash, '')
+      ),
+      timezone('utc', now()) + interval '90 days', timezone('utc', now()));
     return query select false, 'disabled', op_id, p_storage_key,
       coalesce(bridge_row.payload, '{}'::jsonb), coalesce(bridge_row.content_hash, ''),
       coalesce(bridge_row.revision, 0), null::bigint, timezone('utc', now()), source,
@@ -368,12 +441,19 @@ begin
     insert into public.rootine_sync_operations
       (user_id, operation_id, entity, entity_id, storage_key, kind, base_revision,
        status, payload, content_hash, revision, client_source, correlation_id,
-       error_message, result, updated_at)
+       error_message, result, expires_at, updated_at)
     values (uid, op_id, public.rootine_bridge_domain(p_storage_key), p_storage_key,
-      p_storage_key, 'upsert', p_expected_revision, 'conflict', bridge_row.payload,
-      bridge_row.content_hash, greatest(bridge_row.revision, 1), source, correlation,
+      p_storage_key, case when deleted_at_value is not null then 'delete' else 'upsert' end,
+      p_expected_revision, 'conflict', p_payload,
+      p_content_hash, greatest(bridge_row.revision, 1), source, correlation,
       'The bridge record revision is newer.',
-      jsonb_build_object('status', 'conflict', 'revision', bridge_row.revision), timezone('utc', now()));
+      jsonb_build_object(
+        'status', 'conflict',
+        'revision', bridge_row.revision,
+        'payload', bridge_row.payload,
+        'content_hash', bridge_row.content_hash
+      ),
+      timezone('utc', now()) + interval '90 days', timezone('utc', now()));
     return query select false, 'conflict', op_id, p_storage_key, bridge_row.payload,
       bridge_row.content_hash, bridge_row.revision, null::bigint, bridge_row.updated_at,
       source, false, null::text, 'The bridge record revision is newer.';
@@ -386,10 +466,10 @@ begin
      last_operation_id, last_client_source, deleted_at, created_at, updated_at)
   values (uid, p_storage_key, public.rootine_bridge_domain(p_storage_key), p_storage_key,
     p_payload, p_content_hash, new_revision, op_id, source,
-    case when p_payload ? 'deletedAt' and p_payload->>'deletedAt' is not null
-      then (p_payload->>'deletedAt')::timestamptz else null end,
+    deleted_at_value,
     coalesce(bridge_row.created_at, timezone('utc', now())), timezone('utc', now()))
   on conflict (user_id, entity, entity_id) do update set
+    storage_key = excluded.storage_key,
     payload = excluded.payload, content_hash = excluded.content_hash,
     revision = excluded.revision, last_operation_id = excluded.last_operation_id,
     last_client_source = excluded.last_client_source, deleted_at = excluded.deleted_at,
@@ -399,10 +479,9 @@ begin
     (user_id, storage_key, entity, entity_id, operation, payload,
      revision, operation_id, client_source, created_at, updated_at, deleted_at)
   values (uid, p_storage_key, public.rootine_bridge_domain(p_storage_key), p_storage_key,
-    case when p_payload ? 'deletedAt' and p_payload->>'deletedAt' is not null then 'delete' else 'upsert' end,
+    case when deleted_at_value is not null then 'delete' else 'upsert' end,
     p_payload, new_revision, op_id, source, timezone('utc', now()), timezone('utc', now()),
-    case when p_payload ? 'deletedAt' and p_payload->>'deletedAt' is not null
-      then (p_payload->>'deletedAt')::timestamptz else null end)
+    deleted_at_value)
   returning change_cursor into new_cursor;
   insert into public.rootine_workspace_revisions
     (user_id, storage_key, revision, operation_id, client_source, payload, manifest)
@@ -412,31 +491,44 @@ begin
   insert into public.rootine_sync_operations
     (user_id, operation_id, entity, entity_id, storage_key, kind, base_revision,
      status, payload, content_hash, revision, change_cursor, client_source,
-     correlation_id, result, materialized, applied_at, updated_at)
+     correlation_id, result, materialized, applied_at, expires_at, updated_at)
   values (uid, op_id, public.rootine_bridge_domain(p_storage_key), p_storage_key, p_storage_key,
-    case when p_payload ? 'deletedAt' and p_payload->>'deletedAt' is not null then 'delete' else 'upsert' end,
+    case when deleted_at_value is not null then 'delete' else 'upsert' end,
     p_expected_revision, 'applied', p_payload, p_content_hash, new_revision, new_cursor,
     source, correlation, jsonb_build_object('status', 'applied', 'cursor', new_cursor,
-      'revision', new_revision, 'base_cursor', p_cursor), false, timezone('utc', now()), timezone('utc', now()));
+      'revision', new_revision, 'base_cursor', p_cursor), false, timezone('utc', now()),
+      timezone('utc', now()) + interval '90 days', timezone('utc', now()));
 
   -- The exception block is a subtransaction: relational changes above remain
   -- auditable while a failed legacy materializer is queued for recovery.
   begin
-    perform public.rootine_materialize_legacy_snapshot(uid, p_storage_key, p_payload, p_content_hash, new_revision);
-    materialized_ok := true;
-    select payload into after_payload from public.rootine_workspace_snapshots
+    materialized_ok := public.rootine_materialize_legacy_snapshot(
+      uid, p_storage_key, p_payload, p_content_hash, new_revision
+    );
+    select payload, content_hash into after_payload, after_content_hash
+      from public.rootine_workspace_snapshots
       where user_id = uid and storage_key = p_storage_key;
-    if after_payload is distinct from p_payload then
+    if not materialized_ok or after_payload is distinct from p_payload then
       begin
         insert into public.rootine_sync_reconciliation_log
           (user_id, storage_key, correlation_id, domain, entity, entity_id, revision,
            client_source, details, diff_metadata, status)
         values (uid, p_storage_key, correlation, public.rootine_bridge_domain(p_storage_key), 'workspace', p_storage_key,
-          new_revision, source, jsonb_build_object('kind', 'materialized_canonical_diff',
-            'changed_paths', jsonb_build_array('$'), 'left_type', jsonb_typeof(p_payload),
-            'right_type', jsonb_typeof(after_payload)), jsonb_build_object('kind', 'materialized_canonical_diff',
-            'changed_paths', jsonb_build_array('$'), 'left_type', jsonb_typeof(p_payload),
-            'right_type', jsonb_typeof(after_payload)), 'different') returning id into log_id;
+          new_revision, source, jsonb_build_object(
+            'kind', case when after_payload is distinct from p_payload
+              then 'materialized_canonical_diff' else 'materializer_hash_mismatch' end,
+            'changed_paths', case when after_payload is distinct from p_payload
+              then jsonb_build_array('$') else '[]'::jsonb end,
+            'left_hash', p_content_hash, 'right_hash', after_content_hash,
+            'left_type', jsonb_typeof(p_payload), 'right_type', jsonb_typeof(after_payload)),
+          jsonb_build_object(
+            'kind', case when after_payload is distinct from p_payload
+              then 'materialized_canonical_diff' else 'materializer_hash_mismatch' end,
+            'changed_paths', case when after_payload is distinct from p_payload
+              then jsonb_build_array('$') else '[]'::jsonb end,
+            'left_hash', p_content_hash, 'right_hash', after_content_hash,
+            'left_type', jsonb_typeof(p_payload), 'right_type', jsonb_typeof(after_payload)),
+          'different') returning id into log_id;
       exception when others then log_id := null;
       end;
     end if;

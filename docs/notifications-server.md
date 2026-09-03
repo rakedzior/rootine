@@ -29,10 +29,14 @@ The scheduler calls:
 1. `rootine_claim_notification_jobs(p_limit, p_lock_owner, p_job_id)`.
    `FOR UPDATE SKIP LOCKED` reserves jobs atomically; a stale processing lock
    is reclaimable after five minutes.
-2. APNs for active, non-revoked `rootine_devices` rows.
+2. APNs for active `rootine_devices` rows with `authorized`, `provisional` or
+   `ephemeral` permission, a non-null token, no revoke/delete marker, and a
+   recent check-in (90 days). `unknown` and stale installations are never
+   sent to.
 3. `rootine_finalize_notification_job(...)`, which writes deliveries and
    applies exponential backoff (up to five attempts by default). A 410 or
-   `Unregistered` response calls `rootine_revoke_notification_device(...)`.
+   `Unregistered` response calls the owner-scoped
+   `rootine_revoke_notification_device(device_id, user_id)` RPC.
 4. `rootine_notification_retention('90 days')` for delivery history.
 
 Quiet-hours claims are deferred to the next local quiet-hours end using the
@@ -80,6 +84,19 @@ APNs environments come from B09's `rootine_devices.apns_environment` column:
 
 The functions return stable, redacted errors. Logs contain aggregate health
 metrics only; never log payloads, tokens, JWTs, private keys, or account data.
+
+## Payload and deep-link boundary
+
+The worker forwards only the APNs alert fields (`title`, `subtitle`, `body`,
+`sound`, `badge`) and the optional `rootine_deep_link` custom key. Arbitrary
+payload keys—including account IDs, access tokens, notes and financial or
+health content—are stripped before the provider call. A deep link must match
+the internal opaque-ID form
+`rootine://notification/{task|habit}/{opaque-id}?date=YYYY-MM-DD`; external
+URLs, free-form query parameters and user-derived dedupe keys are rejected.
+The iOS delegate validates this envelope again before posting
+`rootineNotificationDeepLinkDidReceive` to the app. The current shell may
+subscribe to that event to select the relevant task/habit screen.
 
 ## Rollback and account deletion
 

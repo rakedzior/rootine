@@ -125,6 +125,447 @@ private struct MoreModuleHero: View {
     }
 }
 
+private func affairAmountText(_ amount: Double) -> String {
+    let number = AffairMoney.normalized(amount)
+    return String(format: "%.2f", number)
+}
+
+private struct AffairOneTimeDraft {
+    var title: String
+    var category: String
+    var amount: Double
+    var dueDate: String
+    var note: String
+}
+
+private struct AffairOneTimeEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let payment: AffairOneTimePayment?
+    let onSave: (AffairOneTimeDraft) -> Void
+    @State private var title: String
+    @State private var category: String
+    @State private var amount: String
+    @State private var dueDate: String
+    @State private var note: String
+
+    init(payment: AffairOneTimePayment?, onSave: @escaping (AffairOneTimeDraft) -> Void) {
+        self.payment = payment
+        self.onSave = onSave
+        _title = State(initialValue: payment?.title ?? "")
+        _category = State(initialValue: payment?.category ?? "Inne")
+        _amount = State(initialValue: affairAmountText(payment?.amount ?? 0))
+        _dueDate = State(initialValue: payment?.dueDate ?? RootineDate.localDate())
+        _note = State(initialValue: payment?.note ?? "")
+    }
+
+    private var valid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairMoney.parse(amount) != nil
+            && AffairDate.isValid(dueDate, allowingEmpty: false)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Płatność jednorazowa") {
+                    TextField("Nazwa", text: $title)
+                    TextField("Kategoria", text: $category)
+                    TextField("Kwota (PLN)", text: $amount).keyboardType(.decimalPad)
+                    TextField("Termin (RRRR-MM-DD)", text: $dueDate).keyboardType(.numbersAndPunctuation)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(payment == nil ? "Nowa płatność" : "Edytuj płatność")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsed = AffairMoney.parse(amount), valid else { return }
+                        onSave(AffairOneTimeDraft(title: title, category: category, amount: NSDecimalNumber(decimal: parsed).doubleValue, dueDate: dueDate, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairPaymentDraft {
+    var name: String
+    var category: String
+    var amount: Double
+    var cadence: String
+    var nextDueDate: String
+    var automatic: Bool
+    var note: String
+}
+
+private struct AffairPaymentEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let payment: AffairRecurringPayment?
+    let onSave: (AffairPaymentDraft) -> Void
+    @State private var name: String
+    @State private var category: String
+    @State private var amount: String
+    @State private var cadence: String
+    @State private var nextDueDate: String
+    @State private var automatic: Bool
+    @State private var note: String
+
+    init(payment: AffairRecurringPayment?, onSave: @escaping (AffairPaymentDraft) -> Void) {
+        self.payment = payment
+        self.onSave = onSave
+        _name = State(initialValue: payment?.name ?? "")
+        _category = State(initialValue: payment?.category ?? "Inne")
+        _amount = State(initialValue: affairAmountText(payment?.amount ?? 0))
+        _cadence = State(initialValue: payment?.cadence ?? "monthly")
+        _nextDueDate = State(initialValue: payment?.nextDueDate ?? RootineDate.localDate())
+        _automatic = State(initialValue: payment?.automatic ?? false)
+        _note = State(initialValue: payment?.note ?? "")
+    }
+
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairMoney.parse(amount) != nil
+            && AffairsWorkspaceRules.cadences.contains(cadence)
+            && AffairDate.isValid(nextDueDate, allowingEmpty: false)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Płatność cykliczna") {
+                    TextField("Nazwa", text: $name)
+                    TextField("Kategoria", text: $category)
+                    TextField("Kwota (PLN)", text: $amount).keyboardType(.decimalPad)
+                    Picker("Częstotliwość", selection: $cadence) {
+                        Text("Co miesiąc").tag("monthly")
+                        Text("Co kwartał").tag("quarterly")
+                        Text("Co rok").tag("yearly")
+                    }
+                    TextField("Najbliższy termin (RRRR-MM-DD)", text: $nextDueDate).keyboardType(.numbersAndPunctuation)
+                    Toggle("Płatność automatyczna", isOn: $automatic)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(payment == nil ? "Nowa płatność" : "Edytuj płatność")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsed = AffairMoney.parse(amount), valid else { return }
+                        onSave(AffairPaymentDraft(name: name, category: category, amount: NSDecimalNumber(decimal: parsed).doubleValue, cadence: cadence, nextDueDate: nextDueDate, automatic: automatic, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairSubscriptionDraft {
+    var name: String
+    var category: String
+    var amount: Double
+    var cadence: String
+    var nextBillingDate: String
+    var renewal: String
+    var commitmentEndDate: String
+    var note: String
+}
+
+private struct AffairSubscriptionEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let subscription: AffairSubscription?
+    let onSave: (AffairSubscriptionDraft) -> Void
+    @State private var name: String
+    @State private var category: String
+    @State private var amount: String
+    @State private var cadence: String
+    @State private var nextBillingDate: String
+    @State private var renewal: String
+    @State private var commitmentEndDate: String
+    @State private var note: String
+
+    init(subscription: AffairSubscription?, onSave: @escaping (AffairSubscriptionDraft) -> Void) {
+        self.subscription = subscription
+        self.onSave = onSave
+        _name = State(initialValue: subscription?.name ?? "")
+        _category = State(initialValue: subscription?.category ?? "Inne")
+        _amount = State(initialValue: affairAmountText(subscription?.amount ?? 0))
+        _cadence = State(initialValue: subscription?.cadence ?? "monthly")
+        _nextBillingDate = State(initialValue: subscription?.nextBillingDate ?? RootineDate.localDate())
+        _renewal = State(initialValue: subscription?.renewal ?? "manual")
+        _commitmentEndDate = State(initialValue: subscription?.commitmentEndDate ?? "")
+        _note = State(initialValue: subscription?.note ?? "")
+    }
+
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairMoney.parse(amount) != nil
+            && AffairsWorkspaceRules.cadences.contains(cadence)
+            && ["automatic", "manual"].contains(renewal)
+            && AffairDate.isValid(nextBillingDate, allowingEmpty: false)
+            && AffairDate.isValid(commitmentEndDate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Subskrypcja") {
+                    TextField("Nazwa", text: $name)
+                    TextField("Kategoria", text: $category)
+                    TextField("Kwota (PLN)", text: $amount).keyboardType(.decimalPad)
+                    Picker("Częstotliwość", selection: $cadence) {
+                        Text("Co miesiąc").tag("monthly")
+                        Text("Co kwartał").tag("quarterly")
+                        Text("Co rok").tag("yearly")
+                    }
+                    Picker("Odnowienie", selection: $renewal) {
+                        Text("Automatyczne").tag("automatic")
+                        Text("Ręczne").tag("manual")
+                    }
+                    TextField("Kolejne rozliczenie (RRRR-MM-DD)", text: $nextBillingDate).keyboardType(.numbersAndPunctuation)
+                    TextField("Koniec zobowiązania (opcjonalnie)", text: $commitmentEndDate).keyboardType(.numbersAndPunctuation)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(subscription == nil ? "Nowa subskrypcja" : "Edytuj subskrypcję")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsed = AffairMoney.parse(amount), valid else { return }
+                        onSave(AffairSubscriptionDraft(name: name, category: category, amount: NSDecimalNumber(decimal: parsed).doubleValue, cadence: cadence, nextBillingDate: nextBillingDate, renewal: renewal, commitmentEndDate: commitmentEndDate, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairDocumentDraft {
+    var name: String
+    var category: String
+    var holder: String
+    var expiresAt: String
+    var reminderDays: Int
+    var note: String
+}
+
+private struct AffairDocumentEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let document: AffairDocument?
+    let onSave: (AffairDocumentDraft) -> Void
+    @State private var name: String
+    @State private var category: String
+    @State private var holder: String
+    @State private var expiresAt: String
+    @State private var reminderDays: String
+    @State private var note: String
+
+    init(document: AffairDocument?, onSave: @escaping (AffairDocumentDraft) -> Void) {
+        self.document = document
+        self.onSave = onSave
+        _name = State(initialValue: document?.name ?? "")
+        _category = State(initialValue: document?.category ?? "other")
+        _holder = State(initialValue: document?.holder ?? "Ja")
+        _expiresAt = State(initialValue: document?.expiresAt ?? RootineDate.localDate())
+        _reminderDays = State(initialValue: String(document?.reminderDays ?? 30))
+        _note = State(initialValue: document?.note ?? "")
+    }
+
+    private var parsedReminderDays: Int? { Int(reminderDays.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairsWorkspaceRules.documentCategories.contains(category)
+            && AffairDate.isValid(expiresAt)
+            && parsedReminderDays.map({ (0...730).contains($0) }) == true
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Dokument") {
+                    TextField("Nazwa", text: $name)
+                    Picker("Kategoria", selection: $category) {
+                        Text("Tożsamość").tag("identity")
+                        Text("Prawo jazdy").tag("driving")
+                        Text("Ubezpieczenie").tag("insurance")
+                        Text("Zdrowie").tag("health")
+                        Text("Umowa").tag("agreement")
+                        Text("Inne").tag("other")
+                    }
+                    TextField("Osoba / właściciel", text: $holder)
+                    TextField("Ważny do (RRRR-MM-DD)", text: $expiresAt).keyboardType(.numbersAndPunctuation)
+                    TextField("Przypomnienie (dni wcześniej)", text: $reminderDays).keyboardType(.numberPad)
+                }
+                Section("Notatka") {
+                    Text("Nie wpisuj pełnych numerów dokumentów ani innych danych wrażliwych.")
+                        .font(.footnote).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    TextEditor(text: $note).frame(minHeight: 80)
+                }
+            }
+            .navigationTitle(document == nil ? "Nowy dokument" : "Edytuj dokument")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsedReminderDays, valid else { return }
+                        onSave(AffairDocumentDraft(name: name, category: category, holder: holder, expiresAt: expiresAt, reminderDays: parsedReminderDays, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairVehicleDraft {
+    var name: String
+    var registration: String
+    var mileage: Double
+}
+
+private struct AffairVehicleEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let vehicle: AffairVehicle?
+    let onSave: (AffairVehicleDraft) -> Void
+    @State private var name: String
+    @State private var registration: String
+    @State private var mileage: String
+
+    init(vehicle: AffairVehicle?, onSave: @escaping (AffairVehicleDraft) -> Void) {
+        self.vehicle = vehicle
+        self.onSave = onSave
+        _name = State(initialValue: vehicle?.name ?? "")
+        _registration = State(initialValue: vehicle?.registration ?? "")
+        _mileage = State(initialValue: vehicle.map { String(Int($0.mileage)) } ?? "0")
+    }
+
+    private var parsedMileage: Double? { Double(mileage.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: ".")) }
+    private var valid: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && parsedMileage.map { $0.isFinite && $0 >= 0 } == true }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Pojazd") {
+                    TextField("Nazwa", text: $name)
+                    TextField("Numer rejestracyjny", text: $registration).textInputAutocapitalization(.characters)
+                    TextField("Przebieg (km)", text: $mileage).keyboardType(.numberPad)
+                }
+            }
+            .navigationTitle(vehicle == nil ? "Nowy pojazd" : "Edytuj pojazd")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard let parsedMileage, valid else { return }
+                        onSave(AffairVehicleDraft(name: name, registration: registration, mileage: parsedMileage))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
+private struct AffairVehicleItemDraft {
+    var vehicleID: String
+    var title: String
+    var type: String
+    var dueDate: String
+    var dueMileage: Double?
+    var note: String
+}
+
+private struct AffairVehicleItemEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: AffairVehicleItem?
+    let onSave: (AffairVehicleItemDraft) -> Void
+    let vehicles: [AffairVehicle]
+    @State private var vehicleID: String
+    @State private var title: String
+    @State private var type: String
+    @State private var dueDate: String
+    @State private var dueMileage: String
+    @State private var note: String
+
+    init(item: AffairVehicleItem?, vehicleID: String, vehicles: [AffairVehicle], onSave: @escaping (AffairVehicleItemDraft) -> Void) {
+        self.item = item
+        self.onSave = onSave
+        self.vehicles = vehicles
+        _vehicleID = State(initialValue: item?.vehicleId ?? vehicleID)
+        _title = State(initialValue: item?.title ?? "")
+        _type = State(initialValue: item?.type ?? "service")
+        _dueDate = State(initialValue: item?.dueDate ?? "")
+        _dueMileage = State(initialValue: item?.dueMileage.map { String(Int($0)) } ?? "")
+        _note = State(initialValue: item?.note ?? "")
+    }
+
+    private var parsedDueMileage: Double? {
+        let value = dueMileage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        return Double(value.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: "."))
+    }
+    private var valid: Bool {
+        !vehicleID.isEmpty && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AffairsWorkspaceRules.vehicleItemTypes.contains(type)
+            && AffairDate.isValid(dueDate)
+            && (parsedDueMileage == nil || (parsedDueMileage?.isFinite == true && parsedDueMileage! >= 0))
+            && (!dueDate.isEmpty || parsedDueMileage != nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Termin pojazdu") {
+                    Picker("Pojazd", selection: $vehicleID) {
+                        ForEach(vehicles) { vehicle in Text(vehicle.name).tag(vehicle.id) }
+                    }
+                    TextField("Nazwa", text: $title)
+                    Picker("Typ", selection: $type) {
+                        Text("Ubezpieczenie").tag("insurance")
+                        Text("Przegląd").tag("inspection")
+                        Text("Serwis").tag("service")
+                        Text("Opony").tag("tires")
+                        Text("Leasing").tag("lease")
+                        Text("Gwarancja").tag("warranty")
+                        Text("Inne").tag("other")
+                    }
+                    TextField("Termin (opcjonalnie, RRRR-MM-DD)", text: $dueDate).keyboardType(.numbersAndPunctuation)
+                    TextField("Przebieg graniczny (opcjonalnie)", text: $dueMileage).keyboardType(.numberPad)
+                }
+                Section("Notatka") { TextEditor(text: $note).frame(minHeight: 80) }
+            }
+            .navigationTitle(item == nil ? "Nowy termin" : "Edytuj termin")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        guard valid else { return }
+                        onSave(AffairVehicleItemDraft(vehicleID: vehicleID, title: title, type: type, dueDate: dueDate, dueMileage: parsedDueMileage, note: note))
+                        dismiss()
+                    }
+                    .disabled(!valid)
+                }
+            }
+        }
+    }
+}
+
 private struct ModuleSyncStatusBanner: View {
     @EnvironmentObject private var environment: AppEnvironment
 
@@ -187,25 +628,44 @@ private struct ModuleActionButton: View {
 private struct NotesModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var editorTarget: NoteEditorTarget?
+    @State private var listEditorTarget: NoteListEditorTarget?
     @State private var searchText = ""
     @State private var showingArchive = false
+    @State private var selectedListID: String?
+    @State private var selectedTag: String?
+    @State private var pinnedOnly = false
+    @State private var sort: RootineNotesSort = .updated
     @State private var noteToDelete: NoteRecord?
     @State private var deletedNote: NoteRecord?
+    @State private var listToDelete: NoteList?
 
     private var notes: [NoteRecord] {
-        environment.notesWorkspace.notes
-            .filter { showingArchive ? $0.archived : !$0.archived }
-            .filter { note in
-                let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !query.isEmpty else { return true }
-                return note.title.localizedCaseInsensitiveContains(query)
-                    || note.body.localizedCaseInsensitiveContains(query)
-                    || note.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
-            }
-            .sorted { lhs, rhs in
-                if lhs.pinned != rhs.pinned { return lhs.pinned }
-                return lhs.updatedAt > rhs.updatedAt
-            }
+        rootineNotes(environment.notesWorkspace, matching: RootineNotesQuery(
+            search: searchText,
+            listID: selectedListID,
+            tag: selectedTag,
+            showingArchive: showingArchive,
+            pinnedOnly: pinnedOnly,
+            sort: sort
+        ))
+    }
+
+    private var recentNotes: [NoteRecord] {
+        guard !pinnedOnly else { return notes }
+        // Keep the first pinned note in the feature card while leaving any
+        // additional pinned notes in the ordinary list.
+        guard let featuredID = notes.first(where: \.pinned)?.id else { return notes }
+        return notes.filter { $0.id != featuredID }
+    }
+
+    private var hasPinnedNote: Bool {
+        notes.contains(where: \.pinned)
+    }
+
+    private var availableTags: [String] {
+        Array(Set(environment.notesWorkspace.notes.flatMap(\.tags))).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
     }
 
     var body: some View {
@@ -232,19 +692,75 @@ private struct NotesModuleContent: View {
             .background(RootineTheme.ColorToken.elevated)
             .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
 
+            folderBar
+
             HStack {
                 Label(showingArchive ? "Archiwum" : "Aktywne", systemImage: showingArchive ? "archivebox.fill" : "note.text")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Button(showingArchive ? "Pokaż aktywne" : "Pokaż archiwum") {
-                    showingArchive.toggle()
+                Menu {
+                    Button {
+                        pinnedOnly.toggle()
+                    } label: {
+                        Label(pinnedOnly ? "Pokaż wszystkie" : "Tylko przypięte", systemImage: pinnedOnly ? "note.text" : "pin.fill")
+                    }
+                    Divider()
+                    Picker("Sortowanie", selection: $sort) {
+                        Text("Ostatnio zmienione").tag(RootineNotesSort.updated)
+                        Text("Utworzone ostatnio").tag(RootineNotesSort.created)
+                        Text("Alfabetycznie").tag(RootineNotesSort.title)
+                    }
+                    if !availableTags.isEmpty {
+                        Divider()
+                        Menu("Filtruj tagiem") {
+                            Button {
+                                selectedTag = nil
+                            } label: {
+                                Label("Wszystkie tagi", systemImage: selectedTag == nil ? "checkmark" : "tag")
+                            }
+                            ForEach(availableTags, id: \.self) { tag in
+                                Button {
+                                    selectedTag = tag
+                                } label: {
+                                    Label("#\(tag)", systemImage: selectedTag == tag ? "checkmark" : "tag")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button(showingArchive ? "Pokaż aktywne" : "Pokaż archiwum") {
+                        showingArchive.toggle()
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.title3)
+                        .foregroundStyle(MoreModule.notes.tint)
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.bordered)
-                .frame(minHeight: 44)
-                .accessibilityHint("Przełącza listę aktywnych i zarchiwizowanych notatek")
+                .accessibilityLabel("Filtry i sortowanie notatek")
+                .accessibilityValue(filterSummary)
             }
 
-            if let pinned = notes.first(where: { $0.pinned }) {
+            if let selectedTag {
+                HStack(spacing: RootineTheme.Spacing.xSmall) {
+                    Text("Filtr: #\(selectedTag)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MoreModule.notes.tint)
+                    Button {
+                        self.selectedTag = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Usuń filtr tagu")
+                }
+                .padding(.horizontal, RootineTheme.Spacing.small)
+                .padding(.vertical, RootineTheme.Spacing.xSmall)
+                .background(MoreModule.notes.tint.opacity(0.12))
+                .clipShape(Capsule())
+            }
+
+            if let pinned = notes.first(where: { $0.pinned }), !pinnedOnly {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                     HStack {
                         ModuleSectionTitle(title: "Przypięte", systemImage: "pin.fill")
@@ -262,23 +778,23 @@ private struct NotesModuleContent: View {
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
                 HStack {
-                    ModuleSectionTitle(title: "Ostatnie notatki", systemImage: "clock")
+                    ModuleSectionTitle(title: showingArchive ? "Zarchiwizowane notatki" : "Ostatnie notatki", systemImage: showingArchive ? "archivebox" : "clock")
                     Spacer()
                     Text("\(notes.count)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
 
-                if notes.isEmpty {
+                if recentNotes.isEmpty && !hasPinnedNote {
                     ModuleEmptyCard(
-                        title: "Zrób miejsce na pomysły",
-                        detail: "Twoje notatki pojawią się tutaj.",
+                        title: showingArchive ? "Archiwum jest puste" : (pinnedOnly ? "Brak przypiętych notatek" : "Zrób miejsce na pomysły"),
+                        detail: showingArchive ? "Zarchiwizowane notatki pojawią się tutaj." : "Twoje notatki pojawią się tutaj.",
                         systemImage: "note.text.badge.plus",
                         tint: MoreModule.notes.tint
                     )
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                        ForEach(Array(recentNotes.enumerated()), id: \.element.id) { index, note in
                             Button { editorTarget = NoteEditorTarget(note: note) } label: {
                                 NoteListRow(note: note)
                             }
@@ -313,7 +829,7 @@ private struct NotesModuleContent: View {
                                     .tint(MoreModule.notes.tint)
                                 }
                             }
-                            if index < notes.count - 1 {
+                            if index < recentNotes.count - 1 {
                                 Divider().overlay(RootineTheme.ColorToken.separator)
                             }
                         }
@@ -327,12 +843,25 @@ private struct NotesModuleContent: View {
             }
         }
         .sheet(item: $editorTarget) { target in
-            NoteEditorSheet(note: target.note) { note in
+            NoteEditorSheet(note: target.note, lists: environment.notesWorkspace.lists) { note in
                 Task { await environment.upsertNote(note) }
             } onDelete: { note in
                 requestDelete(note)
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $listEditorTarget) { target in
+            NoteListEditorSheet(list: target.list) { name in
+                Task {
+                    if let list = target.list {
+                        await environment.renameNoteList(id: list.id, name: name)
+                    } else {
+                        await environment.createNoteList(name: name)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
         .confirmationDialog(
@@ -353,6 +882,27 @@ private struct NotesModuleContent: View {
             }
             Button("Anuluj", role: .cancel) {}
         }
+        .confirmationDialog(
+            "Usunąć folder?",
+            isPresented: Binding(
+                get: { listToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { listToDelete = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let listToDelete {
+                Button("Usuń folder", role: .destructive) {
+                    if selectedListID == listToDelete.id { selectedListID = nil }
+                    Task { await environment.deleteNoteList(id: listToDelete.id) }
+                    self.listToDelete = nil
+                }
+            }
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text("Notatki pozostaną zachowane jako bez folderu.")
+        }
         .overlay(alignment: .bottom) {
             if let deletedNote {
                 RootineUndoBanner(message: "Usunięto notatkę") {
@@ -364,6 +914,75 @@ private struct NotesModuleContent: View {
                 .padding(.bottom, RootineTheme.Spacing.small)
             }
         }
+    }
+
+    private var filterSummary: String {
+        var values = [showingArchive ? "archiwum" : "aktywne"]
+        if pinnedOnly { values.append("przypięte") }
+        if selectedListID != nil { values.append("folder") }
+        if selectedTag != nil { values.append("tag") }
+        return values.joined(separator: ", ")
+    }
+
+    private var folderBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: RootineTheme.Spacing.xSmall) {
+                folderButton(title: "Wszystkie", systemImage: "tray.full", id: nil)
+                if environment.notesWorkspace.notes.contains(where: { $0.listId.isEmpty }) {
+                    folderButton(title: "Bez folderu", systemImage: "tray", id: "")
+                }
+                ForEach(environment.notesWorkspace.lists) { list in
+                    HStack(spacing: 0) {
+                        folderButton(title: list.name, systemImage: "folder", id: list.id)
+                        Menu {
+                            Button {
+                                listEditorTarget = NoteListEditorTarget(list: list)
+                            } label: {
+                                Label("Zmień nazwę", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                listToDelete = list
+                            } label: {
+                                Label("Usuń folder", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.caption.weight(.bold))
+                                .frame(width: 28, height: 36)
+                        }
+                        .accessibilityLabel("Zarządzaj folderem \(list.name)")
+                    }
+                    .background(selectedListID == list.id ? MoreModule.notes.tint.opacity(0.18) : RootineTheme.ColorToken.elevated)
+                    .clipShape(Capsule())
+                }
+                Button {
+                    listEditorTarget = NoteListEditorTarget(list: nil)
+                } label: {
+                    Label("Nowy folder", systemImage: "folder.badge.plus")
+                        .font(.caption.weight(.semibold))
+                        .frame(minHeight: 36)
+                }
+                .buttonStyle(.bordered)
+                .tint(MoreModule.notes.tint)
+                .accessibilityLabel("Utwórz folder notatek")
+            }
+            .padding(.horizontal, RootineTheme.Spacing.xSmall)
+        }
+    }
+
+    private func folderButton(title: String, systemImage: String, id: String?) -> some View {
+        Button {
+            selectedListID = id
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(selectedListID == id ? MoreModule.notes.tint : RootineTheme.ColorToken.primaryText)
+                .frame(minHeight: 36)
+                .padding(.horizontal, RootineTheme.Spacing.small)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Folder \(title)")
+        .accessibilityAddTraits(selectedListID == id ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -415,21 +1034,33 @@ private struct NoteEditorTarget: Identifiable {
 private struct NoteEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let note: NoteRecord?
+    let lists: [NoteList]
     let onSave: (NoteRecord) -> Void
     let onDelete: (NoteRecord) -> Void
     @State private var title: String
     @State private var bodyText: String
     @State private var tags: String
     @State private var pinned: Bool
+    @State private var kind: String
+    @State private var items: [NoteChecklistItem]
+    @State private var listID: String
+    @State private var color: NoteColor
 
-    init(note: NoteRecord?, onSave: @escaping (NoteRecord) -> Void, onDelete: @escaping (NoteRecord) -> Void) {
+    init(note: NoteRecord?, lists: [NoteList], onSave: @escaping (NoteRecord) -> Void, onDelete: @escaping (NoteRecord) -> Void) {
         self.note = note
+        self.lists = lists
         self.onSave = onSave
         self.onDelete = onDelete
         _title = State(initialValue: note?.title ?? "")
         _bodyText = State(initialValue: note?.body ?? "")
         _tags = State(initialValue: note?.tags.joined(separator: ", ") ?? "")
         _pinned = State(initialValue: note?.pinned ?? false)
+        // Preserve a future/web kind until the user explicitly changes it;
+        // the native picker still offers the two currently supported modes.
+        _kind = State(initialValue: note?.kind ?? "text")
+        _items = State(initialValue: note?.items ?? [])
+        _listID = State(initialValue: note?.listId ?? "")
+        _color = State(initialValue: note?.color ?? .blue)
     }
 
     var body: some View {
@@ -440,7 +1071,51 @@ private struct NoteEditorSheet: View {
                     TextEditor(text: $bodyText)
                         .frame(minHeight: 120)
                     TextField("Tagi (opcjonalnie)", text: $tags)
+                    Picker("Typ", selection: $kind) {
+                        Text("Tekst").tag("text")
+                        Text("Lista kontrolna").tag("checklist")
+                    }
+                    Picker("Folder", selection: $listID) {
+                        Text("Bez folderu").tag("")
+                        ForEach(lists) { list in
+                            Text(list.name).tag(list.id)
+                        }
+                    }
+                    Picker("Kolor", selection: $color) {
+                        ForEach(NoteColor.allCases, id: \.self) { value in
+                            Text(value.localizedName).tag(value)
+                        }
+                    }
                     Toggle("Przypnij na górze", isOn: $pinned)
+                }
+                if kind == "checklist" {
+                    Section("Lista kontrolna") {
+                        ForEach(items) { item in
+                            HStack(spacing: RootineTheme.Spacing.xSmall) {
+                                Button {
+                                    toggleItem(item.id)
+                                } label: {
+                                    Image(systemName: item.checked ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(item.checked ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.secondaryText)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(item.checked ? "Oznacz jako nieukończone" : "Oznacz jako ukończone")
+                                TextField("Element listy", text: itemBinding(item.id))
+                                Button(role: .destructive) {
+                                    items.removeAll { $0.id == item.id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Usuń element listy")
+                            }
+                        }
+                        Button {
+                            items.append(NoteChecklistItem(id: UUID().uuidString, text: "", checked: false))
+                        } label: {
+                            Label("Dodaj element", systemImage: "plus.circle")
+                        }
+                    }
                 }
                 if let note {
                     Section {
@@ -464,11 +1139,11 @@ private struct NoteEditorSheet: View {
                             id: note?.id ?? UUID().uuidString,
                             title: title,
                             body: bodyText,
-                            kind: note?.kind ?? "text",
-                            items: note?.items ?? [],
+                            kind: kind,
+                            items: kind == "checklist" ? items.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } : [],
                             tags: tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
-                            listId: note?.listId ?? "",
-                            color: note?.color ?? .blue,
+                            listId: listID,
+                            color: color,
                             pinned: pinned,
                             archived: false,
                             createdAt: note?.createdAt ?? now,
@@ -477,7 +1152,69 @@ private struct NoteEditorSheet: View {
                         onSave(saved)
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && items.allSatisfy { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                }
+            }
+        }
+    }
+
+    private func toggleItem(_ id: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].checked.toggle()
+    }
+
+    private func itemBinding(_ id: String) -> Binding<String> {
+        Binding(
+            get: { items.first(where: { $0.id == id })?.text ?? "" },
+            set: { value in
+                guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+                items[index].text = value
+            }
+        )
+    }
+}
+
+private struct NoteListEditorTarget: Identifiable {
+    let id: String
+    let list: NoteList?
+
+    init(list: NoteList?) {
+        self.list = list
+        id = list?.id ?? "new-note-list-\(UUID().uuidString)"
+    }
+}
+
+private struct NoteListEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let list: NoteList?
+    let onSave: (String) -> Void
+    @State private var name: String
+
+    init(list: NoteList?, onSave: @escaping (String) -> Void) {
+        self.list = list
+        self.onSave = onSave
+        _name = State(initialValue: list?.name ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Nazwa folderu", text: $name)
+            }
+            .navigationTitle(list == nil ? "Nowy folder" : "Zmień nazwę folderu")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Anuluj") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(name)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -501,6 +1238,11 @@ private struct NoteFeatureCard: View {
                 .font(.subheadline)
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 .lineLimit(3)
+            if note.kind == "checklist", !note.items.isEmpty {
+                Text("\(note.items.filter(\.checked).count)/\(note.items.count) ukończonych")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.success)
+            }
             if !note.tags.isEmpty {
                 HStack(spacing: RootineTheme.Spacing.xSmall) {
                     ForEach(note.tags.prefix(3), id: \.self) { tag in
@@ -534,6 +1276,11 @@ private struct NoteListRow: View {
                     .font(.caption)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     .lineLimit(1)
+                if note.kind == "checklist", !note.items.isEmpty {
+                    Text("\(note.items.filter(\.checked).count)/\(note.items.count) ukończonych")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                }
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
@@ -553,6 +1300,19 @@ private func noteColor(_ color: NoteColor) -> Color {
     case .amber: return RootineTheme.ColorToken.warning
     case .violet: return MoreModule.travel.tint
     case .coral: return RootineTheme.ColorToken.destructive
+    }
+}
+
+private extension NoteColor {
+    var localizedName: String {
+        switch self {
+        case .graphite: return "Grafitowy"
+        case .blue: return "Niebieski"
+        case .green: return "Zielony"
+        case .amber: return "Bursztynowy"
+        case .violet: return "Fioletowy"
+        case .coral: return "Koralowy"
+        }
     }
 }
 
@@ -955,8 +1715,19 @@ private struct GoalsModuleContent: View {
     @State private var editingGoal: GoalRecord?
     @State private var goalToDelete: GoalRecord?
     @State private var deletedGoal: GoalRecord?
+    @State private var showingArchive = false
+    @State private var categoryFilter: String?
 
-    private var goals: [GoalRecord] { environment.goalsWorkspace.goals }
+    private var goals: [GoalRecord] {
+        environment.goalsWorkspace.goals
+            .filter { showingArchive ? $0.status == .archived : $0.status != .archived }
+            .filter { categoryFilter == nil || $0.categoryId == categoryFilter }
+            .sorted { lhs, rhs in
+                if lhs.status != rhs.status { return lhs.status == .active }
+                if lhs.dueDate != rhs.dueDate { return lhs.dueDate < rhs.dueDate }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
     private var averageProgress: Double {
         guard !goals.isEmpty else { return 0 }
         return goals.reduce(0) { $0 + $1.progress } / Double(goals.count)
@@ -974,20 +1745,40 @@ private struct GoalsModuleContent: View {
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                     Spacer(minLength: RootineTheme.Spacing.small)
-                    Text("\(Int(averageProgress * 100))%")
+                    Text("\(Int((averageProgress * 100).rounded(.toNearestOrAwayFromZero)))%")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(MoreModule.goals.tint)
                 }
                 ProgressView(value: averageProgress)
                     .tint(MoreModule.goals.tint)
                     .accessibilityLabel("Średni postęp celów")
-                    .accessibilityValue("\(Int(averageProgress * 100)) procent")
+                    .accessibilityValue("\(Int((averageProgress * 100).rounded(.toNearestOrAwayFromZero))) procent")
             }
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
             .rootineSurface()
 
+            HStack(spacing: RootineTheme.Spacing.small) {
+                Button(showingArchive ? "Aktywne" : "Archiwum") {
+                    showingArchive.toggle()
+                    categoryFilter = nil
+                }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: RootineTheme.Spacing.xSmall) {
+                        ForEach(environment.goalsWorkspace.categories) { category in
+                            Button(category.label) {
+                                categoryFilter = categoryFilter == category.id ? nil : category.id
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(categoryFilter == category.id ? MoreModule.goals.tint : RootineTheme.ColorToken.secondaryText)
+                        }
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                ModuleSectionTitle(title: "Aktywne cele", systemImage: "target")
+                ModuleSectionTitle(title: showingArchive ? "Archiwum celów" : "Aktywne cele", systemImage: showingArchive ? "archivebox" : "target")
                 if goals.isEmpty {
                     ModuleEmptyCard(title: "Zacznij od jednego celu", detail: "Wybierz mały, konkretny krok na dziś.", systemImage: "target", tint: MoreModule.goals.tint)
                 } else {
@@ -999,6 +1790,15 @@ private struct GoalsModuleContent: View {
                             .contextMenu {
                                 Button { Task { await environment.advanceGoal(id: goal.id) } } label: {
                                     Label("Dodaj krok", systemImage: "plus.circle")
+                                }
+                                if goal.status == .archived {
+                                    Button { Task { await environment.restoreArchivedGoal(id: goal.id) } } label: {
+                                        Label("Przywróć cel", systemImage: "arrow.uturn.backward")
+                                    }
+                                } else {
+                                    Button { Task { await environment.archiveGoal(id: goal.id) } } label: {
+                                        Label("Archiwizuj cel", systemImage: "archivebox")
+                                    }
                                 }
                                 Button(role: .destructive) { requestDelete(goal) } label: {
                                     Label("Usuń cel", systemImage: "trash")
@@ -1014,6 +1814,17 @@ private struct GoalsModuleContent: View {
                                     Label("Edytuj", systemImage: "pencil")
                                 }
                                 .tint(MoreModule.goals.tint)
+                                if goal.status == .archived {
+                                    Button { Task { await environment.restoreArchivedGoal(id: goal.id) } } label: {
+                                        Label("Przywróć", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .tint(RootineTheme.ColorToken.success)
+                                } else {
+                                    Button { Task { await environment.archiveGoal(id: goal.id) } } label: {
+                                        Label("Archiwizuj", systemImage: "archivebox")
+                                    }
+                                    .tint(MoreModule.goals.tint)
+                                }
                             }
                             if index < goals.count - 1 {
                                 Divider().overlay(RootineTheme.ColorToken.separator)
@@ -1029,8 +1840,21 @@ private struct GoalsModuleContent: View {
             }
         }
         .sheet(isPresented: $isShowingGoalEditor) {
-            GoalEditorSheet { title, detail, target, icon in
-                Task { await environment.addGoal(title: title, detail: detail, target: target, icon: icon) }
+            GoalEditorSheet(categories: environment.goalsWorkspace.categories) { draft in
+                Task { _ = await environment.createGoal(
+                    title: draft.title,
+                    description: draft.detail,
+                    categoryId: draft.categoryId,
+                    iconKey: draft.icon,
+                    status: draft.status,
+                    priority: draft.priority,
+                    startDate: draft.startDate,
+                    dueDate: draft.dueDate,
+                    progressMode: draft.progressMode,
+                    targetValue: draft.target,
+                    unit: draft.unit,
+                    note: draft.note
+                ) }
             }
         }
         .sheet(item: $selectedGoal) { goal in
@@ -1043,8 +1867,21 @@ private struct GoalsModuleContent: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $editingGoal) { goal in
-            GoalEditorSheet(existing: goal) { title, detail, target, icon in
-                Task { await environment.updateGoal(id: goal.id, title: title, detail: detail, target: target, icon: icon) }
+            GoalEditorSheet(existing: goal, categories: environment.goalsWorkspace.categories) { draft in
+                Task { await environment.updateGoal(
+                    id: goal.id,
+                    title: draft.title,
+                    description: draft.detail,
+                    categoryId: draft.categoryId,
+                    status: draft.status,
+                    priority: draft.priority,
+                    startDate: draft.startDate,
+                    dueDate: draft.dueDate,
+                    progressMode: draft.progressMode,
+                    targetValue: draft.target,
+                    unit: draft.unit,
+                    note: draft.note
+                ) }
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -1105,12 +1942,15 @@ private struct GoalRow: View {
                     HStack {
                         Text(goal.title).font(.subheadline.weight(.semibold))
                         Spacer()
-                        Text("\(Int(goal.progress * 100))%")
+                        Text("\(goal.progressPercent)%")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(MoreModule.goals.tint)
                     }
                     Text(goal.detail.isEmpty ? "Postęp celu" : goal.detail)
                         .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    Text("Termin \(goal.dueDate) · \(goal.status.rawValue)")
+                        .font(.caption2)
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     ProgressView(value: goal.progress)
                         .tint(MoreModule.goals.tint)
@@ -1135,19 +1975,37 @@ private struct GoalRow: View {
 private struct GoalEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let existing: GoalRecord?
-    let onSave: (String, String, Double, String) -> Void
+    let categories: [GoalCategory]
+    let onSave: (GoalEditorDraft) -> Void
     @State private var title: String
     @State private var detail: String
     @State private var target: String
     @State private var icon: String
+    @State private var categoryId: String
+    @State private var status: GoalStatus
+    @State private var priority: GoalPriority
+    @State private var startDate: String
+    @State private var dueDate: String
+    @State private var progressMode: GoalProgressMode
+    @State private var unit: String
+    @State private var note: String
 
-    init(existing: GoalRecord? = nil, onSave: @escaping (String, String, Double, String) -> Void) {
+    init(existing: GoalRecord? = nil, categories: [GoalCategory] = [], onSave: @escaping (GoalEditorDraft) -> Void) {
         self.existing = existing
+        self.categories = categories.isEmpty ? [GoalCategory(id: "personal", label: "Osobiste", color: "#8793A1", iconKey: "circle")] : categories
         self.onSave = onSave
         _title = State(initialValue: existing?.title ?? "")
         _detail = State(initialValue: existing?.detail ?? "")
         _target = State(initialValue: String(existing?.target ?? 10))
         _icon = State(initialValue: existing?.icon ?? "target")
+        _categoryId = State(initialValue: existing?.categoryId ?? "personal")
+        _status = State(initialValue: existing?.status ?? .active)
+        _priority = State(initialValue: existing?.priority ?? .medium)
+        _startDate = State(initialValue: existing?.startDate ?? RootineDate.localDate())
+        _dueDate = State(initialValue: existing?.dueDate ?? RootineDate.localDate())
+        _progressMode = State(initialValue: existing?.progressMode ?? .numeric)
+        _unit = State(initialValue: existing?.unit ?? "kroków")
+        _note = State(initialValue: existing?.note ?? existing?.detail ?? "")
     }
 
     var body: some View {
@@ -1159,6 +2017,24 @@ private struct GoalEditorSheet: View {
                     TextField("Liczba kroków", text: $target)
                         .keyboardType(.decimalPad)
                     TextField("Ikona SF Symbol", text: $icon)
+                    Picker("Kategoria", selection: $categoryId) {
+                        ForEach(categories) { category in
+                            Text(category.label).tag(category.id)
+                        }
+                    }
+                    Picker("Status", selection: $status) {
+                        ForEach(GoalStatus.allCases, id: \.self) { value in Text(value.rawValue).tag(value) }
+                    }
+                    Picker("Priorytet", selection: $priority) {
+                        ForEach(GoalPriority.allCases, id: \.self) { value in Text(value.rawValue).tag(value) }
+                    }
+                    Picker("Typ postępu", selection: $progressMode) {
+                        ForEach(GoalProgressMode.allCases, id: \.self) { value in Text(value.rawValue).tag(value) }
+                    }
+                    TextField("Jednostka", text: $unit)
+                    TextField("Start (RRRR-MM-DD)", text: $startDate)
+                    TextField("Termin (RRRR-MM-DD)", text: $dueDate)
+                    TextField("Notatka", text: $note, axis: .vertical)
                 }
             }
             .navigationTitle(existing == nil ? "Dodaj cel" : "Edytuj cel")
@@ -1167,7 +2043,20 @@ private struct GoalEditorSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
-                        onSave(title, detail, Double(target.replacingOccurrences(of: ",", with: ".")) ?? 10, icon)
+                        onSave(GoalEditorDraft(
+                            title: title,
+                            detail: detail,
+                            target: Double(target.replacingOccurrences(of: ",", with: ".")) ?? 10,
+                            icon: icon,
+                            categoryId: categoryId,
+                            status: status,
+                            priority: priority,
+                            startDate: startDate,
+                            dueDate: dueDate,
+                            progressMode: progressMode,
+                            unit: unit,
+                            note: note
+                        ))
                         dismiss()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1177,8 +2066,24 @@ private struct GoalEditorSheet: View {
     }
 }
 
+private struct GoalEditorDraft {
+    let title: String
+    let detail: String
+    let target: Double
+    let icon: String
+    let categoryId: String
+    let status: GoalStatus
+    let priority: GoalPriority
+    let startDate: String
+    let dueDate: String
+    let progressMode: GoalProgressMode
+    let unit: String
+    let note: String
+}
+
 private struct GoalDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var environment: AppEnvironment
     let goal: GoalRecord
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -1194,12 +2099,69 @@ private struct GoalDetailSheet: View {
                 ProgressView(value: goal.progress)
                     .tint(MoreModule.goals.tint)
                     .accessibilityLabel("Postęp celu")
-                    .accessibilityValue("\(Int(goal.progress * 100)) procent")
+                    .accessibilityValue("\(goal.progressPercent) procent")
                 Text("\(Int(goal.current.rounded())) z \(Int(goal.target.rounded())) kroków")
                     .font(.subheadline.weight(.semibold))
+                HStack {
+                    Label("Termin", systemImage: "calendar")
+                    Spacer()
+                    Text(goal.dueDate)
+                }
+                .font(.subheadline)
+                HStack {
+                    Label("Status", systemImage: "circle.fill")
+                    Spacer()
+                    Text(goal.status.rawValue)
+                }
+                if !goal.milestones.isEmpty {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                        ModuleSectionTitle(title: "Etapy", systemImage: "checklist")
+                        ForEach(goal.milestones) { milestone in
+                            Button {
+                                Task { await environment.updateGoalMilestone(id: goal.id, milestoneID: milestone.id, done: !milestone.done) }
+                            } label: {
+                                HStack {
+                                    Image(systemName: milestone.done ? "checkmark.circle.fill" : "circle")
+                                    VStack(alignment: .leading) {
+                                        Text(milestone.title)
+                                        Text(milestone.dueDate).font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                if !goal.linkedTaskIds.isEmpty {
+                    Label("Powiązane zadania: \(goal.linkedTaskIds.map(String.init).joined(separator: ", "))", systemImage: "link")
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if !goal.history.isEmpty {
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                        ModuleSectionTitle(title: "Historia", systemImage: "clock.arrow.circlepath")
+                        ForEach(goal.history.suffix(5)) { entry in
+                            Text("\(entry.label) · \(entry.createdAt.prefix(10))")
+                                .font(.caption)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }
+                    }
+                }
                 RootineSecondaryButton("Edytuj cel", systemImage: "pencil") {
                     onEdit()
                     dismiss()
+                }
+                if goal.status == .archived {
+                    RootineSecondaryButton("Przywróć cel", systemImage: "arrow.uturn.backward") {
+                        Task { await environment.restoreArchivedGoal(id: goal.id) }
+                        dismiss()
+                    }
+                } else {
+                    RootineSecondaryButton("Archiwizuj cel", systemImage: "archivebox") {
+                        Task { await environment.archiveGoal(id: goal.id) }
+                        dismiss()
+                    }
                 }
                 Button("Usuń cel", role: .destructive) { showDeleteConfirmation = true }
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -1229,6 +2191,10 @@ private struct GoalDetailSheet: View {
 
 private struct WorkModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @State private var isShowingProjectEditor = false
+    @State private var isShowingWorkItemEditor = false
+    @State private var editingWorkItem: WorkItem?
+    @State private var workItemToDelete: WorkItem?
     @State private var isShowingPriorityEditor = false
     @State private var editingPriority: WorkspaceTask?
     @State private var priorityToDelete: WorkspaceTask?
@@ -1238,7 +2204,43 @@ private struct WorkModuleContent: View {
         environment.taskWorkspace.tasks.filter { $0.deleted != true && $0.source?.kind == "work" }
     }
 
+    private var workProjects: [WorkProject] {
+        environment.workWorkspace.projects.filter { $0.status != .archived }
+    }
+
+    private var workItems: [WorkItem] {
+        environment.workWorkspace.tasks.sorted { lhs, rhs in
+            if lhs.completed != rhs.completed { return !lhs.completed }
+            if lhs.priority != rhs.priority { return workPriorityRank(lhs.priority) > workPriorityRank(rhs.priority) }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func workPriorityRank(_ priority: WorkItemPriority) -> Int {
+        switch priority {
+        case .urgent: return 4
+        case .high: return 3
+        case .medium: return 2
+        case .low: return 1
+        case .none: return 0
+        }
+    }
+
+    private func workItemMeta(_ item: WorkItem) -> String {
+        let projectName = item.projectId.flatMap { projectID in
+            workProjects.first(where: { $0.id == projectID })?.name
+        }
+        let priority = item.priority == .none ? nil : item.priority.rawValue
+        return [projectName, priority].compactMap { $0 }.joined(separator: " · ").isEmpty
+            ? "Bez projektu"
+            : [projectName, priority].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private var isFocusRunning: Bool { focusStartDate != nil }
+
+    private var isFocusPaused: Bool {
+        !isFocusRunning && environment.workWorkspace.pausedFocusSessionID != nil
+    }
 
     private var focusStartDate: Date? {
         guard let startedAt = environment.workWorkspace.activeFocusStartedAt else { return nil }
@@ -1262,13 +2264,105 @@ private struct WorkModuleContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack {
+                    ModuleSectionTitle(title: "Projekty", systemImage: "folder")
+                    Spacer()
+                    Text("\(workProjects.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if workProjects.isEmpty {
+                    ModuleEmptyCard(title: "Dodaj pierwszy projekt", detail: "Projekty porządkują zadania pracy i sesje skupienia.", systemImage: "folder.badge.plus", tint: MoreModule.work.tint)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workProjects.enumerated()), id: \.element.id) { index, project in
+                            HStack(spacing: RootineTheme.Spacing.small) {
+                                Image(systemName: project.status == .completed ? "checkmark.folder.fill" : "folder.fill")
+                                    .foregroundStyle(project.status == .completed ? RootineTheme.ColorToken.success : MoreModule.work.tint)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(project.name).font(.subheadline.weight(.semibold))
+                                    Text("\(workItems.filter { $0.projectId == project.id && !$0.completed }.count) otwartych zadań")
+                                        .font(.caption)
+                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            if index < workProjects.count - 1 { Divider().overlay(RootineTheme.ColorToken.separator) }
+                        }
+                    }
+                    .rootineSurface()
+                }
+                ModuleActionButton(title: "Dodaj projekt", systemImage: "plus", tint: MoreModule.work.tint) {
+                    isShowingProjectEditor = true
+                }
+            }
+
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack {
+                    ModuleSectionTitle(title: "Zadania pracy", systemImage: "list.bullet.rectangle")
+                    Spacer()
+                    Text("\(workItems.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if workItems.isEmpty {
+                    ModuleEmptyCard(title: "Dodaj zadanie pracy", detail: "Zadania mogą należeć do projektu i mieć priorytet.", systemImage: "plus.rectangle.on.folder", tint: MoreModule.work.tint)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workItems.enumerated()), id: \.element.id) { index, item in
+                            HStack(spacing: RootineTheme.Spacing.small) {
+                                Button {
+                                    Task { await environment.toggleWorkItemCompletion(id: item.id) }
+                                } label: {
+                                    Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(item.completed ? RootineTheme.ColorToken.success : MoreModule.work.tint)
+                                        .frame(width: 32, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                Button { editingWorkItem = item } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.title)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                            .strikethrough(item.completed)
+                                            .lineLimit(2)
+                                        Text(workItemMeta(item))
+                                            .font(.caption)
+                                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    }
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    if !isFocusRunning && !isFocusPaused {
+                                        Button {
+                                            Task { await environment.startFocusSession(projectID: item.projectId, taskID: item.id) }
+                                        } label: {
+                                            Label("Skup się na zadaniu", systemImage: "timer")
+                                        }
+                                    }
+                                    Button(role: .destructive) { workItemToDelete = item } label: { Label("Usuń", systemImage: "trash") }
+                                }
+                            }
+                            if index < workItems.count - 1 { Divider().overlay(RootineTheme.ColorToken.separator) }
+                        }
+                    }
+                    .rootineSurface()
+                }
+                ModuleActionButton(title: "Dodaj zadanie pracy", systemImage: "plus", tint: MoreModule.work.tint) {
+                    isShowingWorkItemEditor = true
+                }
+            }
+
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                 HStack {
                     ModuleSectionTitle(title: "Sesja skupienia", systemImage: "timer")
                     Spacer()
-                    Text(isFocusRunning ? "W TOKU" : "GOTOWE")
+                    Text(isFocusRunning ? "W TOKU" : isFocusPaused ? "WSTRZYMANO" : "GOTOWE")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(isFocusRunning ? MoreModule.work.tint : RootineTheme.ColorToken.success)
+                        .foregroundStyle(isFocusRunning || isFocusPaused ? MoreModule.work.tint : RootineTheme.ColorToken.success)
                 }
                 if hasCorruptFocusSession {
                     Label("Sesja wymaga odzyskania", systemImage: "exclamationmark.triangle")
@@ -1298,9 +2392,9 @@ private struct WorkModuleContent: View {
                     }
                 } else {
                     HStack(alignment: .lastTextBaseline) {
-                        Label("Brak aktywnej sesji", systemImage: "timer")
+                        Label(isFocusPaused ? "Sesja wstrzymana" : "Brak aktywnej sesji", systemImage: isFocusPaused ? "pause.circle" : "timer")
                             .font(.title3.weight(.semibold))
-                        Text("Uruchom blok skupienia")
+                        Text(isFocusPaused ? "Wznów, gdy będziesz gotowy" : "Uruchom blok skupienia")
                             .font(.subheadline)
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
@@ -1309,19 +2403,27 @@ private struct WorkModuleContent: View {
                     Button {
                         Task {
                             if isFocusRunning {
-                                await environment.stopFocusSession()
+                                await environment.pauseFocusSession()
+                            } else if isFocusPaused {
+                                await environment.resumeFocusSession()
                             } else {
                                 await environment.startFocusSession()
                             }
                         }
                     } label: {
-                        Label(isFocusRunning ? "Zatrzymaj sesję" : "Rozpocznij sesję", systemImage: isFocusRunning ? "pause.fill" : "play.fill")
+                        Label(isFocusRunning ? "Wstrzymaj sesję" : isFocusPaused ? "Wznów sesję" : "Rozpocznij sesję", systemImage: isFocusRunning ? "pause.fill" : "play.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(MoreModule.work.tint)
                     .frame(minHeight: 48)
-                    .accessibilityHint(isFocusRunning ? "Kończy bieżącą sesję skupienia" : "Uruchamia 25 minut skupienia")
+                    .accessibilityHint(isFocusRunning ? "Wstrzymuje bieżącą sesję skupienia" : isFocusPaused ? "Wznawia wstrzymaną sesję skupienia" : "Uruchamia blok skupienia")
+                    if isFocusRunning || isFocusPaused {
+                        Button("Zakończ sesję", role: .destructive) {
+                            Task { await environment.stopFocusSession() }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
                 }
             }
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
@@ -1379,8 +2481,14 @@ private struct WorkModuleContent: View {
 
             if !environment.workWorkspace.focusSessions.isEmpty {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                    ModuleSectionTitle(title: "Ostatnie sesje", systemImage: "clock.arrow.circlepath")
-                    ForEach(environment.workWorkspace.focusSessions.prefix(3)) { session in
+                    HStack {
+                        ModuleSectionTitle(title: "Historia skupienia", systemImage: "clock.arrow.circlepath")
+                        Spacer()
+                        Text("Łącznie \(rootineFocusTotalMinutes(environment.workWorkspace.focusSessions)) min")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+                    ForEach(rootineFocusHistory(environment.workWorkspace.focusSessions, limit: 3)) { session in
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(MoreModule.work.tint)
@@ -1396,6 +2504,35 @@ private struct WorkModuleContent: View {
                 }
                 .rootineSurface()
             }
+        }
+        .task { await environment.recoverFocusSession() }
+        .sheet(isPresented: $isShowingProjectEditor) {
+            WorkProjectEditorSheet { name, description in
+                Task { await environment.addWorkProject(name: name, description: description) }
+            }
+        }
+        .sheet(isPresented: $isShowingWorkItemEditor) {
+            WorkItemEditorSheet(projects: workProjects) { title, projectID, priority, status in
+                Task { await environment.addWorkItem(title: title, projectID: projectID, priority: priority, status: status) }
+            }
+        }
+        .sheet(item: $editingWorkItem) { item in
+            WorkItemEditorSheet(existing: item, projects: workProjects) { title, projectID, priority, status in
+                Task { await environment.updateWorkItem(id: item.id, title: title, priority: priority, status: status, projectID: projectID) }
+            }
+        }
+        .confirmationDialog(
+            "Usunąć zadanie pracy?",
+            isPresented: Binding(get: { workItemToDelete != nil }, set: { if !$0 { workItemToDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Usuń zadanie", role: .destructive) {
+                if let workItemToDelete {
+                    Task { await environment.deleteWorkItem(id: workItemToDelete.id) }
+                }
+                workItemToDelete = nil
+            }
+            Button("Anuluj", role: .cancel) {}
         }
         .sheet(isPresented: $isShowingPriorityEditor) {
             WorkPriorityEditorSheet { title in
@@ -1449,6 +2586,118 @@ private struct WorkModuleContent: View {
 
     private func requestDelete(_ task: WorkspaceTask) {
         priorityToDelete = task
+    }
+}
+
+private struct WorkProjectEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (String, String) -> Void
+    @State private var name = ""
+    @State private var description = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Projekt") {
+                    TextField("Nazwa projektu", text: $name)
+                    TextField("Opis (opcjonalnie)", text: $description, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+            }
+            .navigationTitle("Dodaj projekt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(name, description)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct WorkItemEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let existing: WorkItem?
+    let projects: [WorkProject]
+    let onSave: (String, String?, WorkItemPriority, WorkItemStatus) -> Void
+    @State private var title: String
+    @State private var projectID: String
+    @State private var priority: WorkItemPriority
+    @State private var status: WorkItemStatus
+
+    init(existing: WorkItem? = nil, projects: [WorkProject], onSave: @escaping (String, String?, WorkItemPriority, WorkItemStatus) -> Void) {
+        self.existing = existing
+        self.projects = projects
+        self.onSave = onSave
+        _title = State(initialValue: existing?.title ?? "")
+        _projectID = State(initialValue: existing?.projectId ?? "")
+        _priority = State(initialValue: existing?.priority ?? .none)
+        _status = State(initialValue: existing?.status ?? .todo)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Zadanie") {
+                    TextField("Co trzeba zrobić?", text: $title, axis: .vertical)
+                        .lineLimit(2...4)
+                    Picker("Projekt", selection: $projectID) {
+                        Text("Bez projektu").tag("")
+                        ForEach(projects) { project in
+                            Text(project.name).tag(project.id)
+                        }
+                    }
+                    Picker("Priorytet", selection: $priority) {
+                        ForEach(WorkItemPriority.allCases, id: \.self) { value in
+                            Text(workItemPriorityLabel(value)).tag(value)
+                        }
+                    }
+                    Picker("Status", selection: $status) {
+                        ForEach(WorkItemStatus.allCases, id: \.self) { value in
+                            Text(workItemStatusLabel(value)).tag(value)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(existing == nil ? "Dodaj zadanie" : "Edytuj zadanie")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(title, projectID.isEmpty ? nil : projectID, priority, status)
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func workItemPriorityLabel(_ value: WorkItemPriority) -> String {
+        switch value {
+        case .none: return "Brak"
+        case .low: return "Niski"
+        case .medium: return "Średni"
+        case .high: return "Wysoki"
+        case .urgent: return "Pilny"
+        }
+    }
+
+    private func workItemStatusLabel(_ value: WorkItemStatus) -> String {
+        switch value {
+        case .todo: return "Do zrobienia"
+        case .inProgress: return "W toku"
+        case .blocked: return "Zablokowane"
+        case .waiting: return "Oczekuje"
+        case .completed: return "Ukończone"
+        case .cancelled: return "Anulowane"
+        }
     }
 }
 
@@ -1837,6 +3086,9 @@ private struct HealthModuleContent: View {
     @State private var editingReminder: HealthReminder?
     @State private var reminderToDelete: HealthReminder?
     @State private var deletedReminder: HealthReminder?
+    @State private var editingCheckIn: HealthCheckIn?
+    @State private var checkInToDelete: HealthCheckIn?
+    @State private var deletedCheckIn: HealthCheckIn?
 
     private var water: Double {
         let key = RootineDate.localDate()
@@ -1850,6 +3102,18 @@ private struct HealthModuleContent: View {
     private var todayEnergyLabel: String {
         guard let energy = todayEnergy else { return "Nieuzupełnione" }
         return "\(energy)/4"
+    }
+
+    private var todayCheckIn: HealthCheckIn? {
+        environment.healthWorkspace.checkIns[RootineDate.localDate()]
+    }
+
+    private var checkInHistory: [HealthCheckIn] {
+        environment.healthWorkspace.checkInHistory(limit: 7)
+    }
+
+    private var healthMetrics: HealthMetrics {
+        environment.healthWorkspace.metrics(historyDays: 7)
     }
 
     var body: some View {
@@ -1888,6 +3152,72 @@ private struct HealthModuleContent: View {
                         .accessibilityLabel("Energia: \(index + 1) z 4")
                         .accessibilityValue(todayEnergy == index + 1 ? "Wybrano" : "Niewybrano")
                         .accessibilityAddTraits(todayEnergy == index + 1 ? [.isSelected] : [])
+                    }
+                }
+                if let note = todayCheckIn?.note, !note.isEmpty {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                RootineSecondaryButton("Edytuj notatkę check-inu", systemImage: "pencil") {
+                    let key = RootineDate.localDate()
+                    editingCheckIn = todayCheckIn
+                        ?? HealthCheckIn(date: key, energy: todayEnergy ?? 3, note: nil, updatedAt: RootineDate.isoTimestamp())
+                }
+            }
+            .rootineSurface()
+
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack {
+                    ModuleSectionTitle(title: "Historia check-inów", systemImage: "clock.arrow.circlepath")
+                    Spacer()
+                    if let average = healthMetrics.averageEnergy {
+                        Text("Średnia 7 dni: \(average, specifier: "%.1f")/4")
+                            .font(.caption)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+                }
+                if checkInHistory.isEmpty {
+                    ModuleEmptyCard(
+                        title: "Brak historii energii",
+                        detail: "Uzupełnij pierwszy check-in, aby zobaczyć rytm z ostatnich dni.",
+                        systemImage: "waveform.path.ecg",
+                        tint: MoreModule.health.tint
+                    )
+                } else {
+                    ForEach(checkInHistory) { checkIn in
+                        Button {
+                            editingCheckIn = checkIn
+                        } label: {
+                            HStack(spacing: RootineTheme.Spacing.small) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(checkIn.date)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                    Text(checkIn.note?.isEmpty == false ? checkIn.note! : "Bez notatki")
+                                        .font(.caption)
+                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Text("\(checkIn.energy)/4")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(MoreModule.health.tint)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                checkInToDelete = checkIn
+                            } label: {
+                                Label("Usuń check-in", systemImage: "trash")
+                            }
+                        }
+                        if checkIn.id != checkInHistory.last?.id {
+                            Divider().overlay(RootineTheme.ColorToken.separator)
+                        }
                     }
                 }
             }
@@ -1959,6 +3289,13 @@ private struct HealthModuleContent: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: $editingCheckIn) { checkIn in
+            HealthCheckInEditorSheet(existing: checkIn) { energy, note in
+                Task { await environment.updateHealthCheckIn(date: checkIn.date, energy: energy, note: note) }
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $selectedReminder) { reminder in
             HealthReminderDetailSheet(
                 reminder: reminder,
@@ -1996,16 +3333,43 @@ private struct HealthModuleContent: View {
             }
             Button("Anuluj", role: .cancel) {}
         }
-        .overlay(alignment: .bottom) {
-            if let deletedReminder {
-                RootineUndoBanner(message: "Usunięto przypomnienie") {
-                    let reminder = deletedReminder
-                    self.deletedReminder = nil
-                    Task { await environment.restoreHealthReminder(reminder) }
+        .confirmationDialog(
+            "Usunąć check-in?",
+            isPresented: Binding(
+                get: { checkInToDelete != nil },
+                set: { isPresented in
+                    if !isPresented { checkInToDelete = nil }
                 }
-                .padding(.horizontal, RootineTheme.Spacing.medium)
-                .padding(.bottom, RootineTheme.Spacing.small)
+            ),
+            titleVisibility: .visible
+        ) {
+            if let checkInToDelete {
+                Button("Usuń check-in", role: .destructive) {
+                    delete(checkInToDelete)
+                    self.checkInToDelete = nil
+                }
             }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: RootineTheme.Spacing.xSmall) {
+                if let deletedReminder {
+                    RootineUndoBanner(message: "Usunięto przypomnienie") {
+                        let reminder = deletedReminder
+                        self.deletedReminder = nil
+                        Task { await environment.restoreHealthReminder(reminder) }
+                    }
+                }
+                if let deletedCheckIn {
+                    RootineUndoBanner(message: "Usunięto check-in") {
+                        let checkIn = deletedCheckIn
+                        self.deletedCheckIn = nil
+                        Task { await environment.restoreHealthCheckIn(checkIn) }
+                    }
+                }
+            }
+            .padding(.horizontal, RootineTheme.Spacing.medium)
+            .padding(.bottom, RootineTheme.Spacing.small)
         }
     }
 
@@ -2016,6 +3380,11 @@ private struct HealthModuleContent: View {
     private func delete(_ reminder: HealthReminder) {
         deletedReminder = reminder
         Task { await environment.deleteHealthReminder(id: reminder.id) }
+    }
+
+    private func delete(_ checkIn: HealthCheckIn) {
+        deletedCheckIn = checkIn
+        Task { await environment.deleteHealthCheckIn(date: checkIn.date) }
     }
 }
 
@@ -2115,6 +3484,53 @@ private struct HealthReminderEditorSheet: View {
                         dismiss()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct HealthCheckInEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let existing: HealthCheckIn
+    let onSave: (Int, String?) -> Void
+    @State private var energy: Int
+    @State private var note: String
+
+    init(existing: HealthCheckIn, onSave: @escaping (Int, String?) -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        _energy = State(initialValue: existing.energy)
+        _note = State(initialValue: existing.note ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Energia") {
+                    Picker("Poziom energii", selection: $energy) {
+                        ForEach(1...4, id: \.self) { value in
+                            Text("\(value) z 4").tag(value)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                Section("Notatka") {
+                    TextField("Opcjonalnie", text: $note, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+            }
+            .navigationTitle("Edytuj check-in")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Anuluj") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(energy, note)
+                        dismiss()
+                    }
                 }
             }
         }
@@ -2240,6 +3656,7 @@ private struct AffairsModuleContent: View {
     @State private var selectedMatter: AffairMatter?
     @State private var matterToDelete: AffairMatter?
     @State private var deletedMatter: AffairMatter?
+    @State private var editorTarget: AffairsEditorTarget?
 
     private var activeMatters: [AffairMatter] {
         environment.affairsWorkspace.matters
@@ -2307,6 +3724,62 @@ private struct AffairsModuleContent: View {
                 Task { await environment.updateAffairMatter(id: matter.id, title: draft.title, category: draft.category, priority: draft.priority, dueDate: draft.dueDate, note: draft.note) }
             } onDelete: {
                 matterToDelete = matter
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editorTarget) { target in
+            Group {
+                switch target {
+                case .oneTime(let payment):
+                    AffairOneTimeEditorSheet(payment: payment) { draft in
+                        if let payment {
+                            Task { await environment.updateAffairOneTimePayment(id: payment.id, title: draft.title, category: draft.category, amount: draft.amount, dueDate: draft.dueDate, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairOneTimePayment(title: draft.title, category: draft.category, amount: draft.amount, dueDate: draft.dueDate, note: draft.note) }
+                        }
+                    }
+                case .payment(let payment):
+                    AffairPaymentEditorSheet(payment: payment) { draft in
+                        if let payment {
+                            Task { await environment.updateAffairPayment(id: payment.id, name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextDueDate: draft.nextDueDate, automatic: draft.automatic, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairPayment(name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextDueDate: draft.nextDueDate, automatic: draft.automatic, note: draft.note) }
+                        }
+                    }
+                case .subscription(let subscription):
+                    AffairSubscriptionEditorSheet(subscription: subscription) { draft in
+                        if let subscription {
+                            Task { await environment.updateAffairSubscription(id: subscription.id, name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextBillingDate: draft.nextBillingDate, renewal: draft.renewal, commitmentEndDate: draft.commitmentEndDate, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairSubscription(name: draft.name, category: draft.category, amount: draft.amount, cadence: draft.cadence, nextBillingDate: draft.nextBillingDate, renewal: draft.renewal, commitmentEndDate: draft.commitmentEndDate, note: draft.note) }
+                        }
+                    }
+                case .document(let document):
+                    AffairDocumentEditorSheet(document: document) { draft in
+                        if let document {
+                            Task { await environment.updateAffairDocument(id: document.id, name: draft.name, category: draft.category, holder: draft.holder, expiresAt: draft.expiresAt, reminderDays: draft.reminderDays, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairDocument(name: draft.name, category: draft.category, holder: draft.holder, expiresAt: draft.expiresAt, reminderDays: draft.reminderDays, note: draft.note) }
+                        }
+                    }
+                case .vehicle(let vehicle):
+                    AffairVehicleEditorSheet(vehicle: vehicle) { draft in
+                        if let vehicle {
+                            Task { await environment.updateAffairVehicle(id: vehicle.id, name: draft.name, registration: draft.registration, mileage: draft.mileage) }
+                        } else {
+                            Task { await environment.addAffairVehicle(name: draft.name, registration: draft.registration, mileage: draft.mileage) }
+                        }
+                    }
+                case .vehicleItem(let item, let vehicleID):
+                    AffairVehicleItemEditorSheet(item: item, vehicleID: vehicleID, vehicles: environment.affairsWorkspace.vehicles) { draft in
+                        if let item {
+                            Task { await environment.updateAffairVehicleItem(id: item.id, vehicleID: draft.vehicleID, title: draft.title, type: draft.type, dueDate: draft.dueDate, dueMileage: draft.dueMileage, note: draft.note) }
+                        } else {
+                            Task { await environment.addAffairVehicleItem(vehicleID: draft.vehicleID, title: draft.title, type: draft.type, dueDate: draft.dueDate, dueMileage: draft.dueMileage, note: draft.note) }
+                        }
+                    }
+                }
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
@@ -2381,11 +3854,16 @@ private struct AffairsModuleContent: View {
     private var finances: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
             sectionHeader("Finanse", image: "creditcard")
-            if upcomingPayments.isEmpty && environment.affairsWorkspace.oneTimePayments.isEmpty {
+            if upcomingPayments.isEmpty
+                && environment.affairsWorkspace.oneTimePayments.isEmpty
+                && environment.affairsWorkspace.subscriptions.filter(\.active).isEmpty {
                 ModuleEmptyCard(title: "Brak płatności", detail: "Płatności pojawią się tutaj po zapisaniu ich w module Pozostałe.", systemImage: "creditcard", tint: RootineTheme.ColorToken.warning)
             } else {
                 ForEach(upcomingPayments) { payment in
-                    AffairsPaymentRow(payment: payment)
+                    Button { editorTarget = .payment(payment) } label: {
+                        AffairsPaymentRow(payment: payment)
+                    }
+                    .buttonStyle(.plain)
                 }
                 ForEach(environment.affairsWorkspace.oneTimePayments.sorted { $0.dueDate < $1.dueDate }) { payment in
                     HStack(spacing: RootineTheme.Spacing.small) {
@@ -2401,8 +3879,44 @@ private struct AffairsModuleContent: View {
                                 .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
                         }
                         Spacer()
+                        Button { editorTarget = .oneTime(payment) } label: {
+                            Image(systemName: "pencil")
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .frame(minHeight: 52)
+                }
+                sectionHeader("Subskrypcje", image: "repeat.circle")
+                ForEach(environment.affairsWorkspace.subscriptions.filter(\.active).sorted { $0.nextBillingDate < $1.nextBillingDate }) { subscription in
+                    Button { editorTarget = .subscription(subscription) } label: {
+                        HStack(spacing: RootineTheme.Spacing.small) {
+                            Image(systemName: "repeat.circle").foregroundStyle(RootineTheme.ColorToken.warning).frame(width: 36, height: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(subscription.name).font(.subheadline.weight(.medium))
+                                Text("Odnowienie " + subscription.nextBillingDate + " · " + affairCurrency(subscription.amount))
+                                    .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            }
+                            Spacer()
+                        }
+                        .frame(minHeight: 52)
+                    }
+                    .buttonStyle(.plain)
+                }
+                ModuleActionButton(title: "Dodaj płatność", systemImage: "plus", tint: RootineTheme.ColorToken.warning) {
+                    editorTarget = .payment(nil)
+                }
+                ModuleActionButton(title: "Dodaj subskrypcję", systemImage: "plus", tint: RootineTheme.ColorToken.warning) {
+                    editorTarget = .subscription(nil)
+                }
+                sectionHeader("Budżet", image: "chart.pie")
+                if environment.affairsWorkspace.budgets.isEmpty {
+                    ModuleEmptyCard(title: "Brak budżetu", detail: "Budżet miesięczny możesz uzupełnić w webowym module spraw.", systemImage: "chart.pie", tint: RootineTheme.ColorToken.action)
+                } else {
+                    ForEach(environment.affairsWorkspace.budgets) { budget in
+                        AffairsBudgetRow(budget: budget)
+                    }
                 }
             }
         }
@@ -2417,8 +3931,14 @@ private struct AffairsModuleContent: View {
                 ModuleEmptyCard(title: "Brak dokumentów", detail: "Dodaj dokument z terminem ważności w pełnym module spraw.", systemImage: "doc.badge.plus", tint: RootineTheme.ColorToken.action)
             } else {
                 ForEach(openDocuments) { document in
-                    AffairsInfoRow(title: document.name, detail: "\(document.holder) · ważny do \(document.expiresAt)", image: "doc.text", tint: RootineTheme.ColorToken.action)
+                    Button { editorTarget = .document(document) } label: {
+                        AffairsInfoRow(title: document.name, detail: "\(document.holder) · ważny do \(document.expiresAt)", image: "doc.text", tint: RootineTheme.ColorToken.action)
+                    }
+                    .buttonStyle(.plain)
                 }
+            }
+            ModuleActionButton(title: "Dodaj dokument", systemImage: "doc.badge.plus", tint: RootineTheme.ColorToken.action) {
+                editorTarget = .document(nil)
             }
         }
         .rootineSurface()
@@ -2432,7 +3952,35 @@ private struct AffairsModuleContent: View {
                 ModuleEmptyCard(title: "Brak terminów pojazdów", detail: "Przeglądy i ubezpieczenia pojawią się tutaj.", systemImage: "car", tint: MoreModule.affairs.tint)
             } else {
                 ForEach(vehicleItems) { item in
-                    AffairsInfoRow(title: item.title, detail: "Termin \(item.dueDate)", image: "car", tint: MoreModule.affairs.tint)
+                    HStack(spacing: RootineTheme.Spacing.small) {
+                            Button { Task { await environment.toggleAffairVehicleItem(id: item.id) } } label: {
+                                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(item.done ? RootineTheme.ColorToken.success : MoreModule.affairs.tint)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                            AffairsInfoRow(title: item.title, detail: "Termin \(item.dueDate)", image: "car", tint: MoreModule.affairs.tint)
+                            Button { editorTarget = .vehicleItem(item, item.vehicleId) } label: {
+                                Image(systemName: "pencil")
+                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+            ForEach(environment.affairsWorkspace.vehicles) { vehicle in
+                Button { editorTarget = .vehicle(vehicle) } label: {
+                    AffairsInfoRow(title: vehicle.name, detail: "\(vehicle.registration) · \(Int(vehicle.mileage)) km", image: "car.fill", tint: MoreModule.affairs.tint)
+                }
+                .buttonStyle(.plain)
+            }
+            ModuleActionButton(title: "Dodaj pojazd", systemImage: "car.badge.plus", tint: MoreModule.affairs.tint) {
+                editorTarget = .vehicle(nil)
+            }
+            if let vehicle = environment.affairsWorkspace.vehicles.first {
+                ModuleActionButton(title: "Dodaj termin pojazdu", systemImage: "calendar.badge.plus", tint: MoreModule.affairs.tint) {
+                    editorTarget = .vehicleItem(nil, vehicle.id)
                 }
             }
         }
@@ -2463,6 +4011,26 @@ private enum AffairsModuleView: String, CaseIterable, Identifiable {
         case .finances: return "Finanse"
         case .documents: return "Dokumenty"
         case .vehicles: return "Pojazdy"
+        }
+    }
+}
+
+private enum AffairsEditorTarget: Identifiable {
+    case oneTime(AffairOneTimePayment?)
+    case payment(AffairRecurringPayment?)
+    case subscription(AffairSubscription?)
+    case document(AffairDocument?)
+    case vehicle(AffairVehicle?)
+    case vehicleItem(AffairVehicleItem?, String)
+
+    var id: String {
+        switch self {
+        case .oneTime(let value): return "one-time-\(value?.id ?? "new")"
+        case .payment(let value): return "payment-\(value?.id ?? "new")"
+        case .subscription(let value): return "subscription-\(value?.id ?? "new")"
+        case .document(let value): return "document-\(value?.id ?? "new")"
+        case .vehicle(let value): return "vehicle-\(value?.id ?? "new")"
+        case .vehicleItem(let value, let vehicleID): return "vehicle-item-\(value?.id ?? "new")-\(vehicleID)"
         }
     }
 }
@@ -2569,8 +4137,30 @@ private struct AffairsInfoRow: View {
     }
 }
 
+private struct AffairsBudgetRow: View {
+    let budget: AffairBudgetMonth
+
+    private var planned: Double { AffairMoney.adding(budget.lines.map(\.planned)) }
+    private var actual: Double { AffairMoney.adding(budget.lines.map(\.actual)) }
+
+    var body: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Image(systemName: "chart.pie").foregroundStyle(RootineTheme.ColorToken.action).frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(budget.month).font(.subheadline.weight(.medium))
+                Text("Plan \(affairCurrency(planned)) · Wykonanie \(affairCurrency(actual))")
+                    .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Spacer()
+        }
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Budżet \(budget.month): plan \(affairCurrency(planned)), wykonanie \(affairCurrency(actual))")
+    }
+}
+
 private func affairCurrency(_ amount: Double) -> String {
-    "\(String(format: "%.2f", amount)) zł"
+    AffairMoney.formatted(amount)
 }
 
 private struct AffairEditorDraft {

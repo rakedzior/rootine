@@ -11,15 +11,20 @@ struct CalendarView: View {
     private var selectedDateKey: String { RootineDate.localDate(selectedDate) }
     private var isCompactHeight: Bool { verticalSizeClass == .compact }
 
-    private var tasks: [WorkspaceTask] {
+    private var tasks: [RootineCalendarOccurrence] {
         let today = RootineDate.localDate()
-        return environment.taskWorkspace.tasks
-            .filter { task in
-                guard task.deleted != true else { return false }
-                return task.calendarDate == selectedDateKey
-                    || (selectedDateKey == today && task.calendarDate == nil && task.view == "dzis")
-            }
-            .sorted { calendarTaskSort($0, $1, dateKey: selectedDateKey) }
+        let projected = rootineTaskOccurrences(
+            environment.taskWorkspace.tasks,
+            from: selectedDateKey,
+            through: selectedDateKey
+        )
+        let projectedIDs = Set(projected.map(\.sourceTaskID))
+        let undatedToday = selectedDateKey == today
+            ? environment.taskWorkspace.tasks
+                .filter { $0.deleted != true && $0.calendarDate == nil && $0.view == "dzis" && !projectedIDs.contains($0.id) }
+                .map { RootineCalendarOccurrence(key: "task:\($0.id)@\(selectedDateKey)", task: $0, calendarDate: selectedDateKey, isVirtual: false) }
+            : []
+        return (projected + undatedToday).sorted(by: calendarTaskSort)
     }
 
     private var weekDates: [Date] {
@@ -102,9 +107,8 @@ struct CalendarView: View {
                     } else {
                         CalendarTaskCard(
                             tasks: tasks,
-                            dateKey: selectedDateKey,
                             onToggle: toggle,
-                            onSelect: { selectedTask = $0 }
+                            onSelect: { selectedTask = $0.task }
                         )
                     }
                 }
@@ -129,8 +133,8 @@ struct CalendarView: View {
         }
     }
 
-    private func toggle(_ task: WorkspaceTask) {
-        Task { await environment.toggleTaskCompletion(id: task.id, on: selectedDate) }
+    private func toggle(_ occurrence: RootineCalendarOccurrence) {
+        Task { await environment.toggleTaskCompletion(id: occurrence.sourceTaskID, on: selectedDate) }
     }
 
     private func movePreviousDay() {
@@ -234,10 +238,9 @@ private struct CalendarWeekStrip: View {
 }
 
 private struct CalendarTaskCard: View {
-    let tasks: [WorkspaceTask]
-    let dateKey: String
-    let onToggle: (WorkspaceTask) -> Void
-    let onSelect: (WorkspaceTask) -> Void
+    let tasks: [RootineCalendarOccurrence]
+    let onToggle: (RootineCalendarOccurrence) -> Void
+    let onSelect: (RootineCalendarOccurrence) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -246,27 +249,27 @@ private struct CalendarTaskCard: View {
                 .foregroundStyle(RootineTheme.ColorToken.primaryText)
                 .padding(.bottom, RootineTheme.Spacing.small)
 
-            ForEach(tasks) { task in
+            ForEach(tasks) { occurrence in
                 HStack(spacing: RootineTheme.Spacing.small) {
-                    Button { onToggle(task) } label: {
-                        Image(systemName: isDone(task) ? "checkmark.circle.fill" : "circle")
+                    Button { onToggle(occurrence) } label: {
+                        Image(systemName: occurrence.isDone ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
-                            .foregroundStyle(isDone(task) ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.action)
+                            .foregroundStyle(occurrence.isDone ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.action)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(isDone(task) ? "Oznacz \(task.text) jako niewykonane" : "Oznacz \(task.text) jako wykonane")
+                    .accessibilityLabel(occurrence.isDone ? "Oznacz \(occurrence.title) jako niewykonane" : "Oznacz \(occurrence.title) jako wykonane")
 
-                    Button { onSelect(task) } label: {
+                    Button { onSelect(occurrence) } label: {
                         HStack(spacing: RootineTheme.Spacing.small) {
                             VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                                Text(task.text)
+                                Text(occurrence.title)
                                     .font(.body.weight(.medium))
-                                    .foregroundStyle(isDone(task) ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
-                                    .strikethrough(isDone(task))
+                                    .foregroundStyle(occurrence.isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
+                                    .strikethrough(occurrence.isDone)
                                     .lineLimit(3)
                                     .multilineTextAlignment(.leading)
-                                if let time = task.time {
+                                if let time = occurrence.time {
                                     Label(time, systemImage: "clock")
                                         .font(.caption)
                                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
@@ -285,17 +288,13 @@ private struct CalendarTaskCard: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Szczegóły zadania: \(task.text)")
+                    .accessibilityLabel("Szczegóły zadania: \(occurrence.title)")
                     .accessibilityHint("Otwiera edycję i zmianę terminu")
                 }
-                if task.id != tasks.last?.id { Divider().overlay(RootineTheme.ColorToken.separator) }
+                if occurrence.id != tasks.last?.id { Divider().overlay(RootineTheme.ColorToken.separator) }
             }
         }
         .rootineSurface()
-    }
-
-    private func isDone(_ task: WorkspaceTask) -> Bool {
-        rootineTaskIsDoneOnDate(task, dateKey: dateKey)
     }
 }
 
@@ -321,8 +320,8 @@ private func polishTaskCount(_ count: Int) -> String {
     }
 }
 
-private func calendarTaskSort(_ lhs: WorkspaceTask, _ rhs: WorkspaceTask, dateKey: String) -> Bool {
-    switch (rootineTaskIsDoneOnDate(lhs, dateKey: dateKey), rootineTaskIsDoneOnDate(rhs, dateKey: dateKey)) {
+private func calendarTaskSort(_ lhs: RootineCalendarOccurrence, _ rhs: RootineCalendarOccurrence) -> Bool {
+    switch (lhs.isDone, rhs.isDone) {
     case (false, true): return true
     case (true, false): return false
     default:
@@ -330,7 +329,7 @@ private func calendarTaskSort(_ lhs: WorkspaceTask, _ rhs: WorkspaceTask, dateKe
         case let (left?, right?) where left != right: return left < right
         case (_?, nil): return true
         case (nil, _?): return false
-        default: return lhs.id < rhs.id
+        default: return lhs.sourceTaskID < rhs.sourceTaskID
         }
     }
 }

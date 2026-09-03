@@ -44,6 +44,10 @@ const entityIdSchema = z.string().min(1).max(180);
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 
 export const syncV3RequestEnvelopeSchema = z.object({
+  // Clients may echo the wire version on requests. It is optional for
+  // backwards-compatible callers, but when present it must never downgrade
+  // the v3 boundary.
+  contract_version: z.literal(SYNC_V3_CONTRACT_VERSION).optional(),
   correlation_id: correlationIdSchema,
 }).strict();
 

@@ -71,7 +71,7 @@ struct RootineDeviceRegistration: Codable, Equatable, Sendable {
     var deviceID: String
     var platform: String
     var appVersion: String
-    var apnsEnvironment: RootineAPNsEnvironment
+    var apnsEnvironment: RootineAPNsEnvironment?
     var permissionState: RootineNotificationPermissionState
     var lastSeenAt: String
     var revokedAt: String?
@@ -125,6 +125,84 @@ final class RootinePushRegistry: @unchecked Sendable {
 
 extension Notification.Name {
     static let rootineAPNsTokenDidRegister = Notification.Name("rootine.apns-token-did-register")
+    static let rootineNotificationDeepLinkDidReceive = Notification.Name("rootine.notification-deep-link-did-receive")
+    static let rootineApplicationWillTerminate = Notification.Name("rootine.application-will-terminate")
+}
+
+/// A notification deep link is deliberately narrower than a general app URL.
+/// It carries only an opaque task/habit identifier and a local calendar date;
+/// titles, notes, account IDs and dedupe material never cross this boundary.
+struct RootineNotificationDeepLink: Equatable, Sendable {
+    enum Entity: String, Equatable, Sendable {
+        case task
+        case habit
+    }
+
+    let entity: Entity
+    let entityID: String
+    let localDate: String
+
+    init?(entity: Entity, entityID: String, localDate: String) {
+        guard Self.isOpaqueIdentifier(entityID), Self.isLocalDate(localDate) else { return nil }
+        self.entity = entity
+        self.entityID = entityID
+        self.localDate = localDate
+    }
+
+    init?(userInfo: [AnyHashable: Any]) {
+        guard let rawLink = userInfo["rootine_deep_link"] as? String,
+              let url = URL(string: rawLink) else { return nil }
+        self.init(url: url)
+    }
+
+    init?(url: URL) {
+        guard url.scheme?.lowercased() == "rootine",
+              url.host?.lowercased() == "notification",
+              url.user == nil,
+              url.password == nil,
+              url.port == nil,
+              url.fragment == nil,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              url.pathComponents.count == 3,
+              components.queryItems?.count == 1,
+              let date = components.queryItems?.first(where: { $0.name == "date" })?.value,
+              let rawEntity = url.pathComponents.dropFirst().first,
+              let rawID = url.pathComponents.dropFirst(2).first,
+              let entity = Entity(rawValue: rawEntity),
+              let entityID = rawID.removingPercentEncoding,
+              let parsed = Self(entity: entity, entityID: entityID, localDate: date) else {
+            return nil
+        }
+        self = parsed
+    }
+
+    var url: URL {
+        var components = URLComponents()
+        components.scheme = "rootine"
+        components.host = "notification"
+        components.path = "/\(entity.rawValue)/\(Self.escapePathComponent(entityID))"
+        components.queryItems = [URLQueryItem(name: "date", value: localDate)]
+        // The initializer above validates this shape, so force-unwrapping is
+        // limited to our own URL construction rather than external input.
+        return components.url!
+    }
+
+    private static func isOpaqueIdentifier(_ value: String) -> Bool {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return !value.isEmpty && value.count <= 180 && value.unicodeScalars.allSatisfy(allowed.contains)
+    }
+
+    private static func isLocalDate(_ value: String) -> Bool {
+        value.count == 10
+            && value.allSatisfy { $0.isNumber || $0 == "-" }
+            && value[value.index(value.startIndex, offsetBy: 4)] == "-"
+            && value[value.index(value.startIndex, offsetBy: 7)] == "-"
+    }
+
+    private static func escapePathComponent(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+    }
 }
 
 /// A Keychain-backed installation identifier. Keychain items survive an app
@@ -148,16 +226,17 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
 
     static func isV3Identifier(_ identifier: String) -> Bool {
         guard identifier.hasPrefix("ios_") else { return false }
-        return isUUIDv4(String(identifier.dropFirst(4)))
+        return isUUIDv4(String(identifier.dropFirst(4)), requireLowercase: true)
     }
 
     static func isLegacyIdentifier(_ identifier: String) -> Bool {
         isUUIDv4(identifier)
     }
 
-    private static func isUUIDv4(_ value: String) -> Bool {
-        let characters = Array(value)
-        guard value == value.lowercased(),
+    private static func isUUIDv4(_ value: String, requireLowercase: Bool = false) -> Bool {
+        let normalized = value.lowercased()
+        let characters = Array(normalized)
+        guard !requireLowercase || value == normalized,
               characters.count == 36,
               characters[8] == "-",
               characters[13] == "-",
@@ -172,11 +251,16 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
     }
 
     func loadOrCreate() -> String {
-        if let existing = load(), !existing.isEmpty {
+        if let existing = load(), Self.isV3Identifier(existing) || Self.isLegacyIdentifier(existing) {
             return existing
         }
 
         let identifier = Self.makeIdentifier()
+        let lookup: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -185,8 +269,17 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem, let existing = load(), !existing.isEmpty {
-            return existing
+        if status == errSecDuplicateItem {
+            // Replace a malformed legacy value in place so a bad Keychain
+            // record cannot make every future registration fail validation.
+            let updateStatus = SecItemUpdate(
+                lookup as CFDictionary,
+                [kSecValueData as String: Data(identifier.utf8)] as CFDictionary
+            )
+            if updateStatus == errSecSuccess { return identifier }
+            if let existing = load(), Self.isV3Identifier(existing) || Self.isLegacyIdentifier(existing) {
+                return existing
+            }
         }
         return identifier
     }
@@ -196,6 +289,7 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -206,5 +300,15 @@ final class RootineDeviceIdentityStore: @unchecked Sendable {
             return nil
         }
         return value
+    }
+
+    private func clear() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }

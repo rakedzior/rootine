@@ -572,7 +572,13 @@ begin
 
   if p_device_id is not null and not exists (
     select 1 from public.rootine_devices
-    where user_id = current_user_id and device_id = p_device_id and revoked_at is null
+    where user_id = current_user_id
+      and device_id = p_device_id
+      and revoked_at is null
+      and deleted_at is null
+      and push_token is not null
+      and permission_state in ('authorized', 'provisional', 'ephemeral')
+      and coalesce(last_seen_at, created_at) >= timezone('utc', now()) - interval '90 days'
   ) then
     raise foreign_key_violation using message = 'Notification device is not active for the current account.';
   end if;
@@ -920,6 +926,15 @@ begin
     if delivery_device_id is null or delivery_status not in ('delivered', 'failed', 'expired', 'unregistered') then
       raise exception 'Invalid notification delivery result.' using errcode = '22023';
     end if;
+    if not exists (
+      select 1 from public.rootine_devices
+      where user_id = job_row.user_id and device_id = delivery_device_id
+    ) then
+      raise exception 'Notification delivery device is not owned by the job account.' using errcode = '42501';
+    end if;
+    if job_row.device_id is not null and delivery_device_id <> job_row.device_id then
+      raise exception 'Notification delivery device does not match the targeted job.' using errcode = '22023';
+    end if;
     insert into public.rootine_notification_deliveries (
       user_id, job_id, device_id, dedupe_key, status, retryable,
       provider_response_code, provider_reason, delivered_at
@@ -981,7 +996,14 @@ begin
 end;
 $$;
 
-create or replace function public.rootine_revoke_notification_device(p_device_id text)
+-- Revocation is always scoped to the owning account. Device IDs are unique per
+-- user, not globally, so a provider response for one account must never
+-- disable another account's installation.
+drop function if exists public.rootine_revoke_notification_device(text);
+create or replace function public.rootine_revoke_notification_device(
+  p_device_id text,
+  p_user_id uuid
+)
 returns boolean
 language plpgsql
 security definer
@@ -990,13 +1012,16 @@ as $$
 declare
   changed integer;
 begin
-  if p_device_id is null then
+  if p_device_id is null or p_user_id is null then
     return false;
   end if;
   update public.rootine_devices
   set revoked_at = coalesce(revoked_at, timezone('utc', now())),
+      push_token = null,
+      apns_environment = null,
+      permission_state = 'unknown',
       updated_at = timezone('utc', now())
-  where device_id = p_device_id and revoked_at is null;
+  where user_id = p_user_id and device_id = p_device_id and revoked_at is null;
   get diagnostics changed = row_count;
   return changed > 0;
 end;
@@ -1110,8 +1135,8 @@ revoke all on function public.rootine_claim_notification_jobs(integer, text, uui
 grant execute on function public.rootine_claim_notification_jobs(integer, text, uuid) to service_role;
 revoke all on function public.rootine_finalize_notification_job(uuid, text, text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.rootine_finalize_notification_job(uuid, text, text, jsonb, text) to service_role;
-revoke all on function public.rootine_revoke_notification_device(text) from public, anon, authenticated;
-grant execute on function public.rootine_revoke_notification_device(text) to service_role;
+revoke all on function public.rootine_revoke_notification_device(text, uuid) from public, anon, authenticated;
+grant execute on function public.rootine_revoke_notification_device(text, uuid) to service_role;
 revoke all on function public.rootine_notification_retention(interval) from public, anon, authenticated;
 grant execute on function public.rootine_notification_retention(interval) to service_role;
 revoke all on function public.rootine_record_notification_health_alert(bigint, bigint, bigint, bigint, bigint) from public, anon, authenticated;

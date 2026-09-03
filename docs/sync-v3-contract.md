@@ -11,7 +11,8 @@ a przykłady znajdują się w `contracts/fixtures/sync-v3-*.json`.
 
 ## Wspólna obwiednia
 
-Każde żądanie zawiera `correlation_id`, a każda odpowiedź (również błąd)
+Każde żądanie zawiera `correlation_id`; klient może dodatkowo wysłać
+`contract_version: 3`, ale nie może wysłać innej wersji. Każda odpowiedź (również błąd)
 zawiera `contract_version: 3` oraz to samo `correlation_id`. Klient musi
 odrzucić odpowiedź z inną wersją, zanim odczyta jej dane.
 
@@ -40,7 +41,7 @@ Endpoint Supabase to `/functions/v1/mobile-sync`. Operację wybiera pole
 | `bootstrap` | `action: "bootstrap"`, `correlation_id`, `device_id` | `server_cursor`, `next_cursor`, `has_more`, `changes[]` |
 | `pull` | `action: "pull"`, `correlation_id`, `device_id`, `cursor` (`null` oznacza początek), `limit` 1–500 | `from_cursor`, `next_cursor`, `has_more`, `changes[]` |
 | `push` | `action: "push"`, `correlation_id`, `device_id`, 1–100 komend | `server_cursor`, `results[]` per komenda |
-| `register_device` | `action: "register_device"`, `correlation_id`, `device_id`, platforma `ios`, wersja aplikacji i środowisko; opcjonalnie para środowisko APNs + token | `device_id`, `environment`, `registered_at` |
+| `register_device` | `action: "register_device"`, `correlation_id`, `device_id`, platforma `ios`, wersja aplikacji i środowisko; opcjonalnie `permission_state` oraz para środowisko APNs + token | `device_id`, `environment`, `registered_at` |
 
 Komenda `push` ma `operation_id`, `entity`, `entity_id`, `kind`,
 `base_revision` i `payload` dla `upsert`. `delete` jest soft-delete i nie
@@ -49,16 +50,27 @@ przyjmuje payloadu. Ponowienie tego samego `operation_id` zwraca
 zwraca wynik `conflict` z techniczną rewizją serwera oraz opcjonalnym
 `server_record` dla właściciela danych. Rekord jest częścią odpowiedzi
 autoryzowanej, ale nie wolno go kopiować do logów; logger stosuje redakcję.
+Ledger idempotencji przechowuje wynik przez 90 dni; serwisowy job może usuwać
+wyłącznie wygasłe wpisy, nigdy outboxu ani tombstone’ów.
 
 Zmiany w `pull` i `bootstrap` są uporządkowane rosnąco po `cursor`. Realtime
 może jedynie zasygnalizować dostępność zmian — klient zawsze pobiera treść
-przez `pull`.
+przez `pull`. Gdy `bootstrap` zwróci `has_more: true`, klient kontynuuje
+od `next_cursor` przez `pull`; nie zapisuje tego kursora jako ukończonego,
+zanim nie zmaterializuje wszystkich stron.
+
+Nieznane klucze `rootine.*` z domeny webowej są przechowywane przez klienta
+iOS jako nieprzezroczyste dokumenty. Klient ich nie dekoduje ani nie nadpisuje;
+tombstone usuwa taki dokument dopiero po potwierdzeniu odpowiedniego kursora.
 
 `register_device` nie blokuje synchronizacji, gdy użytkownik odmówił
 uprawnienia do powiadomień. W takim przypadku klient pomija zarówno
-`push_token`, jak i `apns_environment`. Jeśli uprawnienie jest przyznane,
-wysyła oba pola razem; kontrakt odrzuca niepełną parę. Token jest przechowywany
-i redagowany wyłącznie po stronie serwera.
+`push_token`, jak i `apns_environment` oraz może wysłać
+`permission_state: "denied"` (analogicznie dla `not_determined`/`unknown`). Jeśli
+uprawnienie jest przyznane, wysyła oba pola razem albo rejestruje stan bez
+tokenu do czasu asynchronicznego callbacku APNs; kontrakt odrzuca token bez
+środowiska i nie zapisuje tokenu dla stanu odmowy. Token jest przechowywany i
+redagowany wyłącznie po stronie serwera.
 
 ## Błędy
 
@@ -68,7 +80,9 @@ Błąd ma tę samą obwiednię co sukces i jedno z kodów:
 `server_error`.
 
 Klient ponawia po `rate_limited` (z `retry_after_seconds`) oraz po błędzie
-przejściowym zgodnie z backoffem. `cursor_expired` uruchamia kontrolowany
+przejściowym zgodnie z backoffem. Po ośmiu nieudanych próbach komenda trafia do
+lokalnego dead-letter queue i nie jest już automatycznie wykonywana.
+`cursor_expired` uruchamia kontrolowany
 bootstrap. `unauthorized` uruchamia pojedynczy refresh sesji, a następnie
 wylogowanie z zachowaniem lokalnej kolejki. Żaden komunikat błędu nie może
 zawierać payloadu, tokenu, SQL ani danych innego konta.

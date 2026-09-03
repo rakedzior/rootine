@@ -22,11 +22,13 @@ const operation_id = "op3_123e4567-e89b-42d3-a456-426614174000";
 
 describe("sync-v3 contract", () => {
   it("validates every request boundary and supplies the pull default limit", () => {
-    expect(bootstrapRequestSchema.parse({ action: "bootstrap", correlation_id, device_id })).toEqual({
+    expect(bootstrapRequestSchema.parse({ contract_version: 3, action: "bootstrap", correlation_id, device_id })).toEqual({
+      contract_version: 3,
       action: "bootstrap",
       correlation_id,
       device_id,
     });
+    expect(() => bootstrapRequestSchema.parse({ contract_version: 2, action: "bootstrap", correlation_id, device_id })).toThrow();
     expect(pullRequestSchema.parse({ action: "pull", correlation_id, device_id, cursor: null })).toMatchObject({
       action: "pull",
       correlation_id,

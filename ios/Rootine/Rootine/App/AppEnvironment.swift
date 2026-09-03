@@ -48,6 +48,37 @@ enum WorkspaceSyncStatus: Equatable, Sendable {
     case error
 }
 
+private func normalizedGoalStartDate(_ value: String) -> String {
+    rootineGoalIsLocalDate(value) ? value : RootineDate.localDate()
+}
+
+private func normalizedGoalDueDate(startDate: String, dueDate: String) -> String {
+    let start = normalizedGoalStartDate(startDate)
+    guard rootineGoalIsLocalDate(dueDate) else { return start }
+    return dueDate < start ? start : dueDate
+}
+
+private func normalizedMilestones(_ milestones: [GoalMilestone]) -> [GoalMilestone] {
+    milestones.enumerated().map { index, item in
+        var result = item
+        result.title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.weight = max(0.01, item.weight)
+        result.order = item.order ?? index
+        return result
+    }.filter { !$0.title.isEmpty }
+}
+
+private func rootineGoalIsLocalDate(_ value: String) -> Bool {
+    let parts = value.split(separator: "-")
+    guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+          let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]) else { return false }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return false }
+    let components = calendar.dateComponents([.year, .month, .day], from: date)
+    return components.year == year && components.month == month && components.day == day
+}
+
 @MainActor
 final class AppEnvironment: ObservableObject {
     @Published private(set) var session: SupabaseSession?
@@ -68,6 +99,7 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var isLaunching = true
     @Published private(set) var isPasswordRecovery = false
     @Published private(set) var authCallbackError: String?
+    @Published private(set) var accountState: RootineAccountState?
     @Published private(set) var foundationMessage = "Szkielet techniczny gotowy"
     @Published private(set) var workspaceSyncStatus = WorkspaceSyncStatus.unavailable
     @Published private(set) var realtimeLastRefresh: Date?
@@ -76,14 +108,18 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var recoveryFiles: [WorkspaceRecoveryFile] = []
     @Published private(set) var deviceRegistration: RootineDeviceRegistration?
     @Published private(set) var notificationPermissionState: RootineNotificationPermissionState = .notDetermined
+    @Published private(set) var profilePreferences = RootineProfilePreferences.current
+    @Published private(set) var notificationPreferences = RootineNotificationPreferences()
     @Published private(set) var normalizedReadEnabled = false
     @Published private(set) var normalizedReadFallbackReason: String?
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
+    private let authClient: any RootineAuthClient
     private let normalizedReadClient: any RootineRelationalReadClient
     private let readFeatureFlags: any RootineReadFeatureFlagStore
-    private let keychain: KeychainSessionStore
+    private let nowProvider: () -> Date
+    private let keychain: any RootineSessionStoring
     private let deviceIdentity: RootineDeviceIdentityStore
     private var store: WorkspaceFileStore?
     private var syncEngine: WorkspaceSyncEngine?
@@ -94,12 +130,16 @@ final class AppEnvironment: ObservableObject {
     /// B08 can replace this in-memory value with the profile payload once its
     /// normalized read is available. It intentionally has no SQLite shadow in
     /// B10, matching the single aggregate-cache decision in the main plan.
-    private var notificationPreferences = RootineNotificationPreferences()
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
+    private var nutritionProductCache: [String: NutritionProduct] = [:]
+    private var normalizedRecordRevisions: [String: Int64] = [:]
     private var creationGate = WorkspaceCreationGate()
-    private var refreshTask: Task<Void, Never>?
     private var realtimeClient: RootineRealtimeClient?
     private var syncCoordinator: RootineSyncCoordinator?
+    private var realtimeRuntimeUserID: String?
+    private var currentScenePhase: RootineScenePhase = .active
+    private var lastKnownNetworkReachable = true
+    private var realtimeRuntimeGeneration = 0
     private var networkMonitor: NWPathMonitor?
     private var networkMonitorQueue: DispatchQueue?
     private var didRegisterBackgroundTask = false
@@ -117,32 +157,41 @@ final class AppEnvironment: ObservableObject {
     private var reconciliationWaiters: [CheckedContinuation<Void, Never>] = []
     private var deviceRegistrationTask: Task<Void, Never>?
     private var lastDeviceRegistrationFingerprint: String?
+    private var authGeneration = 0
+    private var pendingGoogleIdentityLink = false
 
     init(
         configuration: RootineConfiguration = .fromBundle(),
-        keychain: KeychainSessionStore = KeychainSessionStore(),
+        keychain: any RootineSessionStoring = KeychainSessionStore(),
         normalizedReadClient: (any RootineRelationalReadClient)? = nil,
-        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil
+        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil,
+        authClient: (any RootineAuthClient)? = nil,
+        nowProvider: @escaping () -> Date = Date.init
     ) {
         self.configuration = configuration
         self.keychain = keychain
         let configuredAPI = RootineAPIClient(configuration: configuration)
         self.api = configuredAPI
+        self.authClient = authClient ?? configuredAPI
         self.deviceIdentity = RootineDeviceIdentityStore()
         self.normalizedReadClient = normalizedReadClient ?? configuredAPI
         self.readFeatureFlags = readFeatureFlags ?? UserDefaultsRootineReadFeatureFlagStore()
+        self.nowProvider = nowProvider
         let storedSession = keychain.load()
         session = storedSession
         if let storedSession {
+            accountState = RootineAccountState(user: storedSession.user)
             configureRuntime(userID: storedSession.user.id)
         }
     }
 
     func establishEmailSession(email: String, password: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
+        guard !password.isEmpty else { throw RootineAPIError.invalidCredentials }
         isWorking = true
         defer { isWorking = false }
-        let signedIn = try await api.signIn(
+        let signedIn = try await authClient.signIn(
             email: normalizedEmail(email),
             password: password
         )
@@ -151,9 +200,11 @@ final class AppEnvironment: ObservableObject {
 
     func register(email: String, password: String) async throws -> Bool {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
+        guard AuthInputValidator.passwordError(password) == nil else { throw RootineAPIError.weakPassword }
         isWorking = true
         defer { isWorking = false }
-        switch try await api.signUp(email: normalizedEmail(email), password: password) {
+        switch try await authClient.signUp(email: normalizedEmail(email), password: password) {
         case .session(let newSession):
             try await accept(newSession)
             return false
@@ -164,40 +215,51 @@ final class AppEnvironment: ObservableObject {
 
     func resendConfirmation(email: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
-        try await api.resendConfirmation(email: normalizedEmail(email))
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
+        try await authClient.resendConfirmation(email: normalizedEmail(email))
     }
 
     func requestPasswordReset(email: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard AuthInputValidator.isValidEmail(email) else { throw RootineAPIError.invalidEmail }
         isWorking = true
         defer { isWorking = false }
-        try await api.requestPasswordReset(email: normalizedEmail(email))
+        try await authClient.requestPasswordReset(email: normalizedEmail(email))
     }
 
     func googleAuthorizationURL() throws -> URL {
-        try api.googleAuthorizationURL()
+        try authClient.googleAuthorizationURL()
     }
 
     func establishGoogleSession(callbackURL: URL) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
         isWorking = true
         defer { isWorking = false }
-        let result = try await api.session(from: callbackURL)
+        let result = try await authClient.session(from: callbackURL)
         try await accept(result.session, passwordRecovery: result.isPasswordRecovery)
     }
 
     func establishAppleSession(idToken: String, nonce: String) async throws {
         guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        try AuthProtocolValidator.validateAppleIdentityToken(
+            idToken,
+            rawNonce: nonce,
+            expectedAudience: configuration.appleClientID
+        )
         isWorking = true
         defer { isWorking = false }
-        let signedIn = try await api.signInWithApple(idToken: idToken, nonce: nonce)
+        let signedIn = try await authClient.signInWithApple(idToken: idToken, nonce: nonce)
         try await accept(signedIn)
     }
 
     func handleAuthCallback(_ url: URL) async throws {
-        guard url.scheme?.lowercased() == configuration.authCallbackScheme.lowercased(),
-              url.host == "auth-callback" else { return }
-        try await establishGoogleSession(callbackURL: url)
+        guard url.scheme?.caseInsensitiveCompare(configuration.authCallbackScheme) == .orderedSame,
+              url.host?.caseInsensitiveCompare("auth-callback") == .orderedSame else { return }
+        if pendingGoogleIdentityLink {
+            try await establishGoogleIdentityLink(callbackURL: url)
+        } else {
+            try await establishGoogleSession(callbackURL: url)
+        }
     }
 
     func receiveAuthCallback(_ url: URL) async {
@@ -213,13 +275,146 @@ final class AppEnvironment: ObservableObject {
         authCallbackError = nil
     }
 
-    func completePasswordRecovery(password: String) async throws {
+    func googleIdentityAuthorizationURLForLinking() async throws -> URL {
+        guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
         guard let accessToken = session?.accessToken else { throw RootineAPIError.unauthorized }
+        let generation = authGeneration
+        pendingGoogleIdentityLink = true
+        do {
+            let url = try await authClient.googleIdentityAuthorizationURL(accessToken: accessToken)
+            guard generation == authGeneration, session?.accessToken == accessToken else {
+                pendingGoogleIdentityLink = false
+                throw RootineAPIError.cancelled
+            }
+            return url
+        } catch {
+            pendingGoogleIdentityLink = false
+            throw error
+        }
+    }
+
+    func establishGoogleIdentityLink(callbackURL: URL) async throws {
+        guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        let generation = authGeneration
+        isWorking = true
+        defer {
+            isWorking = false
+            pendingGoogleIdentityLink = false
+        }
+        let result = try await authClient.session(from: callbackURL)
+        guard generation == authGeneration,
+              result.session.user.id == currentSession.user.id,
+              session?.accessToken == currentSession.accessToken else {
+            throw RootineAPIError.accountMismatch
+        }
+        try await acceptLinkedIdentitySession(result.session)
+    }
+
+    func cancelPendingIdentityLink() {
+        pendingGoogleIdentityLink = false
+    }
+
+    func establishAppleIdentityLink(idToken: String, nonce: String) async throws {
+        guard configuration.isAuthComplete else { throw RootineAPIError.missingConfiguration }
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        try AuthProtocolValidator.validateAppleIdentityToken(
+            idToken,
+            rawNonce: nonce,
+            expectedAudience: configuration.appleClientID
+        )
         isWorking = true
         defer { isWorking = false }
-        try await api.updatePassword(password, accessToken: accessToken)
+        let linkedSession = try await authClient.linkAppleIdentity(
+            idToken: idToken,
+            nonce: nonce,
+            accessToken: currentSession.accessToken
+        )
+        guard linkedSession.user.id == currentSession.user.id else {
+            throw RootineAPIError.accountMismatch
+        }
+        try await acceptLinkedIdentitySession(linkedSession)
+    }
+
+    func refreshAccountState() async throws {
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        let generation = authGeneration
+        let originalIdentities = currentSession.user.identities
+        let identities = try await authClient.identities(accessToken: currentSession.accessToken)
+        guard generation == authGeneration,
+              session?.user.id == currentSession.user.id,
+              session?.accessToken == currentSession.accessToken,
+              session?.user.identities == originalIdentities else {
+            throw RootineAPIError.cancelled
+        }
+        var user = currentSession.user
+        user.identities = identities
+        let updated = SupabaseSession(
+            accessToken: currentSession.accessToken,
+            refreshToken: currentSession.refreshToken,
+            expiresIn: currentSession.expiresIn,
+            expiresAt: currentSession.expiresAt,
+            tokenType: currentSession.tokenType,
+            user: user
+        )
+        try keychain.save(updated)
+        session = updated
+        accountState = RootineAccountState(user: user)
+    }
+
+    func unlinkIdentity(_ identityID: String) async throws {
+        guard let currentSession = session,
+              let identities = currentSession.user.identities else {
+            throw RootineAPIError.unauthorized
+        }
+        let generation = authGeneration
+        guard identities.contains(where: { $0.identityID == identityID }) else {
+            throw RootineAPIError.identityNotFound
+        }
+        guard identities.count > 1 else { throw RootineAPIError.lastIdentityNotDeletable }
+        try await authClient.unlinkIdentity(identityID: identityID, accessToken: currentSession.accessToken)
+        guard generation == authGeneration,
+              session?.user.id == currentSession.user.id,
+              session?.accessToken == currentSession.accessToken,
+              session?.user.identities == identities else {
+            throw RootineAPIError.cancelled
+        }
+        var user = currentSession.user
+        user.identities = identities.filter { $0.identityID != identityID }
+        let updated = SupabaseSession(
+            accessToken: currentSession.accessToken,
+            refreshToken: currentSession.refreshToken,
+            expiresIn: currentSession.expiresIn,
+            expiresAt: currentSession.expiresAt,
+            tokenType: currentSession.tokenType,
+            user: user
+        )
+        try keychain.save(updated)
+        session = updated
+        accountState = RootineAccountState(user: user)
+    }
+
+    func completePasswordRecovery(password: String) async throws {
+        guard let accessToken = session?.accessToken else { throw RootineAPIError.unauthorized }
+        guard AuthInputValidator.passwordError(password) == nil else { throw RootineAPIError.weakPassword }
+        let generation = authGeneration
+        isWorking = true
+        defer { isWorking = false }
+        try await authClient.updatePassword(password, accessToken: accessToken)
+        guard generation == authGeneration, session?.accessToken == accessToken else {
+            throw RootineAPIError.cancelled
+        }
         isPasswordRecovery = false
         await loadAndReconcile(accessToken: accessToken)
+    }
+
+    func updateAccountPassword(_ password: String) async throws {
+        guard let accessToken = session?.accessToken else { throw RootineAPIError.unauthorized }
+        guard AuthInputValidator.passwordError(password) == nil else {
+            throw RootineAPIError.weakPassword
+        }
+        try await authClient.updatePassword(password, accessToken: accessToken)
+        foundationMessage = "Hasło zostało zmienione"
     }
 
     func cancelPasswordRecovery() {
@@ -228,8 +423,10 @@ final class AppEnvironment: ObservableObject {
     }
 
     func start() async {
+        let generation = authGeneration
         defer { isLaunching = false }
         guard var activeSession = session else {
+            accountState = nil
             workspaceSyncStatus = .unavailable
             foundationMessage = configuration.isAuthComplete
                 ? "Zaloguj się, aby połączyć dane Rootine"
@@ -239,31 +436,41 @@ final class AppEnvironment: ObservableObject {
 
         if activeSession.shouldRefresh && configuration.isAuthComplete {
             do {
-                activeSession = try await api.refreshSession(refreshToken: activeSession.refreshToken)
+                activeSession = try await authClient.refreshSession(refreshToken: activeSession.refreshToken)
+                guard generation == authGeneration else { return }
                 try keychain.save(activeSession)
                 session = activeSession
+                accountState = RootineAccountState(user: activeSession.user)
                 configureRuntime(userID: activeSession.user.id)
             } catch RootineAPIError.unauthorized {
+                guard generation == authGeneration else { return }
                 signOutFoundationSession()
                 return
             } catch {
+                guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
                 await recoverOrphanedTransactions()
                 await loadLocalCopies()
                 await markLocalOnly()
                 foundationMessage = "Offline — używam danych zapisanych na tym iPhonie"
-                return
             }
         }
+        guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
         await recoverOrphanedTransactions()
+        guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
+        await refreshProfileSettings()
         await loadAndReconcile(accessToken: activeSession.accessToken)
+        guard generation == authGeneration, session?.user.id == activeSession.user.id else { return }
         await flushPendingMutations()
         startRealtimeRuntime()
-        startRealtimeRefreshLoop()
         scheduleDeviceRegistration()
         await refreshRecoveryFiles()
     }
 
 #if DEBUG
+    func setTaskWorkspaceForTests(_ workspace: TaskWorkspace) {
+        taskWorkspace = workspace
+    }
+
     func loadPreviewData() async {
         let now = Date()
         let today = RootineDate.localDate(now)
@@ -301,11 +508,11 @@ final class AppEnvironment: ObservableObject {
                     priority: .high,
                     source: CommitmentTaskSource(
                         kind: "work",
-                        entity: "task",
+                        entity: "preview/task",
                         context: "work",
-                        href: "/work",
+                        href: "/praca",
                         originTaskId: nil,
-                        managed: "ios"
+                        managed: "native"
                     )
                 )
             ],
@@ -449,7 +656,9 @@ final class AppEnvironment: ObservableObject {
             if let value = try? await store.load(WorkWorkspace.self, key: .work) { workWorkspace = value }
             if let value = try? await store.load(TravelWorkspace.self, key: .travel) { travelWorkspace = value }
             if let value = try? await store.load(HealthWorkspace.self, key: .health) { healthWorkspace = value }
-            if let value = try? await store.load(AffairsWorkspace.self, key: .affairs) { affairsWorkspace = value }
+            if let value = try? await store.load(AffairsWorkspace.self, key: .affairs) {
+                affairsWorkspace = AffairsWorkspaceRules.normalized(value)
+            }
             try? await store.save(taskWorkspace, key: .tasks)
             try? await store.save(nutritionWorkspace, key: .nutrition)
             try? await store.save(notesWorkspace, key: .notes)
@@ -471,6 +680,8 @@ final class AppEnvironment: ObservableObject {
             signOutAfterArchiveImport = true
             return
         }
+        authGeneration &+= 1
+        pendingGoogleIdentityLink = false
         let accessToken = session?.accessToken
         let currentDeviceID = deviceIdentity.loadOrCreate()
         deviceRegistrationTask?.cancel()
@@ -486,11 +697,12 @@ final class AppEnvironment: ObservableObject {
                 try? await api.revokeDevice(deviceID: currentDeviceID, accessToken: accessToken)
             }
         }
-        refreshTask?.cancel()
-        refreshTask = nil
         stopRealtimeRuntime()
         keychain.clear()
         session = nil
+        accountState = nil
+        isPasswordRecovery = false
+        authCallbackError = nil
         store = nil
         syncEngine = nil
         let scheduler = localNotificationScheduler
@@ -512,6 +724,8 @@ final class AppEnvironment: ObservableObject {
         recoveryFiles = []
         deviceRegistration = nil
         notificationPermissionState = .notDetermined
+        profilePreferences = .current
+        notificationPreferences = RootineNotificationPreferences()
         normalizedReadEnabled = false
         normalizedReadFallbackReason = nil
         foundationMessage = "Sesja usunięta z Keychain"
@@ -540,6 +754,14 @@ final class AppEnvironment: ObservableObject {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(archive)
+    }
+
+    /// Exports only bounded, redacted operational diagnostics. Workspace
+    /// contents, tokens, account identifiers and notification payloads are
+    /// intentionally excluded; a support workflow can attach this next to a
+    /// user-provided issue description.
+    func exportDiagnostics() -> Data {
+        RootineObservability.shared.exportDiagnostics()
     }
 
     func importWorkspaceArchive(_ data: Data) async throws {
@@ -703,6 +925,9 @@ final class AppEnvironment: ObservableObject {
                 supported: supported
             )
         }
+        guard rootineValidateTravelWorkspace(archive.travel).isEmpty else {
+            throw RootineWorkspaceArchiveError.invalidArchive
+        }
     }
 
     func refreshRecoveryFiles() async {
@@ -720,6 +945,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     func clearLocalDataAndSignOut() async throws {
+        let userID = session?.user.id
         guard await beginWorkspacePersistence() else {
             try await clearLocalDataAndSignOut()
             return
@@ -727,6 +953,10 @@ final class AppEnvironment: ObservableObject {
         defer { endWorkspacePersistence() }
         if let store {
             try await store.clearAllLocalData()
+        }
+        if let userID {
+            RootineProfilePreferencesStore.remove(userID: userID)
+            RootineNotificationPreferencesStore.remove(userID: userID)
         }
         signOutFoundationSession()
     }
@@ -743,6 +973,7 @@ final class AppEnvironment: ObservableObject {
             await loadAndReconcile(accessToken: accessToken)
             await flushPendingMutations()
         }
+        await refreshProfileSettings()
         await refreshRecoveryFiles()
     }
 
@@ -753,7 +984,166 @@ final class AppEnvironment: ObservableObject {
         if let userID = session?.user.id {
             RootineNotificationPreferencesStore.save(preferences, userID: userID)
         }
+        if let accessToken = session?.accessToken, configuration.isAuthComplete {
+            do {
+                let saved = try await api.saveNotificationPreferences(preferences, accessToken: accessToken)
+                guard session?.accessToken == accessToken else { return }
+                // Lock-screen detail is deliberately local-only: the server
+                // contract stores schedule metadata, never notification
+                // content or its privacy opt-in.
+                var merged = saved
+                merged.showTaskDetails = preferences.showTaskDetails
+                notificationPreferences = merged
+                if let userID = session?.user.id {
+                    RootineNotificationPreferencesStore.save(merged, userID: userID)
+                }
+            } catch {
+                // Local-first behavior is intentional. A missing notification
+                // migration or a temporary network error must not make the
+                // rest of the account settings unusable.
+                foundationMessage = "Powiadomienia zapisano lokalnie — synchronizacja serwera czeka"
+            }
+        }
         await reconcileLocalNotifications()
+    }
+
+    /// Hydrates only safe notification metadata. A missing optional migration
+    /// leaves the account's previously stored local defaults untouched.
+    func refreshProfileSettings() async {
+        guard let accessToken = session?.accessToken, configuration.isAuthComplete else { return }
+        do {
+            guard let remote = try await api.loadNotificationPreferences(accessToken: accessToken),
+                  session?.accessToken == accessToken else { return }
+            var merged = remote
+            merged.showTaskDetails = notificationPreferences.showTaskDetails
+            notificationPreferences = merged
+            if let userID = session?.user.id {
+                RootineNotificationPreferencesStore.save(merged, userID: userID)
+            }
+            var profile = profilePreferences
+            profile.timezoneIdentifier = remote.timezoneIdentifier
+            profilePreferences = profile.normalized
+            if let userID = session?.user.id {
+                RootineProfilePreferencesStore.save(profilePreferences, userID: userID)
+            }
+            await reconcileLocalNotifications()
+        } catch {
+            // Profile preferences are a progressive enhancement. Keep local
+            // values when the optional server table is unavailable/offline.
+        }
+    }
+
+    /// Persists presentation choices under the current account. Locale,
+    /// currency and units are deliberately not sent to the workspace API:
+    /// they affect rendering only and never mutate domain records.
+    func updateProfilePreferences(_ preferences: RootineProfilePreferences) async {
+        let normalized = preferences.normalized
+        profilePreferences = normalized
+        if let userID = session?.user.id {
+            RootineProfilePreferencesStore.save(normalized, userID: userID)
+        }
+        var notifications = notificationPreferences
+        notifications.timezoneIdentifier = normalized.timezoneIdentifier
+        await updateNotificationPreferences(notifications)
+        foundationMessage = "Preferencje profilu zapisane"
+    }
+
+    /// Updates the display name without exposing or persisting an auth token.
+    func updateProfileDisplayName(_ displayName: String) async throws {
+        let normalized = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...120).contains(normalized.count),
+              !normalized.contains(where: { $0.isNewline }),
+              !normalized.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw RootineProfileSettingsError.invalidDisplayName
+        }
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        let updatedUser = try await api.updateDisplayName(
+            normalized,
+            existingMetadata: currentSession.user.userMetadata,
+            accessToken: currentSession.accessToken
+        )
+        guard session?.accessToken == currentSession.accessToken else { return }
+        var mergedUser = updatedUser
+        if mergedUser.email == nil { mergedUser.email = currentSession.user.email }
+        if mergedUser.userMetadata == nil { mergedUser.userMetadata = currentSession.user.userMetadata }
+        if mergedUser.appMetadata == nil { mergedUser.appMetadata = currentSession.user.appMetadata }
+        if mergedUser.identities == nil { mergedUser.identities = currentSession.user.identities }
+        var updatedSession = currentSession
+        updatedSession.user = mergedUser
+        try keychain.save(updatedSession)
+        session = updatedSession
+        foundationMessage = "Profil został zaktualizowany"
+    }
+
+    /// Requests the OS prompt only when the scheduler is available. The
+    /// resulting authorization state is published for the settings screen;
+    /// an OS denial remains a normal state and never fails sync.
+    func requestNotificationPermissionFromSettings() async {
+        let current = await RootineNotificationPermissionState.current()
+        if current == .denied {
+            notificationPermissionState = current
+            if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                await UIApplication.shared.open(settingsURL)
+            }
+            return
+        }
+        let state = await requestNotificationAuthorization()
+        switch state {
+        case .authorized: notificationPermissionState = .authorized
+        case .provisional: notificationPermissionState = .provisional
+        case .ephemeral: notificationPermissionState = .ephemeral
+        case .denied: notificationPermissionState = .denied
+        case .notDetermined: notificationPermissionState = .notDetermined
+        case .unavailable, .error: notificationPermissionState = .unknown
+        }
+        await registerDeviceForCurrentSession()
+    }
+
+    var currentDeviceIdentifier: String? {
+        guard session != nil else { return nil }
+        let identifier = deviceIdentity.loadOrCreate()
+        guard identifier.count > 8 else { return identifier }
+        return "\(identifier.prefix(6))…\(identifier.suffix(4))"
+    }
+
+    func revokeCurrentDevice() async {
+        guard let accessToken = session?.accessToken else { return }
+        let deviceID = deviceIdentity.loadOrCreate()
+        deviceRegistrationTask?.cancel()
+        deviceRegistrationTask = nil
+        do {
+            _ = try await api.revokeDevice(deviceID: deviceID, accessToken: accessToken)
+            guard session?.accessToken == accessToken else { return }
+            deviceRegistration = nil
+            lastDeviceRegistrationFingerprint = nil
+            foundationMessage = "To urządzenie wyrejestrowano z powiadomień"
+        } catch {
+            foundationMessage = "Nie udało się wyrejestrować urządzenia"
+        }
+    }
+
+    /// Deletes the authenticated account through the server-owned Edge
+    /// Function, then clears the account's local files and Keychain session.
+    /// Local cleanup runs only after the server confirms deletion.
+    func deleteAccountAndSignOut() async throws {
+        guard let currentSession = session else { throw RootineAPIError.unauthorized }
+        isWorking = true
+        defer { isWorking = false }
+        try await api.deleteAccount(accessToken: currentSession.accessToken)
+        do {
+            try await clearLocalDataAndSignOut()
+        } catch {
+            // The remote account is already gone. Never leave a dead session
+            // active merely because local cleanup hit an I/O failure.
+            try? await store?.clearAllLocalData()
+            signOutFoundationSession()
+            RootineProfilePreferencesStore.remove(userID: currentSession.user.id)
+            RootineNotificationPreferencesStore.remove(userID: currentSession.user.id)
+            throw error
+        }
+        RootineProfilePreferencesStore.remove(userID: currentSession.user.id)
+        RootineNotificationPreferencesStore.remove(userID: currentSession.user.id)
+        foundationMessage = "Konto i dane lokalne zostały usunięte"
     }
 
     /// Permission UX remains outside B10. This method is intentionally safe to
@@ -761,7 +1151,18 @@ final class AppEnvironment: ObservableObject {
     /// a thrown error that could interrupt sync.
     func requestNotificationAuthorization() async -> RootineNotificationAuthorization {
         guard let scheduler = localNotificationScheduler else { return .unavailable }
-        return await scheduler.requestAuthorization()
+        let authorization = await scheduler.requestAuthorization()
+        // Reconcile both local scheduling and APNs registration after the
+        // system prompt settles so a grant or denial cannot leave stale state.
+        await reconcileLocalNotifications()
+        if authorization.canSchedule {
+            scheduleDeviceRegistration()
+        }
+        return authorization
+    }
+
+    func refreshNotificationPermissionState() async {
+        notificationPermissionState = await RootineNotificationPermissionState.current()
     }
 
     /// B08 rollout control. The flag is scoped to the signed-in account and
@@ -782,30 +1183,16 @@ final class AppEnvironment: ObservableObject {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
         let dateKey = RootineDate.localDate(date)
-        if var schedule = next.tasks[index].schedule {
-            // Recurring tasks are completed per local day. Keep the legacy
-            // global flag in sync only for the current day so Today, Tasks and
-            // Calendar never leak yesterday's state into another date.
-            var completedDates = schedule.completedDates ?? []
-            var completedAtByDate = schedule.completedAtByDate ?? [:]
-            if completedDates.contains(dateKey) {
-                completedDates.removeAll { $0 == dateKey }
-                completedAtByDate[dateKey] = nil
-            } else {
-                completedDates.append(dateKey)
-                completedDates.sort()
-                completedAtByDate[dateKey] = RootineDate.isoTimestamp(date)
-            }
-            schedule.completedDates = completedDates
-            schedule.completedAtByDate = completedAtByDate
-            next.tasks[index].schedule = schedule
-            let todayKey = RootineDate.localDate()
-            next.tasks[index].done = rootineTaskIsDoneOnDate(next.tasks[index], dateKey: todayKey)
-            next.tasks[index].completedAt = completedAtByDate[todayKey]
-        } else {
-            next.tasks[index].done.toggle()
-            next.tasks[index].completedAt = next.tasks[index].done ? RootineDate.isoTimestamp(date) : nil
-        }
+        let done = !rootineTaskIsDoneOnDate(next.tasks[index], dateKey: dateKey)
+        // Recurring records use the explicit per-date map; a schedule object
+        // without recurrence remains a one-off task and keeps its legacy
+        // global completion flag.
+        next.tasks[index] = rootineTaskSettingCompletion(
+            next.tasks[index],
+            dateKey: dateKey,
+            done: done,
+            completedAt: RootineDate.isoTimestamp()
+        )
         await persistTaskWorkspace(next)
     }
 
@@ -840,12 +1227,51 @@ final class AppEnvironment: ObservableObject {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedTime, !normalizedTime.isEmpty, !RootineDate.isClockTime(normalizedTime) { return }
+        if let calendarDate, !RootineDate.isLocalDateKey(calendarDate) { return }
         next.tasks[index].text = trimmedText
         next.tasks[index].time = normalizedTime?.isEmpty == true ? nil : normalizedTime
+        if normalizedTime?.isEmpty != false { next.tasks[index].endTime = nil }
         next.tasks[index].calendarDate = calendarDate
-        let today = RootineDate.localDate()
-        next.tasks[index].view = calendarDate == nil ? "bezterminu" : calendarDate == today ? "dzis" : "wszystkie"
+        next.tasks[index].view = rootineTaskViewForCalendarDate(calendarDate)
         next.tasks[index].priority = priority
+        if calendarDate == nil {
+            next.tasks[index].schedule = nil
+        } else {
+            let updatedSchedule = rootineTaskSchedule(
+                for: calendarDate,
+                time: normalizedTime,
+                endTime: next.tasks[index].endTime ?? next.tasks[index].schedule?.endTime,
+                existing: next.tasks[index].schedule
+            )
+            guard let updatedSchedule,
+                  rootineValidTaskSchedule(updatedSchedule, taskDate: calendarDate) else { return }
+            next.tasks[index].schedule = updatedSchedule
+        }
+        await persistTaskWorkspace(next)
+    }
+
+    func updateTaskSchedule(id: Int, schedule: WorkspaceTaskSchedule?) async {
+        var next = taskWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
+        guard let dateKey = next.tasks[index].calendarDate else {
+            guard schedule == nil else { return }
+            next.tasks[index].schedule = nil
+            await persistTaskWorkspace(next)
+            return
+        }
+        if let schedule {
+            guard rootineValidTaskSchedule(schedule, taskDate: dateKey) else { return }
+            next.tasks[index].schedule = schedule
+            next.tasks[index].time = schedule.allDay ? nil : schedule.startTime
+            next.tasks[index].endTime = schedule.allDay ? nil : schedule.endTime
+        } else {
+            next.tasks[index].schedule = rootineTaskSchedule(
+                for: dateKey,
+                time: next.tasks[index].time,
+                endTime: next.tasks[index].endTime
+            )
+        }
         await persistTaskWorkspace(next)
     }
 
@@ -853,6 +1279,28 @@ final class AppEnvironment: ObservableObject {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
         next.tasks[index].deleted = true
+        await persistTaskWorkspace(next)
+    }
+
+    /// The canonical task contract has no separate archive field. Archive is
+    /// therefore the recoverable `deleted` tombstone used by web and iOS.
+    func archiveTask(id: Int) async {
+        await deleteTask(id: id)
+    }
+
+    /// Permanent deletion is intentionally separate from the normal delete so
+    /// a UI can require an explicit Trash confirmation before losing a row.
+    func purgeTask(id: Int) async {
+        var next = taskWorkspace
+        guard next.tasks.contains(where: { $0.id == id && $0.deleted == true }) else { return }
+        next.tasks.removeAll { $0.id == id }
+        await persistTaskWorkspace(next)
+    }
+
+    func emptyTaskTrash() async {
+        var next = taskWorkspace
+        guard next.tasks.contains(where: { $0.deleted == true }) else { return }
+        next.tasks.removeAll { $0.deleted == true }
         await persistTaskWorkspace(next)
     }
 
@@ -879,7 +1327,9 @@ final class AppEnvironment: ObservableObject {
         let nextID = RootineLocalIdentifier.integer(namespace: "habit", operationID: operationID)
         guard !next.habits.contains(where: { $0.id == nextID }) else { return }
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedTime, !normalizedTime.isEmpty, !RootineDate.isClockTime(normalizedTime) { return }
         let normalizedSchedule = schedule ?? WorkspaceHabitSchedule(type: "daily", startDate: RootineDate.localDate())
+        guard rootineValidHabitSchedule(normalizedSchedule) else { return }
         next.habits.append(WorkspaceHabit(
             id: nextID,
             name: trimmedName,
@@ -904,14 +1354,49 @@ final class AppEnvironment: ObservableObject {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedTime, !normalizedTime.isEmpty, !RootineDate.isClockTime(normalizedTime) { return }
+        if let schedule, !rootineValidHabitSchedule(schedule) { return }
         next.habits[index].name = trimmedName
         next.habits[index].time = normalizedTime?.isEmpty == true ? nil : normalizedTime
         next.habits[index].priority = priority
         if let schedule { next.habits[index].schedule = schedule }
         let today = RootineDate.localDate()
-        next.habits[index].done = rootineHabitIsScheduledOnDate(next.habits[index], dateKey: today)
-            && rootineHabitIsDoneOnDate(next.habits[index], dateKey: today)
-        next.habits[index].streak = rootineHabitCurrentStreak(next.habits[index], referenceDate: today)
+        next.habits[index] = rootineNormalizedHabit(next.habits[index], referenceDate: today)
+        await persistTaskWorkspace(next)
+    }
+
+    func pauseHabit(id: Int, startDate: String = RootineDate.localDate(), endDate: String? = nil) async {
+        guard RootineDate.isValidLocalDate(startDate),
+              endDate == nil || (RootineDate.isValidLocalDate(endDate!) && endDate! >= startDate) else { return }
+        var next = taskWorkspace
+        guard let index = next.habits.firstIndex(where: { $0.id == id }) else { return }
+        let period = WorkspaceHabitPause(startDate: startDate, endDate: endDate)
+        guard !(next.habits[index].pausePeriods ?? []).contains(where: { $0.startDate == startDate && $0.endDate == endDate }) else { return }
+        next.habits[index].pausePeriods = (next.habits[index].pausePeriods ?? []) + [period]
+        next.habits[index] = rootineNormalizedHabit(next.habits[index])
+        await persistTaskWorkspace(next)
+    }
+
+    func resumeHabit(id: Int, on date: String = RootineDate.localDate()) async {
+        guard RootineDate.isValidLocalDate(date) else { return }
+        var next = taskWorkspace
+        guard let index = next.habits.firstIndex(where: { $0.id == id }) else { return }
+        var periods: [WorkspaceHabitPause] = []
+        var changed = false
+        for period in next.habits[index].pausePeriods ?? [] {
+            guard period.startDate <= date, period.endDate == nil || period.endDate! >= date else {
+                periods.append(period)
+                continue
+            }
+            changed = true
+            if period.startDate < date {
+                let previous = RootineDate.shiftLocalDate(date, by: -1)
+                periods.append(WorkspaceHabitPause(startDate: period.startDate, endDate: previous))
+            }
+        }
+        guard changed else { return }
+        next.habits[index].pausePeriods = periods
+        next.habits[index] = rootineNormalizedHabit(next.habits[index])
         await persistTaskWorkspace(next)
     }
 
@@ -921,12 +1406,18 @@ final class AppEnvironment: ObservableObject {
         await persistTaskWorkspace(next)
     }
 
-    func addTodayTask(text: String, time: String?, operationID: String = UUID().uuidString) async {
+    func addTodayTask(
+        text: String,
+        time: String?,
+        priority: TaskPriority? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
         await addTask(
             text: text,
             time: time,
             calendarDate: RootineDate.localDate(),
             view: "dzis",
+            priority: priority,
             operationID: operationID
         )
     }
@@ -937,25 +1428,58 @@ final class AppEnvironment: ObservableObject {
         calendarDate: String?,
         view: String = "dzis",
         priority: TaskPriority? = nil,
-        operationID: String = UUID().uuidString
+        operationID: String = UUID().uuidString,
+        schedule: WorkspaceTaskSchedule? = nil,
+        list: String? = nil,
+        tags: [String]? = nil,
+        notes: String? = nil,
+        subtasks: [WorkspaceTaskSubtask]? = nil,
+        comments: [WorkspaceTaskComment]? = nil
     ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+        let normalizedView = view.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedView.isEmpty else { return }
+        let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedTime?.isEmpty != false || RootineDate.isClockTime(normalizedTime!) else { return }
+        if let calendarDate, !RootineDate.isLocalDateKey(calendarDate) { return }
         let creationFingerprint = "task|\(trimmedText)|\(time ?? "")|\(calendarDate ?? "")|\(view)|\(priority?.rawValue ?? "")"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = taskWorkspace
         let nextID = RootineLocalIdentifier.integer(namespace: "task", operationID: operationID)
         guard !next.tasks.contains(where: { $0.id == nextID }) else { return }
-        let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSchedule: WorkspaceTaskSchedule?
+        if let schedule {
+            guard rootineValidTaskSchedule(schedule, taskDate: calendarDate) else { return }
+            normalizedSchedule = schedule
+        } else {
+            normalizedSchedule = rootineTaskSchedule(for: calendarDate, time: normalizedTime)
+        }
+        if let normalizedSchedule, !rootineValidTaskSchedule(normalizedSchedule, taskDate: calendarDate) { return }
+        let persistedTime = normalizedSchedule?.allDay == true
+            ? nil
+            : normalizedSchedule?.startTime ?? (normalizedTime?.isEmpty == true ? nil : normalizedTime)
+        let persistedEndTime = normalizedSchedule?.allDay == true ? nil : normalizedSchedule?.endTime
+        let normalizedTags = tags?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let normalizedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard list == nil || next.lists.contains(where: { $0.id == list }),
+              (normalizedTags ?? []).allSatisfy({ tagID in next.tags.contains(where: { tag in tag.id == tagID }) }) else { return }
         next.tasks.append(WorkspaceTask(
             id: nextID,
             text: trimmedText,
             done: false,
-            time: normalizedTime?.isEmpty == true ? nil : normalizedTime,
-            view: view,
+            time: persistedTime,
+            endTime: persistedEndTime,
+            tags: normalizedTags,
+            list: list,
+            view: normalizedView,
             priority: priority,
-            calendarDate: calendarDate
+            notes: normalizedNotes?.isEmpty == true ? nil : normalizedNotes,
+            calendarDate: calendarDate,
+            subtasks: subtasks,
+            comments: comments,
+            schedule: normalizedSchedule
         ))
         await persistTaskWorkspace(next)
     }
@@ -976,7 +1500,7 @@ final class AppEnvironment: ObservableObject {
             done: false,
             view: "wszystkie",
             priority: .high,
-            source: CommitmentTaskSource(kind: "work", entity: "task", context: "work", href: "/work", originTaskId: nil, managed: "ios")
+            source: CommitmentTaskSource(kind: "work", entity: "ios/\(nextID)", context: "work", href: "/praca", originTaskId: nil, managed: "native")
         ))
         next.updatedAt = now
         await persistTaskWorkspace(next)
@@ -1009,6 +1533,47 @@ final class AppEnvironment: ObservableObject {
     }
 
     // MARK: More module actions
+
+    func createNoteList(name: String, operationID: String = UUID().uuidString) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = notesWorkspace
+        guard !next.lists.contains(where: { $0.name.localizedCaseInsensitiveCompare(trimmedName) == .orderedSame }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.lists.append(NoteList(
+            id: RootineLocalIdentifier.string(namespace: "note-list", operationID: operationID),
+            name: trimmedName,
+            createdAt: now
+        ))
+        next.updatedAt = now
+        await persistNotesWorkspace(next)
+    }
+
+    func renameNoteList(id: String, name: String) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = notesWorkspace
+        guard let index = next.lists.firstIndex(where: { $0.id == id }),
+              !next.lists.enumerated().contains(where: { $0.offset != index && $0.element.name.localizedCaseInsensitiveCompare(trimmedName) == .orderedSame }) else { return }
+        next.lists[index].name = trimmedName
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistNotesWorkspace(next)
+    }
+
+    func deleteNoteList(id: String) async {
+        var next = notesWorkspace
+        guard next.lists.contains(where: { $0.id == id }) else { return }
+        next.lists.removeAll { $0.id == id }
+        // Deleting a folder never deletes its notes. An empty list ID is the
+        // canonical unfiled state; the editor will offer the remaining lists.
+        let now = RootineDate.isoTimestamp()
+        for index in next.notes.indices where next.notes[index].listId == id {
+            next.notes[index].listId = ""
+            next.notes[index].updatedAt = now
+        }
+        next.updatedAt = now
+        await persistNotesWorkspace(next)
+    }
 
     func upsertNote(_ note: NoteRecord) async {
         var next = notesWorkspace
@@ -1134,22 +1699,23 @@ final class AppEnvironment: ObservableObject {
         await persistSportWorkspace(next)
     }
 
+    @discardableResult
     func addGoal(
         title: String,
         detail: String,
         target: Double,
         icon: String,
         operationID: String = UUID().uuidString
-    ) async {
+    ) async -> String? {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        guard !trimmedTitle.isEmpty else { return nil }
         let creationFingerprint = "goal|\(trimmedTitle)|\(detail)|\(target)|\(icon)"
-        guard creationGate.claim(creationFingerprint) else { return }
+        guard creationGate.claim(creationFingerprint) else { return nil }
         defer { creationGate.release(creationFingerprint) }
         var next = goalsWorkspace
         let now = RootineDate.isoTimestamp()
         let recordID = RootineLocalIdentifier.string(namespace: "goal", operationID: operationID)
-        guard !next.goals.contains(where: { $0.id == recordID }) else { return }
+        guard !next.goals.contains(where: { $0.id == recordID }) else { return recordID }
         next.goals.append(GoalRecord(
             id: recordID,
             title: trimmedTitle,
@@ -1158,18 +1724,160 @@ final class AppEnvironment: ObservableObject {
             target: max(1, target),
             icon: icon.isEmpty ? "target" : icon,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            categoryId: "personal",
+            iconKey: icon.isEmpty ? "target" : icon,
+            status: .active,
+            startDate: RootineDate.localDate(),
+            dueDate: RootineDate.localDate(),
+            progressMode: .numeric,
+            targetValue: max(1, target),
+            unit: "kroków",
+            history: [GoalHistoryEntry(id: "history-\(recordID)-created", type: .updated, label: "Cel utworzony", createdAt: now)],
+            note: detail.trimmingCharacters(in: .whitespacesAndNewlines)
         ))
         next.updatedAt = now
         await persistGoalsWorkspace(next)
+        return recordID
+    }
+
+    /// Full canonical goal creation entry point. The compact More-module
+    /// form above remains as a backwards-compatible convenience.
+    @discardableResult
+    func createGoal(
+        title: String,
+        description: String = "",
+        categoryId: String = "personal",
+        iconKey: String = "target",
+        customIcon: String? = nil,
+        color: String = "#7FA6C9",
+        status: GoalStatus = .active,
+        health: GoalHealth = .ontrack,
+        priority: GoalPriority = .medium,
+        startDate: String = RootineDate.localDate(),
+        dueDate: String = RootineDate.localDate(),
+        progressMode: GoalProgressMode = .numeric,
+        regularityMode: GoalRegularityMode? = nil,
+        frequencyTarget: Double? = nil,
+        frequencyPeriod: GoalRegularityPeriod? = nil,
+        initialValue: Double = 0,
+        targetValue: Double = 1,
+        unit: String = "kroków",
+        manualProgress: Double = 0,
+        milestones: [GoalMilestone] = [],
+        progressEntries: [GoalProgressEntry] = [],
+        linkedTaskIds: [Int] = [],
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async -> String? {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return nil }
+        let now = RootineDate.isoTimestamp()
+        let recordID = RootineLocalIdentifier.string(namespace: "goal", operationID: operationID)
+        guard !goalsWorkspace.goals.contains(where: { $0.id == recordID }) else { return recordID }
+        let normalizedCategory = goalsWorkspace.categories.contains(where: { $0.id == categoryId }) ? categoryId : "personal"
+        let normalizedMode = progressMode
+        var goal = GoalRecord(
+            id: recordID,
+            title: trimmedTitle,
+            detail: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            current: 0,
+            target: max(1, targetValue),
+            icon: iconKey.isEmpty ? "target" : iconKey,
+            createdAt: now,
+            updatedAt: now,
+            categoryId: normalizedCategory,
+            iconKey: iconKey.isEmpty ? "target" : iconKey,
+            customIcon: customIcon,
+            color: color,
+            status: status,
+            health: health,
+            priority: priority,
+            startDate: normalizedGoalStartDate(startDate),
+            dueDate: normalizedGoalDueDate(startDate: startDate, dueDate: dueDate),
+            progressMode: normalizedMode,
+            regularityMode: regularityMode,
+            frequencyTarget: frequencyTarget,
+            frequencyPeriod: frequencyPeriod,
+            initialValue: initialValue,
+            targetValue: max(0, targetValue),
+            unit: unit,
+            manualProgress: min(100, max(0, manualProgress)),
+            milestones: normalizedMilestones(milestones),
+            progressEntries: progressEntries,
+            linkedTaskIds: linkedTaskIds,
+            history: [GoalHistoryEntry(id: "history-\(recordID)-created", type: .updated, label: "Cel utworzony", createdAt: now)],
+            note: note
+        )
+        goal.current = rootineGoalCurrentValue(goal)
+        var next = goalsWorkspace
+        next.goals.append(goal)
+        await persistGoalsWorkspace(next)
+        return recordID
     }
 
     func advanceGoal(id: String, by amount: Double = 1) async {
         var next = goalsWorkspace
         guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
-        next.goals[index].current = min(next.goals[index].target, max(0, next.goals[index].current + amount))
-        next.goals[index].updatedAt = RootineDate.isoTimestamp()
-        next.updatedAt = RootineDate.isoTimestamp()
+        let now = RootineDate.isoTimestamp()
+        if next.goals[index].progressMode == .milestones {
+            guard let milestoneIndex = next.goals[index].milestones.firstIndex(where: { !$0.done }) else { return }
+            next.goals[index].milestones[milestoneIndex].done = true
+            next.goals[index].milestones[milestoneIndex].completedAt = now
+        } else {
+            next.goals[index].progressEntries.append(GoalProgressEntry(
+                id: RootineLocalIdentifier.string(namespace: "goal-progress", operationID: now + id),
+                date: RootineDate.localDate(),
+                value: amount,
+                kind: .delta,
+                note: "Postęp z aplikacji iOS",
+                createdAt: now
+            ))
+        }
+        next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-\(now)", type: .progress, label: "Zaktualizowano postęp", detail: "\(amount)", createdAt: now))
+        next.updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func addGoalProgress(id: String, date: String, value: Double, kind: GoalProgressEntry.Kind = .delta, note: String = "", operationID: String = UUID().uuidString) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        let entry = GoalProgressEntry(id: RootineLocalIdentifier.string(namespace: "goal-progress", operationID: operationID), date: date, value: value, kind: kind, note: note, createdAt: now)
+        guard !next.goals[index].progressEntries.contains(where: { $0.id == entry.id }) else { return }
+        next.goals[index].progressEntries.append(entry)
+        next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(entry.id)", type: .progress, label: "Zaktualizowano postęp", detail: note.isEmpty ? nil : note, createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalProgress(id: String, progressID: String, date: String? = nil, value: Double? = nil, kind: GoalProgressEntry.Kind? = nil, note: String? = nil) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }),
+              let entryIndex = next.goals[goalIndex].progressEntries.firstIndex(where: { $0.id == progressID }) else { return }
+        var entry = next.goals[goalIndex].progressEntries[entryIndex]
+        if let date { entry.date = date }
+        if let value { entry.value = value }
+        if let kind { entry.kind = kind }
+        if let note { entry.note = note }
+        next.goals[goalIndex].progressEntries[entryIndex] = entry
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].current = rootineGoalCurrentValue(next.goals[goalIndex])
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(progressID)-\(now)", type: .updated, label: "Zaktualizowano wpis postępu", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalProgress(id: String, progressID: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[goalIndex].progressEntries.removeAll { $0.id == progressID }
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].current = rootineGoalCurrentValue(next.goals[goalIndex])
+        next.goals[goalIndex].updatedAt = now
         await persistGoalsWorkspace(next)
     }
 
@@ -1177,6 +1885,26 @@ final class AppEnvironment: ObservableObject {
         var next = goalsWorkspace
         next.goals.removeAll { $0.id == id }
         next.updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func archiveGoal(id: String) async {
+        await setGoalStatus(id: id, status: .archived)
+    }
+
+    func restoreArchivedGoal(id: String) async {
+        await setGoalStatus(id: id, status: .active)
+    }
+
+    func setGoalStatus(id: String, status: GoalStatus) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        guard next.goals[index].status != status else { return }
+        let old = next.goals[index].status.rawValue
+        next.goals[index].status = status
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-status-\(now)", type: status == .paused ? .paused : status == .active && old == GoalStatus.paused.rawValue ? .resumed : .statusChanged, label: "Zmieniono status", detail: "\(old) → \(status.rawValue)", createdAt: now))
         await persistGoalsWorkspace(next)
     }
 
@@ -1188,10 +1916,247 @@ final class AppEnvironment: ObservableObject {
         next.goals[index].title = trimmedTitle
         next.goals[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         next.goals[index].target = max(1, target)
-        next.goals[index].current = min(next.goals[index].current, next.goals[index].target)
+        next.goals[index].targetValue = max(1, target)
+        next.goals[index].current = min(rootineGoalCurrentValue(next.goals[index]), next.goals[index].target)
         next.goals[index].icon = icon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "target" : icon
+        next.goals[index].iconKey = next.goals[index].icon
+        let now = RootineDate.isoTimestamp()
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-updated-\(now)", type: .updated, label: "Zaktualizowano cel", createdAt: now))
+        next.updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalTarget(id: String, targetValue: Double, unit: String? = nil) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.goals[index].targetValue = max(0, targetValue)
+        next.goals[index].target = max(1, targetValue)
+        if let unit { next.goals[index].unit = unit }
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-target-\(now)", type: .updated, label: "Zmieniono wartość docelową", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoal(
+        id: String,
+        title: String,
+        description: String,
+        categoryId: String,
+        status: GoalStatus,
+        priority: GoalPriority,
+        startDate: String,
+        dueDate: String,
+        progressMode: GoalProgressMode,
+        targetValue: Double,
+        unit: String,
+        note: String
+    ) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        guard next.categories.contains(where: { $0.id == categoryId }) else { return }
+        next.goals[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.goals[index].title.isEmpty else { return }
+        next.goals[index].detail = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.goals[index].categoryId = categoryId
+        next.goals[index].status = status
+        next.goals[index].priority = priority
+        next.goals[index].startDate = normalizedGoalStartDate(startDate)
+        next.goals[index].dueDate = normalizedGoalDueDate(startDate: startDate, dueDate: dueDate)
+        next.goals[index].progressMode = progressMode
+        next.goals[index].target = max(1, targetValue)
+        next.goals[index].targetValue = max(0, targetValue)
+        next.goals[index].unit = unit
+        next.goals[index].note = note
+        next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-full-update-\(now)", type: .updated, label: "Zaktualizowano cel", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalDeadline(id: String, startDate: String? = nil, dueDate: String) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        let oldDate = next.goals[index].dueDate
+        let start = startDate ?? next.goals[index].startDate
+        next.goals[index].startDate = normalizedGoalStartDate(start)
+        next.goals[index].dueDate = normalizedGoalDueDate(startDate: start, dueDate: dueDate)
+        next.goals[index].updatedAt = now
+        next.goals[index].history.append(GoalHistoryEntry(id: "history-\(id)-deadline-\(now)", type: .deadlineChanged, label: "Zmieniono termin", detail: "\(oldDate) → \(next.goals[index].dueDate)", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalCategory(id: String, categoryId: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }),
+              next.categories.contains(where: { $0.id == categoryId }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].categoryId = categoryId
+        next.goals[goalIndex].updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func addGoalMilestone(id: String, title: String, dueDate: String, note: String = "", weight: Double = 1, linkedTaskIds: [Int] = [], operationID: String = UUID().uuidString) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }), !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let milestoneID = RootineLocalIdentifier.string(namespace: "goal-milestone", operationID: operationID)
+        guard !next.goals[goalIndex].milestones.contains(where: { $0.id == milestoneID }) else { return }
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].milestones.append(GoalMilestone(id: milestoneID, title: title.trimmingCharacters(in: .whitespacesAndNewlines), note: note, dueDate: dueDate, weight: max(0.01, weight), order: next.goals[goalIndex].milestones.count, linkedTaskIds: linkedTaskIds))
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(milestoneID)", type: .stageAdded, label: "Dodano etap", detail: title, createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func updateGoalMilestone(
+        id: String,
+        milestoneID: String,
+        title: String? = nil,
+        dueDate: String? = nil,
+        note: String? = nil,
+        weight: Double? = nil,
+        done: Bool? = nil,
+        order: Int? = nil,
+        isNext: Bool? = nil,
+        linkedTaskIds: [Int]? = nil
+    ) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }), let milestoneIndex = next.goals[goalIndex].milestones.firstIndex(where: { $0.id == milestoneID }) else { return }
+        let now = RootineDate.isoTimestamp()
+        var milestone = next.goals[goalIndex].milestones[milestoneIndex]
+        if let title { milestone.title = title.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let dueDate { milestone.dueDate = dueDate }
+        if let note { milestone.note = note }
+        if let weight { milestone.weight = max(0.01, weight) }
+        if let done {
+            milestone.done = done
+            milestone.completedAt = done ? now : nil
+        }
+        if let order { milestone.order = max(0, order) }
+        if let isNext {
+            milestone.isNext = isNext
+            if isNext {
+                for index in next.goals[goalIndex].milestones.indices {
+                    next.goals[goalIndex].milestones[index].isNext = index == milestoneIndex
+                }
+            }
+        }
+        if let linkedTaskIds { milestone.linkedTaskIds = linkedTaskIds }
+        next.goals[goalIndex].milestones[milestoneIndex] = milestone
+        next.goals[goalIndex].current = rootineGoalCurrentValue(next.goals[goalIndex])
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(milestoneID)-\(now)", type: done == true ? .stageCompleted : .updated, label: done == true ? "Ukończono etap" : "Zaktualizowano etap", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func setGoalMilestoneDone(id: String, milestoneID: String, done: Bool) async {
+        await updateGoalMilestone(id: id, milestoneID: milestoneID, done: done)
+    }
+
+    func reorderGoalMilestones(id: String, sourceID: String, targetID: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }), sourceID != targetID else { return }
+        var ordered = next.goals[goalIndex].milestones.sorted { lhs, rhs in
+            let leftOrder = lhs.order ?? 0
+            let rightOrder = rhs.order ?? 0
+            if leftOrder != rightOrder { return leftOrder < rightOrder }
+            return lhs.id < rhs.id
+        }
+        guard let sourceIndex = ordered.firstIndex(where: { $0.id == sourceID }),
+              let targetIndex = ordered.firstIndex(where: { $0.id == targetID }) else { return }
+        let source = ordered.remove(at: sourceIndex)
+        ordered.insert(source, at: min(targetIndex, ordered.count))
+        let now = RootineDate.isoTimestamp()
+        next.goals[goalIndex].milestones = ordered.enumerated().map { index, milestone in
+            var result = milestone
+            result.order = index
+            return result
+        }
+        next.goals[goalIndex].updatedAt = now
+        next.goals[goalIndex].history.append(GoalHistoryEntry(id: "history-\(id)-reorder-\(now)", type: .updated, label: "Zmieniono kolejność etapów", createdAt: now))
+        await persistGoalsWorkspace(next)
+    }
+
+    func reorderMilestones(id: String, sourceID: String, targetID: String) async {
+        await reorderGoalMilestones(id: id, sourceID: sourceID, targetID: targetID)
+    }
+
+    func addGoalHistory(id: String, type: GoalHistoryEntry.EntryType = .updated, label: String, detail: String? = nil, operationID: String = UUID().uuidString) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp()
+        let entry = GoalHistoryEntry(id: RootineLocalIdentifier.string(namespace: "goal-history", operationID: operationID), type: type, label: label, detail: detail, createdAt: now)
+        guard !next.goals[goalIndex].history.contains(where: { $0.id == entry.id }) else { return }
+        next.goals[goalIndex].history.append(entry)
+        next.goals[goalIndex].updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalHistory(id: String, historyID: String) async {
+        var next = goalsWorkspace
+        guard let goalIndex = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[goalIndex].history.removeAll { $0.id == historyID }
+        next.goals[goalIndex].updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalMilestone(id: String, milestoneID: String) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[index].milestones.removeAll { $0.id == milestoneID }
+        let now = RootineDate.isoTimestamp()
+        next.goals[index].updatedAt = now
+        await persistGoalsWorkspace(next)
+    }
+
+    func linkGoalTask(id: String, taskID: Int) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }), !next.goals[index].linkedTaskIds.contains(taskID) else { return }
+        next.goals[index].linkedTaskIds.append(taskID)
         next.goals[index].updatedAt = RootineDate.isoTimestamp()
-        next.updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    func unlinkGoalTask(id: String, taskID: Int) async {
+        var next = goalsWorkspace
+        guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
+        next.goals[index].linkedTaskIds.removeAll { $0 == taskID }
+        next.goals[index].updatedAt = RootineDate.isoTimestamp()
+        await persistGoalsWorkspace(next)
+    }
+
+    @discardableResult
+    func addGoalCategory(label: String, color: String = "#7FA6C9", iconKey: String = "circle", operationID: String = UUID().uuidString) async -> String? {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let id = RootineLocalIdentifier.string(namespace: "goal-category", operationID: operationID)
+        guard !goalsWorkspace.categories.contains(where: { $0.id == id }) else { return id }
+        var next = goalsWorkspace
+        next.categories.append(GoalCategory(id: id, label: trimmed, color: color, iconKey: iconKey))
+        await persistGoalsWorkspace(next)
+        return id
+    }
+
+    func updateGoalCategory(id: String, label: String, color: String, iconKey: String) async {
+        var next = goalsWorkspace
+        guard let index = next.categories.firstIndex(where: { $0.id == id }) else { return }
+        next.categories[index] = GoalCategory(id: id, label: label.trimmingCharacters(in: .whitespacesAndNewlines), color: color, iconKey: iconKey)
+        await persistGoalsWorkspace(next)
+    }
+
+    func deleteGoalCategory(id: String) async {
+        guard id != "personal" else { return }
+        var next = goalsWorkspace
+        next.categories.removeAll { $0.id == id }
+        next.goals = next.goals.map { goal in
+            guard goal.categoryId == id else { return goal }
+            var updated = goal
+            updated.categoryId = "personal"
+            return updated
+        }
         await persistGoalsWorkspace(next)
     }
 
@@ -1203,29 +2168,381 @@ final class AppEnvironment: ObservableObject {
         await persistGoalsWorkspace(next)
     }
 
-    func startFocusSession() async {
-        guard workWorkspace.activeFocusStartedAt == nil else { return }
+    // MARK: Work projects and items
+
+    func addWorkCompany(
+        name: String,
+        description: String = "",
+        website: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let id = RootineLocalIdentifier.string(namespace: "work-company", operationID: operationID)
+        guard creationGate.claim("work-company|\(id)") else { return }
+        defer { creationGate.release("work-company|\(id)") }
         var next = workWorkspace
-        next.activeFocusStartedAt = RootineDate.isoTimestamp()
-        next.updatedAt = RootineDate.isoTimestamp()
+        guard !next.companies.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp(nowProvider())
+        next.companies.append(WorkCompany(
+            id: id,
+            name: trimmedName,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            color: "",
+            website: website?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty,
+            archived: false,
+            createdAt: now,
+            updatedAt: now
+        ))
         await persistWorkWorkspace(next)
     }
 
-    func stopFocusSession() async {
+    func updateWorkCompany(id: String, name: String, description: String = "", website: String? = nil) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = workWorkspace
+        guard let index = next.companies.firstIndex(where: { $0.id == id }) else { return }
+        next.companies[index].name = trimmedName
+        next.companies[index].description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.companies[index].website = website?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        next.companies[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func deleteWorkCompany(id: String) async {
+        var next = workWorkspace
+        guard next.companies.contains(where: { $0.id == id }) else { return }
+        let projectIDs = Set(next.projects.filter { $0.companyId == id }.map(\.id))
+        let taskIDs = Set(next.tasks.filter { ($0.companyId == id) || ($0.projectId.map(projectIDs.contains) == true) }.map(\.id))
+        next.companies.removeAll { $0.id == id }
+        next.projects.removeAll { projectIDs.contains($0.id) }
+        next.tasks.removeAll { taskIDs.contains($0.id) }
+        next.focusSessions.removeAll { session in
+            session.projectId.map(projectIDs.contains) == true || session.taskId.map(taskIDs.contains) == true
+        }
+        await persistWorkWorkspace(next)
+    }
+
+    func addWorkProject(
+        name: String,
+        companyID: String? = nil,
+        description: String = "",
+        startDate: String? = nil,
+        endDate: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard normalizedCompany == nil || workWorkspace.companies.contains(where: { $0.id == normalizedCompany }) else { return }
+        guard validWorkDateRange(startDate: startDate, endDate: endDate) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "work-project", operationID: operationID)
+        guard creationGate.claim("work-project|\(id)") else { return }
+        defer { creationGate.release("work-project|\(id)") }
+        var next = workWorkspace
+        guard !next.projects.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp(nowProvider())
+        next.projects.append(WorkProject(
+            id: id,
+            companyId: normalizedCompany,
+            name: trimmedName,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            status: .active,
+            startDate: startDate?.rootineTrimmedNonEmpty,
+            endDate: endDate?.rootineTrimmedNonEmpty,
+            note: nil,
+            createdAt: now,
+            updatedAt: now
+        ))
+        await persistWorkWorkspace(next)
+    }
+
+    func updateWorkProject(
+        id: String,
+        name: String,
+        companyID: String? = nil,
+        description: String = "",
+        status: WorkProjectStatus = .active,
+        startDate: String? = nil,
+        endDate: String? = nil,
+        note: String? = nil
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard !trimmedName.isEmpty,
+              validWorkDateRange(startDate: startDate, endDate: endDate),
+              normalizedCompany == nil || workWorkspace.companies.contains(where: { $0.id == normalizedCompany }) else { return }
+        var next = workWorkspace
+        guard let index = next.projects.firstIndex(where: { $0.id == id }) else { return }
+        next.projects[index].name = trimmedName
+        next.projects[index].companyId = normalizedCompany
+        next.projects[index].description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.projects[index].status = status
+        next.projects[index].startDate = startDate?.rootineTrimmedNonEmpty
+        next.projects[index].endDate = endDate?.rootineTrimmedNonEmpty
+        next.projects[index].note = note?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        next.projects[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func deleteWorkProject(id: String) async {
+        var next = workWorkspace
+        guard next.projects.contains(where: { $0.id == id }) else { return }
+        let taskIDs = Set(next.tasks.filter { $0.projectId == id }.map(\.id))
+        next.projects.removeAll { $0.id == id }
+        next.tasks.removeAll { taskIDs.contains($0.id) }
+        next.focusSessions.removeAll { $0.projectId == id || ( $0.taskId.map(taskIDs.contains) == true) }
+        await persistWorkWorkspace(next)
+    }
+
+    func addWorkItem(
+        title: String,
+        projectID: String? = nil,
+        companyID: String? = nil,
+        parentID: String? = nil,
+        priority: WorkItemPriority = .none,
+        status: WorkItemStatus = .todo,
+        dueDate: String? = nil,
+        dueTime: String? = nil,
+        note: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty,
+              validWorkDate(dueDate), validWorkTime(dueTime) else { return }
+        let normalizedProject = projectID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard normalizedProject == nil || workWorkspace.projects.contains(where: { $0.id == normalizedProject }) else { return }
+        guard normalizedCompany == nil || workWorkspace.companies.contains(where: { $0.id == normalizedCompany }) else { return }
+        guard validWorkParent(parentID, projectID: normalizedProject, workspace: workWorkspace) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "work-task", operationID: operationID)
+        guard creationGate.claim("work-task|\(id)") else { return }
+        defer { creationGate.release("work-task|\(id)") }
+        var next = workWorkspace
+        guard !next.tasks.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp(nowProvider())
+        let resolvedStatus = status == .completed ? .completed : status
+        next.tasks.append(WorkItem(
+            id: id,
+            companyId: normalizedCompany ?? normalizedProject.flatMap { projectID in next.projects.first(where: { $0.id == projectID })?.companyId },
+            projectId: normalizedProject,
+            parentId: parentID?.rootineTrimmedNonEmpty,
+            title: trimmedTitle,
+            completed: resolvedStatus == .completed,
+            status: resolvedStatus,
+            priority: priority,
+            startDate: nil,
+            dueDate: dueDate?.rootineTrimmedNonEmpty,
+            dueTime: dueTime?.rootineTrimmedNonEmpty,
+            note: note?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty,
+            createdAt: now,
+            updatedAt: now
+        ))
+        await persistWorkWorkspace(next)
+    }
+
+    func updateWorkItem(
+        id: String,
+        title: String,
+        priority: WorkItemPriority? = nil,
+        status: WorkItemStatus? = nil,
+        projectID: String? = nil,
+        companyID: String? = nil,
+        parentID: String? = nil,
+        dueDate: String? = nil,
+        dueTime: String? = nil,
+        note: String? = nil
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedProject = projectID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard !trimmedTitle.isEmpty,
+              validWorkDate(dueDate), validWorkTime(dueTime) else { return }
+        var next = workWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id }),
+              normalizedProject == nil || next.projects.contains(where: { $0.id == normalizedProject }),
+              normalizedCompany == nil || next.companies.contains(where: { $0.id == normalizedCompany }),
+              validWorkParent(parentID, projectID: normalizedProject, workspace: next, childID: id) else { return }
+        next.tasks[index].title = trimmedTitle
+        next.tasks[index].projectId = normalizedProject
+        next.tasks[index].companyId = normalizedCompany ?? normalizedProject.flatMap { projectID in next.projects.first(where: { $0.id == projectID })?.companyId }
+        next.tasks[index].parentId = normalizedProject == nil ? nil : parentID?.rootineTrimmedNonEmpty
+        if let priority { next.tasks[index].priority = priority }
+        if let status {
+            next.tasks[index].status = status
+            next.tasks[index].completed = status == .completed
+        }
+        next.tasks[index].dueDate = dueDate?.rootineTrimmedNonEmpty
+        next.tasks[index].dueTime = dueTime?.rootineTrimmedNonEmpty
+        next.tasks[index].note = note?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        next.tasks[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func toggleWorkItemCompletion(id: String) async {
+        var next = workWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id }) else { return }
+        let completed = !next.tasks[index].completed
+        next.tasks[index].completed = completed
+        next.tasks[index].status = completed ? .completed : .todo
+        next.tasks[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func deleteWorkItem(id: String) async {
+        var next = workWorkspace
+        var branch: Set<String> = [id]
+        var didAddDescendant = true
+        while didAddDescendant {
+            didAddDescendant = false
+            for task in next.tasks where task.parentId.map(branch.contains) == true {
+                if branch.insert(task.id).inserted { didAddDescendant = true }
+            }
+        }
+        guard !branch.isEmpty else { return }
+        next.tasks.removeAll { branch.contains($0.id) }
+        next.focusSessions.removeAll { session in session.taskId.map(branch.contains) == true }
+        await persistWorkWorkspace(next)
+    }
+
+    private func validWorkDate(_ value: String?) -> Bool {
+        guard let value = value?.rootineTrimmedNonEmpty else { return true }
+        return workDate(from: value) != nil
+    }
+
+    private func validWorkDateRange(startDate: String?, endDate: String?) -> Bool {
+        guard validWorkDate(startDate), validWorkDate(endDate) else { return false }
+        guard let start = startDate?.rootineTrimmedNonEmpty,
+              let end = endDate?.rootineTrimmedNonEmpty else { return true }
+        return start <= end
+    }
+
+    private func validWorkTime(_ value: String?) -> Bool {
+        guard let value = value?.rootineTrimmedNonEmpty else { return true }
+        return value.range(of: "^([01]\\d|2[0-3]):[0-5]\\d$", options: .regularExpression) != nil
+    }
+
+    private func workDate(from value: String) -> Date? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        let calendar = Calendar(identifier: .gregorian)
+        guard parts.count == 3,
+              String(format: "%04d-%02d-%02d", parts[0], parts[1], parts[2]) == value,
+              let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])),
+              calendar.component(.year, from: date) == parts[0],
+              calendar.component(.month, from: date) == parts[1],
+              calendar.component(.day, from: date) == parts[2] else { return nil }
+        return date
+    }
+
+    private func validWorkParent(_ parentID: String?, projectID: String?, workspace: WorkWorkspace, childID: String? = nil) -> Bool {
+        guard let parentID = parentID?.rootineTrimmedNonEmpty else { return true }
+        guard childID?.rootineNormalizedIdentifier != parentID.rootineNormalizedIdentifier else { return false }
+        guard let parent = workspace.tasks.first(where: { $0.id == parentID }), parent.projectId == projectID else { return false }
+        var seen = Set<String>(); var current: WorkItem? = parent
+        while let item = current, let nextID = item.parentId {
+            guard seen.insert(item.id).inserted, nextID != parentID else { return false }
+            current = workspace.tasks.first(where: { $0.id == nextID })
+        }
+        return true
+    }
+
+    // MARK: Focus timer
+
+    func startFocusSession(projectID: String? = nil, taskID: String? = nil, now: Date? = nil) async {
+        guard workWorkspace.activeFocusStartedAt == nil else { return }
+        let normalizedProject = projectID?.rootineTrimmedNonEmpty
+        let normalizedTask = taskID?.rootineTrimmedNonEmpty
+        let task = normalizedTask.flatMap { taskID in
+            workWorkspace.tasks.first(where: { $0.id == taskID })
+        }
+        let resolvedProject = normalizedProject ?? task?.projectId
+        guard resolvedProject == nil || workWorkspace.projects.contains(where: { $0.id == resolvedProject }),
+              normalizedTask == nil || task != nil,
+              normalizedTask == nil || task?.projectId == resolvedProject else { return }
+        var next = workWorkspace
+        let startedAt = now ?? nowProvider()
+        next.activeFocusStartedAt = RootineDate.isoTimestamp(startedAt)
+        next.activeFocusProjectID = resolvedProject
+        next.activeFocusTaskID = normalizedTask
+        next.pausedFocusSessionID = nil
+        next.updatedAt = RootineDate.isoTimestamp(startedAt)
+        await persistWorkWorkspace(next)
+    }
+
+    func stopFocusSession(now: Date? = nil) async {
         guard let startedAt = workWorkspace.activeFocusStartedAt,
               let startDate = RootineDate.date(from: startedAt) else {
+            if workWorkspace.pausedFocusSessionID != nil {
+                var next = workWorkspace
+                next.pausedFocusSessionID = nil
+                next.updatedAt = RootineDate.isoTimestamp(now ?? nowProvider())
+                await persistWorkWorkspace(next)
+                return
+            }
             await resetFocusSession(message: "Uszkodzona sesja skupienia została przeniesiona do stanu odzyskiwania")
             return
         }
+        await finishFocusSegment(startDate: startDate, startedAt: startedAt, now: now, paused: false)
+    }
+
+    /// Pausing closes the current elapsed segment but keeps a durable marker
+    /// pointing at it. A later resume starts a new segment, so a crash or
+    /// device hand-off cannot double-count the interval before the pause.
+    func pauseFocusSession(now: Date? = nil) async {
+        guard let startedAt = workWorkspace.activeFocusStartedAt,
+              let startDate = RootineDate.date(from: startedAt) else { return }
+        await finishFocusSegment(startDate: startDate, startedAt: startedAt, now: now, paused: true)
+    }
+
+    func resumeFocusSession(now: Date? = nil) async {
+        guard workWorkspace.activeFocusStartedAt == nil,
+              workWorkspace.pausedFocusSessionID != nil else { return }
         var next = workWorkspace
-        let now = Date()
-        let minutes = max(1, Int(now.timeIntervalSince(startDate) / 60))
+        let startedAt = now ?? nowProvider()
+        next.activeFocusStartedAt = RootineDate.isoTimestamp(startedAt)
+        if let pausedID = next.pausedFocusSessionID,
+           let paused = next.focusSessions.first(where: { $0.id == pausedID }) {
+            next.activeFocusProjectID = paused.projectId
+            next.activeFocusTaskID = paused.taskId
+        }
+        next.pausedFocusSessionID = nil
+        next.updatedAt = RootineDate.isoTimestamp(startedAt)
+        await persistWorkWorkspace(next)
+    }
+
+    private func finishFocusSegment(startDate: Date, startedAt: String, now: Date?, paused: Bool) async {
+        var next = workWorkspace
+        let nowDate = max(now ?? nowProvider(), startDate)
+        let minutes = max(1, Int(nowDate.timeIntervalSince(startDate) / 60))
         let sessionID = RootineLocalIdentifier.string(namespace: "focus", operationID: startedAt)
         next.focusSessions.removeAll { $0.id == sessionID }
-        next.focusSessions.insert(WorkFocusSession(id: sessionID, startedAt: startedAt, endedAt: RootineDate.isoTimestamp(now), minutes: minutes), at: 0)
+        next.focusSessions.insert(WorkFocusSession(
+            id: sessionID,
+            startedAt: startedAt,
+            endedAt: RootineDate.isoTimestamp(nowDate),
+            minutes: minutes,
+            projectId: next.activeFocusProjectID,
+            taskId: next.activeFocusTaskID
+        ), at: 0)
         next.activeFocusStartedAt = nil
-        next.updatedAt = RootineDate.isoTimestamp(now)
+        next.activeFocusProjectID = nil
+        next.activeFocusTaskID = nil
+        next.pausedFocusSessionID = paused ? sessionID : nil
+        next.updatedAt = RootineDate.isoTimestamp(nowDate)
         await persistWorkWorkspace(next)
+    }
+
+    /// Foreground recovery validates the persisted marker without stopping a
+    /// session merely because the process was suspended in the background.
+    func recoverFocusSession(now: Date? = nil) async {
+        guard let startedAt = workWorkspace.activeFocusStartedAt else { return }
+        guard let startDate = RootineDate.date(from: startedAt) else {
+            await resetFocusSession(message: "Uszkodzona sesja skupienia została przeniesiona do stanu odzyskiwania")
+            return
+        }
+        if startDate > (now ?? nowProvider()) {
+            await resetFocusSession(message: "Sesja skupienia miała nieprawidłowy czas rozpoczęcia i została wyczyszczona")
+        }
     }
 
     /// Clears an invalid or abandoned focus timestamp without fabricating a
@@ -1235,6 +2552,9 @@ final class AppEnvironment: ObservableObject {
         guard workWorkspace.activeFocusStartedAt != nil else { return }
         var next = workWorkspace
         next.activeFocusStartedAt = nil
+        next.activeFocusProjectID = nil
+        next.activeFocusTaskID = nil
+        next.pausedFocusSessionID = nil
         next.updatedAt = RootineDate.isoTimestamp()
         await persistWorkWorkspace(next)
         foundationMessage = message
@@ -1273,7 +2593,17 @@ final class AppEnvironment: ObservableObject {
         let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDestination.isEmpty else { return }
         next.trips[index].destination = trimmedDestination
+        next.trips[index].name = trimmedDestination
         next.trips[index].dateRange = dateRange.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pieces = next.trips[index].dateRange
+            .components(separatedBy: "–")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if pieces.count == 2,
+           RootineDate.isLocalDateKey(pieces[0]),
+           RootineDate.isLocalDateKey(pieces[1]) {
+            next.trips[index].startDate = pieces[0]
+            next.trips[index].endDate = pieces[1]
+        }
         next.trips[index].nights = max(1, nights)
         next.trips[index].updatedAt = RootineDate.isoTimestamp()
         next.updatedAt = RootineDate.isoTimestamp()
@@ -1289,10 +2619,27 @@ final class AppEnvironment: ObservableObject {
     }
 
     func setHealthEnergy(_ energy: Int, date: Date = Date()) async {
+        guard (1...4).contains(energy) else { return }
+        let key = RootineDate.localDate(date)
+        await updateHealthCheckIn(
+            date: key,
+            energy: energy,
+            note: healthWorkspace.checkIns[key]?.note
+        )
+    }
+
+    /// Creates or replaces a check-in for a specific local day. The explicit
+    /// date overload is used by history editing and keeps offline mutations
+    /// deterministic instead of relying on a wall-clock timestamp.
+    func updateHealthCheckIn(date: String, energy: Int, note: String?) async {
+        let key = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard rootineHealthLocalDateIsValid(key), (1...4).contains(energy) else { return }
         var next = healthWorkspace
         let now = RootineDate.isoTimestamp()
-        let key = RootineDate.localDate(date)
-        next.checkIns[key] = HealthCheckIn(date: key, energy: min(4, max(1, energy)), note: next.checkIns[key]?.note, updatedAt: now)
+        let normalizedNote = note.map {
+            String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+        }.flatMap { $0.isEmpty ? nil : $0 }
+        next.checkIns[key] = HealthCheckIn(date: key, energy: energy, note: normalizedNote, updatedAt: now)
         next.updatedAt = now
         await persistHealthWorkspace(next)
     }
@@ -1305,6 +2652,7 @@ final class AppEnvironment: ObservableObject {
             next.reminders[index].completedDates.removeAll { $0 == key }
         } else {
             next.reminders[index].completedDates.append(key)
+            next.reminders[index].completedDates = Array(Set(next.reminders[index].completedDates)).sorted()
         }
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
@@ -1315,15 +2663,18 @@ final class AppEnvironment: ObservableObject {
         detail: String,
         operationID: String = UUID().uuidString
     ) async {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         guard !trimmedTitle.isEmpty else { return }
-        let creationFingerprint = "health-reminder|\(trimmedTitle)|\(detail)"
+        let trimmedDetail = String(detail.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1000))
+        let normalizedOperationID = operationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedOperationID.isEmpty else { return }
+        let creationFingerprint = "health-reminder|\(trimmedTitle)|\(trimmedDetail)|\(normalizedOperationID)"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = healthWorkspace
-        let recordID = RootineLocalIdentifier.string(namespace: "health-reminder", operationID: operationID)
+        let recordID = RootineLocalIdentifier.string(namespace: "health-reminder", operationID: normalizedOperationID)
         guard !next.reminders.contains(where: { $0.id == recordID }) else { return }
-        next.reminders.append(HealthReminder(id: recordID, title: trimmedTitle, detail: detail.trimmingCharacters(in: .whitespacesAndNewlines), completedDates: []))
+        next.reminders.append(HealthReminder(id: recordID, title: trimmedTitle, detail: trimmedDetail, completedDates: []))
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
@@ -1338,18 +2689,39 @@ final class AppEnvironment: ObservableObject {
     func updateHealthReminder(id: String, title: String, detail: String) async {
         var next = healthWorkspace
         guard let index = next.reminders.firstIndex(where: { $0.id == id }) else { return }
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         guard !trimmedTitle.isEmpty else { return }
         next.reminders[index].title = trimmedTitle
-        next.reminders[index].detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.reminders[index].detail = String(detail.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1000))
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
 
     func restoreHealthReminder(_ reminder: HealthReminder) async {
         var next = healthWorkspace
-        guard !next.reminders.contains(where: { $0.id == reminder.id }) else { return }
-        next.reminders.append(reminder)
+        let restored = rootineSanitizedHealthWorkspace(
+            HealthWorkspace(version: 1, updatedAt: next.updatedAt, checkIns: [:], reminders: [reminder])
+        ).reminders.first
+        guard let restored, !next.reminders.contains(where: { $0.id == restored.id }) else { return }
+        next.reminders.append(restored)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistHealthWorkspace(next)
+    }
+
+    func deleteHealthCheckIn(date: String) async {
+        let key = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard rootineHealthLocalDateIsValid(key), healthWorkspace.checkIns[key] != nil else { return }
+        var next = healthWorkspace
+        next.checkIns.removeValue(forKey: key)
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistHealthWorkspace(next)
+    }
+
+    func restoreHealthCheckIn(_ checkIn: HealthCheckIn) async {
+        guard rootineHealthCheckInIsValid(checkIn) else { return }
+        var next = healthWorkspace
+        guard next.checkIns[checkIn.date] == nil else { return }
+        next.checkIns[checkIn.date] = checkIn
         next.updatedAt = RootineDate.isoTimestamp()
         await persistHealthWorkspace(next)
     }
@@ -1365,7 +2737,8 @@ final class AppEnvironment: ObservableObject {
         operationID: String = UUID().uuidString
     ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        let normalizedDueDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairDate.isValid(normalizedDueDate) else { return }
         let fingerprint = "affair|\(trimmedTitle)|\(category)|\(dueDate)"
         guard creationGate.claim(fingerprint) else { return }
         defer { creationGate.release(fingerprint) }
@@ -1380,7 +2753,7 @@ final class AppEnvironment: ObservableObject {
                 category: AffairMatterCategory.canonical(category),
                 priority: priority == "high" ? "high" : "normal",
                 status: "open",
-                dueDate: dueDate,
+                dueDate: normalizedDueDate,
                 note: note.trimmingCharacters(in: .whitespacesAndNewlines),
                 createdAt: now
             ),
@@ -1399,13 +2772,14 @@ final class AppEnvironment: ObservableObject {
         note: String
     ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        let normalizedDueDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairDate.isValid(normalizedDueDate) else { return }
         var next = affairsWorkspace
         guard let index = next.matters.firstIndex(where: { $0.id == id }) else { return }
         next.matters[index].title = trimmedTitle
         next.matters[index].category = AffairMatterCategory.canonical(category)
         next.matters[index].priority = priority == "high" ? "high" : "normal"
-        next.matters[index].dueDate = dueDate
+        next.matters[index].dueDate = normalizedDueDate
         next.matters[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
         await persistAffairsWorkspace(next)
     }
@@ -1430,6 +2804,61 @@ final class AppEnvironment: ObservableObject {
         await persistAffairsWorkspace(next)
     }
 
+    func addAffairOneTimePayment(
+        title: String,
+        category: String,
+        amount: Double,
+        dueDate: String,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        let fingerprint = "affair-one-time|\(trimmedTitle)|\(normalizedDate)|\(AffairMoney.normalized(amount))"
+        guard creationGate.claim(fingerprint) else { return }
+        defer { creationGate.release(fingerprint) }
+        let id = RootineLocalIdentifier.string(namespace: "affair-one-time", operationID: operationID)
+        guard !affairsWorkspace.oneTimePayments.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.oneTimePayments.insert(AffairOneTimePayment(
+            id: id,
+            title: trimmedTitle,
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: AffairMoney.normalized(amount),
+            dueDate: normalizedDate,
+            paid: false,
+            paidAt: "",
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairOneTimePayment(
+        id: String,
+        title: String,
+        category: String,
+        amount: Double,
+        dueDate: String,
+        note: String = ""
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        var next = affairsWorkspace
+        guard let index = next.oneTimePayments.firstIndex(where: { $0.id == id }) else { return }
+        var payment = next.oneTimePayments[index]
+        payment.title = trimmedTitle
+        payment.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        payment.amount = AffairMoney.normalized(amount)
+        payment.dueDate = normalizedDate
+        payment.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.oneTimePayments[index] = payment
+        await persistAffairsWorkspace(next)
+    }
+
     func toggleOneTimePayment(id: String) async {
         var next = affairsWorkspace
         guard let index = next.oneTimePayments.firstIndex(where: { $0.id == id }) else { return }
@@ -1441,6 +2870,398 @@ final class AppEnvironment: ObservableObject {
     func deleteOneTimePayment(id: String) async {
         var next = affairsWorkspace
         next.oneTimePayments.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairPayment(
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextDueDate: String,
+        automatic: Bool = false,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextDueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        let fingerprint = "affair-payment|\(trimmedName)|\(normalizedDate)|\(cadence)"
+        guard creationGate.claim(fingerprint) else { return }
+        defer { creationGate.release(fingerprint) }
+        let id = RootineLocalIdentifier.string(namespace: "affair-payment", operationID: operationID)
+        guard !affairsWorkspace.payments.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.payments.insert(AffairRecurringPayment(
+            id: id,
+            name: trimmedName,
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: AffairMoney.normalized(amount),
+            cadence: cadence,
+            nextDueDate: normalizedDate,
+            automatic: automatic,
+            active: true,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairPayment(
+        id: String,
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextDueDate: String,
+        automatic: Bool,
+        note: String = ""
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextDueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
+        var next = affairsWorkspace
+        guard let index = next.payments.firstIndex(where: { $0.id == id }) else { return }
+        var payment = next.payments[index]
+        payment.name = trimmedName
+        payment.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        payment.amount = AffairMoney.normalized(amount)
+        payment.cadence = cadence
+        payment.nextDueDate = normalizedDate
+        payment.automatic = automatic
+        payment.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.payments[index] = payment
+        await persistAffairsWorkspace(next)
+    }
+
+    func setAffairPaymentActive(id: String, active: Bool) async {
+        var next = affairsWorkspace
+        guard let index = next.payments.firstIndex(where: { $0.id == id }) else { return }
+        next.payments[index].active = active
+        await persistAffairsWorkspace(next)
+    }
+
+    func advanceAffairPayment(id: String, reference: Date = Date()) async {
+        var next = affairsWorkspace
+        guard let index = next.payments.firstIndex(where: { $0.id == id }) else { return }
+        let payment = next.payments[index]
+        let advanced = AffairDate.advanceToFuture(payment.nextDueDate, cadence: payment.cadence, reference: reference)
+        guard advanced != payment.nextDueDate else { return }
+        next.payments[index].nextDueDate = advanced
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairPayment(id: String) async {
+        var next = affairsWorkspace
+        next.payments.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairSubscription(
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextBillingDate: String,
+        renewal: String,
+        commitmentEndDate: String = "",
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextBillingDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCommitment = commitmentEndDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              ["automatic", "manual"].contains(renewal),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false),
+              AffairDate.isValid(normalizedCommitment) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-subscription", operationID: operationID)
+        guard !affairsWorkspace.subscriptions.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.subscriptions.insert(AffairSubscription(
+            id: id,
+            name: trimmedName,
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            amount: AffairMoney.normalized(amount),
+            cadence: cadence,
+            nextBillingDate: normalizedDate,
+            renewal: renewal,
+            commitmentEndDate: normalizedCommitment,
+            active: true,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairSubscription(
+        id: String,
+        name: String,
+        category: String,
+        amount: Double,
+        cadence: String,
+        nextBillingDate: String,
+        renewal: String,
+        commitmentEndDate: String = "",
+        note: String = ""
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = nextBillingDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCommitment = commitmentEndDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
+              AffairsWorkspaceRules.cadences.contains(cadence),
+              ["automatic", "manual"].contains(renewal),
+              AffairDate.isValid(normalizedDate, allowingEmpty: false), AffairDate.isValid(normalizedCommitment) else { return }
+        var next = affairsWorkspace
+        guard let index = next.subscriptions.firstIndex(where: { $0.id == id }) else { return }
+        var subscription = next.subscriptions[index]
+        subscription.name = trimmedName
+        subscription.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        subscription.amount = AffairMoney.normalized(amount)
+        subscription.cadence = cadence
+        subscription.nextBillingDate = normalizedDate
+        subscription.renewal = renewal
+        subscription.commitmentEndDate = normalizedCommitment
+        subscription.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.subscriptions[index] = subscription
+        await persistAffairsWorkspace(next)
+    }
+
+    func setAffairSubscriptionActive(id: String, active: Bool) async {
+        var next = affairsWorkspace
+        guard let index = next.subscriptions.firstIndex(where: { $0.id == id }) else { return }
+        next.subscriptions[index].active = active
+        await persistAffairsWorkspace(next)
+    }
+
+    func advanceAffairSubscription(id: String, reference: Date = Date()) async {
+        var next = affairsWorkspace
+        guard let index = next.subscriptions.firstIndex(where: { $0.id == id }) else { return }
+        let subscription = next.subscriptions[index]
+        let advanced = AffairDate.advanceToFuture(subscription.nextBillingDate, cadence: subscription.cadence, reference: reference)
+        guard advanced != subscription.nextBillingDate else { return }
+        next.subscriptions[index].nextBillingDate = advanced
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairSubscription(id: String) async {
+        var next = affairsWorkspace
+        next.subscriptions.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairDocument(
+        name: String,
+        category: String,
+        holder: String,
+        expiresAt: String,
+        reminderDays: Int,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = expiresAt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairsWorkspaceRules.documentCategories.contains(category),
+              AffairDate.isValid(normalizedDate), (0...730).contains(reminderDays) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-document", operationID: operationID)
+        guard !affairsWorkspace.documents.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.documents.insert(AffairDocument(
+            id: id,
+            name: trimmedName,
+            category: category,
+            holder: holder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ja" : holder.trimmingCharacters(in: .whitespacesAndNewlines),
+            expiresAt: normalizedDate,
+            reminderDays: reminderDays,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairDocument(
+        id: String,
+        name: String,
+        category: String,
+        holder: String,
+        expiresAt: String,
+        reminderDays: Int,
+        note: String = ""
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = expiresAt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, AffairsWorkspaceRules.documentCategories.contains(category),
+              AffairDate.isValid(normalizedDate), (0...730).contains(reminderDays) else { return }
+        var next = affairsWorkspace
+        guard let index = next.documents.firstIndex(where: { $0.id == id }) else { return }
+        next.documents[index].name = trimmedName
+        next.documents[index].category = category
+        next.documents[index].holder = holder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ja" : holder.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.documents[index].expiresAt = normalizedDate
+        next.documents[index].reminderDays = reminderDays
+        next.documents[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairDocument(id: String) async {
+        var next = affairsWorkspace
+        next.documents.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairVehicle(
+        name: String,
+        registration: String,
+        mileage: Double,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, mileage.isFinite, mileage >= 0 else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-vehicle", operationID: operationID)
+        guard !affairsWorkspace.vehicles.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.vehicles.insert(AffairVehicle(
+            id: id,
+            name: trimmedName,
+            registration: registration.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(with: Locale(identifier: "pl-PL")),
+            mileage: AffairMoney.normalized(mileage)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairVehicle(id: String, name: String, registration: String, mileage: Double) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, mileage.isFinite, mileage >= 0 else { return }
+        var next = affairsWorkspace
+        guard let index = next.vehicles.firstIndex(where: { $0.id == id }) else { return }
+        next.vehicles[index].name = trimmedName
+        next.vehicles[index].registration = registration.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(with: Locale(identifier: "pl-PL"))
+        next.vehicles[index].mileage = AffairMoney.normalized(mileage)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairVehicleMileage(id: String, mileage: Double) async {
+        guard mileage.isFinite, mileage >= 0 else { return }
+        var next = affairsWorkspace
+        guard let index = next.vehicles.firstIndex(where: { $0.id == id }), mileage >= next.vehicles[index].mileage else { return }
+        next.vehicles[index].mileage = AffairMoney.normalized(mileage)
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairVehicle(id: String) async {
+        var next = affairsWorkspace
+        next.vehicles.removeAll { $0.id == id }
+        next.vehicleItems.removeAll { $0.vehicleId == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func addAffairVehicleItem(
+        vehicleID: String,
+        title: String,
+        type: String,
+        dueDate: String = "",
+        dueMileage: Double? = nil,
+        note: String = "",
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard affairsWorkspace.vehicles.contains(where: { $0.id == vehicleID }), !trimmedTitle.isEmpty,
+              AffairsWorkspaceRules.vehicleItemTypes.contains(type), AffairDate.isValid(normalizedDate),
+              (dueMileage == nil || (dueMileage!.isFinite && dueMileage! >= 0)), !normalizedDate.isEmpty || dueMileage != nil else { return }
+        let id = RootineLocalIdentifier.string(namespace: "affair-vehicle-item", operationID: operationID)
+        guard !affairsWorkspace.vehicleItems.contains(where: { $0.id == id }) else { return }
+        var next = affairsWorkspace
+        next.vehicleItems.insert(AffairVehicleItem(
+            id: id,
+            vehicleId: vehicleID,
+            title: trimmedTitle,
+            type: type,
+            dueDate: normalizedDate,
+            dueMileage: dueMileage.map { AffairMoney.normalized($0) },
+            done: false,
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), at: 0)
+        await persistAffairsWorkspace(next)
+    }
+
+    func updateAffairVehicleItem(
+        id: String,
+        vehicleID: String,
+        title: String,
+        type: String,
+        dueDate: String = "",
+        dueMileage: Double? = nil,
+        note: String = ""
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard affairsWorkspace.vehicles.contains(where: { $0.id == vehicleID }), !trimmedTitle.isEmpty,
+              AffairsWorkspaceRules.vehicleItemTypes.contains(type), AffairDate.isValid(normalizedDate),
+              (dueMileage == nil || (dueMileage!.isFinite && dueMileage! >= 0)), !normalizedDate.isEmpty || dueMileage != nil else { return }
+        var next = affairsWorkspace
+        guard let index = next.vehicleItems.firstIndex(where: { $0.id == id }) else { return }
+        next.vehicleItems[index].vehicleId = vehicleID
+        next.vehicleItems[index].title = trimmedTitle
+        next.vehicleItems[index].type = type
+        next.vehicleItems[index].dueDate = normalizedDate
+        next.vehicleItems[index].dueMileage = dueMileage.map { AffairMoney.normalized($0) }
+        next.vehicleItems[index].note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        await persistAffairsWorkspace(next)
+    }
+
+    func toggleAffairVehicleItem(id: String) async {
+        var next = affairsWorkspace
+        guard let index = next.vehicleItems.firstIndex(where: { $0.id == id }) else { return }
+        next.vehicleItems[index].done.toggle()
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairVehicleItem(id: String) async {
+        var next = affairsWorkspace
+        next.vehicleItems.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func upsertAffairBudgetMonth(_ month: AffairBudgetMonth) async {
+        guard AffairDate.monthIsValid(month.month) else { return }
+        var next = affairsWorkspace
+        let normalizedLines = month.lines.map { line in
+            AffairBudgetLine(id: line.id, label: line.label.trimmingCharacters(in: .whitespacesAndNewlines), kind: AffairsWorkspaceRules.budgetKinds.contains(line.kind) ? line.kind : "flexible", planned: AffairMoney.normalized(max(0, line.planned)), actual: AffairMoney.normalized(max(0, line.actual)))
+        }
+        let normalized = AffairBudgetMonth(month: month.month, lines: normalizedLines)
+        if let index = next.budgets.firstIndex(where: { $0.month == month.month }) { next.budgets[index] = normalized }
+        else { next.budgets.append(normalized) }
+        await persistAffairsWorkspace(next)
+    }
+
+    func upsertAffairBudgetLine(month: String, line: AffairBudgetLine) async {
+        guard AffairDate.monthIsValid(month), !line.id.isEmpty else { return }
+        var next = affairsWorkspace
+        let normalized = AffairBudgetLine(id: line.id, label: line.label.trimmingCharacters(in: .whitespacesAndNewlines), kind: AffairsWorkspaceRules.budgetKinds.contains(line.kind) ? line.kind : "flexible", planned: AffairMoney.normalized(max(0, line.planned)), actual: AffairMoney.normalized(max(0, line.actual)))
+        if let monthIndex = next.budgets.firstIndex(where: { $0.month == month }) {
+            if let lineIndex = next.budgets[monthIndex].lines.firstIndex(where: { $0.id == line.id }) { next.budgets[monthIndex].lines[lineIndex] = normalized }
+            else { next.budgets[monthIndex].lines.append(normalized) }
+        } else { next.budgets.append(AffairBudgetMonth(month: month, lines: [normalized])) }
+        await persistAffairsWorkspace(next)
+    }
+
+    func deleteAffairBudgetLine(month: String, id: String) async {
+        var next = affairsWorkspace
+        guard let monthIndex = next.budgets.firstIndex(where: { $0.month == month }) else { return }
+        next.budgets[monthIndex].lines.removeAll { $0.id == id }
+        await persistAffairsWorkspace(next)
+    }
+
+    func setAffairAttentionState(_ state: AffairAttentionState) async {
+        guard !state.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var next = affairsWorkspace
+        var states = next.attentionStates ?? []
+        if let index = states.firstIndex(where: { $0.key == state.key }) { states[index] = state }
+        else { states.append(state) }
+        next.attentionStates = Array(states.suffix(500))
         await persistAffairsWorkspace(next)
     }
 
@@ -1604,7 +3425,10 @@ final class AppEnvironment: ObservableObject {
 
     func lookupNutritionProduct(barcode: String) async -> NutritionProduct? {
         let normalized = NutritionBarcode.normalized(barcode)
-        guard !normalized.isEmpty else { return nil }
+        guard !normalized.isEmpty else {
+            RootineObservability.shared.recordQR(outcome: .failure, format: "barcode", error: "invalid barcode")
+            return nil
+        }
         let lookupFingerprint = "nutrition-barcode-lookup|\(normalized)"
         guard creationGate.claim(lookupFingerprint) else { return nil }
         defer { creationGate.release(lookupFingerprint) }
@@ -1613,6 +3437,12 @@ final class AppEnvironment: ObservableObject {
             .first(where: { $0.id == NutritionBarcode.requestID(for: normalized) })?
             .resolvedProduct {
             return resolved
+        }
+        if let cached = nutritionProductCache[normalized] {
+            // Reattach a cache hit to an existing pending request so the UI
+            // can offer the same durable "Dodaj" action after a relaunch.
+            await storeNutritionBarcodeResult(normalized, product: cached)
+            return cached
         }
         guard let token = session?.accessToken, !token.isEmpty else {
             await recordNutritionBarcodeFailure(normalized)
@@ -1623,6 +3453,12 @@ final class AppEnvironment: ObservableObject {
             let product = try await api.product(barcode: normalized, accessToken: token)
             await storeNutritionBarcodeResult(normalized, product: product)
             return product
+        } catch RootineAPIError.server(status: 404) {
+            // A definitive miss is not retriable. Keep the manual entry path
+            // useful and avoid retrying an unknown product forever.
+            await discardNutritionBarcode(normalized)
+            foundationMessage = "Nie znaleziono produktu dla tego kodu. Możesz uzupełnić dane ręcznie."
+            return nil
         } catch {
             await recordNutritionBarcodeFailure(normalized)
             foundationMessage = "Kod zapisany lokalnie — ponowimy próbę po połączeniu. Możesz też wpisać produkt ręcznie."
@@ -1684,6 +3520,18 @@ final class AppEnvironment: ObservableObject {
         guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
         pending[index].resolvedProduct = product
         pending[index].lastAttemptAt = RootineDate.isoTimestamp()
+        next.pendingBarcodeLookups = pending
+        await persistNutritionWorkspace(next)
+        nutritionProductCache[normalized] = product
+        await persistNutritionProductCache()
+    }
+
+    private func discardNutritionBarcode(_ barcode: String) async {
+        let normalized = NutritionBarcode.normalized(barcode)
+        guard !normalized.isEmpty else { return }
+        var next = nutritionWorkspace
+        var pending = normalizedNutritionBarcodeRequests(next.pendingBarcodeLookups ?? [])
+        pending.removeAll { $0.id == NutritionBarcode.requestID(for: normalized) }
         next.pendingBarcodeLookups = pending
         await persistNutritionWorkspace(next)
     }
@@ -1985,8 +3833,12 @@ final class AppEnvironment: ObservableObject {
     private func persistTaskWorkspace(_ value: TaskWorkspace) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
+        var next = rootineNormalizedTaskWorkspace(value)
         next.updatedAt = RootineDate.isoTimestamp()
+        guard (try? RootineTaskDomain.validate(next)) != nil else {
+            foundationMessage = "Nieprawidłowe dane zadania — zapis odrzucony"
+            return
+        }
         taskWorkspace = next
         // Schedule from the just-published local aggregate before attempting
         // the network queue. This keeps reminders working while offline and
@@ -2026,7 +3878,19 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
+    private func persistNutritionProductCache() async {
+        guard let store else { return }
+        // Stable ordering makes the file deterministic and keeps the cache
+        // bounded without introducing a second timestamp contract.
+        let products = nutritionProductCache
+            .sorted { $0.key < $1.key }
+            .suffix(128)
+            .map(\.value)
+        try? await store.save(NutritionProductCache(products: products), key: .nutritionProductCache)
+    }
+
     private func persistNotesWorkspace(_ value: NotesWorkspace) async {
+        let previous = notesWorkspace
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
         var next = value
@@ -2037,20 +3901,126 @@ final class AppEnvironment: ObservableObject {
             return
         }
         do {
+            let mapped = try (canonicalShadows[.notes].map {
+                try RootineCanonicalWorkspaceMapping.mergedNotesPayload(for: next, onto: $0)
+            } ?? RootineCanonicalWorkspaceMapping.payload(for: next))
             try await store.save(next, key: .notes)
-            try await syncEngine.enqueue(next, key: .notes)
-            await markLocalOnly()
-            await flushPendingMutations()
+            canonicalShadows[.notes] = mapped
+            try await store.save(mapped, key: .notesCanonicalShadow)
+            if normalizedReadEnabled {
+                let canUseNormalized = try await enqueueNormalizedNoteMutations(from: previous, to: next, payload: mapped, syncEngine: syncEngine)
+                if canUseNormalized {
+                    await flushPendingNormalizedCommands()
+                } else {
+                    // A full relational bootstrap may provide a document but
+                    // no per-row revisions. CAS cannot safely update an
+                    // existing note in that state, so retain aggregate
+                    // compatibility until a pull supplies record revisions.
+                    try await syncEngine.enqueue(payload: mapped, storageKey: RootineStorageKey.notes.rawValue)
+                    await flushPendingMutations()
+                }
+            } else {
+                try await syncEngine.enqueue(payload: mapped, storageKey: RootineStorageKey.notes.rawValue)
+                await flushPendingMutations()
+            }
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
     }
 
+    private func enqueueNormalizedNoteMutations(
+        from previous: NotesWorkspace,
+        to next: NotesWorkspace,
+        payload: JSONValue,
+        syncEngine: WorkspaceSyncEngine
+    ) async throws -> Bool {
+        let key = RootineStorageKey.notes.rawValue
+        let previousNotes = Dictionary(uniqueKeysWithValues: previous.notes.map { ($0.id, $0) })
+        let nextNotes = Dictionary(uniqueKeysWithValues: next.notes.map { ($0.id, $0) })
+        let previousLists = Dictionary(uniqueKeysWithValues: previous.lists.map { ($0.id, $0) })
+        let nextLists = Dictionary(uniqueKeysWithValues: next.lists.map { ($0.id, $0) })
+
+        func record(_ collection: String, id: String) -> JSONValue? {
+            guard case .object(let root) = payload,
+                  case .array(let values) = root[collection] else { return nil }
+            return values.first { value in
+                guard case .object(let object) = value,
+                      case .string(let candidate) = object["id"] else { return false }
+                return candidate == id
+            }
+        }
+
+        func revision(for entity: String, id: String) -> Int64? {
+            normalizedRecordRevisions["\(key)\u{1F}\(entity)\u{1F}\(id)"]
+        }
+
+        // Existing rows require a real per-record revision under B03's CAS.
+        // New rows can safely use zero; aggregate compatibility handles a
+        // bootstrap that only exposed a document/cursor revision.
+        for id in Set(previousLists.keys).union(nextLists.keys) where previousLists[id] != nextLists[id] {
+            if previousLists[id] != nil && revision(for: "notelist", id: id) == nil { return false }
+        }
+        for id in Set(previousNotes.keys).union(nextNotes.keys) where previousNotes[id] != nextNotes[id] {
+            if previousNotes[id] != nil && revision(for: "note", id: id) == nil { return false }
+        }
+
+        func baseRevision(for entity: String, id: String) -> Int64 {
+            revision(for: entity, id: id) ?? 0
+        }
+
+        for id in Set(previousLists.keys).union(nextLists.keys).sorted() {
+            if let current = nextLists[id], current != previousLists[id], let value = record("lists", id: id) {
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note_list",
+                    entityID: id,
+                    baseRevision: baseRevision(for: "notelist", id: id),
+                    payload: value
+                )
+            } else if nextLists[id] == nil, previousLists[id] != nil {
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note_list",
+                    entityID: id,
+                    kind: .delete,
+                    baseRevision: baseRevision(for: "notelist", id: id),
+                    payload: .null
+                )
+            }
+        }
+
+        for id in Set(previousNotes.keys).union(nextNotes.keys).sorted() {
+            if let current = nextNotes[id], current != previousNotes[id], let value = record("notes", id: id) {
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note",
+                    entityID: id,
+                    baseRevision: baseRevision(for: "note", id: id),
+                    payload: value
+                )
+            } else if nextNotes[id] == nil, previousNotes[id] != nil {
+                // `payload: .null` is intentional: the sync-v3 wire contract
+                // omits payload for deletes, while PendingSyncCommand keeps a
+                // JSONValue slot for one stable Codable shape.
+                _ = try await syncEngine.enqueueNormalizedCommand(
+                    entity: "note",
+                    entityID: id,
+                    kind: .delete,
+                    baseRevision: baseRevision(for: "note", id: id),
+                    payload: .null
+                )
+            }
+        }
+
+        return true
+    }
+
     private func persistSportWorkspace(_ value: SportWorkspace) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
+        var next = value.normalizedForPersistence()
         next.updatedAt = RootineDate.isoTimestamp()
+        guard (try? next.validate()) != nil else {
+            foundationMessage = "Nieprawidłowe dane aktywności"
+            return
+        }
         sportWorkspace = next
         await persistCanonicalWorkspace(next, key: .sport, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload)
     }
@@ -2078,6 +4048,10 @@ final class AppEnvironment: ObservableObject {
         defer { endWorkspacePersistence() }
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
+        guard rootineValidateTravelWorkspace(next).isEmpty else {
+            foundationMessage = "Nie zapisano podróży — dane wymagają korekty"
+            return
+        }
         travelWorkspace = next
         await persistCanonicalWorkspace(next, key: .travel, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload)
     }
@@ -2094,22 +4068,25 @@ final class AppEnvironment: ObservableObject {
     private func persistAffairsWorkspace(_ value: AffairsWorkspace) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
-        next.version = 2
+        let next = AffairsWorkspaceRules.normalized(value)
         affairsWorkspace = next
         await persistWorkspace(next, key: .affairs)
     }
 
     private func persistWorkspace<T: Codable & Sendable>(_ value: T, key: RootineStorageKey) async {
-        guard let store, let syncEngine else {
+        guard let store else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
         }
         do {
             try await store.save(value, key: key)
-            try await syncEngine.enqueue(value, key: key)
-            await markLocalOnly()
-            await flushPendingMutations()
+            if let syncEngine {
+                try await syncEngine.enqueue(value, key: key)
+                await markLocalOnly()
+                await flushPendingMutations()
+            } else {
+                workspaceSyncStatus = .localOnly(pending: 0)
+            }
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
         }
@@ -2120,7 +4097,11 @@ final class AppEnvironment: ObservableObject {
         key: RootineStorageKey,
         merge: (T, JSONValue) throws -> JSONValue
     ) async {
-        guard let store, let syncEngine else {
+        // Local-first is also valid before authentication is fully restored
+        // (for example after an offline launch). Persist the compact native
+        // snapshot and canonical shadow whenever a store exists; enqueue only
+        // when a sync engine is available.
+        guard let store else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
         }
@@ -2131,6 +4112,10 @@ final class AppEnvironment: ObservableObject {
             canonicalShadows[key] = mapped
             if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) {
                 try await store.save(mapped, key: shadowKey)
+            }
+            guard let syncEngine else {
+                foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+                return
             }
             try await syncEngine.enqueue(
                 payload: mapped,
@@ -2153,9 +4138,10 @@ final class AppEnvironment: ObservableObject {
             throw RootineWorkspaceArchiveError.invalidArchive
         }
         let supported = key.supportedLocalVersion!
-        // Affairs v1 is normalized to v2 after decoding. Other direct
-        // workspaces have no implicit migration path and must match exactly.
-        guard found == supported || (key == .affairs && found == 1) else {
+        // Affairs and Tasks v1 snapshots are normalized to v2 after decoding.
+        // Other direct workspaces have no implicit migration path and must
+        // match exactly.
+        guard found == supported || ((key == .affairs || key == .tasks) && found == 1) else {
             throw RootineWorkspaceArchiveError.unsupportedWorkspaceVersion(
                 key: key.rawValue,
                 found: found,
@@ -2295,14 +4281,17 @@ final class AppEnvironment: ObservableObject {
     private func configureRuntime(userID: String) {
         stopRealtimeRuntime()
         canonicalShadows.removeAll()
+        normalizedRecordRevisions.removeAll()
         lastDeviceRegistrationFingerprint = nil
         deviceRegistration = nil
         let previousScheduler = localNotificationScheduler
         // Preferences are account-scoped. Never carry an opt-in or lock-screen
         // detail setting across an account switch before B08 has supplied the
         // new profile payload.
+        profilePreferences = RootineProfilePreferencesStore.load(userID: userID)
+            ?? .current
         notificationPreferences = RootineNotificationPreferencesStore.load(userID: userID)
-            ?? RootineNotificationPreferences()
+            ?? RootineNotificationPreferences(timezoneIdentifier: profilePreferences.timezoneIdentifier)
         let userStore = WorkspaceFileStore(userID: userID)
         store = userStore
         localNotificationScheduler = RootineLocalNotificationScheduler(
@@ -2317,18 +4306,25 @@ final class AppEnvironment: ObservableObject {
             environment: configuration.environment
         )
         normalizedReadFallbackReason = nil
-        guard let normalizedRemote = try? RootineSyncRemoteClient(configuration: configuration) else {
-            syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
-            return
-        }
+        // The lifecycle coordinator is useful even when sync-v3 is not
+        // configured yet: it keeps the local-first legacy transport and the
+        // Realtime wake-up/fallback path under the same cancellation gates.
+        let normalizedRemote = try? RootineSyncRemoteClient(configuration: configuration)
         let deviceID = syncDeviceIdentifier(for: userID)
-        syncEngine = WorkspaceSyncEngine(
-            store: userStore,
-            remote: api,
-            normalizedRemote: normalizedRemote,
-            deviceID: deviceID,
-            accountID: userID
-        )
+        if let normalizedRemote {
+            syncEngine = WorkspaceSyncEngine(
+                store: userStore,
+                remote: api,
+                normalizedRemote: normalizedRemote,
+                deviceID: deviceID,
+                accountID: userID
+            )
+        } else {
+            syncEngine = WorkspaceSyncEngine(store: userStore, remote: api)
+        }
+
+        realtimeRuntimeUserID = userID
+        let runtimeGeneration = realtimeRuntimeGeneration
 
         syncCoordinator = RootineSyncCoordinator(
             operations: RootineSyncOperations(
@@ -2355,12 +4351,12 @@ final class AppEnvironment: ObservableObject {
             session: activeSession,
             onEvent: { [weak self] event in
                 Task { @MainActor [weak self] in
-                    self?.handleRealtimeEvent(event)
+                    self?.handleRealtimeEvent(event, userID: userID, generation: runtimeGeneration)
                 }
             },
             onStatus: { [weak self] status in
                 Task { @MainActor [weak self] in
-                    self?.handleRealtimeStatus(status)
+                    self?.handleRealtimeStatus(status, userID: userID, generation: runtimeGeneration)
                 }
             }
         )
@@ -2394,25 +4390,10 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
-    /// Compatibility polling remains available while the realtime lifecycle
-    /// is being rolled out. It also provides a fallback on networks where a
-    /// WebSocket cannot be established.
-    private func startRealtimeRefreshLoop() {
-        refreshTask?.cancel()
-        guard configuration.isAuthComplete else { return }
-        refreshTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await _Concurrency.Task.sleep(for: .seconds(30))
-                guard !Task.isCancelled, let self else { return }
-                guard let token = self.session?.accessToken else { return }
-                await self.loadAndReconcile(accessToken: token)
-            }
-        }
-    }
-
     /// Starts Realtime and its lifecycle coordinator only after the initial
-    /// authoritative bootstrap has completed. Polling remains owned by the
-    /// coordinator and is automatically stopped in the background/sign-out.
+    /// authoritative bootstrap has completed. Coordinator polling is the
+    /// bounded fallback when Realtime cannot connect and is automatically
+    /// stopped in the background/sign-out.
     private func startRealtimeRuntime() {
         guard configuration.isAuthComplete,
               session != nil,
@@ -2420,19 +4401,31 @@ final class AppEnvironment: ObservableObject {
               let realtimeClient else { return }
         startNetworkMonitor()
         scheduleBackgroundRefresh()
+        let generation = realtimeRuntimeGeneration
         Task {
+            guard self.realtimeRuntimeGeneration == generation,
+                  self.session != nil else { return }
             await syncCoordinator.start()
+            if self.currentScenePhase == .background {
+                await syncCoordinator.scenePhaseChanged(.background)
+            }
+            if !self.lastKnownNetworkReachable {
+                await syncCoordinator.networkPathChanged(isReachable: false)
+            }
+            guard self.realtimeRuntimeGeneration == generation,
+                  self.currentScenePhase != .background,
+                  self.lastKnownNetworkReachable else { return }
             await realtimeClient.start()
         }
     }
 
     private func stopRealtimeRuntime() {
-        refreshTask?.cancel()
-        refreshTask = nil
+        realtimeRuntimeGeneration += 1
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundRefreshTaskIdentifier)
         networkMonitor?.cancel()
         networkMonitor = nil
         networkMonitorQueue = nil
+        realtimeRuntimeUserID = nil
         if let realtimeClient {
             Task { await realtimeClient.stop() }
         }
@@ -2443,6 +4436,18 @@ final class AppEnvironment: ObservableObject {
         syncCoordinator = nil
         realtimeStatus = .stopped
         syncCoordinatorStatus = .stopped
+    }
+
+    private func pauseRealtimeClient() {
+        guard let realtimeClient else { return }
+        Task { await realtimeClient.stop() }
+    }
+
+    private func resumeRealtimeClientIfAllowed() {
+        guard currentScenePhase != .background,
+              lastKnownNetworkReachable,
+              let realtimeClient else { return }
+        Task { await realtimeClient.start() }
     }
 
     private func scheduleBackgroundRefresh() {
@@ -2468,12 +4473,23 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func handleNetworkPath(isReachable: Bool) {
+        let changed = lastKnownNetworkReachable != isReachable
+        lastKnownNetworkReachable = isReachable
         guard session != nil, let syncCoordinator else { return }
+        if !isReachable {
+            pauseRealtimeClient()
+        } else if changed {
+            resumeRealtimeClientIfAllowed()
+        }
         Task { await syncCoordinator.networkPathChanged(isReachable: isReachable) }
     }
 
-    private func handleRealtimeEvent(_ event: RootineRealtimeEvent) {
+    private func handleRealtimeEvent(_ event: RootineRealtimeEvent, userID: String, generation: Int) {
         guard let session,
+              realtimeRuntimeUserID == userID,
+              realtimeRuntimeGeneration == generation,
+              currentScenePhase != .background,
+              lastKnownNetworkReachable,
               case .syncAvailable(let signal) = event,
               signal.userID == session.user.id,
               let syncCoordinator else { return }
@@ -2482,9 +4498,14 @@ final class AppEnvironment: ObservableObject {
         Task { await syncCoordinator.requestPull(reason: .realtime) }
     }
 
-    private func handleRealtimeStatus(_ status: RootineRealtimeStatus) {
+    private func handleRealtimeStatus(_ status: RootineRealtimeStatus, userID: String, generation: Int) {
+        guard realtimeRuntimeUserID == userID,
+              realtimeRuntimeGeneration == generation,
+              session?.user.id == userID else { return }
         realtimeStatus = status
         guard case .connected = status,
+              currentScenePhase != .background,
+              lastKnownNetworkReachable,
               session != nil,
               let syncCoordinator else { return }
         // Includes the first connection and every reconnect: pull from the
@@ -2493,8 +4514,28 @@ final class AppEnvironment: ObservableObject {
     }
 
     func scenePhaseDidChange(_ phase: RootineScenePhase) {
+        currentScenePhase = phase
+        switch phase {
+        case .background:
+            pauseRealtimeClient()
+        case .active:
+            resumeRealtimeClientIfAllowed()
+        case .inactive:
+            break
+        }
         guard session != nil, let syncCoordinator else { return }
+        if phase == .active {
+            // Permission may change while the app is suspended in Settings.
+            scheduleDeviceRegistration()
+        }
         Task { await syncCoordinator.scenePhaseChanged(phase) }
+    }
+
+    /// Pending writes are durable before this boundary. Closing the runtime
+    /// prevents stale callbacks from touching a future account/session.
+    func applicationWillTerminate() {
+        currentScenePhase = .background
+        stopRealtimeRuntime()
     }
 
     func registerBackgroundRefreshTask() {
@@ -2520,9 +4561,15 @@ final class AppEnvironment: ObservableObject {
             return
         }
         let work = Task { await syncCoordinator.syncNow(reason: .backgroundTask) }
-        task?.expirationHandler = { work.cancel() }
+        task?.expirationHandler = {
+            work.cancel()
+            Task { await syncCoordinator.cancelBackgroundWork() }
+        }
         let success = await work.value
         task?.setTaskCompleted(success: success)
+        // BGTaskScheduler requests are one-shot. Re-arm the safety net after
+        // every execution, including an expired/failed run.
+        scheduleBackgroundRefresh()
     }
 
     private static let backgroundRefreshTaskIdentifier = "app.rootine.sync.refresh"
@@ -2532,18 +4579,43 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func accept(_ newSession: SupabaseSession, passwordRecovery: Bool = false) async throws {
+        let requestGeneration = authGeneration
+        guard newSession.isValid else { throw RootineAPIError.invalidResponse }
+        guard requestGeneration == authGeneration else { throw RootineAPIError.cancelled }
+        authGeneration &+= 1
+        let generation = authGeneration
         try keychain.save(newSession)
         session = newSession
+        accountState = RootineAccountState(user: newSession.user)
         isPasswordRecovery = passwordRecovery
         configureRuntime(userID: newSession.user.id)
         guard !passwordRecovery else { return }
+        guard generation == authGeneration else { throw RootineAPIError.cancelled }
         await recoverOrphanedTransactions()
+        guard generation == authGeneration else { throw RootineAPIError.cancelled }
+        await refreshProfileSettings()
         await loadAndReconcile(accessToken: newSession.accessToken)
+        guard generation == authGeneration else { throw RootineAPIError.cancelled }
         await flushPendingMutations()
         startRealtimeRuntime()
-        startRealtimeRefreshLoop()
         scheduleDeviceRegistration()
         await refreshRecoveryFiles()
+    }
+
+    private func acceptLinkedIdentitySession(_ newSession: SupabaseSession) async throws {
+        let requestGeneration = authGeneration
+        guard let currentUserID = session?.user.id,
+              currentUserID == newSession.user.id,
+              requestGeneration == authGeneration,
+              newSession.isValid else {
+            throw RootineAPIError.accountMismatch
+        }
+        authGeneration &+= 1
+        try keychain.save(newSession)
+        session = newSession
+        accountState = RootineAccountState(user: newSession.user)
+        configureRuntime(userID: newSession.user.id)
+        startRealtimeRuntime()
     }
 
     /// Registers the current installation after authentication. Reading the
@@ -2581,13 +4653,15 @@ final class AppEnvironment: ObservableObject {
 
         let deviceID = deviceIdentity.loadOrCreate()
         let appVersion = configuration.appVersion.isEmpty ? "0.0.0" : configuration.appVersion
+        let apnsEnvironment = permission.canRegisterWithAPNs ? configuration.apnsEnvironment : nil
+        let registeredPushToken = permission.canRegisterWithAPNs ? pushToken : nil
         let fingerprint = [
             userID,
             deviceID,
             appVersion,
-            configuration.apnsEnvironment.rawValue,
+            apnsEnvironment?.rawValue ?? "",
             permission.rawValue,
-            pushToken ?? ""
+            registeredPushToken ?? ""
         ].joined(separator: "|")
         guard fingerprint != lastDeviceRegistrationFingerprint else { return }
 
@@ -2595,18 +4669,29 @@ final class AppEnvironment: ObservableObject {
             let registration = try await api.registerDevice(
                 deviceID: deviceID,
                 appVersion: appVersion,
-                apnsEnvironment: configuration.apnsEnvironment,
-                pushToken: pushToken,
+                apnsEnvironment: apnsEnvironment,
+                pushToken: registeredPushToken,
                 permissionState: permission,
                 accessToken: accessToken
             )
             guard session?.accessToken == accessToken else { return }
             deviceRegistration = registration
             lastDeviceRegistrationFingerprint = fingerprint
+            RootineObservability.shared.recordDeviceHealth(
+                outcome: .success,
+                permission: permission.rawValue,
+                environment: configuration.apnsEnvironment.rawValue
+            )
         } catch {
             // Device registration is auxiliary to bootstrap and workspace
             // sync. Keep the token out of logs and do not turn a missing
             // mobile-sync/B03 deployment into a sync error.
+            RootineObservability.shared.recordDeviceHealth(
+                outcome: .failure,
+                permission: permission.rawValue,
+                environment: configuration.apnsEnvironment.rawValue,
+                error: String(describing: error)
+            )
         }
     }
 
@@ -2619,22 +4704,32 @@ final class AppEnvironment: ObservableObject {
         await loadCanonicalShadows(from: store)
         taskWorkspace = (try? await store.load(TaskWorkspace.self, key: .tasks)) ?? .empty
         nutritionWorkspace = (try? await store.load(NutritionWorkspace.self, key: .nutrition)) ?? .empty
+        await loadNutritionProductCache(from: store)
         notesWorkspace = (try? await store.load(NotesWorkspace.self, key: .notes)) ?? .empty
         sportWorkspace = (try? await store.load(SportWorkspace.self, key: .sport)) ?? .empty
         goalsWorkspace = (try? await store.load(GoalsWorkspace.self, key: .goals)) ?? .empty
         let localWork = (try? await store.load(WorkWorkspace.self, key: .work)) ?? .empty
         workWorkspace = await sanitizedWorkWorkspace(localWork, store: store)
         travelWorkspace = (try? await store.load(TravelWorkspace.self, key: .travel)) ?? .empty
-        healthWorkspace = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
+        let localHealth = (try? await store.load(HealthWorkspace.self, key: .health)) ?? .empty
+        healthWorkspace = await sanitizedHealthWorkspace(localHealth, store: store)
         let localAffairs = (try? await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
         affairsWorkspace = await sanitizedAffairsWorkspace(localAffairs, store: store, syncEngine: syncEngine, allowSync: false)
         recoveryFiles = (try? await store.recoveryFiles()) ?? []
         await reconcileLocalNotifications()
     }
 
+    private func loadNutritionProductCache(from store: WorkspaceFileStore) async {
+        let cachedProducts = (try? await store.load(NutritionProductCache.self, key: .nutritionProductCache)) ?? .empty
+        nutritionProductCache = cachedProducts.products.reduce(into: [String: NutritionProduct]()) { result, product in
+            let code = NutritionBarcode.normalized(product.barcode)
+            if !code.isEmpty { result[code] = product }
+        }
+    }
+
     private func loadCanonicalShadows(from store: WorkspaceFileStore) async {
         canonicalShadows.removeAll()
-        for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
+        for key in [RootineStorageKey.sport, .goals, .work, .travel, .health, .notes] {
             guard let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key),
                   let shadow = try? await store.load(JSONValue.self, key: shadowKey) else { continue }
             canonicalShadows[key] = shadow
@@ -2698,14 +4793,7 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func normalizedAffairsWorkspace(_ workspace: AffairsWorkspace) -> AffairsWorkspace {
-        var normalized = workspace
-        normalized.matters = workspace.matters.map { matter in
-            var matter = matter
-            matter.category = AffairMatterCategory.canonical(matter.category)
-            return matter
-        }
-        normalized.version = 2
-        return normalized
+        AffairsWorkspaceRules.normalized(workspace)
     }
 
     private func sanitizedAffairsWorkspace(
@@ -2727,6 +4815,47 @@ final class AppEnvironment: ObservableObject {
         return normalized
     }
 
+    /// Health values are user-entered and can arrive from legacy snapshots or
+    /// relational rows. Repair only structural issues at the local boundary;
+    /// impossible energy values are discarded rather than silently rewritten.
+    /// As with Work, a repair is kept in Recovery and is not queued until
+    /// reconciliation has compared the server revision.
+    private func sanitizedHealthWorkspace(
+        _ workspace: HealthWorkspace,
+        store: WorkspaceFileStore,
+        syncEngine: WorkspaceSyncEngine? = nil,
+        allowSync: Bool = false
+    ) async -> HealthWorkspace {
+        let sanitized = rootineSanitizedHealthWorkspace(workspace)
+        guard sanitized != workspace else { return workspace }
+        if let data = try? JSONEncoder().encode(workspace) {
+            _ = try? await store.writeRecoveryCopy(data, label: "health-sanitized", kind: .diagnostic)
+        }
+        var persisted = sanitized
+        persisted.updatedAt = RootineDate.isoTimestamp()
+        try? await store.save(persisted, key: .health)
+
+        let mapped: JSONValue?
+        if let shadow = canonicalShadows[.health] {
+            mapped = try? RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: persisted, onto: shadow)
+        } else {
+            mapped = try? RootineCanonicalWorkspaceMapping.payload(for: persisted)
+        }
+        if let mapped {
+            canonicalShadows[.health] = mapped
+            if allowSync,
+               !archiveImportInProgress,
+               let syncEngine {
+                _ = try? await syncEngine.enqueue(
+                    payload: mapped,
+                    storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: .health)
+                )
+            }
+        }
+        foundationMessage = "Nieprawidłowe dane zdrowia zachowano w Recovery i bezpiecznie wyczyszczono"
+        return persisted
+    }
+
     private func loadAndReconcile(accessToken: String, flushAfterReconcile: Bool = true) async {
         if normalizedReadEnabled {
             await loadNormalizedAndReconcile(accessToken: accessToken)
@@ -2745,22 +4874,30 @@ final class AppEnvironment: ObservableObject {
         do {
             let localTasks = try await store.load(TaskWorkspace.self, key: .tasks)
             let localNutrition = try await store.load(NutritionWorkspace.self, key: .nutrition)
+            await loadNutritionProductCache(from: store)
             let localNotes = try await store.load(NotesWorkspace.self, key: .notes)
             let localSport = try await store.load(SportWorkspace.self, key: .sport)
             let localGoals = try await store.load(GoalsWorkspace.self, key: .goals)
             let localWorkRaw = try await store.load(WorkWorkspace.self, key: .work)
             let localWork = localWorkRaw.map(rootineSanitizedWorkWorkspace)
             let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
-            let localHealth = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealthRaw = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealth = localHealthRaw.map(rootineSanitizedHealthWorkspace)
             let localAffairsRaw = try await store.load(AffairsWorkspace.self, key: .affairs)
             let localAffairs = localAffairsRaw.map(normalizedAffairsWorkspace)
             let state = (try await store.load(RootineNormalizedReadState.self, key: .normalizedReadState)) ?? RootineNormalizedReadState()
             guard state.contractVersion == RootineRelationalWorkspaceAdapter.supportedContractVersion else {
                 throw RootineNormalizedReadError.schemaMismatch(expected: RootineRelationalWorkspaceAdapter.supportedContractVersion, actual: state.contractVersion)
             }
+            normalizedRecordRevisions = state.recordRevisions
 
-            let current = RootineRelationalMaterialization(documents: state.documents, revisions: [:])
+            let current = RootineRelationalMaterialization(
+                documents: state.documents,
+                revisions: [:],
+                recordRevisions: normalizedRecordRevisions
+            )
             let fetched = try await fetchNormalizedMaterialization(cursor: state.cursor, base: current, accessToken: accessToken)
+            normalizedRecordRevisions = fetched.recordRevisions
             let decoded = try decodeNormalizedWorkspaces(fetched)
             let pending = try await store.pendingMutations()
             let decisions = [
@@ -2780,7 +4917,7 @@ final class AppEnvironment: ObservableObject {
             // then makes aggregate files, relational state and cursor a
             // single publish point; a failed materializer never advances the
             // cursor or leaves a mixed set of workspaces.
-            for key in [RootineStorageKey.sport, .goals, .work, .travel, .health] {
+            for key in [RootineStorageKey.sport, .goals, .work, .travel, .health, .notes] {
                 if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: key)] {
                     canonicalShadows[key] = payload
                 }
@@ -2797,10 +4934,11 @@ final class AppEnvironment: ObservableObject {
                 try await persistNormalizedDecision(decisions[7], key: .health, store: store)
                 try await persistNormalizedDecision(decisions[8], key: .affairs, store: store)
                 let nextState = RootineNormalizedReadState(
-                    contractVersion: RootineRelationalWorkspaceAdapter.supportedContractVersion,
-                    cursor: fetchedCursor,
-                    documents: fetched.documents
-                )
+                contractVersion: RootineRelationalWorkspaceAdapter.supportedContractVersion,
+                cursor: fetchedCursor,
+                documents: fetched.documents,
+                recordRevisions: fetched.recordRevisions
+            )
                 try await store.save(nextState, key: .normalizedReadState)
                 try await store.commitBatchTransaction(transaction)
             } catch {
@@ -2822,6 +4960,7 @@ final class AppEnvironment: ObservableObject {
             if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .work)] { canonicalShadows[.work] = payload }
             if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .travel)] { canonicalShadows[.travel] = payload }
             if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .health)] { canonicalShadows[.health] = payload }
+            if let payload = fetched.documents[RootineRelationalWorkspaceAdapter.canonicalStorageKey(for: .notes)] { canonicalShadows[.notes] = payload }
             if conflictKeys.isEmpty {
                 workspaceSyncStatus = .synced
                 foundationMessage = "Relacyjny stan został bezpiecznie uzgodniony"
@@ -2848,10 +4987,9 @@ final class AppEnvironment: ObservableObject {
         accessToken: String
     ) async throws -> RootineRelationalMaterialization {
         if cursor == nil {
-            let response = try await normalizedReadClient.bootstrap(accessToken: accessToken)
-            let result = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: response)
-            fetchedCursor = response.serverCursor
-            return result
+            let bootstrap = try await fetchNormalizedBootstrap(accessToken: accessToken)
+            fetchedCursor = bootstrap.cursor
+            return bootstrap.materialization
         }
         var result = base
         var nextCursor = cursor
@@ -2861,22 +4999,63 @@ final class AppEnvironment: ObservableObject {
             do {
                 response = try await normalizedReadClient.pullChanges(cursor: nextCursor, limit: 500, accessToken: accessToken)
             } catch RootineNormalizedReadError.cursorExpired {
-                let bootstrap = try await normalizedReadClient.bootstrap(accessToken: accessToken)
-                result = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: bootstrap)
-                nextCursor = bootstrap.serverCursor
-                fetchedCursor = nextCursor
+                let bootstrap = try await fetchNormalizedBootstrap(accessToken: accessToken)
+                result = bootstrap.materialization
+                nextCursor = bootstrap.cursor
+                fetchedCursor = bootstrap.cursor
                 return result
             }
             guard RootineRelationalWorkspaceAdapter.supportedTransportContractVersions.contains(response.contractVersion) else {
                 throw RootineNormalizedReadError.schemaMismatch(expected: RootineRelationalWorkspaceAdapter.supportedContractVersion, actual: response.contractVersion)
             }
             result = try RootineRelationalWorkspaceAdapter.materialize(changes: response.changes, onto: result)
-            guard response.nextCursor >= (nextCursor ?? 0) else { throw RootineNormalizedReadError.contractMismatch("cursor cofa się") }
+            let currentCursor = nextCursor ?? 0
+            guard response.nextCursor >= currentCursor else { throw RootineNormalizedReadError.contractMismatch("cursor cofa się") }
+            guard !response.hasMore || response.nextCursor > currentCursor else {
+                throw RootineNormalizedReadError.contractMismatch("pull pagination nie robi postępu")
+            }
             nextCursor = response.nextCursor
             hasMore = response.hasMore
         }
         fetchedCursor = nextCursor
         return result
+    }
+
+    private func fetchNormalizedBootstrap(
+        accessToken: String
+    ) async throws -> (materialization: RootineRelationalMaterialization, cursor: Int64) {
+        let response = try await normalizedReadClient.bootstrap(accessToken: accessToken)
+        var result = try RootineRelationalWorkspaceAdapter.materialize(bootstrap: response)
+        guard response.hasMore else {
+            return (result, max(response.serverCursor, response.nextCursor ?? response.serverCursor))
+        }
+
+        // sync-v3 bootstrap has no request cursor. Continue after its bounded
+        // first page before persisting any cursor, otherwise newer records are
+        // skipped on large accounts. Starting at next_cursor also works after
+        // cursor expiry, where pulling from zero is intentionally rejected.
+        guard let bootstrapCursor = response.nextCursor else {
+            throw RootineNormalizedReadError.contractMismatch("bootstrap bez next_cursor")
+        }
+        guard bootstrapCursor < response.serverCursor else {
+            throw RootineNormalizedReadError.contractMismatch("bootstrap next_cursor wykracza poza server_cursor")
+        }
+        var pullCursor = bootstrapCursor
+        var hasMore = true
+        while hasMore {
+            let page = try await normalizedReadClient.pullChanges(
+                cursor: pullCursor,
+                limit: 500,
+                accessToken: accessToken
+            )
+            guard page.nextCursor > pullCursor || !page.hasMore else {
+                throw RootineNormalizedReadError.contractMismatch("bootstrap pagination nie robi postępu")
+            }
+            result = try RootineRelationalWorkspaceAdapter.materialize(changes: page.changes, onto: result)
+            pullCursor = page.nextCursor
+            hasMore = page.hasMore
+        }
+        return (result, pullCursor)
     }
 
     private func fallbackToLegacyRead(error: RootineNormalizedReadError, accessToken: String) async {
@@ -2929,7 +5108,7 @@ final class AppEnvironment: ObservableObject {
             work: try canonical(.work, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:)),
             travel: try canonical(.travel, decode: RootineCanonicalWorkspaceMapping.travelWorkspace(from:)),
             health: try canonical(.health, decode: RootineCanonicalWorkspaceMapping.healthWorkspace(from:)),
-            affairs: try direct(AffairsWorkspace.self, key: .affairs)
+            affairs: try direct(AffairsWorkspace.self, key: .affairs).map(AffairsWorkspaceRules.normalized)
         )
     }
 
@@ -2987,7 +5166,11 @@ final class AppEnvironment: ObservableObject {
             switch key {
             case .tasks: try await store.save(decision.value as! TaskWorkspace, key: key)
             case .nutrition: try await store.save(decision.value as! NutritionWorkspace, key: key)
-            case .notes: try await store.save(decision.value as! NotesWorkspace, key: key)
+            case .notes:
+                if decision.shouldPersist {
+                    try await store.save(decision.value as! NotesWorkspace, key: key)
+                }
+                if let payload = canonicalShadows[key] { try await store.save(payload, key: .notesCanonicalShadow) }
             case .sport:
                 try await store.save(decision.value as! SportWorkspace, key: key)
                 if let payload = canonicalShadows[key] { try await store.save(payload, key: .sportCanonicalShadow) }
@@ -3028,6 +5211,7 @@ final class AppEnvironment: ObservableObject {
             await loadCanonicalShadows(from: store)
             let localTasks = try await store.load(TaskWorkspace.self, key: .tasks)
             let localNutrition = try await store.load(NutritionWorkspace.self, key: .nutrition)
+            await loadNutritionProductCache(from: store)
             let localNotes = try await store.load(NotesWorkspace.self, key: .notes)
             let localSport = try await store.load(SportWorkspace.self, key: .sport)
             let localGoals = try await store.load(GoalsWorkspace.self, key: .goals)
@@ -3039,7 +5223,13 @@ final class AppEnvironment: ObservableObject {
                 localWork = nil
             }
             let localTravel = try await store.load(TravelWorkspace.self, key: .travel)
-            let localHealth = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealthRaw = try await store.load(HealthWorkspace.self, key: .health)
+            let localHealth: HealthWorkspace?
+            if let localHealthRaw {
+                localHealth = await sanitizedHealthWorkspace(localHealthRaw, store: store, syncEngine: syncEngine, allowSync: false)
+            } else {
+                localHealth = nil
+            }
             let localAffairsRaw = (try await store.load(AffairsWorkspace.self, key: .affairs)) ?? .empty
             let localAffairs = await sanitizedAffairsWorkspace(localAffairsRaw, store: store, syncEngine: syncEngine, allowSync: false)
             let remoteRows = try await api.readSnapshots(accessToken: accessToken)
@@ -3052,7 +5242,7 @@ final class AppEnvironment: ObservableObject {
 
             let taskResult = try await reconcile(localTasks, fallback: .empty, key: .tasks, remote: remote, store: store, syncEngine: syncEngine)
             let nutritionResult = try await reconcile(localNutrition, fallback: .empty, key: .nutrition, remote: remote, store: store, syncEngine: syncEngine)
-            let notesResult = try await reconcile(localNotes, fallback: .empty, key: .notes, remote: remote, store: store, syncEngine: syncEngine)
+            let notesResult = try await reconcileCanonical(localNotes, fallback: .empty, key: .notes, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedNotesPayload, decode: RootineCanonicalWorkspaceMapping.notesWorkspace(from:))
             let sportResult = try await reconcileCanonical(localSport, fallback: .empty, key: .sport, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload, decode: RootineCanonicalWorkspaceMapping.sportWorkspace(from:))
             let goalsResult = try await reconcileCanonical(localGoals, fallback: .empty, key: .goals, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload, decode: RootineCanonicalWorkspaceMapping.goalsWorkspace(from:))
             let workResult = try await reconcileCanonical(localWork, fallback: .empty, key: .work, remote: remote, store: store, syncEngine: syncEngine, encode: RootineCanonicalWorkspaceMapping.payload, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload, decode: RootineCanonicalWorkspaceMapping.workWorkspace(from:))
@@ -3066,7 +5256,7 @@ final class AppEnvironment: ObservableObject {
             goalsWorkspace = goalsResult.value
             workWorkspace = await sanitizedWorkWorkspace(workResult.value, store: store, allowSync: true)
             travelWorkspace = travelResult.value
-            healthWorkspace = healthResult.value
+            healthWorkspace = await sanitizedHealthWorkspace(healthResult.value, store: store, syncEngine: syncEngine, allowSync: true)
             affairsWorkspace = await sanitizedAffairsWorkspace(affairsResult.value, store: store, syncEngine: syncEngine, allowSync: true)
             await reconcileLocalNotifications()
             let reconciliationResults: [(RootineStorageKey, Bool)] = [

@@ -64,11 +64,15 @@ enum RootineB05RelationalReadAdapter {
     static func bootstrap(
         contractVersion: Int = 3,
         serverCursor: Int64,
+        nextCursor: Int64? = nil,
+        hasMore: Bool = false,
         changes: [RootineRelationalPullChange]
     ) -> RootineRelationalBootstrapResponse {
         RootineRelationalBootstrapResponse(
             contractVersion: contractVersion,
             serverCursor: serverCursor,
+            nextCursor: nextCursor,
+            hasMore: hasMore,
             changes: changes
         )
     }
@@ -107,7 +111,26 @@ final class UserDefaultsRootineReadFeatureFlagStore: RootineReadFeatureFlagStore
     }
 
     func normalizedReadEnabled(accountID: String, environment: String) -> Bool {
-        defaults.object(forKey: key(accountID: accountID, environment: environment)) as? Bool ?? false
+        let currentKey = key(accountID: accountID, environment: environment)
+        if let current = defaults.object(forKey: currentKey) {
+            guard let value = current as? Bool else {
+                defaults.removeObject(forKey: currentKey)
+                return false
+            }
+            return value
+        }
+        // Keep the existing rollout decision when upgrading from the raw-key
+        // implementation, then copy it to the one-way key. Keep the legacy
+        // value read-only so a downgrade remains possible without a data-loss
+        // migration; new writes never update that raw key.
+        let legacy = legacyKey(accountID: accountID, environment: environment)
+        guard let legacyObject = defaults.object(forKey: legacy) else { return false }
+        guard let value = legacyObject as? Bool else {
+            defaults.removeObject(forKey: legacy)
+            return false
+        }
+        defaults.set(value, forKey: currentKey)
+        return value
     }
 
     func setNormalizedReadEnabled(_ enabled: Bool, accountID: String, environment: String) {
@@ -115,6 +138,14 @@ final class UserDefaultsRootineReadFeatureFlagStore: RootineReadFeatureFlagStore
     }
 
     private func key(accountID: String, environment: String) -> String {
+        RootineSecureStorageSupport.defaultsKey(
+            prefix: "\(prefix).normalized_read_enabled",
+            accountID: accountID,
+            environment: environment
+        )
+    }
+
+    private func legacyKey(accountID: String, environment: String) -> String {
         "\(prefix).normalized_read_enabled.\(environment).\(accountID)"
     }
 }
@@ -261,6 +292,8 @@ struct RootineRelationalWorkspace: Codable, Equatable, Sendable {
 struct RootineRelationalBootstrapResponse: Codable, Equatable, Sendable {
     var contractVersion: Int
     var serverCursor: Int64
+    var nextCursor: Int64?
+    var hasMore: Bool
     var oldestCursor: Int64?
     var workspaces: [RootineRelationalWorkspace]
     var changes: [RootineRelationalPullChange]
@@ -268,12 +301,16 @@ struct RootineRelationalBootstrapResponse: Codable, Equatable, Sendable {
     init(
         contractVersion: Int = 1,
         serverCursor: Int64,
+        nextCursor: Int64? = nil,
+        hasMore: Bool = false,
         oldestCursor: Int64? = nil,
         workspaces: [RootineRelationalWorkspace] = [],
         changes: [RootineRelationalPullChange] = []
     ) {
         self.contractVersion = contractVersion
         self.serverCursor = serverCursor
+        self.nextCursor = nextCursor
+        self.hasMore = hasMore
         self.oldestCursor = oldestCursor
         self.workspaces = workspaces
         self.changes = changes
@@ -283,6 +320,7 @@ struct RootineRelationalBootstrapResponse: Codable, Equatable, Sendable {
         case contractVersion = "contract_version"
         case serverCursor = "server_cursor"
         case nextCursor = "next_cursor"
+        case hasMore = "has_more"
         case oldestCursor = "oldest_cursor"
         case workspaces
         case state
@@ -295,6 +333,8 @@ struct RootineRelationalBootstrapResponse: Codable, Equatable, Sendable {
         serverCursor = try container.decodeIfPresent(Int64.self, forKey: .serverCursor)
             ?? container.decodeIfPresent(Int64.self, forKey: .nextCursor)
             ?? 0
+        nextCursor = try container.decodeIfPresent(Int64.self, forKey: .nextCursor)
+        hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
         oldestCursor = try container.decodeIfPresent(Int64.self, forKey: .oldestCursor)
         workspaces = try container.decodeIfPresent([RootineRelationalWorkspace].self, forKey: .workspaces) ?? []
         changes = try container.decodeIfPresent([RootineRelationalPullChange].self, forKey: .changes) ?? []
@@ -310,6 +350,8 @@ struct RootineRelationalBootstrapResponse: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(contractVersion, forKey: .contractVersion)
         try container.encode(serverCursor, forKey: .serverCursor)
+        try container.encodeIfPresent(nextCursor, forKey: .nextCursor)
+        try container.encode(hasMore, forKey: .hasMore)
         try container.encodeIfPresent(oldestCursor, forKey: .oldestCursor)
         try container.encode(workspaces, forKey: .workspaces)
         try container.encode(changes, forKey: .changes)
@@ -358,21 +400,51 @@ struct RootineNormalizedReadState: Codable, Equatable, Sendable {
     var contractVersion: Int
     var cursor: Int64?
     var documents: [String: JSONValue]
+    /// Survives relaunch so Notes can continue per-record CAS after an
+    /// incremental pull instead of reverting to aggregate writes.
+    var recordRevisions: [String: Int64]
 
-    init(contractVersion: Int = 1, cursor: Int64? = nil, documents: [String: JSONValue] = [:]) {
+    init(
+        contractVersion: Int = 1,
+        cursor: Int64? = nil,
+        documents: [String: JSONValue] = [:],
+        recordRevisions: [String: Int64] = [:]
+    ) {
         self.contractVersion = contractVersion
         self.cursor = cursor
         self.documents = documents
+        self.recordRevisions = recordRevisions
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case contractVersion, cursor, documents, recordRevisions
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        contractVersion = try container.decode(Int.self, forKey: .contractVersion)
+        cursor = try container.decodeIfPresent(Int64.self, forKey: .cursor)
+        documents = try container.decode([String: JSONValue].self, forKey: .documents)
+        recordRevisions = try container.decodeIfPresent([String: Int64].self, forKey: .recordRevisions) ?? [:]
     }
 }
 
 struct RootineRelationalMaterialization: Equatable, Sendable {
     var documents: [String: JSONValue]
     var revisions: [String: Int64]
+    /// Per-record revisions are retained alongside document revisions so a
+    /// normalized Notes mutation can use compare-and-swap even when the
+    /// aggregate snapshot contains many notes.
+    var recordRevisions: [String: Int64]
 
-    init(documents: [String: JSONValue] = [:], revisions: [String: Int64] = [:]) {
+    init(
+        documents: [String: JSONValue] = [:],
+        revisions: [String: Int64] = [:],
+        recordRevisions: [String: Int64] = [:]
+    ) {
         self.documents = documents
         self.revisions = revisions
+        self.recordRevisions = recordRevisions
     }
 }
 
@@ -394,7 +466,7 @@ enum RootineRelationalWorkspaceAdapter {
         try validate(contractVersion: bootstrap.contractVersion)
         var result = base
         for workspace in bootstrap.workspaces {
-            let key = try storageKey(for: workspace.storageKey, entity: nil)
+            let key = try storageKey(for: workspace.storageKey, entity: "workspace")
             if let payload = workspace.payload { result.documents[key] = try fullDocument(payload, key: key) }
             // Some early B04 materializer responses omit a per-document
             // revision and only expose the global cursor. Treat that cursor
@@ -421,8 +493,17 @@ enum RootineRelationalWorkspaceAdapter {
             guard !change.entity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw RootineNormalizedReadError.contractMismatch("brak encji")
             }
-            let key = try storageKey(for: change.storageKey, entity: change.entity)
+            let key = try storageKey(for: change.storageKey, entity: change.entity, entityID: change.entityID)
             let operation = normalized(change.operation)
+            if isOpaqueWebOnlyKey(key, entity: change.entity)
+                && (operation == "delete" || operation == "remove" || operation == "tombstone") {
+                // Native clients do not decode web-only documents, but they
+                // must still advance the cursor and forget an explicitly
+                // deleted opaque document rather than failing the whole pull.
+                result.documents.removeValue(forKey: key)
+                result.revisions[key] = max(result.revisions[key] ?? 0, change.revision ?? change.cursor)
+                continue
+            }
             var document = result.documents[key] ?? emptyDocument(for: key)
             let record = change.record.map(canonicalize)
             if operation == "delete" || operation == "remove" || operation == "tombstone" {
@@ -432,6 +513,11 @@ enum RootineRelationalWorkspaceAdapter {
             }
             result.documents[key] = document
             result.revisions[key] = max(result.revisions[key] ?? 0, change.revision ?? change.cursor)
+            let recordKey = "\(key)\u{1F}\(normalized(change.entity))\u{1F}\(normalized(change.entityID))"
+            result.recordRevisions[recordKey] = max(
+                result.recordRevisions[recordKey] ?? 0,
+                change.revision ?? change.cursor
+            )
         }
         return result
     }
@@ -466,7 +552,7 @@ enum RootineRelationalWorkspaceAdapter {
         }
     }
 
-    private static func storageKey(for raw: String?, entity: String?) throws -> String {
+    private static func storageKey(for raw: String?, entity: String?, entityID: String? = nil) throws -> String {
         let value = normalized(raw ?? "")
         let entityName = normalized(entity ?? "")
         let known = [
@@ -489,6 +575,19 @@ enum RootineRelationalWorkspaceAdapter {
             result[normalized(pair.key)] = pair.value
         }
         if let resolved = normalizedKnown[value] { return resolved }
+        if value.hasPrefix("rootine"), !value.isEmpty {
+            // B06 deliberately leaves web-only workspace keys opaque. Keep
+            // their exact key and payload in the normalized state so a native
+            // round-trip cannot erase data it does not understand.
+            return raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? value
+        }
+        if value.isEmpty,
+           let entityID,
+           normalized(entityID).hasPrefix("rootine") {
+            // B03's transport predates B06.storage_key and carries a bridge
+            // storage key as entity_id instead.
+            return entityID.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         if !value.isEmpty { throw RootineNormalizedReadError.contractMismatch("nieznany storage_key \(raw ?? value)") }
         switch entityName {
         case let name where name.hasPrefix("task") || name.hasPrefix("habit"): return RootineStorageKey.tasks.rawValue
@@ -497,7 +596,7 @@ enum RootineRelationalWorkspaceAdapter {
         case let name where name.hasPrefix("sport") || name == "workout" || name == "workouts" || name == "exercise" || name == "exercises" || name == "template" || name == "templates" || name == "cycle" || name == "cycles" || name == "session" || name == "sessions" || name == "history" || name == "execution" || name == "executions": return canonicalStorageKey(for: .sport)
         case let name where name.hasPrefix("goal") || name == "goals" || name == "milestone" || name == "milestones" || name == "progressentry" || name == "progressentries" || name == "category" || name == "categories": return canonicalStorageKey(for: .goals)
         case let name where name.hasPrefix("work") || name == "company" || name == "companies" || name == "project" || name == "projects" || name == "focussession" || name == "focussessions": return canonicalStorageKey(for: .work)
-        case let name where name.hasPrefix("travel") || name == "trip" || name == "trips" || name.hasPrefix("tripitinerary") || name == "itineraryitem" || name == "itineraryitems" || name.hasPrefix("tripbooking") || name == "booking" || name == "bookings" || name.hasPrefix("tripbudget") || name == "budgetitem" || name == "budgetitems" || name.hasPrefix("tripdocument") || name == "stay" || name == "stays" || name.hasPrefix("trippacking") || name == "packingitem" || name == "packingitems": return canonicalStorageKey(for: .travel)
+        case let name where name.hasPrefix("travel") || name == "trip" || name == "trips" || name.hasPrefix("tripitinerary") || name == "itineraryitem" || name == "itineraryitems" || name.hasPrefix("tripbooking") || name == "booking" || name == "bookings" || name.hasPrefix("tripbudget") || name == "budgetitem" || name == "budgetitems" || name.hasPrefix("tripdocument") || name.hasPrefix("triptransport") || name == "stay" || name == "stays" || name == "transport" || name == "transports" || name.hasPrefix("trippacking") || name == "packingitem" || name == "packingitems": return canonicalStorageKey(for: .travel)
         case let name where name.hasPrefix("health") || name == "checkin" || name == "checkins" || name == "reminder" || name == "reminders" || name == "visit" || name == "visits" || name == "test" || name == "tests" || name == "prescription" || name == "prescriptions" || name == "vaccination" || name == "vaccinations": return canonicalStorageKey(for: .health)
         case let name where name.hasPrefix("affair") || name.hasPrefix("jdg") || name == "matter" || name == "matters" || name == "payment" || name == "payments" || name == "subscription" || name == "subscriptions" || name == "document" || name == "documents" || name == "vehicle" || name == "vehicles" || name == "budgetline" || name == "budgetlines" || name == "budgetmonth" || name == "budgetmonths" || name == "attentionstate" || name == "attentionstates": return RootineStorageKey.affairs.rawValue
         default: throw RootineNormalizedReadError.contractMismatch("nieznana encja \(entityName)")
@@ -510,6 +609,12 @@ enum RootineRelationalWorkspaceAdapter {
     }
 
     private static func upserting(document: JSONValue, key: String, entity: String, entityID: String, record: JSONValue) throws -> JSONValue {
+        if isOpaqueWebOnlyKey(key, entity: entity) {
+            guard case .object = record else {
+                throw RootineNormalizedReadError.materializationFailed("wiersz \(entity) nie jest obiektem")
+            }
+            return record
+        }
         if isFullDocument(record, key: key) { return record }
         if let wrapped = wrappedPayload(record), isFullDocument(wrapped, key: key) { return wrapped }
         guard case .object(var root) = document, case .object(var row) = record else {
@@ -557,6 +662,9 @@ enum RootineRelationalWorkspaceAdapter {
                     })
                 }
             }
+        } else if key == RootineStorageKey.notes.rawValue && (name == "note" || name == "notes" || name == "notelist" || name == "notelists" || name == "list" || name == "lists") {
+            let collection = name.contains("list") ? "lists" : "notes"
+            removeArray(&root, key: collection, id: id)
         } else if key == RootineStorageKey.notes.rawValue && (name == "notechecklistitem" || name == "notechecklistitems" || name == "checklistitem" || name == "checklistitems" || name == "notetag" || name == "notetags") {
             let noteID = stringValue(row["noteId"] ?? row["note_id"]) ?? ""
             if name.contains("checklist") && !noteID.isEmpty {
@@ -575,7 +683,9 @@ enum RootineRelationalWorkspaceAdapter {
             let child: String
             switch name {
             case "travelitineraryitem", "travelitineraryitems", "itineraryitem", "itineraryitems": child = "itinerary"
-            case "travelbooking", "travelbookings", "booking", "bookings", "travelstay", "travelstays", "stay", "stays": child = "stays"
+            case "travelbooking", "travelbookings", "booking", "bookings": child = "bookings"
+            case "travelstay", "travelstays", "stay", "stays": child = "stays"
+            case "traveltransport", "traveltransports", "transport", "transports": child = "transports"
             case "travelbudgetitem", "travelbudgetitems", "budgetitem", "budgetitems": child = "budget"
             case "traveldocument", "traveldocuments": child = "documents"
             case "travelpackingitem", "travelpackingitems", "packingitem", "packingitems": child = "packingItems"
@@ -597,6 +707,23 @@ enum RootineRelationalWorkspaceAdapter {
                         normalized(stringValue(objectValue($0)?["id"]) ?? "") != id
                     })
                 }
+            }
+        } else if key == RootineStorageKey.affairs.rawValue {
+            let child: String?
+            switch name {
+            case "affairmatter", "affairmatters", "matter", "matters": child = "matters"
+            case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments", "payment", "payments": child = "oneTimePayments"
+            case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments": child = "payments"
+            case "affairsubscription", "affairsubscriptions", "subscription", "subscriptions": child = "subscriptions"
+            case "affairdocument", "affairdocuments", "document", "documents": child = "documents"
+            case "affairvehicle", "affairvehicles", "vehicle", "vehicles": child = "vehicles"
+            case "affairvehicleitem", "affairvehicleitems", "vehicleserviceitem", "vehicleserviceitems", "vehicleitem", "vehicleitems": child = "vehicleItems"
+            case "affairbudgetmonth", "affairbudgetmonths", "budgetmonth", "budgetmonths": child = "budgets"
+            case "affairattentionstate", "affairattentionstates", "attentionstate", "attentionstates": child = "attentionStates"
+            default: child = nil
+            }
+            if let child {
+                removeArray(&root, key: child, id: id)
             }
         } else if let collection = collectionKey(for: name, document: key) {
             if collection.dictionary {
@@ -761,7 +888,11 @@ enum RootineRelationalWorkspaceAdapter {
     private static func applyNotes(row: [String: JSONValue], id: String, entity: String, to root: inout [String: JSONValue]) throws {
         switch entity {
         case "notelist", "notelists", "list", "lists":
-            try upsertArray(&root, key: "lists", id: id, value: .object(row))
+            var value = row
+            value["id"] = .string(id)
+            value["name"] = row["name"] ?? row["label"] ?? .string("")
+            value["createdAt"] = row["createdAt"] ?? row["created_at"] ?? .string(RootineDate.isoTimestamp())
+            try upsertArray(&root, key: "lists", id: id, value: .object(value))
         case "note", "notes":
             var value = row
             value["id"] = .string(id)
@@ -774,13 +905,19 @@ enum RootineRelationalWorkspaceAdapter {
             value["color"] = row["color"] ?? .string("graphite")
             value["pinned"] = row["pinned"] ?? .bool(false)
             value["archived"] = row["archived"] ?? .bool(false)
+            value["createdAt"] = row["createdAt"] ?? row["created_at"] ?? .string(RootineDate.isoTimestamp())
+            value["updatedAt"] = row["updatedAt"] ?? row["updated_at"] ?? value["createdAt"] ?? .string(RootineDate.isoTimestamp())
             try upsertArray(&root, key: "notes", id: id, value: .object(value))
         case "notechecklistitem", "notechecklistitems", "checklistitem", "checklistitems":
             let noteID = stringValue(row["noteId"] ?? row["note_id"]) ?? ""
             guard !noteID.isEmpty else { throw RootineNormalizedReadError.contractMismatch("element checklisty bez notatki") }
             try updateArrayObject(&root, key: "notes", id: noteID) { note in
+                var item = row
+                item["id"] = .string(id)
+                item["text"] = row["text"] ?? .string("")
+                item["checked"] = row["checked"] ?? .bool(false)
                 var items = arrayValue(note["items"])
-                upsert(&items, id: id, value: .object(row))
+                upsert(&items, id: id, value: .object(item))
                 note["items"] = .array(items)
             }
         case "notetag", "notetags", "tag", "tags":
@@ -988,16 +1125,27 @@ enum RootineRelationalWorkspaceAdapter {
             value["destination"] = row["destination"] ?? .string("")
             value["startDate"] = row["startDate"] ?? row["start_date"] ?? .string(RootineDate.localDate())
             value["endDate"] = row["endDate"] ?? row["end_date"] ?? value["startDate"]!
-            value["status"] = row["status"] ?? .string("planning")
+            // The relational table has a few operational states that are not
+            // part of the web travel contract. Keep the materialized payload
+            // valid instead of leaking an un-decodable status downstream.
+            let rawStatus = stringValue(row["status"]) ?? "planning"
+            let status = ["idea", "planning", "ready", "completed"].contains(rawStatus)
+                ? rawStatus
+                : (rawStatus == "archived" || rawStatus == "cancelled" ? "completed" : "planning")
+            value["status"] = .string(status)
             value["travelers"] = row["travelers"] ?? .array([])
             value["baseCurrency"] = row["baseCurrency"] ?? row["base_currency"] ?? .string("PLN")
             value["note"] = row["note"] ?? .string("")
+            value["archivedAt"] = row["archivedAt"] ?? row["archived_at"] ?? .null
             value["stays"] = row["stays"] ?? .array([])
             value["transports"] = row["transports"] ?? .array([])
+            value["bookings"] = row["bookings"] ?? .array([])
             value["itinerary"] = row["itinerary"] ?? .array([])
             value["budget"] = row["budget"] ?? .array([])
             value["documents"] = row["documents"] ?? .array([])
             value["tasks"] = row["tasks"] ?? .array([])
+            value["packingItems"] = row["packingItems"] ?? .array([])
+            value["timezone"] = row["timezone"] ?? .null
             try upsertArray(&root, key: "trips", id: id, value: .object(value)); return
         }
         let tripID = stringValue(row["tripId"] ?? row["trip_id"]) ?? ""
@@ -1005,7 +1153,9 @@ enum RootineRelationalWorkspaceAdapter {
         let child: String
         switch entity {
         case "travelitineraryitem", "travelitineraryitems", "tripitineraryitem", "tripitineraryitems", "itineraryitem", "itineraryitems": child = "itinerary"
-        case "travelbooking", "travelbookings", "tripbooking", "tripbookings", "booking", "bookings", "travelstay", "travelstays", "tripstay", "tripstays", "stay", "stays": child = "stays"
+        case "travelbooking", "travelbookings", "tripbooking", "tripbookings", "booking", "bookings": child = "bookings"
+        case "travelstay", "travelstays", "tripstay", "tripstays", "stay", "stays": child = "stays"
+        case "traveltransport", "traveltransports", "triptransport", "triptransports", "transport", "transports": child = "transports"
         case "travelbudgetitem", "travelbudgetitems", "tripbudgetitem", "tripbudgetitems", "budgetitem", "budgetitems": child = "budget"
         case "traveldocument", "traveldocuments", "tripdocument", "tripdocuments": child = "documents"
         case "travelpackingitem", "travelpackingitems", "trippackingitem", "trippackingitems", "packingitem", "packingitems": child = "packingItems"
@@ -1022,6 +1172,84 @@ enum RootineRelationalWorkspaceAdapter {
             value["kind"] = row["kind"] ?? .string("activity")
             value["note"] = row["note"] ?? .string("")
             value["reserved"] = row["reserved"] ?? .bool(false)
+            value["startsAt"] = row["startsAt"] ?? row["starts_at"] ?? .null
+            value["endsAt"] = row["endsAt"] ?? row["ends_at"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "stays" {
+            value["name"] = row["name"] ?? row["provider"] ?? .string("Nocleg")
+            value["city"] = row["city"] ?? .string("")
+            value["address"] = row["address"] ?? .string("")
+            value["checkIn"] = row["checkIn"] ?? row["check_in"] ?? row["startsAt"] ?? row["starts_at"] ?? .string("")
+            value["checkOut"] = row["checkOut"] ?? row["check_out"] ?? row["endsAt"] ?? row["ends_at"] ?? .string("")
+            value["bookingRef"] = row["bookingRef"] ?? row["booking_reference"] ?? .string("")
+            let rawStayStatus = stringValue(row["status"]) ?? "planned"
+            value["status"] = .string(["planned", "booked", "paid"].contains(rawStayStatus) ? rawStayStatus : "planned")
+            let amountMinor: Double = {
+                if case .number(let number) = row["amountMinor"] ?? row["amount_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            value["amount"] = row["amount"] ?? .number(amountMinor / 100)
+            value["currency"] = row["currency"] ?? row["currencyCode"] ?? row["currency_code"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "bookings" {
+            value["provider"] = row["provider"] ?? .string("")
+            value["bookingReference"] = row["bookingReference"] ?? row["booking_reference"] ?? .string("")
+            let rawBookingStatus = stringValue(row["status"]) ?? "planned"
+            value["status"] = .string(["planned", "booked", "paid", "cancelled", "completed"].contains(rawBookingStatus) ? rawBookingStatus : "planned")
+            value["amountMinor"] = row["amountMinor"] ?? row["amount_minor"] ?? .null
+            value["currencyCode"] = row["currencyCode"] ?? row["currency_code"] ?? .null
+            value["startsAt"] = row["startsAt"] ?? row["starts_at"] ?? .null
+            value["endsAt"] = row["endsAt"] ?? row["ends_at"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "transports" {
+            value["mode"] = row["mode"] ?? .string("other")
+            value["title"] = row["title"] ?? .string("Transport")
+            value["from"] = row["from"] ?? .string("")
+            value["to"] = row["to"] ?? .string("")
+            value["departure"] = row["departure"] ?? row["startsAt"] ?? row["starts_at"] ?? .string("")
+            value["arrival"] = row["arrival"] ?? row["endsAt"] ?? row["ends_at"] ?? .string("")
+            value["bookingRef"] = row["bookingRef"] ?? row["booking_reference"] ?? .string("")
+            let rawTransportStatus = stringValue(row["status"]) ?? "planned"
+            value["status"] = .string(["planned", "booked", "paid"].contains(rawTransportStatus) ? rawTransportStatus : "planned")
+            let amountMinor: Double = {
+                if case .number(let number) = row["amountMinor"] ?? row["amount_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            value["amount"] = row["amount"] ?? .number(amountMinor / 100)
+            value["currency"] = row["currency"] ?? row["currencyCode"] ?? row["currency_code"] ?? .null
+            value["timezone"] = row["timezone"] ?? .null
+        } else if child == "budget" {
+            value["category"] = row["category"] ?? .string("other")
+            value["label"] = row["label"] ?? row["name"] ?? .string("Budżet")
+            let plannedMinor: Double = {
+                if case .number(let number) = row["plannedMinor"] ?? row["planned_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            let actualMinor: Double = {
+                if case .number(let number) = row["actualMinor"] ?? row["actual_minor"] ?? .number(0) { return number }
+                return 0
+            }()
+            value["planned"] = row["planned"] ?? .number(plannedMinor / 100)
+            value["actual"] = row["actual"] ?? .number(actualMinor / 100)
+            value["paid"] = row["paid"] ?? .bool(false)
+            value["currency"] = row["currency"] ?? row["currencyCode"] ?? row["currency_code"] ?? .null
+        } else if child == "documents" {
+            value["name"] = row["name"] ?? row["title"] ?? .string("Dokument")
+            value["owner"] = row["owner"] ?? .string("")
+            let rawStatus = stringValue(row["status"]) ?? "todo"
+            value["status"] = .string(["todo", "pending", "ready"].contains(rawStatus) ? rawStatus : "pending")
+            value["expiresAt"] = row["expiresAt"] ?? row["expires_at"] ?? .string("")
+            value["note"] = row["note"] ?? .string("")
+            value["storagePath"] = row["storagePath"] ?? row["storage_path"] ?? .null
+        } else if child == "packingItems" {
+            value["label"] = row["label"] ?? row["name"] ?? .string("Rzecz")
+            value["quantity"] = row["quantity"] ?? .number(1)
+            value["packed"] = row["packed"] ?? .bool(false)
+        } else if child == "tasks" {
+            value["title"] = row["title"] ?? row["name"] ?? .string("Zadanie")
+            value["category"] = row["category"] ?? .string("other")
+            value["dueDate"] = row["dueDate"] ?? row["due_date"] ?? .string("")
+            value["completed"] = row["completed"] ?? row["done"] ?? .bool(false)
         }
         try updateArrayObject(&root, key: "trips", id: tripID) { trip in
             var values = arrayValue(trip[child]); upsert(&values, id: id, value: .object(value)); trip[child] = .array(values)
@@ -1076,47 +1304,53 @@ enum RootineRelationalWorkspaceAdapter {
         case "affairmatter", "affairmatters", "matter", "matters":
             value["title"] = row["title"] ?? row["description"] ?? .string("Sprawa")
             value["category"] = row["category"] ?? .string("finanse")
-            value["priority"] = row["priority"] ?? .string("medium")
-            value["status"] = row["status"] ?? .string("open")
-            value["dueDate"] = row["dueDate"] ?? row["due_date"] ?? .string(RootineDate.localDate())
+            value["priority"] = affairMatterPriority(row["priority"])
+            value["status"] = affairMatterStatus(row["status"])
+            value["dueDate"] = affairDateValue(row["dueDate"] ?? row["due_date"]) ?? .string("")
             value["note"] = row["note"] ?? row["description"] ?? .string("")
             value["createdAt"] = row["createdAt"] ?? row["created_at"] ?? .string(RootineDate.isoTimestamp())
             collection = "matters"
-        case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments":
+        case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments", "payment", "payments":
             value["title"] = row["title"] ?? row["description"] ?? .string("Płatność")
             value["category"] = row["category"] ?? .string("finanse")
-            value["amount"] = row["amount"] ?? row["amountMinor"] ?? row["amount_minor"] ?? .number(0)
-            value["dueDate"] = row["dueDate"] ?? row["due_date"] ?? .string(RootineDate.localDate())
+            value["amount"] = affairMoneyValue(row["amount"], minor: row["amountMinor"] ?? row["amount_minor"]) ?? .number(0)
+            value["dueDate"] = affairDateValue(row["dueDate"] ?? row["due_date"]) ?? .string("")
             value["paid"] = row["paid"] ?? row["status"].map { value in stringValue(value) == "paid" ? .bool(true) : .bool(false) } ?? .bool(false)
             value["paidAt"] = row["paidAt"] ?? row["paid_at"] ?? .string("")
             value["note"] = row["note"] ?? row["description"] ?? .string("")
             collection = "oneTimePayments"
-        case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments", "payment", "payments":
+        case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments":
             value["name"] = row["name"] ?? row["description"] ?? .string("Płatność")
             value["category"] = row["category"] ?? .string("finanse")
-            value["amount"] = row["amount"] ?? row["amountMinor"] ?? row["amount_minor"] ?? .number(0)
+            value["amount"] = affairMoneyValue(row["amount"], minor: row["amountMinor"] ?? row["amount_minor"]) ?? .number(0)
             value["cadence"] = row["cadence"] ?? .string("monthly")
-            value["nextDueDate"] = row["nextDueDate"] ?? row["next_due_on"] ?? .string(RootineDate.localDate())
+            value["nextDueDate"] = affairDateValue(row["nextDueDate"] ?? row["next_due_on"]) ?? .string("")
             value["automatic"] = row["automatic"] ?? .bool(false)
-            value["active"] = row["active"] ?? (row["status"].map { .bool(stringValue($0) != "cancelled") } ?? .bool(true))
+            value["active"] = row["active"] ?? (row["status"].map {
+                let status = stringValue($0)?.lowercased() ?? ""
+                return .bool(!["paused", "cancelled", "expired", "inactive"].contains(status))
+            } ?? .bool(true))
             value["note"] = row["note"] ?? row["description"] ?? .string("")
             collection = "payments"
         case "affairsubscription", "affairsubscriptions", "subscription", "subscriptions":
             value["name"] = row["name"] ?? .string("Subskrypcja")
             value["category"] = row["category"] ?? .string("finanse")
-            value["amount"] = row["amount"] ?? row["amountMinor"] ?? row["amount_minor"] ?? .number(0)
+            value["amount"] = affairMoneyValue(row["amount"], minor: row["amountMinor"] ?? row["amount_minor"]) ?? .number(0)
             value["cadence"] = row["cadence"] ?? .string("monthly")
-            value["nextBillingDate"] = row["nextBillingDate"] ?? row["nextDueOn"] ?? row["next_due_on"] ?? .string(RootineDate.localDate())
-            value["renewal"] = row["renewal"] ?? .string("")
-            value["commitmentEndDate"] = row["commitmentEndDate"] ?? .string("")
-            value["active"] = row["active"] ?? .bool(true)
+            value["nextBillingDate"] = affairDateValue(row["nextBillingDate"] ?? row["nextDueOn"] ?? row["next_due_on"]) ?? .string("")
+            value["renewal"] = row["renewal"] ?? .string("manual")
+            value["commitmentEndDate"] = affairDateValue(row["commitmentEndDate"] ?? row["commitment_end_date"]) ?? .string("")
+            value["active"] = row["active"] ?? (row["status"].map {
+                let status = stringValue($0)?.lowercased() ?? ""
+                return .bool(!["paused", "cancelled", "expired", "inactive"].contains(status))
+            } ?? .bool(true))
             value["note"] = row["note"] ?? .string("")
             collection = "subscriptions"
         case "affairdocument", "affairdocuments", "document", "documents":
             value["name"] = row["name"] ?? .string("Dokument")
             value["category"] = row["category"] ?? row["documentType"] ?? .string("dokumenty")
             value["holder"] = row["holder"] ?? row["owner"] ?? .string("")
-            value["expiresAt"] = row["expiresAt"] ?? row["expires_at"] ?? .string("")
+            value["expiresAt"] = affairDateValue(row["expiresAt"] ?? row["expires_at"]) ?? .string("")
             value["reminderDays"] = row["reminderDays"] ?? .number(0)
             value["note"] = row["note"] ?? .string("")
             collection = "documents"
@@ -1130,7 +1364,8 @@ enum RootineRelationalWorkspaceAdapter {
             value["vehicleId"] = row["vehicleId"] ?? row["vehicle_id"] ?? .string("")
             value["title"] = row["title"] ?? row["serviceType"] ?? row["service_type"] ?? .string("Serwis")
             value["type"] = row["type"] ?? row["serviceType"] ?? row["service_type"] ?? .string("service")
-            value["dueDate"] = row["dueDate"] ?? row["nextDueOn"] ?? row["next_due_on"] ?? .string(RootineDate.localDate())
+            value["dueDate"] = affairDateValue(row["dueDate"] ?? row["nextDueOn"] ?? row["next_due_on"]) ?? .string("")
+            value["dueMileage"] = row["dueMileage"] ?? row["due_mileage"] ?? row["mileage"] ?? .null
             value["done"] = row["done"] ?? .bool(false)
             value["note"] = row["note"] ?? .string("")
             collection = "vehicleItems"
@@ -1186,7 +1421,19 @@ enum RootineRelationalWorkspaceAdapter {
         case "rootine.work-workspace.v1": return ("focusSessions", false)
         case "rootine.travel-workspace.v1": return ("trips", false)
         case "rootine.health.workspace.v1": return ("reminders", false)
-        case RootineStorageKey.affairs.rawValue: return ("matters", false)
+        case RootineStorageKey.affairs.rawValue:
+            switch entity {
+            case "affairmatter", "affairmatters", "matter", "matters": return ("matters", false)
+            case "affaironetimepayment", "affaironetimepayments", "onetimepayment", "onetimepayments", "payment", "payments": return ("oneTimePayments", false)
+            case "affairrecurringpayment", "affairrecurringpayments", "recurringpayment", "recurringpayments": return ("payments", false)
+            case "affairsubscription", "affairsubscriptions", "subscription", "subscriptions": return ("subscriptions", false)
+            case "affairdocument", "affairdocuments", "document", "documents": return ("documents", false)
+            case "affairvehicle", "affairvehicles", "vehicle", "vehicles": return ("vehicles", false)
+            case "affairvehicleitem", "affairvehicleitems", "vehicleserviceitem", "vehicleserviceitems", "vehicleitem", "vehicleitems": return ("vehicleItems", false)
+            case "affairbudgetmonth", "affairbudgetmonths", "budgetmonth", "budgetmonths": return ("budgets", false)
+            case "affairattentionstate", "affairattentionstates", "attentionstate", "attentionstates": return ("attentionStates", false)
+            default: return nil
+            }
         default: break
         }
         return nil
@@ -1203,7 +1450,18 @@ enum RootineRelationalWorkspaceAdapter {
     }
 
     private static func upsertArray(_ root: inout [String: JSONValue], key: String, id: String, value: JSONValue) throws {
-        var values = arrayValue(root[key]); upsert(&values, id: id, value: value); root[key] = .array(values)
+        var values = arrayValue(root[key])
+        if key == "budgets" {
+            if let index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["month"]) ?? "") == normalized(id) }) {
+                values[index] = value
+            } else {
+                values.append(value)
+            }
+            root[key] = .array(values)
+            return
+        }
+        upsert(&values, id: id, value: value)
+        root[key] = .array(values)
     }
 
     private static func upsert(_ values: inout [JSONValue], id: String, value: JSONValue) {
@@ -1229,7 +1487,13 @@ enum RootineRelationalWorkspaceAdapter {
 
     private static func updateArrayObject(_ root: inout [String: JSONValue], key: String, id: String, update: (inout [String: JSONValue]) -> Void) throws {
         var values = arrayValue(root[key])
-        guard let index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["id"]) ?? "") == normalized(id) }) else { return }
+        let index: Int?
+        if key == "budgets" {
+            index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["month"]) ?? "") == normalized(id) })
+        } else {
+            index = values.firstIndex(where: { normalized(stringValue(objectValue($0)?["id"]) ?? "") == normalized(id) })
+        }
+        guard let index else { return }
         guard case .object(var object) = values[index] else { return }
         update(&object); values[index] = .object(object); root[key] = .array(values)
     }
@@ -1241,7 +1505,12 @@ enum RootineRelationalWorkspaceAdapter {
     }
 
     private static func removeArray(_ root: inout [String: JSONValue], key: String, id: String) {
-        root[key] = .array(arrayValue(root[key]).filter { normalized(stringValue(objectValue($0)?["id"]) ?? "") != normalized(id) })
+        root[key] = .array(arrayValue(root[key]).filter {
+            let candidate = key == "budgets"
+                ? stringValue(objectValue($0)?["month"])
+                : stringValue(objectValue($0)?["id"])
+            return normalized(candidate ?? "") != normalized(id)
+        })
     }
 
     private static func objectValue(_ value: JSONValue?) -> [String: JSONValue]? { guard case .object(let value) = value else { return nil }; return value }
@@ -1251,6 +1520,37 @@ enum RootineRelationalWorkspaceAdapter {
         case .string(let value): return value
         case .number(let value): return value.rounded() == value ? String(Int(value)) : String(value)
         default: return nil
+        }
+    }
+
+    /// Relational finance tables use integer minor units (cents/grosze),
+    /// while the v2 aggregate contract uses major-unit JSON numbers. Prefer a
+    /// major-unit value when a compatibility row supplies both; otherwise
+    /// convert the minor-unit integer exactly before Affairs normalizes it.
+    private static func affairMoneyValue(_ major: JSONValue?, minor: JSONValue?) -> JSONValue? {
+        if let major, case .number(let value) = major, value.isFinite { return .number(value) }
+        guard let minor, case .number(let value) = minor, value.isFinite else { return nil }
+        return .number(value / 100)
+    }
+
+    private static func affairDateValue(_ value: JSONValue?) -> JSONValue? {
+        guard let raw = stringValue(value), !raw.isEmpty else { return nil }
+        let date = String(raw.prefix(10))
+        return AffairDate.isValid(date, allowingEmpty: false) ? .string(date) : nil
+    }
+
+    private static func affairMatterPriority(_ value: JSONValue?) -> JSONValue {
+        switch stringValue(value)?.lowercased() {
+        case "high", "urgent": return .string("high")
+        default: return .string("normal")
+        }
+    }
+
+    private static func affairMatterStatus(_ value: JSONValue?) -> JSONValue {
+        switch stringValue(value)?.lowercased() {
+        case "done", "completed", "resolved": return .string("done")
+        case "waiting", "in_progress", "in-progress": return .string("waiting")
+        default: return .string("open")
         }
     }
     private static func intValue(_ value: JSONValue) -> JSONValue { guard case .number(let value) = value else { return value }; return .number(value.rounded()) }
@@ -1324,6 +1624,20 @@ enum RootineRelationalWorkspaceAdapter {
         case RootineStorageKey.affairs.rawValue: return .object(["version": .number(2), "matters": .array([]), "oneTimePayments": .array([]), "payments": .array([]), "subscriptions": .array([]), "documents": .array([]), "vehicles": .array([]), "vehicleItems": .array([]), "budgets": .array([]), "attentionStates": .array([])])
         default: return .object([:])
         }
+    }
+    private static func isOpaqueWebOnlyKey(_ key: String, entity _: String) -> Bool {
+        guard !key.isEmpty else { return false }
+        return ![
+            RootineStorageKey.tasks.rawValue,
+            RootineStorageKey.nutrition.rawValue,
+            RootineStorageKey.notes.rawValue,
+            RootineStorageKey.affairs.rawValue,
+            "rootine-sport-planner-v1",
+            "rootine.goals.v1",
+            "rootine.work-workspace.v1",
+            "rootine.travel-workspace.v1",
+            "rootine.health.workspace.v1"
+        ].contains(key)
     }
     private static func defaultTaskSchedule() -> [String: JSONValue] { ["allDay": .bool(false), "startTime": .string(""), "timezone": .string("UTC")] }
     private static func defaultNutritionEntriesObject() -> [String: JSONValue] { ["breakfast": .array([]), "lunch": .array([]), "snack": .array([]), "dinner": .array([])] }

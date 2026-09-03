@@ -1,4 +1,5 @@
 import { getRootineStorageItem, setRootineStorageItem } from "../../app/data/accountStorage";
+import { rootineObservability } from "../../app/observability";
 import { supabase } from "./client";
 
 /**
@@ -60,6 +61,22 @@ export type DualWriteFlags = {
   observeReconciliation: boolean;
   reason?: string;
 };
+
+/** Keep provider/SQL details out of account-panel diagnostics. */
+export function redactSyncError(error: unknown, fallback = "Synchronizacja nie powiodła się.") {
+  const candidate = error && typeof error === "object"
+    ? error as { code?: unknown }
+    : {};
+  const code = typeof candidate.code === "string" && /^[A-Z0-9]{3,12}$/.test(candidate.code)
+    ? candidate.code
+    : undefined;
+  const message = code === "PGRST205"
+    ? "Brakuje tabeli synchronizacji Supabase. Zastosuj migracje."
+    : code === "PGRST202" || code === "42883"
+      ? "Brakuje aktualnego kontraktu synchronizacji Supabase. Zastosuj wszystkie migracje."
+      : fallback;
+  return code ? { code, message } : { message };
+}
 
 function fallbackUUID() {
   return `rootine-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -186,7 +203,9 @@ function parseRow(data: unknown, command: DualWriteCommand): DualWriteCommit | n
     clientSource: source,
     materialized: row.materialized !== false,
     reconciliationId: typeof row.reconciliation_id === "string" ? row.reconciliation_id : undefined,
-    message: typeof row.error_message === "string" ? row.error_message : undefined,
+    message: typeof row.error_message === "string"
+      ? redactSyncError(undefined).message
+      : undefined,
   };
 }
 
@@ -219,7 +238,24 @@ export async function commitWorkspaceThroughBridge(
   userId: string,
   command: DualWriteCommand,
 ): Promise<{ commit: DualWriteCommit | null; error: { code?: string; message: string } | null }> {
-  if (!supabase) return { commit: null, error: { message: "Supabase nie jest skonfigurowane." } };
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const recordOutcome = (outcome: "success" | "failure", status?: string, error?: unknown) => {
+    const endedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+    rootineObservability.recordSyncOperation({
+      endpoint: "push",
+      outcome,
+      status,
+      durationMs: Math.max(0, endedAt - startedAt),
+      correlationId: command.correlationId,
+      operationId: command.operationId,
+      error,
+      attributes: { source: command.clientSource, entity: command.storageKey },
+    });
+  };
+  if (!supabase) {
+    recordOutcome("failure", "missing_configuration", "missing configuration");
+    return { commit: null, error: { message: "Supabase nie jest skonfigurowane." } };
+  }
   const args = {
     p_storage_key: command.storageKey,
     p_payload: command.payload,
@@ -242,10 +278,17 @@ export async function commitWorkspaceThroughBridge(
       p_expected_revision: command.baseRevision,
     });
   }
-  if (response.error) return { commit: null, error: response.error };
+  if (response.error) {
+    recordOutcome("failure", "rpc_error", response.error);
+    return { commit: null, error: response.error };
+  }
   const commit = parseRow(response.data, command);
-  if (!commit) return { commit: null, error: { message: "Serwer nie zwrócił wyniku bridge’a zapisu." } };
+  if (!commit) {
+    recordOutcome("failure", "invalid_response", "invalid response");
+    return { commit: null, error: { message: "Serwer nie zwrócił wyniku bridge’a zapisu." } };
+  }
   writeSyncCursor(userId, commit.cursor);
+  recordOutcome(commit.applied ? "success" : "failure", commit.status, commit.message);
   return { commit, error: null };
 }
 

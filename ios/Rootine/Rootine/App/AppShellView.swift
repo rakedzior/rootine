@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -81,6 +82,9 @@ struct RootineEntryView: View {
         .onReceive(NotificationCenter.default.publisher(for: .rootineAPNsTokenDidRegister)) { _ in
             guard !isPreviewLaunch else { return }
             Task { await environment.registerDeviceForCurrentSession() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .rootineApplicationWillTerminate)) { _ in
+            environment.applicationWillTerminate()
         }
         .onChange(of: scenePhase) { _, phase in
             guard !isPreviewLaunch else { return }
@@ -619,12 +623,127 @@ private struct MoreAccountSheet: View {
 
 private struct RootineProfileView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @StateObject private var oauthSession = OAuthWebSession()
+    @State private var pendingProvider: RootineIdentityProvider?
+    @State private var appleNonce: String?
+    @State private var identityFeedback: String?
+    @State private var displayName = ""
+    @State private var isSavingProfile = false
+    @State private var profileMessage: String?
+    @State private var profileError: String?
+    @State private var deleteConfirmation = ""
+    @State private var isDeletingAccount = false
+
+    private var currentDisplayName: String {
+        guard let metadata = environment.session?.user.userMetadata else {
+            return environment.session?.user.email ?? ""
+        }
+        for key in ["full_name", "name", "display_name"] {
+            if case .string(let value) = metadata[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value
+            }
+        }
+        return environment.session?.user.email ?? ""
+    }
+
+    private var linkedProviders: Set<String> {
+        let identityProviders = environment.session?.user.identities?.map { $0.provider.lowercased() } ?? []
+        if !identityProviders.isEmpty { return Set(identityProviders) }
+        if case .string(let provider) = environment.session?.user.appMetadata?["provider"] {
+            return [provider.lowercased()]
+        }
+        return []
+    }
+
+    private var privacySafeEmail: String {
+        guard environment.profilePreferences.privacyMode else {
+            return environment.session?.user.email ?? "Nie podano"
+        }
+        return "Ukryto w trybie prywatnym"
+    }
+
+    private var privacySafeAccountID: String {
+        guard environment.profilePreferences.privacyMode else {
+            return environment.session?.user.id ?? "Lokalnie"
+        }
+        return "Ukryto w trybie prywatnym"
+    }
 
     var body: some View {
         List {
-            Section("Konto") {
-                LabeledContent("E-mail", value: environment.session?.user.email ?? "Nie podano")
-                LabeledContent("Identyfikator", value: environment.session?.user.id ?? "Lokalnie")
+            Section("Profil") {
+                TextField("Nazwa wyświetlana", text: $displayName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                Button {
+                    Task { await saveProfile() }
+                } label: {
+                    Label("Zapisz profil", systemImage: "checkmark.circle")
+                }
+                .disabled(isSavingProfile || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                LabeledContent("E-mail", value: privacySafeEmail)
+                if let profileMessage {
+                    Label(profileMessage, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                }
+                if let profileError {
+                    Label(profileError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(RootineTheme.ColorToken.destructive)
+                }
+            }
+            Section("Metody logowania") {
+                ForEach(RootineIdentityProvider.allCases, id: \.rawValue) { provider in
+                    providerRow(provider)
+                }
+                if let identityFeedback {
+                    Text(identityFeedback)
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.warning)
+                }
+                Text("Nie można odłączyć ostatniej metody logowania.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Section("Subskrypcje i integracje") {
+                Label("Niedostępne w tej wersji", systemImage: "minus.circle")
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                Text("Nie aktywujemy planów płatnych ani zewnętrznych integracji bez zatwierdzonego kontraktu API i bezpiecznego przepływu konta.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Section("Bezpieczeństwo") {
+                NavigationLink {
+                    RootinePasswordSettingsView()
+                } label: {
+                    Label("Zmień hasło", systemImage: "key.fill")
+                }
+                NavigationLink {
+                    RootineDiagnosticsView()
+                } label: {
+                    Label("Diagnostyka i synchronizacja", systemImage: "stethoscope")
+                }
+            }
+            Section("Urządzenie") {
+                LabeledContent("To urządzenie", value: environment.currentDeviceIdentifier ?? "Brak aktywnej sesji")
+                LabeledContent("Powiadomienia systemowe", value: notificationPermissionLabel(environment.notificationPermissionState))
+                if let registration = environment.deviceRegistration {
+                    LabeledContent("Rejestracja", value: registration.revokedAt == nil ? "Aktywna" : "Wycofana")
+                } else {
+                    Text("Urządzenie zostanie zarejestrowane po udzieleniu zgody na powiadomienia.")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                Button {
+                    Task { await environment.registerDeviceForCurrentSession() }
+                } label: {
+                    Label("Odśwież rejestrację", systemImage: "arrow.clockwise")
+                }
+                Button {
+                    Task { await environment.revokeCurrentDevice() }
+                } label: {
+                    Label("Wyrejestruj urządzenie", systemImage: "bell.slash")
+                }
+                .foregroundStyle(RootineTheme.ColorToken.destructive)
             }
             Section("Połączenie") {
                 ConfigurationStatusRow(title: "Logowanie", ready: environment.configuration.isAuthComplete)
@@ -632,15 +751,212 @@ private struct RootineProfileView: View {
                 if let refreshed = environment.realtimeLastRefresh {
                     LabeledContent("Ostatnie uzgodnienie", value: refreshed.formatted(date: .omitted, time: .shortened))
                 }
-            }
-            Section {
-                Text("Rootine zapisuje zmiany lokalnie i synchronizuje je dopiero po potwierdzeniu sesji. Brak sieci nie blokuje pracy.")
+                Text("Identyfikator konta jest używany tylko do rozdzielenia danych. Nie pokazujemy tokenów sesji ani tokenów APNs.")
                     .font(.footnote)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Section("Konto") {
+                LabeledContent("Identyfikator", value: privacySafeAccountID)
+                Button("Wyloguj się", role: .destructive) {
+                    environment.signOutFoundationSession()
+                }
+                Text("Wylogowanie nie usuwa lokalnych danych. Zostają one przypisane do tego konta i nie są przekazywane następnej sesji.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Section("Usuń konto") {
+                Text("Usunięcie konta jest nieodwracalne. Najpierw wyeksportuj kopię w sekcji Kopie i odzyskiwanie, jeśli chcesz zachować dane.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                SecureField("Wpisz DELETE", text: $deleteConfirmation)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Button("Usuń konto i dane lokalne", role: .destructive) {
+                    Task { await deleteAccount() }
+                }
+                .disabled(isDeletingAccount || deleteConfirmation != "DELETE")
             }
         }
         .navigationTitle("Profil")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            displayName = currentDisplayName
+            await environment.refreshProfileSettings()
+            await environment.refreshNotificationPermissionState()
+            try? await environment.refreshAccountState()
+        }
+    }
+
+    @ViewBuilder
+    private func providerRow(_ provider: RootineIdentityProvider) -> some View {
+        let identities = environment.session?.user.identities ?? []
+        let identity = identities.first { $0.provider.lowercased() == provider.rawValue }
+        if let identity {
+            HStack {
+                Label(provider.title, systemImage: provider == .email ? "envelope" : provider == .google ? "g.circle" : "apple.logo")
+                Spacer()
+                Text("Połączono")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.success)
+                if provider != .email {
+                    Button("Odłącz", role: .destructive) {
+                        unlink(identityID: identity.identityID)
+                    }
+                    .disabled(pendingProvider != nil || identities.count < 2)
+                }
+            }
+        } else {
+            switch provider {
+            case .email:
+                Label("E-mail", systemImage: "envelope")
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            case .google:
+                Button {
+                    linkGoogle()
+                } label: {
+                    Label(pendingProvider == .google ? "Łączę z Google…" : "Połącz Google", systemImage: "g.circle")
+                }
+                .disabled(pendingProvider != nil)
+            case .apple:
+                ZStack {
+                    SignInWithAppleButton(.continue, onRequest: prepareAppleRequest, onCompletion: completeAppleLink)
+                        .signInWithAppleButtonStyle(.white)
+                        .frame(height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+                        .opacity(pendingProvider == .apple ? 0.45 : 1)
+                        .disabled(pendingProvider != nil)
+                    if pendingProvider == .apple {
+                        ProgressView().tint(RootineTheme.ColorToken.canvas)
+                    }
+                }
+            }
+        }
+    }
+
+    private func linkGoogle() {
+        identityFeedback = nil
+        pendingProvider = .google
+        Task {
+            defer {
+                pendingProvider = nil
+                environment.cancelPendingIdentityLink()
+            }
+            do {
+                let url = try await environment.googleIdentityAuthorizationURLForLinking()
+                let callback = try await oauthSession.start(
+                    url: url,
+                    callbackScheme: environment.configuration.authCallbackScheme
+                )
+                try await environment.establishGoogleIdentityLink(callbackURL: callback)
+                try await environment.refreshAccountState()
+            } catch {
+                identityFeedback = error.localizedDescription
+            }
+        }
+    }
+
+    private func prepareAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        do {
+            let nonce = try AuthNonce.random()
+            appleNonce = nonce
+            request.requestedScopes = [.email]
+            request.nonce = AuthNonce.hashed(nonce)
+        } catch {
+            appleNonce = nil
+            identityFeedback = RootineAPIError.invalidResponse.localizedDescription
+        }
+    }
+
+    private func completeAppleLink(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .failure:
+            identityFeedback = RootineAPIError.providerUnavailable.localizedDescription
+            appleNonce = nil
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let tokenData = credential.identityToken,
+                  let idToken = String(data: tokenData, encoding: .utf8),
+                  let nonce = appleNonce else {
+                identityFeedback = RootineAPIError.invalidResponse.localizedDescription
+                return
+            }
+            pendingProvider = .apple
+            Task {
+                defer {
+                    pendingProvider = nil
+                    appleNonce = nil
+                }
+                do {
+                    try await environment.establishAppleIdentityLink(idToken: idToken, nonce: nonce)
+                    try await environment.refreshAccountState()
+                } catch {
+                    identityFeedback = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func unlink(identityID: String) {
+        Task {
+            do {
+                try await environment.unlinkIdentity(identityID)
+                try await environment.refreshAccountState()
+            } catch {
+                identityFeedback = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveProfile() async {
+        isSavingProfile = true
+        profileMessage = nil
+        profileError = nil
+        do {
+            try await environment.updateProfileDisplayName(displayName)
+            profileMessage = "Profil został zapisany"
+        } catch {
+            profileError = error.localizedDescription
+        }
+        isSavingProfile = false
+    }
+
+    private func deleteAccount() async {
+        isDeletingAccount = true
+        profileError = nil
+        do {
+            try await environment.deleteAccountAndSignOut()
+        } catch {
+            profileError = error.localizedDescription
+            isDeletingAccount = false
+        }
+    }
+}
+
+private struct ProviderStatusRow: View {
+    let title: String
+    let isLinked: Bool
+
+    var body: some View {
+        Label {
+            Text(title)
+            Text(isLinked ? "Połączone" : "Dostępne przy logowaniu")
+                .font(.caption)
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+        } icon: {
+            Image(systemName: isLinked ? "checkmark.circle.fill" : "circle.dashed")
+                .foregroundStyle(isLinked ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.secondaryText)
+        }
+    }
+}
+
+private func notificationPermissionLabel(_ state: RootineNotificationPermissionState) -> String {
+    switch state {
+    case .authorized: return "Dozwolone"
+    case .provisional: return "Tymczasowe"
+    case .ephemeral: return "Tymczasowe (App Clip)"
+    case .denied: return "Odrzucone"
+    case .notDetermined: return "Nieustalone"
+    case .unknown: return "Niedostępne"
     }
 }
 
@@ -655,7 +971,19 @@ private struct ConfigurationStatusRow: View {
 }
 
 private struct RootineSettingsView: View {
+    @EnvironmentObject private var environment: AppEnvironment
     @AppStorage("rootine.appearance") private var appearance = "system"
+    @State private var profile = RootineProfilePreferences.current
+    @State private var notifications = RootineNotificationPreferences()
+
+    private var timezoneOptions: [String] {
+        let preferred = [
+            "Europe/Warsaw", "Europe/London", "Europe/Berlin", "America/New_York",
+            "America/Los_Angeles", "Asia/Tokyo", "UTC"
+        ]
+        let current = profile.timezoneIdentifier
+        return Array(Set(preferred + [current])).sorted()
+    }
 
     var body: some View {
         Form {
@@ -667,6 +995,54 @@ private struct RootineSettingsView: View {
                 }
                 .pickerStyle(.navigationLink)
             }
+            Section("Formaty") {
+                Picker("Strefa czasowa", selection: timezoneBinding) {
+                    ForEach(timezoneOptions, id: \.self) { timezone in
+                        Text(timezone).tag(timezone)
+                    }
+                }
+                .pickerStyle(.navigationLink)
+                Picker("Język i format", selection: localeBinding) {
+                    Text("Polski (Polska)").tag("pl-PL")
+                    Text("English (United States)").tag("en-US")
+                }
+                .pickerStyle(.navigationLink)
+                Picker("Waluta", selection: currencyBinding) {
+                    Text("PLN — złoty").tag("PLN")
+                    Text("EUR — euro").tag("EUR")
+                    Text("USD — dolar").tag("USD")
+                    Text("GBP — funt").tag("GBP")
+                }
+                .pickerStyle(.navigationLink)
+                Picker("Jednostki", selection: unitsBinding) {
+                    Text("Metryczne (kg, km)").tag(true)
+                    Text("Imperialne (lb, mi)").tag(false)
+                }
+                .pickerStyle(.navigationLink)
+            }
+            Section("Powiadomienia") {
+                Toggle("Przypomnienia", isOn: notificationEnabledBinding)
+                Toggle("Zadania", isOn: taskNotificationsBinding)
+                    .disabled(!notifications.enabled)
+                Toggle("Nawyki", isOn: habitNotificationsBinding)
+                    .disabled(!notifications.enabled)
+                Toggle("Szczegóły na ekranie blokady", isOn: showDetailsBinding)
+                    .disabled(!notifications.enabled)
+                Button {
+                    Task { await environment.requestNotificationPermissionFromSettings() }
+                } label: {
+                    Label("Zarządzaj zgodą systemową", systemImage: "bell.badge")
+                }
+                Text("Domyślnie treść zadania nie trafia na ekran blokady. Zmiana strefy czasowej aktualizuje plan przypomnień.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            Section("Prywatność") {
+                Toggle("Tryb prywatny", isOn: privacyBinding)
+                Text("Tryb prywatny ogranicza informacje pokazywane w podglądzie konta. Eksport i dane domenowe pozostają niezmienione.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
             Section("Zachowanie") {
                 Label("Aplikacja respektuje Reduce Motion i Dynamic Type ustawione w systemie.", systemImage: "accessibility")
                     .font(.footnote)
@@ -676,13 +1052,267 @@ private struct RootineSettingsView: View {
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
             }
             Section("Dane") {
-                Text("Kopie, import, eksport i pliki odzyskiwania są dostępne w sekcji „Kopie i odzyskiwanie” w profilu.")
+                NavigationLink {
+                    RootineDataCenterView()
+                } label: {
+                    Label("Kopie i odzyskiwanie", systemImage: "externaldrive.badge.icloud")
+                }
+                NavigationLink {
+                    RootineDiagnosticsView()
+                } label: {
+                    Label("Diagnostyka", systemImage: "stethoscope")
+                }
+                Text("Eksport obejmuje wszystkie workspace’y tego konta. Dane aplikacji pozostają lokalne do czasu potwierdzonej synchronizacji.")
                     .font(.footnote)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
             }
         }
         .navigationTitle("Ustawienia")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            profile = environment.profilePreferences
+            notifications = environment.notificationPreferences
+            await environment.refreshNotificationPermissionState()
+        }
+        .onChange(of: environment.profilePreferences) { _, next in
+            profile = next
+        }
+        .onChange(of: environment.notificationPreferences) { _, next in
+            notifications = next
+        }
+    }
+
+    private var timezoneBinding: Binding<String> {
+        Binding(
+            get: { profile.timezoneIdentifier },
+            set: { next in
+                profile.timezoneIdentifier = next
+                saveProfile()
+            }
+        )
+    }
+
+    private var localeBinding: Binding<String> {
+        Binding(
+            get: { profile.localeIdentifier },
+            set: { next in
+                profile.localeIdentifier = next
+                saveProfile()
+            }
+        )
+    }
+
+    private var currencyBinding: Binding<String> {
+        Binding(
+            get: { profile.currencyCode },
+            set: { next in
+                profile.currencyCode = next
+                saveProfile()
+            }
+        )
+    }
+
+    private var unitsBinding: Binding<Bool> {
+        Binding(
+            get: { profile.usesMetricUnits },
+            set: { next in
+                profile.usesMetricUnits = next
+                saveProfile()
+            }
+        )
+    }
+
+    private var privacyBinding: Binding<Bool> {
+        Binding(
+            get: { profile.privacyMode },
+            set: { next in
+                profile.privacyMode = next
+                saveProfile()
+            }
+        )
+    }
+
+    private var notificationEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { notifications.enabled },
+            set: { next in
+                notifications.enabled = next
+                saveNotifications()
+            }
+        )
+    }
+
+    private var taskNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: { notifications.taskRemindersEnabled },
+            set: { next in
+                notifications.taskRemindersEnabled = next
+                saveNotifications()
+            }
+        )
+    }
+
+    private var habitNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: { notifications.habitRemindersEnabled },
+            set: { next in
+                notifications.habitRemindersEnabled = next
+                saveNotifications()
+            }
+        )
+    }
+
+    private var showDetailsBinding: Binding<Bool> {
+        Binding(
+            get: { notifications.showTaskDetails },
+            set: { next in
+                notifications.showTaskDetails = next
+                saveNotifications()
+            }
+        )
+    }
+
+    private func saveProfile() {
+        Task { await environment.updateProfilePreferences(profile) }
+    }
+
+    private func saveNotifications() {
+        Task { await environment.updateNotificationPreferences(notifications) }
+    }
+}
+
+private struct RootinePasswordSettingsView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var message: String?
+    @State private var errorMessage: String?
+    @State private var isSaving = false
+
+    var body: some View {
+        Form {
+            Section("Nowe hasło") {
+                SecureField("Nowe hasło (min. 8 znaków)", text: $password)
+                    .textContentType(.newPassword)
+                SecureField("Powtórz nowe hasło", text: $confirmation)
+                    .textContentType(.newPassword)
+                Button {
+                    Task { await save() }
+                } label: {
+                    Label(isSaving ? "Zapisuję…" : "Zmień hasło", systemImage: "key.fill")
+                }
+                .disabled(isSaving || password.isEmpty || password != confirmation)
+            }
+            Section {
+                Text("Hasło jest przekazywane wyłącznie do Supabase przez bezpieczną sesję. Rootine nie zapisuje go w Keychain, plikach ani diagnostyce.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            if let message {
+                Section {
+                    Label(message, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                }
+            }
+            if let errorMessage {
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(RootineTheme.ColorToken.destructive)
+                }
+            }
+        }
+        .navigationTitle("Bezpieczeństwo")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func save() async {
+        isSaving = true
+        message = nil
+        errorMessage = nil
+        do {
+            try await environment.updateAccountPassword(password)
+            message = "Hasło zostało zmienione"
+            password = ""
+            confirmation = ""
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isSaving = false
+    }
+}
+
+private struct RootineDiagnosticsView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+
+    var body: some View {
+        List {
+            Section("Synchronizacja") {
+                LabeledContent("Stan danych", value: workspaceSyncStatusLabel(environment.workspaceSyncStatus))
+                LabeledContent("Realtime", value: realtimeStatusLabel(environment.realtimeStatus))
+                LabeledContent("Koordynator", value: syncCoordinatorStatusLabel(environment.syncCoordinatorStatus))
+                if let refreshed = environment.realtimeLastRefresh {
+                    LabeledContent("Ostatnie uzgodnienie", value: refreshed.formatted(date: .abbreviated, time: .shortened))
+                }
+                if let fallback = environment.normalizedReadFallbackReason {
+                    Text("Odczyt relacyjny używa trybu zgodności: \(fallback)")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.warning)
+                }
+                Button {
+                    Task { await environment.refreshActiveSession() }
+                } label: {
+                    Label("Synchronizuj teraz", systemImage: "arrow.clockwise")
+                }
+            }
+            Section("Konfiguracja") {
+                ConfigurationStatusRow(title: "Logowanie", ready: environment.configuration.isAuthComplete)
+                ConfigurationStatusRow(title: "Backend danych", ready: environment.configuration.isComplete)
+                ConfigurationStatusRow(title: "Dokumenty prawne", ready: environment.configuration.hasLegalDocuments)
+                LabeledContent("Środowisko", value: environment.configuration.environment)
+            }
+            Section("Powiadomienia") {
+                LabeledContent("Zgoda systemowa", value: notificationPermissionLabel(environment.notificationPermissionState))
+                LabeledContent("Rejestracja urządzenia", value: environment.deviceRegistration == nil ? "Brak aktywnej" : "Aktywna")
+                Text("Diagnostyka nie zawiera tokenu sesji, tokenu APNs, treści powiadomień ani pełnego identyfikatora urządzenia.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+        }
+        .navigationTitle("Diagnostyka")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private func workspaceSyncStatusLabel(_ status: WorkspaceSyncStatus) -> String {
+    switch status {
+    case .unavailable: return "Niedostępna"
+    case .localOnly(let pending): return pending > 0 ? "Lokalnie (\(pending) oczekujących)" : "Tylko lokalnie"
+    case .syncing(let pending): return pending > 0 ? "Synchronizuję (\(pending))" : "Synchronizuję"
+    case .synced: return "Zsynchronizowano"
+    case .conflict(let keys): return "Konflikt (\(keys.count))"
+    case .schemaMismatch: return "Niezgodny kontrakt"
+    case .unauthorized: return "Sesja wygasła"
+    case .error: return "Błąd"
+    }
+}
+
+private func realtimeStatusLabel(_ status: RootineRealtimeStatus) -> String {
+    switch status {
+    case .stopped: return "Zatrzymany"
+    case .connecting: return "Łączenie"
+    case .connected: return "Połączony"
+    case .reconnecting: return "Ponowne łączenie"
+    case .degraded: return "Ograniczony"
+    case .failed: return "Błąd"
+    }
+}
+
+private func syncCoordinatorStatusLabel(_ status: RootineSyncCoordinatorStatus) -> String {
+    switch status {
+    case .ready: return "Gotowy"
+    case .syncing: return "Synchronizuje"
+    case .degraded: return "Ograniczony"
+    case .stopped: return "Zatrzymany"
     }
 }
 

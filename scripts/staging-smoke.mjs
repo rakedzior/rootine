@@ -58,6 +58,12 @@ function normalizedBase(input) {
   if (! ["http:", "https:"].includes(base.protocol)) {
     throw new SmokeFailure("configuration", "ROOTINE_STAGING_URL must use HTTP or HTTPS");
   }
+  if (base.username || base.password) {
+    throw new SmokeFailure("configuration", "ROOTINE_STAGING_URL must not contain embedded credentials");
+  }
+  if (base.search || base.hash || (base.pathname !== "/" && base.pathname !== "")) {
+    throw new SmokeFailure("configuration", "ROOTINE_STAGING_URL must identify the project origin without a path, query, or fragment");
+  }
   return base.toString().replace(/\/$/, "");
 }
 
@@ -77,8 +83,16 @@ function correlationId(environment) {
   return `rt3_${environment}_${randomUUID()}`;
 }
 
+function relativeSmokePath(input, name, fallback) {
+  const configured = input?.trim() || fallback;
+  if (!configured.startsWith("/") || configured.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(configured) || configured.includes("?") || configured.includes("#")) {
+    throw new SmokeFailure("configuration", `${name} must be a relative path on ROOTINE_STAGING_URL without query or fragment`);
+  }
+  return configured;
+}
+
 function syncPath(action) {
-  const configured = process.env.ROOTINE_SMOKE_SYNC_PATH?.trim() || "/functions/v1/mobile-sync";
+  const configured = relativeSmokePath(process.env.ROOTINE_SMOKE_SYNC_PATH, "ROOTINE_SMOKE_SYNC_PATH", "/functions/v1/mobile-sync");
   return configured.includes("{operation}") ? configured.replace("{operation}", action) : configured;
 }
 
@@ -103,7 +117,7 @@ async function waitForAuthInvalidation(request, accessToken) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     latest = await request("delete", "/auth/v1/user", { headers: { authorization: `Bearer ${accessToken}` } });
     if ([401, 404].includes(latest.response.status)) return latest;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
   }
   return latest;
 }
@@ -114,7 +128,7 @@ function realtimeURL(base, publishableKey) {
   const url = new URL(base);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = "/realtime/v1/websocket";
-  url.search = new URLSearchParams({ apikey: publishableKey, vsn: "1.0.0" }).toString();
+  url.search = new globalThis.URLSearchParams({ apikey: publishableKey, vsn: "1.0.0" }).toString();
   return url.toString();
 }
 
@@ -126,8 +140,8 @@ async function openRealtime(base, publishableKey, accessToken, userId, deviceId)
   const socket = new WebSocketClient(url);
   let ref = 1;
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Realtime join timed out")), timeoutMs);
-    const cleanup = () => clearTimeout(timer);
+    const timer = globalThis.setTimeout(() => reject(new Error("Realtime join timed out")), timeoutMs);
+    const cleanup = () => globalThis.clearTimeout(timer);
     socket.addEventListener("open", () => {
       socket.send(JSON.stringify({
         topic: "realtime:public:rootine_sync_changes",
@@ -166,12 +180,12 @@ async function openRealtime(base, publishableKey, accessToken, userId, deviceId)
     signalResolve = resolve;
     signalReject = reject;
   });
-  const timer = setTimeout(() => signalReject(new Error("Realtime signal timed out")), timeoutMs);
+  const timer = globalThis.setTimeout(() => signalReject(new Error("Realtime signal timed out")), timeoutMs);
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(String(event.data));
       if (["postgres_changes", "broadcast"].includes(message.event)) {
-        clearTimeout(timer);
+        globalThis.clearTimeout(timer);
         signalResolve();
       }
     } catch {
@@ -209,15 +223,19 @@ async function main() {
   let base;
   let token;
   let userId;
+  let createdUserId;
   let generatedAccount = false;
   let deletedAccount = false;
   let serviceRoleCleanup = false;
   let realtimeSession;
+  let observedApnsDeliveryRate = null;
 
   const check = (name, status, details = {}) => {
-    const item = { name, status, passed: ["passed", "fallback", "manual-required"].includes(status), ...details };
+    const automatedPassed = ["passed", "fallback"].includes(status);
+    const blocking = status === "failed" || (strict && status === "manual-required");
+    const item = { name, status, ...details, passed: automatedPassed, blocking };
     evidence.checks.push(item);
-    passed &&= item.passed;
+    passed &&= !item.blocking;
     const outcome = status === "manual-required" ? "MANUAL" : item.passed ? "PASS" : "FAIL";
     console.log(`${outcome} ${name}${item.reason ? ` — ${item.reason}` : ""}`);
     return item.passed;
@@ -286,7 +304,8 @@ async function main() {
         body: jsonBody({ email, password }),
       });
       if (![200, 201].includes(signup.response.status)) throw new SmokeFailure("auth", `staging signup returned HTTP ${signup.response.status}`);
-      userId = signup.body?.user?.id;
+      createdUserId = typeof signup.body?.user?.id === "string" ? signup.body.user.id : undefined;
+      userId = createdUserId;
       token = signup.body?.access_token;
       if (!token) {
         const login = await request("auth", "/auth/v1/token?grant_type=password", {
@@ -332,7 +351,6 @@ async function main() {
     });
     const push = await sync("push", deviceA, { commands });
     const pushResults = responseResults(push);
-    const firstResult = pushResults[0];
     if (pushResults.length < commands.length || pushResults.some((result) => !["applied", "already_applied"].includes(result.status))) {
       const keys = push && typeof push === "object" ? Object.keys(push).slice(0, 12).join(",") : "none";
       throw new SmokeFailure("push", `expected an applied result for every domain; response keys: ${keys || "none"}`);
@@ -414,13 +432,26 @@ async function main() {
 
     const apnsURL = process.env.ROOTINE_SMOKE_APNS_URL?.trim();
     if (apnsURL) {
-      const notificationProbe = await request("notifications", apnsURL, {
+      const provider = new URL(apnsURL);
+      if (!["http:", "https:"].includes(provider.protocol) || provider.username || provider.password) {
+        throw new SmokeFailure("notifications", "ROOTINE_SMOKE_APNS_URL must be an HTTP(S) URL without embedded credentials");
+      }
+      const notificationResponse = await fetch(provider, {
         method: "POST",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        headers: { "content-type": "application/json" },
         body: jsonBody({ type: "b12_synthetic_notification", dedupe_key: `b12-${commands[0].entity_id}` }),
+        redirect: "error",
+        signal: AbortSignal.timeout(timeoutMs),
       });
-      check("APNs/local notification mock", notificationProbe.response.ok ? "passed" : "failed", {
-        reason: notificationProbe.response.ok ? undefined : `notification provider returned HTTP ${notificationProbe.response.status}`,
+      try {
+        const notificationBody = await notificationResponse.clone().json();
+        const deliveryRate = Number(notificationBody?.delivery_rate);
+        if (Number.isFinite(deliveryRate) && deliveryRate >= 0 && deliveryRate <= 1) observedApnsDeliveryRate = deliveryRate;
+      } catch {
+        // A 2xx probe without a delivery metric is still only a provider reachability check.
+      }
+      check("APNs/local notification mock", notificationResponse.ok ? "passed" : "failed", {
+        reason: notificationResponse.ok ? undefined : `notification provider returned HTTP ${notificationResponse.status}`,
       });
     } else {
       check("APNs/local notification mock", "manual-required", {
@@ -436,20 +467,26 @@ async function main() {
     const metadataDomains = Array.isArray(roundTripDomains)
       ? roundTripDomains.filter((entry) => entry && typeof entry === "object" && entry.client_a_to_b === true && entry.client_b_to_a === true).map((entry) => entry.domain)
       : [];
-    const hasDomainMatrix = commands.every((command) => receivedDomains.has(command.entity))
+    const hasDomainMatrix = Array.isArray(roundTripDomains)
+      && commands.every((command) => receivedDomains.has(command.entity))
       && reverseCommands.every((command) => reverseReceived && reverseIds.has(command.entity_id))
-      && (roundTripDomains === undefined || domainMatrix.every((domain) => metadataDomains.includes(domain)));
+      && domainMatrix.every((domain) => metadataDomains.includes(domain));
     for (const domain of evidence.domain_matrix) {
-      domain.status = hasDomainMatrix ? "passed" : "contract-pending";
+      domain.status = hasDomainMatrix ? "passed" : "manual-required";
       domain.passed = hasDomainMatrix;
     }
-    if (strict && !hasDomainMatrix) {
+    if (hasDomainMatrix) {
+      check("Two-client domain matrix", "passed", {
+        automated: true,
+        status_detail: "both transport clients exchanged every configured domain and the server marked both directions",
+      });
+    } else if (strict) {
       check("Two-client domain matrix", "failed", { reason: "both clients must exchange a fixture for every configured domain; optional round_trip_domains metadata must mark both directions" });
     } else {
-      check("Two-client domain matrix", "manual-required", { automated: true, status_detail: "all configured domains exchanged fixtures in both directions; physical web ↔ iOS verification remains manual" });
+      check("Two-client domain matrix", "manual-required", { automated: false, status_detail: "transport fixtures are not evidence of a physical web ↔ iOS round-trip; complete the native matrix manually" });
     }
 
-    const deletion = await request("delete", process.env.ROOTINE_SMOKE_DELETE_PATH || "/functions/v1/delete-account", {
+    const deletion = await request("delete", relativeSmokePath(process.env.ROOTINE_SMOKE_DELETE_PATH, "ROOTINE_SMOKE_DELETE_PATH", "/functions/v1/delete-account"), {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: jsonBody({ confirmation: "DELETE" }),
@@ -467,11 +504,14 @@ async function main() {
     check(phase, "failed", { reason: safeError(error) });
   } finally {
     if (realtimeSession?.socket) realtimeSession.socket.close();
-    if (generatedAccount && userId && !deletedAccount) {
+    if (generatedAccount && !deletedAccount) {
+      const cleanupUserId = createdUserId || userId;
       const serviceRole = process.env.ROOTINE_STAGING_SERVICE_ROLE_KEY?.trim();
-      if (serviceRole) {
+      if (!cleanupUserId) {
+        check("Synthetic account cleanup", "failed", { reason: "smoke created an account but did not obtain its user id for cleanup" });
+      } else if (serviceRole) {
         try {
-          const cleanup = await fetch(new URL(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, base), {
+          const cleanup = await fetch(new URL(`/auth/v1/admin/users/${encodeURIComponent(cleanupUserId)}`, base), {
             method: "DELETE",
             headers: { apikey: serviceRole, authorization: `Bearer ${serviceRole}` },
             signal: AbortSignal.timeout(timeoutMs),
@@ -494,18 +534,35 @@ async function main() {
     deleted_via_edge_function: deletedAccount,
     service_role_cleanup: serviceRoleCleanup,
   };
-  const failedTransportChecks = evidence.checks.filter((item) =>
-    ["Push", "Push idempotency", "Transport pull fallback scaffold", "Reverse push from web client", "Two-client domain round-trip", "Two-client domain matrix"].includes(item.name)
-    && !item.passed
-  ).length;
+  const transportCheckNames = ["Push", "Push idempotency", "Transport pull fallback scaffold", "Reverse push from web client", "Two-client domain round-trip", "Two-client domain matrix"];
+  const transportChecks = evidence.checks.filter((item) => transportCheckNames.includes(item.name));
+  const failedTransportChecks = transportChecks.filter((item) => item.status === "failed").length;
+  const transportEvaluated = transportChecks.length > 0 && transportChecks.every((item) => ["passed", "fallback"].includes(item.status));
+  const authEvaluated = evidence.checks.some((item) => item.name === "Auth" && item.status === "passed");
+  const conflictEvaluated = evidence.checks.some((item) => item.name === "Conflict is explicit" && ["passed", "failed"].includes(item.status));
   evidence.metrics.automated_observations = {
-    pull_push_errors: failedTransportChecks,
-    unauthorized_401_excluding_delete_invalidation: 0,
-    explicit_conflicts: evidence.checks.some((item) => item.name === "Conflict is explicit" && item.passed) ? 1 : 0,
+    pull_push_errors: transportEvaluated ? failedTransportChecks : null,
+    unauthorized_401_excluding_delete_invalidation: authEvaluated ? 0 : null,
+    explicit_conflicts: conflictEvaluated
+      ? evidence.checks.some((item) => item.name === "Conflict is explicit" && item.status === "passed") ? 1 : 0
+      : null,
     cursor_lag_seconds: null,
     outbox_lag_seconds: null,
-    apns_delivery_rate: null,
+    apns_delivery_rate: observedApnsDeliveryRate,
   };
+  evidence.metrics.thresholds_evaluated = {
+    pull_push_errors: transportEvaluated,
+    unauthorized_401: authEvaluated,
+    explicit_conflicts: conflictEvaluated,
+    cursor_lag_seconds: false,
+    outbox_lag_seconds: false,
+    apns_delivery_rate: observedApnsDeliveryRate !== null && observedApnsDeliveryRate >= 0.99,
+  };
+  evidence.metrics.status = Object.values(evidence.metrics.thresholds_evaluated).every(Boolean)
+    ? "automated"
+    : "manual-required";
+  evidence.automated_gate_passed = passed;
+  evidence.release_ready = passed && evidence.manual_gates_pending.length === 0;
   evidence.duration_ms = Date.now() - started;
   const complete = finishEvidence(evidence, passed);
   const path = await writeEvidence(complete, "staging-smoke.json");

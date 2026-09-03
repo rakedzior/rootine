@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { basename, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 const projectRoot = resolve("ios/Rootine");
 const sourceRoot = join(projectRoot, "Rootine");
@@ -21,6 +22,7 @@ const rolloutFlags = [
   "ROOTINE_NOTIFICATIONS_ENABLED",
 ];
 const infoPlist = join(sourceRoot, "Resources/Info.plist");
+const privacyManifest = join(sourceRoot, "Resources/PrivacyInfo.xcprivacy");
 const entitlements = join(sourceRoot, "Resources/Rootine.entitlements");
 const failures = [];
 
@@ -46,11 +48,16 @@ function readEffectiveXcconfig(path, seen = new Set()) {
 
 function readXcodeBuildSettings(configuration) {
   if (process.platform !== "darwin") return null;
+  // `xcodebuild -showBuildSettings` still materializes its PIF cache. Use an
+  // isolated writable directory so the audit works in CI/sandboxes where the
+  // user's default DerivedData directory may be read-only or locked by Xcode.
+  const derivedDataPath = mkdtempSync(join(tmpdir(), "rootine-ios-audit-"));
   try {
     const output = execFileSync("xcodebuild", [
       "-project", projectContainer,
       "-scheme", "Rootine",
       "-configuration", configuration,
+      "-derivedDataPath", derivedDataPath,
       "-showBuildSettings",
     ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return Object.fromEntries([...output.matchAll(/^\s*(ROOTINE_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/gm)]
@@ -58,10 +65,12 @@ function readXcodeBuildSettings(configuration) {
   } catch {
     failures.push(`xcodebuild could not resolve effective settings for ${configuration}`);
     return null;
+  } finally {
+    rmSync(derivedDataPath, { recursive: true, force: true });
   }
 }
 
-for (const path of [projectFile, sharedConfig, ...environmentConfigs, infoPlist, entitlements, sourceRoot, testsRoot]) {
+for (const path of [projectFile, sharedConfig, ...environmentConfigs, infoPlist, privacyManifest, entitlements, sourceRoot, testsRoot]) {
   if (!existsSync(path)) failures.push(`Missing required iOS path: ${path}`);
 }
 
@@ -69,6 +78,7 @@ if (failures.length === 0) {
   const project = readFileSync(projectFile, "utf8");
   const config = readFileSync(sharedConfig, "utf8");
   const plist = readFileSync(infoPlist, "utf8");
+  const privacy = readFileSync(privacyManifest, "utf8");
   const capabilities = readFileSync(entitlements, "utf8");
   const environmentConfigContents = environmentConfigs.map((path) => readFileSync(path, "utf8"));
   const swiftFiles = [...walk(sourceRoot), ...walk(testsRoot)].filter((path) => path.endsWith(".swift"));
@@ -95,6 +105,13 @@ if (failures.length === 0) {
   if (!project.includes("objectVersion = 77")) failures.push("Xcode project format must use the Xcode 26 project format");
   if (!project.includes("LastUpgradeCheck = 2630")) failures.push("Xcode project metadata is not aligned with Xcode 26.3");
   if (!plist.includes("$(ROOTINE_AUTH_CALLBACK_SCHEME)")) failures.push("Info.plist is missing the configurable native auth URL scheme");
+  if (!plist.includes("NSCameraUsageDescription")) failures.push("Info.plist is missing the camera usage description");
+  if (!plist.includes("BGTaskSchedulerPermittedIdentifiers")) failures.push("Info.plist is missing the background refresh allowlist");
+  if (!privacy.includes("NSPrivacyTracking") || !privacy.includes("<false/>")) failures.push("Privacy manifest must explicitly disable tracking");
+  if (!privacy.includes("NSPrivacyAccessedAPICategoryUserDefaults") || !privacy.includes("CA92.1")) {
+    failures.push("Privacy manifest must declare the UserDefaults access reason");
+  }
+  if (!project.includes("PrivacyInfo.xcprivacy")) failures.push("Privacy manifest is not bundled in the iOS target");
   if (!config.includes("ROOTINE_AUTH_CALLBACK_SCHEME = rootine")) failures.push("Native auth callback scheme must remain aligned with Supabase setup");
   for (const [index, environment] of ["development", "staging", "production"].entries()) {
     if (!environmentConfigContents[index]?.includes(`ROOTINE_ENVIRONMENT = ${environment}`)) {
@@ -149,6 +166,14 @@ if (failures.length === 0) {
     .join("\n");
   for (const banned of ["SwiftData", "@Observable", "Observation", "NavigationSplitViewColumn"]) {
     if (source.includes(banned)) failures.push(`API outside the approved Rootine iOS architecture found in source: ${banned}`);
+  }
+  for (const required of [
+    ".accessibilityElement",
+    ".accessibilityLabel",
+    ".accessibilityHint",
+    "accessibilityReduceMotion",
+  ]) {
+    if (!source.includes(required)) failures.push(`Accessibility foundation is missing the expected SwiftUI contract: ${required}`);
   }
   for (const required of [
     "Codzienność nie mieści się w jednej liście",

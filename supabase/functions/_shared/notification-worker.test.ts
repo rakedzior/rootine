@@ -19,6 +19,7 @@ function queryResult<T>(data: T, error: null = null) {
     select: () => query,
     eq: () => query,
     is: () => query,
+    gte: () => query,
     in: () => query,
     maybeSingle: () => Promise.resolve({ data, error }),
     then: (resolve: (value: { data: T; error: null }) => unknown) =>
@@ -35,6 +36,7 @@ function adminMock() {
       if (table === "rootine_devices") {
         return queryResult([
           {
+            user_id: job.user_id,
             device_id: "device-1",
             push_token: "a".repeat(64),
             apns_environment: "sandbox",
@@ -84,10 +86,62 @@ describe("deliverNotificationJob", () => {
     const result = await deliverNotificationJob(admin as any, { send } as any, job, "worker-2");
 
     expect(result.outcome).toBe("failed");
-    expect(rpc).toHaveBeenCalledWith("rootine_revoke_notification_device", { p_device_id: "device-1" });
+    expect(rpc).toHaveBeenCalledWith("rootine_revoke_notification_device", {
+      p_device_id: "device-1",
+      p_user_id: job.user_id,
+    });
     expect(rpc).toHaveBeenCalledWith("rootine_finalize_notification_job", expect.objectContaining({
       p_outcome: "failed",
     }));
+  });
+
+  it("allows only opaque internal deep links and strips arbitrary payload keys", async () => {
+    const { admin } = adminMock();
+    const send = vi.fn(async (input: any) => {
+      expect(input.payload.rootine_deep_link).toBe(
+        "rootine://notification/task/task-1?date=2026-09-02",
+      );
+      expect(input.payload.user_id).toBeUndefined();
+      expect(input.payload.aps.alert).toEqual({ title: "Task", body: "Do the thing" });
+      return {
+        status: "delivered" as const,
+        retryable: false,
+        revokeDevice: false,
+        responseCode: 200,
+        reason: null,
+      };
+    });
+
+    await deliverNotificationJob(admin as any, { send } as any, {
+      ...job,
+      payload: {
+        title: "Task",
+        body: "Do the thing",
+        user_id: job.user_id,
+        rootine_deep_link: "rootine://notification/task/task-1?date=2026-09-02",
+      },
+    }, "worker-deep-link");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops external deep links instead of forwarding them to APNs", async () => {
+    const { admin } = adminMock();
+    const send = vi.fn(async (input: any) => {
+      expect(input.payload.rootine_deep_link).toBeUndefined();
+      return {
+        status: "delivered" as const,
+        retryable: false,
+        revokeDevice: false,
+        responseCode: 200,
+        reason: null,
+      };
+    });
+
+    await deliverNotificationJob(admin as any, { send } as any, {
+      ...job,
+      payload: { title: "Task", rootine_deep_link: "https://example.test/user/secret" },
+    }, "worker-external-link");
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a retryable provider failure pending", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { canonicalDiff, canonicalJson, operationIdFor } from "./dualWriteBridge";
+import { canonicalDiff, canonicalJson, operationIdFor, redactSyncError } from "./dualWriteBridge";
 
 const bridgeMigrationSql = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260902100000_rootine_dual_write_bridge.sql"),
@@ -46,6 +46,18 @@ describe("dual-write bridge contract", () => {
       .toBe(operationIdFor("rootine.tasks.v1", 4, "hash", "web"));
     expect(operationIdFor("rootine.tasks.v1", 4, "hash", "web"))
       .not.toBe(operationIdFor("rootine.tasks.v1", 4, "hash", "ios"));
+  });
+
+  it("redacts provider details while retaining actionable contract codes", () => {
+    expect(redactSyncError({ code: "PGRST205", message: "relation auth.users leaked" })).toEqual({
+      code: "PGRST205",
+      message: "Brakuje tabeli synchronizacji Supabase. Zastosuj migracje.",
+    });
+    expect(redactSyncError({ code: "XX000", message: "stack trace and payload" })).toEqual({
+      code: "XX000",
+      message: "Synchronizacja nie powiodła się.",
+    });
+    expect(redactSyncError({ message: "private SQL details" }).message).not.toContain("private");
   });
 
   it("keeps the v2 four-argument RPC return shape beside the metadata overload", () => {

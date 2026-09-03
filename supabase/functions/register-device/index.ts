@@ -43,20 +43,39 @@ Deno.serve(async (request) => {
   const deviceID = typeof body.device_id === "string" ? body.device_id : "";
   const platform = typeof body.platform === "string" ? body.platform : "";
   const appVersion = typeof body.app_version === "string" ? body.app_version : "";
-  const apnsEnvironment = typeof body.apns_environment === "string" ? body.apns_environment : "";
-  const permissionState = typeof body.permission_state === "string"
-    ? body.permission_state
-    : "not_determined";
-  const rawPushToken = body.push_token ?? body.apns_token;
+  const hasEnvironment = Object.prototype.hasOwnProperty.call(body, "apns_environment");
+  const hasPushToken = Object.prototype.hasOwnProperty.call(body, "push_token")
+    || Object.prototype.hasOwnProperty.call(body, "apns_token");
+  const rawEnvironment = body.apns_environment;
+  const apnsEnvironment = rawEnvironment === null || rawEnvironment === undefined
+    ? null
+    : typeof rawEnvironment === "string" ? rawEnvironment.trim() : "";
+  const rawPushToken = Object.prototype.hasOwnProperty.call(body, "push_token")
+    ? body.push_token
+    : body.apns_token;
   const pushToken = rawPushToken === null || rawPushToken === undefined
     ? null
-    : typeof rawPushToken === "string" ? rawPushToken : "";
+    : typeof rawPushToken === "string" ? rawPushToken.trim() : "";
+  const explicitPermission = typeof body.permission_state === "string"
+    ? body.permission_state.trim().toLowerCase()
+    : null;
+  // Preserve the pre-B03 endpoint's pair-based clients while making the
+  // permission state explicit for new clients. A callback may still be
+  // pending after authorization, so an authorized state can omit the pair.
+  const hasApnsValues = apnsEnvironment !== null || pushToken !== null;
+  const permissionState = explicitPermission ?? (hasApnsValues ? "authorized" : "not_determined");
 
-  if (!deviceID || !platform || !appVersion || !apnsEnvironment) {
-    return errorResponse("Device id, platform, app version and APNs environment are required", 400);
-  }
-  if (rawPushToken !== null && rawPushToken !== undefined && pushToken === "") {
-    return errorResponse("APNs token must be a string or null", 400);
+  if (!/^ios_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(deviceID)
+    || platform !== "ios" || appVersion.trim().length < 1 || appVersion.trim().length > 64
+    || !["not_determined", "denied", "authorized", "provisional", "ephemeral", "unknown"].includes(permissionState)
+    || (hasEnvironment !== hasPushToken)
+    || (hasEnvironment && rawEnvironment !== null
+      && (!apnsEnvironment || !["sandbox", "production"].includes(apnsEnvironment)))
+    || (hasPushToken && rawPushToken !== null && (!pushToken || pushToken.length > 512))
+    || (hasApnsValues && (!apnsEnvironment || !pushToken))
+    || (["not_determined", "denied", "unknown"].includes(permissionState)
+      && hasApnsValues)) {
+    return errorResponse("Invalid device registration", 400);
   }
 
   const supabaseURL = Deno.env.get("SUPABASE_URL");

@@ -29,6 +29,9 @@ names remain as compatibility aliases for development and production.
   `ASWebAuthenticationSession`, and native Sign in with Apple.
 - Session refresh, OAuth/recovery deep links, Keychain persistence, and explicit
   online/offline bootstrap states.
+- Strict callback and Apple identity-token protocol validation, deterministic
+  auth-client mocks, and account provider linking/unlinking with ownership and
+  last-identity guards.
 - An initial native `Dzisiaj` screen with day progress, timed queue, overdue
   attention, task/habit completion, nutrition totals, and notes activity.
 - An initial native `Zadania` screen with smart-view filters, overdue and
@@ -44,6 +47,14 @@ names remain as compatibility aliases for development and production.
   Notes, Sport, Goals, Work, Travel, Health, and Pozostałe/Sprawy modules.
   Their Codable snapshots are persisted locally and queued through the same
   offline/CAS sync engine as the core tabs.
+- Notes support local-first CRUD, archive, folders, checklists, pinning, and
+  search/filter/sort. Native Notes intentionally does not implement binary
+  attachment storage or a provider/upload contract; opaque web attachment
+  descriptors remain preserved in the canonical shadow for later support.
+  If normalized per-row revisions are unavailable, Notes falls back to the
+  existing aggregate queue; the v1 aggregate contract has no local tombstone
+  field, so normalized delete commands are preferred whenever CAS metadata is
+  available.
 - A nutrition quick-capture flow with a local product catalog, manual fallback,
   camera barcode scanning (when permission is granted), saved meals, weight
   measurements, editable goals, and undo-safe deletion.
@@ -70,5 +81,10 @@ defaults for bootstrapping and diagnostics only; account-scoped rollout is
 documented in [`docs/staging-runbook.md`](../docs/staging-runbook.md).
 
 Release validation is documented in [`docs/ios-release-gate.md`](../docs/ios-release-gate.md).
+The local-storage boundary, account isolation, lifecycle cleanup, and explicit
+security omissions are documented in [`docs/ios-secure-storage.md`](../docs/ios-secure-storage.md).
 The protected workflow runs executable `xcodebuild test`, SQL/RLS and Edge
 contract gates, then the isolated staging sync smoke before a TestFlight build.
+
+Production Apple/Google credentials, provider-console settings, and redirect
+allowlists are intentionally not committed or configured by this repository.

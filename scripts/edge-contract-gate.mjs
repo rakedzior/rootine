@@ -2,13 +2,27 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { baseEvidence, finishEvidence, hasFlag, runCommand, safeError, writeEvidence, commandExists } from "./release-gate-utils.mjs";
-import { validateSyncContractShape } from "./sync-contract-validation.mjs";
+import { validateSyncContractFixtures, validateSyncContractShape } from "./sync-contract-validation.mjs";
 
 const strict = hasFlag("--strict") || process.env.CI === "true";
 const allowMissingTooling = hasFlag("--allow-missing-tooling");
 const skipMissingTooling = allowMissingTooling && !strict;
 const root = new URL("../supabase/functions/", import.meta.url);
 const canonicalSchema = new URL("../contracts/schemas/sync-v3.schema.json", import.meta.url);
+const fixtureDirectory = new URL("../contracts/fixtures/", import.meta.url);
+const requiredSyncFixtures = [
+  "sync-v3-bootstrap-request.json",
+  "sync-v3-bootstrap-response.json",
+  "sync-v3-pull-request.json",
+  "sync-v3-pull-response.json",
+  "sync-v3-push-request.json",
+  "sync-v3-push-response.json",
+  "sync-v3-push-conflict-response.json",
+  "sync-v3-register-device-request.json",
+  "sync-v3-register-device-no-apns-request.json",
+  "sync-v3-register-device-response.json",
+  "sync-v3-error-cursor-expired.json",
+];
 
 async function findTests(directory, prefix = "") {
   const tests = [];
@@ -45,7 +59,13 @@ function resolveVitest() {
 
 async function validateSyncContract() {
   const contract = JSON.parse(await readFile(canonicalSchema, "utf8"));
-  return validateSyncContractShape(contract);
+  const fixtures = {};
+  for (const name of requiredSyncFixtures) fixtures[name] = JSON.parse(await readFile(new URL(name, fixtureDirectory), "utf8"));
+  return {
+    shape: validateSyncContractShape(contract),
+    fixtures: validateSyncContractFixtures(contract, fixtures),
+    fixtureCount: Object.keys(fixtures).length,
+  };
 }
 
 async function main() {
@@ -69,12 +89,21 @@ async function main() {
     const contract = await validateSyncContract();
     evidence.checks.push({
       name: "sync-v3 executable contract schema",
-      passed: contract.valid,
-      status: contract.valid ? "present" : "blocked",
-      contract_version: contract.contract_version,
-      definitions: contract.definitions,
+      passed: contract.shape.valid,
+      status: contract.shape.valid ? "present" : "blocked",
+      contract_version: contract.shape.contract_version,
+      definitions: contract.shape.definitions,
     });
-    passed &&= contract.valid;
+    passed &&= contract.shape.valid;
+    const invalidFixtures = contract.fixtures.results.filter((result) => !result.valid);
+    evidence.checks.push({
+      name: "sync-v3 request/response fixtures validate against schema",
+      passed: contract.fixtureCount === requiredSyncFixtures.length && contract.fixtures.valid,
+      status: contract.fixtureCount === requiredSyncFixtures.length && contract.fixtures.valid ? "present" : "blocked",
+      fixture_count: contract.fixtureCount,
+      invalid_fixtures: invalidFixtures.map((result) => ({ name: result.name, errors: result.errors })),
+    });
+    passed &&= contract.fixtureCount === requiredSyncFixtures.length && contract.fixtures.valid;
   } catch (error) {
     const missing = error?.code === "ENOENT";
     evidence.checks.push({
@@ -95,7 +124,7 @@ async function main() {
       status: skipMissingTooling ? "skipped" : "blocked",
       reason: "Deno is required for Edge Function contract tests. The CI workflow installs it explicitly.",
     });
-    passed = skipMissingTooling;
+    passed &&= skipMissingTooling;
   } else if (tests.length === 0) {
     evidence.checks.push({
       name: "Edge contract test inventory",
@@ -139,27 +168,22 @@ async function main() {
     }
   }
 
-  const mobileSyncDirectory = new URL("mobile-sync/", root);
-  let mobileSyncExists = true;
-  try {
-    const entries = await readdir(mobileSyncDirectory);
-    mobileSyncExists = entries.includes("index.ts");
-  } catch {
-    mobileSyncExists = false;
-  }
-  const mobileSyncTestExists = tests.some((test) => test.startsWith("mobile-sync/"))
-    || apiTests.some((test) => test === "mobile-sync.test.ts");
+  const requiredFunctionNames = ["delete-account", "mobile-sync"];
+  const functionTestInventory = Object.fromEntries(requiredFunctionNames.map((name) => [
+    name,
+    tests.filter((test) => test.startsWith(`${name}/`)),
+  ]));
+  const missingFunctionTests = requiredFunctionNames.filter((name) => !functionTestInventory[name].length);
   evidence.checks.push({
-    name: "mobile-sync Edge Function and contract test",
-    passed: (mobileSyncExists && mobileSyncTestExists) || !strict,
-    status: mobileSyncExists && mobileSyncTestExists ? "present" : strict ? "blocked" : "scaffold-pending",
-    reason: mobileSyncExists && mobileSyncTestExists
+    name: "required Edge Function contract-test inventory",
+    passed: missingFunctionTests.length === 0 || !strict,
+    status: missingFunctionTests.length === 0 ? "present" : strict ? "blocked" : "scaffold-pending",
+    reason: missingFunctionTests.length === 0
       ? undefined
-      : "B03 implementation and a mobile-sync *.test.ts/*.contract.ts are required by the strict release gate.",
-    implementation: mobileSyncExists,
-    contract_test: mobileSyncTestExists,
+      : `Missing contract tests for: ${missingFunctionTests.join(", ")}`,
+    functions: functionTestInventory,
   });
-  passed &&= (mobileSyncExists && mobileSyncTestExists) || !strict;
+  passed &&= missingFunctionTests.length === 0 || !strict;
 
   evidence.duration_ms = Date.now() - started;
   const complete = finishEvidence(evidence, passed);

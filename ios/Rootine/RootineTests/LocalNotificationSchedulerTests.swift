@@ -23,6 +23,27 @@ final class LocalNotificationSchedulerTests: XCTestCase {
         XCTAssertNotEqual(occurrence.requestIdentifier(for: "user-1"), occurrence.requestIdentifier(for: "user-2"))
     }
 
+    func testNotificationUserInfoUsesOpaqueDeepLinkWithoutUserDedupeMaterial() throws {
+        let occurrence = RootineNotificationOccurrence(
+            entity: .task,
+            entityID: "task-42",
+            localDate: "2026-09-02",
+            localTime: "08:45",
+            scheduledAt: Date(timeIntervalSince1970: 10),
+            userID: "sensitive-user-id"
+        )
+
+        XCTAssertNil(occurrence.userInfo["rootine_dedupe_key"])
+        let rawLink = try XCTUnwrap(occurrence.userInfo["rootine_deep_link"] as? String)
+        let link = try XCTUnwrap(RootineNotificationDeepLink(userInfo: occurrence.userInfo))
+        XCTAssertEqual(link.entity, .task)
+        XCTAssertEqual(link.entityID, "task-42")
+        XCTAssertEqual(link.localDate, "2026-09-02")
+        XCTAssertEqual(link.url.absoluteString, rawLink)
+        XCTAssertFalse(rawLink.contains("sensitive-user-id"))
+        XCTAssertNil(RootineNotificationDeepLink(url: URL(string: "rootine://notification/task/task-42/extra?date=2026-09-02")!))
+    }
+
     func testPreferencesPersistAcrossSchedulerRestartWithoutSQLite() {
         let suiteName = "RootineNotificationSchedulerTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -44,6 +65,34 @@ final class LocalNotificationSchedulerTests: XCTestCase {
             preferences
         )
         XCTAssertNil(RootineNotificationPreferencesStore.load(userID: "user-2", defaults: defaults))
+    }
+
+    func testProfilePreferencesAreAccountScopedAndNormalizeUnknownValues() {
+        let suiteName = "RootineProfilePreferencesTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = RootineProfilePreferences(
+            version: 1,
+            timezoneIdentifier: "not/a/timezone",
+            localeIdentifier: "fr-FR",
+            currencyCode: "CAD",
+            usesMetricUnits: false,
+            privacyMode: true
+        )
+
+        RootineProfilePreferencesStore.save(preferences, userID: "user-1", defaults: defaults)
+
+        let loaded = RootineProfilePreferencesStore.load(userID: "user-1", defaults: defaults)
+        XCTAssertEqual(loaded?.version, RootineProfilePreferences.currentVersion)
+        XCTAssertEqual(loaded?.timezoneIdentifier, TimeZone.current.identifier)
+        XCTAssertTrue(["pl-PL", "en-US"].contains(loaded?.localeIdentifier ?? ""))
+        XCTAssertTrue(["PLN", "EUR", "USD", "GBP"].contains(loaded?.currencyCode ?? ""))
+        XCTAssertEqual(loaded?.usesMetricUnits, false)
+        XCTAssertEqual(loaded?.privacyMode, true)
+        XCTAssertNil(RootineProfilePreferencesStore.load(userID: "user-2", defaults: defaults))
+
+        RootineProfilePreferencesStore.remove(userID: "user-1", defaults: defaults)
+        XCTAssertNil(RootineProfilePreferencesStore.load(userID: "user-1", defaults: defaults))
     }
 
     func testPlannerUsesProfileTimezoneAcrossUTCDateBoundary() {

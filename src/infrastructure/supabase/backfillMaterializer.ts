@@ -7,6 +7,8 @@
  * in `supabase/migrations/20260902120000_rootine_backfill_materializer.sql`.
  */
 
+import { rootineObservability } from "../../app/observability";
+
 export const BACKFILL_CONTRACT_VERSION = 1 as const;
 
 export type BackfillDomain =
@@ -920,7 +922,10 @@ export async function backfillUserSnapshots(
       status: domainReport.status,
       report: domainReport,
     };
-    if (adapted.quarantine.length > 0) await store.recordQuarantine?.(userId, adapted.quarantine, runId);
+    if (adapted.quarantine.length > 0) {
+      adapted.quarantine.slice(0, 16).forEach((entry) => rootineObservability.recordMaterializerQuarantine(entry.reason));
+      await store.recordQuarantine?.(userId, adapted.quarantine, runId);
+    }
     // Unknown/malformed snapshots have no safe generated aggregate. Keep the
     // quarantine entry, but do not create an empty relational revision or a
     // misleading materialization for it.

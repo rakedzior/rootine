@@ -1060,6 +1060,8 @@ private struct AddNutritionEntrySheet: View {
     @State private var generatedNutritionValues: NutritionValues?
     @State private var pendingBarcodeToConsume: String?
     @State private var isShowingScanner = false
+    @State private var isShowingManualCode = false
+    @State private var manualCode = ""
     @State private var scanMessage: String?
     @State private var isSaving = false
     @State private var saveOperationID: String
@@ -1184,7 +1186,25 @@ private struct AddNutritionEntrySheet: View {
                         Label("Skanuj kod produktu", systemImage: "barcode.viewfinder")
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
-                    .accessibilityHint("Otwiera aparat i wyszukuje produkt po kodzie")
+                    .accessibilityHint("Otwiera aparat i wyszukuje produkt po kodzie EAN, UPC, GTIN lub QR")
+                    Button {
+                        isShowingManualCode = true
+                        focusedField = .manualCode
+                    } label: {
+                        Label("Wpisz kod ręcznie", systemImage: "keyboard")
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .accessibilityHint("Pozwala wpisać kod produktu, gdy aparat jest niedostępny")
+                    if isShowingManualCode {
+                        TextField("Kod EAN / UPC / GTIN lub Rootine QR", text: $manualCode)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .manualCode)
+                            .submitLabel(.search)
+                            .onSubmit { lookupManualCode() }
+                        Button("Wyszukaj kod") { lookupManualCode() }
+                            .disabled(manualCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                     if let scanMessage {
                         Label(scanMessage, systemImage: "info.circle")
                             .font(.footnote)
@@ -1222,7 +1242,9 @@ private struct AddNutritionEntrySheet: View {
                     handleBarcode(code)
                 } onError: { message in
                     isShowingScanner = false
+                    isShowingManualCode = true
                     scanMessage = message
+                    focusedField = .manualCode
                 }
                 .ignoresSafeArea()
                 .presentationDetents([.medium, .large])
@@ -1270,18 +1292,35 @@ private struct AddNutritionEntrySheet: View {
     }
 
     private func handleBarcode(_ code: String) {
-        query = code
+        let normalizedCode: String
+        switch NutritionBarcode.parseScanPayload(code) {
+        case .malformed:
+            manualCode = code
+            isShowingManualCode = true
+            scanMessage = "Nie udało się odczytać kodu. Wpisz poprawny kod EAN, UPC, GTIN lub Rootine QR ręcznie."
+            focusedField = .manualCode
+            return
+        case .unsupported:
+            manualCode = code
+            isShowingManualCode = true
+            scanMessage = "Ten kod QR nie jest obsługiwanym kodem produktu Rootine. Możesz uzupełnić dane ręcznie."
+            focusedField = .manualCode
+            return
+        case .productCode(let normalized):
+            normalizedCode = normalized
+        }
+        query = normalizedCode
+        manualCode = normalizedCode
         pendingBarcodeToConsume = nil
-        scanMessage = "Szukam produktu dla kodu \(code)…"
+        scanMessage = "Szukam produktu dla kodu \(normalizedCode)…"
         _Concurrency.Task {
-            if let product = await environment.lookupNutritionProduct(barcode: code) {
+            if let product = await environment.lookupNutritionProduct(barcode: normalizedCode) {
                 select(product)
-                pendingBarcodeToConsume = NutritionBarcode.normalized(code)
+                pendingBarcodeToConsume = normalizedCode
                 scanMessage = nil
             } else {
-                let normalized = NutritionBarcode.normalized(code)
                 let wasQueued = environment.nutritionWorkspace.pendingBarcodeLookups?.contains {
-                    NutritionBarcode.normalized($0.barcode) == normalized
+                    NutritionBarcode.normalized($0.barcode) == normalizedCode
                 } == true
                 scanMessage = wasQueued
                     ? "Nie znaleziono produktu online. Kod zapisano — ponowimy próbę po połączeniu; możesz też wpisać dane ręcznie."
@@ -1289,6 +1328,10 @@ private struct AddNutritionEntrySheet: View {
                 focusedField = .name
             }
         }
+    }
+
+    private func lookupManualCode() {
+        handleBarcode(manualCode)
     }
 
     private func submit() {
@@ -1391,6 +1434,7 @@ private struct AddNutritionEntrySheet: View {
 
 private enum NutritionEntryField: Hashable {
     case search
+    case manualCode
     case name
     case calories
     case protein
@@ -1466,6 +1510,7 @@ private final class BarcodeScannerViewController: UIViewController, @preconcurre
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer?.frame = view.bounds
+        updateVideoOrientation()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -1513,7 +1558,10 @@ private final class BarcodeScannerViewController: UIViewController, @preconcurre
                 }
                 self.captureSession.addInput(input)
                 self.captureSession.addOutput(output)
-                output.metadataObjectTypes = [.ean8, .ean13, .upce, .code128, .qr]
+                // UPC-A is emitted as EAN-13 by AVFoundation when it has a
+                // leading zero. ITF-14 covers GTIN-14 labels; the parser still
+                // validates the decoded value before any lookup.
+                output.metadataObjectTypes = [.ean8, .ean13, .upce, .itf14, .interleaved2of5, .code128, .qr]
                 self.captureSession.commitConfiguration()
                 let layer = AVCaptureVideoPreviewLayer(session: self.captureSession)
                 layer.videoGravity = .resizeAspectFill
@@ -1522,11 +1570,24 @@ private final class BarcodeScannerViewController: UIViewController, @preconcurre
                     output.setMetadataObjectsDelegate(self, queue: .main)
                     self.previewLayer = layer
                     self.view.layer.insertSublayer(layer, at: 0)
+                    self.updateVideoOrientation()
                 }
                 self.captureSession.startRunning()
             } catch {
                 DispatchQueue.main.async { [weak self] in self?.onError("Nie udało się uruchomić aparatu.") }
             }
+        }
+    }
+
+    private func updateVideoOrientation() {
+        guard let orientation = view.window?.windowScene?.interfaceOrientation,
+              let connection = previewLayer?.connection,
+              connection.isVideoOrientationSupported else { return }
+        switch orientation {
+        case .landscapeLeft: connection.videoOrientation = .landscapeLeft
+        case .landscapeRight: connection.videoOrientation = .landscapeRight
+        case .portraitUpsideDown: connection.videoOrientation = .portraitUpsideDown
+        default: connection.videoOrientation = .portrait
         }
     }
 
@@ -1556,6 +1617,7 @@ private final class BarcodeScannerViewController: UIViewController, @preconcurre
               let code = object.stringValue,
               !code.isEmpty else { return }
         hasDeliveredCode = true
+        RootineObservability.shared.recordQRDetected(format: object.type == .qr ? "qr" : "barcode")
         captureQueue.async { [weak self] in
             guard let self, self.captureSession.isRunning else { return }
             self.captureSession.stopRunning()

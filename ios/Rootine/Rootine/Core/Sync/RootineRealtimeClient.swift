@@ -169,6 +169,7 @@ actor RootineRealtimeClient {
     private let sleep: Sleep
     private let onEvent: EventHandler?
     private let onStatus: StatusHandler?
+    private let observability: RootineObservability
 
     private var runTask: Task<Void, Never>?
     private var activeSocket: (any RootineRealtimeSocket)?
@@ -178,6 +179,15 @@ actor RootineRealtimeClient {
     private var nextReference = 1
     private var pendingHeartbeat: (reference: String, startedAt: Date)?
     private var heartbeatFailure: RootineRealtimeError?
+    private var connectedAt: Date?
+    private var runIdentifier: UUID?
+
+    /// Realtime is a wake-up path, so a broken channel must not create an
+    /// unbounded reconnect/heartbeat loop. The lower bound only applies to
+    /// zero/negative values; small positive values remain useful in tests.
+    private let minimumTimerInterval: Duration = .milliseconds(100)
+    private let maximumReconnectDelay: Duration = .seconds(300)
+    private let maximumHeartbeatInterval: Duration = .seconds(300)
 
     init(
         configuration: RootineRealtimeConfiguration,
@@ -188,13 +198,15 @@ actor RootineRealtimeClient {
             try await Task.sleep(for: duration)
         },
         onEvent: EventHandler? = nil,
-        onStatus: StatusHandler? = nil
+        onStatus: StatusHandler? = nil,
+        observability: RootineObservability = .shared
     ) {
         self.configuration = configuration
         self.socketFactory = socketFactory
         self.sleep = sleep
         self.onEvent = onEvent
         self.onStatus = onStatus
+        self.observability = observability
     }
 
     init(
@@ -207,7 +219,8 @@ actor RootineRealtimeClient {
             try await Task.sleep(for: duration)
         },
         onEvent: EventHandler? = nil,
-        onStatus: StatusHandler? = nil
+        onStatus: StatusHandler? = nil,
+        observability: RootineObservability = .shared
     ) {
         self.configuration = RootineRealtimeConfiguration(
             supabaseURL: configuration.supabaseURL,
@@ -219,6 +232,7 @@ actor RootineRealtimeClient {
         self.sleep = sleep
         self.onEvent = onEvent
         self.onStatus = onStatus
+        self.observability = observability
     }
 
     var status: RootineRealtimeStatus {
@@ -232,12 +246,15 @@ actor RootineRealtimeClient {
 
     func start() {
         guard runTask == nil else { return }
+        let identifier = UUID()
+        runIdentifier = identifier
         runTask = Task { [weak self] in
-            await self?.runLoop()
+            await self?.runLoop(identifier: identifier)
         }
     }
 
     func stop() {
+        runIdentifier = nil
         runTask?.cancel()
         runTask = nil
         heartbeatTask?.cancel()
@@ -247,24 +264,31 @@ actor RootineRealtimeClient {
         pendingHeartbeat = nil
         heartbeatFailure = nil
         failureCount = 0
+        connectedAt = nil
         setStatus(.stopped)
     }
 
-    private func runLoop() async {
+    private func runLoop(identifier: UUID) async {
         guard makeWebSocketRequest() != nil else {
             setStatus(.failed(.invalidConfiguration))
-            runTask = nil
+            if runIdentifier == identifier {
+                runTask = nil
+                runIdentifier = nil
+            }
             return
         }
 
-        while !Task.isCancelled {
+        while !Task.isCancelled, runIdentifier == identifier {
             do {
                 try await connectAndListen()
-                failureCount = 0
             } catch is CancellationError {
                 break
             } catch let error as RootineRealtimeError {
                 guard !Task.isCancelled else { break }
+                if error == .unauthorized {
+                    setStatus(.failed(error.failure))
+                    break
+                }
                 setStatus(.degraded(error.failure))
                 await waitBeforeReconnect()
             } catch {
@@ -274,14 +298,20 @@ actor RootineRealtimeClient {
             }
         }
 
+        guard runIdentifier == identifier else { return }
         runTask = nil
+        runIdentifier = nil
         heartbeatTask?.cancel()
         heartbeatTask = nil
         activeSocket?.cancel()
         activeSocket = nil
         pendingHeartbeat = nil
         heartbeatFailure = nil
-        if statusValue != .stopped {
+        connectedAt = nil
+        if case .failed = statusValue {
+            // Preserve terminal authentication/configuration failures so the
+            // owner can surface them and decide when to retry.
+        } else if statusValue != .stopped {
             setStatus(.stopped)
         }
     }
@@ -296,17 +326,24 @@ actor RootineRealtimeClient {
         activeSocket = socket
         pendingHeartbeat = nil
         defer {
+            // A connection that stayed healthy for at least 30 seconds has
+            // earned a fresh backoff window. Short-lived drops keep the
+            // failure count so a flapping network cannot spin rapidly.
+            if connectedAt.map({ Date().timeIntervalSince($0) >= 30 }) == true {
+                failureCount = 0
+            }
             heartbeatTask?.cancel()
             heartbeatTask = nil
             socket.cancel()
             activeSocket = nil
             pendingHeartbeat = nil
             heartbeatFailure = nil
+            connectedAt = nil
         }
 
         try await socket.connect()
         try await socket.send(joinMessage())
-        failureCount = 0
+        connectedAt = Date()
         setStatus(.connected)
 
         heartbeatTask = Task { [weak self] in
@@ -343,7 +380,15 @@ actor RootineRealtimeClient {
     }
 
     private func heartbeatLoop(socket: any RootineRealtimeSocket) async throws {
-        var delayUntilNextHeartbeat = configuration.heartbeatInterval
+        let heartbeatInterval = configuration.heartbeatInterval.bounded(
+            minimum: minimumTimerInterval,
+            maximum: maximumHeartbeatInterval
+        )
+        let heartbeatTimeout = configuration.heartbeatTimeout.bounded(
+            minimum: minimumTimerInterval,
+            maximum: heartbeatInterval
+        )
+        var delayUntilNextHeartbeat = heartbeatInterval
         while !Task.isCancelled {
             try await sleep(delayUntilNextHeartbeat)
             try Task.checkCancellation()
@@ -354,17 +399,17 @@ actor RootineRealtimeClient {
             // The ACK deadline is independent from the next send interval:
             // with the default 25 s/10 s settings a dead channel is detected
             // after 10 s, rather than waiting for the following 25 s tick.
-            try await sleep(configuration.heartbeatTimeout)
+            try await sleep(heartbeatTimeout)
             try Task.checkCancellation()
             if pendingHeartbeat?.reference == reference {
+                heartbeatFailure = .heartbeatFailed
                 throw RootineRealtimeError.heartbeatFailed
             }
 
-            let remaining = configuration.heartbeatInterval.timeInterval
-                - configuration.heartbeatTimeout.timeInterval
-            delayUntilNextHeartbeat = remaining > 0
+            let remaining = heartbeatInterval.timeInterval - heartbeatTimeout.timeInterval
+            delayUntilNextHeartbeat = remaining > minimumTimerInterval.timeInterval
                 ? .milliseconds(Int64((remaining * 1_000).rounded(.up)))
-                : .zero
+                : minimumTimerInterval
         }
     }
 
@@ -383,7 +428,10 @@ actor RootineRealtimeClient {
                 : RootineRealtimeError.channelError
         }
         if envelope.event == "system" {
-            let status = envelope.payload?.stringValue?.lowercased()
+            let status = (
+                envelope.payload?.stringValue
+                ?? envelope.payload?.objectValue?["status"]?.stringValue
+            )?.lowercased()
             if status == "timeout" || status == "timed_out" {
                 throw RootineRealtimeError.timedOut
             }
@@ -395,11 +443,18 @@ actor RootineRealtimeClient {
         if envelope.event == "phx_reply" {
             let status = envelope.payload?.objectValue?["status"]?.stringValue?.lowercased()
             if status == "error" {
-                let reason = envelope.payload?.objectValue?["response"]?.objectValue?["reason"]?.stringValue?.lowercased()
+                let response = envelope.payload?.objectValue?["response"]
+                let reason = (
+                    response?.objectValue?["reason"]?.stringValue
+                    ?? response?.stringValue
+                )?.lowercased()
                 if reason?.contains("timeout") == true || reason?.contains("timed_out") == true {
                     throw RootineRealtimeError.timedOut
                 }
-                if reason?.contains("unauthorized") == true || reason?.contains("invalid token") == true {
+                if reason?.contains("unauthorized") == true
+                    || reason?.contains("invalid token") == true
+                    || reason?.contains("invalid jwt") == true
+                    || reason?.contains("jwt expired") == true {
                     throw RootineRealtimeError.unauthorized
                 }
                 throw envelope.ref == pendingHeartbeat?.reference
@@ -422,6 +477,13 @@ actor RootineRealtimeClient {
     }
 
     private func signal(from envelope: RealtimeEnvelope) -> RootineSyncAvailableEvent? {
+        // A socket should only ever deliver frames for the joined topic. The
+        // explicit check protects adapters/tests that feed a frame from a
+        // different channel into this client.
+        if let topic = envelope.topic, topic != configuration.topic {
+            return nil
+        }
+
         let candidate: JSONValue
         let fallbackType: String?
         if envelope.event == "broadcast", let payload = envelope.payload {
@@ -438,6 +500,20 @@ actor RootineRealtimeClient {
         } else if envelope.event == "rootine_sync_available", let payload = envelope.payload {
             candidate = payload
             fallbackType = envelope.event
+        } else if envelope.event == "postgres_changes", let payload = envelope.payload {
+            // Supabase's postgres_changes envelope nests the row under
+            // payload.data.record. Accept the direct record form as well so
+            // deployments can publish the same minimal signal through either
+            // Realtime adapter.
+            if let data = payload.objectValue,
+               let nested = data["data"]?.objectValue?["record"] {
+                candidate = nested
+            } else if let record = payload.objectValue?["record"] {
+                candidate = record
+            } else {
+                return nil
+            }
+            fallbackType = "rootine_sync_available"
         } else if envelope.type == "rootine_sync_available" {
             candidate = .object([
                 "type": .string(envelope.type ?? ""),
@@ -451,7 +527,8 @@ actor RootineRealtimeClient {
         }
 
         guard case .object(let object) = candidate,
-              case .string(let userID) = object["user_id"] else {
+              case .string(let userID) = object["user_id"],
+              !userID.isEmpty else {
             return nil
         }
         let type: String
@@ -467,11 +544,19 @@ actor RootineRealtimeClient {
            value.isFinite,
            value.rounded() == value {
             cursor = Int64(exactly: value)
+        } else if case .number(let value) = object["change_cursor"],
+                  value.isFinite,
+                  value.rounded() == value {
+            cursor = Int64(exactly: value)
         } else {
             cursor = nil
         }
         let workspaceHint: String?
         if case .string(let value) = object["workspace_hint"] {
+            workspaceHint = value
+        } else if case .string(let value) = object["storage_key"] {
+            workspaceHint = value
+        } else if case .string(let value) = object["entity"] {
             workspaceHint = value
         } else {
             workspaceHint = nil
@@ -486,7 +571,10 @@ actor RootineRealtimeClient {
 
     private func waitBeforeReconnect() async {
         guard !Task.isCancelled else { return }
-        let delays = configuration.reconnectDelays.isEmpty ? [.seconds(1)] : configuration.reconnectDelays
+        let configuredDelays = configuration.reconnectDelays.isEmpty ? [.seconds(1)] : configuration.reconnectDelays
+        let delays = configuredDelays.map {
+            $0.bounded(minimum: minimumTimerInterval, maximum: maximumReconnectDelay)
+        }
         let index = min(failureCount, delays.count - 1)
         let delay = delays[index]
         failureCount += 1
@@ -570,6 +658,37 @@ actor RootineRealtimeClient {
 
     private func setStatus(_ status: RootineRealtimeStatus) {
         statusValue = status
+        let outcome: RootineTelemetryOutcome
+        var attributes: [String: String] = [:]
+        switch status {
+        case .connected:
+            observability.increment(.realtimeConnected)
+            outcome = .success
+            attributes["status"] = "connected"
+        case let .reconnecting(attempt, _):
+            observability.increment(.realtimeReconnect)
+            outcome = .degraded
+            attributes["status"] = "reconnecting"
+            attributes["attempt"] = String(attempt)
+        case let .degraded(failure):
+            observability.increment(.realtimeFailure)
+            outcome = .degraded
+            attributes["status"] = "degraded"
+            attributes["reason"] = failure.rawValue
+        case let .failed(failure):
+            observability.increment(.realtimeFailure)
+            outcome = .failure
+            attributes["status"] = "failed"
+            attributes["reason"] = failure.rawValue
+        case let .connecting(attempt):
+            outcome = .unknown
+            attributes["status"] = "connecting"
+            attributes["attempt"] = String(attempt)
+        case .stopped:
+            outcome = .unknown
+            attributes["status"] = "stopped"
+        }
+        observability.record(name: "realtime_health", outcome: outcome, attributes: attributes)
         guard let onStatus else { return }
         Task { await onStatus(status) }
     }
@@ -619,6 +738,15 @@ private extension Duration {
     var timeInterval: TimeInterval {
         let components = components
         return TimeInterval(components.seconds) + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+
+    func bounded(minimum: Duration, maximum: Duration) -> Duration {
+        let value = timeInterval
+        let lower = minimum.timeInterval
+        let upper = maximum.timeInterval
+        guard value.isFinite else { return maximum }
+        let bounded = Swift.max(lower, Swift.min(value, upper))
+        return .milliseconds(Int64((bounded * 1_000).rounded(.up)))
     }
 }
 

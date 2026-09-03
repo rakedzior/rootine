@@ -1,5 +1,67 @@
 import Foundation
 
+/// A clock is a deliberately tiny dependency boundary. Production uses the
+/// wall clock, while contract and lifecycle tests can freeze time without
+/// mutating the process-wide calendar or timezone.
+protocol RootineClock: Sendable {
+    var now: Date { get }
+}
+
+struct SystemRootineClock: RootineClock, Sendable {
+    var now: Date { Date() }
+}
+
+struct FixedRootineClock: RootineClock, Sendable {
+    let now: Date
+
+    init(_ now: Date) {
+        self.now = now
+    }
+}
+
+/// The settings that affect local-day interpretation are kept together so a
+/// profile can later provide them as one validated value. The default is the
+/// current device configuration; no language, currency, or timezone is
+/// silently forced by the native client.
+struct RootineLocaleSettings: Codable, Equatable, Sendable {
+    var localeIdentifier: String
+    var timezoneIdentifier: String
+    var calendarIdentifier: Calendar.Identifier
+    var currencyCode: String?
+    var usesMetricSystem: Bool
+
+    init(
+        localeIdentifier: String = Locale.autoupdatingCurrent.identifier,
+        timezoneIdentifier: String = TimeZone.autoupdatingCurrent.identifier,
+        calendarIdentifier: Calendar.Identifier = Calendar.autoupdatingCurrent.identifier,
+        currencyCode: String? = Locale.autoupdatingCurrent.currency?.identifier,
+        usesMetricSystem: Bool = Locale.autoupdatingCurrent.measurementSystem == .metric
+    ) {
+        self.localeIdentifier = localeIdentifier
+        self.timezoneIdentifier = timezoneIdentifier
+        self.calendarIdentifier = calendarIdentifier
+        self.currencyCode = currencyCode
+        self.usesMetricSystem = usesMetricSystem
+    }
+
+    static var device: RootineLocaleSettings { RootineLocaleSettings() }
+
+    var locale: Locale {
+        Locale(identifier: localeIdentifier)
+    }
+
+    var timeZone: TimeZone {
+        TimeZone(identifier: timezoneIdentifier) ?? .autoupdatingCurrent
+    }
+
+    var calendar: Calendar {
+        var calendar = Calendar(identifier: calendarIdentifier)
+        calendar.locale = locale
+        calendar.timeZone = timeZone
+        return calendar
+    }
+}
+
 enum RootineEnvironment: String, Codable, CaseIterable, Sendable {
     case development
     case staging

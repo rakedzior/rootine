@@ -19,6 +19,7 @@
     "test:e2e:viewport": "playwright test --grep @viewport-matrix",
     "test:e2e:zoom": "playwright test --grep @zoom-matrix",
     "test:sql": "node scripts/sql-migration-gate.mjs",
+    "test:sql:static": "node --test scripts/sql-migration-static.test.mjs",
     "test:edge": "node scripts/edge-contract-gate.mjs",
     "test:edge:regression": "node --test scripts/edge-contract-gate.regression.test.mjs",
     "test:staging-smoke": "node scripts/staging-smoke.mjs",

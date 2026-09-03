@@ -6,6 +6,8 @@
  * PostgREST, so auth.uid() in every RPC remains the source of ownership.
  */
 
+import { emitRootineDiagnostic, RootineHealthCounters } from "../_shared/observability.ts";
+
 const MAX_BODY_BYTES = 1_048_576;
 const MAX_BATCH = 100;
 const MAX_PULL_LIMIT = 500;
@@ -61,6 +63,13 @@ class MobileSyncRpcError extends Error {
     super("Mobile sync upstream request failed");
     this.name = "MobileSyncRpcError";
     this.status = status;
+  }
+}
+
+class MobileSyncContractError extends Error {
+  constructor() {
+    super("Mobile sync upstream contract is invalid");
+    this.name = "MobileSyncContractError";
   }
 }
 
@@ -131,6 +140,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
 function integerField(body: Record<string, unknown>, name: string, fallback: number, min: number, max: number) {
   if (body[name] === undefined) return fallback;
   if (typeof body[name] !== "number" || !Number.isSafeInteger(body[name])) return null;
@@ -138,6 +152,10 @@ function integerField(body: Record<string, unknown>, name: string, fallback: num
 }
 
 function validPushCommand(command: Record<string, unknown>) {
+  const allowedKeys = command.kind === "delete"
+    ? ["operation_id", "entity", "entity_id", "kind", "base_revision"]
+    : ["operation_id", "entity", "entity_id", "kind", "base_revision", "payload"];
+  if (!hasOnlyKeys(command, allowedKeys)) return false;
   const operationId = typeof command.operation_id === "string" ? command.operation_id : "";
   const entity = typeof command.entity === "string" ? command.entity : "";
   const entityId = typeof command.entity_id === "string" ? command.entity_id : "";
@@ -272,11 +290,16 @@ function actionBody(body: Record<string, unknown>) {
   const actionValue = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
   const action = actionValue as SyncAction;
   if (!["bootstrap", "pull", "push", "register_device"].includes(actionValue)) return null;
+  if (body.contract_version !== undefined && body.contract_version !== CONTRACT_VERSION) return null;
   const deviceId = typeof body.device_id === "string" ? body.device_id : "";
   if (!DEVICE_ID_PATTERN.test(deviceId)) return null;
 
-  if (action === "bootstrap") return { action, deviceId } as const;
+  if (action === "bootstrap") {
+    if (!hasOnlyKeys(body, ["contract_version", "correlation_id", "action", "device_id"])) return null;
+    return { action, deviceId } as const;
+  }
   if (action === "pull") {
+    if (!hasOnlyKeys(body, ["contract_version", "correlation_id", "action", "device_id", "cursor", "limit"])) return null;
     if (!Object.prototype.hasOwnProperty.call(body, "cursor")) return null;
     const cursor = body.cursor === null ? 0 : integerField(body, "cursor", 0, 0, Number.MAX_SAFE_INTEGER);
     const limit = integerField(body, "limit", MAX_PULL_LIMIT, 1, MAX_PULL_LIMIT);
@@ -284,24 +307,39 @@ function actionBody(body: Record<string, unknown>) {
     return { action, deviceId, cursor, limit } as const;
   }
   if (action === "push") {
+    if (!hasOnlyKeys(body, ["contract_version", "correlation_id", "action", "device_id", "commands"])) return null;
     if (!Array.isArray(body.commands) || body.commands.length < 1 || body.commands.length > MAX_BATCH) return null;
     if (body.commands.some((command) => !isRecord(command) || !validPushCommand(command))) return null;
     return { action, deviceId, commands: body.commands } as const;
   }
 
+  if (!hasOnlyKeys(body, [
+    "contract_version", "correlation_id", "action", "device_id", "platform", "app_version", "environment",
+    "apns_environment", "push_token", "permission_state",
+  ])) return null;
   const platform = typeof body.platform === "string" ? body.platform : "";
   const appVersion = typeof body.app_version === "string" ? body.app_version : "";
   const environment = typeof body.environment === "string" ? body.environment : "";
   const hasApnsEnvironment = Object.prototype.hasOwnProperty.call(body, "apns_environment");
   const hasPushToken = Object.prototype.hasOwnProperty.call(body, "push_token");
+  const hasPermissionState = Object.prototype.hasOwnProperty.call(body, "permission_state");
   if (hasApnsEnvironment !== hasPushToken) return null;
   const apnsEnvironment = hasApnsEnvironment
     && typeof body.apns_environment === "string" ? body.apns_environment : null;
   const pushToken = hasPushToken && typeof body.push_token === "string" ? body.push_token : null;
+  const permissionState = hasPermissionState && typeof body.permission_state === "string"
+    ? body.permission_state : null;
+  const hasApnsValues = apnsEnvironment !== null || pushToken !== null;
   if (platform !== "ios" || appVersion.length < 1 || appVersion.length > 40
     || !["development", "staging", "production"].includes(environment)
-    || (hasApnsEnvironment && (!apnsEnvironment || !["sandbox", "production"].includes(apnsEnvironment)))
-    || (hasPushToken && (!pushToken || pushToken.length < 1 || pushToken.length > 512))) return null;
+    || (hasApnsEnvironment && body.apns_environment !== null
+      && (!apnsEnvironment || !["sandbox", "production"].includes(apnsEnvironment)))
+    || (hasPushToken && body.push_token !== null
+      && (!pushToken || pushToken.length < 1 || pushToken.length > 512))
+    || (hasApnsValues && (!apnsEnvironment || !pushToken))
+    || (hasPermissionState && !["not_determined", "denied", "authorized", "provisional", "ephemeral", "unknown"].includes(permissionState ?? ""))
+    || (permissionState !== null && ["not_determined", "denied", "unknown"].includes(permissionState)
+      && hasApnsValues)) return null;
   return {
     action,
     deviceId,
@@ -310,6 +348,7 @@ function actionBody(body: Record<string, unknown>) {
     environment,
     apnsEnvironment,
     pushToken,
+    permissionState,
   } as const;
 }
 
@@ -329,6 +368,7 @@ function nonNegativeInteger(value: unknown, fallback: number) {
 
 function normalizeChange(value: unknown) {
   if (!isRecord(value)) return null;
+  if (!Object.prototype.hasOwnProperty.call(value, "record")) return null;
   const cursor = nonNegativeInteger(value.cursor, 0);
   const entity = typeof value.entity === "string" ? value.entity : "";
   const entityId = typeof value.entity_id === "string" ? value.entity_id : "";
@@ -345,8 +385,11 @@ function normalizeChange(value: unknown) {
 }
 
 function normalizeChanges(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value.map(normalizeChange).filter((change): change is NonNullable<typeof change> => change !== null).slice(0, MAX_PULL_LIMIT);
+  if (!Array.isArray(value)) return null;
+  if (value.length > MAX_PULL_LIMIT) return null;
+  const normalized = value.map(normalizeChange);
+  if (normalized.some((change) => change === null)) return null;
+  return normalized.filter((change): change is NonNullable<typeof change> => change !== null);
 }
 
 function normalizeServerRecord(
@@ -379,22 +422,23 @@ function normalizeServerRecord(
 }
 
 function normalizePushResults(value: unknown, commands: Record<string, unknown>[]) {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, MAX_BATCH).map((item, index) => {
-    const result = isRecord(item) ? item : {};
+  if (!Array.isArray(value) || value.length !== commands.length || value.length > MAX_BATCH) return null;
+  const normalized = value.slice(0, MAX_BATCH).map((item, index) => {
+    if (!isRecord(item)) return null;
+    const result = item;
     const command = commands[index] ?? {};
-    const operationId = typeof result.operation_id === "string"
-      ? result.operation_id
-      : typeof command.operation_id === "string" ? command.operation_id : "invalid";
+    const operationId = typeof result.operation_id === "string" ? result.operation_id : null;
+    if (!operationId || typeof command.operation_id !== "string" || operationId !== command.operation_id) return null;
+    const rawStatus = result.status;
+    if (!["applied", "already_applied", "conflict", "invalid"].includes(String(rawStatus))) return null;
+    const status = rawStatus as "applied" | "already_applied" | "conflict" | "invalid";
     const entity = typeof result.entity === "string"
       ? result.entity
-      : typeof command.entity === "string" ? command.entity : "invalid";
+      : status === "invalid" && typeof command.entity === "string" ? command.entity : null;
     const entityId = typeof result.entity_id === "string"
       ? result.entity_id
-      : typeof command.entity_id === "string" ? command.entity_id : "invalid";
-    const status = ["applied", "already_applied", "conflict", "invalid"].includes(String(result.status))
-      ? result.status as "applied" | "already_applied" | "conflict" | "invalid"
-      : "invalid";
+      : status === "invalid" && typeof command.entity_id === "string" ? command.entity_id : null;
+    if (!entity || !ENTITY_PATTERN.test(entity) || !entityId || entityId.length > 180) return null;
     const normalized: Record<string, unknown> = {
       operation_id: operationId,
       status,
@@ -418,6 +462,8 @@ function normalizePushResults(value: unknown, commands: Record<string, unknown>[
     }
     return normalized;
   });
+  if (normalized.some((result) => result === null)) return null;
+  return normalized as Record<string, unknown>[];
 }
 
 function normalizeSuccess(
@@ -427,28 +473,34 @@ function normalizeSuccess(
   correlationId: string,
 ) {
   if (action === "bootstrap") {
+    const changes = normalizeChanges(data.changes);
+    if (!changes) throw new MobileSyncContractError();
     const serverCursor = nonNegativeInteger(data.server_cursor ?? data.cursor, 0);
     return responseBody({
       server_cursor: serverCursor,
       next_cursor: nonNegativeInteger(data.next_cursor, serverCursor),
       has_more: data.has_more === true,
-      changes: normalizeChanges(data.changes),
+      changes,
     }, correlationId);
   }
   if (action === "pull") {
+    const changes = normalizeChanges(data.changes);
+    if (!changes) throw new MobileSyncContractError();
     const fromCursor = nonNegativeInteger(data.from_cursor, 0);
     return responseBody({
       from_cursor: fromCursor,
       next_cursor: nonNegativeInteger(data.next_cursor, fromCursor),
       has_more: data.has_more === true,
-      changes: normalizeChanges(data.changes),
+      changes,
     }, correlationId);
   }
   if (action === "push") {
+    const results = normalizePushResults(data.results, parsed.commands as Record<string, unknown>[]);
+    if (!results) throw new MobileSyncContractError();
     const serverCursor = nonNegativeInteger(data.server_cursor, 0);
     return responseBody({
       server_cursor: serverCursor,
-      results: normalizePushResults(data.results, parsed.commands as Record<string, unknown>[]),
+      results,
     }, correlationId);
   }
   return responseBody({
@@ -502,6 +554,42 @@ export async function handleMobileSync(
   const parsed = actionBody(body);
   if (!parsed) return syncErrorResponse("invalid", 400, correlationId);
 
+  const diagnostics = new RootineHealthCounters();
+  const operationStartedAt = Date.now();
+  const operationId = parsed.action === "push" && typeof parsed.commands[0]?.operation_id === "string"
+    ? parsed.commands[0].operation_id
+    : undefined;
+  const finish = (response: Response, error?: unknown) => {
+    const successful = response.status >= 200 && response.status < 300;
+    const outcome = successful ? "success" : response.status === 409 ? "degraded" : "failure";
+    const actionCounter = parsed.action === "pull" || parsed.action === "bootstrap"
+      ? (successful ? "sync_pull_success" : "sync_pull_failure")
+      : parsed.action === "push"
+      ? (successful ? "sync_push_success" : "sync_push_failure")
+      : null;
+    if (actionCounter) diagnostics.increment(actionCounter);
+    if (response.status === 401 || response.status === 403) diagnostics.increment("sync_unauthorized");
+    if (response.status === 409) diagnostics.increment("sync_cursor_expired");
+    if (response.status === 429) diagnostics.increment("sync_retry");
+    const event = diagnostics.record({
+      name: "sync_operation",
+      outcome,
+      duration_ms: Date.now() - operationStartedAt,
+      correlation_id: correlationId,
+      ...(operationId ? { operation_id: operationId } : {}),
+      attributes: {
+        action: parsed.action,
+        http_status: response.status,
+        ...(error === undefined ? {} : { error }),
+        ...(parsed.action === "push" ? { batch_size: parsed.commands.length } : {}),
+      },
+    });
+    if (runtimeEnv("ROOTINE_DIAGNOSTICS_LOGGING") === "true") {
+      emitRootineDiagnostic(event, (message, details) => console.info(message, details));
+    }
+    return response;
+  };
+
   const configuredTimeoutMs = Number.parseInt(runtimeEnv("MOBILE_SYNC_TIMEOUT_MS") ?? "", 10);
   const timeoutMs = Number.isSafeInteger(options.timeoutMs) && (options.timeoutMs ?? 0) > 0
     ? options.timeoutMs as number
@@ -525,18 +613,18 @@ export async function handleMobileSync(
     if (!authorization.ok) {
       const authStatus = authorization.response.status;
       const authCode = authStatus === 401 ? "unauthorized" : "server_error";
-      return syncErrorResponse(authCode, authStatus >= 500 ? 503 : 401, correlationId);
+      return finish(syncErrorResponse(authCode, authStatus >= 500 ? 503 : 401, correlationId), authCode);
     }
 
     const key = options.clientKey?.(request, authorization.userId, parsed.deviceId)
       ?? clientKey(request, authorization.userId, parsed.deviceId);
     const rateLimit = consumeRateLimit(key, options.now?.() ?? Date.now());
     if (!rateLimit.allowed) {
-      return syncErrorResponse("rate_limited", 429, correlationId, {
+      return finish(syncErrorResponse("rate_limited", 429, correlationId, {
         "retry-after": String(rateLimit.retryAfter),
         "x-ratelimit-limit": String(RATE_LIMIT),
         "x-ratelimit-remaining": "0",
-      }, rateLimit.retryAfter);
+      }, rateLimit.retryAfter), "rate_limited");
     }
 
     let rpcName = "";
@@ -567,24 +655,29 @@ export async function handleMobileSync(
           p_apns_environment: parsed.apnsEnvironment,
           p_push_token: parsed.pushToken,
         };
+        if (parsed.permissionState !== null) args.p_permission_state = parsed.permissionState;
         break;
     }
 
     const invokeRpc = options.invokeRpc
       ?? ((name: string, rpcArgs: Record<string, unknown>, signal: AbortSignal) =>
         invokeMobileSyncRpc(request, name, rpcArgs, signal));
-    const data = await Promise.race([
+    const rawData = await Promise.race([
       invokeRpc(rpcName, args, controller.signal),
       timeoutPromise,
     ]);
+    const data = parsed.action === "register_device" && Array.isArray(rawData)
+      ? rawData[0] : rawData;
     if (!isRecord(data)) return syncErrorResponse("server_error", 502, correlationId);
-
     const errorCode = responseErrorCode(data);
     if (errorCode === "unauthorized") return syncErrorResponse("unauthorized", 403, correlationId);
     if (errorCode === "cursor_expired") return syncErrorResponse("cursor_expired", 409, correlationId);
     if (errorCode === "rate_limited") return syncErrorResponse("rate_limited", 429, correlationId);
     if (errorCode === "invalid") return syncErrorResponse("invalid", 400, correlationId);
     if (errorCode === "server_error") return syncErrorResponse("server_error", 502, correlationId);
+    if (data.contract_version !== CONTRACT_VERSION) {
+      throw new MobileSyncContractError();
+    }
 
     return jsonResponse(normalizeSuccess(parsed.action, data, parsed, correlationId), 200, {
       "x-ratelimit-limit": String(RATE_LIMIT),
@@ -593,6 +686,9 @@ export async function handleMobileSync(
   } catch (error) {
     if (error instanceof MobileSyncTimeoutError || controller.signal.aborted) {
       return syncErrorResponse("server_error", 408, correlationId);
+    }
+    if (error instanceof MobileSyncContractError) {
+      return syncErrorResponse("server_error", 502, correlationId);
     }
     const status = rpcErrorStatus(error);
     const code = rpcErrorCode(status);
@@ -603,7 +699,7 @@ export async function handleMobileSync(
 }
 
 const runtime = globalThis as Runtime;
-if (runtime.Deno?.serve) {
+if (runtime.Deno?.serve && (import.meta as ImportMeta & { main?: boolean }).main) {
   runtime.Deno.serve((request) => handleMobileSync(request));
 }
 

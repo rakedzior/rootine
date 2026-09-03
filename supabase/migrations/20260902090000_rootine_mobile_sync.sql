@@ -605,7 +605,11 @@ begin
       else
         result := jsonb_build_object(
           'operation_id', operation_id,
-          'status', 'already_applied'
+          'status', case
+            when previous_operation.status = 'applied' then 'already_applied'
+            when previous_operation.status in ('conflict', 'invalid') then previous_operation.status
+            else 'invalid'
+          end
         ) || coalesce(previous_operation.result - 'status', '{}'::jsonb);
       end if;
       results := results || jsonb_build_array(result);
@@ -643,7 +647,11 @@ begin
       else
         result := jsonb_build_object(
           'operation_id', operation_id,
-          'status', 'already_applied'
+          'status', case
+            when previous_operation.status = 'applied' then 'already_applied'
+            when previous_operation.status in ('conflict', 'invalid') then previous_operation.status
+            else 'invalid'
+          end
         ) || coalesce(previous_operation.result - 'status', '{}'::jsonb);
       end if;
       results := results || jsonb_build_array(result);

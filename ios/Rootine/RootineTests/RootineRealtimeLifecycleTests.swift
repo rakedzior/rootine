@@ -150,6 +150,132 @@ final class RootineRealtimeLifecycleTests: XCTestCase {
         XCTAssertEqual(delay ?? -1, 0.002, accuracy: 0.0001)
     }
 
+    func testRealtimeClientClampsZeroReconnectBackoff() async {
+        let reconnecting = expectation(description: "safe reconnect backoff")
+        let statusProbe = RealtimeStatusProbe()
+        let client = RootineRealtimeClient(
+            configuration: RootineRealtimeConfiguration(
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                publishableKey: "publishable",
+                userID: "user-42",
+                accessToken: "access",
+                reconnectDelays: [.zero],
+                heartbeatInterval: .seconds(3_600)
+            ),
+            socketFactory: { _ in ImmediateFailureRealtimeSocket() },
+            onStatus: { status in
+                if case .reconnecting(attempt: 1, delay: let delay) = status {
+                    await statusProbe.recordReconnectDelay(delay)
+                    reconnecting.fulfill()
+                }
+            }
+        )
+
+        await client.start()
+        await fulfillment(of: [reconnecting], timeout: 2)
+        await client.stop()
+        let delay = await statusProbe.reconnectDelay()
+        XCTAssertGreaterThanOrEqual(delay ?? 0, 0.1)
+    }
+
+    func testRealtimeClientAcceptsPostgresChangesOnlyOnJoinedTopic() async throws {
+        let matching = Data("""
+        {"topic":"realtime:rootine-sync:user-42","event":"postgres_changes","payload":{"data":{"record":{"user_id":"user-42","change_cursor":1900,"entity":"tasks"}}}}
+        """.utf8)
+        let wrongTopic = Data("""
+        {"topic":"realtime:rootine-sync:other-user","event":"postgres_changes","payload":{"data":{"record":{"user_id":"user-42","change_cursor":1901,"entity":"tasks"}}}}
+        """.utf8)
+        let socket = ScriptedRealtimeSocket(messages: [matching, wrongTopic])
+        let received = expectation(description: "postgres signal")
+        let eventProbe = RealtimeEventProbe()
+        let client = RootineRealtimeClient(
+            configuration: RootineRealtimeConfiguration(
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                publishableKey: "publishable",
+                userID: "user-42",
+                accessToken: "access"
+            ),
+            socketFactory: { _ in socket },
+            onEvent: { event in
+                await eventProbe.set(event)
+                received.fulfill()
+            }
+        )
+
+        await client.start()
+        await fulfillment(of: [received], timeout: 2)
+        await client.stop()
+
+        guard case .syncAvailable(let signal) = await eventProbe.value() else {
+            return XCTFail("Expected one matching postgres signal")
+        }
+        XCTAssertEqual(signal.userID, "user-42")
+        XCTAssertEqual(signal.cursor, 1900)
+        XCTAssertEqual(signal.workspaceHint, "tasks")
+    }
+
+    func testCoordinatorDoesNotStartWorkUntilStartedOrWhileOffline() async {
+        let probe = ImmediateSyncProbe()
+        let coordinator = RootineSyncCoordinator(
+            operations: RootineSyncOperations(
+                pull: { @MainActor in await probe.pull() },
+                push: { @MainActor in await probe.push() }
+            )
+        )
+
+        await coordinator.requestSync(reason: .manual)
+        let initialPulls = await probe.pullCount()
+        let initialPushes = await probe.pushCount()
+        XCTAssertEqual(initialPulls, 0)
+        XCTAssertEqual(initialPushes, 0)
+
+        await coordinator.start()
+        await coordinator.networkPathChanged(isReachable: false)
+        await coordinator.requestSync(reason: .manual)
+        let offlinePulls = await probe.pullCount()
+        let offlinePushes = await probe.pushCount()
+        XCTAssertEqual(offlinePulls, 0)
+        XCTAssertEqual(offlinePushes, 0)
+
+        await coordinator.networkPathChanged(isReachable: true)
+        await waitUntil {
+            let pulls = await probe.pullCount()
+            let pushes = await probe.pushCount()
+            return pulls == 1 && pushes == 1
+        }
+        await coordinator.networkPathChanged(isReachable: true)
+        await coordinator.requestSync(reason: .manual)
+        await waitUntil {
+            let pulls = await probe.pullCount()
+            let pushes = await probe.pushCount()
+            return pulls == 2 && pushes == 2
+        }
+        await coordinator.stop()
+    }
+
+    func testCoordinatorUsesPushOnlyForBackgroundAndBackgroundRecovery() async {
+        let probe = ImmediateSyncProbe()
+        let coordinator = RootineSyncCoordinator(
+            operations: RootineSyncOperations(
+                pull: { @MainActor in await probe.pull() },
+                push: { @MainActor in await probe.push() }
+            )
+        )
+
+        await coordinator.start()
+        await coordinator.scenePhaseChanged(.background)
+        await waitUntil { await probe.pushCount() == 1 }
+        let backgroundPulls = await probe.pullCount()
+        XCTAssertEqual(backgroundPulls, 0)
+
+        await coordinator.networkPathChanged(isReachable: false)
+        await coordinator.networkPathChanged(isReachable: true)
+        await waitUntil { await probe.pushCount() == 2 }
+        let recoveryPulls = await probe.pullCount()
+        XCTAssertEqual(recoveryPulls, 0)
+        await coordinator.stop()
+    }
+
     private func waitUntil(
         timeout: Duration = .seconds(2),
         condition: @escaping @Sendable () async -> Bool
@@ -306,4 +432,20 @@ private actor SyncLifecycleProbe {
     func pushCount() -> Int { pushCalls }
     func maxConcurrentPulls() -> Int { highestPulls }
     func maxConcurrentPushes() -> Int { highestPushes }
+}
+
+private actor ImmediateSyncProbe {
+    private var pulls = 0
+    private var pushes = 0
+
+    func pull() {
+        pulls += 1
+    }
+
+    func push() {
+        pushes += 1
+    }
+
+    func pullCount() -> Int { pulls }
+    func pushCount() -> Int { pushes }
 }

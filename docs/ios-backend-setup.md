@@ -19,8 +19,19 @@ production respectively.
 1. Apply the migrations in chronological order:
    - `20260806120000_rootine_workspace_snapshots.sql`
    - `20260819090000_rootine_workspace_sync_v2.sql`
+   - `20260820100000_rootine_relational_schema_rls.sql`
    - `20260902080000_rootine_feature_flags.sql`
+   - `20260902090000_rootine_mobile_sync.sql`
+   - `20260902100000_rootine_dual_write_bridge.sql`
+   - `20260902120000_rootine_backfill_materializer.sql`
    - `20260902120000_rootine_devices.sql`
+   - `20260902120000_rootine_server_notifications.sql`
+   - `20260902130000_rootine_mobile_sync_v3_register_device.sql`
+   - `20260902140000_rootine_database_hardening.sql`
+
+   The three `20260902120000` files are applied in lexical filename order;
+   this ordering is intentional because B04 extends the shared B02 tables,
+   B09 extends the device registry, and B11 consumes both.
 2. Deploy the `delete-account` Edge Function.
 3. Optionally deploy `register-device` until B03's `mobile-sync` router is
    available; both boundaries delegate to `rootine_register_device`.

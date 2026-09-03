@@ -31,6 +31,7 @@ private struct TodaySnapshot {
     let notes: [NoteRecord]
     let now: TodayFocusItem?
     let next: [TodayFocusItem]
+    let aggregation: TodayAggregation
 
     var completedTasks: Int { tasks.filter { rootineTaskIsDoneOnDate($0, dateKey: dateKey) }.count }
     var completedHabits: Int { habits.filter { isHabitDone($0, dateKey: dateKey) }.count }
@@ -60,55 +61,88 @@ private struct TodaySnapshot {
             + habits.filter { $0.priority != nil && isHabitDone($0, dateKey: dateKey) }.count
     }
 
-    init(taskWorkspace: TaskWorkspace, nutritionWorkspace: NutritionWorkspace, notesWorkspace: NotesWorkspace, date: Date) {
+    init(
+        accountID: String,
+        taskWorkspace: TaskWorkspace,
+        nutritionWorkspace: NutritionWorkspace,
+        notesWorkspace: NotesWorkspace,
+        sportWorkspace: SportWorkspace,
+        goalsWorkspace: GoalsWorkspace,
+        workWorkspace: WorkWorkspace,
+        travelWorkspace: TravelWorkspace,
+        healthWorkspace: HealthWorkspace,
+        affairsWorkspace: AffairsWorkspace,
+        date: Date,
+        syncStatus: WorkspaceSyncStatus,
+        calendar: Calendar = .current
+    ) {
+        let input = TodayAggregationInput(
+            accountID: accountID,
+            referenceDate: date,
+            calendar: calendar,
+            taskWorkspace: taskWorkspace,
+            nutritionWorkspace: nutritionWorkspace,
+            notesWorkspace: notesWorkspace,
+            sportWorkspace: sportWorkspace,
+            goalsWorkspace: goalsWorkspace,
+            workWorkspace: workWorkspace,
+            travelWorkspace: travelWorkspace,
+            healthWorkspace: healthWorkspace,
+            affairsWorkspace: affairsWorkspace,
+            statuses: Self.statuses(for: syncStatus)
+        )
+        let aggregation = TodayAggregationService.aggregate(input)
+        self.aggregation = aggregation
         self.date = date
-        dateKey = RootineDate.localDate(date)
-        let calendar = Calendar.current
-        let todayKey = RootineDate.localDate(date)
+        dateKey = aggregation.boundary.dateKey
+        tasks = aggregation.todayTasks
+        overdueTasks = aggregation.overdueTasks
+        habits = aggregation.todayHabits
+        nutritionDay = aggregation.nutritionDay
+        notes = aggregation.notes
+        now = Self.focusItem(from: aggregation.now)
+        next = aggregation.next.compactMap { Self.focusItem(from: $0) }
+    }
 
-        tasks = taskWorkspace.tasks
-            .filter { task in
-                guard task.deleted != true, task.source?.kind != "work" else { return false }
-                return task.calendarDate == todayKey || (task.calendarDate == nil && task.view == "dzis")
-            }
-            .sorted(by: Self.taskSort)
+    private static func focusItem(from item: TodayQueueItem?) -> TodayFocusItem? {
+        guard let item else { return nil }
+        switch item.kind {
+        case .task, .workTask:
+            guard let task = item.task else { return nil }
+            return TodayFocusItem(id: item.id, title: item.title, time: item.time, kind: .task, task: task, habit: nil)
+        case .habit:
+            guard let habit = item.habit else { return nil }
+            return TodayFocusItem(id: item.id, title: item.title, time: item.time, kind: .habit, task: nil, habit: habit)
+        case .workout, .reminder, .affair:
+            return nil
+        }
+    }
 
-        overdueTasks = taskWorkspace.tasks
-            .filter { task in
-                task.deleted != true
-                    && task.source?.kind != "work"
-                    && !rootineTaskIsDoneOnDate(task, dateKey: todayKey)
-                    && task.calendarDate != nil
-                    && task.calendarDate! < todayKey
-            }
-            .sorted(by: Self.taskSort)
-
-        habits = taskWorkspace.habits
-            .filter { rootineHabitIsScheduledOnDate($0, dateKey: todayKey, calendar: calendar) }
-            .sorted { lhs, rhs in
-                switch (lhs.time, rhs.time) {
-                case let (left?, right?) where left != right: return left < right
-                case (_?, nil): return true
-                case (nil, _?): return false
-                default: return lhs.id < rhs.id
-                }
-            }
-        nutritionDay = nutritionWorkspace.days[todayKey]
-        notes = notesWorkspace.notes
-
-        let timedItems = Self.makeFocusItems(tasks: tasks, habits: habits)
-        let currentMinutes = Self.minutesSinceMidnight(date)
-        now = timedItems.last(where: { item in
-            guard let time = item.time, let minutes = Self.parseMinutes(time) else { return false }
-            return minutes <= currentMinutes && !Self.isDone(item, dateKey: todayKey)
-        })
-        next = timedItems
-            .filter { item in
-                guard let time = item.time, let minutes = Self.parseMinutes(time) else { return false }
-                return minutes > currentMinutes && !Self.isDone(item, dateKey: todayKey)
-            }
-            .prefix(3)
-            .map { $0 }
+    private static func statuses(for syncStatus: WorkspaceSyncStatus) -> [TodayDomain: TodayDomainStatus] {
+        switch syncStatus {
+        case .synced:
+            return [:]
+        case .localOnly:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.stale())
+            })
+        case .syncing:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.stale(message: "Synchronizuję zmiany; dane lokalne są dostępne."))
+            })
+        case .conflict:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.stale(message: "Wykryto konflikt; zachowuję dane lokalne do czasu rozwiązania."))
+            })
+        case .schemaMismatch, .error:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.failed("Nie udało się odświeżyć tego obszaru."))
+            })
+        case .unauthorized, .unavailable:
+            return Dictionary(uniqueKeysWithValues: TodayDomain.allCases.map {
+                ($0, TodayDomainStatus.unavailable("Dane będą dostępne po połączeniu z kontem."))
+            })
+        }
     }
 
     private static func makeFocusItems(tasks: [WorkspaceTask], habits: [WorkspaceHabit]) -> [TodayFocusItem] {
@@ -126,6 +160,13 @@ private struct TodaySnapshot {
             default: return lhs.id < rhs.id
             }
         }
+    }
+
+    private static func taskForOccurrence(_ occurrence: RootineCalendarOccurrence) -> WorkspaceTask {
+        var task = occurrence.task
+        task.time = occurrence.time
+        task.endTime = occurrence.endTime
+        return task
     }
 
     private static func isDone(_ item: TodayFocusItem, dateKey: String) -> Bool {
@@ -183,10 +224,18 @@ struct TodayView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let snapshot = TodaySnapshot(
+                accountID: environment.session?.user.id ?? "preview",
                 taskWorkspace: environment.taskWorkspace,
                 nutritionWorkspace: environment.nutritionWorkspace,
                 notesWorkspace: environment.notesWorkspace,
-                date: context.date
+                sportWorkspace: environment.sportWorkspace,
+                goalsWorkspace: environment.goalsWorkspace,
+                workWorkspace: environment.workWorkspace,
+                travelWorkspace: environment.travelWorkspace,
+                healthWorkspace: environment.healthWorkspace,
+                affairsWorkspace: environment.affairsWorkspace,
+                date: context.date,
+                syncStatus: environment.workspaceSyncStatus
             )
 
             TodayContentView(

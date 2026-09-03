@@ -3,6 +3,7 @@ import {
   getLocalMutationSequence,
   importAllLocalWorkspaces,
 } from "../../app/data/localRepository";
+import { rootineObservability } from "../../app/observability";
 import { supabase } from "./client";
 import {
   canonicalDiff,
@@ -10,6 +11,7 @@ import {
   newCorrelationId,
   operationIdFor,
   recordCanonicalDiff,
+  redactSyncError,
   type DualWriteCommit,
 } from "./dualWriteBridge";
 
@@ -240,8 +242,9 @@ async function reconcileRemoteWorkspaces(
         knownLocalHashes: new Map(),
       };
     }
+    const safeError = redactSyncError(error);
     return {
-      result: { status: "error", uploaded: 0, downloaded: 0, message: error.message },
+      result: { status: "error", uploaded: 0, downloaded: 0, message: safeError.message },
       knownRemoteRows: new Map(),
       knownLocalHashes: new Map(),
     };
@@ -409,7 +412,7 @@ async function reconcileRemoteWorkspaces(
         status: "error",
         uploaded: uploadResult.confirmed.length,
         downloaded,
-        message: uploadResult.error.message,
+        message: redactSyncError(uploadResult.error).message,
       },
       knownRemoteRows,
       knownLocalHashes,
@@ -474,7 +477,7 @@ export async function resolveRemoteWorkspaceConflicts(
       status: isMissingSchemaError(error) ? "schema-missing" : "error",
       uploaded: 0,
       downloaded: 0,
-      message: error.message,
+      message: redactSyncError(error).message,
     };
   }
   const remoteByKey = new Map(rows.map((row) => [row.storage_key, row]));
@@ -493,7 +496,7 @@ export async function resolveRemoteWorkspaceConflicts(
           : "error",
         uploaded: uploadResult.confirmed.length,
         downloaded: 0,
-        message: uploadResult.error.message,
+        message: redactSyncError(uploadResult.error).message,
       };
     }
     if (uploadResult.conflicts.length > 0) {
@@ -543,6 +546,7 @@ export async function startRemoteWorkspaceSync(
   userId: string,
   onResult: (result: RemoteWorkspaceSyncResult) => void,
 ) {
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const changedDuringInitialSync = new Set<string>();
   let everyWorkspaceChangedDuringInitialSync = false;
   const captureInitialWorkspaceChange = (event: Event) => {
@@ -578,12 +582,33 @@ export async function startRemoteWorkspaceSync(
       },
     });
   } catch (error) {
+    const endedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+    rootineObservability.recordSyncOperation({
+      endpoint: "pull",
+      outcome: "failure",
+      durationMs: Math.max(0, endedAt - startedAt),
+      error,
+      attributes: { source: "web", trigger: "initial" },
+    });
     if (typeof window !== "undefined") {
       window.removeEventListener("rootine:workspace-change", captureInitialWorkspaceChange);
     }
     throw error;
   }
   const initial = outcome.result;
+  const endedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  rootineObservability.recordSyncOperation({
+    endpoint: "pull",
+    outcome: initial.status === "synced" ? "success" : initial.status === "conflict" ? "degraded" : "failure",
+    status: initial.status,
+    durationMs: Math.max(0, endedAt - startedAt),
+    attributes: {
+      source: "web",
+      trigger: "initial",
+      changeCount: initial.downloaded,
+      queueDepth: initial.uploaded,
+    },
+  });
   onResult(initial);
   if (initial.status !== "synced" || !supabase || typeof window === "undefined") {
     if (typeof window !== "undefined") {
@@ -648,7 +673,7 @@ export async function startRemoteWorkspaceSync(
             downloaded: 0,
             message: isMissingSchemaError(uploadResult.error) || isMissingSyncContractError(uploadResult.error)
               ? "Brakuje aktualnego kontraktu synchronizacji Supabase. Zastosuj wszystkie migracje."
-              : uploadResult.error.message,
+              : redactSyncError(uploadResult.error).message,
           });
         if (retryTimer === null) {
           retryTimer = window.setTimeout(() => {

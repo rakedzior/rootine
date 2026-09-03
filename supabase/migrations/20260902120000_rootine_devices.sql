@@ -37,6 +37,7 @@ alter table public.rootine_devices add column if not exists revision bigint defa
 -- B11's standalone table made push_token NOT NULL, but a denied/not-yet-
 -- authorized installation must be representable without a token.
 alter table public.rootine_devices alter column push_token drop not null;
+alter table public.rootine_devices alter column apns_environment drop not null;
 
 -- B11 used `restricted`, while iOS reports ephemeral/not_determined/unknown.
 -- Preserve the legacy value for old rows but accept the complete B09 state set.
@@ -98,7 +99,7 @@ as $$
 declare
   current_user_id uuid := auth.uid();
   normalized_platform text := lower(trim(coalesce(p_platform, '')));
-  normalized_environment text := lower(trim(coalesce(p_apns_environment, '')));
+  normalized_environment text := nullif(lower(trim(coalesce(p_apns_environment, ''))), '');
   normalized_permission text := lower(trim(coalesce(p_permission_state, 'not_determined')));
   normalized_device_id text := trim(coalesce(p_device_id, ''));
   normalized_app_version text := trim(coalesce(p_app_version, ''));
@@ -122,7 +123,8 @@ begin
   if normalized_app_version = '' or char_length(normalized_app_version) > 64 then
     raise exception 'Invalid app version.' using errcode = '22023';
   end if;
-  if normalized_environment not in ('sandbox', 'production') then
+  if normalized_environment is not null
+    and normalized_environment not in ('sandbox', 'production') then
     raise exception 'Invalid APNs environment.' using errcode = '22023';
   end if;
   if normalized_permission not in ('not_determined', 'denied', 'authorized', 'provisional', 'ephemeral', 'unknown') then
@@ -133,6 +135,13 @@ begin
     or normalized_push_token ~ '[[:space:]]'
   ) then
     raise exception 'Invalid APNs token.' using errcode = '22023';
+  end if;
+  if normalized_permission in ('not_determined', 'denied', 'unknown')
+    and (normalized_environment is not null or normalized_push_token is not null) then
+    raise exception 'APNs values require notification authorization.' using errcode = '22023';
+  end if;
+  if normalized_push_token is not null and normalized_environment is null then
+    raise exception 'APNs environment is required with a push token.' using errcode = '22023';
   end if;
 
   -- Expire stale installations for the account, while allowing the current
@@ -181,9 +190,11 @@ begin
     app_version = excluded.app_version,
     apns_environment = excluded.apns_environment,
     -- Null on an authorized check-in preserves the previous token while the
-    -- asynchronous APNs callback is still in flight. Denial always clears it.
+    -- asynchronous APNs callback is still in flight. Any state that cannot
+    -- register with APNs clears the old token before it can be considered
+    -- again.
     push_token = case
-      when excluded.permission_state = 'denied' then null
+      when excluded.permission_state in ('not_determined', 'denied', 'unknown') then null
       when excluded.push_token is not null then excluded.push_token
       else devices.push_token
     end,
@@ -251,6 +262,7 @@ begin
   set revoked_at = coalesce(revoked_at, now_utc),
       revoked_reason = normalized_reason,
       push_token = null,
+      apns_environment = null,
       permission_state = 'denied',
       updated_at = now_utc
   where user_id = current_user_id

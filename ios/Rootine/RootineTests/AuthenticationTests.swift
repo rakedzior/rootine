@@ -7,6 +7,7 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertTrue(AuthInputValidator.isValidEmail("ola@example.com"))
         XCTAssertFalse(AuthInputValidator.isValidEmail("ola@example"))
         XCTAssertFalse(AuthInputValidator.isValidEmail("ola example.com"))
+        XCTAssertFalse(AuthInputValidator.isValidEmail("ola@example..com"))
     }
 
     func testPasswordRequiresAtLeastEightCharacters() {
@@ -32,6 +33,48 @@ final class AuthenticationTests: XCTestCase {
         }
     }
 
+    func testDeepLinkParserAcceptsKnownDestinationsWithoutRetainingAuthPayload() throws {
+        let configuration = RootineConfiguration(
+            supabaseURL: URL(string: "https://example.supabase.co"),
+            supabasePublishableKey: "publishable",
+            backendURL: URL(string: "https://app.example.com"),
+            authCallbackScheme: "rootine",
+            termsURL: nil,
+            privacyURL: nil
+        )
+
+        XCTAssertEqual(
+            RootineDeepLink.parse(URL(string: "rootine://tasks/42")!, configuration: configuration),
+            .tasks(taskID: 42)
+        )
+        XCTAssertEqual(
+            RootineDeepLink.parse(URL(string: "https://app.example.com/odzywianie/barcode/590123")!, configuration: configuration),
+            .nutritionBarcode(code: "590123")
+        )
+        XCTAssertEqual(
+            RootineDeepLink.parse(URL(string: "rootine://auth-callback#access_token=secret&refresh_token=secret")!, configuration: configuration),
+            .authCallback
+        )
+        XCTAssertNil(RootineDeepLink.parse(URL(string: "https://evil.example.com/tasks/42")!, configuration: configuration))
+        XCTAssertNil(RootineDeepLink.parse(URL(string: "rootine://tasks/0")!, configuration: configuration))
+    }
+
+    func testNotificationDeepLinkValidatesSchemaAndMapsToTasks() {
+        XCTAssertEqual(
+            RootineDeepLink.fromNotificationUserInfo([
+                "rootine_schema_version": 1,
+                "rootine_entity": "habit",
+                "rootine_entity_id": "101"
+            ]),
+            .reminder(entity: .habit, entityID: "101")
+        )
+        XCTAssertNil(RootineDeepLink.fromNotificationUserInfo([
+            "rootine_schema_version": 2,
+            "rootine_entity": "task",
+            "rootine_entity_id": "42"
+        ]))
+    }
+
     func testStoredSessionRefreshesShortlyBeforeExpiry() {
         let session = SupabaseSession(
             accessToken: "access",
@@ -42,6 +85,21 @@ final class AuthenticationTests: XCTestCase {
             user: SupabaseUser(id: "user", email: "ola@example.com")
         )
         XCTAssertTrue(session.shouldRefresh)
+    }
+
+    func testSessionValidationRejectsEmptyBearerFields() {
+        let invalid = SupabaseSession(
+            accessToken: "",
+            refreshToken: "refresh",
+            expiresIn: 3_600,
+            expiresAt: nil,
+            tokenType: "bearer",
+            user: SupabaseUser(id: "user", email: "ola@example.com")
+        )
+        XCTAssertFalse(invalid.isValid)
+        XCTAssertThrowsError(try invalid.validated()) { error in
+            XCTAssertEqual(error as? RootineAPIError, .invalidResponse)
+        }
     }
 
     func testAPNsEnvironmentContractKeepsSandboxAndProductionDistinct() {
@@ -71,6 +129,35 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertEqual(identifier, identifier.lowercased())
         XCTAssertTrue(RootineDeviceIdentityStore.isV3Identifier(identifier))
         XCTAssertFalse(RootineDeviceIdentityStore.isLegacyIdentifier(identifier))
+    }
+
+    func testLegacyDeviceIdentityRemainsReadableAcrossReinstall() {
+        XCTAssertTrue(
+            RootineDeviceIdentityStore.isLegacyIdentifier("123E4567-E89B-42D3-A456-426614174000")
+        )
+        XCTAssertFalse(RootineDeviceIdentityStore.isLegacyIdentifier("not-a-device"))
+    }
+
+    func testSessionValidationRejectsEmptySecretsWithoutPersistingThem() {
+        let valid = SupabaseSession(
+            accessToken: "access",
+            refreshToken: "refresh",
+            expiresIn: 3600,
+            expiresAt: nil,
+            tokenType: "bearer",
+            user: SupabaseUser(id: "user", email: nil)
+        )
+        let invalid = SupabaseSession(
+            accessToken: " ",
+            refreshToken: "refresh",
+            expiresIn: 3600,
+            expiresAt: nil,
+            tokenType: "bearer",
+            user: SupabaseUser(id: "user", email: nil)
+        )
+
+        XCTAssertTrue(KeychainSessionStore.isUsable(valid))
+        XCTAssertFalse(KeychainSessionStore.isUsable(invalid))
     }
 
     func testDeviceRegistrationResponseNeverModelsAnAPNsToken() throws {
@@ -112,4 +199,129 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertEqual(flags.value(for: .normalizedSyncEnabled).source, .account)
         XCTAssertEqual(flags.environment, .staging)
     }
+
+    @MainActor
+    func testAccountStateRefreshAndIdentityOwnershipGuardsUseTheAuthMock() async throws {
+        let emailIdentity = SupabaseIdentity(identityID: "email-identity", provider: "email")
+        let googleIdentity = SupabaseIdentity(identityID: "google-identity", provider: "google")
+        let session = makeSession(user: SupabaseUser(
+            id: "user-1",
+            email: "ola@example.com",
+            emailConfirmedAt: "2026-09-01T00:00:00Z",
+            identities: [emailIdentity]
+        ))
+        let store = InMemorySessionStore(session: session)
+        let auth = MockRootineAuthClient()
+        auth.identitiesValue = [emailIdentity, googleIdentity]
+        let environment = AppEnvironment(
+            configuration: RootineConfiguration(
+                supabaseURL: URL(string: "https://project.supabase.co"),
+                supabasePublishableKey: "publishable",
+                backendURL: nil,
+                authCallbackScheme: "rootine",
+                appleClientID: "app.rootine.ios"
+            ),
+            keychain: store,
+            authClient: auth
+        )
+
+        try await environment.refreshAccountState()
+        XCTAssertEqual(environment.accountState?.linkedProviders, Set<RootineIdentityProvider>([.email, .google]))
+        XCTAssertEqual(environment.session?.user.identities?.count, 2)
+
+        try await environment.unlinkIdentity("google-identity")
+        XCTAssertEqual(auth.unlinkedIdentityIDs, ["google-identity"])
+        XCTAssertEqual(environment.session?.user.identities?.map(\.identityID), ["email-identity"])
+
+        do {
+            try await environment.unlinkIdentity("google-identity")
+            XCTFail("An already removed identity should be rejected before the network call")
+        } catch let error as RootineAPIError {
+            XCTAssertEqual(error, .identityNotFound)
+        }
+    }
+
+    @MainActor
+    func testAccountStateCannotUnlinkItsLastIdentity() async throws {
+        let identity = SupabaseIdentity(identityID: "email-identity", provider: "email")
+        let store = InMemorySessionStore(session: makeSession(user: SupabaseUser(
+            id: "user-1",
+            email: "ola@example.com",
+            emailConfirmedAt: nil,
+            identities: [identity]
+        )))
+        let auth = MockRootineAuthClient()
+        let environment = AppEnvironment(
+            configuration: RootineConfiguration(
+                supabaseURL: URL(string: "https://project.supabase.co"),
+                supabasePublishableKey: "publishable",
+                backendURL: nil,
+                authCallbackScheme: "rootine",
+                appleClientID: "app.rootine.ios"
+            ),
+            keychain: store,
+            authClient: auth
+        )
+
+        do {
+            try await environment.unlinkIdentity("email-identity")
+            XCTFail("The last identity must remain linked")
+        } catch let error as RootineAPIError {
+            XCTAssertEqual(error, .lastIdentityNotDeletable)
+        }
+        XCTAssertTrue(auth.unlinkedIdentityIDs.isEmpty)
+    }
+
+    private func makeJWT(header: [String: Any], payload: [String: Any]) -> String {
+        func encoded(_ object: [String: Any]) -> String {
+            let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            return data.base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+        }
+        return "\(encoded(header)).\(encoded(payload)).c2lnbmF0dXJl"
+    }
+
+    private func makeSession(user: SupabaseUser) -> SupabaseSession {
+        SupabaseSession(
+            accessToken: "access",
+            refreshToken: "refresh",
+            expiresIn: 3_600,
+            expiresAt: Int(Date().timeIntervalSince1970) + 3_600,
+            tokenType: "bearer",
+            user: user
+        )
+    }
+}
+
+private final class InMemorySessionStore: RootineSessionStore, @unchecked Sendable {
+    var session: SupabaseSession?
+
+    init(session: SupabaseSession?) {
+        self.session = session
+    }
+
+    func load() -> SupabaseSession? { session }
+    func save(_ session: SupabaseSession) throws { self.session = session }
+    func clear() { session = nil }
+}
+
+private final class MockRootineAuthClient: RootineAuthClient, @unchecked Sendable {
+    var identitiesValue: [SupabaseIdentity] = []
+    var unlinkedIdentityIDs: [String] = []
+
+    func signIn(email: String, password: String) async throws -> SupabaseSession { fatalError("unused") }
+    func signUp(email: String, password: String) async throws -> EmailRegistrationResult { fatalError("unused") }
+    func resendConfirmation(email: String) async throws { fatalError("unused") }
+    func requestPasswordReset(email: String) async throws { fatalError("unused") }
+    func updatePassword(_ password: String, accessToken: String) async throws { fatalError("unused") }
+    func refreshSession(refreshToken: String) async throws -> SupabaseSession { fatalError("unused") }
+    func signInWithApple(idToken: String, nonce: String) async throws -> SupabaseSession { fatalError("unused") }
+    func googleAuthorizationURL() throws -> URL { fatalError("unused") }
+    func session(from callbackURL: URL) async throws -> AuthCallbackResult { fatalError("unused") }
+    func googleIdentityAuthorizationURL(accessToken: String) async throws -> URL { fatalError("unused") }
+    func linkAppleIdentity(idToken: String, nonce: String, accessToken: String) async throws -> SupabaseSession { fatalError("unused") }
+    func identities(accessToken: String) async throws -> [SupabaseIdentity] { identitiesValue }
+    func unlinkIdentity(identityID: String, accessToken: String) async throws { unlinkedIdentityIDs.append(identityID) }
 }

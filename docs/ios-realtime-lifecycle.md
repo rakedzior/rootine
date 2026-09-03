@@ -1,4 +1,4 @@
-# iOS Realtime i lifecycle synchronizacji
+# iOS Realtime — lifecycle synchronizacji
 
 ## Kanał Supabase
 
@@ -27,17 +27,35 @@ uruchamia autorytatywny pull od ostatniego bezpiecznego cursora.
 ## Odporność i lifecycle
 
 - reconnect: `1s → 2s → 5s → 15s → 30s`, po każdej próbie reconnect wykonywany
-  jest pull;
+  jest pull; opóźnienie jest ograniczone do 5 minut, a wartości zerowe nie
+  tworzą aktywnej pętli;
 - `phx_error`, `phx_close`, timeout i brak heartbeat ACK aktywują status
   degraded, ale nie usuwają lokalnych danych ani kolejki;
 - heartbeat Supabase jest wysyłany co 25 s, z timeoutem ACK 10 s;
 - coordinator dopuszcza maksymalnie jeden pull i jeden push, a kolejne sygnały
-  scala przez `needsAnotherPull`;
+  scala przez `needsAnotherPull`/`needsAnotherPush`. Żądania przed `start`, po
+  `stop` oraz przy niedostępnej sieci są ignorowane;
 - polling działa co 30 s w foreground oraz natychmiast po foreground i
   odzyskaniu sieci; w background jest zatrzymywany, gdy nie ma zaległych
-  komend, a przy zaległych pushach pozostaje best-effort;
-- `scenePhase`, `NWPathMonitor`, ręczny sync i `BGAppRefreshTask` są triggerami
-  best effort. System iOS może przerwać pracę w tle.
+  komend, a przy zaległych pushach pozostaje best-effort (wykonuje tylko push).
+  Interwał jest ograniczony do 5 minut, a przypadkowe zero/ujemne wartości do
+  bezpiecznego minimum;
+- `scenePhase` zatrzymuje socket w backgroundzie i wznawia go po powrocie do
+  foreground. `NWPathMonitor` zatrzymuje socket i polling offline, a po
+  przejściu offline → online uruchamia jeden recovery pull/push w foreground
+  albo push-only w background;
+- `BGAppRefreshTask` ma krótką, jednorazową próbę i jest planowany ponownie po
+  wykonaniu. Expiration anuluje aktywne pull/push, bez usuwania trwałej kolejki;
+- `applicationWillTerminate` zamyka socket i koordynator. iOS nie gwarantuje
+  dostarczenia tego callbacku, dlatego lokalne mutacje i kolejka muszą być
+  trwałe przed wejściem w tę granicę.
+
+Każdy odebrany sygnał musi pochodzić z aktualnie dołączonego topicu i zawierać
+identyczny `user_id`; klient dodatkowo deklaruje filtr `user_id=eq.<user_id>` w
+join. Nie przyjmuje rekordów innego użytkownika ani ramek z obcego topicu.
+Supabase `postgres_changes` (`payload.data.record`) oraz minimalne broadcasty są
+normalizowane do tego samego wake-up eventu. Żaden z nich nie zastępuje
+autorytatywnego pull/CAS.
 
 ## Integracja B05/B06
 

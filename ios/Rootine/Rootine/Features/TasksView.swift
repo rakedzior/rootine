@@ -73,7 +73,13 @@ struct TasksView: View {
         case .today:
             base = activeTasks.filter { isVisibleToday($0, today: today) }
         case .upcoming:
-            base = activeTasks.filter { ($0.calendarDate ?? "") > today }
+            base = activeTasks.filter { task in
+                guard let calendarDate = task.calendarDate else { return false }
+                if task.schedule?.validatedRecurrence != nil {
+                    return calendarDate > today || task.schedule?.endDate == nil || task.schedule!.endDate! > today
+                }
+                return calendarDate > today
+            }
         case .undated:
             base = activeTasks.filter { $0.calendarDate == nil && !isDone($0) }
         case .trash:
@@ -154,9 +160,12 @@ struct TasksView: View {
                         if deletedTasks.isEmpty {
                             TasksEmptyState(filter: filter, onAdd: {})
                         } else {
-                            TasksTrashCard(tasks: deletedTasks) { id in
-                                Task { await environment.restoreTask(id: id) }
-                            }
+                            TasksTrashCard(
+                                tasks: deletedTasks,
+                                onRestore: { id in Task { await environment.restoreTask(id: id) } },
+                                onPurge: { id in Task { await environment.purgeTask(id: id) } },
+                                onEmpty: { Task { await environment.emptyTaskTrash() } }
+                            )
                         }
                     } else if filter == .habits {
                         if visibleHabits.isEmpty {
@@ -262,7 +271,10 @@ struct TasksView: View {
             // filter badge aligned with that first-viewport list instead of
             // silently omitting habits from its count.
             .today: activeTasks.filter { isVisibleToday($0, today: today) }.count + todayHabitCount,
-            .upcoming: activeTasks.filter { ($0.calendarDate ?? "") > today }.count,
+            .upcoming: activeTasks.filter { task in
+                guard let calendarDate = task.calendarDate else { return false }
+                return calendarDate > today || (task.schedule?.validatedRecurrence != nil && (task.schedule?.endDate == nil || task.schedule!.endDate! > today))
+            }.count,
             .undated: activeTasks.filter { $0.calendarDate == nil && !isDone($0) }.count,
             .trash: deletedTasks.count
         ]
@@ -306,7 +318,7 @@ struct TasksView: View {
     }
 
     private func isVisibleToday(_ task: WorkspaceTask, today: String) -> Bool {
-        if task.calendarDate == today { return true }
+        if rootineTaskOccurrences([task], from: today, through: today).contains(where: { $0.calendarDate == today }) { return true }
         if task.calendarDate == nil && task.view == "dzis" { return true }
         if let calendarDate = task.calendarDate, calendarDate < today {
             return !isDone(task, dateKey: today)
@@ -597,6 +609,10 @@ private struct TasksHabitsCard: View {
 private struct TasksTrashCard: View {
     let tasks: [WorkspaceTask]
     let onRestore: (Int) -> Void
+    let onPurge: (Int) -> Void
+    let onEmpty: () -> Void
+    @State private var taskToPurge: WorkspaceTask?
+    @State private var isConfirmingEmpty = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -604,6 +620,14 @@ private struct TasksTrashCard: View {
                 .font(.headline)
                 .foregroundStyle(RootineTheme.ColorToken.destructive)
                 .padding(.bottom, RootineTheme.Spacing.small)
+
+            HStack {
+                Spacer()
+                Button("Opróżnij kosz", role: .destructive) { isConfirmingEmpty = true }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Opróżnij kosz")
+            }
 
             ForEach(tasks) { task in
                 HStack(spacing: RootineTheme.Spacing.small) {
@@ -619,17 +643,45 @@ private struct TasksTrashCard: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    Button("Przywróć") { onRestore(task.id) }
-                        .font(.subheadline.weight(.semibold))
-                        .frame(minWidth: 44, minHeight: 44)
-                        .foregroundStyle(RootineTheme.ColorToken.action)
-                        .accessibilityLabel("Przywróć zadanie: \(task.text)")
+                    VStack(alignment: .trailing, spacing: RootineTheme.Spacing.xSmall) {
+                        Button("Przywróć") { onRestore(task.id) }
+                            .font(.subheadline.weight(.semibold))
+                            .frame(minWidth: 44, minHeight: 44)
+                            .foregroundStyle(RootineTheme.ColorToken.action)
+                            .accessibilityLabel("Przywróć zadanie: \(task.text)")
+                        Button("Usuń na stałe", role: .destructive) { taskToPurge = task }
+                            .font(.caption.weight(.semibold))
+                            .frame(minHeight: 36)
+                            .accessibilityLabel("Usuń zadanie na stałe: \(task.text)")
+                    }
                 }
                 .frame(minHeight: 48)
                 if task.id != tasks.last?.id { Divider().overlay(RootineTheme.ColorToken.separator) }
             }
         }
         .rootineSurface()
+        .confirmationDialog(
+            "Usunąć zadanie na stałe?",
+            isPresented: Binding(
+                get: { taskToPurge != nil },
+                set: { isPresented in if !isPresented { taskToPurge = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Usuń na stałe", role: .destructive) {
+                if let taskToPurge { onPurge(taskToPurge.id) }
+                taskToPurge = nil
+            }
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text(taskToPurge.map { "Nie będzie można przywrócić „\($0.text)”." } ?? "")
+        }
+        .confirmationDialog("Opróżnić kosz?", isPresented: $isConfirmingEmpty, titleVisibility: .visible) {
+            Button("Opróżnij kosz", role: .destructive, action: onEmpty)
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text("Usunięte zadania zostaną usunięte bez możliwości przywrócenia.")
+        }
     }
 }
 
@@ -782,7 +834,14 @@ struct TaskDetailSheet: View {
                 Section {
                     Button(isCompletedOnContextDate ? "Oznacz jako niewykonane" : "Oznacz jako wykonane") {
                         Task {
-                            await environment.toggleTaskCompletion(id: task.id, on: completionDate ?? Date())
+                            if let completionDate {
+                                let dateKey = RootineDate.localDate(completionDate)
+                                if let date = RootineDate.localDateValue(dateKey) {
+                                    await environment.toggleTaskCompletion(id: task.id, on: date)
+                                }
+                            } else {
+                                await environment.toggleTaskCompletion(id: task.id)
+                            }
                             dismiss()
                         }
                     }
@@ -975,6 +1034,17 @@ struct HabitDetailSheet: View {
                         Text("Wysoki").tag("high")
                         Text("Średni").tag("medium")
                         Text("Niski").tag("low")
+                    }
+                }
+                Section("Przerwa") {
+                    if rootineHabitIsPausedOnDate(habit, dateKey: RootineDate.localDate()) {
+                        Button("Wznów dzisiaj") {
+                            Task { await environment.resumeHabit(id: habit.id); dismiss() }
+                        }
+                    } else {
+                        Button("Wstrzymaj od dzisiaj") {
+                            Task { await environment.pauseHabit(id: habit.id); dismiss() }
+                        }
                     }
                 }
                 Section {

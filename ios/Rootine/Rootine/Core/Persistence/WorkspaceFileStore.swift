@@ -1,4 +1,62 @@
+import CryptoKit
 import Foundation
+
+/// Shared storage primitives used by every local persistence boundary. The
+/// account namespace is one-way so a user's identifier is not exposed in
+/// Application Support/UserDefaults keys, while deterministic hashing keeps
+/// the same account stable across launches and reinstalls.
+enum RootineSecureStorageSupport {
+    static let fileProtection: FileProtectionType = .completeUntilFirstUserAuthentication
+
+    static func accountNamespace(_ accountID: String) -> String {
+        "account-" + stableHash(accountID.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Keeps the pre-S19 UUID directory name readable on upgrade. IDs that
+    /// contain separators/control characters get a stable hash suffix instead
+    /// of being allowed to escape the account container.
+    static func accountPathComponent(_ accountID: String) -> String {
+        let normalized = accountID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scalars = normalized.unicodeScalars.map { scalar -> Character in
+            if CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_" {
+                return Character(String(scalar))
+            }
+            return "-"
+        }
+        let safe = String(scalars)
+            .replacingOccurrences(of: "-{2,}", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        guard !safe.isEmpty else { return "invalid-account-\(stableHash(normalized))" }
+        guard safe == normalized else {
+            return "\(safe)-\(String(stableHash(normalized).prefix(16)))"
+        }
+        return safe
+    }
+
+    static func stableHash(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static func defaultsKey(prefix: String, accountID: String, environment: String? = nil) -> String {
+        let scope = [environment, accountID]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .joined(separator: "\u{1F}")
+        return "\(prefix).\(stableHash(scope))"
+    }
+
+    static func createProtectedDirectory(
+        at url: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        try fileManager.setAttributes(
+            [.protectionKey: fileProtection],
+            ofItemAtPath: url.path
+        )
+    }
+}
 
 struct PendingWorkspaceMutation: Codable, Equatable, Identifiable, Sendable {
     var id: String
@@ -144,7 +202,7 @@ actor WorkspaceFileStore {
         let base = rootURL
             ?? applicationSupport
                 .appendingPathComponent("Rootine/Users", isDirectory: true)
-                .appendingPathComponent(userID, isDirectory: true)
+                .appendingPathComponent(RootineSecureStorageSupport.accountPathComponent(userID), isDirectory: true)
         self.rootURL = base
         encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -159,7 +217,8 @@ actor WorkspaceFileStore {
         do {
             if let supportedVersion = key.supportedLocalVersion {
                 let envelope = try decoder.decode(VersionEnvelope.self, from: data)
-                guard envelope.version == supportedVersion else {
+                let supportsLegacyTaskMigration = key == .tasks && envelope.version == 1 && supportedVersion == 2
+                guard envelope.version == supportedVersion || supportsLegacyTaskMigration else {
                     throw WorkspaceFileStoreError.unsupportedVersion(
                         key: key.rawValue,
                         found: envelope.version,
@@ -189,13 +248,13 @@ actor WorkspaceFileStore {
         }
         let transaction = WorkspaceBatchTransaction(id: UUID().uuidString)
         let transactionURL = try validatedTransactionURL(for: transaction, requireExisting: false)
-        try fileManager.createDirectory(at: transactionURL, withIntermediateDirectories: true)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: transactionURL, fileManager: fileManager)
         do {
             try fileManager.copyItem(at: workspaceDirectory, to: transactionURL.appendingPathComponent("Workspaces", isDirectory: true))
             if fileManager.fileExists(atPath: queueURL.path) {
                 try fileManager.copyItem(at: queueURL, to: transactionURL.appendingPathComponent("pending-mutations.json"))
             } else {
-                try Data().write(to: transactionURL.appendingPathComponent("queue-absent"), options: .atomic)
+                try protectedWrite(Data(), to: transactionURL.appendingPathComponent("queue-absent"))
             }
             activeTransactionID = transaction.id
             return transaction
@@ -384,7 +443,7 @@ actor WorkspaceFileStore {
             // only knows about the current set of workspace keys.
             try fileManager.copyItem(at: workspaceDirectory, to: stagingURL)
         } else {
-            try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: true)
+            try RootineSecureStorageSupport.createProtectedDirectory(at: stagingURL, fileManager: fileManager)
         }
         defer {
             try? fileManager.removeItem(at: stagingURL)
@@ -574,6 +633,17 @@ actor WorkspaceFileStore {
     }
 
     func clearAllLocalData() throws {
+        guard activeTransactionID == nil else {
+            throw WorkspaceFileStoreError.invalidTransaction
+        }
+        // Never allow a malformed/injected root to turn account deletion into
+        // a broad container deletion. Production roots are always beneath the
+        // app's Application Support container; test callers may provide a
+        // dedicated temporary directory, but never the filesystem root.
+        guard rootURL.standardizedFileURL.path != "/",
+              rootURL.standardizedFileURL.path != fileManager.temporaryDirectory.standardizedFileURL.path else {
+            throw WorkspaceFileStoreError.invalidRoot
+        }
         if fileManager.fileExists(atPath: rootURL.path) {
             try fileManager.removeItem(at: rootURL)
         }
@@ -609,9 +679,12 @@ actor WorkspaceFileStore {
     }
 
     private func ensureDirectories() throws {
-        try fileManager.createDirectory(at: workspaceDirectory, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: recoveryDirectory, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: transactionsDirectory, withIntermediateDirectories: true)
+        // Protect the container as well as each file. File protection is not
+        // reliably inherited when an atomic replacement creates a new inode.
+        try RootineSecureStorageSupport.createProtectedDirectory(at: rootURL, fileManager: fileManager)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: workspaceDirectory, fileManager: fileManager)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: recoveryDirectory, fileManager: fileManager)
+        try RootineSecureStorageSupport.createProtectedDirectory(at: transactionsDirectory, fileManager: fileManager)
     }
 
     private func validatedTransactionURL(
@@ -667,7 +740,7 @@ actor WorkspaceFileStore {
     private func protectedWrite(_ data: Data, to url: URL) throws {
         try data.write(to: url, options: .atomic)
         try fileManager.setAttributes(
-            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            [.protectionKey: RootineSecureStorageSupport.fileProtection],
             ofItemAtPath: url.path
         )
     }
@@ -676,4 +749,5 @@ actor WorkspaceFileStore {
 enum WorkspaceFileStoreError: Error, Equatable {
     case unsupportedVersion(key: String, found: Int, supported: Int)
     case invalidTransaction
+    case invalidRoot
 }
