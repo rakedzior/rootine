@@ -653,20 +653,192 @@ struct GoalsWorkspace: Codable, Equatable, Sendable {
     static let empty = GoalsWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), goals: [])
 }
 
+// MARK: Work
+
+enum WorkProjectStatus: String, Codable, CaseIterable, Hashable, Sendable {
+    case active
+    case paused
+    case completed
+    case archived
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WorkProjectStatus(rawValue: raw) ?? .active
+    }
+}
+
+enum WorkItemStatus: String, Codable, CaseIterable, Hashable, Sendable {
+    case todo
+    case inProgress = "in_progress"
+    case blocked
+    case waiting
+    case completed
+    case cancelled
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WorkItemStatus(rawValue: raw) ?? .todo
+    }
+}
+
+enum WorkItemPriority: String, Codable, CaseIterable, Hashable, Sendable {
+    case none
+    case low
+    case medium
+    case high
+    case urgent
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WorkItemPriority(rawValue: raw) ?? .none
+    }
+}
+
+struct WorkCompany: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var description: String = ""
+    var color: String = ""
+    var website: String? = nil
+    var archived: Bool = false
+    var createdAt: String? = nil
+    var updatedAt: String? = nil
+}
+
+struct WorkProject: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var companyId: String? = nil
+    var name: String
+    var description: String = ""
+    var status: WorkProjectStatus = .active
+    var startDate: String? = nil
+    var endDate: String? = nil
+    var note: String? = nil
+    var createdAt: String? = nil
+    var updatedAt: String? = nil
+}
+
+/// Native work item projection. It mirrors the v3 `work_tasks` collection;
+/// unlike the compact global TaskWorkspace projection it keeps project and
+/// hierarchy identity on the work document itself.
+struct WorkItem: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var companyId: String? = nil
+    var projectId: String? = nil
+    var parentId: String? = nil
+    var title: String
+    var completed: Bool = false
+    var status: WorkItemStatus = .todo
+    var priority: WorkItemPriority = .none
+    var startDate: String? = nil
+    var dueDate: String? = nil
+    var dueTime: String? = nil
+    var note: String? = nil
+    var createdAt: String
+    var updatedAt: String? = nil
+}
+
 struct WorkFocusSession: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var startedAt: String
     var endedAt: String
     var minutes: Int
+    var projectId: String? = nil
+    var taskId: String? = nil
+    var note: String? = nil
 }
 
 struct WorkWorkspace: Codable, Equatable, Sendable {
     var version: Int
     var updatedAt: String
     var activeFocusStartedAt: String?
+    var activeFocusProjectID: String?
+    var activeFocusTaskID: String?
+    /// Set when a focus segment was paused. The completed segment remains in
+    /// `focusSessions`, while this marker lets the native surface distinguish
+    /// resume from a brand-new session after a relaunch.
+    var pausedFocusSessionID: String?
     var focusSessions: [WorkFocusSession]
+    var companies: [WorkCompany]
+    var projects: [WorkProject]
+    var tasks: [WorkItem]
+    /// v1 snapshots written before the native Work collections existed must
+    /// not be interpreted as an intentional delete of the server's records.
+    /// This marker is local-only and is not encoded into the contract.
+    var hasFullProjection: Bool
+
+    init(
+        version: Int,
+        updatedAt: String,
+        activeFocusStartedAt: String?,
+        pausedFocusSessionID: String? = nil,
+        activeFocusProjectID: String? = nil,
+        activeFocusTaskID: String? = nil,
+        focusSessions: [WorkFocusSession],
+        companies: [WorkCompany] = [],
+        projects: [WorkProject] = [],
+        tasks: [WorkItem] = [],
+        hasFullProjection: Bool = true
+    ) {
+        self.version = version
+        self.updatedAt = updatedAt
+        self.activeFocusStartedAt = activeFocusStartedAt
+        self.activeFocusProjectID = activeFocusProjectID
+        self.activeFocusTaskID = activeFocusTaskID
+        self.pausedFocusSessionID = pausedFocusSessionID
+        self.focusSessions = focusSessions
+        self.companies = companies
+        self.projects = projects
+        self.tasks = tasks
+        self.hasFullProjection = hasFullProjection
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version, updatedAt, activeFocusStartedAt, activeFocusProjectID, activeFocusTaskID, pausedFocusSessionID, focusSessions, companies, projects, tasks
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(activeFocusStartedAt, forKey: .activeFocusStartedAt)
+        try container.encodeIfPresent(activeFocusProjectID, forKey: .activeFocusProjectID)
+        try container.encodeIfPresent(activeFocusTaskID, forKey: .activeFocusTaskID)
+        try container.encodeIfPresent(pausedFocusSessionID, forKey: .pausedFocusSessionID)
+        try container.encode(focusSessions, forKey: .focusSessions)
+        // Keep compact v1 snapshots compact. The local marker is intentionally
+        // not encoded; the absence of collection keys is its durable form.
+        guard hasFullProjection else { return }
+        try container.encode(companies, forKey: .companies)
+        try container.encode(projects, forKey: .projects)
+        try container.encode(tasks, forKey: .tasks)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? RootineDate.isoTimestamp()
+        activeFocusStartedAt = try container.decodeIfPresent(String.self, forKey: .activeFocusStartedAt)
+        activeFocusProjectID = try container.decodeIfPresent(String.self, forKey: .activeFocusProjectID)
+        activeFocusTaskID = try container.decodeIfPresent(String.self, forKey: .activeFocusTaskID)
+        pausedFocusSessionID = try container.decodeIfPresent(String.self, forKey: .pausedFocusSessionID)
+        focusSessions = try container.decodeIfPresent([WorkFocusSession].self, forKey: .focusSessions) ?? []
+        // v1 native snapshots did not expose these collections. Defaults are
+        // intentional: decoding an old local file must never discard the
+        // valid focus history it does contain.
+        let hasCollections = container.contains(.companies) || container.contains(.projects) || container.contains(.tasks)
+        companies = try container.decodeIfPresent([WorkCompany].self, forKey: .companies) ?? []
+        projects = try container.decodeIfPresent([WorkProject].self, forKey: .projects) ?? []
+        tasks = try container.decodeIfPresent([WorkItem].self, forKey: .tasks) ?? []
+        hasFullProjection = hasCollections
+    }
 
     static let empty = WorkWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), activeFocusStartedAt: nil, focusSessions: [])
+
+    var workItems: [WorkItem] {
+        get { tasks }
+        set { tasks = newValue }
+    }
 }
 
 /// Normalizes the small Work projection at the persistence boundary. A
@@ -681,22 +853,241 @@ func rootineSanitizedWorkWorkspace(_ workspace: WorkWorkspace) -> WorkWorkspace 
     {
         sanitized.activeFocusStartedAt = nil
     }
+    sanitized.pausedFocusSessionID = workspace.pausedFocusSessionID?.rootineTrimmedNonEmpty
 
     var seenIDs = Set<String>()
     var retained: [WorkFocusSession] = []
     for session in workspace.focusSessions.reversed() {
         let normalizedID = session.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let startedAt = RootineDate.date(from: session.startedAt),
+              let endedAt = RootineDate.date(from: session.endedAt) else { continue }
         guard !normalizedID.isEmpty,
-              RootineDate.date(from: session.startedAt) != nil,
-              RootineDate.date(from: session.endedAt) != nil,
+              endedAt >= startedAt,
               session.minutes >= 0,
               seenIDs.insert(normalizedID).inserted else { continue }
         var normalized = session
         normalized.id = normalizedID
+        // Keep the explicit duration from the contract. Older native rows
+        // legitimately used equal placeholder timestamps while still
+        // carrying their measured minutes.
+        normalized.minutes = max(0, session.minutes)
+        normalized.projectId = session.projectId?.rootineTrimmedNonEmpty
+        normalized.taskId = session.taskId?.rootineTrimmedNonEmpty
         retained.append(normalized)
     }
     sanitized.focusSessions = Array(retained.reversed())
+    if sanitized.activeFocusStartedAt != nil {
+        sanitized.pausedFocusSessionID = nil
+    } else {
+        sanitized.activeFocusProjectID = nil
+        sanitized.activeFocusTaskID = nil
+    }
+
+    sanitized.companies = rootineDeduplicatedWorkCompanies(workspace.companies)
+    let companyIDByNormalized = Dictionary(uniqueKeysWithValues: sanitized.companies.map {
+        ($0.id.rootineNormalizedIdentifier, $0.id)
+    })
+    sanitized.projects = rootineDeduplicatedWorkProjects(workspace.projects).map { project in
+        var project = project
+        project.companyId = project.companyId.flatMap {
+            companyIDByNormalized[$0.rootineNormalizedIdentifier]
+        }
+        project.startDate = rootineWorkDateKey(project.startDate)
+        project.endDate = rootineWorkDateKey(project.endDate)
+        if let startDate = project.startDate,
+           let endDate = project.endDate,
+           endDate < startDate {
+            project.endDate = nil
+        }
+        project.name = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return project
+    }.filter { !$0.name.isEmpty }
+    let projectIDByNormalized = Dictionary(uniqueKeysWithValues: sanitized.projects.map {
+        ($0.id.rootineNormalizedIdentifier, $0.id)
+    })
+    var taskIDs = Set<String>()
+    sanitized.tasks = rootineDeduplicatedWorkItems(workspace.tasks).map { task in
+        var task = task
+        task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        task.companyId = task.companyId.flatMap {
+            companyIDByNormalized[$0.rootineNormalizedIdentifier]
+        }
+        task.projectId = task.projectId.flatMap {
+            projectIDByNormalized[$0.rootineNormalizedIdentifier]
+        }
+        task.parentId = task.parentId?.rootineTrimmedNonEmpty
+        task.startDate = rootineWorkDateKey(task.startDate)
+        task.dueDate = rootineWorkDateKey(task.dueDate)
+        task.dueTime = rootineWorkClockTime(task.dueTime)
+        if task.projectId == nil { task.parentId = nil }
+        if task.completed { task.status = .completed }
+        if task.status == .completed { task.completed = true }
+        guard !task.title.isEmpty else { return nil }
+        guard taskIDs.insert(task.id.rootineNormalizedIdentifier).inserted else { return nil }
+        return task
+    }.compactMap { $0 }
+    let validTaskIDs = Set(sanitized.tasks.map { $0.id.rootineNormalizedIdentifier })
+    for index in sanitized.tasks.indices {
+        guard let parentId = sanitized.tasks[index].parentId,
+              validTaskIDs.contains(parentId.rootineNormalizedIdentifier),
+              sanitized.tasks[index].projectId?.rootineNormalizedIdentifier == sanitized.tasks.first(where: { $0.id.rootineNormalizedIdentifier == parentId.rootineNormalizedIdentifier })?.projectId?.rootineNormalizedIdentifier,
+              let parent = sanitized.tasks.first(where: { $0.id.rootineNormalizedIdentifier == parentId.rootineNormalizedIdentifier }) else {
+            sanitized.tasks[index].parentId = nil
+            continue
+        }
+        sanitized.tasks[index].parentId = parent.id
+        var ancestors = Set<String>()
+        var current = parentId.rootineNormalizedIdentifier
+        while let parent = sanitized.tasks.first(where: { $0.id.rootineNormalizedIdentifier == current }),
+              let next = parent.parentId?.rootineNormalizedIdentifier {
+            guard ancestors.insert(current).inserted, next != sanitized.tasks[index].id.rootineNormalizedIdentifier else {
+                sanitized.tasks[index].parentId = nil
+                break
+            }
+            current = next
+        }
+    }
+    // Focus links are relational references in the canonical v3 document.
+    // Normalize them against the same winning IDs as the collections and
+    // clear only dangling links rather than allowing a rejected row to poison
+    // the complete Work snapshot.
+    let taskIDByNormalized = Dictionary(uniqueKeysWithValues: sanitized.tasks.map {
+        ($0.id.rootineNormalizedIdentifier, $0.id)
+    })
+    sanitized.activeFocusProjectID = sanitized.activeFocusProjectID.flatMap {
+        projectIDByNormalized[$0.rootineNormalizedIdentifier]
+    }
+    sanitized.activeFocusTaskID = sanitized.activeFocusTaskID.flatMap {
+        taskIDByNormalized[$0.rootineNormalizedIdentifier]
+    }
+    if let taskID = sanitized.activeFocusTaskID,
+       let task = sanitized.tasks.first(where: { $0.id == taskID }) {
+        sanitized.activeFocusProjectID = task.projectId
+    }
+    sanitized.focusSessions = sanitized.focusSessions.map { session in
+        var session = session
+        session.projectId = session.projectId.flatMap {
+            projectIDByNormalized[$0.rootineNormalizedIdentifier]
+        }
+        session.taskId = session.taskId.flatMap {
+            taskIDByNormalized[$0.rootineNormalizedIdentifier]
+        }
+        if let taskID = session.taskId,
+           let task = sanitized.tasks.first(where: { $0.id == taskID }) {
+            session.projectId = task.projectId
+        }
+        return session
+    }
+    if let pausedID = sanitized.pausedFocusSessionID,
+       !sanitized.focusSessions.contains(where: { $0.id.rootineNormalizedIdentifier == pausedID.rootineNormalizedIdentifier }) {
+        sanitized.pausedFocusSessionID = nil
+    }
     return sanitized
+}
+
+extension String {
+    var rootineTrimmedNonEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    var rootineNormalizedIdentifier: String {
+        trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+private func rootineWorkDateKey(_ value: String?) -> String? {
+    guard let value = value?.rootineTrimmedNonEmpty else { return nil }
+    let parts = value.split(separator: "-").compactMap { Int($0) }
+    let calendar = Calendar(identifier: .gregorian)
+    let components = DateComponents(year: parts.count > 0 ? parts[0] : nil, month: parts.count > 1 ? parts[1] : nil, day: parts.count > 2 ? parts[2] : nil)
+    guard parts.count == 3,
+          String(format: "%04d-%02d-%02d", parts[0], parts[1], parts[2]) == value,
+          let date = calendar.date(from: components),
+          calendar.component(.year, from: date) == parts[0],
+          calendar.component(.month, from: date) == parts[1],
+          calendar.component(.day, from: date) == parts[2] else {
+        return nil
+    }
+    return value
+}
+
+private func rootineWorkClockTime(_ value: String?) -> String? {
+    guard let value = value?.rootineTrimmedNonEmpty else { return nil }
+    return value.range(of: "^([01]\\d|2[0-3]):[0-5]\\d$", options: .regularExpression) == nil ? nil : value
+}
+
+private func rootineDeduplicatedWorkCompanies(_ values: [WorkCompany]) -> [WorkCompany] {
+    var seen = Set<String>(); var retained: [WorkCompany] = []
+    for value in values.reversed() {
+        var value = value; value.id = value.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.id.isEmpty, seen.insert(value.id.rootineNormalizedIdentifier).inserted else { continue }
+        value.name = value.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.name.isEmpty else { continue }
+        retained.append(value)
+    }
+    return Array(retained.reversed())
+}
+
+private func rootineDeduplicatedWorkProjects(_ values: [WorkProject]) -> [WorkProject] {
+    var seen = Set<String>(); var retained: [WorkProject] = []
+    for value in values.reversed() {
+        var value = value; value.id = value.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.id.isEmpty, seen.insert(value.id.rootineNormalizedIdentifier).inserted else { continue }
+        retained.append(value)
+    }
+    return Array(retained.reversed())
+}
+
+private func rootineDeduplicatedWorkItems(_ values: [WorkItem]) -> [WorkItem] {
+    var seen = Set<String>(); var retained: [WorkItem] = []
+    for value in values.reversed() {
+        var value = value; value.id = value.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.id.isEmpty, seen.insert(value.id.rootineNormalizedIdentifier).inserted else { continue }
+        retained.append(value)
+    }
+    return Array(retained.reversed())
+}
+
+struct RootineWorkTotals: Equatable, Sendable {
+    var projectCount: Int
+    var openTaskCount: Int
+    var completedTaskCount: Int
+    var highPriorityTaskCount: Int
+    var focusMinutes: Int
+}
+
+func rootineWorkTotals(_ workspace: WorkWorkspace) -> RootineWorkTotals {
+    let open = workspace.tasks.filter { !$0.completed && $0.status != .cancelled }
+    return RootineWorkTotals(
+        projectCount: workspace.projects.filter { $0.status != .archived }.count,
+        openTaskCount: open.count,
+        completedTaskCount: workspace.tasks.filter { $0.completed || $0.status == .completed }.count,
+        highPriorityTaskCount: open.filter { $0.priority == .high || $0.priority == .urgent }.count,
+        focusMinutes: rootineFocusTotalMinutes(workspace.focusSessions)
+    )
+}
+
+func rootineFocusTotalMinutes(_ sessions: [WorkFocusSession], on dateKey: String? = nil) -> Int {
+    sessions.filter { session in
+        guard let dateKey else { return true }
+        guard let startedAt = RootineDate.date(from: session.startedAt) else { return false }
+        return RootineDate.localDate(startedAt) == dateKey
+    }.reduce(0) { $0 + max(0, $1.minutes) }
+}
+
+func rootineFocusHistory(_ sessions: [WorkFocusSession], limit: Int? = nil) -> [WorkFocusSession] {
+    let ordered = sessions.sorted {
+        if $0.endedAt != $1.endedAt { return $0.endedAt > $1.endedAt }
+        return $0.id < $1.id
+    }
+    guard let limit else { return ordered }
+    return Array(ordered.prefix(max(0, limit)))
+}
+
+func rootineFocusElapsedSeconds(startedAt: String?, at now: Date) -> Int? {
+    guard let startedAt, let start = RootineDate.date(from: startedAt) else { return nil }
+    return max(0, Int(now.timeIntervalSince(start)))
 }
 
 struct TravelItineraryItem: Codable, Equatable, Identifiable, Sendable {

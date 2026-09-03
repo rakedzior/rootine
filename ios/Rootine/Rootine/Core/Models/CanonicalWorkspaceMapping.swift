@@ -360,40 +360,98 @@ enum RootineCanonicalWorkspaceMapping {
     }
 
     static func payload(for workspace: WorkWorkspace) throws -> JSONValue {
-        try jsonValue(CanonicalWorkWorkspace(
+        let sanitized = rootineSanitizedWorkWorkspace(workspace)
+        return try jsonValue(CanonicalWorkWorkspace(
             version: 3,
-            updatedAt: workspace.updatedAt,
-            companies: [],
-            projects: [],
-            tasks: [],
-            activeFocusStartedAt: workspace.activeFocusStartedAt,
-            focusSessions: deduplicatedWorkFocusSessions(workspace.focusSessions)
+            updatedAt: sanitized.updatedAt,
+            companies: try sanitized.companies.map { try jsonValue($0) },
+            projects: try sanitized.projects.map { try jsonValue($0) },
+            tasks: try sanitized.tasks.map { try jsonValue($0) },
+            activeFocusStartedAt: sanitized.activeFocusStartedAt,
+            activeFocusProjectID: sanitized.activeFocusProjectID,
+            activeFocusTaskID: sanitized.activeFocusTaskID,
+            pausedFocusSessionID: sanitized.pausedFocusSessionID,
+            focusSessions: try deduplicatedWorkFocusSessions(sanitized.focusSessions).map { try jsonValue($0) }
         ))
     }
 
     static func workWorkspace(from payload: JSONValue) throws -> WorkWorkspace {
         let canonical = try decode(CanonicalWorkWorkspace.self, from: payload)
+        let companies = canonical.companies.compactMap { try? decode(WorkCompany.self, from: $0) }
+        let projects = canonical.projects.compactMap { try? decode(WorkProject.self, from: $0) }
+        let tasks = canonical.tasks.compactMap { try? decode(WorkItem.self, from: $0) }
+        let sessions = (canonical.focusSessions ?? []).compactMap { try? decode(WorkFocusSession.self, from: $0) }
         return WorkWorkspace(
             version: 1,
             updatedAt: canonical.updatedAt,
             activeFocusStartedAt: canonical.activeFocusStartedAt,
-            focusSessions: deduplicatedWorkFocusSessions(canonical.focusSessions ?? [])
+            pausedFocusSessionID: canonical.pausedFocusSessionID,
+            activeFocusProjectID: canonical.activeFocusProjectID,
+            activeFocusTaskID: canonical.activeFocusTaskID,
+            focusSessions: deduplicatedWorkFocusSessions(sessions),
+            companies: companies,
+            projects: projects,
+            tasks: tasks,
+            hasFullProjection: true
         )
     }
 
     static func mergedWorkPayload(for workspace: WorkWorkspace, onto base: JSONValue) throws -> JSONValue {
         var root = try objectValue(base)
-        root["updatedAt"] = .string(workspace.updatedAt)
-        if let activeFocusStartedAt = workspace.activeFocusStartedAt {
+        let sanitized = rootineSanitizedWorkWorkspace(workspace)
+        root["updatedAt"] = .string(sanitized.updatedAt)
+        if let activeFocusStartedAt = sanitized.activeFocusStartedAt {
             root["activeFocusStartedAt"] = .string(activeFocusStartedAt)
         } else {
             root.removeValue(forKey: "activeFocusStartedAt")
         }
-        if !workspace.focusSessions.isEmpty || root["focusSessions"] != nil {
-            if workspace.focusSessions.isEmpty {
-                root["focusSessions"] = .array(deduplicatedRecords(arrayValue(root["focusSessions"])))
+        if sanitized.hasFullProjection {
+            if let activeFocusProjectID = sanitized.activeFocusProjectID {
+                root["activeFocusProjectID"] = .string(activeFocusProjectID)
             } else {
-                root["focusSessions"] = try jsonValue(deduplicatedWorkFocusSessions(workspace.focusSessions))
+                root.removeValue(forKey: "activeFocusProjectID")
+            }
+            if let activeFocusTaskID = sanitized.activeFocusTaskID {
+                root["activeFocusTaskID"] = .string(activeFocusTaskID)
+            } else {
+                root.removeValue(forKey: "activeFocusTaskID")
+            }
+            if let pausedFocusSessionID = sanitized.pausedFocusSessionID {
+                root["pausedFocusSessionID"] = .string(pausedFocusSessionID)
+            } else {
+                root.removeValue(forKey: "pausedFocusSessionID")
+            }
+            root["companies"] = try mergedWorkRecords(
+                native: sanitized.companies.map { try jsonValue($0) },
+                base: arrayValue(root["companies"])
+            )
+            root["projects"] = try mergedWorkRecords(
+                native: sanitized.projects.map { try jsonValue($0) },
+                base: arrayValue(root["projects"])
+            )
+            root["tasks"] = try mergedWorkRecords(
+                native: sanitized.tasks.map { try jsonValue($0) },
+                base: arrayValue(root["tasks"])
+            )
+            root["focusSessions"] = try mergedWorkRecords(
+                native: sanitized.focusSessions.map { try jsonValue($0) },
+                base: arrayValue(root["focusSessions"])
+            )
+        } else if !sanitized.focusSessions.isEmpty || root["focusSessions"] != nil || sanitized.pausedFocusSessionID != nil || sanitized.activeFocusProjectID != nil || sanitized.activeFocusTaskID != nil {
+            // Compact v1 local snapshots only own the focus projection. Keep
+            // all server-owned Work collections untouched during their first
+            // post-upgrade write.
+            if !sanitized.focusSessions.isEmpty {
+                root["focusSessions"] = try jsonValue(deduplicatedWorkFocusSessions(sanitized.focusSessions))
+            }
+            if let pausedFocusSessionID = sanitized.pausedFocusSessionID {
+                root["pausedFocusSessionID"] = .string(pausedFocusSessionID)
+            }
+            if let activeFocusProjectID = sanitized.activeFocusProjectID {
+                root["activeFocusProjectID"] = .string(activeFocusProjectID)
+            }
+            if let activeFocusTaskID = sanitized.activeFocusTaskID {
+                root["activeFocusTaskID"] = .string(activeFocusTaskID)
             }
         }
         return .object(root)
@@ -619,6 +677,27 @@ enum RootineCanonicalWorkspaceMapping {
             retained.append(normalized)
         }
         return Array(retained.reversed())
+    }
+
+    /// Merge a native collection into the last canonical shadow while
+    /// retaining fields that iOS does not understand. Native records are the
+    /// authoritative set for this projection, but each matching base object
+    /// wins for unknown keys and the native values win for known keys.
+    private static func mergedWorkRecords(native: [JSONValue], base: [JSONValue]) throws -> JSONValue {
+        let normalizedNative = deduplicatedRecords(native)
+        let normalizedBase = deduplicatedRecords(base)
+        let baseByID = normalizedBase.reduce(into: [String: JSONValue]()) { result, value in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return }
+            result[id] = value
+        }
+        let merged = normalizedNative.map { value -> JSONValue in
+            guard let id = identifier(objectValueIfPresent(value)?["id"]),
+                  let existing = baseByID[id],
+                  let existingObject = objectValueIfPresent(existing),
+                  let nativeObject = objectValueIfPresent(value) else { return value }
+            return .object(existingObject.merging(nativeObject) { _, native in native })
+        }
+        return .array(merged)
     }
 
     private static func deduplicatedGoals(_ goals: [GoalRecord]) -> [GoalRecord] {
@@ -1235,7 +1314,10 @@ private struct CanonicalWorkWorkspace: Codable {
     var projects: [JSONValue]
     var tasks: [JSONValue]
     var activeFocusStartedAt: String?
-    var focusSessions: [WorkFocusSession]?
+    var activeFocusProjectID: String?
+    var activeFocusTaskID: String?
+    var pausedFocusSessionID: String?
+    var focusSessions: [JSONValue]?
 }
 
 private struct CanonicalTravelWorkspace: Codable {

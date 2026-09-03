@@ -1398,6 +1398,123 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(sanitized.focusSessions.first?.minutes, 20)
     }
 
+    func testLegacyCompactWorkSnapshotDoesNotDeleteCanonicalCollections() throws {
+        let data = Data("""
+        {"version":1,"updatedAt":"2026-09-02T10:00:00.000Z","activeFocusStartedAt":null,"focusSessions":[]}
+        """.utf8)
+        let legacy = try JSONDecoder().decode(WorkWorkspace.self, from: data)
+        XCTAssertFalse(legacy.hasFullProjection)
+        let compactRoundTrip = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(legacy))
+        if case .object(let compactObject) = compactRoundTrip {
+            XCTAssertNil(compactObject["companies"])
+            XCTAssertNil(compactObject["projects"])
+            XCTAssertNil(compactObject["tasks"])
+        } else {
+            XCTFail("Legacy Work snapshot should remain compact on local save")
+        }
+
+        let base = try RootineCanonicalWorkspaceMapping.payload(for: WorkWorkspace(
+            version: 1,
+            updatedAt: "2026-09-02T10:00:00.000Z",
+            activeFocusStartedAt: nil,
+            focusSessions: [],
+            companies: [WorkCompany(id: "company", name: "Acme")],
+            projects: [WorkProject(id: "project", companyId: "company", name: "Launch")],
+            tasks: [WorkItem(id: "task", projectId: "project", title: "Ship", createdAt: "2026-09-02T10:00:00.000Z")]
+        ))
+        let merged = try RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: legacy, onto: base)
+        guard case .object(let object) = merged,
+              case .array(let companies) = object["companies"],
+              case .array(let projects) = object["projects"],
+              case .array(let tasks) = object["tasks"] else {
+            return XCTFail("Legacy compact Work merge should keep canonical collections")
+        }
+        XCTAssertEqual(companies.count, 1)
+        XCTAssertEqual(projects.count, 1)
+        XCTAssertEqual(tasks.count, 1)
+    }
+
+    func testWorkProjectionRoundTripsCollectionsAndPreservesUnknownRecordFields() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let workspace = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: nil,
+            focusSessions: [WorkFocusSession(id: " focus-1 ", startedAt: timestamp, endedAt: timestamp, minutes: 25, projectId: "project-1")],
+            companies: [WorkCompany(id: " company-1 ", name: "Acme", description: "Studio")],
+            projects: [WorkProject(id: "project-1", companyId: "company-1", name: "Launch", status: .active)],
+            tasks: [WorkItem(id: "task-1", companyId: "company-1", projectId: "project-1", title: "Ship", completed: false, status: .todo, priority: .high, dueDate: "2026-09-04", createdAt: timestamp)]
+        )
+        var base = try RootineCanonicalWorkspaceMapping.payload(for: workspace)
+        if case .object(var root) = base,
+           case .array(let companies) = root["companies"],
+           case .object(var company) = companies[0] {
+            company["webOnlyField"] = .string("preserve")
+            root["companies"] = .array([.object(company)])
+            base = .object(root)
+        }
+        let decoded = try RootineCanonicalWorkspaceMapping.workWorkspace(from: base)
+        XCTAssertEqual(decoded.companies.first?.id, "company-1")
+        XCTAssertEqual(decoded.projects.first?.companyId, "company-1")
+        XCTAssertEqual(decoded.tasks.first?.priority, .high)
+        XCTAssertEqual(decoded.focusSessions.first?.minutes, 25)
+
+        let merged = try RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: decoded, onto: base)
+        guard case .object(let root) = merged,
+              case .array(let companies) = root["companies"],
+              case .object(let company) = companies[0] else {
+            return XCTFail("Work payload should contain canonical company records")
+        }
+        XCTAssertEqual(company["webOnlyField"], .string("preserve"))
+    }
+
+    func testWorkValidationBreaksDanglingRelationshipsAndComputesTotals() {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let workspace = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: timestamp,
+            focusSessions: [WorkFocusSession(id: "focus", startedAt: timestamp, endedAt: timestamp, minutes: 25)],
+            companies: [WorkCompany(id: "company", name: "Acme")],
+            projects: [WorkProject(id: "project", companyId: "missing", name: "Launch")],
+            tasks: [
+                WorkItem(id: "task", projectId: "missing", parentId: "task", title: "Ship", completed: false, priority: .urgent, createdAt: timestamp),
+                WorkItem(id: "done", projectId: "project", title: "Done", completed: true, status: .completed, createdAt: timestamp)
+            ]
+        )
+        let sanitized = rootineSanitizedWorkWorkspace(workspace)
+        XCTAssertNil(sanitized.projects.first?.companyId)
+        XCTAssertNil(sanitized.tasks.first?.projectId)
+        XCTAssertNil(sanitized.tasks.first?.parentId)
+        let totals = rootineWorkTotals(sanitized)
+        XCTAssertEqual(totals.projectCount, 1)
+        XCTAssertEqual(totals.openTaskCount, 1)
+        XCTAssertEqual(totals.completedTaskCount, 1)
+        XCTAssertEqual(totals.focusMinutes, 25)
+        let now = RootineDate.date(from: timestamp)!.addingTimeInterval(90)
+        XCTAssertEqual(rootineFocusElapsedSeconds(startedAt: timestamp, at: now), 90)
+        XCTAssertNil(rootineFocusElapsedSeconds(startedAt: "not-a-timestamp", at: now))
+    }
+
+    func testPausedFocusMarkerRoundTripsAndRequiresKnownHistory() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+        let session = WorkFocusSession(id: "focus-segment", startedAt: timestamp, endedAt: timestamp, minutes: 25)
+        let paused = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: nil,
+            pausedFocusSessionID: session.id,
+            focusSessions: [session]
+        )
+        XCTAssertEqual(try roundTrip(paused), paused)
+        XCTAssertEqual(try objectValue(RootineCanonicalWorkspaceMapping.payload(for: paused))?["pausedFocusSessionID"], .string(session.id))
+
+        var unknown = paused
+        unknown.pausedFocusSessionID = "missing"
+        XCTAssertNil(rootineSanitizedWorkWorkspace(unknown).pausedFocusSessionID)
+        XCTAssertEqual(RootineLocalIdentifier.string(namespace: "focus", operationID: timestamp), RootineLocalIdentifier.string(namespace: "focus", operationID: timestamp))
+    }
+
     func testCanonicalMergesDeduplicateWhitespaceAndRepeatedBaseIDs() throws {
         let timestamp = "2026-09-02T10:00:00.000Z"
 

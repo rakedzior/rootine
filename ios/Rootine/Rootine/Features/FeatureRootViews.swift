@@ -1229,6 +1229,10 @@ private struct GoalDetailSheet: View {
 
 private struct WorkModuleContent: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @State private var isShowingProjectEditor = false
+    @State private var isShowingWorkItemEditor = false
+    @State private var editingWorkItem: WorkItem?
+    @State private var workItemToDelete: WorkItem?
     @State private var isShowingPriorityEditor = false
     @State private var editingPriority: WorkspaceTask?
     @State private var priorityToDelete: WorkspaceTask?
@@ -1238,7 +1242,43 @@ private struct WorkModuleContent: View {
         environment.taskWorkspace.tasks.filter { $0.deleted != true && $0.source?.kind == "work" }
     }
 
+    private var workProjects: [WorkProject] {
+        environment.workWorkspace.projects.filter { $0.status != .archived }
+    }
+
+    private var workItems: [WorkItem] {
+        environment.workWorkspace.tasks.sorted { lhs, rhs in
+            if lhs.completed != rhs.completed { return !lhs.completed }
+            if lhs.priority != rhs.priority { return workPriorityRank(lhs.priority) > workPriorityRank(rhs.priority) }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private func workPriorityRank(_ priority: WorkItemPriority) -> Int {
+        switch priority {
+        case .urgent: return 4
+        case .high: return 3
+        case .medium: return 2
+        case .low: return 1
+        case .none: return 0
+        }
+    }
+
+    private func workItemMeta(_ item: WorkItem) -> String {
+        let projectName = item.projectId.flatMap { projectID in
+            workProjects.first(where: { $0.id == projectID })?.name
+        }
+        let priority = item.priority == .none ? nil : item.priority.rawValue
+        return [projectName, priority].compactMap { $0 }.joined(separator: " · ").isEmpty
+            ? "Bez projektu"
+            : [projectName, priority].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private var isFocusRunning: Bool { focusStartDate != nil }
+
+    private var isFocusPaused: Bool {
+        !isFocusRunning && environment.workWorkspace.pausedFocusSessionID != nil
+    }
 
     private var focusStartDate: Date? {
         guard let startedAt = environment.workWorkspace.activeFocusStartedAt else { return nil }
@@ -1262,13 +1302,105 @@ private struct WorkModuleContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack {
+                    ModuleSectionTitle(title: "Projekty", systemImage: "folder")
+                    Spacer()
+                    Text("\(workProjects.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if workProjects.isEmpty {
+                    ModuleEmptyCard(title: "Dodaj pierwszy projekt", detail: "Projekty porządkują zadania pracy i sesje skupienia.", systemImage: "folder.badge.plus", tint: MoreModule.work.tint)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workProjects.enumerated()), id: \.element.id) { index, project in
+                            HStack(spacing: RootineTheme.Spacing.small) {
+                                Image(systemName: project.status == .completed ? "checkmark.folder.fill" : "folder.fill")
+                                    .foregroundStyle(project.status == .completed ? RootineTheme.ColorToken.success : MoreModule.work.tint)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(project.name).font(.subheadline.weight(.semibold))
+                                    Text("\(workItems.filter { $0.projectId == project.id && !$0.completed }.count) otwartych zadań")
+                                        .font(.caption)
+                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            if index < workProjects.count - 1 { Divider().overlay(RootineTheme.ColorToken.separator) }
+                        }
+                    }
+                    .rootineSurface()
+                }
+                ModuleActionButton(title: "Dodaj projekt", systemImage: "plus", tint: MoreModule.work.tint) {
+                    isShowingProjectEditor = true
+                }
+            }
+
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack {
+                    ModuleSectionTitle(title: "Zadania pracy", systemImage: "list.bullet.rectangle")
+                    Spacer()
+                    Text("\(workItems.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                if workItems.isEmpty {
+                    ModuleEmptyCard(title: "Dodaj zadanie pracy", detail: "Zadania mogą należeć do projektu i mieć priorytet.", systemImage: "plus.rectangle.on.folder", tint: MoreModule.work.tint)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(workItems.enumerated()), id: \.element.id) { index, item in
+                            HStack(spacing: RootineTheme.Spacing.small) {
+                                Button {
+                                    Task { await environment.toggleWorkItemCompletion(id: item.id) }
+                                } label: {
+                                    Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(item.completed ? RootineTheme.ColorToken.success : MoreModule.work.tint)
+                                        .frame(width: 32, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                Button { editingWorkItem = item } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.title)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                            .strikethrough(item.completed)
+                                            .lineLimit(2)
+                                        Text(workItemMeta(item))
+                                            .font(.caption)
+                                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                    }
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    if !isFocusRunning && !isFocusPaused {
+                                        Button {
+                                            Task { await environment.startFocusSession(projectID: item.projectId, taskID: item.id) }
+                                        } label: {
+                                            Label("Skup się na zadaniu", systemImage: "timer")
+                                        }
+                                    }
+                                    Button(role: .destructive) { workItemToDelete = item } label: { Label("Usuń", systemImage: "trash") }
+                                }
+                            }
+                            if index < workItems.count - 1 { Divider().overlay(RootineTheme.ColorToken.separator) }
+                        }
+                    }
+                    .rootineSurface()
+                }
+                ModuleActionButton(title: "Dodaj zadanie pracy", systemImage: "plus", tint: MoreModule.work.tint) {
+                    isShowingWorkItemEditor = true
+                }
+            }
+
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                 HStack {
                     ModuleSectionTitle(title: "Sesja skupienia", systemImage: "timer")
                     Spacer()
-                    Text(isFocusRunning ? "W TOKU" : "GOTOWE")
+                    Text(isFocusRunning ? "W TOKU" : isFocusPaused ? "WSTRZYMANO" : "GOTOWE")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(isFocusRunning ? MoreModule.work.tint : RootineTheme.ColorToken.success)
+                        .foregroundStyle(isFocusRunning || isFocusPaused ? MoreModule.work.tint : RootineTheme.ColorToken.success)
                 }
                 if hasCorruptFocusSession {
                     Label("Sesja wymaga odzyskania", systemImage: "exclamationmark.triangle")
@@ -1298,9 +1430,9 @@ private struct WorkModuleContent: View {
                     }
                 } else {
                     HStack(alignment: .lastTextBaseline) {
-                        Label("Brak aktywnej sesji", systemImage: "timer")
+                        Label(isFocusPaused ? "Sesja wstrzymana" : "Brak aktywnej sesji", systemImage: isFocusPaused ? "pause.circle" : "timer")
                             .font(.title3.weight(.semibold))
-                        Text("Uruchom blok skupienia")
+                        Text(isFocusPaused ? "Wznów, gdy będziesz gotowy" : "Uruchom blok skupienia")
                             .font(.subheadline)
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
@@ -1309,19 +1441,27 @@ private struct WorkModuleContent: View {
                     Button {
                         Task {
                             if isFocusRunning {
-                                await environment.stopFocusSession()
+                                await environment.pauseFocusSession()
+                            } else if isFocusPaused {
+                                await environment.resumeFocusSession()
                             } else {
                                 await environment.startFocusSession()
                             }
                         }
                     } label: {
-                        Label(isFocusRunning ? "Zatrzymaj sesję" : "Rozpocznij sesję", systemImage: isFocusRunning ? "pause.fill" : "play.fill")
+                        Label(isFocusRunning ? "Wstrzymaj sesję" : isFocusPaused ? "Wznów sesję" : "Rozpocznij sesję", systemImage: isFocusRunning ? "pause.fill" : "play.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(MoreModule.work.tint)
                     .frame(minHeight: 48)
-                    .accessibilityHint(isFocusRunning ? "Kończy bieżącą sesję skupienia" : "Uruchamia 25 minut skupienia")
+                    .accessibilityHint(isFocusRunning ? "Wstrzymuje bieżącą sesję skupienia" : isFocusPaused ? "Wznawia wstrzymaną sesję skupienia" : "Uruchamia blok skupienia")
+                    if isFocusRunning || isFocusPaused {
+                        Button("Zakończ sesję", role: .destructive) {
+                            Task { await environment.stopFocusSession() }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
                 }
             }
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
@@ -1379,8 +1519,14 @@ private struct WorkModuleContent: View {
 
             if !environment.workWorkspace.focusSessions.isEmpty {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                    ModuleSectionTitle(title: "Ostatnie sesje", systemImage: "clock.arrow.circlepath")
-                    ForEach(environment.workWorkspace.focusSessions.prefix(3)) { session in
+                    HStack {
+                        ModuleSectionTitle(title: "Historia skupienia", systemImage: "clock.arrow.circlepath")
+                        Spacer()
+                        Text("Łącznie \(rootineFocusTotalMinutes(environment.workWorkspace.focusSessions)) min")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    }
+                    ForEach(rootineFocusHistory(environment.workWorkspace.focusSessions, limit: 3)) { session in
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(MoreModule.work.tint)
@@ -1396,6 +1542,35 @@ private struct WorkModuleContent: View {
                 }
                 .rootineSurface()
             }
+        }
+        .task { await environment.recoverFocusSession() }
+        .sheet(isPresented: $isShowingProjectEditor) {
+            WorkProjectEditorSheet { name, description in
+                Task { await environment.addWorkProject(name: name, description: description) }
+            }
+        }
+        .sheet(isPresented: $isShowingWorkItemEditor) {
+            WorkItemEditorSheet(projects: workProjects) { title, projectID, priority, status in
+                Task { await environment.addWorkItem(title: title, projectID: projectID, priority: priority, status: status) }
+            }
+        }
+        .sheet(item: $editingWorkItem) { item in
+            WorkItemEditorSheet(existing: item, projects: workProjects) { title, projectID, priority, status in
+                Task { await environment.updateWorkItem(id: item.id, title: title, priority: priority, status: status, projectID: projectID) }
+            }
+        }
+        .confirmationDialog(
+            "Usunąć zadanie pracy?",
+            isPresented: Binding(get: { workItemToDelete != nil }, set: { if !$0 { workItemToDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Usuń zadanie", role: .destructive) {
+                if let workItemToDelete {
+                    Task { await environment.deleteWorkItem(id: workItemToDelete.id) }
+                }
+                workItemToDelete = nil
+            }
+            Button("Anuluj", role: .cancel) {}
         }
         .sheet(isPresented: $isShowingPriorityEditor) {
             WorkPriorityEditorSheet { title in
@@ -1449,6 +1624,118 @@ private struct WorkModuleContent: View {
 
     private func requestDelete(_ task: WorkspaceTask) {
         priorityToDelete = task
+    }
+}
+
+private struct WorkProjectEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (String, String) -> Void
+    @State private var name = ""
+    @State private var description = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Projekt") {
+                    TextField("Nazwa projektu", text: $name)
+                    TextField("Opis (opcjonalnie)", text: $description, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+            }
+            .navigationTitle("Dodaj projekt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(name, description)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct WorkItemEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let existing: WorkItem?
+    let projects: [WorkProject]
+    let onSave: (String, String?, WorkItemPriority, WorkItemStatus) -> Void
+    @State private var title: String
+    @State private var projectID: String
+    @State private var priority: WorkItemPriority
+    @State private var status: WorkItemStatus
+
+    init(existing: WorkItem? = nil, projects: [WorkProject], onSave: @escaping (String, String?, WorkItemPriority, WorkItemStatus) -> Void) {
+        self.existing = existing
+        self.projects = projects
+        self.onSave = onSave
+        _title = State(initialValue: existing?.title ?? "")
+        _projectID = State(initialValue: existing?.projectId ?? "")
+        _priority = State(initialValue: existing?.priority ?? .none)
+        _status = State(initialValue: existing?.status ?? .todo)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Zadanie") {
+                    TextField("Co trzeba zrobić?", text: $title, axis: .vertical)
+                        .lineLimit(2...4)
+                    Picker("Projekt", selection: $projectID) {
+                        Text("Bez projektu").tag("")
+                        ForEach(projects) { project in
+                            Text(project.name).tag(project.id)
+                        }
+                    }
+                    Picker("Priorytet", selection: $priority) {
+                        ForEach(WorkItemPriority.allCases, id: \.self) { value in
+                            Text(workItemPriorityLabel(value)).tag(value)
+                        }
+                    }
+                    Picker("Status", selection: $status) {
+                        ForEach(WorkItemStatus.allCases, id: \.self) { value in
+                            Text(workItemStatusLabel(value)).tag(value)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(existing == nil ? "Dodaj zadanie" : "Edytuj zadanie")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Zapisz") {
+                        onSave(title, projectID.isEmpty ? nil : projectID, priority, status)
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func workItemPriorityLabel(_ value: WorkItemPriority) -> String {
+        switch value {
+        case .none: return "Brak"
+        case .low: return "Niski"
+        case .medium: return "Średni"
+        case .high: return "Wysoki"
+        case .urgent: return "Pilny"
+        }
+    }
+
+    private func workItemStatusLabel(_ value: WorkItemStatus) -> String {
+        switch value {
+        case .todo: return "Do zrobienia"
+        case .inProgress: return "W toku"
+        case .blocked: return "Zablokowane"
+        case .waiting: return "Oczekuje"
+        case .completed: return "Ukończone"
+        case .cancelled: return "Anulowane"
+        }
     }
 }
 

@@ -97,6 +97,9 @@ final class AppEnvironment: ObservableObject {
     private var notificationPreferences = RootineNotificationPreferences()
     private var canonicalShadows: [RootineStorageKey: JSONValue] = [:]
     private var creationGate = WorkspaceCreationGate()
+    /// Injectable wall clock keeps timer recovery deterministic in tests while
+    /// production always evaluates elapsed time from persisted timestamps.
+    private let nowProvider: () -> Date
     private var refreshTask: Task<Void, Never>?
     private var realtimeClient: RootineRealtimeClient?
     private var syncCoordinator: RootineSyncCoordinator?
@@ -122,7 +125,8 @@ final class AppEnvironment: ObservableObject {
         configuration: RootineConfiguration = .fromBundle(),
         keychain: KeychainSessionStore = KeychainSessionStore(),
         normalizedReadClient: (any RootineRelationalReadClient)? = nil,
-        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil
+        readFeatureFlags: (any RootineReadFeatureFlagStore)? = nil,
+        nowProvider: @escaping () -> Date = { Date() }
     ) {
         self.configuration = configuration
         self.keychain = keychain
@@ -131,6 +135,7 @@ final class AppEnvironment: ObservableObject {
         self.deviceIdentity = RootineDeviceIdentityStore()
         self.normalizedReadClient = normalizedReadClient ?? configuredAPI
         self.readFeatureFlags = readFeatureFlags ?? UserDefaultsRootineReadFeatureFlagStore()
+        self.nowProvider = nowProvider
         let storedSession = keychain.load()
         session = storedSession
         if let storedSession {
@@ -1203,29 +1208,381 @@ final class AppEnvironment: ObservableObject {
         await persistGoalsWorkspace(next)
     }
 
-    func startFocusSession() async {
-        guard workWorkspace.activeFocusStartedAt == nil else { return }
+    // MARK: Work projects and items
+
+    func addWorkCompany(
+        name: String,
+        description: String = "",
+        website: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let id = RootineLocalIdentifier.string(namespace: "work-company", operationID: operationID)
+        guard creationGate.claim("work-company|\(id)") else { return }
+        defer { creationGate.release("work-company|\(id)") }
         var next = workWorkspace
-        next.activeFocusStartedAt = RootineDate.isoTimestamp()
-        next.updatedAt = RootineDate.isoTimestamp()
+        guard !next.companies.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp(nowProvider())
+        next.companies.append(WorkCompany(
+            id: id,
+            name: trimmedName,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            color: "",
+            website: website?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty,
+            archived: false,
+            createdAt: now,
+            updatedAt: now
+        ))
         await persistWorkWorkspace(next)
     }
 
-    func stopFocusSession() async {
+    func updateWorkCompany(id: String, name: String, description: String = "", website: String? = nil) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        var next = workWorkspace
+        guard let index = next.companies.firstIndex(where: { $0.id == id }) else { return }
+        next.companies[index].name = trimmedName
+        next.companies[index].description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.companies[index].website = website?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        next.companies[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func deleteWorkCompany(id: String) async {
+        var next = workWorkspace
+        guard next.companies.contains(where: { $0.id == id }) else { return }
+        let projectIDs = Set(next.projects.filter { $0.companyId == id }.map(\.id))
+        let taskIDs = Set(next.tasks.filter { ($0.companyId == id) || ($0.projectId.map(projectIDs.contains) == true) }.map(\.id))
+        next.companies.removeAll { $0.id == id }
+        next.projects.removeAll { projectIDs.contains($0.id) }
+        next.tasks.removeAll { taskIDs.contains($0.id) }
+        next.focusSessions.removeAll { session in
+            session.projectId.map(projectIDs.contains) == true || session.taskId.map(taskIDs.contains) == true
+        }
+        await persistWorkWorkspace(next)
+    }
+
+    func addWorkProject(
+        name: String,
+        companyID: String? = nil,
+        description: String = "",
+        startDate: String? = nil,
+        endDate: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard normalizedCompany == nil || workWorkspace.companies.contains(where: { $0.id == normalizedCompany }) else { return }
+        guard validWorkDateRange(startDate: startDate, endDate: endDate) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "work-project", operationID: operationID)
+        guard creationGate.claim("work-project|\(id)") else { return }
+        defer { creationGate.release("work-project|\(id)") }
+        var next = workWorkspace
+        guard !next.projects.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp(nowProvider())
+        next.projects.append(WorkProject(
+            id: id,
+            companyId: normalizedCompany,
+            name: trimmedName,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            status: .active,
+            startDate: startDate?.rootineTrimmedNonEmpty,
+            endDate: endDate?.rootineTrimmedNonEmpty,
+            note: nil,
+            createdAt: now,
+            updatedAt: now
+        ))
+        await persistWorkWorkspace(next)
+    }
+
+    func updateWorkProject(
+        id: String,
+        name: String,
+        companyID: String? = nil,
+        description: String = "",
+        status: WorkProjectStatus = .active,
+        startDate: String? = nil,
+        endDate: String? = nil,
+        note: String? = nil
+    ) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard !trimmedName.isEmpty,
+              validWorkDateRange(startDate: startDate, endDate: endDate),
+              normalizedCompany == nil || workWorkspace.companies.contains(where: { $0.id == normalizedCompany }) else { return }
+        var next = workWorkspace
+        guard let index = next.projects.firstIndex(where: { $0.id == id }) else { return }
+        next.projects[index].name = trimmedName
+        next.projects[index].companyId = normalizedCompany
+        next.projects[index].description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        next.projects[index].status = status
+        next.projects[index].startDate = startDate?.rootineTrimmedNonEmpty
+        next.projects[index].endDate = endDate?.rootineTrimmedNonEmpty
+        next.projects[index].note = note?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        next.projects[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func deleteWorkProject(id: String) async {
+        var next = workWorkspace
+        guard next.projects.contains(where: { $0.id == id }) else { return }
+        let taskIDs = Set(next.tasks.filter { $0.projectId == id }.map(\.id))
+        next.projects.removeAll { $0.id == id }
+        next.tasks.removeAll { taskIDs.contains($0.id) }
+        next.focusSessions.removeAll { $0.projectId == id || ( $0.taskId.map(taskIDs.contains) == true) }
+        await persistWorkWorkspace(next)
+    }
+
+    func addWorkItem(
+        title: String,
+        projectID: String? = nil,
+        companyID: String? = nil,
+        parentID: String? = nil,
+        priority: WorkItemPriority = .none,
+        status: WorkItemStatus = .todo,
+        dueDate: String? = nil,
+        dueTime: String? = nil,
+        note: String? = nil,
+        operationID: String = UUID().uuidString
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty,
+              validWorkDate(dueDate), validWorkTime(dueTime) else { return }
+        let normalizedProject = projectID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard normalizedProject == nil || workWorkspace.projects.contains(where: { $0.id == normalizedProject }) else { return }
+        guard normalizedCompany == nil || workWorkspace.companies.contains(where: { $0.id == normalizedCompany }) else { return }
+        guard validWorkParent(parentID, projectID: normalizedProject, workspace: workWorkspace) else { return }
+        let id = RootineLocalIdentifier.string(namespace: "work-task", operationID: operationID)
+        guard creationGate.claim("work-task|\(id)") else { return }
+        defer { creationGate.release("work-task|\(id)") }
+        var next = workWorkspace
+        guard !next.tasks.contains(where: { $0.id == id }) else { return }
+        let now = RootineDate.isoTimestamp(nowProvider())
+        let resolvedStatus = status == .completed ? .completed : status
+        next.tasks.append(WorkItem(
+            id: id,
+            companyId: normalizedCompany ?? normalizedProject.flatMap { projectID in next.projects.first(where: { $0.id == projectID })?.companyId },
+            projectId: normalizedProject,
+            parentId: parentID?.rootineTrimmedNonEmpty,
+            title: trimmedTitle,
+            completed: resolvedStatus == .completed,
+            status: resolvedStatus,
+            priority: priority,
+            startDate: nil,
+            dueDate: dueDate?.rootineTrimmedNonEmpty,
+            dueTime: dueTime?.rootineTrimmedNonEmpty,
+            note: note?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty,
+            createdAt: now,
+            updatedAt: now
+        ))
+        await persistWorkWorkspace(next)
+    }
+
+    func updateWorkItem(
+        id: String,
+        title: String,
+        priority: WorkItemPriority? = nil,
+        status: WorkItemStatus? = nil,
+        projectID: String? = nil,
+        companyID: String? = nil,
+        parentID: String? = nil,
+        dueDate: String? = nil,
+        dueTime: String? = nil,
+        note: String? = nil
+    ) async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedProject = projectID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        let normalizedCompany = companyID?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        guard !trimmedTitle.isEmpty,
+              validWorkDate(dueDate), validWorkTime(dueTime) else { return }
+        var next = workWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id }),
+              normalizedProject == nil || next.projects.contains(where: { $0.id == normalizedProject }),
+              normalizedCompany == nil || next.companies.contains(where: { $0.id == normalizedCompany }),
+              validWorkParent(parentID, projectID: normalizedProject, workspace: next, childID: id) else { return }
+        next.tasks[index].title = trimmedTitle
+        next.tasks[index].projectId = normalizedProject
+        next.tasks[index].companyId = normalizedCompany ?? normalizedProject.flatMap { projectID in next.projects.first(where: { $0.id == projectID })?.companyId }
+        next.tasks[index].parentId = normalizedProject == nil ? nil : parentID?.rootineTrimmedNonEmpty
+        if let priority { next.tasks[index].priority = priority }
+        if let status {
+            next.tasks[index].status = status
+            next.tasks[index].completed = status == .completed
+        }
+        next.tasks[index].dueDate = dueDate?.rootineTrimmedNonEmpty
+        next.tasks[index].dueTime = dueTime?.rootineTrimmedNonEmpty
+        next.tasks[index].note = note?.trimmingCharacters(in: .whitespacesAndNewlines).rootineTrimmedNonEmpty
+        next.tasks[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func toggleWorkItemCompletion(id: String) async {
+        var next = workWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id }) else { return }
+        let completed = !next.tasks[index].completed
+        next.tasks[index].completed = completed
+        next.tasks[index].status = completed ? .completed : .todo
+        next.tasks[index].updatedAt = RootineDate.isoTimestamp(nowProvider())
+        await persistWorkWorkspace(next)
+    }
+
+    func deleteWorkItem(id: String) async {
+        var next = workWorkspace
+        var branch: Set<String> = [id]
+        var didAddDescendant = true
+        while didAddDescendant {
+            didAddDescendant = false
+            for task in next.tasks where task.parentId.map(branch.contains) == true {
+                if branch.insert(task.id).inserted { didAddDescendant = true }
+            }
+        }
+        guard !branch.isEmpty else { return }
+        next.tasks.removeAll { branch.contains($0.id) }
+        next.focusSessions.removeAll { session in session.taskId.map(branch.contains) == true }
+        await persistWorkWorkspace(next)
+    }
+
+    private func validWorkDate(_ value: String?) -> Bool {
+        guard let value = value?.rootineTrimmedNonEmpty else { return true }
+        return workDate(from: value) != nil
+    }
+
+    private func validWorkDateRange(startDate: String?, endDate: String?) -> Bool {
+        guard validWorkDate(startDate), validWorkDate(endDate) else { return false }
+        guard let start = startDate?.rootineTrimmedNonEmpty,
+              let end = endDate?.rootineTrimmedNonEmpty else { return true }
+        return start <= end
+    }
+
+    private func validWorkTime(_ value: String?) -> Bool {
+        guard let value = value?.rootineTrimmedNonEmpty else { return true }
+        return value.range(of: "^([01]\\d|2[0-3]):[0-5]\\d$", options: .regularExpression) != nil
+    }
+
+    private func workDate(from value: String) -> Date? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        let calendar = Calendar(identifier: .gregorian)
+        guard parts.count == 3,
+              String(format: "%04d-%02d-%02d", parts[0], parts[1], parts[2]) == value,
+              let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])),
+              calendar.component(.year, from: date) == parts[0],
+              calendar.component(.month, from: date) == parts[1],
+              calendar.component(.day, from: date) == parts[2] else { return nil }
+        return date
+    }
+
+    private func validWorkParent(_ parentID: String?, projectID: String?, workspace: WorkWorkspace, childID: String? = nil) -> Bool {
+        guard let parentID = parentID?.rootineTrimmedNonEmpty else { return true }
+        guard childID?.rootineNormalizedIdentifier != parentID.rootineNormalizedIdentifier else { return false }
+        guard let parent = workspace.tasks.first(where: { $0.id == parentID }), parent.projectId == projectID else { return false }
+        var seen = Set<String>(); var current: WorkItem? = parent
+        while let item = current, let nextID = item.parentId {
+            guard seen.insert(item.id).inserted, nextID != parentID else { return false }
+            current = workspace.tasks.first(where: { $0.id == nextID })
+        }
+        return true
+    }
+
+    // MARK: Focus timer
+
+    func startFocusSession(projectID: String? = nil, taskID: String? = nil, now: Date? = nil) async {
+        guard workWorkspace.activeFocusStartedAt == nil else { return }
+        let normalizedProject = projectID?.rootineTrimmedNonEmpty
+        let normalizedTask = taskID?.rootineTrimmedNonEmpty
+        let task = normalizedTask.flatMap { taskID in
+            workWorkspace.tasks.first(where: { $0.id == taskID })
+        }
+        let resolvedProject = normalizedProject ?? task?.projectId
+        guard resolvedProject == nil || workWorkspace.projects.contains(where: { $0.id == resolvedProject }),
+              normalizedTask == nil || task != nil,
+              normalizedTask == nil || task?.projectId == resolvedProject else { return }
+        var next = workWorkspace
+        let startedAt = now ?? nowProvider()
+        next.activeFocusStartedAt = RootineDate.isoTimestamp(startedAt)
+        next.activeFocusProjectID = resolvedProject
+        next.activeFocusTaskID = normalizedTask
+        next.pausedFocusSessionID = nil
+        next.updatedAt = RootineDate.isoTimestamp(startedAt)
+        await persistWorkWorkspace(next)
+    }
+
+    func stopFocusSession(now: Date? = nil) async {
         guard let startedAt = workWorkspace.activeFocusStartedAt,
               let startDate = RootineDate.date(from: startedAt) else {
+            if workWorkspace.pausedFocusSessionID != nil {
+                var next = workWorkspace
+                next.pausedFocusSessionID = nil
+                next.updatedAt = RootineDate.isoTimestamp(now ?? nowProvider())
+                await persistWorkWorkspace(next)
+                return
+            }
             await resetFocusSession(message: "Uszkodzona sesja skupienia została przeniesiona do stanu odzyskiwania")
             return
         }
+        await finishFocusSegment(startDate: startDate, startedAt: startedAt, now: now, paused: false)
+    }
+
+    /// Pausing closes the current elapsed segment but keeps a durable marker
+    /// pointing at it. A later resume starts a new segment, so a crash or
+    /// device hand-off cannot double-count the interval before the pause.
+    func pauseFocusSession(now: Date? = nil) async {
+        guard let startedAt = workWorkspace.activeFocusStartedAt,
+              let startDate = RootineDate.date(from: startedAt) else { return }
+        await finishFocusSegment(startDate: startDate, startedAt: startedAt, now: now, paused: true)
+    }
+
+    func resumeFocusSession(now: Date? = nil) async {
+        guard workWorkspace.activeFocusStartedAt == nil,
+              workWorkspace.pausedFocusSessionID != nil else { return }
         var next = workWorkspace
-        let now = Date()
-        let minutes = max(1, Int(now.timeIntervalSince(startDate) / 60))
+        let startedAt = now ?? nowProvider()
+        next.activeFocusStartedAt = RootineDate.isoTimestamp(startedAt)
+        if let pausedID = next.pausedFocusSessionID,
+           let paused = next.focusSessions.first(where: { $0.id == pausedID }) {
+            next.activeFocusProjectID = paused.projectId
+            next.activeFocusTaskID = paused.taskId
+        }
+        next.pausedFocusSessionID = nil
+        next.updatedAt = RootineDate.isoTimestamp(startedAt)
+        await persistWorkWorkspace(next)
+    }
+
+    private func finishFocusSegment(startDate: Date, startedAt: String, now: Date?, paused: Bool) async {
+        var next = workWorkspace
+        let nowDate = max(now ?? nowProvider(), startDate)
+        let minutes = max(1, Int(nowDate.timeIntervalSince(startDate) / 60))
         let sessionID = RootineLocalIdentifier.string(namespace: "focus", operationID: startedAt)
         next.focusSessions.removeAll { $0.id == sessionID }
-        next.focusSessions.insert(WorkFocusSession(id: sessionID, startedAt: startedAt, endedAt: RootineDate.isoTimestamp(now), minutes: minutes), at: 0)
+        next.focusSessions.insert(WorkFocusSession(
+            id: sessionID,
+            startedAt: startedAt,
+            endedAt: RootineDate.isoTimestamp(nowDate),
+            minutes: minutes,
+            projectId: next.activeFocusProjectID,
+            taskId: next.activeFocusTaskID
+        ), at: 0)
         next.activeFocusStartedAt = nil
-        next.updatedAt = RootineDate.isoTimestamp(now)
+        next.activeFocusProjectID = nil
+        next.activeFocusTaskID = nil
+        next.pausedFocusSessionID = paused ? sessionID : nil
+        next.updatedAt = RootineDate.isoTimestamp(nowDate)
         await persistWorkWorkspace(next)
+    }
+
+    /// Foreground recovery validates the persisted marker without stopping a
+    /// session merely because the process was suspended in the background.
+    func recoverFocusSession(now: Date? = nil) async {
+        guard let startedAt = workWorkspace.activeFocusStartedAt else { return }
+        guard let startDate = RootineDate.date(from: startedAt) else {
+            await resetFocusSession(message: "Uszkodzona sesja skupienia została przeniesiona do stanu odzyskiwania")
+            return
+        }
+        if startDate > (now ?? nowProvider()) {
+            await resetFocusSession(message: "Sesja skupienia miała nieprawidłowy czas rozpoczęcia i została wyczyszczona")
+        }
     }
 
     /// Clears an invalid or abandoned focus timestamp without fabricating a
@@ -1235,6 +1592,9 @@ final class AppEnvironment: ObservableObject {
         guard workWorkspace.activeFocusStartedAt != nil else { return }
         var next = workWorkspace
         next.activeFocusStartedAt = nil
+        next.activeFocusProjectID = nil
+        next.activeFocusTaskID = nil
+        next.pausedFocusSessionID = nil
         next.updatedAt = RootineDate.isoTimestamp()
         await persistWorkWorkspace(next)
         foundationMessage = message
@@ -2494,6 +2854,9 @@ final class AppEnvironment: ObservableObject {
 
     func scenePhaseDidChange(_ phase: RootineScenePhase) {
         guard session != nil, let syncCoordinator else { return }
+        if phase == .active {
+            Task { await recoverFocusSession() }
+        }
         Task { await syncCoordinator.scenePhaseChanged(phase) }
     }
 
@@ -2519,6 +2882,11 @@ final class AppEnvironment: ObservableObject {
             task?.setTaskCompleted(success: false)
             return
         }
+        // A suspended process cannot advance a UI counter. Revalidate the
+        // persisted marker immediately before the background sync so a clock
+        // correction or malformed timestamp is repaired even without a
+        // foreground transition; a valid marker remains active.
+        await recoverFocusSession()
         let work = Task { await syncCoordinator.syncNow(reason: .backgroundTask) }
         task?.expirationHandler = { work.cancel() }
         let success = await work.value
