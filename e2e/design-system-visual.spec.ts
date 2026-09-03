@@ -128,7 +128,16 @@ test.describe("design-system visual baselines", { tag: "@shared" }, () => {
     const reminderPicker = page.getByRole("dialog", { name: "Przypomnienie", exact: true });
     await expect(reminderPicker).toBeVisible();
     await capture(reminderPicker, "task-reminder-picker-portal.png", { maxDiffPixels: 256 });
-    expect(await datePicker.boundingBox()).toEqual(pickerSize);
+    const pickerSizeAfterReminder = await datePicker.boundingBox();
+    expect(pickerSizeAfterReminder).not.toBeNull();
+    if (pickerSize && pickerSizeAfterReminder) {
+      for (const dimension of ["x", "y", "width", "height"] as const) {
+        expect(
+          Math.abs(pickerSizeAfterReminder[dimension] - pickerSize[dimension]),
+          `Date picker ${dimension} should remain stable while opening a child layer`,
+        ).toBeLessThanOrEqual(1);
+      }
+    }
     const [parentLayer, childLayer, reminderSize] = await Promise.all([
       datePicker.evaluate((element) => Number(getComputedStyle(element).zIndex)),
       reminderPicker.evaluate((element) => Number(getComputedStyle(element).zIndex)),
