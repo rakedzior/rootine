@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 25
     if: needs['trusted-ref'].result == 'success' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
     env:
-      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-pr-quality
+      ROOTINE_EVIDENCE_DIR: ${{ github.workspace }}/.tmp-pr-quality
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -68,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: pr-quality-sql-${{ github.sha }}
-          path: ${{ runner.temp }}/rootine-pr-quality
+          path: ${{ github.workspace }}/.tmp-pr-quality
           if-no-files-found: ignore
           retention-days: 7
 
@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 15
     if: needs['trusted-ref'].result == 'success' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
     env:
-      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-pr-quality
+      ROOTINE_EVIDENCE_DIR: ${{ github.workspace }}/.tmp-pr-quality
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -108,7 +108,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: pr-quality-edge-${{ github.sha }}
-          path: ${{ runner.temp }}/rootine-pr-quality
+          path: ${{ github.workspace }}/.tmp-pr-quality
           if-no-files-found: ignore
           retention-days: 7
 

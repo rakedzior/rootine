@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 25
     environment: staging
     env:
-      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-release-gate
+      ROOTINE_EVIDENCE_DIR: ${{ github.workspace }}/.tmp-release-gate
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -78,7 +78,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: release-gate-sql-${{ github.sha }}
-          path: ${{ runner.temp }}/rootine-release-gate
+          path: ${{ github.workspace }}/.tmp-release-gate
           if-no-files-found: ignore
           retention-days: 14
 
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-release-gate
+      ROOTINE_EVIDENCE_DIR: ${{ github.workspace }}/.tmp-release-gate
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: release-gate-edge-${{ github.sha }}
-          path: ${{ runner.temp }}/rootine-release-gate
+          path: ${{ github.workspace }}/.tmp-release-gate
           if-no-files-found: ignore
           retention-days: 14
 
@@ -176,7 +176,7 @@ jobs:
     timeout-minutes: 20
     environment: staging
     env:
-      ROOTINE_EVIDENCE_DIR: ${{ runner.temp }}/rootine-release-gate
+      ROOTINE_EVIDENCE_DIR: ${{ github.workspace }}/.tmp-release-gate
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -199,7 +199,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: release-gate-staging-${{ github.sha }}
-          path: ${{ runner.temp }}/rootine-release-gate
+          path: ${{ github.workspace }}/.tmp-release-gate
           if-no-files-found: ignore
           retention-days: 14
 
