@@ -31,7 +31,7 @@ test("same-day integrations use unique migration versions in dependency order", 
     "20260902120200_rootine_server_notifications.sql",
   ]);
   assert.ok(names.indexOf("20260902130000_rootine_mobile_sync_v3_register_device.sql") > names.indexOf("20260902120200_rootine_server_notifications.sql"));
-  assert.ok(names.at(-1)?.startsWith("20260902140000_rootine_database_hardening.sql"));
+  assert.ok(names.indexOf("20260903150000_rootine_device_rpc_ambiguity_fix.sql") > names.indexOf("20260902140000_rootine_database_hardening.sql"));
 });
 
 test("hardening migration is additive and service-role gated", async () => {

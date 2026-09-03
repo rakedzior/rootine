@@ -28,6 +28,7 @@ production respectively.
    - `20260902120200_rootine_server_notifications.sql`
    - `20260902130000_rootine_mobile_sync_v3_register_device.sql`
    - `20260902140000_rootine_database_hardening.sql`
+   - `20260903150000_rootine_device_rpc_ambiguity_fix.sql`
 
    B04, B09 and B11 use unique migration versions and are applied in this
    order because B04 extends the shared B02 tables, B09 extends the device

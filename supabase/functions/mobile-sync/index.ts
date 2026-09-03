@@ -666,9 +666,22 @@ export async function handleMobileSync(
       invokeRpc(rpcName, args, controller.signal),
       timeoutPromise,
     ]);
-    const data = parsed.action === "register_device" && Array.isArray(rawData)
+    let data = parsed.action === "register_device" && Array.isArray(rawData)
       ? rawData[0] : rawData;
     if (!isRecord(data)) return syncErrorResponse("server_error", 502, correlationId);
+    // B09's six-argument permission-state RPC returns metadata rows, while
+    // the transport contract is v3. Normalize that internal row before the
+    // common contract-version guard so denied/not-determined registrations
+    // remain compatible with the same mobile-sync endpoint.
+    if (parsed.action === "register_device" && data.contract_version === undefined) {
+      data = {
+        ...data,
+        contract_version: CONTRACT_VERSION,
+        registered_at: typeof data.last_seen_at === "string"
+          ? data.last_seen_at
+          : new Date().toISOString(),
+      };
+    }
     const errorCode = responseErrorCode(data);
     if (errorCode === "unauthorized") return syncErrorResponse("unauthorized", 403, correlationId);
     if (errorCode === "cursor_expired") return syncErrorResponse("cursor_expired", 409, correlationId);
