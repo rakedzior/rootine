@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { baseEvidence, finishEvidence, hasFlag, runCommand, safeError, writeEvidence, commandExists } from "./release-gate-utils.mjs";
 import { validateSyncContractFixtures, validateSyncContractShape } from "./sync-contract-validation.mjs";
 
@@ -24,12 +25,20 @@ const requiredSyncFixtures = [
   "sync-v3-error-cursor-expired.json",
 ];
 
-async function findTests(directory, prefix = "") {
+export function isDenoContractTestSource(source) {
+  return /\bDeno\.test\s*\(/.test(source)
+    && !/(?:from\s+|import\s*\(|require\s*\()\s*["']vitest["']/.test(source);
+}
+
+export async function findTests(directory, prefix = "") {
   const tests = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const relative = join(prefix, entry.name);
     if (entry.isDirectory()) tests.push(...await findTests(new URL(`${entry.name}/`, directory), relative));
-    else if (/\.(test|contract)\.ts$/.test(entry.name)) tests.push(relative);
+    else if (/\.(test|contract)\.ts$/.test(entry.name)) {
+      const source = await readFile(new URL(entry.name, directory), "utf8");
+      if (isDenoContractTestSource(source)) tests.push(relative);
+    }
   }
   return tests.sort();
 }
@@ -195,9 +204,11 @@ async function main() {
   }
 }
 
-main().catch(async (error) => {
-  const evidence = finishEvidence(baseEvidence("edge-contract-gate"), false, { error: safeError(error) });
-  const path = await writeEvidence(evidence, "edge-contract-gate.json");
-  console.error(`Edge contract gate failed: ${safeError(error)}\nEvidence: ${path}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(async (error) => {
+    const evidence = finishEvidence(baseEvidence("edge-contract-gate"), false, { error: safeError(error) });
+    const path = await writeEvidence(evidence, "edge-contract-gate.json");
+    console.error(`Edge contract gate failed: ${safeError(error)}\nEvidence: ${path}`);
+    process.exitCode = 1;
+  });
+}

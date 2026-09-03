@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { SYNC_CONTRACT_ID, SYNC_CONTRACT_VERSION, SYNC_SCHEMA_DIALECT, validateSyncContractFixtures, validateSyncContractShape } from "./sync-contract-validation.mjs";
+import { findTests, isDenoContractTestSource } from "./edge-contract-gate.mjs";
 
 function contractFixture(overrides = {}) {
   const definitions = [
@@ -72,4 +73,11 @@ test("executable sync-v3 schema rejects an out-of-range pull limit", () => {
   fixture.limit = 501;
   const result = validateSyncContractFixtures(schema, { fixture });
   assert.equal(result.valid, false);
+});
+
+test("edge inventory executes only Deno-native contract tests", async () => {
+  const tests = await findTests(new URL("../supabase/functions/", import.meta.url));
+  assert.deepEqual(tests, ["delete-account/index.test.ts", "mobile-sync/index.test.ts"]);
+  assert.equal(isDenoContractTestSource(readFileSync("supabase/functions/_shared/notification-worker.test.ts", "utf8")), false);
+  assert.equal(isDenoContractTestSource(readFileSync("supabase/functions/mobile-sync/index.test.ts", "utf8")), true);
 });
