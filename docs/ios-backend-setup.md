@@ -32,6 +32,7 @@ production respectively.
    - `20260903151000_rootine_device_rpc_variable_conflict_fix.sql`
    - `20260903152000_rootine_sync_push_variable_conflict_fix.sql`
    - `20260903153000_rootine_sync_push_variable_precedence_fix.sql`
+   - `20260903154000_rootine_sync_operation_idempotency_index.sql`
 
    B04, B09 and B11 use unique migration versions and are applied in this
    order because B04 extends the shared B02 tables, B09 extends the device
