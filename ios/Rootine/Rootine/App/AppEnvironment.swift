@@ -4436,6 +4436,13 @@ final class AppEnvironment: ObservableObject {
             guard self.realtimeRuntimeGeneration == generation,
                   self.session != nil else { return }
             await syncCoordinator.start()
+            // The initial flush happens before the runtime is started. If the
+            // app was launched while offline, that flush can fail while the
+            // path monitor's first callback still reports the default
+            // reachable state. Kick both directions once here so a restored
+            // connection does not leave the durable local queue stranded
+            // until an unrelated lifecycle event occurs.
+            await syncCoordinator.requestSync(reason: .foreground)
             if self.currentScenePhase == .background {
                 await syncCoordinator.scenePhaseChanged(.background)
             }

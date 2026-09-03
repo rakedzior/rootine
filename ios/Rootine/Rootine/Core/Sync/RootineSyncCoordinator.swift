@@ -327,7 +327,12 @@ actor RootineSyncCoordinator {
                   isStarted, isNetworkReachable,
                   (isForeground || pollWhileBackground) else { return }
             if isForeground {
-                requestPull(reason: .polling)
+                // Polling is also the recovery path for a launch that
+                // happened offline: NWPathMonitor may not emit a false->true
+                // transition when its first callback already reports an
+                // available path. Retry pending writes together with the
+                // authoritative pull.
+                requestSync(reason: .polling)
             } else {
                 requestPush(reason: .polling)
                 if await operations.pendingPushCount() == 0 {
