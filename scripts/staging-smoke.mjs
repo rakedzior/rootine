@@ -13,6 +13,24 @@ const domainMatrix = (process.env.ROOTINE_SMOKE_DOMAINS
   .map((domain) => domain.trim())
   .filter(Boolean);
 
+// The report uses product-domain names, while sync-v3 persists canonical
+// record entities. Keep the matrix readable and send one valid representative
+// entity for each domain.
+const domainEntity = Object.freeze({
+  tasks: "task",
+  habits: "habit",
+  notes: "note",
+  nutrition: "nutrition_day",
+  sport: "sport_session",
+  goals: "goal",
+  work: "work_task",
+  travel: "trip",
+  health: "health_checkin",
+  affairs: "affair_matter",
+  finance: "payment",
+  jdg: "jdg_period",
+});
+
 class SmokeFailure extends Error {
   constructor(phase, message) {
     super(message);
@@ -344,7 +362,7 @@ async function main() {
 
     const commands = domainMatrix.map((domain) => ({
       operation_id: `op3_${randomUUID()}`,
-      entity: domain,
+      entity: domainEntity[domain] || domain,
       entity_id: `b12-smoke-${domain}-${randomUUID()}`,
       kind: "upsert",
       base_revision: 0,
