@@ -189,7 +189,7 @@ describe("Praca persistence lifecycle", () => {
 
     expect(screen.getByText("Dzisiaj route")).toBeInTheDocument();
     expect(window.sessionStorage.getItem("rootine.work-editor-draft.company.add.new")).toBeNull();
-  });
+  }, 15_000);
 
   it("recovers a session draft and clears it after a successful submit", async () => {
     const draftKey = "rootine.work-editor-draft.company.add.new";

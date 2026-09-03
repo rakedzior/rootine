@@ -9,6 +9,13 @@ export default defineConfig({
       "api/**/*.{test,spec}.ts",
       "supabase/functions/**/*.test.ts",
     ],
+    // These suites use Deno's jsr:@std/assert runtime and are executed by
+    // the Edge contract gate. Keeping them out of Vitest avoids trying to
+    // resolve Deno-only imports in the browser/jsdom runner.
+    exclude: [
+      "supabase/functions/delete-account/index.test.ts",
+      "supabase/functions/mobile-sync/index.test.ts",
+    ],
     environment: "jsdom",
     environmentOptions: {
       jsdom: {
