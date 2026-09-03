@@ -142,7 +142,6 @@ final class AppEnvironment: ObservableObject {
     private var realtimeRuntimeGeneration = 0
     private var networkMonitor: NWPathMonitor?
     private var networkMonitorQueue: DispatchQueue?
-    private var didRegisterBackgroundTask = false
     private var isReconciling = false
     /// Main-actor methods can still interleave at an `await`. Keep an import
     /// from racing a UI write by letting already-started persistence finish
@@ -4567,23 +4566,6 @@ final class AppEnvironment: ObservableObject {
     func applicationWillTerminate() {
         currentScenePhase = .background
         stopRealtimeRuntime()
-    }
-
-    func registerBackgroundRefreshTask() {
-        guard !didRegisterBackgroundTask else { return }
-        didRegisterBackgroundTask = true
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: Self.backgroundRefreshTaskIdentifier,
-            using: nil
-        ) { [weak self] task in
-            guard let task = task as? BGAppRefreshTask else {
-                task.setTaskCompleted(success: false)
-                return
-            }
-            Task { @MainActor [weak self] in
-                await self?.performBackgroundRefresh(task)
-            }
-        }
     }
 
     func performBackgroundRefresh(_ task: BGTask? = nil) async {

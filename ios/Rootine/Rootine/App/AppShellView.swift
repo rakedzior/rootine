@@ -68,11 +68,9 @@ struct RootineEntryView: View {
             if isPreviewLaunch {
                 await environment.loadPreviewData()
             } else {
-                environment.registerBackgroundRefreshTask()
                 await environment.start()
             }
 #else
-            environment.registerBackgroundRefreshTask()
             await environment.start()
 #endif
         }
