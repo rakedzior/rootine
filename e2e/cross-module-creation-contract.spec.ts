@@ -341,6 +341,11 @@ test.describe("cross-module full creation editors", { tag: "@shared" }, () => {
   });
 
   test("Work, Affairs and Goals use the standard Select and DatePicker contract", async ({ rootinePage: page }) => {
+    // This deliberately exercises three complete editors (including portal
+    // mounted selects, date pickers, priority menus, and time pickers). Keep
+    // its budget independent from the short smoke-test default so a loaded CI
+    // runner cannot close the page while the final picker is settling.
+    test.setTimeout(90_000);
     const fieldHeights: number[] = [];
 
     for (const profile of FULL_EDITORS) {
