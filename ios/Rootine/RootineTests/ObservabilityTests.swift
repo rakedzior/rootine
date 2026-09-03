@@ -1,4 +1,5 @@
 import XCTest
+@testable import Rootine
 
 final class ObservabilityTests: XCTestCase {
     func testRedactsPrivateAttributesAndBoundsRing() throws {

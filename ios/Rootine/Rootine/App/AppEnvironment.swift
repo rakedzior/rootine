@@ -2618,6 +2618,37 @@ final class AppEnvironment: ObservableObject {
         await persistTravelWorkspace(next)
     }
 
+    private func updateTravelTrip(id: String, mutate: (inout TravelRecord) -> Void) async {
+        var next = travelWorkspace
+        guard let index = next.trips.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&next.trips[index])
+        next.trips[index].updatedAt = RootineDate.isoTimestamp()
+        next.updatedAt = RootineDate.isoTimestamp()
+        await persistTravelWorkspace(next)
+    }
+
+    func setTravelStatus(_ status: String, tripID: String) async {
+        let allowed = ["idea", "planning", "ready", "completed"]
+        guard allowed.contains(status) else { return }
+        await updateTravelTrip(id: tripID) { $0.status = status }
+    }
+
+    func addTravelPackingItem(
+        tripID: String,
+        label: String,
+        quantity: Int = 1,
+        packed: Bool = false,
+        operationID: String = UUID().uuidString
+    ) async {
+        let cleanLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanLabel.isEmpty, quantity > 0 else { return }
+        let itemID = RootineLocalIdentifier.string(namespace: "travel-packing", operationID: "\(tripID):\(operationID)")
+        await updateTravelTrip(id: tripID) { trip in
+            guard !trip.packingItems.contains(where: { $0.id == itemID }) else { return }
+            trip.packingItems.append(TravelPackingItem(id: itemID, label: cleanLabel, quantity: quantity, packed: packed))
+        }
+    }
+
     func setHealthEnergy(_ energy: Int, date: Date = Date()) async {
         guard (1...4).contains(energy) else { return }
         let key = RootineDate.localDate(date)

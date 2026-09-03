@@ -2874,6 +2874,52 @@ struct TravelWorkspace: Codable, Equatable, Sendable {
     static let empty = TravelWorkspace(version: 1, updatedAt: RootineDate.isoTimestamp(), trips: [])
 }
 
+/// Compatibility alias used by the richer travel contract/tests. The native
+/// model deliberately keeps one record type for compact and canonical forms.
+typealias TravelTrip = TravelRecord
+
+struct TravelBudgetSummary: Equatable, Sendable {
+    var planned: Double
+    var actual: Double
+    var paid: Double
+    var remaining: Double
+    var reservationCommitted: Double
+    var unbudgetedReservations: Double
+}
+
+func summarizeTravelBudget(_ trip: TravelTrip) -> TravelBudgetSummary {
+    let categories = ["transport", "stay", "food", "attractions", "shopping", "insurance", "other"]
+    let stayTotal = trip.stays.reduce(0) { $0 + $1.amount }
+    let stayPaid = trip.stays.filter { $0.status == "paid" }.reduce(0) { $0 + $1.amount }
+    let transportTotal = trip.transports.reduce(0) { $0 + $1.amount }
+    let transportPaid = trip.transports.filter { $0.status == "paid" }.reduce(0) { $0 + $1.amount }
+    var planned = 0.0
+    var actual = 0.0
+    var paid = 0.0
+    var unbudgeted = 0.0
+
+    for category in categories {
+        let lines = trip.budget.filter { $0.category == category }
+        let categoryPlanned = lines.reduce(0) { $0 + $1.planned }
+        let categoryActual = lines.reduce(0) { $0 + $1.actual }
+        let categoryPaid = lines.filter(\.paid).reduce(0) { $0 + $1.actual }
+        let reservationTotal = category == "stay" ? stayTotal : (category == "transport" ? transportTotal : 0)
+        let reservationPaid = category == "stay" ? stayPaid : (category == "transport" ? transportPaid : 0)
+        planned += max(categoryPlanned, reservationTotal)
+        actual += max(categoryActual, reservationTotal)
+        paid += max(categoryPaid, reservationPaid)
+        unbudgeted += max(0, reservationTotal - categoryPlanned)
+    }
+    return TravelBudgetSummary(
+        planned: planned,
+        actual: actual,
+        paid: paid,
+        remaining: planned - actual,
+        reservationCommitted: stayTotal + transportTotal,
+        unbudgetedReservations: unbudgeted
+    )
+}
+
 enum TravelValidationIssue: Equatable, Sendable {
     case invalidWorkspaceVersion(Int)
     case invalidUpdatedAt

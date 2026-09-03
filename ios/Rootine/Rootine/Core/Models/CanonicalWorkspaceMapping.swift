@@ -4,6 +4,12 @@ import Foundation
 /// workspaces. This boundary translates those models to the canonical
 /// documents before a snapshot enters the shared sync queue.
 enum RootineCanonicalWorkspaceMapping {
+    /// Canonical wire key compatibility name used by relational materializer
+    /// callers. Keep the mapping in one place so readers cannot diverge.
+    static func canonicalStorageKey(for key: RootineStorageKey) -> String {
+        storageKey(for: key)
+    }
+
     static func shadowKey(for key: RootineStorageKey) -> RootineStorageKey? {
         switch key {
         case .sport: return .sportCanonicalShadow

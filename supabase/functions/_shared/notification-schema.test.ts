@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
-  new URL("../../migrations/20260902120000_rootine_server_notifications.sql", import.meta.url),
+  resolve(process.cwd(), "supabase/migrations/20260902120000_rootine_server_notifications.sql"),
   "utf8",
 );
 

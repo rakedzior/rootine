@@ -20,8 +20,8 @@ final class TodayAggregationTests: XCTestCase {
         var recurringSchedule = WorkspaceTaskSchedule(
             allDay: false,
             startTime: "08:00",
-            timezone: "Europe/Warsaw",
-            completedDates: [day]
+            completedDates: [day],
+            timezone: "Europe/Warsaw"
         )
         recurringSchedule.completedAtByDate = [day: timestamp]
 

@@ -130,8 +130,10 @@ final class SyncV3Tests: XCTestCase {
         try await accountA.save(9)
         let accountB = RootineSyncCursorStore(accountID: "account-b", deviceID: "device-1", rootURL: root)
         let deviceTwo = RootineSyncCursorStore(accountID: "account-a", deviceID: "device-2", rootURL: root)
-        XCTAssertNil(try await accountB.load())
-        XCTAssertNil(try await deviceTwo.load())
+        let accountBCursor = try await accountB.load()
+        let deviceTwoCursor = try await deviceTwo.load()
+        XCTAssertNil(accountBCursor)
+        XCTAssertNil(deviceTwoCursor)
 
         let cursorURL = await accountA.location()
         try Data("{\"contractVersion\":1,\"accountID\":\"other\",\"deviceID\":\"device-1\",\"cursor\":9,\"updatedAt\":\"2026-09-03T10:00:00Z\"}".utf8)
@@ -246,7 +248,8 @@ final class SyncV3Tests: XCTestCase {
         let operationURL = directory.appendingPathComponent("operations.json")
         try Data("broken-operation-log".utf8).write(to: operationURL, options: .atomic)
         let log = RootineSyncOperationLog(accountID: "account", deviceID: "device", rootURL: root)
-        XCTAssertTrue(try await log.allEntries().isEmpty)
+        let operationEntries = try await log.allEntries()
+        XCTAssertTrue(operationEntries.isEmpty)
 
         let operationQuarantine = try FileManager.default.contentsOfDirectory(
             atPath: directory.appendingPathComponent("Recovery", isDirectory: true).path
@@ -257,7 +260,8 @@ final class SyncV3Tests: XCTestCase {
         let conflictURL = directory.appendingPathComponent("conflicts.json")
         try Data("broken-conflicts".utf8).write(to: conflictURL, options: .atomic)
         let conflicts = RootineConflictStore(accountID: "account", deviceID: "device", rootURL: root)
-        XCTAssertTrue(try await conflicts.list().isEmpty)
+        let conflictEntries = try await conflicts.list()
+        XCTAssertTrue(conflictEntries.isEmpty)
         let conflictQuarantine = try FileManager.default.contentsOfDirectory(atPath: directory.path)
             .first(where: { $0.hasPrefix("conflicts-corrupt-") })
         XCTAssertNotNil(conflictQuarantine)
@@ -439,9 +443,12 @@ final class SyncV3Tests: XCTestCase {
             deviceID: "device"
         )
 
-        XCTAssertEqual(try await engine.flushNormalized(accessToken: "token"), .error)
-        XCTAssertTrue(try await log.pending().isEmpty)
-        XCTAssertEqual(try await log.entry(operationID: "exhausted")?.state, .deadLetter)
+        let flushResult = try await engine.flushNormalized(accessToken: "token")
+        let pendingEntries = try await log.pending()
+        let exhaustedEntry = try await log.entry(operationID: "exhausted")
+        XCTAssertEqual(flushResult, .error)
+        XCTAssertTrue(pendingEntries.isEmpty)
+        XCTAssertEqual(exhaustedEntry?.state, .deadLetter)
     }
 
     func testCursorExpiryClearsOnlyCursorAndLeavesOperationLog() async throws {

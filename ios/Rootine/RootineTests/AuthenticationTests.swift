@@ -295,7 +295,7 @@ final class AuthenticationTests: XCTestCase {
     }
 }
 
-private final class InMemorySessionStore: RootineSessionStore, @unchecked Sendable {
+private final class InMemorySessionStore: RootineSessionStoring, @unchecked Sendable {
     var session: SupabaseSession?
 
     init(session: SupabaseSession?) {
