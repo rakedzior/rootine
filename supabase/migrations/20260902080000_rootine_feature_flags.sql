@@ -14,12 +14,29 @@ create table if not exists public.rootine_feature_flags (
       'notifications_enabled'
     )),
   enabled boolean not null default false,
-  updated_at timestamptz not null default timezone('utc', now()),
-  constraint rootine_feature_flags_scope_check check (
-    (scope = 'environment' and user_id is null)
-    or (scope = 'account' and user_id is not null)
-  )
+  updated_at timestamptz not null default timezone('utc', now())
 );
+
+-- A previous staging attempt may have created the table before the migration
+-- transaction was recorded. CREATE TABLE IF NOT EXISTS still attempts to
+-- reconcile named constraints on some PostgreSQL versions, so add this one
+-- explicitly and idempotently.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.rootine_feature_flags'::regclass
+      and conname = 'rootine_feature_flags_scope_check'
+  ) then
+    alter table public.rootine_feature_flags
+      add constraint rootine_feature_flags_scope_check check (
+        (scope = 'environment' and user_id is null)
+        or (scope = 'account' and user_id is not null)
+      );
+  end if;
+end;
+$$;
 
 create unique index if not exists rootine_feature_flags_unique_scope
   on public.rootine_feature_flags (
@@ -45,7 +62,9 @@ cross join (values
   ('normalized_sync_enabled'),
   ('normalized_read_enabled'),
   ('notifications_enabled')
-) as flags(flag_name);
+) as flags(flag_name)
+on conflict do nothing;
+
 
 create or replace function public.rootine_get_feature_flags(
   p_environment text default 'production'
