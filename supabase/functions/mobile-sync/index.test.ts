@@ -44,7 +44,7 @@ Deno.test("mobile-sync routes a bounded bootstrap with the caller identity", asy
     invokeRpc: async (name, args) => {
       rpcName = name;
       rpcArgs = args;
-      return { server_cursor: 12, next_cursor: 12, has_more: false, changes: [] };
+      return { contract_version: 3, server_cursor: 12, next_cursor: 12, has_more: false, changes: [] };
     },
   });
 
@@ -104,6 +104,7 @@ Deno.test("mobile-sync returns a redacted conflict record", async () => {
   }), {
     authorize,
     invokeRpc: async () => ({
+      contract_version: 3,
       server_cursor: 42,
       results: [{
         operation_id: operationId,
