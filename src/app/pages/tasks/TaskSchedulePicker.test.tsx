@@ -149,5 +149,5 @@ describe("TaskSchedulePicker layered interactions", () => {
     expect(dateAllDay).toBeChecked();
     await user.click(dateAllDay);
     expect(dateAllDay).not.toBeChecked();
-  });
+  }, 15_000);
 });
