@@ -953,85 +953,118 @@ private struct NutritionMealCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Label(meal.title, systemImage: meal.systemImage)
-                    .font(.headline)
-                Spacer(minLength: RootineTheme.Spacing.small)
-                if calories > 0 {
-                    Text("\(Int(calories.rounded())) kcal")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                        .monospacedDigit()
-                }
-                Button(action: onAdd) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(RootineTheme.ColorToken.action)
-                .accessibilityLabel("Dodaj do: \(meal.title)")
-            }
+            header
             .padding(.bottom, RootineTheme.Spacing.xSmall)
 
             if entries.isEmpty {
-                Button(action: onAdd) {
-                    HStack(spacing: RootineTheme.Spacing.small) {
-                        Image(systemName: "plus")
-                        Text("Dodaj pierwszy wpis")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .frame(minHeight: 44)
-                }
-                .buttonStyle(.plain)
+                emptyState
             } else {
-                ForEach(entries) { entry in
-                    Button { onEdit(entry) } label: {
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                                Text(entry.name)
-                                    .font(.body.weight(.medium))
-                                    .lineLimit(2)
-                                Text("\(entry.portion) · B \(Int(entry.protein.rounded())) g · W \(Int(entry.carbs.rounded())) g · T \(Int(entry.fat.rounded())) g")
-                                    .font(.caption)
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                    .lineLimit(2)
-                            }
-                            Spacer(minLength: RootineTheme.Spacing.small)
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text("\(Int(entry.calories.rounded()))")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                    .monospacedDigit()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                    .accessibilityHidden(true)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Edytuj wpis: \(entry.name)")
-                    .accessibilityHint("Otwiera wartości produktu i posiłek")
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) { onDelete(entry) } label: {
-                            Label("Usuń", systemImage: "trash")
-                        }
-                    }
-                    if entry.id != entries.last?.id {
-                        Divider().overlay(RootineTheme.ColorToken.separator)
-                    }
-                }
+                entryRows
             }
         }
         .foregroundStyle(RootineTheme.ColorToken.primaryText)
         .rootineSurface()
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: entries)
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Label(meal.title, systemImage: meal.systemImage)
+                .font(.headline)
+            Spacer(minLength: RootineTheme.Spacing.small)
+            if calories > 0 {
+                Text("\(Int(calories.rounded())) kcal")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    .monospacedDigit()
+                    .accessibilityLabel("\(Int(calories.rounded())) kilokalorii")
+            }
+            Button(action: onAdd) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(RootineTheme.ColorToken.action)
+            .accessibilityLabel("Dodaj do: \(meal.title)")
+        }
+    }
+
+    private var emptyState: some View {
+        Button(action: onAdd) {
+            HStack(spacing: RootineTheme.Spacing.small) {
+                Image(systemName: "plus")
+                Text("Dodaj pierwszy wpis")
+                Spacer()
+                Image(systemName: "arrow.up.right")
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var entryRows: some View {
+        ForEach(entries) { entry in
+            entryRow(entry)
+        }
+    }
+
+    @ViewBuilder
+    private func entryRow(_ entry: NutritionEntry) -> some View {
+        Button { onEdit(entry) } label: {
+            entryLabel(entry)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: entry))
+        .accessibilityValue(entry.portion)
+        .accessibilityHint("Otwiera wartości produktu i posiłek")
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) { onDelete(entry) } label: {
+                Label("Usuń", systemImage: "trash")
+            }
+        }
+        if entry.id != entries.last?.id {
+            Divider().overlay(RootineTheme.ColorToken.separator)
+        }
+    }
+
+    private func entryLabel(_ entry: NutritionEntry) -> some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                Text(entry.name)
+                    .font(.body.weight(.medium))
+                    .lineLimit(2)
+                Text(
+                    "\(entry.portion) · B \(Int(entry.protein.rounded())) g · "
+                        + "W \(Int(entry.carbs.rounded())) g · T \(Int(entry.fat.rounded())) g"
+                )
+                .font(.caption)
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                .lineLimit(2)
+            }
+            Spacer(minLength: RootineTheme.Spacing.small)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(entry.calories.rounded()))")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    .monospacedDigit()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func accessibilityLabel(for entry: NutritionEntry) -> String {
+        "Edytuj wpis: \(entry.name), \(Int(entry.calories.rounded())) kilokalorii, "
+            + "białko \(Int(entry.protein.rounded())) gramów, "
+            + "węglowodany \(Int(entry.carbs.rounded())) gramów, "
+            + "tłuszcz \(Int(entry.fat.rounded())) gramów"
     }
 }
 
@@ -1058,6 +1091,10 @@ private struct AddNutritionEntrySheet: View {
     /// any macro field afterwards, submit must preserve that deliberate
     /// override instead of silently replacing it with a catalog calculation.
     @State private var generatedNutritionValues: NutritionValues?
+    /// Explicit user edits are tracked per field. Programmatic catalog and
+    /// portion updates write directly to state, so they do not accidentally
+    /// become overrides through SwiftUI change observation.
+    @State private var nutritionOverrides: Set<NutritionValueField>
     @State private var pendingBarcodeToConsume: String?
     @State private var isShowingScanner = false
     @State private var isShowingManualCode = false
@@ -1111,6 +1148,9 @@ private struct AddNutritionEntrySheet: View {
         // selects a catalog product again; only a fresh catalog/prefill value
         // is eligible for automatic portion-based recalculation.
         _generatedNutritionValues = State(initialValue: existingEntry == nil ? initialValues : nil)
+        _nutritionOverrides = State(
+            initialValue: existingEntry == nil ? [] : Set(NutritionValueField.allCases)
+        )
         _pendingBarcodeToConsume = State(initialValue: barcodeToConsume)
         _saveOperationID = State(initialValue: existingEntry?.id ?? UUID().uuidString)
     }
@@ -1219,7 +1259,8 @@ private struct AddNutritionEntrySheet: View {
                 Section("Produkt") {
                     TextField("Nazwa produktu", text: $name)
                         .focused($focusedField, equals: .name)
-                    TextField("Porcja", text: $portion)
+                    TextField("Porcja", text: portionBinding)
+                        .accessibilityHint("Zmiana porcji przelicza wartości z wybranego produktu")
                     Picker("Posiłek", selection: $selectedMeal) {
                         ForEach(NutritionMealKind.allCases) { option in
                             Text(option.title).tag(option)
@@ -1228,10 +1269,10 @@ private struct AddNutritionEntrySheet: View {
                 }
 
                 Section("Wartości odżywcze") {
-                    numericField("Kalorie (kcal)", text: $calories, field: .calories)
-                    numericField("Białko (g)", text: $protein, field: .protein)
-                    numericField("Węglowodany (g)", text: $carbs, field: .carbs)
-                    numericField("Tłuszcz (g)", text: $fat, field: .fat)
+                    numericField("Kalorie (kcal)", text: $calories, field: .calories, valueField: .calories)
+                    numericField("Białko (g)", text: $protein, field: .protein, valueField: .protein)
+                    numericField("Węglowodany (g)", text: $carbs, field: .carbs, valueField: .carbs)
+                    numericField("Tłuszcz (g)", text: $fat, field: .fat, valueField: .fat)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -1276,19 +1317,41 @@ private struct AddNutritionEntrySheet: View {
         selectedProduct = product
         name = product.name
         portion = "\(Int(product.defaultAmount)) \(product.unit)"
-        let multiplier = NutritionPortion.multiplier(amount: product.defaultAmount, unit: product.unit)
+        applyCalculatedValues(base: product.per100g, portionText: portion)
+        focusedField = .name
+    }
+
+    private var portionBinding: Binding<String> {
+        Binding(
+            get: { portion },
+            set: { newValue in
+                portion = newValue
+                guard let base = selectedProduct?.per100g ?? existingEntry?.per100g else { return }
+                applyCalculatedValues(base: base, portionText: newValue)
+            }
+        )
+    }
+
+    private func applyCalculatedValues(base: NutritionValues, portionText: String) {
+        let parsed = NutritionPortion.parse(
+            portionText,
+            fallbackAmount: selectedProduct?.defaultAmount ?? existingEntry?.amount,
+            fallbackUnit: selectedProduct?.unit ?? existingEntry?.unit
+        )
+        guard parsed.amount != nil else { return }
+        let multiplier = NutritionPortion.multiplier(amount: parsed.amount, unit: parsed.unit)
         let values = NutritionValues(
-            calories: product.per100g.calories * multiplier,
-            protein: product.per100g.protein * multiplier,
-            carbs: product.per100g.carbs * multiplier,
-            fat: product.per100g.fat * multiplier
+            calories: max(0, base.calories * multiplier),
+            protein: max(0, base.protein * multiplier),
+            carbs: max(0, base.carbs * multiplier),
+            fat: max(0, base.fat * multiplier)
         )
         generatedNutritionValues = values
+        nutritionOverrides.removeAll()
         calories = String(Int(values.calories.rounded()))
         protein = String(format: "%.1f", values.protein)
         carbs = String(format: "%.1f", values.carbs)
         fat = String(format: "%.1f", values.fat)
-        focusedField = .name
     }
 
     private func handleBarcode(_ code: String) {
@@ -1347,7 +1410,8 @@ private struct AddNutritionEntrySheet: View {
         let finalValues = rootineResolvedNutritionValues(
             generated: generatedNutritionValues,
             entered: entered,
-            scaled: scaledNutritionValues
+            scaled: scaledNutritionValues,
+            explicitOverrides: nutritionOverrides
         )
         let draft = NutritionEntryDraft(
             meal: selectedMeal.rawValue,
@@ -1421,8 +1485,22 @@ private struct AddNutritionEntrySheet: View {
     }
 
     @ViewBuilder
-    private func numericField(_ title: String, text: Binding<String>, field: NutritionEntryField) -> some View {
-        TextField(title, text: text)
+    private func numericField(
+        _ title: String,
+        text: Binding<String>,
+        field: NutritionEntryField,
+        valueField: NutritionValueField
+    ) -> some View {
+        TextField(
+            title,
+            text: Binding(
+                get: { text.wrappedValue },
+                set: { newValue in
+                    text.wrappedValue = newValue
+                    nutritionOverrides.insert(valueField)
+                }
+            )
+        )
             .keyboardType(.decimalPad)
             .focused($focusedField, equals: field)
     }

@@ -59,6 +59,10 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(fallback, NutritionPortion(amount: 60, unit: "g"))
         XCTAssertEqual(NutritionPortion.multiplier(amount: 1.5, unit: "kg"), 15)
         XCTAssertEqual(NutritionPortion.multiplier(amount: 2, unit: "l"), 20)
+        XCTAssertEqual(
+            NutritionPortion.parse("duża porcja", fallbackAmount: 60, fallbackUnit: "g"),
+            NutritionPortion(amount: nil, unit: nil)
+        )
     }
 
     func testNutritionManualMacroOverrideWinsOverCatalogScaling() {
@@ -73,6 +77,29 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(
             rootineResolvedNutritionValues(generated: generated, entered: generated, scaled: scaled),
             scaled
+        )
+
+        let caloriesOnly = NutritionValues(calories: 410, protein: 13, carbs: 60, fat: 7)
+        XCTAssertEqual(
+            rootineResolvedNutritionValues(
+                generated: generated,
+                entered: caloriesOnly,
+                scaled: scaled,
+                explicitOverrides: [.calories]
+            ),
+            NutritionValues(calories: 410, protein: 26, carbs: 120, fat: 14)
+        )
+
+        // An explicit edit remains authoritative even when it happens to be
+        // numerically equal to the last generated value.
+        XCTAssertEqual(
+            rootineResolvedNutritionValues(
+                generated: generated,
+                entered: generated,
+                scaled: scaled,
+                explicitOverrides: [.protein]
+            ).protein,
+            generated.protein
         )
     }
 
@@ -2230,6 +2257,188 @@ final class ContractFixtureTests: XCTestCase {
         } else {
             XCTFail("Canonical travel should remain an array")
         }
+    }
+
+    func testCanonicalMappingsUseLastWriteWinsForMalformedNestedCollections() throws {
+        let timestamp = "2026-09-02T10:00:00.000Z"
+
+        let notes = NotesWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            lists: [
+                NoteList(id: "list", name: "Pierwsza", createdAt: timestamp),
+                NoteList(id: " list ", name: "Ostatnia", createdAt: timestamp)
+            ],
+            notes: [
+                NoteRecord(
+                    id: "note",
+                    title: "Pierwsza",
+                    body: "",
+                    kind: "checklist",
+                    items: [
+                        NoteChecklistItem(id: "item", text: "Pierwszy", checked: false),
+                        NoteChecklistItem(id: " item ", text: "Ostatni", checked: true)
+                    ],
+                    tags: [],
+                    listId: "list",
+                    color: .blue,
+                    pinned: false,
+                    archived: false,
+                    createdAt: timestamp,
+                    updatedAt: timestamp
+                ),
+                NoteRecord(id: " note ", title: "Ostatnia", body: "", kind: "text", items: [], tags: [], listId: "list", color: .green, pinned: false, archived: false, createdAt: timestamp, updatedAt: timestamp)
+            ]
+        )
+        let decodedNotes = try RootineCanonicalWorkspaceMapping.notesWorkspace(
+            from: RootineCanonicalWorkspaceMapping.payload(for: notes)
+        )
+        XCTAssertEqual(decodedNotes.lists.map(\.name), ["Ostatnia"])
+        XCTAssertEqual(decodedNotes.notes.map(\.title), ["Ostatnia"])
+
+        let work = WorkWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            activeFocusStartedAt: nil,
+            focusSessions: [
+                WorkFocusSession(id: "focus", startedAt: timestamp, endedAt: timestamp, minutes: 10),
+                WorkFocusSession(id: " focus ", startedAt: timestamp, endedAt: timestamp, minutes: 20)
+            ],
+            companies: [
+                WorkCompany(id: "company", name: "Pierwsza"),
+                WorkCompany(id: " COMPANY ", name: "Ostatnia")
+            ],
+            projects: [
+                WorkProject(id: "project", companyId: "company", name: "Pierwszy"),
+                WorkProject(id: " PROJECT ", companyId: "company", name: "Ostatni")
+            ],
+            tasks: [
+                WorkItem(id: "task", projectId: "project", title: "Pierwsze", createdAt: timestamp),
+                WorkItem(id: " TASK ", projectId: "project", title: "Ostatnie", createdAt: timestamp)
+            ]
+        )
+        let decodedWork = try RootineCanonicalWorkspaceMapping.workWorkspace(
+            from: RootineCanonicalWorkspaceMapping.payload(for: work)
+        )
+        XCTAssertEqual(decodedWork.focusSessions.map(\.minutes), [20])
+        XCTAssertEqual(decodedWork.companies.map(\.name), ["Ostatnia"])
+        XCTAssertEqual(decodedWork.projects.map(\.name), ["Ostatni"])
+        XCTAssertEqual(decodedWork.tasks.map(\.title), ["Ostatnie"])
+
+        let milestoneA = GoalMilestone(id: "milestone", title: "Pierwszy", dueDate: "2026-09-10")
+        let milestoneB = GoalMilestone(id: " milestone ", title: "Ostatni", dueDate: "2026-09-10")
+        let progressA = GoalProgressEntry(id: "progress", date: "2026-09-02", value: 1, createdAt: timestamp)
+        let progressB = GoalProgressEntry(id: " progress ", date: "2026-09-02", value: 2, createdAt: timestamp)
+        let historyA = GoalHistoryEntry(id: "history", label: "Pierwsza", createdAt: timestamp)
+        let historyB = GoalHistoryEntry(id: " history ", label: "Ostatnia", createdAt: timestamp)
+        let goal = GoalRecord(
+            id: "goal",
+            title: "Cel",
+            detail: "",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            milestones: [milestoneA, milestoneB],
+            progressEntries: [progressA, progressB],
+            history: [historyA, historyB]
+        )
+        let decodedGoals = try RootineCanonicalWorkspaceMapping.goalsWorkspace(
+            from: RootineCanonicalWorkspaceMapping.payload(for: GoalsWorkspace(
+                version: 1,
+                updatedAt: timestamp,
+                goals: [goal],
+                categories: [
+                    GoalCategory(id: "personal", label: "Pierwsza", color: "#000000", iconKey: "circle"),
+                    GoalCategory(id: " personal ", label: "Ostatnia", color: "#FFFFFF", iconKey: "circle")
+                ]
+            ))
+        )
+        XCTAssertEqual(decodedGoals.categories.map(\.label), ["Ostatnia"])
+        XCTAssertEqual(decodedGoals.goals.first?.milestones.map(\.title), ["Ostatni"])
+        XCTAssertEqual(decodedGoals.goals.first?.progressEntries.map(\.value), [2])
+        XCTAssertEqual(decodedGoals.goals.first?.history.map(\.label), ["Ostatnia"])
+
+        var trip = TravelRecord(
+            id: "trip",
+            destination: "Gdańsk",
+            dateRange: "2026-09-02 – 2026-09-03",
+            nights: 1,
+            itinerary: [
+                TravelItineraryItem(id: "stop", day: "2026-09-02", title: "Pierwszy", detail: ""),
+                TravelItineraryItem(id: " stop ", day: "2026-09-02", title: "Ostatni", detail: "")
+            ],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+        trip.packingItems = [
+            TravelPackingItem(id: "bag", label: "Pierwszy", quantity: 1, packed: false),
+            TravelPackingItem(id: " bag ", label: "Ostatni", quantity: 1, packed: true)
+        ]
+        let decodedTravel = try RootineCanonicalWorkspaceMapping.travelWorkspace(
+            from: RootineCanonicalWorkspaceMapping.payload(for: TravelWorkspace(version: 1, updatedAt: timestamp, trips: [trip]))
+        )
+        XCTAssertEqual(decodedTravel.trips.first?.itinerary.map(\.title), ["Ostatni"])
+        XCTAssertEqual(decodedTravel.trips.first?.packingItems.map(\.label), ["Ostatni"])
+
+        let health = HealthWorkspace(
+            version: 1,
+            updatedAt: timestamp,
+            checkIns: [:],
+            reminders: [
+                HealthReminder(id: "reminder", title: "Pierwsze", detail: "", completedDates: []),
+                HealthReminder(id: " reminder ", title: "Ostatnie", detail: "", completedDates: [])
+            ]
+        )
+        let decodedHealth = try RootineCanonicalWorkspaceMapping.healthWorkspace(
+            from: RootineCanonicalWorkspaceMapping.payload(for: health)
+        )
+        XCTAssertEqual(decodedHealth.reminders.map(\.title), ["Ostatnie"])
+    }
+
+    func testSportCanonicalTimestampAndMalformedBaseUseRecordLastWriteWins() throws {
+        let workspaceTimestamp = "2026-09-02T12:00:00.000Z"
+        let recordTimestamp = "2026-09-02T10:00:00.000Z"
+        let workout = SportWorkout(
+            id: "sport-record",
+            title: "Bieg",
+            date: "2026-09-02",
+            minutes: 30,
+            kind: "Bieg",
+            completed: true,
+            createdAt: "2026-09-02T09:00:00.000Z",
+            updatedAt: recordTimestamp
+        )
+        var payload = try RootineCanonicalWorkspaceMapping.payload(for: SportWorkspace(
+            version: 1,
+            updatedAt: workspaceTimestamp,
+            workouts: [workout]
+        ))
+        guard case .object(var root) = payload,
+              case .array(let originalHistory) = root["history"],
+              case .object(var duplicate) = originalHistory.first,
+              case .object(let outcomes) = root["workoutOutcomes"],
+              case .object(let outcome) = outcomes[workout.id] else {
+            return XCTFail("Canonical Sport fixture should contain history and outcome")
+        }
+        XCTAssertEqual(outcome["updatedAt"], .string(recordTimestamp))
+
+        duplicate["id"] = .string(" sport-record ")
+        duplicate["title"] = .string("Ostatni zapis")
+        duplicate["updatedAt"] = .string("2026-09-02T11:00:00.000Z")
+        root["history"] = .array(originalHistory + [.object(duplicate)])
+        payload = .object(root)
+
+        let decoded = try RootineCanonicalWorkspaceMapping.sportWorkspace(from: payload)
+        XCTAssertEqual(decoded.workouts.count, 1)
+        XCTAssertEqual(decoded.workouts.first?.title, "Ostatni zapis")
+        XCTAssertEqual(decoded.workouts.first?.updatedAt, "2026-09-02T11:00:00.000Z")
+
+        let merged = try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: decoded, onto: payload)
+        guard case .object(let mergedRoot) = merged,
+              case .array(let history) = mergedRoot["history"] else {
+            return XCTFail("Merged Sport fixture should retain history")
+        }
+        XCTAssertEqual(history.count, 1)
+        XCTAssertEqual(objectValue(history.first)?["title"], .string("Ostatni zapis"))
     }
 
     func testTravelItineraryMergeUpdatesDeletesAndAddsByStableID() throws {
