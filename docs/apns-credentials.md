@@ -44,7 +44,7 @@ the prefixed form.
 
 ## Deployment verification
 
-1. Apply migrations through `20260902120000_rootine_devices.sql`.
+1. Apply migrations through `20260902120100_rootine_devices.sql`.
 2. Confirm the authenticated role can execute registration/revoke RPCs but
    cannot select `rootine_devices` or `rootine_active_devices`.
 3. Register one debug installation and verify `apns_environment = sandbox`.

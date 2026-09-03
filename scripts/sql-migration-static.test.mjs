@@ -22,15 +22,15 @@ test("migration filenames are deterministic and timestamped", async () => {
     assert.match(name, /^\d{14}_[a-z0-9_]+\.sql$/);
   }
 });
-test("same-timestamp integrations keep their declared lexical order", async () => {
+test("same-day integrations use unique migration versions in dependency order", async () => {
   const names = await migrationNames();
-  const sameTimestamp = names.filter((name) => name.startsWith("20260902120000_"));
-  assert.deepEqual(sameTimestamp, [
+  const integrations = names.filter((name) => /rootine_(backfill_materializer|devices|server_notifications)\.sql$/.test(name));
+  assert.deepEqual(integrations, [
     "20260902120000_rootine_backfill_materializer.sql",
-    "20260902120000_rootine_devices.sql",
-    "20260902120000_rootine_server_notifications.sql",
+    "20260902120100_rootine_devices.sql",
+    "20260902120200_rootine_server_notifications.sql",
   ]);
-  assert.ok(names.indexOf("20260902130000_rootine_mobile_sync_v3_register_device.sql") > names.indexOf("20260902120000_rootine_server_notifications.sql"));
+  assert.ok(names.indexOf("20260902130000_rootine_mobile_sync_v3_register_device.sql") > names.indexOf("20260902120200_rootine_server_notifications.sql"));
   assert.ok(names.at(-1)?.startsWith("20260902140000_rootine_database_hardening.sql"));
 });
 
