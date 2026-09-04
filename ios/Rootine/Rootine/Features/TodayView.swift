@@ -21,6 +21,12 @@ private struct TodayFocusItem: Identifiable {
     }
 }
 
+private enum TodayRescheduleOption {
+    case date(String)
+    case undated
+    case clear
+}
+
 private struct TodaySnapshot {
     let date: Date
     let dateKey: String
@@ -198,7 +204,7 @@ private struct TodaySnapshot {
 }
 
 private struct TodayUndoAction: Identifiable {
-    enum Kind { case task, habit, deletedTask }
+    enum Kind { case task, habit }
 
     let id = UUID()
     let kind: Kind
@@ -269,15 +275,29 @@ struct TodayView: View {
                         )
                     Task { await environment.toggleHabitCompletion(id: habit.id, on: context.date) }
                 },
-                onDeleteTask: { task in
-                    undoAction = TodayUndoAction(
-                        kind: .deletedTask,
-                        recordID: task.id,
-                        title: task.text,
-                        date: context.date,
-                        message: "Usunięto „\(task.text)”"
-                    )
-                    Task { await environment.deleteTask(id: task.id) }
+                onRescheduleTask: { task, option in
+                    let targetDate: String?
+                    let targetTime: String?
+                    switch option {
+                    case .date(let dateKey):
+                        targetDate = dateKey
+                        targetTime = task.time
+                    case .undated:
+                        targetDate = nil
+                        targetTime = task.time
+                    case .clear:
+                        targetDate = nil
+                        targetTime = nil
+                    }
+                    Task {
+                        await environment.updateTask(
+                            id: task.id,
+                            text: task.text,
+                            time: targetTime,
+                            calendarDate: targetDate,
+                            priority: task.priority
+                        )
+                    }
                 },
                 undoAction: undoAction,
                 onUndo: undo,
@@ -310,8 +330,6 @@ struct TodayView: View {
                 await environment.toggleTaskCompletion(id: action.recordID, on: action.date)
             case .habit:
                 await environment.toggleHabitCompletion(id: action.recordID, on: action.date)
-            case .deletedTask:
-                await environment.restoreTask(id: action.recordID)
             }
         }
     }
@@ -325,7 +343,7 @@ private struct TodayContentView: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
-    let onDeleteTask: (WorkspaceTask) -> Void
+    let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
     let undoAction: TodayUndoAction?
     let onUndo: () -> Void
     let onDismissUndo: () -> Void
@@ -359,7 +377,7 @@ private struct TodayContentView: View {
                     onSelectHabit: onSelectHabit,
                     onToggleTask: onToggleTask,
                     onToggleHabit: onToggleHabit,
-                    onDeleteTask: onDeleteTask
+                    onRescheduleTask: onRescheduleTask
                 )
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
@@ -422,27 +440,29 @@ private struct TodaySummaryCard: View {
                 .overlay(RootineTheme.ColorToken.separator)
 
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                Image(systemName: "flag.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.success)
-                    .frame(width: 24, height: 24, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.xSmall) {
-                        Text("\(snapshot.priorityTotal)")
-                            .font(.title3.weight(.bold).monospacedDigit())
-                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                        Text(priorityWord(snapshot.priorityTotal))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            .lineLimit(1)
-                    }
-
-                    Text("Pozostało \(remainingPriorities)")
-                        .font(.caption)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                HStack(alignment: .center, spacing: RootineTheme.Spacing.xSmall) {
+                    Image(systemName: "flag.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                        .frame(width: 24, height: 24, alignment: .leading)
+                    Text("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        .monospacedDigit()
                         .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .allowsTightening(true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("\(remainingPriorities) pozostało")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .frame(width: 128, alignment: .leading)
             .accessibilityElement(children: .ignore)
@@ -459,7 +479,7 @@ private struct TodayTimelineCard: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
-    let onDeleteTask: (WorkspaceTask) -> Void
+    let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
 
     private var overdueEntries: [TodayFocusItem] {
         snapshot.overdueTasks.map {
@@ -543,7 +563,7 @@ private struct TodayTimelineCard: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onDeleteTask: onDeleteTask
+                            onRescheduleTask: onRescheduleTask
                         )
                     }
                     if hasOpenEntries {
@@ -571,7 +591,7 @@ private struct TodayTimelineCard: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onDeleteTask: onDeleteTask
+                            onRescheduleTask: onRescheduleTask
                         )
                     }
                     if !timedEntries.isEmpty && !untimedEntries.isEmpty {
@@ -587,7 +607,7 @@ private struct TodayTimelineCard: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onDeleteTask: onDeleteTask
+                            onRescheduleTask: onRescheduleTask
                         )
                     }
                 }
@@ -600,7 +620,7 @@ private struct TodayTimelineCard: View {
                         onSelectHabit: onSelectHabit,
                         onToggleTask: onToggleTask,
                         onToggleHabit: onToggleHabit,
-                        onDeleteTask: onDeleteTask
+                        onRescheduleTask: onRescheduleTask
                     )
                 }
             }
@@ -649,8 +669,11 @@ private struct TodayTimelineItemRow: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
-    let onDeleteTask: (WorkspaceTask) -> Void
+    let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
     @State private var horizontalDrag: CGFloat = 0
+    @State private var isRescheduleMenuPresented = false
+    @State private var isDatePickerPresented = false
+    @State private var rescheduleDate = Date()
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -699,46 +722,68 @@ private struct TodayTimelineItemRow: View {
             .frame(width: 44)
             .frame(minHeight: 76)
 
-            HStack(spacing: RootineTheme.Spacing.small) {
-                Button(action: open) {
-                    HStack(spacing: RootineTheme.Spacing.small) {
-                        VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                            if isNext {
-                                HStack(spacing: RootineTheme.Spacing.xSmall) {
-                                    Image(systemName: "sparkles")
-                                    Text("NAJBLIŻSZE")
-                                        .tracking(0.7)
+            ZStack(alignment: .leading) {
+                swipeActionFeedback
+
+                HStack(spacing: RootineTheme.Spacing.small) {
+                    Button(action: open) {
+                        HStack(spacing: RootineTheme.Spacing.small) {
+                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                                if isNext {
+                                    HStack(spacing: RootineTheme.Spacing.xSmall) {
+                                        Image(systemName: "sparkles")
+                                        Text("NAJBLIŻSZE")
+                                            .tracking(0.7)
+                                    }
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(RootineTheme.ColorToken.action)
                                 }
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(RootineTheme.ColorToken.action)
+                                Text(item.title)
+                                    .font(.body.weight(isNext ? .semibold : .medium))
+                                    .foregroundStyle(isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
+                                    .strikethrough(isDone)
+                                    .lineLimit(2)
+                                Text(item.kindLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                             }
-                            Text(item.title)
-                                .font(.body.weight(isNext ? .semibold : .medium))
-                                .foregroundStyle(isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
-                                .strikethrough(isDone)
-                                .lineLimit(2)
-                            Text(item.kindLabel)
-                                .font(.caption)
-                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .frame(minHeight: 60)
+                        .contentShape(Rectangle())
                     }
-                    .frame(minHeight: 60)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Szczegóły: \(item.title)")
+                    .accessibilityHint(interactionHint)
+                    .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
+                    .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
+                    .onLongPressGesture { open() }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Szczegóły: \(item.title)")
-                .accessibilityHint(interactionHint)
-                .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
-                .modifier(TodayDeleteAccessibilityModifier(task: item.task, action: onDeleteTask))
-                .onLongPressGesture { open() }
+                .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
+                .padding(.vertical, RootineTheme.Spacing.small)
+                .offset(x: horizontalDrag)
             }
-            .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
-            .padding(.vertical, RootineTheme.Spacing.small)
-            .offset(x: horizontalDrag)
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
         }
         .contentShape(Rectangle())
         .simultaneousGesture(swipeGesture)
+        .confirmationDialog("Przełóż zadanie", isPresented: $isRescheduleMenuPresented, titleVisibility: .visible) {
+            Button("Dziś") { reschedule(.date(dateKey)) }
+            Button("Jutro") { reschedule(.date(RootineDate.shiftLocalDate(dateKey, by: 1))) }
+            Button("Pojutrze") { reschedule(.date(RootineDate.shiftLocalDate(dateKey, by: 2))) }
+            Button("Za tydzień") { reschedule(.date(RootineDate.shiftLocalDate(dateKey, by: 7))) }
+            Button("Wybierz datę") { showDatePicker() }
+            Button("Bez daty") { reschedule(.undated) }
+            Button("Wyczyść", role: .destructive) { reschedule(.clear) }
+            Button("Anuluj", role: .cancel) {}
+        } message: {
+            Text(item.title)
+        }
+        .sheet(isPresented: $isDatePickerPresented) {
+            TodayRescheduleDateSheet(initialDate: rescheduleDate) { date in
+                reschedule(.date(RootineDate.localDate(date)))
+            }
+        }
     }
 
     private var isDone: Bool {
@@ -752,6 +797,35 @@ private struct TodayTimelineItemRow: View {
         if isDone { return RootineTheme.ColorToken.success }
         if isOverdue { return RootineTheme.ColorToken.warning }
         return RootineTheme.ColorToken.action
+    }
+
+    private var swipeProgress: CGFloat {
+        min(1, abs(horizontalDrag) / 72)
+    }
+
+    private var swipeActionFeedback: some View {
+        HStack {
+            if horizontalDrag >= 0 {
+                swipeActionIcon(systemName: "checkmark.circle.fill", tint: RootineTheme.ColorToken.success)
+                Spacer(minLength: 0)
+            } else if item.task != nil {
+                Spacer(minLength: 0)
+                swipeActionIcon(systemName: "calendar.badge.clock", tint: RootineTheme.ColorToken.warning)
+            }
+        }
+        .padding(.horizontal, RootineTheme.Spacing.small)
+        .opacity(horizontalDrag == 0 ? 0 : min(1, 0.35 + swipeProgress))
+        .animation(.easeOut(duration: 0.12), value: horizontalDrag >= 0)
+    }
+
+    private func swipeActionIcon(systemName: String, tint: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(tint.opacity(0.14)))
+            .scaleEffect(0.85 + 0.15 * swipeProgress)
+            .accessibilityHidden(true)
     }
 
     private var swipeGesture: some Gesture {
@@ -772,8 +846,8 @@ private struct TodayTimelineItemRow: View {
                 guard isHorizontal, crossedThreshold else { return }
                 if direction > 0 {
                     toggle()
-                } else if let task = item.task {
-                    onDeleteTask(task)
+                } else if item.task != nil {
+                    isRescheduleMenuPresented = true
                 }
             }
     }
@@ -788,24 +862,73 @@ private struct TodayTimelineItemRow: View {
         if let habit = item.habit { onSelectHabit(habit) }
     }
 
+    private func showDatePicker() {
+        rescheduleDate = item.task.flatMap { task in
+            task.calendarDate.flatMap { RootineDate.localDateValue($0) }
+        } ?? RootineDate.localDateValue(dateKey) ?? Date()
+        isDatePickerPresented = true
+    }
+
+    private func reschedule(_ option: TodayRescheduleOption) {
+        guard let task = item.task else { return }
+        onRescheduleTask(task, option)
+    }
+
     private var interactionHint: String {
         let completionAction = isDone ? "cofnąć wykonanie" : "oznaczyć jako wykonane"
-        let deleteAction = item.task == nil ? "" : " lub w lewo, aby usunąć"
-        return "Otwiera szczegóły. Przytrzymaj, aby edytować. Przesuń w prawo, aby \(completionAction)\(deleteAction)."
+        let rescheduleAction = item.task == nil ? "" : " lub w lewo, aby przełożyć"
+        return "Otwiera szczegóły. Przytrzymaj, aby edytować. Przesuń w prawo, aby \(completionAction)\(rescheduleAction)."
     }
 }
 
-private struct TodayDeleteAccessibilityModifier: ViewModifier {
+private struct TodayRescheduleAccessibilityModifier: ViewModifier {
     let task: WorkspaceTask?
-    let action: (WorkspaceTask) -> Void
+    let action: () -> Void
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if let task {
-            content.accessibilityAction(named: "Usuń") { action(task) }
+        if task != nil {
+            content.accessibilityAction(named: "Przełóż") { action() }
         } else {
             content
         }
+    }
+}
+
+private struct TodayRescheduleDateSheet: View {
+    let initialDate: Date
+    let onSave: (Date) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedDate: Date
+
+    init(initialDate: Date, onSave: @escaping (Date) -> Void) {
+        self.initialDate = initialDate
+        self.onSave = onSave
+        _selectedDate = State(initialValue: initialDate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            DatePicker("Data", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .padding(RootineTheme.Spacing.medium)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .navigationTitle("Wybierz datę")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Anuluj") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Zapisz") {
+                            onSave(selectedDate)
+                            dismiss()
+                        }
+                    }
+                }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -815,7 +938,7 @@ private struct TodayCompletedDisclosure: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
-    let onDeleteTask: (WorkspaceTask) -> Void
+    let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
     @State private var isExpanded = false
 
     private var completedEntries: [TodayFocusItem] {
@@ -868,7 +991,7 @@ private struct TodayCompletedDisclosure: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onDeleteTask: onDeleteTask
+                            onRescheduleTask: onRescheduleTask
                         )
                     }
                     if completedEntries.isEmpty {
