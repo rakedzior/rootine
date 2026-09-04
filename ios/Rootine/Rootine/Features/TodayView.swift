@@ -421,34 +421,32 @@ private struct TodaySummaryCard: View {
                 .frame(height: 48)
                 .overlay(RootineTheme.ColorToken.separator)
 
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                HStack(spacing: RootineTheme.Spacing.xSmall) {
-                    Image(systemName: "flag.fill")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 22, height: 22, alignment: .leading)
-                    Text("\(remainingPriorities)")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .frame(width: 28, alignment: .leading)
-                    Text(priorityWord(remainingPriorities))
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(remainingPriorities == 0 ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.action)
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                Image(systemName: "flag.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.success)
+                    .frame(width: 24, height: 24, alignment: .leading)
 
-                HStack(spacing: RootineTheme.Spacing.xSmall) {
-                    Image(systemName: snapshot.remainingItems == 0 ? "checkmark.circle" : "circle")
-                        .font(.caption.weight(.semibold))
-                        .frame(width: 22, height: 22, alignment: .leading)
-                    Text("\(snapshot.remainingItems)")
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .frame(width: 28, alignment: .leading)
-                    Text("pozostało")
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.xSmall) {
+                        Text("\(snapshot.priorityTotal)")
+                            .font(.title3.weight(.bold).monospacedDigit())
+                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        Text(priorityWord(snapshot.priorityTotal))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Text("Pozostało \(remainingPriorities)")
                         .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                         .lineLimit(1)
                 }
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
             }
             .frame(width: 128, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Priorytety: \(snapshot.priorityTotal), pozostało \(remainingPriorities)")
         }
         .rootineSurface()
         .accessibilityElement(children: .contain)
@@ -468,7 +466,7 @@ private struct TodayTimelineCard: View {
             TodayFocusItem(
                 id: "overdue-task-\($0.id)",
                 title: $0.text,
-                time: $0.time,
+                time: overdueAgeLabel(for: $0, relativeTo: snapshot.dateKey),
                 kind: .task,
                 task: $0,
                 habit: nil
@@ -637,7 +635,7 @@ private struct TodayTimelineDivider: View {
         Rectangle()
             .fill(RootineTheme.ColorToken.separator)
             .frame(height: 1)
-            .padding(.leading, 72)
+            .padding(.leading, 88)
             .padding(.vertical, RootineTheme.Spacing.small)
     }
 }
@@ -657,9 +655,12 @@ private struct TodayTimelineItemRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             Text(item.time ?? "")
-                .font(.caption.monospacedDigit())
+                .font(isOverdue ? .caption : .caption.monospacedDigit())
                 .foregroundStyle(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.secondaryText)
-                .frame(width: 48, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .allowsTightening(true)
+                .frame(width: 64, alignment: .leading)
                 .padding(.top, RootineTheme.Spacing.medium)
 
             ZStack(alignment: .top) {
@@ -1237,6 +1238,16 @@ private func clock(_ date: Date) -> String {
     formatter.locale = Locale(identifier: "pl_PL")
     formatter.dateFormat = "HH:mm"
     return formatter.string(from: date)
+}
+
+private func overdueAgeLabel(for task: WorkspaceTask, relativeTo dateKey: String) -> String {
+    guard let sourceDate = task.calendarDate ?? task.date,
+          let days = RootineDate.calendarDaysBetween(sourceDate, dateKey),
+          days > 0 else {
+        return "Zaległe"
+    }
+
+    return days == 1 ? "dzień temu" : "\(days) dni temu"
 }
 
 private func todayItemWord(_ count: Int) -> String {
