@@ -71,9 +71,13 @@ without invalidating existing local snapshots.
 ## Account configuration
 
 The native callback is `rootine://auth-callback`. Add that exact redirect URL to
-the Supabase Auth allowlist. Registration stays visibly unavailable until real
-`ROOTINE_TERMS_URL` and `ROOTINE_PRIVACY_URL` values are supplied; the app never
-ships dead legal links.
+the Supabase Auth allowlist. In `Development` and `Staging`, registration can
+be exercised with clearly labelled local informational documents bundled in
+the app. `Production` still keeps registration unavailable until real
+`ROOTINE_TERMS_URL` and `ROOTINE_PRIVACY_URL` values are supplied; the app
+never ships dead legal links. The local Development build also exposes a
+test-account entry in the native sign-in screen; it uses deterministic preview
+data only and never creates a server account.
 
 The server is authoritative for `normalized_sync_enabled`,
 `normalized_read_enabled`, and `notifications_enabled`. Bundle values are safe

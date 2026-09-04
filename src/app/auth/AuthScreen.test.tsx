@@ -15,6 +15,7 @@ const testState = vi.hoisted(() => ({
     clearAuthError: vi.fn(),
     signIn: vi.fn(async () => ({ error: null })),
     signInWithGoogle: vi.fn(async () => ({ error: null })),
+    signInWithApple: vi.fn(async () => ({ error: null })),
     signUp: vi.fn(async () => ({ error: null })),
     requestPasswordReset: vi.fn(async () => ({ error: null })),
     updatePassword: vi.fn(async () => ({ error: null })),
@@ -49,6 +50,7 @@ describe("AuthScreen", () => {
     testState.auth.clearAuthError.mockClear();
     testState.auth.signIn.mockClear();
     testState.auth.signInWithGoogle.mockClear();
+    testState.auth.signInWithApple.mockClear();
     testState.auth.signUp.mockClear();
     testState.auth.requestPasswordReset.mockClear();
     testState.auth.updatePassword.mockClear();
@@ -71,12 +73,13 @@ describe("AuthScreen", () => {
     expect(screen.queryByText("Twoje dane pozostają dostępne lokalnie, a konto włącza synchronizację między sesjami.")).not.toBeInTheDocument();
   });
 
-  it("exposes password, Google, local and test-account entry paths", async () => {
+  it("exposes password, Google, Apple, local and test-account entry paths", async () => {
     const user = userEvent.setup();
     render(<AuthScreen />);
 
     expect(screen.getByRole("heading", { name: "Dobrze Cię widzieć" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kontynuuj z Google" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Kontynuuj z Apple" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Nie pamiętasz hasła?" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Wejdź do danych lokalnych" }));
@@ -85,8 +88,8 @@ describe("AuthScreen", () => {
     await user.click(screen.getByRole("button", { name: "Wejdź do konta testowego" }));
     expect(testState.session.enterTestAccount).toHaveBeenCalledOnce();
 
-    await user.click(screen.getByRole("button", { name: "Kontynuuj z Google" }));
-    expect(testState.auth.signInWithGoogle).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Kontynuuj z Apple" }));
+    expect(testState.auth.signInWithApple).toHaveBeenCalledOnce();
   });
 
   it("sends a password reset only after a valid email is entered", async () => {
@@ -116,6 +119,20 @@ describe("AuthScreen", () => {
 
     await user.click(screen.getByRole("button", { name: "Utwórz konto" }));
     expect(screen.getByRole("heading", { name: "Utwórz konto" })).toBeInTheDocument();
+  });
+
+  it("requires matching passwords before creating an account", async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen />);
+
+    await user.click(screen.getByRole("button", { name: "Utwórz konto" }));
+    await user.type(screen.getByRole("textbox", { name: "Adres e-mail" }), "ola@example.com");
+    await user.type(screen.getByLabelText("Hasło"), "sekret123");
+    await user.type(screen.getByLabelText("Powtórz hasło"), "sekret124");
+    await user.click(screen.getByRole("button", { name: "Utwórz konto" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Hasła nie są takie same");
+    expect(testState.auth.signUp).not.toHaveBeenCalled();
   });
 
   it("requires matching passwords during recovery", async () => {
