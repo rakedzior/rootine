@@ -222,4 +222,22 @@ final class TodayAggregationTests: XCTestCase {
             ))
         }
     }
+
+    func testSwipeBelowThresholdDoesNotTriggerAnAction() {
+        XCTAssertNil(TodaySwipeMotion.action(for: CGSize(width: 71.99, height: 0)))
+    }
+
+    func testSwipeAtThresholdCompletesExactlyOnceInThePositiveDirection() {
+        XCTAssertEqual(TodaySwipeMotion.action(for: CGSize(width: 72, height: 0)), .complete)
+    }
+
+    func testSwipeAboveThresholdOpensRescheduleInTheNegativeDirection() {
+        XCTAssertEqual(TodaySwipeMotion.action(for: CGSize(width: -72.01, height: 0)), .reschedule)
+    }
+
+    func testVerticalTranslationNeverTriggersSwipeAction() {
+        XCTAssertNil(TodaySwipeMotion.action(for: CGSize(width: 72, height: 72)))
+        XCTAssertEqual(TodaySwipeMotion.clampedOffset(for: CGSize(width: 400, height: 0)), 140)
+        XCTAssertEqual(TodaySwipeMotion.clampedOffset(for: CGSize(width: -400, height: 0)), -140)
+    }
 }

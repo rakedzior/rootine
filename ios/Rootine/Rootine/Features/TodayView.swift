@@ -278,6 +278,31 @@ private struct TodayUndoAction: Identifiable {
     let message: String
 }
 
+enum TodaySwipeAction: Equatable {
+    case complete
+    case reschedule
+}
+
+private enum TodaySwipeAxis: Equatable {
+    case horizontal
+    case vertical
+}
+
+enum TodaySwipeMotion {
+    static let actionThreshold: CGFloat = 72
+    static let maximumOffset: CGFloat = 140
+
+    static func clampedOffset(for translation: CGSize) -> CGFloat {
+        min(max(translation.width, -maximumOffset), maximumOffset)
+    }
+
+    static func action(for translation: CGSize) -> TodaySwipeAction? {
+        guard abs(translation.width) > abs(translation.height),
+              abs(translation.width) >= actionThreshold else { return nil }
+        return translation.width > 0 ? .complete : .reschedule
+    }
+}
+
 private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.localDate()) -> Bool {
     rootineHabitIsDoneOnDate(habit, dateKey: dateKey)
 }
@@ -954,53 +979,55 @@ private struct TodayTimelineItemRow: View {
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
     let onMoveTask: (WorkspaceTask, TodayTaskSection, String?) -> Void
     let section: TodayTaskSection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var horizontalDrag: CGFloat = 0
+    @State private var swipeAxis: TodaySwipeAxis?
     @State private var isRescheduleMenuPresented = false
     @State private var isDatePickerPresented = false
     @State private var rescheduleDate = Date()
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Text(item.time ?? "")
-                .font(isOverdue ? .caption : .caption.monospacedDigit())
-                .foregroundStyle(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.secondaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .allowsTightening(true)
-                .frame(width: 64, alignment: .leading)
-                .padding(.top, RootineTheme.Spacing.medium)
+        ZStack(alignment: .leading) {
+            swipeActionFeedback
 
-            ZStack(alignment: .top) {
-                TodayTimelineConnector(
-                    color: isOverdue
-                        ? RootineTheme.ColorToken.warning.opacity(0.55)
-                        : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator)
-                )
+            HStack(alignment: .top, spacing: 0) {
+                Text(item.time ?? "")
+                    .font(isOverdue ? .caption : .caption.monospacedDigit())
+                    .foregroundStyle(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
+                    .frame(width: 64, alignment: .leading)
+                    .padding(.top, RootineTheme.Spacing.medium)
 
-                Button(action: toggle) {
-                    ZStack {
-                        Circle()
-                            .fill(isDone ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.surface)
-                        Circle()
-                            .stroke(nodeColor, lineWidth: isNext || isDone ? 2 : 1.5)
-                        if isDone {
-                            Image(systemName: "checkmark")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(RootineTheme.ColorToken.canvas)
+                ZStack(alignment: .top) {
+                    TodayTimelineConnector(
+                        color: isOverdue
+                            ? RootineTheme.ColorToken.warning.opacity(0.55)
+                            : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator)
+                    )
+
+                    Button(action: toggle) {
+                        ZStack {
+                            Circle()
+                                .fill(isDone ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.surface)
+                            Circle()
+                                .stroke(nodeColor, lineWidth: isNext || isDone ? 2 : 1.5)
+                            if isDone {
+                                Image(systemName: "checkmark")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(RootineTheme.ColorToken.canvas)
+                            }
                         }
+                        .frame(width: isNext ? 17 : 14, height: isNext ? 17 : 14)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                     }
-                    .frame(width: isNext ? 17 : 14, height: isNext ? 17 : 14)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isDone ? "Oznacz \(item.title) jako niewykonane" : "Oznacz \(item.title) jako wykonane")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isDone ? "Oznacz \(item.title) jako niewykonane" : "Oznacz \(item.title) jako wykonane")
-            }
-            .frame(width: 44)
-            .frame(minHeight: 76)
-
-            ZStack(alignment: .leading) {
-                swipeActionFeedback
+                .frame(width: 44)
+                .frame(minHeight: 76)
 
                 HStack(spacing: RootineTheme.Spacing.small) {
                     Button(action: open) {
@@ -1037,11 +1064,12 @@ private struct TodayTimelineItemRow: View {
                 }
                 .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
                 .padding(.vertical, RootineTheme.Spacing.small)
-                .offset(x: horizontalDrag)
                 .modifier(TodayTaskDragModifier(task: item.task))
             }
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+            .offset(x: horizontalDrag)
         }
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
         .contentShape(Rectangle())
         // Keep horizontal swipe and native long-press drag mutually
         // exclusive. A simultaneous gesture could complete both actions.
@@ -1079,22 +1107,32 @@ private struct TodayTimelineItemRow: View {
     }
 
     private var swipeProgress: CGFloat {
-        min(1, abs(horizontalDrag) / 72)
+        min(1, abs(horizontalDrag) / TodaySwipeMotion.actionThreshold)
     }
 
     private var swipeActionFeedback: some View {
-        HStack {
-            if horizontalDrag >= 0 {
-                swipeActionIcon(systemName: "checkmark.circle.fill", tint: RootineTheme.ColorToken.success)
-                Spacer(minLength: 0)
-            } else if item.task != nil {
-                Spacer(minLength: 0)
-                swipeActionIcon(systemName: "calendar.badge.clock", tint: RootineTheme.ColorToken.warning)
+        ZStack {
+            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                .fill(swipeTint.opacity(0.10 * Double(swipeProgress)))
+
+            HStack {
+                if horizontalDrag >= 0 {
+                    swipeActionIcon(systemName: "checkmark.circle.fill", tint: RootineTheme.ColorToken.success)
+                    Spacer(minLength: 0)
+                } else if item.task != nil {
+                    Spacer(minLength: 0)
+                    swipeActionIcon(systemName: "calendar.badge.clock", tint: RootineTheme.ColorToken.warning)
+                }
             }
+            .padding(.horizontal, RootineTheme.Spacing.small)
         }
-        .padding(.horizontal, RootineTheme.Spacing.small)
+        .frame(maxWidth: .infinity, minHeight: 76)
         .opacity(horizontalDrag == 0 ? 0 : min(1, 0.35 + swipeProgress))
-        .animation(.easeOut(duration: 0.12), value: horizontalDrag >= 0)
+        .allowsHitTesting(false)
+    }
+
+    private var swipeTint: Color {
+        horizontalDrag >= 0 ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.warning
     }
 
     private func swipeActionIcon(systemName: String, tint: Color) -> some View {
@@ -1103,37 +1141,57 @@ private struct TodayTimelineItemRow: View {
             .foregroundStyle(tint)
             .frame(width: 44, height: 44)
             .background(Circle().fill(tint.opacity(0.14)))
-            .scaleEffect(0.85 + 0.15 * swipeProgress)
+            .scaleEffect(0.80 + 0.20 * swipeProgress)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: swipeProgress)
             .accessibilityHidden(true)
     }
 
     private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
             .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                horizontalDrag = min(max(value.translation.width, -140), 140)
+                guard swipeAxis != .vertical else { return }
+
+                if swipeAxis == nil {
+                    swipeAxis = abs(value.translation.width) > abs(value.translation.height) ? .horizontal : .vertical
+                }
+                guard swipeAxis == .horizontal else {
+                    horizontalDrag = 0
+                    return
+                }
+                horizontalDrag = TodaySwipeMotion.clampedOffset(for: value.translation)
             }
             .onEnded { value in
-                let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-                let crossedThreshold = abs(value.translation.width) >= 72
-                let direction = value.translation.width
+                let action = swipeAxis == .horizontal ? TodaySwipeMotion.action(for: value.translation) : nil
+                resetSwipe()
 
-                withAnimation(.snappy(duration: 0.2)) {
-                    horizontalDrag = 0
-                }
-
-                guard isHorizontal, crossedThreshold else { return }
-                if direction > 0 {
+                guard let action else { return }
+                switch action {
+                case .complete:
                     toggle()
-                } else if item.task != nil {
+                case .reschedule:
+                    guard item.task != nil else { return }
                     isRescheduleMenuPresented = true
                 }
             }
     }
 
+    private func resetSwipe() {
+        swipeAxis = nil
+        if reduceMotion {
+            horizontalDrag = 0
+        } else {
+            withAnimation(.snappy(duration: 0.2)) {
+                horizontalDrag = 0
+            }
+        }
+    }
+
     private func toggle() {
-        if let task = item.task { onToggleTask(task) }
-        if let habit = item.habit { onToggleHabit(habit) }
+        if let task = item.task {
+            onToggleTask(task)
+        } else if let habit = item.habit {
+            onToggleHabit(habit)
+        }
     }
 
     private func open() {
@@ -1189,13 +1247,15 @@ private struct TodayTaskDragModifier: ViewModifier {
 }
 
 private struct TodayTaskTitleButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
                 RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
                     .fill(RootineTheme.ColorToken.primaryText.opacity(configuration.isPressed ? 0.07 : 0))
             }
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
