@@ -1,17 +1,43 @@
 import SwiftUI
+import UIKit
 
 enum RootineTheme {
     enum ColorToken {
-        static let canvas = Color(uiColor: .systemGroupedBackground)
-        static let surface = Color(uiColor: .secondarySystemGroupedBackground)
-        static let elevated = Color(uiColor: .tertiarySystemGroupedBackground)
-        static let separator = Color(uiColor: .separator)
-        static let primaryText = Color(uiColor: .label)
-        static let secondaryText = Color(uiColor: .secondaryLabel)
-        static let action = Color(uiColor: .systemBlue)
-        static let success = Color(uiColor: .systemGreen)
-        static let warning = Color(uiColor: .systemOrange)
-        static let destructive = Color(uiColor: .systemRed)
+        // These values mirror the web product tokens while retaining a
+        // semantic light-mode counterpart and Dynamic Type-friendly system
+        // rendering on iOS.
+        static let canvas = adaptive(dark: rgb(0x15181B), light: rgb(0xF2EEE6))
+        static let surface = adaptive(dark: rgb(0x1D2125), light: rgb(0xFAF8F3))
+        static let elevated = adaptive(dark: rgb(0x24292F), light: rgb(0xFFFFFF))
+        static let separator = adaptive(
+            dark: rgba(0xDEE5F4, alpha: 0.10),
+            light: rgba(0x302C27, alpha: 0.12)
+        )
+        static let primaryText = adaptive(dark: rgb(0xF1F0EC), light: rgb(0x302C27))
+        static let secondaryText = adaptive(dark: rgb(0xB6B8BB), light: rgb(0x685F55))
+        static let action = adaptive(dark: rgb(0x657FCE), light: rgb(0x4F63A6))
+        static let success = adaptive(dark: rgb(0x69A77A), light: rgb(0x5F8A68))
+        static let warning = adaptive(dark: rgb(0xD2A04D), light: rgb(0xB97828))
+        static let destructive = adaptive(dark: rgb(0xD36A6A), light: rgb(0xB95858))
+
+        private static func adaptive(dark: UIColor, light: UIColor) -> Color {
+            Color(uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark ? dark : light
+            })
+        }
+
+        private static func rgb(_ hex: UInt32) -> UIColor {
+            rgba(hex, alpha: 1)
+        }
+
+        private static func rgba(_ hex: UInt32, alpha: CGFloat) -> UIColor {
+            UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: alpha
+            )
+        }
     }
 
     enum Spacing {
