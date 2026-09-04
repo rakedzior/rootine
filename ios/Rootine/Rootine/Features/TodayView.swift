@@ -243,6 +243,7 @@ private struct TodayUndoAction: Identifiable {
     let recordID: Int
     let title: String
     let date: Date
+    let restoreCalendarDate: String?
 
     let message: String
 }
@@ -282,7 +283,11 @@ struct TodayView: View {
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
-                    let wasDone = rootineTaskIsDoneOnDate(task, dateKey: RootineDate.localDate(context.date))
+                    let todayKey = RootineDate.localDate(context.date)
+                    let wasDone = rootineTaskIsDoneOnDate(task, dateKey: todayKey)
+                    let restoreCalendarDate = task.schedule?.recurrence == nil
+                        ? task.calendarDate.flatMap { dateKey in dateKey < todayKey ? dateKey : nil }
+                        : nil
                     undoAction = wasDone
                         ? nil
                         : TodayUndoAction(
@@ -290,9 +295,28 @@ struct TodayView: View {
                             recordID: task.id,
                             title: task.text,
                             date: context.date,
+                            restoreCalendarDate: restoreCalendarDate,
                             message: "Oznaczono „\(task.text)” jako wykonane"
                         )
-                    Task { await environment.toggleTaskCompletion(id: task.id, on: context.date) }
+                    Task {
+                        // A completed one-off overdue task belongs to today's
+                        // completed timeline, so move its date before setting
+                        // completion. Recurring tasks keep their series anchor
+                        // and only record today's occurrence.
+                        if !wasDone, restoreCalendarDate != nil {
+                            await environment.updateTask(
+                                id: task.id,
+                                text: task.text,
+                                time: task.time,
+                                calendarDate: todayKey,
+                                priority: task.priority,
+                                notes: task.notes,
+                                list: task.list,
+                                tags: task.tags
+                            )
+                        }
+                        await environment.toggleTaskCompletion(id: task.id, on: context.date)
+                    }
                 },
                 onToggleHabit: { habit in
                     let wasDone = rootineHabitIsDoneOnDate(habit, dateKey: RootineDate.localDate(context.date))
@@ -303,6 +327,7 @@ struct TodayView: View {
                             recordID: habit.id,
                             title: habit.name,
                             date: context.date,
+                            restoreCalendarDate: nil,
                             message: "Oznaczono „\(habit.name)” jako wykonane"
                         )
                     Task { await environment.toggleHabitCompletion(id: habit.id, on: context.date) }
@@ -421,6 +446,19 @@ struct TodayView: View {
             switch action.kind {
             case .task:
                 await environment.toggleTaskCompletion(id: action.recordID, on: action.date)
+                if let restoreCalendarDate = action.restoreCalendarDate,
+                   let task = environment.taskWorkspace.tasks.first(where: { $0.id == action.recordID }) {
+                    await environment.updateTask(
+                        id: task.id,
+                        text: task.text,
+                        time: task.time,
+                        calendarDate: restoreCalendarDate,
+                        priority: task.priority,
+                        notes: task.notes,
+                        list: task.list,
+                        tags: task.tags
+                    )
+                }
             case .habit:
                 await environment.toggleHabitCompletion(id: action.recordID, on: action.date)
             }
