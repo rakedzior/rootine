@@ -2442,12 +2442,13 @@ function setCompleteRowState(row, completed) {
     event?.classList.add('active');
   }
   if (sourceMeta) sourceMeta.textContent = sourceMeta.textContent.replace(/\s*· wykonane$/, '');
-  if (!row.querySelector('.today-check')) {
+  if (check?.tagName !== 'BUTTON') {
     const activeCheck = document.createElement('button');
     activeCheck.className = 'btn-icon today-check';
     activeCheck.setAttribute('aria-label', `Oznacz ${title} jako wykonane`);
     activeCheck.innerHTML = '<span class="icon icon-sm" aria-hidden="true"></span>';
-    row.prepend(activeCheck);
+    if (check) check.replaceWith(activeCheck);
+    else row.prepend(activeCheck);
     activeCheck.dataset.go = 'scr-dzisiaj-complete-generic';
     wireTrigger(activeCheck);
   }
