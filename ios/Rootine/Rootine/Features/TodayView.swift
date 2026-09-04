@@ -346,37 +346,48 @@ private struct TodaySummaryCard: View {
     let snapshot: TodaySnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-            Text(todayTitle(snapshot.date))
-                .font(.subheadline)
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-
-            HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.small) {
-                Text("\(snapshot.completedItems) z \(snapshot.totalItems)")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                    .monospacedDigit()
-                Text("wykonane")
-                    .font(.subheadline)
+        HStack(alignment: .center, spacing: RootineTheme.Spacing.medium) {
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                Text(todayTitle(snapshot.date))
+                    .font(.caption)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                Spacer(minLength: 0)
+
+                HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.small) {
+                    Text("\(snapshot.completedItems) z \(snapshot.totalItems)")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        .monospacedDigit()
+                    Text("wykonane")
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+
+                ProgressView(value: snapshot.progress)
+                    .tint(RootineTheme.ColorToken.action)
+                    .accessibilityLabel("Postęp dnia")
+                    .accessibilityValue("\(Int(snapshot.progress * 100)) procent")
             }
-            ProgressView(value: snapshot.progress)
-                .tint(RootineTheme.ColorToken.action)
-                .accessibilityLabel("Postęp dnia")
-                .accessibilityValue("\(Int(snapshot.progress * 100)) procent")
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: RootineTheme.Spacing.small) {
-                Image(systemName: "flag.fill")
-                    .foregroundStyle(RootineTheme.ColorToken.action)
-                Text(snapshot.priorityTotal == 0 ? "Brak priorytetów" : "\(snapshot.priorityTotal) priorytetów")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                Spacer(minLength: 0)
+            Divider()
+                .frame(height: 48)
+                .overlay(RootineTheme.ColorToken.separator)
+
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                Label(
+                    snapshot.priorityTotal == 0 ? "Brak priorytetów" : "\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal))",
+                    systemImage: "flag.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RootineTheme.ColorToken.action)
+                .lineLimit(1)
+
                 Text(snapshot.remainingItems == 0 ? "Dzień domknięty" : "\(snapshot.remainingItems) pozostało")
                     .font(.caption)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    .lineLimit(1)
             }
+            .frame(width: 112, alignment: .leading)
         }
         .rootineSurface()
         .accessibilityElement(children: .contain)
@@ -578,31 +589,42 @@ private struct TodayTimelineItemRow: View {
                 .padding(.top, RootineTheme.Spacing.medium)
 
             ZStack(alignment: .top) {
-                Rectangle()
-                    .fill(isOverdue ? RootineTheme.ColorToken.warning.opacity(0.5) : RootineTheme.ColorToken.separator)
-                    .frame(width: 1)
-                Circle()
-                    .fill(isNext ? RootineTheme.ColorToken.action : RootineTheme.ColorToken.surface)
-                    .overlay {
-                        Circle()
-                            .stroke(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.action, lineWidth: isNext ? 2 : 1.5)
+                GeometryReader { proxy in
+                    Path { path in
+                        path.move(to: CGPoint(x: proxy.size.width / 2, y: 0))
+                        path.addLine(to: CGPoint(x: proxy.size.width / 2, y: proxy.size.height))
                     }
-                    .frame(width: isNext ? 16 : 13, height: isNext ? 16 : 13)
-                    .padding(.top, RootineTheme.Spacing.medium + 1)
-            }
-            .frame(width: 24)
-            .frame(minHeight: 76)
+                    .stroke(
+                        isOverdue
+                            ? RootineTheme.ColorToken.warning.opacity(0.55)
+                            : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator),
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 4])
+                    )
+                }
 
-            HStack(spacing: RootineTheme.Spacing.small) {
                 Button(action: toggle) {
-                    Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(isDone ? RootineTheme.ColorToken.success : (isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.action))
-                        .frame(width: 44, height: 44)
+                    ZStack {
+                        Circle()
+                            .fill(isDone ? RootineTheme.ColorToken.success : (isNext ? RootineTheme.ColorToken.action : RootineTheme.ColorToken.surface))
+                        Circle()
+                            .stroke(nodeColor, lineWidth: isNext || isDone ? 2 : 1.5)
+                        if isDone {
+                            Image(systemName: "checkmark")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(RootineTheme.ColorToken.canvas)
+                        }
+                    }
+                    .frame(width: isNext ? 17 : 14, height: isNext ? 17 : 14)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isDone ? "Oznacz \(item.title) jako niewykonane" : "Oznacz \(item.title) jako wykonane")
+            }
+            .frame(width: 44)
+            .frame(minHeight: 76)
 
+            HStack(spacing: RootineTheme.Spacing.small) {
                 Button(action: open) {
                     HStack(spacing: RootineTheme.Spacing.small) {
                         VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
@@ -651,6 +673,12 @@ private struct TodayTimelineItemRow: View {
         case .task: return item.task.map { rootineTaskIsDoneOnDate($0, dateKey: dateKey) } ?? false
         case .habit: return item.habit.map { isHabitDone($0, dateKey: dateKey) } ?? false
         }
+    }
+
+    private var nodeColor: Color {
+        if isDone { return RootineTheme.ColorToken.success }
+        if isOverdue { return RootineTheme.ColorToken.warning }
+        return RootineTheme.ColorToken.action
     }
 
     private func toggle() {
@@ -1117,6 +1145,14 @@ private func todayItemWord(_ count: Int) -> String {
     let mod10 = value % 10
     let mod100 = value % 100
     return mod10 >= 5 || (12...14).contains(mod100) ? "elementów" : "elementy"
+}
+
+private func priorityWord(_ count: Int) -> String {
+    let value = abs(count)
+    if value == 1 { return "priorytet" }
+    let mod10 = value % 10
+    let mod100 = value % 100
+    return (2...4).contains(mod10) && !(12...14).contains(mod100) ? "priorytety" : "priorytetów"
 }
 
 private func number(_ value: Double) -> String {
