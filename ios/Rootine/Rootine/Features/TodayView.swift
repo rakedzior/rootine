@@ -1626,24 +1626,31 @@ private struct TodayTimelineItemRow: View {
         // changes and recognizer hand-off edge cases.
         guard !isVerticalDragActive, !verticalDragCancelled,
               abs(value.translation.width) > abs(value.translation.height) else { return }
-        horizontalDrag = min(max(value.translation.width, -140), 140)
+        horizontalDrag = TodaySwipeMotion.clampedOffset(for: value.translation)
     }
 
     private func handleSwipeEnd(_ value: DragGesture.Value) {
-        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-        let crossedThreshold = abs(value.translation.width) >= 72
-        let direction = value.translation.width
+        let action = TodaySwipeMotion.action(for: value.translation)
 
-        withAnimation(.snappy(duration: 0.2)) {
+        if reduceMotion {
             horizontalDrag = 0
+        } else {
+            withAnimation(.snappy(duration: 0.2)) {
+                horizontalDrag = 0
+            }
         }
         verticalDragCancelled = false
 
-        guard isHorizontal, crossedThreshold, !isVerticalDragActive else { return }
-        if direction > 0 {
+        guard !isVerticalDragActive else { return }
+        switch action {
+        case .complete:
             toggle()
-        } else if item.task != nil {
-            isRescheduleMenuPresented = true
+        case .reschedule:
+            if item.task != nil {
+                isRescheduleMenuPresented = true
+            }
+        case nil:
+            break
         }
     }
 
