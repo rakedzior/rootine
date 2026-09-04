@@ -169,9 +169,12 @@ struct RootineMainView: View {
                             isShowingQuickAdd = true
                         } label: {
                             Image(systemName: "plus")
-                                .frame(minWidth: 44, minHeight: 44)
+                                .font(.title3.weight(.medium))
+                                .foregroundStyle(RootineTheme.ColorToken.action)
+                                .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .accessibilityLabel("Dodaj")
                         .accessibilityHint("Otwiera wybór nowego zadania lub nawyku")
                     }
