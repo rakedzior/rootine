@@ -1504,7 +1504,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
 
           <div class="today-status t-caption muted"><span>9:41</span><span class="grow"></span></div>
           <div class="appbar today-appbar">
-            <button class="btn-icon" data-go="scr-dzisiaj-clean" aria-label="Wróć do Dzisiaj"><span class="glyph gl-arrow-left" aria-hidden="true"></span></button>
+            <button class="btn-icon" data-completion-appbar-back data-go="scr-dzisiaj-clean" aria-label="Wróć do Dzisiaj"><span class="glyph gl-arrow-left" aria-hidden="true"></span></button>
             <div class="grow">
               <h1 class="t-title">Wykonano</h1>
               <p class="today-date t-caption muted">Zaktualizowano plan dnia</p>
@@ -2355,6 +2355,7 @@ function restoreCompletedRecord(record) {
   const currentCheck = row.querySelector('.today-check');
   if (currentCheck && record.checkMarkup) {
     const restored = record.checkMarkup.cloneNode(true);
+    restored.removeAttribute('data-trigger-wired');
     currentCheck.replaceWith(restored);
     wireTrigger(restored);
   }
@@ -2510,6 +2511,8 @@ function prepareGenericCompletion(source) {
     back.setAttribute('aria-label', back.textContent);
   }
   if (undo) { undo.dataset.go = destination; undo.setAttribute('aria-label', 'Cofnij wykonanie'); }
+  const appbarBack = result.querySelector('[data-completion-appbar-back]');
+  if (appbarBack) { appbarBack.dataset.go = destination; appbarBack.setAttribute('aria-label', labelForReturn(destination)); }
 }
 function go(el) {
   if (view() !== 'proto') return;
@@ -2520,7 +2523,11 @@ function go(el) {
     if (t.id === 'scr-dzisiaj-done') updateDoneHistory(el.dataset.doneState || 'clean');
     if (t.id === 'scr-dzisiaj-add-complete') prepareAddResult();
     if (t.id === 'scr-dzisiaj-conflict-resolved') prepareConflictResult(el.dataset.conflictSource);
-    if (t.id === 'scr-dzisiaj-complete') completePrimaryMail(activeDetailSource || el);
+    if (t.id === 'scr-dzisiaj-complete') {
+      const source = el.closest('#scr-dzisiaj-detail') ? activeDetailSource : el;
+      completePrimaryMail(source);
+      activeDetailSource = null;
+    }
     if (t.id === 'scr-dzisiaj-complete-generic') prepareGenericCompletion(el);
     protoHist.push(cur);
     show(frames.indexOf(t));
