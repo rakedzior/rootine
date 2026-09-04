@@ -842,6 +842,7 @@ struct TaskDetailSheet: View {
                                 .font(.body)
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 112)
+                                .accessibilityLabel("Treść zadania")
                         }
                     }
 
