@@ -1219,7 +1219,10 @@ final class AppEnvironment: ObservableObject {
         text: String,
         time: String?,
         calendarDate: String?,
-        priority: TaskPriority?
+        priority: TaskPriority?,
+        notes: String?,
+        list: String?,
+        tags: [String]?
     ) async {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
@@ -1228,12 +1231,19 @@ final class AppEnvironment: ObservableObject {
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let normalizedTime, !normalizedTime.isEmpty, !RootineDate.isClockTime(normalizedTime) { return }
         if let calendarDate, !RootineDate.isLocalDateKey(calendarDate) { return }
+        let normalizedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTags = tags?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard list == nil || next.lists.contains(where: { $0.id == list }),
+              (normalizedTags ?? []).allSatisfy({ tagID in next.tags.contains(where: { $0.id == tagID }) }) else { return }
         next.tasks[index].text = trimmedText
         next.tasks[index].time = normalizedTime?.isEmpty == true ? nil : normalizedTime
         if normalizedTime?.isEmpty != false { next.tasks[index].endTime = nil }
         next.tasks[index].calendarDate = calendarDate
         next.tasks[index].view = rootineTaskViewForCalendarDate(calendarDate)
         next.tasks[index].priority = priority
+        next.tasks[index].notes = normalizedNotes?.isEmpty == true ? nil : normalizedNotes
+        next.tasks[index].list = list
+        next.tasks[index].tags = normalizedTags
         if calendarDate == nil {
             next.tasks[index].schedule = nil
         } else {

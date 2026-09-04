@@ -27,6 +27,38 @@ private enum TodayRescheduleOption {
     case clear
 }
 
+private enum TodayTaskSection: String, CaseIterable, Identifiable {
+    case overdue
+    case today
+    case completed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overdue: return "Zaległe"
+        case .today: return "Dzisiaj"
+        case .completed: return "Ukończone"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .overdue: return "clock.badge.exclamationmark"
+        case .today: return "sun.max.fill"
+        case .completed: return "checkmark.circle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .overdue: return RootineTheme.ColorToken.warning
+        case .today: return RootineTheme.ColorToken.action
+        case .completed: return RootineTheme.ColorToken.success
+        }
+    }
+}
+
 private struct TodaySnapshot {
     let date: Date
     let dateKey: String
@@ -295,8 +327,52 @@ struct TodayView: View {
                             text: task.text,
                             time: targetTime,
                             calendarDate: targetDate,
-                            priority: task.priority
+                            priority: task.priority,
+                            notes: task.notes,
+                            list: task.list,
+                            tags: task.tags
                         )
+                    }
+                },
+                onMoveTask: { task, section in
+                    let todayKey = RootineDate.localDate(context.date)
+                    Task {
+                        switch section {
+                        case .completed:
+                            if !rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
+                                await environment.toggleTaskCompletion(id: task.id, on: context.date)
+                            }
+                        case .today:
+                            if rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
+                                await environment.toggleTaskCompletion(id: task.id, on: context.date)
+                            }
+                            await environment.updateTask(
+                                id: task.id,
+                                text: task.text,
+                                time: task.time,
+                                calendarDate: todayKey,
+                                priority: task.priority,
+                                notes: task.notes,
+                                list: task.list,
+                                tags: task.tags
+                            )
+                        case .overdue:
+                            if rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
+                                await environment.toggleTaskCompletion(id: task.id, on: context.date)
+                            }
+                            let targetDate = task.calendarDate.flatMap { $0 < todayKey ? $0 : nil }
+                                ?? RootineDate.shiftLocalDate(todayKey, by: -1)
+                            await environment.updateTask(
+                                id: task.id,
+                                text: task.text,
+                                time: task.time,
+                                calendarDate: targetDate,
+                                priority: task.priority,
+                                notes: task.notes,
+                                list: task.list,
+                                tags: task.tags
+                            )
+                        }
                     }
                 },
                 undoAction: undoAction,
@@ -344,6 +420,7 @@ private struct TodayContentView: View {
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
+    let onMoveTask: (WorkspaceTask, TodayTaskSection) -> Void
     let undoAction: TodayUndoAction?
     let onUndo: () -> Void
     let onDismissUndo: () -> Void
@@ -377,7 +454,8 @@ private struct TodayContentView: View {
                     onSelectHabit: onSelectHabit,
                     onToggleTask: onToggleTask,
                     onToggleHabit: onToggleHabit,
-                    onRescheduleTask: onRescheduleTask
+                    onRescheduleTask: onRescheduleTask,
+                    onMoveTask: onMoveTask
                 )
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
@@ -480,6 +558,8 @@ private struct TodayTimelineCard: View {
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
+    let onMoveTask: (WorkspaceTask, TodayTaskSection) -> Void
+    @State private var draggedTaskID: Int?
 
     private var overdueEntries: [TodayFocusItem] {
         snapshot.overdueTasks.map {
@@ -546,6 +626,13 @@ private struct TodayTimelineCard: View {
                 Spacer(minLength: 0)
             }
 
+            if draggedTaskID != nil {
+                TodayTaskDropTargets { taskID, section in
+                    moveTask(taskID: taskID, to: section)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             VStack(spacing: 0) {
                 if !overdueEntries.isEmpty {
                     TodayTimelineSectionLabel(
@@ -563,7 +650,8 @@ private struct TodayTimelineCard: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask
+                            onRescheduleTask: onRescheduleTask,
+                            onDragTask: beginDrag
                         )
                     }
                     if hasOpenEntries {
@@ -591,7 +679,8 @@ private struct TodayTimelineCard: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask
+                            onRescheduleTask: onRescheduleTask,
+                            onDragTask: beginDrag
                         )
                     }
                     if !timedEntries.isEmpty && !untimedEntries.isEmpty {
@@ -607,7 +696,8 @@ private struct TodayTimelineCard: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask
+                            onRescheduleTask: onRescheduleTask,
+                            onDragTask: beginDrag
                         )
                     }
                 }
@@ -620,7 +710,8 @@ private struct TodayTimelineCard: View {
                         onSelectHabit: onSelectHabit,
                         onToggleTask: onToggleTask,
                         onToggleHabit: onToggleHabit,
-                        onRescheduleTask: onRescheduleTask
+                        onRescheduleTask: onRescheduleTask,
+                        onDragTask: beginDrag
                     )
                 }
             }
@@ -633,6 +724,66 @@ private struct TodayTimelineCard: View {
         case .task: return item.task.map { rootineTaskIsDoneOnDate($0, dateKey: snapshot.dateKey) } ?? false
         case .habit: return item.habit.map { isHabitDone($0, dateKey: snapshot.dateKey) } ?? false
         }
+    }
+
+    private func beginDrag(_ task: WorkspaceTask) {
+        withAnimation(.snappy(duration: 0.2)) {
+            draggedTaskID = task.id
+        }
+    }
+
+    private func moveTask(taskID: Int, to section: TodayTaskSection) {
+        guard let task = snapshot.tasks.first(where: { $0.id == taskID })
+                ?? snapshot.overdueTasks.first(where: { $0.id == taskID }) else { return }
+        withAnimation(.snappy(duration: 0.24)) {
+            draggedTaskID = nil
+        }
+        onMoveTask(task, section)
+    }
+}
+
+private struct TodayTaskDropTargets: View {
+    let onDrop: (Int, TodayTaskSection) -> Void
+    @State private var targetedSection: TodayTaskSection?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+            Text("Przenieś do")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+
+            HStack(spacing: RootineTheme.Spacing.xSmall) {
+                ForEach(TodayTaskSection.allCases) { section in
+                    Label(section.title, systemImage: section.systemImage)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(section.tint)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                                .fill(section.tint.opacity(targetedSection == section ? 0.24 : 0.10))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                                .stroke(section.tint.opacity(targetedSection == section ? 0.8 : 0.3), lineWidth: targetedSection == section ? 2 : 1)
+                        }
+                        .contentShape(Rectangle())
+                        .dropDestination(for: String.self) { items, _ in
+                            guard let taskID = items.first.flatMap(Int.init) else { return false }
+                            onDrop(taskID, section)
+                            return true
+                        } isTargeted: { isTargeted in
+                            if isTargeted {
+                                targetedSection = section
+                            } else if targetedSection == section {
+                                targetedSection = nil
+                            }
+                        }
+                        .accessibilityLabel("Upuść w sekcji \(section.title)")
+                }
+            }
+        }
+        .padding(.vertical, RootineTheme.Spacing.xSmall)
     }
 }
 
@@ -670,6 +821,7 @@ private struct TodayTimelineItemRow: View {
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
+    let onDragTask: (WorkspaceTask) -> Void
     @State private var horizontalDrag: CGFloat = 0
     @State private var isRescheduleMenuPresented = false
     @State private var isDatePickerPresented = false
@@ -752,16 +904,16 @@ private struct TodayTimelineItemRow: View {
                         .frame(minHeight: 60)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(TodayTaskTitleButtonStyle())
                     .accessibilityLabel("Szczegóły: \(item.title)")
                     .accessibilityHint(interactionHint)
                     .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
                     .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
-                    .onLongPressGesture { open() }
                 }
                 .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
                 .padding(.vertical, RootineTheme.Spacing.small)
                 .offset(x: horizontalDrag)
+                .modifier(TodayTaskDragModifier(task: item.task, onDragStarted: onDragTask))
             }
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
         }
@@ -877,7 +1029,51 @@ private struct TodayTimelineItemRow: View {
     private var interactionHint: String {
         let completionAction = isDone ? "cofnąć wykonanie" : "oznaczyć jako wykonane"
         let rescheduleAction = item.task == nil ? "" : " lub w lewo, aby przełożyć"
-        return "Otwiera szczegóły. Przytrzymaj, aby edytować. Przesuń w prawo, aby \(completionAction)\(rescheduleAction)."
+        let dragAction = item.task == nil ? "" : " Przytrzymaj i przeciągnij, aby przenieść między sekcjami."
+        return "Otwiera edycję. Przesuń w prawo, aby \(completionAction)\(rescheduleAction).\(dragAction)"
+    }
+}
+
+private struct TodayTaskDragModifier: ViewModifier {
+    let task: WorkspaceTask?
+    let onDragStarted: (WorkspaceTask) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let task {
+            content
+                .draggable(String(task.id)) {
+                HStack(spacing: RootineTheme.Spacing.small) {
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundStyle(RootineTheme.ColorToken.action)
+                    Text(task.text)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(2)
+                }
+                .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.vertical, RootineTheme.Spacing.small)
+                .background(RootineTheme.ColorToken.elevated)
+                .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
+            }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.35)
+                    .onEnded { _ in onDragStarted(task) }
+            )
+        } else {
+            content
+        }
+    }
+}
+
+private struct TodayTaskTitleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                    .fill(RootineTheme.ColorToken.primaryText.opacity(configuration.isPressed ? 0.07 : 0))
+            }
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -939,6 +1135,7 @@ private struct TodayCompletedDisclosure: View {
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
+    let onDragTask: (WorkspaceTask) -> Void
     @State private var isExpanded = false
 
     private var completedEntries: [TodayFocusItem] {
@@ -991,7 +1188,8 @@ private struct TodayCompletedDisclosure: View {
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
                             onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask
+                            onRescheduleTask: onRescheduleTask,
+                            onDragTask: onDragTask
                         )
                     }
                     if completedEntries.isEmpty {
