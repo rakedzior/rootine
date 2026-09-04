@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import Rootine
 
@@ -239,5 +240,65 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertNil(TodaySwipeMotion.action(for: CGSize(width: 72, height: 72)))
         XCTAssertEqual(TodaySwipeMotion.clampedOffset(for: CGSize(width: 400, height: 0)), 140)
         XCTAssertEqual(TodaySwipeMotion.clampedOffset(for: CGSize(width: -400, height: 0)), -140)
+    }
+    func testTodayDropResolverMapsEveryRenderedSectionAndSeparator() {
+        let frames: [TodayTaskSection: CGRect] = [
+            .overdue: CGRect(x: 0, y: 40, width: 320, height: 72),
+            .today: CGRect(x: 0, y: 132, width: 320, height: 144),
+            .completed: CGRect(x: 0, y: 300, width: 320, height: 64),
+        ]
+
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 60, in: frames), .overdue)
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 180, in: frames), .today)
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 320, in: frames), .completed)
+        // The midpoint of each actual separator gap determines which side
+        // owns the drop, so a one-pixel movement cannot use a fake date.
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 120, in: frames), .overdue)
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 125, in: frames), .today)
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 286, in: frames), .today)
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 292, in: frames), .completed)
+        XCTAssertEqual(TodayTaskSectionDropResolver.section(atY: 210, in: frames), .today)
+    }
+
+    func testTodayDropResolverCancelsOutsideRenderedRange() {
+        let frames: [TodayTaskSection: CGRect] = [
+            .overdue: CGRect(x: 0, y: 40, width: 320, height: 72),
+            .today: CGRect(x: 0, y: 132, width: 320, height: 144),
+            .completed: CGRect(x: 0, y: 300, width: 320, height: 64),
+        ]
+
+        XCTAssertNil(TodayTaskSectionDropResolver.section(atY: 39, in: frames))
+        XCTAssertNil(TodayTaskSectionDropResolver.section(atY: 365, in: frames))
+        XCTAssertNil(TodayTaskSectionDropResolver.section(atY: -80, in: frames))
+    }
+
+    func testRecurringOccurrenceCompletionKeepsSeriesAnchor() {
+        let anchor = "2026-09-01"
+        let recurring = WorkspaceTask(
+            id: 42,
+            text: "Powtarzalne zadanie",
+            done: false,
+            time: "09:00",
+            view: "dzis",
+            calendarDate: anchor,
+            schedule: WorkspaceTaskSchedule(
+                allDay: false,
+                startTime: "09:00",
+                recurrence: "daily",
+                timezone: "Europe/Warsaw"
+            )
+        )
+
+        let occurrence = rootineTaskSettingCompletion(
+            recurring,
+            dateKey: "2026-09-02",
+            done: true,
+            completedAt: "2026-09-02T08:00:00.000Z"
+        )
+
+        XCTAssertEqual(occurrence.calendarDate, anchor)
+        XCTAssertEqual(occurrence.schedule?.recurrence, "daily")
+        XCTAssertEqual(occurrence.schedule?.completedDates, ["2026-09-02"])
+        XCTAssertFalse(occurrence.done)
     }
 }

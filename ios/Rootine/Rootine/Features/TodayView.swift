@@ -27,7 +27,7 @@ private enum TodayRescheduleOption {
     case clear
 }
 
-private enum TodayTaskSection: String, CaseIterable, Identifiable {
+enum TodayTaskSection: String, CaseIterable, Identifiable, Hashable {
     case overdue
     case today
     case completed
@@ -56,6 +56,61 @@ private enum TodayTaskSection: String, CaseIterable, Identifiable {
         case .today: return RootineTheme.ColorToken.action
         case .completed: return RootineTheme.ColorToken.success
         }
+    }
+}
+
+/// Coordinates section hit-testing for the physical Today timeline drag.
+/// The resolver intentionally uses rendered section bounds and the midpoint
+/// of the real separator gaps; a task can never be moved merely because a
+/// synthetic date happened to match a section.
+enum TodayTaskSectionDropResolver {
+    static func section(atY y: CGFloat, in frames: [TodayTaskSection: CGRect]) -> TodayTaskSection? {
+        let ordered = frames.sorted { lhs, rhs in
+            if lhs.value.minY != rhs.value.minY { return lhs.value.minY < rhs.value.minY }
+            return lhs.key.rawValue < rhs.key.rawValue
+        }
+        guard let first = ordered.first, let last = ordered.last,
+              y >= first.value.minY, y <= last.value.maxY else {
+            return nil
+        }
+
+        if let containing = ordered.first(where: { $0.value.contains(CGPoint(x: $0.value.midX, y: y)) }) {
+            return containing.key
+        }
+
+        for pair in zip(ordered, ordered.dropFirst()) {
+            let (leading, trailing) = pair
+            guard y >= leading.value.maxY, y <= trailing.value.minY else { continue }
+            let separatorMidpoint = leading.value.maxY + (trailing.value.minY - leading.value.maxY) / 2
+            return y <= separatorMidpoint ? leading.key : trailing.key
+        }
+
+        return ordered.last?.key
+    }
+}
+
+private enum TodayTimelineCoordinateSpace {
+    static let name = "today-timeline-coordinate-space"
+}
+
+private struct TodayTaskDragSession: Equatable {
+    let taskID: Int
+    let sourceSection: TodayTaskSection
+    var location: CGPoint
+    var targetSection: TodayTaskSection?
+}
+
+private enum TodayTaskDragEvent {
+    case changed(taskID: Int, sourceSection: TodayTaskSection, location: CGPoint)
+    case ended(taskID: Int, sourceSection: TodayTaskSection, location: CGPoint)
+    case cancelled(taskID: Int)
+}
+
+private struct TodayTaskSectionFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [TodayTaskSection: CGRect] = [:]
+
+    static func reduce(value: inout [TodayTaskSection: CGRect], nextValue: () -> [TodayTaskSection: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
     }
 }
 
@@ -310,9 +365,11 @@ private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.
 struct TodayView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTask: WorkspaceTask?
     @State private var selectedHabit: WorkspaceHabit?
     @State private var undoAction: TodayUndoAction?
+    @State private var dragResetToken = UUID()
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -335,6 +392,7 @@ struct TodayView: View {
                 snapshot: snapshot,
                 isLaunching: environment.isLaunching,
                 syncStatus: environment.workspaceSyncStatus,
+                dragResetToken: dragResetToken,
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
@@ -420,6 +478,16 @@ struct TodayView: View {
                         switch section {
                         case .completed:
                             let wasDone = rootineTaskIsDoneOnDate(task, dateKey: todayKey)
+                            // A recurring task is a series, not a movable
+                            // one-off row. Completing its current occurrence
+                            // is the only safe section move; changing the
+                            // calendar date here would move the whole anchor.
+                            if task.schedule?.recurrence != nil {
+                                if !wasDone {
+                                    await environment.toggleTaskCompletion(id: task.id, on: context.date)
+                                }
+                                return
+                            }
                             await environment.updateTask(
                                 id: task.id,
                                 text: task.text,
@@ -430,13 +498,18 @@ struct TodayView: View {
                                 list: task.list,
                                 tags: task.tags
                             )
-                            // Move the anchor before marking a recurring task
-                            // complete so the completion stays on the anchor
-                            // rather than becoming a stale today's map entry.
+                            // Persist the new one-off date before recording
+                            // completion so the row stays in today's section.
                             if !wasDone {
                                 await environment.toggleTaskCompletion(id: task.id, on: context.date)
                             }
                         case .today:
+                            if task.schedule?.recurrence != nil {
+                                if rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
+                                    await environment.toggleTaskCompletion(id: task.id, on: context.date)
+                                }
+                                return
+                            }
                             if rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
                                 await environment.toggleTaskCompletion(id: task.id, on: context.date)
                             }
@@ -486,6 +559,16 @@ struct TodayView: View {
         }
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active else { return }
+            // SwiftUI may cancel an in-flight gesture without delivering its
+            // final value when the scene resigns active. A new token forces
+            // every row and the timeline coordinator to clear their state.
+            dragResetToken = UUID()
+        }
+        .onDisappear {
+            dragResetToken = UUID()
+        }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(task: task)
                 .presentationDetents([.medium, .large])
@@ -530,6 +613,7 @@ private struct TodayContentView: View, Equatable {
     let snapshot: TodaySnapshot
     let isLaunching: Bool
     let syncStatus: WorkspaceSyncStatus
+    let dragResetToken: UUID
     let onSelectTask: (WorkspaceTask) -> Void
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
@@ -572,6 +656,7 @@ private struct TodayContentView: View, Equatable {
                 TodaySummaryCard(snapshot: snapshot)
                 TodayTimelineCard(
                     snapshot: snapshot,
+                    dragResetToken: dragResetToken,
                     onSelectTask: onSelectTask,
                     onSelectHabit: onSelectHabit,
                     onToggleTask: onToggleTask,
@@ -671,13 +756,15 @@ private struct TodaySummaryCard: View {
 
 private struct TodayTimelineCard: View {
     let snapshot: TodaySnapshot
+    let dragResetToken: UUID
     let onSelectTask: (WorkspaceTask) -> Void
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
     let onMoveTask: (WorkspaceTask, TodayTaskSection, String?) -> Void
-    @State private var overdueMoveTask: WorkspaceTask?
+    @State private var dragSession: TodayTaskDragSession?
+    @State private var sectionFrames: [TodayTaskSection: CGRect] = [:]
     @State private var moveNotice: String?
 
     private struct TimelineEntries {
@@ -741,109 +828,130 @@ private struct TodayTimelineCard: View {
                 Spacer(minLength: 0)
             }
 
-            if !snapshot.tasks.isEmpty || !snapshot.overdueTasks.isEmpty {
-                TodayTaskDropTargets { taskID, section in
-                    moveTask(taskID: taskID, to: section)
-                }
-            }
-
             VStack(spacing: 0) {
-                if !timeline.overdue.isEmpty {
-                    TodayTimelineSectionLabel(
-                        title: "Zaległości",
-                        systemImage: "clock.badge.exclamationmark",
-                        tint: RootineTheme.ColorToken.warning
-                    )
-                    ForEach(timeline.overdue) { item in
-                        TodayTimelineItemRow(
-                            item: item,
-                            dateKey: snapshot.dateKey,
-                            isNext: false,
-                            isOverdue: true,
-                            onSelectTask: onSelectTask,
-                            onSelectHabit: onSelectHabit,
-                            onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask,
-                            onMoveTask: onMoveTask,
-                            section: .overdue
-                        )
-                    }
-                    if timeline.hasOpenEntries {
-                        TodayTimelineDivider()
-                    }
-                }
-
-                if !timeline.hasOpenEntries {
-                    Label(
-                        "Brak otwartych zobowiązań. Możesz spokojnie domknąć dzień.",
-                        systemImage: "checkmark.circle"
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, RootineTheme.Spacing.small)
-                } else {
-                    ForEach(timeline.timed) { item in
-                        TodayTimelineItemRow(
-                            item: item,
-                            dateKey: snapshot.dateKey,
-                            isNext: item.id == nextID,
-                            isOverdue: false,
-                            onSelectTask: onSelectTask,
-                            onSelectHabit: onSelectHabit,
-                            onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask,
-                            onMoveTask: onMoveTask,
-                            section: .today
-                        )
-                    }
-                    if !timeline.timed.isEmpty && !timeline.untimed.isEmpty {
-                        TodayTimelineDivider()
-                    }
-                    ForEach(timeline.untimed) { item in
-                        TodayTimelineItemRow(
-                            item: item,
-                            dateKey: snapshot.dateKey,
-                            isNext: item.id == nextID,
-                            isOverdue: false,
-                            onSelectTask: onSelectTask,
-                            onSelectHabit: onSelectHabit,
-                            onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask,
-                            onMoveTask: onMoveTask,
-                            section: .today
-                        )
+                TodayTimelineSectionRegion(
+                    section: .overdue,
+                    isActive: dragSession?.targetSection == .overdue,
+                    minimumHeight: timeline.overdue.isEmpty && dragSession != nil ? 44 : 0
+                ) {
+                    VStack(spacing: 0) {
+                        if !timeline.overdue.isEmpty {
+                            TodayTimelineSectionLabel(
+                                title: "Zaległości",
+                                systemImage: "clock.badge.exclamationmark",
+                                tint: RootineTheme.ColorToken.warning
+                            )
+                            ForEach(timeline.overdue) { item in
+                                TodayTimelineItemRow(
+                                    item: item,
+                                    dateKey: snapshot.dateKey,
+                                    isNext: false,
+                                    isOverdue: true,
+                                    onSelectTask: onSelectTask,
+                                    onSelectHabit: onSelectHabit,
+                                    onToggleTask: onToggleTask,
+                                    onToggleHabit: onToggleHabit,
+                                    onRescheduleTask: onRescheduleTask,
+                                    onMoveTask: requestMove,
+                                    dragResetToken: dragResetToken,
+                                    onDragEvent: handleDragEvent,
+                                    section: .overdue
+                                )
+                            }
+                            if timeline.hasOpenEntries {
+                                TodayTimelineDivider()
+                            }
+                        }
                     }
                 }
 
-                if snapshot.completedItems > 0 {
-                    TodayTimelineDivider()
-                    TodayCompletedDisclosure(
-                        snapshot: snapshot,
-                        onSelectTask: onSelectTask,
-                        onSelectHabit: onSelectHabit,
-                        onToggleTask: onToggleTask,
-                        onToggleHabit: onToggleHabit,
-                        onRescheduleTask: onRescheduleTask,
-                        onMoveTask: onMoveTask
-                    )
+                TodayTimelineSectionRegion(
+                    section: .today,
+                    isActive: dragSession?.targetSection == .today
+                ) {
+                    VStack(spacing: 0) {
+                        if !timeline.hasOpenEntries {
+                            Label(
+                                "Brak otwartych zobowiązań. Możesz spokojnie domknąć dzień.",
+                                systemImage: "checkmark.circle"
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, RootineTheme.Spacing.small)
+                        } else {
+                            ForEach(timeline.timed) { item in
+                                TodayTimelineItemRow(
+                                    item: item,
+                                    dateKey: snapshot.dateKey,
+                                    isNext: item.id == nextID,
+                                    isOverdue: false,
+                                    onSelectTask: onSelectTask,
+                                    onSelectHabit: onSelectHabit,
+                                    onToggleTask: onToggleTask,
+                                    onToggleHabit: onToggleHabit,
+                                    onRescheduleTask: onRescheduleTask,
+                                    onMoveTask: requestMove,
+                                    dragResetToken: dragResetToken,
+                                    onDragEvent: handleDragEvent,
+                                    section: .today
+                                )
+                            }
+                            if !timeline.timed.isEmpty && !timeline.untimed.isEmpty {
+                                TodayTimelineDivider()
+                            }
+                            ForEach(timeline.untimed) { item in
+                                TodayTimelineItemRow(
+                                    item: item,
+                                    dateKey: snapshot.dateKey,
+                                    isNext: item.id == nextID,
+                                    isOverdue: false,
+                                    onSelectTask: onSelectTask,
+                                    onSelectHabit: onSelectHabit,
+                                    onToggleTask: onToggleTask,
+                                    onToggleHabit: onToggleHabit,
+                                    onRescheduleTask: onRescheduleTask,
+                                    onMoveTask: requestMove,
+                                    dragResetToken: dragResetToken,
+                                    onDragEvent: handleDragEvent,
+                                    section: .today
+                                )
+                        }
+                    }
+                }
+                    }
+
+                TodayTimelineSectionRegion(
+                    section: .completed,
+                    isActive: dragSession?.targetSection == .completed,
+                    minimumHeight: snapshot.completedItems == 0 && dragSession != nil ? 44 : 0
+                ) {
+                    VStack(spacing: 0) {
+                        if snapshot.completedItems > 0 {
+                            TodayTimelineDivider()
+                            TodayCompletedDisclosure(
+                                snapshot: snapshot,
+                                dragResetToken: dragResetToken,
+                                onSelectTask: onSelectTask,
+                                onSelectHabit: onSelectHabit,
+                                onToggleTask: onToggleTask,
+                                onToggleHabit: onToggleHabit,
+                                onRescheduleTask: onRescheduleTask,
+                                onMoveTask: requestMove,
+                                onDragEvent: handleDragEvent
+                            )
+                        }
+                    }
                 }
             }
         }
         .accessibilityIdentifier("today-timeline")
-        .sheet(item: $overdueMoveTask) { task in
-            TodayRescheduleDateSheet(
-                initialDate: overdueDate(for: task),
-                title: "Wybierz datę zaległości",
-                maximumDate: RootineDate.localDateValue(RootineDate.shiftLocalDate(snapshot.dateKey, by: -1))
-            ) { date in
-                let dateKey = RootineDate.localDate(date)
-                guard dateKey < snapshot.dateKey else { return }
-                onMoveTask(task, .overdue, dateKey)
-            }
+        .coordinateSpace(name: TodayTimelineCoordinateSpace.name)
+        .onPreferenceChange(TodayTaskSectionFramePreferenceKey.self) { frames in
+            sectionFrames = frames
+        }
+        .onChange(of: dragResetToken) { _, _ in
+            resetDragSession()
         }
         .alert("Nie można przenieść zadania", isPresented: Binding(
             get: { moveNotice != nil },
@@ -855,77 +963,113 @@ private struct TodayTimelineCard: View {
         }
     }
 
-    private func isDone(_ item: TodayFocusItem) -> Bool {
-        switch item.kind {
-        case .task: return item.task.map { rootineTaskIsDoneOnDate($0, dateKey: snapshot.dateKey) } ?? false
-        case .habit: return item.habit.map { isHabitDone($0, dateKey: snapshot.dateKey) } ?? false
+    private func handleDragEvent(_ event: TodayTaskDragEvent) {
+        switch event {
+        case let .changed(taskID, sourceSection, location):
+            let targetSection = TodayTaskSectionDropResolver.section(atY: location.y, in: sectionFrames)
+            if dragSession?.taskID != taskID {
+                dragSession = TodayTaskDragSession(
+                    taskID: taskID,
+                    sourceSection: sourceSection,
+                    location: location,
+                    targetSection: targetSection
+                )
+            } else {
+                dragSession?.location = location
+                dragSession?.targetSection = targetSection
+            }
+        case let .ended(taskID, sourceSection, location):
+            let targetSection = TodayTaskSectionDropResolver.section(atY: location.y, in: sectionFrames)
+            dragSession = nil
+            guard let targetSection, targetSection != sourceSection,
+                  let task = task(withID: taskID) else { return }
+            requestMove(task: task, from: sourceSection, to: targetSection)
+        case let .cancelled(taskID):
+            if dragSession?.taskID == taskID {
+                dragSession = nil
+            }
         }
     }
 
-    private func moveTask(taskID: Int, to section: TodayTaskSection) {
-        guard let task = snapshot.tasks.first(where: { $0.id == taskID })
-                ?? snapshot.overdueTasks.first(where: { $0.id == taskID }) else { return }
-        if section == .overdue {
-            guard task.schedule?.recurrence == nil else {
-                moveNotice = "Zadanie cykliczne zachowuje swój harmonogram. Przełóż konkretne wystąpienie z menu zadania."
+    private func task(withID id: Int) -> WorkspaceTask? {
+        snapshot.tasks.first(where: { $0.id == id })
+            ?? snapshot.overdueTasks.first(where: { $0.id == id })
+    }
+
+    private func requestMove(task: WorkspaceTask, from source: TodayTaskSection, to target: TodayTaskSection) {
+        guard source != target else { return }
+
+        if task.schedule?.recurrence != nil {
+            let occurrenceMove = (source == .today && target == .completed)
+                || (source == .completed && target == .today)
+            guard occurrenceMove else {
+                moveNotice = "Zadanie cykliczne zachowuje kotwicę całej serii. Przenieś konkretne wystąpienie z menu zadania."
                 return
             }
-            overdueMoveTask = task
+        }
+
+        if target == .overdue {
+            // A drag over the real overdue section chooses the nearest
+            // previous local day. No date sheet is needed for a gesture.
+            onMoveTask(task, .overdue, RootineDate.shiftLocalDate(snapshot.dateKey, by: -1))
         } else {
-            onMoveTask(task, section, nil)
+            onMoveTask(task, target, nil)
         }
     }
 
-    private func overdueDate(for task: WorkspaceTask) -> Date {
-        if let date = task.calendarDate.flatMap({ RootineDate.localDateValue($0) }), date < (RootineDate.localDateValue(snapshot.dateKey) ?? Date()) {
-            return date
-        }
-        return RootineDate.localDateValue(RootineDate.shiftLocalDate(snapshot.dateKey, by: -1)) ?? Date()
+    private func resetDragSession() {
+        dragSession = nil
     }
 }
 
-private struct TodayTaskDropTargets: View {
-    let onDrop: (Int, TodayTaskSection) -> Void
-    @State private var targetedSection: TodayTaskSection?
+private struct TodayTimelineSectionRegion<Content: View>: View {
+    let section: TodayTaskSection
+    let isActive: Bool
+    let minimumHeight: CGFloat
+    @ViewBuilder let content: Content
+
+    init(
+        section: TodayTaskSection,
+        isActive: Bool,
+        minimumHeight: CGFloat = 0,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.section = section
+        self.isActive = isActive
+        self.minimumHeight = minimumHeight
+        self.content = content()
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-            Text("Przenieś do")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-
-            HStack(spacing: RootineTheme.Spacing.xSmall) {
-                ForEach(TodayTaskSection.allCases) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(section.tint)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(
-                            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
-                                .fill(section.tint.opacity(targetedSection == section ? 0.24 : 0.10))
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
-                                .stroke(section.tint.opacity(targetedSection == section ? 0.8 : 0.3), lineWidth: targetedSection == section ? 2 : 1)
-                        }
-                        .contentShape(Rectangle())
-                        .dropDestination(for: String.self) { items, _ in
-                            guard let taskID = items.first.flatMap(Int.init) else { return false }
-                            onDrop(taskID, section)
-                            return true
-                        } isTargeted: { isTargeted in
-                            if isTargeted {
-                                targetedSection = section
-                            } else if targetedSection == section {
-                                targetedSection = nil
-                            }
-                        }
-                        .accessibilityLabel("Upuść w sekcji \(section.title)")
+        content
+            .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .leading)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: TodayTaskSectionFramePreferenceKey.self,
+                        value: [section: proxy.frame(in: .named(TodayTimelineCoordinateSpace.name))]
+                    )
                 }
             }
-        }
-        .padding(.vertical, RootineTheme.Spacing.xSmall)
+            .overlay {
+                if isActive {
+                    RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                        .stroke(section.tint.opacity(0.42), lineWidth: 1)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isActive {
+                    Label("Upuść w \(section.title)", systemImage: section.systemImage)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(section.tint)
+                        .padding(.horizontal, RootineTheme.Spacing.small)
+                        .padding(.vertical, RootineTheme.Spacing.xSmall)
+                        .background(section.tint.opacity(0.12), in: Capsule())
+                        .padding(.top, RootineTheme.Spacing.xSmall)
+                        .padding(.trailing, RootineTheme.Spacing.xSmall)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 }
 
@@ -977,120 +1121,26 @@ private struct TodayTimelineItemRow: View {
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
-    let onMoveTask: (WorkspaceTask, TodayTaskSection, String?) -> Void
+    let onMoveTask: (WorkspaceTask, TodayTaskSection, TodayTaskSection) -> Void
+    let dragResetToken: UUID
+    let onDragEvent: (TodayTaskDragEvent) -> Void
     let section: TodayTaskSection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var horizontalDrag: CGFloat = 0
-    @State private var swipeAxis: TodaySwipeAxis?
+    @State private var verticalDragOffset: CGFloat = 0
+    @State private var isVerticalDragActive = false
+    @State private var verticalDragCancelled = false
     @State private var isRescheduleMenuPresented = false
     @State private var isDatePickerPresented = false
     @State private var rescheduleDate = Date()
     @GestureState private var isPressed = false
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            swipeActionFeedback
+        presentedRow
+    }
 
-            HStack(alignment: .center, spacing: 0) {
-                Text(item.time ?? "")
-                    .font(isOverdue ? .caption : .caption.monospacedDigit())
-                    .foregroundStyle(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .allowsTightening(true)
-                    .frame(width: 64, alignment: .leading)
-                    .frame(minHeight: 76, alignment: .center)
-                    .contentShape(Rectangle())
-
-                ZStack {
-                    TodayTimelineConnector(
-                        color: isOverdue
-                            ? RootineTheme.ColorToken.warning.opacity(0.55)
-                            : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator)
-                    )
-
-                    Button(action: toggle) {
-                        ZStack {
-                            Circle()
-                                .fill(isDone ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.surface)
-                            Circle()
-                                .stroke(nodeColor, lineWidth: isNext || isDone ? 2 : 1.5)
-                            if isDone {
-                                Image(systemName: "checkmark")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(RootineTheme.ColorToken.canvas)
-                            }
-                        }
-                        .frame(width: isNext ? 17 : 14, height: isNext ? 17 : 14)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(isDone ? "Oznacz \(item.title) jako niewykonane" : "Oznacz \(item.title) jako wykonane")
-                }
-                .frame(width: 44)
-                .frame(minHeight: 76)
-
-                HStack(spacing: RootineTheme.Spacing.small) {
-                    Button(action: open) {
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                                if isNext {
-                                    HStack(spacing: RootineTheme.Spacing.xSmall) {
-                                        Image(systemName: "sparkles")
-                                        Text("NAJBLIŻSZE")
-                                            .tracking(0.7)
-                                    }
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(RootineTheme.ColorToken.action)
-                                }
-                                Text(item.title)
-                                    .font(.body.weight(isNext ? .semibold : .medium))
-                                    .foregroundStyle(isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
-                                    .strikethrough(isDone)
-                                    .lineLimit(2)
-                                Text(item.kindLabel)
-                                    .font(.caption)
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .frame(minHeight: 60)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Szczegóły: \(item.title)")
-                    .accessibilityHint(interactionHint)
-                    .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
-                    .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
-                }
-                .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
-                .padding(.vertical, RootineTheme.Spacing.small)
-                .modifier(TodayTaskDragModifier(task: item.task))
-            }
-            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-            .offset(x: horizontalDrag)
-        }
-        .frame(maxWidth: .infinity, minHeight: 76, alignment: .center)
-        .background {
-            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
-                .fill(RootineTheme.ColorToken.primaryText.opacity(isPressed ? 0.07 : 0))
-        }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isPressed)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityRowLabel)
-        .accessibilityValue(isDone ? "Wykonane" : "Do wykonania")
-        .accessibilityHint(interactionHint)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { open() }
-        .accessibilityAction(named: "Otwórz szczegóły") { open() }
-        .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
-        .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
-        .simultaneousGesture(pressGesture)
-        // Keep horizontal swipe and native long-press drag mutually
-        // exclusive. A simultaneous gesture could complete both actions.
-        .gesture(swipeGesture)
+    private var presentedRow: some View {
+        gestureRow
         .confirmationDialog("Przełóż zadanie", isPresented: $isRescheduleMenuPresented, titleVisibility: .visible) {
             Button("Dziś") { reschedule(.date(dateKey)) }
             Button("Jutro") { reschedule(.date(RootineDate.shiftLocalDate(dateKey, by: 1))) }
@@ -1108,6 +1158,153 @@ private struct TodayTimelineItemRow: View {
                 reschedule(.date(RootineDate.localDate(date)))
             }
         }
+    }
+
+    private var gestureRow: some View {
+        accessibleRow
+        .simultaneousGesture(pressGesture)
+        .offset(y: verticalDragOffset)
+        .shadow(
+            color: RootineTheme.ColorToken.primaryText.opacity(isVerticalDragActive ? 0.12 : 0),
+            radius: isVerticalDragActive ? 8 : 0,
+            y: isVerticalDragActive ? 4 : 0
+        )
+        .zIndex(isVerticalDragActive ? 1 : 0)
+        // Long press owns the gesture once it has armed. Before that point a
+        // horizontal movement is allowed to fall through to the swipe branch;
+        // the exclusive composition prevents both actions in one gesture.
+        .gesture(sectionGesture)
+        .onChange(of: dragResetToken) { _, _ in
+            resetDragState(notify: true)
+        }
+        .onDisappear {
+            resetDragState(notify: true)
+        }
+    }
+
+    private var accessibleRow: some View {
+        visualRow
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityRowLabel)
+        .accessibilityValue(isDone ? "Wykonane" : "Do wykonania")
+        .accessibilityHint(interactionHint)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { open() }
+        .accessibilityAction(named: "Otwórz szczegóły") { open() }
+        .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
+        .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
+    }
+
+    private var visualRow: some View {
+        rowShell
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .center)
+        .background {
+            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                .fill(RootineTheme.ColorToken.primaryText.opacity(isPressed ? 0.07 : 0))
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isPressed)
+        .contentShape(Rectangle())
+    }
+
+    private var rowShell: some View {
+        ZStack(alignment: .leading) {
+            swipeActionFeedback
+            taskRowContent
+        }
+    }
+
+    private var taskRowContent: some View {
+        HStack(alignment: .center, spacing: 0) {
+            timelineTime
+            timelineNode
+            taskTitleButton
+        }
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .offset(x: horizontalDrag)
+    }
+
+    private var timelineTime: some View {
+        Text(item.time ?? "")
+            .font(isOverdue ? .caption : .caption.monospacedDigit())
+            .foregroundStyle(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.secondaryText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .allowsTightening(true)
+            .frame(width: 64, alignment: .leading)
+            .frame(minHeight: 76, alignment: .center)
+            .contentShape(Rectangle())
+    }
+
+    private var timelineNode: some View {
+        ZStack {
+            TodayTimelineConnector(
+                color: isOverdue
+                    ? RootineTheme.ColorToken.warning.opacity(0.55)
+                    : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator)
+            )
+
+            Button(action: toggle) {
+                ZStack {
+                    Circle()
+                        .fill(isDone ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.surface)
+                    Circle()
+                        .stroke(nodeColor, lineWidth: isNext || isDone ? 2 : 1.5)
+                    if isDone {
+                        Image(systemName: "checkmark")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(RootineTheme.ColorToken.canvas)
+                    }
+                }
+                .frame(width: isNext ? 17 : 14, height: isNext ? 17 : 14)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isDone ? "Oznacz \(item.title) jako niewykonane" : "Oznacz \(item.title) jako wykonane")
+        }
+        .frame(width: 44)
+        .frame(minHeight: 76)
+    }
+
+    private var taskTitleButton: some View {
+        Button(action: open) {
+            HStack(spacing: RootineTheme.Spacing.small) {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                    if isNext {
+                        HStack(spacing: RootineTheme.Spacing.xSmall) {
+                            Image(systemName: "sparkles")
+                            Text("NAJBLIŻSZE")
+                                .tracking(0.7)
+                        }
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(RootineTheme.ColorToken.action)
+                    }
+                    Text(item.title)
+                        .font(.body.weight(isNext ? .semibold : .medium))
+                        .foregroundStyle(isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
+                        .strikethrough(isDone)
+                        .lineLimit(2)
+                    Text(item.kindLabel)
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 60)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Szczegóły: \(item.title)")
+        .accessibilityHint(interactionHint)
+        .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
+        .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
+        .modifier(TodayTaskMoveAccessibilityModifier(
+            task: item.task,
+            sourceSection: section,
+            onMoveTask: onMoveTask
+        ))
+        .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
+        .padding(.vertical, RootineTheme.Spacing.small)
     }
 
     private var isDone: Bool {
@@ -1163,44 +1360,110 @@ private struct TodayTimelineItemRow: View {
             .accessibilityHidden(true)
     }
 
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                guard swipeAxis != .vertical else { return }
+    private var sectionGesture: some Gesture {
+        let longPressThenVerticalDrag = LongPressGesture(minimumDuration: 0.45, maximumDistance: 12)
+            .sequenced(before: DragGesture(
+                minimumDistance: 4,
+                coordinateSpace: .named(TodayTimelineCoordinateSpace.name)
+            ))
 
-                if swipeAxis == nil {
-                    swipeAxis = abs(value.translation.width) > abs(value.translation.height) ? .horizontal : .vertical
+        return longPressThenVerticalDrag
+            .exclusively(before: swipeGesture)
+            .onChanged { value in
+                switch value {
+                case let .first(sequence):
+                    handleLongPressSequenceChange(sequence)
+                case let .second(swipe):
+                    handleSwipeChange(swipe)
                 }
-                guard swipeAxis == .horizontal else {
-                    horizontalDrag = 0
-                    return
-                }
-                horizontalDrag = TodaySwipeMotion.clampedOffset(for: value.translation)
             }
             .onEnded { value in
-                let action = swipeAxis == .horizontal ? TodaySwipeMotion.action(for: value.translation) : nil
-                resetSwipe()
-
-                guard let action else { return }
-                switch action {
-                case .complete:
-                    toggle()
-                case .reschedule:
-                    guard item.task != nil else { return }
-                    isRescheduleMenuPresented = true
+                switch value {
+                case let .first(sequence):
+                    handleLongPressSequenceEnd(sequence)
+                case let .second(swipe):
+                    handleSwipeEnd(swipe)
                 }
             }
     }
 
-    private func resetSwipe() {
-        swipeAxis = nil
-        if reduceMotion {
-            horizontalDrag = 0
-        } else {
-            withAnimation(.snappy(duration: 0.2)) {
-                horizontalDrag = 0
+    private var swipeGesture: DragGesture {
+        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+    }
+
+    private func handleLongPressSequenceChange(
+        _ sequence: SequenceGesture<LongPressGesture, DragGesture>.Value
+    ) {
+        guard case let .second(_, drag?) = sequence else { return }
+        guard item.task != nil else { return }
+
+        let horizontalDistance = abs(drag.translation.width)
+        let verticalDistance = abs(drag.translation.height)
+        if horizontalDistance > max(12, verticalDistance * 1.1) {
+            if !verticalDragCancelled, isVerticalDragActive {
+                onDragEvent(.cancelled(taskID: item.task?.id ?? 0))
             }
+            verticalDragCancelled = true
+            isVerticalDragActive = false
+            verticalDragOffset = 0
+            return
         }
+
+        guard !verticalDragCancelled, let task = item.task else { return }
+        isVerticalDragActive = true
+        verticalDragOffset = min(max(drag.translation.height, -180), 180)
+        onDragEvent(.changed(taskID: task.id, sourceSection: section, location: drag.location))
+    }
+
+    private func handleLongPressSequenceEnd(
+        _ sequence: SequenceGesture<LongPressGesture, DragGesture>.Value
+    ) {
+        if case let .second(_, drag?) = sequence,
+           let task = item.task,
+           isVerticalDragActive,
+           !verticalDragCancelled {
+            onDragEvent(.ended(taskID: task.id, sourceSection: section, location: drag.location))
+        } else if isVerticalDragActive, let task = item.task {
+            onDragEvent(.cancelled(taskID: task.id))
+        }
+        resetDragState(notify: false)
+    }
+
+    private func handleSwipeChange(_ value: DragGesture.Value) {
+        // The exclusive gesture gives the swipe branch only when the long
+        // press failed. Keep this guard as a second line of defence for scene
+        // changes and recognizer hand-off edge cases.
+        guard !isVerticalDragActive, !verticalDragCancelled,
+              abs(value.translation.width) > abs(value.translation.height) else { return }
+        horizontalDrag = min(max(value.translation.width, -140), 140)
+    }
+
+    private func handleSwipeEnd(_ value: DragGesture.Value) {
+        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
+        let crossedThreshold = abs(value.translation.width) >= 72
+        let direction = value.translation.width
+
+        withAnimation(.snappy(duration: 0.2)) {
+            horizontalDrag = 0
+        }
+        verticalDragCancelled = false
+
+        guard isHorizontal, crossedThreshold, !isVerticalDragActive else { return }
+        if direction > 0 {
+            toggle()
+        } else if item.task != nil {
+            isRescheduleMenuPresented = true
+        }
+    }
+
+    private func resetDragState(notify: Bool) {
+        if notify, isVerticalDragActive, let task = item.task {
+            onDragEvent(.cancelled(taskID: task.id))
+        }
+        isVerticalDragActive = false
+        verticalDragCancelled = false
+        verticalDragOffset = 0
+        horizontalDrag = 0
     }
 
     private func toggle() {
@@ -1248,33 +1511,6 @@ private struct TodayTimelineItemRow: View {
     }
 }
 
-private struct TodayTaskDragModifier: ViewModifier {
-    let task: WorkspaceTask?
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if let task {
-            content
-                .draggable(String(task.id)) {
-                HStack(spacing: RootineTheme.Spacing.small) {
-                    Image(systemName: "line.3.horizontal")
-                        .foregroundStyle(RootineTheme.ColorToken.action)
-                    Text(task.text)
-                        .font(.body.weight(.semibold))
-                        .lineLimit(2)
-                }
-                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                .padding(.horizontal, RootineTheme.Spacing.medium)
-                .padding(.vertical, RootineTheme.Spacing.small)
-                .background(RootineTheme.ColorToken.elevated)
-                .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
-            }
-        } else {
-            content
-        }
-    }
-}
-
 private struct TodayRescheduleAccessibilityModifier: ViewModifier {
     let task: WorkspaceTask?
     let action: () -> Void
@@ -1283,6 +1519,36 @@ private struct TodayRescheduleAccessibilityModifier: ViewModifier {
     func body(content: Content) -> some View {
         if task != nil {
             content.accessibilityAction(named: "Przełóż") { action() }
+        } else {
+            content
+        }
+    }
+}
+
+/// VoiceOver and Switch Control fallback for users who cannot perform a
+/// long-press drag. These actions use the same guarded move path as touch
+/// dragging, so recurring tasks never acquire a new series anchor silently.
+private struct TodayTaskMoveAccessibilityModifier: ViewModifier {
+    let task: WorkspaceTask?
+    let sourceSection: TodayTaskSection
+    let onMoveTask: (WorkspaceTask, TodayTaskSection, TodayTaskSection) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let task {
+            content
+                .accessibilityAction(named: "Przenieś do Zaległości") {
+                    guard sourceSection != .overdue else { return }
+                    onMoveTask(task, sourceSection, .overdue)
+                }
+                .accessibilityAction(named: "Przenieś do Dzisiaj") {
+                    guard sourceSection != .today else { return }
+                    onMoveTask(task, sourceSection, .today)
+                }
+                .accessibilityAction(named: "Przenieś do Ukończone") {
+                    guard sourceSection != .completed else { return }
+                    onMoveTask(task, sourceSection, .completed)
+                }
         } else {
             content
         }
@@ -1342,12 +1608,14 @@ private struct TodayRescheduleDateSheet: View {
 
 private struct TodayCompletedDisclosure: View {
     let snapshot: TodaySnapshot
+    let dragResetToken: UUID
     let onSelectTask: (WorkspaceTask) -> Void
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
-    let onMoveTask: (WorkspaceTask, TodayTaskSection, String?) -> Void
+    let onMoveTask: (WorkspaceTask, TodayTaskSection, TodayTaskSection) -> Void
+    let onDragEvent: (TodayTaskDragEvent) -> Void
     @State private var isExpanded = false
 
     private var completedEntries: [TodayFocusItem] {
@@ -1402,6 +1670,8 @@ private struct TodayCompletedDisclosure: View {
                             onToggleHabit: onToggleHabit,
                             onRescheduleTask: onRescheduleTask,
                             onMoveTask: onMoveTask,
+                            dragResetToken: dragResetToken,
+                            onDragEvent: onDragEvent,
                             section: .completed
                         )
                     }
