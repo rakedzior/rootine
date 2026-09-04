@@ -342,6 +342,16 @@ struct TodayView: View {
                             if !rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
                                 await environment.toggleTaskCompletion(id: task.id, on: context.date)
                             }
+                            await environment.updateTask(
+                                id: task.id,
+                                text: task.text,
+                                time: task.time,
+                                calendarDate: todayKey,
+                                priority: task.priority,
+                                notes: task.notes,
+                                list: task.list,
+                                tags: task.tags
+                            )
                         case .today:
                             if rootineTaskIsDoneOnDate(task, dateKey: todayKey) {
                                 await environment.toggleTaskCompletion(id: task.id, on: context.date)
