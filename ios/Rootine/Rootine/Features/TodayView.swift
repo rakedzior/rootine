@@ -985,12 +985,13 @@ private struct TodayTimelineItemRow: View {
     @State private var isRescheduleMenuPresented = false
     @State private var isDatePickerPresented = false
     @State private var rescheduleDate = Date()
+    @GestureState private var isPressed = false
 
     var body: some View {
         ZStack(alignment: .leading) {
             swipeActionFeedback
 
-            HStack(alignment: .top, spacing: 0) {
+            HStack(alignment: .center, spacing: 0) {
                 Text(item.time ?? "")
                     .font(isOverdue ? .caption : .caption.monospacedDigit())
                     .foregroundStyle(isOverdue ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.secondaryText)
@@ -998,9 +999,10 @@ private struct TodayTimelineItemRow: View {
                     .minimumScaleFactor(0.75)
                     .allowsTightening(true)
                     .frame(width: 64, alignment: .leading)
-                    .padding(.top, RootineTheme.Spacing.medium)
+                    .frame(minHeight: 76, alignment: .center)
+                    .contentShape(Rectangle())
 
-                ZStack(alignment: .top) {
+                ZStack {
                     TodayTimelineConnector(
                         color: isOverdue
                             ? RootineTheme.ColorToken.warning.opacity(0.55)
@@ -1056,7 +1058,7 @@ private struct TodayTimelineItemRow: View {
                         .frame(minHeight: 60)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(TodayTaskTitleButtonStyle())
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Szczegóły: \(item.title)")
                     .accessibilityHint(interactionHint)
                     .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
@@ -1069,8 +1071,23 @@ private struct TodayTimelineItemRow: View {
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
             .offset(x: horizontalDrag)
         }
-        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .center)
+        .background {
+            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                .fill(RootineTheme.ColorToken.primaryText.opacity(isPressed ? 0.07 : 0))
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isPressed)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityRowLabel)
+        .accessibilityValue(isDone ? "Wykonane" : "Do wykonania")
+        .accessibilityHint(interactionHint)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { open() }
+        .accessibilityAction(named: "Otwórz szczegóły") { open() }
+        .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
+        .modifier(TodayRescheduleAccessibilityModifier(task: item.task) { isRescheduleMenuPresented = true })
+        .simultaneousGesture(pressGesture)
         // Keep horizontal swipe and native long-press drag mutually
         // exclusive. A simultaneous gesture could complete both actions.
         .gesture(swipeGesture)
@@ -1217,6 +1234,18 @@ private struct TodayTimelineItemRow: View {
         let dragAction = item.task == nil ? "" : " Przytrzymaj i przeciągnij, aby przenieść między sekcjami."
         return "Otwiera edycję. Przesuń w prawo, aby \(completionAction)\(rescheduleAction).\(dragAction)"
     }
+
+    private var accessibilityRowLabel: String {
+        let time = item.time.map { "\($0), " } ?? ""
+        return "\(time)\(item.title), \(item.kindLabel)"
+    }
+
+    private var pressGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .updating($isPressed) { _, state, _ in
+                state = true
+            }
+    }
 }
 
 private struct TodayTaskDragModifier: ViewModifier {
@@ -1243,19 +1272,6 @@ private struct TodayTaskDragModifier: ViewModifier {
         } else {
             content
         }
-    }
-}
-
-private struct TodayTaskTitleButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
-                    .fill(RootineTheme.ColorToken.primaryText.opacity(configuration.isPressed ? 0.07 : 0))
-            }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -1363,14 +1379,14 @@ private struct TodayCompletedDisclosure: View {
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
             }
-            .buttonStyle(.plain)
-            .frame(minHeight: 44)
+            .buttonStyle(TodayCompletedDisclosureButtonStyle())
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .contentShape(Rectangle())
             .accessibilityLabel(isExpanded ? "Ukryj ukończone elementy" : "Pokaż ukończone elementy")
+            .accessibilityValue("\(snapshot.completedItems) \(todayItemWord(snapshot.completedItems))")
+            .accessibilityHint("Stuknij w dowolnym miejscu wiersza, aby zmienić widoczność ukończonych elementów")
 
             if isExpanded {
                 VStack(spacing: 0) {
@@ -1400,6 +1416,17 @@ private struct TodayCompletedDisclosure: View {
             }
         }
         .accessibilityIdentifier("today-completed")
+    }
+}
+
+private struct TodayCompletedDisclosureButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
+                    .fill(RootineTheme.ColorToken.primaryText.opacity(configuration.isPressed ? 0.07 : 0))
+            }
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
