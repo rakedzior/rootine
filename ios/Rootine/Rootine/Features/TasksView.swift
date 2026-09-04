@@ -1067,7 +1067,9 @@ struct TaskDetailSheet: View {
     private func toggleCompletion() {
         pendingSave?.cancel()
         isFinishing = true
+        let draft = makeDraft()
         Task {
+            await saveDraft(draft)
             if let completionDate {
                 let dateKey = RootineDate.localDate(completionDate)
                 if let date = RootineDate.localDateValue(dateKey) {
