@@ -198,7 +198,7 @@ private struct TodaySnapshot {
 }
 
 private struct TodayUndoAction: Identifiable {
-    enum Kind { case task, habit }
+    enum Kind { case task, habit, deletedTask }
 
     let id = UUID()
     let kind: Kind
@@ -206,7 +206,7 @@ private struct TodayUndoAction: Identifiable {
     let title: String
     let date: Date
 
-    var message: String { "Oznaczono „\(title)” jako wykonane" }
+    let message: String
 }
 
 private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.localDate()) -> Bool {
@@ -244,15 +244,44 @@ struct TodayView: View {
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
-                    undoAction = TodayUndoAction(kind: .task, recordID: task.id, title: task.text, date: context.date)
+                    let wasDone = rootineTaskIsDoneOnDate(task, dateKey: RootineDate.localDate(context.date))
+                    undoAction = wasDone
+                        ? nil
+                        : TodayUndoAction(
+                            kind: .task,
+                            recordID: task.id,
+                            title: task.text,
+                            date: context.date,
+                            message: "Oznaczono „\(task.text)” jako wykonane"
+                        )
                     Task { await environment.toggleTaskCompletion(id: task.id, on: context.date) }
                 },
                 onToggleHabit: { habit in
-                    undoAction = TodayUndoAction(kind: .habit, recordID: habit.id, title: habit.name, date: context.date)
+                    let wasDone = rootineHabitIsDoneOnDate(habit, dateKey: RootineDate.localDate(context.date))
+                    undoAction = wasDone
+                        ? nil
+                        : TodayUndoAction(
+                            kind: .habit,
+                            recordID: habit.id,
+                            title: habit.name,
+                            date: context.date,
+                            message: "Oznaczono „\(habit.name)” jako wykonane"
+                        )
                     Task { await environment.toggleHabitCompletion(id: habit.id, on: context.date) }
+                },
+                onDeleteTask: { task in
+                    undoAction = TodayUndoAction(
+                        kind: .deletedTask,
+                        recordID: task.id,
+                        title: task.text,
+                        date: context.date,
+                        message: "Usunięto „\(task.text)”"
+                    )
+                    Task { await environment.deleteTask(id: task.id) }
                 },
                 undoAction: undoAction,
                 onUndo: undo,
+                onDismissUndo: { undoAction = nil },
                 onRefresh: { await environment.flushPendingMutations() },
                 onRetry: { await environment.flushPendingMutations() }
             )
@@ -281,6 +310,8 @@ struct TodayView: View {
                 await environment.toggleTaskCompletion(id: action.recordID, on: action.date)
             case .habit:
                 await environment.toggleHabitCompletion(id: action.recordID, on: action.date)
+            case .deletedTask:
+                await environment.restoreTask(id: action.recordID)
             }
         }
     }
@@ -294,8 +325,10 @@ private struct TodayContentView: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
+    let onDeleteTask: (WorkspaceTask) -> Void
     let undoAction: TodayUndoAction?
     let onUndo: () -> Void
+    let onDismissUndo: () -> Void
     let onRefresh: () async -> Void
     let onRetry: () async -> Void
 
@@ -325,12 +358,9 @@ private struct TodayContentView: View {
                     onSelectTask: onSelectTask,
                     onSelectHabit: onSelectHabit,
                     onToggleTask: onToggleTask,
-                    onToggleHabit: onToggleHabit
+                    onToggleHabit: onToggleHabit,
+                    onDeleteTask: onDeleteTask
                 )
-                if let undoAction {
-                    RootineUndoBanner(message: undoAction.message, onUndo: onUndo)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
             .padding(.top, RootineTheme.Spacing.small)
@@ -338,12 +368,30 @@ private struct TodayContentView: View {
         }
         .scrollIndicators(.hidden)
         .safeAreaPadding(.bottom, RootineTheme.Spacing.medium)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let undoAction {
+                RootineUndoBanner(message: undoAction.message, onUndo: onUndo)
+                    .padding(.horizontal, RootineTheme.Spacing.medium)
+                    .padding(.bottom, RootineTheme.Spacing.small)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .refreshable { await onRefresh() }
+        .task(id: undoAction?.id) {
+            guard undoAction != nil else { return }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            onDismissUndo()
+        }
     }
 }
 
 private struct TodaySummaryCard: View {
     let snapshot: TodaySnapshot
+
+    private var remainingPriorities: Int {
+        max(0, snapshot.priorityTotal - snapshot.priorityCompleted)
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: RootineTheme.Spacing.medium) {
@@ -373,21 +421,34 @@ private struct TodaySummaryCard: View {
                 .frame(height: 48)
                 .overlay(RootineTheme.ColorToken.separator)
 
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                Label(
-                    snapshot.priorityTotal == 0 ? "Brak priorytetów" : "\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal))",
-                    systemImage: "flag.fill"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(RootineTheme.ColorToken.action)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                HStack(spacing: RootineTheme.Spacing.xSmall) {
+                    Image(systemName: "flag.fill")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 22, height: 22, alignment: .leading)
+                    Text("\(remainingPriorities)")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .frame(width: 28, alignment: .leading)
+                    Text(priorityWord(remainingPriorities))
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(remainingPriorities == 0 ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.action)
 
-                Text(snapshot.remainingItems == 0 ? "Dzień domknięty" : "\(snapshot.remainingItems) pozostało")
-                    .font(.caption)
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .lineLimit(1)
+                HStack(spacing: RootineTheme.Spacing.xSmall) {
+                    Image(systemName: snapshot.remainingItems == 0 ? "checkmark.circle" : "circle")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 22, height: 22, alignment: .leading)
+                    Text("\(snapshot.remainingItems)")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .frame(width: 28, alignment: .leading)
+                    Text("pozostało")
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
             }
-            .frame(width: 112, alignment: .leading)
+            .frame(width: 128, alignment: .leading)
         }
         .rootineSurface()
         .accessibilityElement(children: .contain)
@@ -400,6 +461,7 @@ private struct TodayTimelineCard: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
+    let onDeleteTask: (WorkspaceTask) -> Void
 
     private var overdueEntries: [TodayFocusItem] {
         snapshot.overdueTasks.map {
@@ -482,7 +544,8 @@ private struct TodayTimelineCard: View {
                             onSelectTask: onSelectTask,
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit
+                            onToggleHabit: onToggleHabit,
+                            onDeleteTask: onDeleteTask
                         )
                     }
                     if hasOpenEntries {
@@ -509,7 +572,8 @@ private struct TodayTimelineCard: View {
                             onSelectTask: onSelectTask,
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit
+                            onToggleHabit: onToggleHabit,
+                            onDeleteTask: onDeleteTask
                         )
                     }
                     if !timedEntries.isEmpty && !untimedEntries.isEmpty {
@@ -524,14 +588,22 @@ private struct TodayTimelineCard: View {
                             onSelectTask: onSelectTask,
                             onSelectHabit: onSelectHabit,
                             onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit
+                            onToggleHabit: onToggleHabit,
+                            onDeleteTask: onDeleteTask
                         )
                     }
                 }
 
                 if snapshot.completedItems > 0 {
                     TodayTimelineDivider()
-                    TodayCompletedDisclosure(snapshot: snapshot)
+                    TodayCompletedDisclosure(
+                        snapshot: snapshot,
+                        onSelectTask: onSelectTask,
+                        onSelectHabit: onSelectHabit,
+                        onToggleTask: onToggleTask,
+                        onToggleHabit: onToggleHabit,
+                        onDeleteTask: onDeleteTask
+                    )
                 }
             }
         }
@@ -579,6 +651,8 @@ private struct TodayTimelineItemRow: View {
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
     let onToggleHabit: (WorkspaceHabit) -> Void
+    let onDeleteTask: (WorkspaceTask) -> Void
+    @State private var horizontalDrag: CGFloat = 0
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -605,7 +679,7 @@ private struct TodayTimelineItemRow: View {
                 Button(action: toggle) {
                     ZStack {
                         Circle()
-                            .fill(isDone ? RootineTheme.ColorToken.success : (isNext ? RootineTheme.ColorToken.action : RootineTheme.ColorToken.surface))
+                            .fill(isDone ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.surface)
                         Circle()
                             .stroke(nodeColor, lineWidth: isNext || isDone ? 2 : 1.5)
                         if isDone {
@@ -628,6 +702,15 @@ private struct TodayTimelineItemRow: View {
                 Button(action: open) {
                     HStack(spacing: RootineTheme.Spacing.small) {
                         VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                            if isNext {
+                                HStack(spacing: RootineTheme.Spacing.xSmall) {
+                                    Image(systemName: "sparkles")
+                                    Text("NAJBLIŻSZE")
+                                        .tracking(0.7)
+                                }
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(RootineTheme.ColorToken.action)
+                            }
                             Text(item.title)
                                 .font(.body.weight(isNext ? .semibold : .medium))
                                 .foregroundStyle(isDone ? RootineTheme.ColorToken.secondaryText : RootineTheme.ColorToken.primaryText)
@@ -638,34 +721,23 @@ private struct TodayTimelineItemRow: View {
                                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                         }
                         Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                     .frame(minHeight: 60)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Szczegóły: \(item.title)")
-                .accessibilityHint("Otwiera szczegóły zobowiązania")
+                .accessibilityHint(interactionHint)
+                .accessibilityAction(named: isDone ? "Cofnij wykonanie" : "Oznacz jako wykonane") { toggle() }
+                .modifier(TodayDeleteAccessibilityModifier(task: item.task, action: onDeleteTask))
                 .onLongPressGesture { open() }
-                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    Button("Wykonaj", systemImage: "checkmark") { toggle() }
-                        .tint(RootineTheme.ColorToken.success)
-                }
             }
             .padding(.leading, isNext ? RootineTheme.Spacing.small : 0)
             .padding(.vertical, RootineTheme.Spacing.small)
-            .background(isNext ? RootineTheme.ColorToken.action.opacity(0.08) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
-            .overlay(alignment: .leading) {
-                if isNext {
-                    Capsule()
-                        .fill(RootineTheme.ColorToken.action)
-                        .frame(width: 2, height: 32)
-                }
-            }
+            .offset(x: horizontalDrag)
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(swipeGesture)
     }
 
     private var isDone: Bool {
@@ -681,6 +753,30 @@ private struct TodayTimelineItemRow: View {
         return RootineTheme.ColorToken.action
     }
 
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                horizontalDrag = min(max(value.translation.width, -140), 140)
+            }
+            .onEnded { value in
+                let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
+                let crossedThreshold = abs(value.translation.width) >= 72
+                let direction = value.translation.width
+
+                withAnimation(.snappy(duration: 0.2)) {
+                    horizontalDrag = 0
+                }
+
+                guard isHorizontal, crossedThreshold else { return }
+                if direction > 0 {
+                    toggle()
+                } else if let task = item.task {
+                    onDeleteTask(task)
+                }
+            }
+    }
+
     private func toggle() {
         if let task = item.task { onToggleTask(task) }
         if let habit = item.habit { onToggleHabit(habit) }
@@ -690,10 +786,35 @@ private struct TodayTimelineItemRow: View {
         if let task = item.task { onSelectTask(task) }
         if let habit = item.habit { onSelectHabit(habit) }
     }
+
+    private var interactionHint: String {
+        let completionAction = isDone ? "cofnąć wykonanie" : "oznaczyć jako wykonane"
+        let deleteAction = item.task == nil ? "" : " lub w lewo, aby usunąć"
+        return "Otwiera szczegóły. Przytrzymaj, aby edytować. Przesuń w prawo, aby \(completionAction)\(deleteAction)."
+    }
+}
+
+private struct TodayDeleteAccessibilityModifier: ViewModifier {
+    let task: WorkspaceTask?
+    let action: (WorkspaceTask) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let task {
+            content.accessibilityAction(named: "Usuń") { action(task) }
+        } else {
+            content
+        }
+    }
 }
 
 private struct TodayCompletedDisclosure: View {
     let snapshot: TodaySnapshot
+    let onSelectTask: (WorkspaceTask) -> Void
+    let onSelectHabit: (WorkspaceHabit) -> Void
+    let onToggleTask: (WorkspaceTask) -> Void
+    let onToggleHabit: (WorkspaceHabit) -> Void
+    let onDeleteTask: (WorkspaceTask) -> Void
     @State private var isExpanded = false
 
     private var completedEntries: [TodayFocusItem] {
@@ -737,29 +858,17 @@ private struct TodayCompletedDisclosure: View {
             if isExpanded {
                 VStack(spacing: 0) {
                     ForEach(completedEntries) { item in
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(RootineTheme.ColorToken.success)
-                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                    .strikethrough()
-                                Text(item.kindLabel)
-                                    .font(.caption)
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
-                            Spacer(minLength: 0)
-                            if let time = item.time {
-                                Text(time)
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
-                        }
-                        .frame(minHeight: 48)
-                        if item.id != completedEntries.last?.id {
-                            Divider().overlay(RootineTheme.ColorToken.separator)
-                        }
+                        TodayTimelineItemRow(
+                            item: item,
+                            dateKey: snapshot.dateKey,
+                            isNext: false,
+                            isOverdue: false,
+                            onSelectTask: onSelectTask,
+                            onSelectHabit: onSelectHabit,
+                            onToggleTask: onToggleTask,
+                            onToggleHabit: onToggleHabit,
+                            onDeleteTask: onDeleteTask
+                        )
                     }
                     if completedEntries.isEmpty {
                         Text("Ukończone elementy z innych obszarów dnia.")
@@ -915,9 +1024,6 @@ private struct TodayFocusRow: View {
                             .font(.subheadline.monospacedDigit().weight(.semibold))
                             .foregroundStyle(RootineTheme.ColorToken.action)
                     }
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
@@ -969,9 +1075,6 @@ private struct TodayTaskRow: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
@@ -1013,9 +1116,6 @@ private struct TodayHabitRow: View {
                             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 }
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
