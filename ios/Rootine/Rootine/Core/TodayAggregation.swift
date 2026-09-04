@@ -879,6 +879,123 @@ enum TodayAggregationService {
     }
 }
 
+/// A single, testable plan for the Today bulk overdue action. The plan keeps
+/// the original task alongside its date-only projection so Undo can restore
+/// exactly the same record without rebuilding it through an editor path.
+struct TodayBulkRescheduleChange: Equatable, Sendable {
+    let original: WorkspaceTask
+    let updated: WorkspaceTask
+}
+
+struct TodayBulkReschedulePlan: Equatable, Sendable {
+    let changes: [TodayBulkRescheduleChange]
+    let skippedRecurring: [WorkspaceTask]
+
+    var isEmpty: Bool { changes.isEmpty && skippedRecurring.isEmpty }
+}
+
+struct TodayBulkRescheduleUndoPlan: Equatable, Sendable {
+    let tasks: [WorkspaceTask]
+    let restoredIDs: [Int]
+    let skippedIDs: [Int]
+}
+
+/// Implements the same overdue predicate as TodayAggregationService while
+/// making the recurrence boundary explicit. A recurring task's calendarDate is
+/// its series anchor, so bulk rescheduling never changes that field. Until the
+/// data model supports occurrence-level moves, those records are reported to
+/// the caller for a concrete user-facing explanation.
+enum TodayBulkReschedulePlanner {
+    static func plan(tasks: [WorkspaceTask], todayKey: String) -> TodayBulkReschedulePlan {
+        guard RootineDate.isLocalDateKey(todayKey) else {
+            return TodayBulkReschedulePlan(changes: [], skippedRecurring: [])
+        }
+
+        let orderedTasks = tasks.sorted {
+            if $0.id != $1.id { return $0.id < $1.id }
+            if ($0.deleted == true) != ($1.deleted == true) { return $0.deleted != true }
+            let leftFingerprint = [
+                $0.text,
+                $0.calendarDate ?? "",
+                $0.time ?? "",
+                String($0.done),
+                $0.view,
+                $0.priority?.rawValue ?? "",
+                $0.source?.kind ?? "",
+                String($0.deleted == true)
+            ].joined(separator: "|")
+            let rightFingerprint = [
+                $1.text,
+                $1.calendarDate ?? "",
+                $1.time ?? "",
+                String($1.done),
+                $1.view,
+                $1.priority?.rawValue ?? "",
+                $1.source?.kind ?? "",
+                String($1.deleted == true)
+            ].joined(separator: "|")
+            return leftFingerprint < rightFingerprint
+        }
+        var seenIDs = Set<Int>()
+        var changes: [TodayBulkRescheduleChange] = []
+        var skippedRecurring: [WorkspaceTask] = []
+
+        for task in orderedTasks where seenIDs.insert(task.id).inserted {
+            guard task.deleted != true,
+                  task.source?.kind != "work",
+                  let calendarDate = task.calendarDate,
+                  RootineDate.isLocalDateKey(calendarDate),
+                  calendarDate < todayKey,
+                  !rootineTaskIsDoneOnDate(task, dateKey: todayKey) else {
+                continue
+            }
+
+            if task.schedule?.recurrence != nil {
+                skippedRecurring.append(task)
+                continue
+            }
+
+            var updated = task
+            updated.calendarDate = todayKey
+            updated.view = rootineTaskViewForCalendarDate(todayKey, referenceDate: todayKey)
+            changes.append(TodayBulkRescheduleChange(original: task, updated: updated))
+        }
+
+        return TodayBulkReschedulePlan(changes: changes, skippedRecurring: skippedRecurring)
+    }
+
+    /// Restores only rows that still equal the post-operation projection. If a
+    /// task was edited after the bulk action, it is left untouched and its ID
+    /// is returned as skipped instead of overwriting the newer user change.
+    static func undo(
+        changes: [TodayBulkRescheduleChange],
+        in tasks: [WorkspaceTask]
+    ) -> TodayBulkRescheduleUndoPlan {
+        var restoredIDs: [Int] = []
+        var skippedIDs: [Int] = []
+        var restored = tasks
+
+        for change in changes {
+            guard let index = restored.firstIndex(where: { $0.id == change.updated.id }) else {
+                skippedIDs.append(change.updated.id)
+                continue
+            }
+            guard restored[index] == change.updated else {
+                skippedIDs.append(change.updated.id)
+                continue
+            }
+            restored[index] = change.original
+            restoredIDs.append(change.updated.id)
+        }
+
+        return TodayBulkRescheduleUndoPlan(
+            tasks: restored,
+            restoredIDs: restoredIDs,
+            skippedIDs: skippedIDs
+        )
+    }
+}
+
 /// A bounded in-memory cache avoids recomputing recurrence and large-account
 /// projections during rapid tab switches. The account is the outer key so a
 /// sign-out/account switch can never return another user's Today projection.

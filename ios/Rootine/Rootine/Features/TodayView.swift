@@ -321,7 +321,7 @@ private struct TodaySnapshot {
 }
 
 private struct TodayUndoAction: Identifiable {
-    enum Kind { case task, habit }
+    enum Kind { case task, habit, bulk }
 
     let id = UUID()
     let kind: Kind
@@ -329,8 +329,27 @@ private struct TodayUndoAction: Identifiable {
     let title: String
     let date: Date
     let restoreCalendarDate: String?
+    let bulkChanges: [TodayBulkRescheduleChange]
 
     let message: String
+
+    init(
+        kind: Kind,
+        recordID: Int,
+        title: String,
+        date: Date,
+        restoreCalendarDate: String?,
+        bulkChanges: [TodayBulkRescheduleChange] = [],
+        message: String
+    ) {
+        self.kind = kind
+        self.recordID = recordID
+        self.title = title
+        self.date = date
+        self.restoreCalendarDate = restoreCalendarDate
+        self.bulkChanges = bulkChanges
+        self.message = message
+    }
 }
 
 enum TodaySwipeAction: Equatable {
@@ -370,6 +389,9 @@ struct TodayView: View {
     @State private var selectedHabit: WorkspaceHabit?
     @State private var undoAction: TodayUndoAction?
     @State private var dragResetToken = UUID()
+    @State private var isBulkRescheduleConfirmationPresented = false
+    @State private var isBulkRescheduling = false
+    @State private var bulkNotice: String?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -393,6 +415,11 @@ struct TodayView: View {
                 isLaunching: environment.isLaunching,
                 syncStatus: environment.workspaceSyncStatus,
                 dragResetToken: dragResetToken,
+                isBulkRescheduling: isBulkRescheduling,
+                onRequestBulkRescheduleConfirmation: {
+                    guard !isBulkRescheduling else { return }
+                    isBulkRescheduleConfirmationPresented = true
+                },
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
@@ -579,12 +606,103 @@ struct TodayView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .confirmationDialog(
+            "Przełóż zaległości",
+            isPresented: $isBulkRescheduleConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Anuluj", role: .cancel) {}
+            Button("Przełóż") {
+                startBulkReschedule(on: Date())
+            }
+        } message: {
+            Text("Wszystkie zadania z zaległości zostaną przełożone na dzisiaj.")
+        }
+        .alert(
+            "Przełożenie zaległości",
+            isPresented: Binding(
+                get: { bulkNotice != nil },
+                set: { if !$0 { bulkNotice = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { bulkNotice = nil }
+        } message: {
+            Text(bulkNotice ?? "")
+        }
+    }
+
+    private func startBulkReschedule(on date: Date) {
+        guard !isBulkRescheduling else { return }
+        isBulkRescheduling = true
+        undoAction = nil
+        let todayKey = RootineDate.localDate(date)
+        let operationID = UUID().uuidString
+        Task { @MainActor in
+            let result = await environment.rescheduleOverdueTasksToToday(
+                todayKey: todayKey,
+                operationID: operationID
+            )
+            isBulkRescheduling = false
+            presentBulkResult(result, date: date)
+        }
+    }
+
+    private func presentBulkResult(_ result: TodayBulkRescheduleResult, date: Date) {
+        switch result {
+        case .moved(let report):
+            let count = report.changes.count
+            var message: [String] = []
+            switch report.syncState {
+            case .synced:
+                message.append("Przełożono \(count) \(bulkTaskWord(count)) na dzisiaj.")
+            case .queuedOffline:
+                message.append("Przełożono lokalnie \(count) \(bulkTaskWord(count)) na dzisiaj. Synchronizacja czeka na połączenie.")
+            case .conflict:
+                message.append("Przełożono lokalnie \(count) \(bulkTaskWord(count)) na dzisiaj, ale synchronizacja zgłosiła konflikt.")
+            }
+            if !report.skippedRecurring.isEmpty {
+                message.append("Pominięto \(report.skippedRecurring.count) \(bulkTaskWord(report.skippedRecurring.count, recurring: true)), aby zachować ich harmonogram. Przełóż konkretne wystąpienie z menu zadania.")
+            }
+            undoAction = TodayUndoAction(
+                kind: .bulk,
+                recordID: 0,
+                title: "Zaległości",
+                date: date,
+                restoreCalendarDate: nil,
+                bulkChanges: report.changes,
+                message: "Przełożono \(count) \(bulkTaskWord(count)) — możesz cofnąć"
+            )
+            if !report.skippedRecurring.isEmpty || report.syncState != .synced {
+                bulkNotice = message.joined(separator: " ")
+            }
+        case .noChanges(let skippedRecurring):
+            if skippedRecurring.isEmpty {
+                bulkNotice = "Nie ma zaległych zadań do przełożenia."
+            } else {
+                bulkNotice = "Nie przełożono zadań cyklicznych, aby zachować ich harmonogram. Przełóż konkretne wystąpienie z menu zadania."
+            }
+        case .duplicate:
+            // A duplicate callback is an idempotent no-op. The first request
+            // owns the eventual banner or error, so do not present a second
+            // message here.
+            break
+        case .failed(let message):
+            bulkNotice = "Nie udało się przełożyć zaległości. \(message)"
+        }
+    }
+
+    private func bulkTaskWord(_ count: Int, recurring: Bool = false) -> String {
+        switch count {
+        case 1: return recurring ? "zadanie cykliczne" : "zadanie"
+        case 2...4: return recurring ? "zadania cykliczne" : "zadania"
+        default: return recurring ? "zadań cyklicznych" : "zadań"
+        }
     }
 
     private func undo() {
         guard let action = undoAction else { return }
         undoAction = nil
-        Task {
+        Task { @MainActor in
             switch action.kind {
             case .task:
                 await environment.toggleTaskCompletion(id: action.recordID, on: action.date)
@@ -603,6 +721,28 @@ struct TodayView: View {
                 }
             case .habit:
                 await environment.toggleHabitCompletion(id: action.recordID, on: action.date)
+            case .bulk:
+                isBulkRescheduling = true
+                let result = await environment.undoTodayBulkReschedule(
+                    changes: action.bulkChanges,
+                    operationID: action.id.uuidString
+                )
+                isBulkRescheduling = false
+                switch result {
+                case .restored(let count, let skippedCount, let syncState):
+                    var message = "Cofnięto \(count) \(bulkTaskWord(count))."
+                    if skippedCount > 0 {
+                        message += " \(skippedCount) \(bulkTaskWord(skippedCount)) pozostawiono bez zmian, bo zostały później zmodyfikowane."
+                    }
+                    if syncState != .synced {
+                        message += " Cofnięcie zapisano lokalnie; synchronizacja czeka na połączenie."
+                    }
+                    bulkNotice = message
+                case .nothingToUndo:
+                    bulkNotice = "Nie można cofnąć przełożenia — zadania zostały już zmienione."
+                case .failed(let message):
+                    bulkNotice = "Nie udało się cofnąć przełożenia. \(message)"
+                }
             }
         }
     }
@@ -614,6 +754,8 @@ private struct TodayContentView: View, Equatable {
     let isLaunching: Bool
     let syncStatus: WorkspaceSyncStatus
     let dragResetToken: UUID
+    let isBulkRescheduling: Bool
+    let onRequestBulkRescheduleConfirmation: () -> Void
     let onSelectTask: (WorkspaceTask) -> Void
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
@@ -657,6 +799,8 @@ private struct TodayContentView: View, Equatable {
                 TodayTimelineCard(
                     snapshot: snapshot,
                     dragResetToken: dragResetToken,
+                    isBulkRescheduling: isBulkRescheduling,
+                    onRequestBulkRescheduleConfirmation: onRequestBulkRescheduleConfirmation,
                     onSelectTask: onSelectTask,
                     onSelectHabit: onSelectHabit,
                     onToggleTask: onToggleTask,
@@ -757,6 +901,8 @@ private struct TodaySummaryCard: View {
 private struct TodayTimelineCard: View {
     let snapshot: TodaySnapshot
     let dragResetToken: UUID
+    let isBulkRescheduling: Bool
+    let onRequestBulkRescheduleConfirmation: () -> Void
     let onSelectTask: (WorkspaceTask) -> Void
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
@@ -839,7 +985,10 @@ private struct TodayTimelineCard: View {
                             TodayTimelineSectionLabel(
                                 title: "Zaległości",
                                 systemImage: "clock.badge.exclamationmark",
-                                tint: RootineTheme.ColorToken.warning
+                                tint: RootineTheme.ColorToken.warning,
+                                actionTitle: "Przełóż",
+                                isActionLoading: isBulkRescheduling,
+                                onAction: onRequestBulkRescheduleConfirmation
                             )
                             ForEach(timeline.overdue) { item in
                                 TodayTimelineItemRow(
@@ -1077,13 +1226,55 @@ private struct TodayTimelineSectionLabel: View {
     let title: String
     let systemImage: String
     let tint: Color
+    let actionTitle: String?
+    let isActionLoading: Bool
+    let onAction: (() -> Void)?
+
+    init(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        actionTitle: String? = nil,
+        isActionLoading: Bool = false,
+        onAction: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.tint = tint
+        self.actionTitle = actionTitle
+        self.isActionLoading = isActionLoading
+        self.onAction = onAction
+    }
 
     var body: some View {
-        Label(title.uppercased(), systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, RootineTheme.Spacing.small)
+        HStack(alignment: .firstTextBaseline, spacing: RootineTheme.Spacing.small) {
+            Label(title.uppercased(), systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+            Spacer(minLength: 0)
+            if let onAction, let actionTitle {
+                Button(action: onAction) {
+                    Group {
+                        if isActionLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .accessibilityLabel("Przełożenie w toku")
+                        } else {
+                            Text(actionTitle)
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isActionLoading)
+                .accessibilityLabel("Przełóż wszystkie zaległości na dzisiaj")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, RootineTheme.Spacing.small)
     }
 }
 

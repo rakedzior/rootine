@@ -202,6 +202,139 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertEqual(environment.taskWorkspace.tasks.first?.priority, .high)
     }
 
+    func testBulkRescheduleEmptyPlanIsAnExplicitNoOp() {
+        let plan = TodayBulkReschedulePlanner.plan(tasks: [], todayKey: "2026-09-02")
+
+        XCTAssertTrue(plan.changes.isEmpty)
+        XCTAssertTrue(plan.skippedRecurring.isEmpty)
+        XCTAssertTrue(plan.isEmpty)
+    }
+
+    func testBulkRescheduleMovesManyOneOffsPreservesFieldsAndSkipsRecurrence() {
+        let today = "2026-09-02"
+        let yesterday = "2026-09-01"
+        let schedule = WorkspaceTaskSchedule(
+            allDay: true,
+            startTime: "",
+            reminderMinutes: 15,
+            recurrence: "daily",
+            completedDates: ["2026-08-31"],
+            timezone: "Europe/Warsaw"
+        )
+        let first = WorkspaceTask(
+            id: 10,
+            text: "Ważne zaległe",
+            done: false,
+            time: "09:15",
+            endTime: "10:00",
+            tags: ["tag-a"],
+            list: "list-a",
+            view: "wszystkie",
+            priority: .high,
+            notes: "Nie zgubić notatki",
+            calendarDate: yesterday
+        )
+        let second = WorkspaceTask(
+            id: 11,
+            text: "Drugie zaległe",
+            done: false,
+            time: "14:30",
+            view: "7dni",
+            priority: .low,
+            calendarDate: yesterday
+        )
+        let recurring = WorkspaceTask(
+            id: 12,
+            text: "Codzienny przegląd",
+            done: false,
+            view: "wszystkie",
+            calendarDate: yesterday,
+            schedule: schedule
+        )
+        let completed = WorkspaceTask(
+            id: 13,
+            text: "Już zrobione",
+            done: true,
+            view: "wszystkie",
+            calendarDate: yesterday
+        )
+
+        let plan = TodayBulkReschedulePlanner.plan(
+            tasks: [first, second, recurring, completed],
+            todayKey: today
+        )
+
+        XCTAssertEqual(plan.changes.map { $0.original.id }, [10, 11])
+        XCTAssertEqual(plan.skippedRecurring.map(\.id), [12])
+        XCTAssertEqual(plan.changes[0].updated.calendarDate, today)
+        XCTAssertEqual(plan.changes[0].updated.view, "dzis")
+        XCTAssertEqual(plan.changes[0].updated.time, first.time)
+        XCTAssertEqual(plan.changes[0].updated.endTime, first.endTime)
+        XCTAssertEqual(plan.changes[0].updated.priority, first.priority)
+        XCTAssertEqual(plan.changes[0].updated.notes, first.notes)
+        XCTAssertEqual(plan.changes[0].updated.list, first.list)
+        XCTAssertEqual(plan.changes[0].updated.tags, first.tags)
+        XCTAssertEqual(plan.skippedRecurring[0].calendarDate, yesterday)
+        XCTAssertEqual(plan.skippedRecurring[0].schedule, recurring.schedule)
+    }
+
+    func testBulkRescheduleUndoIsConditionalAndSupportsPartialRecovery() {
+        let today = "2026-09-02"
+        let yesterday = "2026-09-01"
+        let first = WorkspaceTask(id: 20, text: "Edytowane później", done: false, view: "wszystkie", calendarDate: yesterday)
+        let second = WorkspaceTask(id: 21, text: "Bez zmian", done: false, view: "wszystkie", calendarDate: yesterday)
+        let plan = TodayBulkReschedulePlanner.plan(tasks: [first, second], todayKey: today)
+        var current = plan.changes.map(\.updated)
+        current[0].text = "Nowszy tekst"
+
+        let undo = TodayBulkReschedulePlanner.undo(changes: plan.changes, in: current)
+
+        XCTAssertEqual(undo.restoredIDs, [21])
+        XCTAssertEqual(undo.skippedIDs, [20])
+        XCTAssertEqual(undo.tasks.first(where: { $0.id == 20 })?.text, "Nowszy tekst")
+        XCTAssertEqual(undo.tasks.first(where: { $0.id == 21 }), second)
+    }
+
+    @MainActor
+    func testBulkRescheduleReportsOfflineAndIsIdempotent() async {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        let yesterday = RootineDate.shiftLocalDate(RootineDate.localDate(), by: -1)
+        environment.setTaskWorkspaceForTests(TaskWorkspace(
+            version: 2,
+            updatedAt: RootineDate.isoTimestamp(),
+            tasks: [WorkspaceTask(id: 30, text: "Offline zaległe", done: false, view: "wszystkie", calendarDate: yesterday)],
+            habits: [],
+            lists: [],
+            tags: []
+        ))
+
+        let first = await environment.rescheduleOverdueTasksToToday(
+            todayKey: RootineDate.localDate(),
+            operationID: "bulk-offline"
+        )
+        let second = await environment.rescheduleOverdueTasksToToday(
+            todayKey: RootineDate.localDate(),
+            operationID: "bulk-offline-retry"
+        )
+
+        guard case .moved(let report) = first else {
+            return XCTFail("Pierwsza operacja powinna przenieść zaległe zadanie")
+        }
+        XCTAssertEqual(report.syncState, .queuedOffline)
+        XCTAssertEqual(report.changes.map { $0.original.id }, [30])
+        guard case .noChanges(_) = second else {
+            return XCTFail("Powtórzenie nie powinno utworzyć drugiego ruchu")
+        }
+        XCTAssertEqual(environment.taskWorkspace.tasks.first?.calendarDate, RootineDate.localDate())
+    }
+
     func testLargeAccountAggregationIsMeasured() {
         var workspace = TaskWorkspace.empty
         workspace.tasks = (0..<2_000).map { index in

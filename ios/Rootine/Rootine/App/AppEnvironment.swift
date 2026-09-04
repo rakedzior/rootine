@@ -48,6 +48,38 @@ enum WorkspaceSyncStatus: Equatable, Sendable {
     case error
 }
 
+enum TodayBulkRescheduleSyncState: Equatable, Sendable {
+    case synced
+    case queuedOffline
+    case conflict
+}
+
+struct TodayBulkRescheduleReport: Equatable, Sendable {
+    let changes: [TodayBulkRescheduleChange]
+    let skippedRecurring: [WorkspaceTask]
+    let syncState: TodayBulkRescheduleSyncState
+}
+
+enum TodayBulkRescheduleResult: Equatable, Sendable {
+    case moved(TodayBulkRescheduleReport)
+    case noChanges(skippedRecurring: [WorkspaceTask])
+    case duplicate
+    case failed(String)
+}
+
+enum TodayBulkRescheduleUndoResult: Equatable, Sendable {
+    case restored(count: Int, skippedCount: Int, syncState: TodayBulkRescheduleSyncState)
+    case nothingToUndo
+    case failed(String)
+}
+
+private enum RootineTaskPersistenceOutcome: Equatable, Sendable {
+    case synced
+    case queuedOffline
+    case conflict
+    case failed(String)
+}
+
 private func normalizedGoalStartDate(_ value: String) -> String {
     rootineGoalIsLocalDate(value) ? value : RootineDate.localDate()
 }
@@ -134,6 +166,10 @@ final class AppEnvironment: ObservableObject {
     private var nutritionProductCache: [String: NutritionProduct] = [:]
     private var normalizedRecordRevisions: [String: Int64] = [:]
     private var creationGate = WorkspaceCreationGate()
+    /// A UI confirmation can generate more than one async callback. Keep the
+    /// operation gate on the main actor so one tap can never publish two
+    /// bulk snapshots while the first write is suspended.
+    private var activeTodayBulkRescheduleOperations = Set<String>()
     private var realtimeClient: RootineRealtimeClient?
     private var syncCoordinator: RootineSyncCoordinator?
     private var realtimeRuntimeUserID: String?
@@ -1193,6 +1229,95 @@ final class AppEnvironment: ObservableObject {
             completedAt: RootineDate.isoTimestamp()
         )
         await persistTaskWorkspace(next)
+    }
+
+    /// Moves every currently actionable, non-recurring overdue task in one
+    /// workspace write. Recurring rows are deliberately excluded because
+    /// `calendarDate` is their series anchor; the caller receives those rows
+    /// so the UI can explain the partial result instead of silently changing
+    /// the schedule. Re-running after success is naturally idempotent because
+    /// moved rows no longer satisfy the overdue predicate, while the in-flight
+    /// gate protects the suspension window around the single write.
+    func rescheduleOverdueTasksToToday(
+        todayKey: String = RootineDate.localDate(),
+        operationID: String = UUID().uuidString
+    ) async -> TodayBulkRescheduleResult {
+        let normalizedOperationID = operationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedOperationID.isEmpty else {
+            return .failed("Nie można przełożyć zaległości bez identyfikatora operacji.")
+        }
+        guard activeTodayBulkRescheduleOperations.insert(normalizedOperationID).inserted else {
+            return .duplicate
+        }
+        defer { activeTodayBulkRescheduleOperations.remove(normalizedOperationID) }
+
+        guard RootineDate.isLocalDateKey(todayKey) else {
+            return .failed("Nieprawidłowa data dzisiejszego dnia.")
+        }
+
+        let plan = TodayBulkReschedulePlanner.plan(tasks: taskWorkspace.tasks, todayKey: todayKey)
+        guard !plan.changes.isEmpty else {
+            return .noChanges(skippedRecurring: plan.skippedRecurring)
+        }
+
+        var next = taskWorkspace
+        let updatesByID = Dictionary(uniqueKeysWithValues: plan.changes.map { ($0.original.id, $0.updated) })
+        next.tasks = next.tasks.map { updatesByID[$0.id] ?? $0 }
+        switch await persistTaskWorkspaceOutcome(next) {
+        case .synced:
+            return .moved(TodayBulkRescheduleReport(
+                changes: plan.changes,
+                skippedRecurring: plan.skippedRecurring,
+                syncState: .synced
+            ))
+        case .queuedOffline:
+            return .moved(TodayBulkRescheduleReport(
+                changes: plan.changes,
+                skippedRecurring: plan.skippedRecurring,
+                syncState: .queuedOffline
+            ))
+        case .conflict:
+            return .moved(TodayBulkRescheduleReport(
+                changes: plan.changes,
+                skippedRecurring: plan.skippedRecurring,
+                syncState: .conflict
+            ))
+        case .failed(let message):
+            return .failed(message)
+        }
+    }
+
+    /// Conditional bulk Undo. A task edited after the move must not be
+    /// overwritten by an old banner, so only rows still equal to their exact
+    /// post-move projection are restored.
+    func undoTodayBulkReschedule(
+        changes: [TodayBulkRescheduleChange],
+        operationID: String = UUID().uuidString
+    ) async -> TodayBulkRescheduleUndoResult {
+        let normalizedOperationID = operationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedOperationID.isEmpty else {
+            return .failed("Nie można cofnąć przełożenia bez identyfikatora operacji.")
+        }
+        guard activeTodayBulkRescheduleOperations.insert(normalizedOperationID).inserted else {
+            return .nothingToUndo
+        }
+        defer { activeTodayBulkRescheduleOperations.remove(normalizedOperationID) }
+
+        let plan = TodayBulkReschedulePlanner.undo(changes: changes, in: taskWorkspace.tasks)
+        guard !plan.restoredIDs.isEmpty else { return .nothingToUndo }
+        var next = taskWorkspace
+        next.tasks = plan.tasks
+
+        switch await persistTaskWorkspaceOutcome(next) {
+        case .synced:
+            return .restored(count: plan.restoredIDs.count, skippedCount: plan.skippedIDs.count, syncState: .synced)
+        case .queuedOffline:
+            return .restored(count: plan.restoredIDs.count, skippedCount: plan.skippedIDs.count, syncState: .queuedOffline)
+        case .conflict:
+            return .restored(count: plan.restoredIDs.count, skippedCount: plan.skippedIDs.count, syncState: .conflict)
+        case .failed(let message):
+            return .failed(message)
+        }
     }
 
     func toggleHabitCompletion(id: Int, on date: Date = Date()) async {
@@ -3904,6 +4029,92 @@ final class AppEnvironment: ObservableObject {
             await flushPendingMutations()
         } catch {
             foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie"
+        }
+    }
+
+    /// Bulk Today actions need an explicit persistence outcome so a failed
+    /// local write or queue preparation cannot be presented as a successful
+    /// move. The legacy task editor keeps its local-first behavior above.
+    @discardableResult
+    private func persistTaskWorkspaceOutcome(_ value: TaskWorkspace) async -> RootineTaskPersistenceOutcome {
+        guard await beginWorkspacePersistence() else {
+            return .failed("Nie można zapisać zmian podczas importu danych.")
+        }
+        defer { endWorkspacePersistence() }
+
+        var next = rootineNormalizedTaskWorkspace(value)
+        next.updatedAt = RootineDate.isoTimestamp()
+        guard (try? RootineTaskDomain.validate(next)) != nil else {
+            foundationMessage = "Nieprawidłowe dane zadania — zapis odrzucony"
+            return .failed("Nieprawidłowe dane zadania — zapis odrzucony")
+        }
+
+        // Persist before publishing. If the filesystem or queue rejects the
+        // write, the caller receives an error and the old workspace remains
+        // authoritative.
+        guard let store else {
+            taskWorkspace = next
+            workspaceSyncStatus = .localOnly(pending: 0)
+            await reconcileLocalNotifications()
+            foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+            return .queuedOffline
+        }
+
+        let receipt: WorkspaceWriteReceipt
+        do {
+            receipt = try await store.saveWithReceipt(next, key: .tasks)
+        } catch {
+            foundationMessage = "Nie udało się zapisać zmian lokalnie"
+            return .failed("Nie udało się zapisać zmian lokalnie.")
+        }
+
+        guard let syncEngine else {
+            taskWorkspace = next
+            workspaceSyncStatus = .localOnly(pending: 0)
+            await reconcileLocalNotifications()
+            foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+            return .queuedOffline
+        }
+
+        do {
+            try await syncEngine.enqueue(next, key: .tasks)
+        } catch {
+            // A receipt lets us remove an unqueueable local snapshot, so the
+            // UI never reports a move that cannot be retried safely.
+            let didRollback = (try? await store.undo(receipt)) == true
+            if !didRollback {
+                // A concurrent writer may have superseded the receipt. Keep
+                // the local projection and report it as pending rather than
+                // claiming that the operation was discarded while leaving a
+                // moved snapshot on disk.
+                taskWorkspace = next
+                let pending = (try? await syncEngine.pendingMutationCount()) ?? 0
+                workspaceSyncStatus = .localOnly(pending: pending)
+                await reconcileLocalNotifications()
+                foundationMessage = "Zapisano lokalnie — synchronizacja czeka na ponowienie"
+                return .queuedOffline
+            }
+            foundationMessage = "Nie udało się przygotować synchronizacji — zmian nie zastosowano"
+            return .failed("Nie udało się przygotować synchronizacji — zmian nie zastosowano.")
+        }
+
+        taskWorkspace = next
+        // Schedule from the just-published local aggregate before attempting
+        // the network flush. This keeps reminders working while offline and
+        // ensures an edit/completion/delete invalidates its old occurrence.
+        await reconcileLocalNotifications()
+        await markLocalOnly()
+        await flushPendingMutations()
+        switch workspaceSyncStatus {
+        case .synced:
+            return .synced
+        case .conflict:
+            return .conflict
+        case .unavailable, .localOnly, .syncing, .schemaMismatch, .unauthorized, .error:
+            // Local-first writes remain valid when the remote is unavailable,
+            // but callers must present that state as pending rather than as a
+            // successful server-side move.
+            return .queuedOffline
         }
     }
 
