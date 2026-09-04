@@ -802,6 +802,7 @@ struct TaskDetailSheet: View {
     @State private var selectedList: String?
     @State private var selectedTags: Set<String>
     @State private var pendingSave: Task<Void, Never>?
+    @State private var isFinishing = false
     @State private var showDeleteConfirmation = false
 
     init(task: WorkspaceTask, completionDate: Date? = nil) {
@@ -1011,8 +1012,8 @@ struct TaskDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Gotowe") { dismiss() }
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Gotowe") { finishEditing() }
+                        .disabled(isFinishing || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .confirmationDialog("Usunąć zadanie?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
@@ -1033,6 +1034,10 @@ struct TaskDetailSheet: View {
         .onChange(of: selectedTags) { _, _ in scheduleSave() }
         .onDisappear {
             pendingSave?.cancel()
+            // Interactive sheet dismissal cannot be awaited. Capture the
+            // latest draft once; normal dismissal goes through finishEditing
+            // and awaits the final save before closing.
+            guard !isFinishing else { return }
             saveImmediately()
         }
     }
@@ -1061,6 +1066,7 @@ struct TaskDetailSheet: View {
 
     private func toggleCompletion() {
         pendingSave?.cancel()
+        isFinishing = true
         Task {
             if let completionDate {
                 let dateKey = RootineDate.localDate(completionDate)
@@ -1076,22 +1082,33 @@ struct TaskDetailSheet: View {
 
     private func scheduleSave() {
         pendingSave?.cancel()
-        pendingSave = Task {
+        pendingSave = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
             guard !Task.isCancelled else { return }
-            await saveDraft()
+            let draft = makeDraft()
+            await saveDraft(draft)
         }
     }
 
     private func saveImmediately() {
-        Task { await saveDraft() }
+        let draft = makeDraft()
+        Task { await saveDraft(draft) }
     }
 
-    private func saveDraft() async {
+    private func finishEditing() {
+        pendingSave?.cancel()
+        isFinishing = true
+        let draft = makeDraft()
+        Task {
+            await saveDraft(draft)
+            dismiss()
+        }
+    }
+
+    private func makeDraft() -> TaskEditorDraft? {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
-        await environment.updateTask(
-            id: task.id,
+        guard !trimmedTitle.isEmpty else { return nil }
+        return TaskEditorDraft(
             text: trimmedTitle,
             time: hasTime ? taskClockString(timeDate) : nil,
             calendarDate: hasDate ? RootineDate.localDate(dueDate) : nil,
@@ -1101,6 +1118,30 @@ struct TaskDetailSheet: View {
             tags: selectedTags.isEmpty ? nil : Array(selectedTags).sorted()
         )
     }
+
+    private func saveDraft(_ draft: TaskEditorDraft?) async {
+        guard let draft else { return }
+        await environment.updateTask(
+            id: task.id,
+            text: draft.text,
+            time: draft.time,
+            calendarDate: draft.calendarDate,
+            priority: draft.priority,
+            notes: draft.notes,
+            list: draft.list,
+            tags: draft.tags
+        )
+    }
+}
+
+private struct TaskEditorDraft: Sendable {
+    let text: String
+    let time: String?
+    let calendarDate: String?
+    let priority: TaskPriority?
+    let notes: String
+    let list: String?
+    let tags: [String]?
 }
 
 private struct TaskEditorSection<Content: View>: View {

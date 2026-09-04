@@ -1233,8 +1233,17 @@ final class AppEnvironment: ObservableObject {
         if let calendarDate, !RootineDate.isLocalDateKey(calendarDate) { return }
         let normalizedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedTags = tags?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        guard list == nil || next.lists.contains(where: { $0.id == list }),
-              (normalizedTags ?? []).allSatisfy({ tagID in next.tags.contains(where: { $0.id == tagID }) }) else { return }
+        let existingTask = next.tasks[index]
+        let existingTags = Set(existingTask.tags ?? [])
+        // Keep legacy/orphaned references round-trippable when an editor
+        // saves an otherwise valid task. New assignments still must point to
+        // the current taxonomy.
+        guard list == nil
+                || list == existingTask.list
+                || next.lists.contains(where: { $0.id == list }) else { return }
+        guard (normalizedTags ?? []).allSatisfy({ tagID in
+            existingTags.contains(tagID) || next.tags.contains(where: { $0.id == tagID })
+        }) else { return }
         next.tasks[index].text = trimmedText
         next.tasks[index].time = normalizedTime?.isEmpty == true ? nil : normalizedTime
         if normalizedTime?.isEmpty != false { next.tasks[index].endTime = nil }
