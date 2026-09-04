@@ -2270,6 +2270,7 @@ const returnLabels = {
 function labelForReturn(id) { return returnLabels[id] || 'Wróć do Dzisiaj'; }
 let primaryMailCompletion = null;
 const genericCompletions = [];
+const completionStack = [];
 let activeDetailSource = null;
 function itemWord(count) {
   const n = Math.abs(count);
@@ -2374,32 +2375,26 @@ function appendGenericHistory(record) {
   wireTrigger(item);
 }
 function latestCompletion() {
-  return genericCompletions[genericCompletions.length - 1] || primaryMailCompletion;
+  return completionStack[completionStack.length - 1] || null;
 }
 function undoLatestCompletion() {
-  if (genericCompletions.length) {
-    const record = genericCompletions.pop();
-    restoreCompletedRecord(record);
-    updateFrameSummary(record.frameId, -1);
-    record.historyButton?.remove();
-    updateDoneHistory('clean');
-    return record;
-  }
-  if (primaryMailCompletion) {
-    const record = primaryMailCompletion;
-    primaryMailCompletion = null;
-    restoreCompletedRecord(record);
-    updateFrameSummary(record.frameId, -1);
-    updateDoneHistory('clean');
-    return record;
-  }
-  return null;
+  const record = completionStack.pop();
+  if (!record) return null;
+  if (record.kind === 'generic') genericCompletions.splice(genericCompletions.indexOf(record), 1);
+  else if (record.kind === 'primary') primaryMailCompletion = null;
+  restoreCompletedRecord(record);
+  updateFrameSummary(record.frameId, -1);
+  record.historyButton?.remove();
+  updateDoneHistory('clean');
+  return record;
 }
 function completePrimaryMail(source) {
   if (primaryMailCompletion) return primaryMailCompletion;
   const record = markRowCompleted(source);
   if (record) {
+    record.kind = 'primary';
     primaryMailCompletion = record;
+    completionStack.push(record);
     updateFrameSummary(record.frameId, 1);
   }
   return record;
@@ -2451,20 +2446,21 @@ function updateDoneHistory(state) {
   const done = document.getElementById('scr-dzisiaj-done');
   if (!done) return;
   const complete = state === 'complete';
-  done.classList.toggle('is-complete', complete);
-  done.querySelector('.today-done-frame')?.classList.toggle('is-complete', complete);
-  const hasUndo = complete || genericCompletions.length > 0 || !!primaryMailCompletion;
+  const mailDone = complete || !!primaryMailCompletion;
+  done.classList.toggle('is-complete', mailDone);
+  done.querySelector('.today-done-frame')?.classList.toggle('is-complete', mailDone);
+  const hasUndo = completionStack.length > 0;
   done.classList.toggle('has-undo', hasUndo);
   done.querySelector('.today-done-frame')?.classList.toggle('has-undo', hasUndo);
   const meta = done.querySelector('#done-meta');
-  const historyCount = 3 + genericCompletions.length + (complete ? 1 : 0);
+  const historyCount = 3 + genericCompletions.length + (mailDone ? 1 : 0);
   if (meta) meta.textContent = `Historia · ${historyCount} ${itemWord(historyCount)}`;
-  const destination = complete ? 'scr-dzisiaj-complete' : 'scr-dzisiaj-clean';
+  const destination = mailDone ? 'scr-dzisiaj-complete' : 'scr-dzisiaj-clean';
   const back = done.querySelector('.today-appbar [data-go]');
   const bottomBack = done.querySelector('[data-done-back]');
   const undo = done.querySelector('[data-done-undo]');
-  if (back) { back.dataset.go = destination; back.setAttribute('aria-label', complete ? 'Wróć do wykonania' : 'Wróć do Dzisiaj'); }
-  if (bottomBack) { bottomBack.dataset.go = destination; bottomBack.textContent = complete ? 'Wróć do wykonania' : 'Wróć do Dzisiaj'; }
+  if (back) { back.dataset.go = destination; back.setAttribute('aria-label', mailDone ? 'Wróć do wykonania' : 'Wróć do Dzisiaj'); }
+  if (bottomBack) { bottomBack.dataset.go = destination; bottomBack.textContent = mailDone ? 'Wróć do wykonania' : 'Wróć do Dzisiaj'; }
   const latest = latestCompletion();
   if (undo) undo.dataset.go = latest?.frameId || 'scr-dzisiaj-clean';
 }
@@ -2496,7 +2492,9 @@ function prepareGenericCompletion(source) {
   if (!result) return;
   const record = markRowCompleted(source);
   if (!record) return;
+  record.kind = 'generic';
   genericCompletions.push(record);
+  completionStack.push(record);
   appendGenericHistory(record);
   updateFrameSummary(record.frameId, 1);
   updateDoneHistory('clean');
