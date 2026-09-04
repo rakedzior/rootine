@@ -1006,6 +1006,13 @@ struct NutritionValues: Codable, Equatable, Sendable {
     var fat: Double
 }
 
+enum NutritionValueField: CaseIterable, Hashable, Sendable {
+    case calories
+    case protein
+    case carbs
+    case fat
+}
+
 /// Resolves the values submitted by the nutrition editor. A catalog product
 /// may provide a calculated baseline, but a person who changes a macro field
 /// must never lose that explicit override when the form is saved. Keeping this
@@ -1014,14 +1021,52 @@ struct NutritionValues: Codable, Equatable, Sendable {
 func rootineResolvedNutritionValues(
     generated: NutritionValues?,
     entered: NutritionValues,
-    scaled: NutritionValues?
+    scaled: NutritionValues?,
+    explicitOverrides: Set<NutritionValueField> = []
 ) -> NutritionValues {
     guard let generated, let scaled else { return entered }
-    let matchesGenerated = abs(entered.calories - generated.calories) < 0.6
-        && abs(entered.protein - generated.protein) < 0.06
-        && abs(entered.carbs - generated.carbs) < 0.06
-        && abs(entered.fat - generated.fat) < 0.06
-    return matchesGenerated ? scaled : entered
+
+    func resolve(
+        _ field: NutritionValueField,
+        entered enteredValue: Double,
+        generated generatedValue: Double,
+        scaled scaledValue: Double,
+        tolerance: Double
+    ) -> Double {
+        if explicitOverrides.contains(field) { return enteredValue }
+        return abs(enteredValue - generatedValue) < tolerance ? scaledValue : enteredValue
+    }
+
+    return NutritionValues(
+        calories: resolve(
+            .calories,
+            entered: entered.calories,
+            generated: generated.calories,
+            scaled: scaled.calories,
+            tolerance: 0.6
+        ),
+        protein: resolve(
+            .protein,
+            entered: entered.protein,
+            generated: generated.protein,
+            scaled: scaled.protein,
+            tolerance: 0.06
+        ),
+        carbs: resolve(
+            .carbs,
+            entered: entered.carbs,
+            generated: generated.carbs,
+            scaled: scaled.carbs,
+            tolerance: 0.06
+        ),
+        fat: resolve(
+            .fat,
+            entered: entered.fat,
+            generated: generated.fat,
+            scaled: scaled.fat,
+            tolerance: 0.06
+        )
+    )
 }
 
 /// The amount typed in the nutrition editor is the source of truth for a
@@ -1063,7 +1108,10 @@ struct NutritionPortion: Equatable, Sendable {
             character.isNumber || character == "." || character == "-"
         }
         guard let parsedAmount = Double(numericPrefix), parsedAmount >= 0 else {
-            return NutritionPortion(amount: fallbackAmount, unit: fallbackUnit)
+            // A non-empty, malformed label must not silently retain stale
+            // structured catalog data. Nil fields accurately describe that
+            // the free-form portion has no machine-readable amount/unit.
+            return NutritionPortion(amount: nil, unit: nil)
         }
 
         var unitParts: [String] = []
@@ -2307,9 +2355,9 @@ func rootineSanitizedWorkWorkspace(_ workspace: WorkWorkspace) -> WorkWorkspace 
     }
 
     sanitized.companies = rootineDeduplicatedWorkCompanies(workspace.companies)
-    let companyIDByNormalized = Dictionary(uniqueKeysWithValues: sanitized.companies.map {
-        ($0.id.rootineNormalizedIdentifier, $0.id)
-    })
+    let companyIDByNormalized = sanitized.companies.reduce(into: [String: String]()) { result, company in
+        result[company.id.rootineNormalizedIdentifier] = company.id
+    }
     sanitized.projects = rootineDeduplicatedWorkProjects(workspace.projects).map { project in
         var project = project
         project.companyId = project.companyId.flatMap {
@@ -2325,9 +2373,9 @@ func rootineSanitizedWorkWorkspace(_ workspace: WorkWorkspace) -> WorkWorkspace 
         project.name = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
         return project
     }.filter { !$0.name.isEmpty }
-    let projectIDByNormalized = Dictionary(uniqueKeysWithValues: sanitized.projects.map {
-        ($0.id.rootineNormalizedIdentifier, $0.id)
-    })
+    let projectIDByNormalized = sanitized.projects.reduce(into: [String: String]()) { result, project in
+        result[project.id.rootineNormalizedIdentifier] = project.id
+    }
     var taskIDs = Set<String>()
     sanitized.tasks = rootineDeduplicatedWorkItems(workspace.tasks).map { task in
         var task = task
@@ -2374,9 +2422,9 @@ func rootineSanitizedWorkWorkspace(_ workspace: WorkWorkspace) -> WorkWorkspace 
     // Normalize them against the same winning IDs as the collections and
     // clear only dangling links rather than allowing a rejected row to poison
     // the complete Work snapshot.
-    let taskIDByNormalized = Dictionary(uniqueKeysWithValues: sanitized.tasks.map {
-        ($0.id.rootineNormalizedIdentifier, $0.id)
-    })
+    let taskIDByNormalized = sanitized.tasks.reduce(into: [String: String]()) { result, task in
+        result[task.id.rootineNormalizedIdentifier] = task.id
+    }
     sanitized.activeFocusProjectID = sanitized.activeFocusProjectID.flatMap {
         projectIDByNormalized[$0.rootineNormalizedIdentifier]
     }
