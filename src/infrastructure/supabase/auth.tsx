@@ -15,6 +15,7 @@ import {
   supabase,
   supabaseConfigurationIssue,
 } from "./client";
+import { authRedirectUrl } from "./authRedirect";
 import { rootineObservability } from "../../app/observability";
 
 export type AuthActionResult = {
@@ -33,6 +34,7 @@ export type SupabaseAuthContextValue = {
   clearAuthError: () => void;
   signIn: (email: string, password: string) => Promise<AuthActionResult>;
   signInWithGoogle: () => Promise<AuthActionResult>;
+  signInWithApple: () => Promise<AuthActionResult>;
   signUp: (email: string, password: string) => Promise<AuthActionResult>;
   requestPasswordReset: (email: string) => Promise<AuthActionResult>;
   updatePassword: (password: string) => Promise<AuthActionResult>;
@@ -45,11 +47,7 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function authRedirectUrl() {
-  return new URL("/dzisiaj", window.location.origin).toString();
-}
-
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown, provider: "google" | "apple" | null = null) {
   if (error instanceof Error && error.message.trim()) {
     const message = error.message.trim();
     const code = typeof error === "object" && error !== null && "code" in error
@@ -75,9 +73,10 @@ function errorMessage(error: unknown) {
       return "Wykonano zbyt wiele prób. Odczekaj chwilę i spróbuj ponownie.";
     }
     if (normalized.includes("provider") && normalized.includes("enabled")) {
-      return "Logowanie kontem Google nie jest jeszcze włączone dla tego środowiska.";
+      return "Ta metoda logowania nie jest jeszcze włączona dla tego środowiska.";
     }
     if (normalized.includes("access_denied") || normalized.includes("cancel") || normalized.includes("denied")) {
+      if (provider === "apple") return "Logowanie przez Apple zostało anulowane. Możesz spróbować ponownie.";
       return "Logowanie przez Google zostało anulowane. Możesz spróbować ponownie.";
     }
     if (normalized.includes("signup") && normalized.includes("disabled")) {
@@ -185,10 +184,34 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
         options: { redirectTo: authRedirectUrl() },
       });
       rootineObservability.recordAuthOutcome({ action: "sign_in_google", outcome: error ? "failure" : "success", provider: "google", error });
-      return { error: error ? errorMessage(error) : null };
+      return { error: error ? errorMessage(error, "google") : null };
     } catch (error) {
       rootineObservability.recordAuthOutcome({ action: "sign_in_google", outcome: "failure", provider: "google", error });
-      return { error: errorMessage(error) };
+      return { error: errorMessage(error, "google") };
+    }
+  }, []);
+
+  const signInWithApple = useCallback(async (): Promise<AuthActionResult> => {
+    if (!supabase) {
+      rootineObservability.recordAuthOutcome({ action: "sign_in_apple", outcome: "failure", error: "missing configuration" });
+      return { error: "Logowanie przez Apple nie jest dostępne w tym środowisku." };
+    }
+    setAuthError(null);
+    try {
+      const appleEnabled = await isSupabaseAuthProviderEnabled("apple");
+      if (!appleEnabled) {
+        rootineObservability.recordAuthOutcome({ action: "sign_in_apple", outcome: "failure", provider: "apple", error: "provider unavailable" });
+        return { error: "Logowanie przez Apple nie jest jeszcze włączone dla tego środowiska." };
+      }
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "apple",
+        options: { redirectTo: authRedirectUrl() },
+      });
+      rootineObservability.recordAuthOutcome({ action: "sign_in_apple", outcome: error ? "failure" : "success", provider: "apple", error });
+      return { error: error ? errorMessage(error, "apple") : null };
+    } catch (error) {
+      rootineObservability.recordAuthOutcome({ action: "sign_in_apple", outcome: "failure", provider: "apple", error });
+      return { error: errorMessage(error, "apple") };
     }
   }, []);
 
@@ -300,6 +323,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     clearAuthError,
     signIn,
     signInWithGoogle,
+    signInWithApple,
     signUp,
     requestPasswordReset,
     updatePassword,
@@ -312,6 +336,7 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     requestPasswordReset,
     session,
     signIn,
+    signInWithApple,
     signInWithGoogle,
     signOut,
     signUp,

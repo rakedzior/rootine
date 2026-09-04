@@ -100,8 +100,13 @@ B07's lifecycle coordinator should call the existing
 stop callbacks after sign-out. APNs token callbacks are delivered through
 `RootinePushRegistry`; no permission prompt is triggered by B09.
 
-The legal URLs are required for self-registration. Missing URLs disable only the
-registration action and explain why; existing users can still sign in.
+The legal URLs are required for production self-registration. Development and
+staging builds may use clearly labelled, bundled informational documents so the
+complete registration flow can be exercised before public legal pages are
+deployed. Missing production URLs disable only the registration action and
+explain why; existing users can still sign in. The native Development build's
+test-account entry is local preview data, not a Supabase user, and must not be
+used for production validation.
 
 ## Smoke checks after deployment
 
