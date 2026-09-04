@@ -987,6 +987,9 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
     .today-done-toggle .text-stack { gap: var(--sp-1); }
     .today-done-frame [data-done-after-complete] { display: none; }
     .today-done-frame.is-complete [data-done-after-complete] { display: flex; }
+    body[data-view="proto"] .today-hidden-history { display: none !important; }
+    .today-done-frame [data-done-undo] { display: none; }
+    .today-done-frame.has-undo [data-done-undo] { display: flex; }
     .today-detail-card { display: flex; flex-direction: column; gap: var(--sp-3); }
     .today-detail-card .btn { width: 100%; }
     .today-choice { width: 100%; height: auto; min-height: calc(var(--h-lg) + var(--sp-4)); padding: var(--sp-3); text-align: left; align-items: flex-start; }
@@ -1092,7 +1095,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
               <div class="today-section-head"><h2 class="t-heading">Plan dnia</h2></div>
               <div class="today-timeline">
                 
-              <div class="today-event completed">
+              <div class="today-event completed today-hidden-history">
                 <div class="today-time t-caption muted">09:00</div>
                 <div class="list-row today-row completed" role="group" aria-label="Zobowiązanie: Przygotuj projekt prezentacji">
                   <span class="btn-icon today-check" role="img" aria-label="Wykonane"><span class="glyph gl-check" aria-hidden="true"></span></span>
@@ -1152,7 +1155,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
             </section>
             <section class="card today-done-summary" aria-label="Zrobione dzisiaj">
               <button class="card-body row today-done-toggle" data-go="scr-dzisiaj-done" data-done-state="clean" aria-label="Rozwiń historię wykonanych elementów">
-                <span class="glyph gl-check" aria-hidden="true"></span><span class="grow text-stack"><span class="t-body-strong">Zrobione dzisiaj</span><span class="t-caption muted">2 elementy · otwórz historię</span></span><span class="badge badge-muted">2</span><span class="glyph gl-chevron" aria-hidden="true"></span>
+                <span class="glyph gl-check" aria-hidden="true"></span><span class="grow text-stack"><span class="t-body-strong">Zrobione dzisiaj</span><span class="t-caption muted">3 elementy · otwórz historię</span></span><span class="badge badge-muted">3</span><span class="glyph gl-chevron" aria-hidden="true"></span>
               </button>
             </section>
           </div>
@@ -1231,7 +1234,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
               <div class="today-section-head"><h2 class="t-heading">Plan dnia</h2></div>
               <div class="today-timeline">
                 
-              <div class="today-event completed">
+              <div class="today-event completed today-hidden-history">
                 <div class="today-time t-caption muted">09:00</div>
                 <div class="list-row today-row completed" role="group" aria-label="Zobowiązanie: Przygotuj projekt prezentacji">
                   <span class="btn-icon today-check" role="img" aria-label="Wykonane"><span class="glyph gl-check" aria-hidden="true"></span></span>
@@ -1413,7 +1416,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
               <div class="today-section-head"><h2 class="t-heading">Plan dnia</h2></div>
               <div class="today-timeline">
                 
-              <div class="today-event completed">
+              <div class="today-event completed today-hidden-history">
                 <div class="today-time t-caption muted">09:00</div>
                 <div class="list-row today-row completed" role="group" aria-label="Zobowiązanie: Przygotuj projekt prezentacji">
                   <span class="btn-icon today-check" role="img" aria-label="Wykonane"><span class="glyph gl-check" aria-hidden="true"></span></span>
@@ -1429,7 +1432,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
 
                 <div class="today-now-marker"><span class="today-now-dot"></span><span class="t-caption">Teraz · 10:35</span></div>
                 
-              <div class="today-event completed">
+              <div class="today-event completed today-hidden-history">
                 <div class="today-time t-caption muted">11:00</div>
                 <div class="list-row today-row completed" role="group" aria-label="Zobowiązanie: Odpowiedz na mail">
                   <span class="btn-icon today-check" role="img" aria-label="Wykonane"><span class="glyph gl-check" aria-hidden="true"></span></span>
@@ -1472,10 +1475,10 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
             </section>
             <section class="card today-done-summary" aria-label="Zrobione dzisiaj">
               <button class="card-body row today-done-toggle" data-go="scr-dzisiaj-done" data-done-state="complete" aria-label="Rozwiń historię wykonanych elementów">
-                <span class="glyph gl-check" aria-hidden="true"></span><span class="grow text-stack"><span class="t-body-strong">Zrobione dzisiaj</span><span class="t-caption muted">3 elementy · otwórz historię</span></span><span class="badge badge-muted">3</span><span class="glyph gl-chevron" aria-hidden="true"></span>
+                <span class="glyph gl-check" aria-hidden="true"></span><span class="grow text-stack"><span class="t-body-strong">Zrobione dzisiaj</span><span class="t-caption muted">4 elementy · otwórz historię</span></span><span class="badge badge-muted">4</span><span class="glyph gl-chevron" aria-hidden="true"></span>
               </button>
             </section>
-            <div class="toast today-toast" role="status"><span>Oznaczono „Odpowiedz na mail” jako wykonane</span><button class="btn btn-ghost btn-sm" data-go="scr-dzisiaj-clean" data-focus-target aria-label="Cofnij zmianę"> <span class="glyph gl-arrow-left" aria-hidden="true"></span> Cofnij</button></div>
+            <div class="toast today-toast" role="status"><span>Oznaczono „Odpowiedz na mail” jako wykonane</span><button class="btn btn-ghost btn-sm" data-go="scr-dzisiaj-clean" data-primary-undo data-focus-target aria-label="Cofnij zmianę"> <span class="glyph gl-arrow-left" aria-hidden="true"></span> Cofnij</button></div>
           </div>
 
           <nav class="tabbar today-tabbar" aria-label="Główna nawigacja">
@@ -1517,6 +1520,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
               <div class="card-body"><h2 id="completion-result-title" class="t-heading" data-completion-result-title>Zobowiązanie</h2><p class="t-body muted" data-completion-result-meta>Dzisiaj</p></div>
             </section>
             <button class="btn btn-primary btn-block" data-completion-back data-go="scr-dzisiaj-clean">Wróć do Dzisiaj</button>
+            <button class="btn btn-ghost btn-block" data-completion-undo data-go="scr-dzisiaj-clean" aria-label="Cofnij wykonanie">Cofnij wykonanie</button>
           </div>
 
           <nav class="tabbar today-tabbar" aria-label="Główna nawigacja">
@@ -1574,7 +1578,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
               <div class="today-section-head"><h2 class="t-heading">Plan dnia</h2></div>
               <div class="today-timeline">
                 
-              <div class="today-event completed">
+              <div class="today-event completed today-hidden-history">
                 <div class="today-time t-caption muted">09:00</div>
                 <div class="list-row today-row completed" role="group" aria-label="Zobowiązanie: Przygotuj projekt prezentacji">
                   <span class="btn-icon today-check" role="img" aria-label="Wykonane"><span class="glyph gl-check" aria-hidden="true"></span></span>
@@ -1676,7 +1680,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
               <div class="today-section-head"><h2 class="t-heading">Plan dnia</h2></div>
               <div class="today-timeline">
                 
-              <div class="today-event completed">
+              <div class="today-event completed today-hidden-history">
                 <div class="today-time t-caption muted">09:00</div>
                 <div class="list-row today-row completed" role="group" aria-label="Zobowiązanie: Przygotuj projekt prezentacji">
                   <span class="btn-icon today-check" role="img" aria-label="Wykonane"><span class="glyph gl-check" aria-hidden="true"></span></span>
@@ -1831,14 +1835,14 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
             <button class="btn-icon" data-go="scr-dzisiaj-clean" aria-label="Wróć do Dzisiaj"><span class="glyph gl-arrow-left" aria-hidden="true"></span></button>
             <div class="grow">
               <h1 class="t-title">Dodano do planu</h1>
-              <p class="today-date t-caption muted">Dzisiaj · 12:00</p>
+              <p id="data-add-result-date" data-add-result-date class="today-date t-caption muted">Dzisiaj · 12:00</p>
             </div>
           </div>
 
           <div class="today-content" role="region" aria-label="Potwierdzenie dodania zobowiązania">
             <div class="callout success" role="status">
               <span class="glyph gl-check" aria-hidden="true"></span>
-              <div class="callout-body"><div class="callout-title">Zobowiązanie dodane</div><div class="callout-text"><span data-add-result-copy>Nowe zobowiązanie</span> pojawi się w planie dnia o <span data-add-result-time>12:00</span>.</div></div>
+              <div class="callout-body"><div class="callout-title">Zobowiązanie dodane</div><div class="callout-text" data-add-result-sentence>Nowe zobowiązanie pojawi się w planie dnia o 12:00.</div></div>
             </div>
             <section class="card today-row" data-add-result-card aria-label="Nowe zobowiązanie">
               <div class="card-body row">
@@ -1909,7 +1913,7 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
             <button class="btn-icon" data-go="scr-dzisiaj-clean" aria-label="Wróć do Dzisiaj"><span class="glyph gl-arrow-left" aria-hidden="true"></span></button>
             <div class="grow">
               <h1 class="t-title">Zrobione dzisiaj</h1>
-              <p id="done-meta" class="today-date t-caption muted">Historia · 2 elementy</p>
+              <p id="done-meta" class="today-date t-caption muted">Historia · 3 elementy</p>
             </div>
           </div>
 
@@ -1925,11 +1929,15 @@ body[data-view="slides"] .note-group:not(.active) { display: none; }
                     <span class="glyph gl-check" aria-hidden="true"></span><span class="grow"><span class="t-body-strong">Odpowiedz na mail</span><span class="today-source t-caption muted">Zadania · 30 min</span></span><span class="glyph gl-chevron" aria-hidden="true"></span>
                   </button>
                   <button class="list-row" data-go="scr-dzisiaj-detail" aria-label="Otwórz wykonane: Wstępna wersja umowy">
-                    <span class="glyph gl-check" aria-hidden="true"></span><span class="grow"><span class="t-body-strong">Wstępna wersja umowy</span><span class="today-source t-caption muted">Praca · wczoraj</span></span><span class="glyph gl-chevron" aria-hidden="true"></span>
+                    <span class="glyph gl-check" aria-hidden="true"></span><span class="grow"><span class="t-body-strong">Wstępna wersja umowy</span><span class="today-source t-caption muted">Praca · dzisiaj</span></span><span class="glyph gl-chevron" aria-hidden="true"></span>
+                  </button>
+                  <button class="list-row" data-go="scr-dzisiaj-detail" aria-label="Otwórz wykonane: Poranna rutyna">
+                    <span class="glyph gl-check" aria-hidden="true"></span><span class="grow"><span class="t-body-strong">Poranna rutyna</span><span class="today-source t-caption muted">Osobiste · dzisiaj</span></span><span class="glyph gl-chevron" aria-hidden="true"></span>
                   </button>
                 </div>
               </div>
             </section>
+            <button class="btn btn-ghost btn-block" data-done-undo data-go="scr-dzisiaj-clean" aria-label="Cofnij ostatnie wykonanie">Cofnij ostatnie wykonanie</button>
             <button class="btn btn-ghost btn-block" data-done-back data-go="scr-dzisiaj-clean">Wróć do Dzisiaj</button>
           </div>
 
@@ -2260,9 +2268,146 @@ const returnLabels = {
   'scr-dzisiaj-conflict': 'Wróć do konfliktu'
 };
 function labelForReturn(id) { return returnLabels[id] || 'Wróć do Dzisiaj'; }
+let primaryMailCompletion = null;
+const genericCompletions = [];
+let activeDetailSource = null;
+function itemWord(count) {
+  const n = Math.abs(count);
+  if (n === 1) return 'element';
+  return (n % 10 >= 5) || (n % 100 >= 12 && n % 100 <= 14) ? 'elementów' : 'elementy';
+}
+function setDoneSummaryCount(frame, count) {
+  const summary = frame?.querySelector('.today-done-toggle');
+  if (!summary) return;
+  const caption = summary.querySelector('.t-caption');
+  const badge = summary.querySelector('.badge');
+  if (caption) caption.textContent = `${count} ${itemWord(count)} · otwórz historię`;
+  if (badge) badge.textContent = String(count);
+}
+function updateFrameSummary(frameId, delta) {
+  const frame = document.getElementById(frameId);
+  const display = frame?.querySelector('.today-summary .t-display');
+  if (!frame || !display) return;
+  const match = display.textContent.match(/(\d+)\s+z\s+(\d+)/);
+  if (!match) return;
+  const total = Number(match[2]);
+  const completed = Math.max(0, Math.min(total, Number(match[1]) + delta));
+  const remaining = total - completed;
+  display.textContent = `${completed} z ${total}`;
+  const sub = frame.querySelector('.today-summary-sub');
+  if (sub) sub.textContent = remaining ? `${remaining} ${remaining === 1 ? 'pozostało' : 'pozostałe'} do zrobienia` : 'Brak zobowiązań do zrobienia';
+  const progress = frame.querySelector('.today-progress');
+  if (progress) {
+    progress.setAttribute('aria-valuenow', String(completed));
+    progress.querySelector('span')?.style.setProperty('width', `${Math.round((completed / total) * 100)}%`);
+  }
+  setDoneSummaryCount(frame, completed);
+}
+function markRowCompleted(source) {
+  const row = source?.closest('.today-row');
+  if (!row) return null;
+  const event = row.closest('.today-event');
+  const wrapper = event || row;
+  const check = row.querySelector('.today-check');
+  const sourceMeta = row.querySelector('.today-source');
+  const title = row.querySelector('.t-body-strong')?.textContent.trim() || 'Zobowiązanie';
+  const record = {
+    source, row, event, wrapper,
+    frameId: source.closest('.frame')?.id || 'scr-dzisiaj-clean',
+    title,
+    meta: sourceMeta?.textContent.trim() || 'Dzisiaj',
+    rowLabel: row.getAttribute('aria-label') || `Zobowiązanie: ${title}`,
+    checkMarkup: check?.cloneNode(true),
+    rowWasActive: row.classList.contains('active'),
+    rowWasNormal: row.classList.contains('normal'),
+    wrapperWasActive: wrapper.classList.contains('active'),
+    wrapperWasNormal: wrapper.classList.contains('normal')
+  };
+  row.classList.remove('active', 'normal');
+  row.classList.add('completed');
+  row.setAttribute('aria-label', `Wykonane zobowiązanie: ${title}`);
+  wrapper.classList.remove('active', 'normal');
+  wrapper.classList.add('completed', 'today-hidden-history');
+  if (sourceMeta && !/· wykonane$/.test(sourceMeta.textContent.trim())) sourceMeta.textContent = `${record.meta} · wykonane`;
+  if (check) {
+    const doneCheck = document.createElement('span');
+    doneCheck.className = 'btn-icon today-check';
+    doneCheck.setAttribute('role', 'img');
+    doneCheck.setAttribute('aria-label', 'Wykonane');
+    doneCheck.innerHTML = '<span class="glyph gl-check" aria-hidden="true"></span>';
+    check.replaceWith(doneCheck);
+  }
+  return record;
+}
+function restoreCompletedRecord(record) {
+  if (!record?.row) return;
+  const { row, wrapper } = record;
+  row.classList.remove('completed', 'active', 'normal', 'today-hidden-history');
+  if (record.rowWasActive) row.classList.add('active');
+  else if (record.rowWasNormal) row.classList.add('normal');
+  row.setAttribute('aria-label', record.rowLabel);
+  wrapper.classList.remove('completed', 'active', 'normal', 'today-hidden-history');
+  if (record.wrapperWasActive) wrapper.classList.add('active');
+  else if (record.wrapperWasNormal) wrapper.classList.add('normal');
+  const sourceMeta = row.querySelector('.today-source');
+  if (sourceMeta) sourceMeta.textContent = record.meta;
+  const currentCheck = row.querySelector('.today-check');
+  if (currentCheck && record.checkMarkup) {
+    const restored = record.checkMarkup.cloneNode(true);
+    currentCheck.replaceWith(restored);
+    wireTrigger(restored);
+  }
+}
+function appendGenericHistory(record) {
+  const list = document.querySelector('#scr-dzisiaj-done .today-mini-list');
+  if (!list) return;
+  const item = document.createElement('button');
+  item.className = 'list-row';
+  item.dataset.go = 'scr-dzisiaj-detail';
+  item.dataset.genericCompleted = '';
+  item.setAttribute('aria-label', `Otwórz wykonane: ${record.title}`);
+  item.innerHTML = '<span class="glyph gl-check" aria-hidden="true"></span><span class="grow"><span class="t-body-strong"></span><span class="today-source t-caption muted"></span></span><span class="glyph gl-chevron" aria-hidden="true"></span>';
+  item.querySelector('.t-body-strong').textContent = record.title;
+  item.querySelector('.today-source').textContent = record.meta;
+  list.appendChild(item);
+  record.historyButton = item;
+  wireTrigger(item);
+}
+function latestCompletion() {
+  return genericCompletions[genericCompletions.length - 1] || primaryMailCompletion;
+}
+function undoLatestCompletion() {
+  if (genericCompletions.length) {
+    const record = genericCompletions.pop();
+    restoreCompletedRecord(record);
+    updateFrameSummary(record.frameId, -1);
+    record.historyButton?.remove();
+    updateDoneHistory('clean');
+    return record;
+  }
+  if (primaryMailCompletion) {
+    const record = primaryMailCompletion;
+    primaryMailCompletion = null;
+    restoreCompletedRecord(record);
+    updateFrameSummary(record.frameId, -1);
+    updateDoneHistory('clean');
+    return record;
+  }
+  return null;
+}
+function completePrimaryMail(source) {
+  if (primaryMailCompletion) return primaryMailCompletion;
+  const record = markRowCompleted(source);
+  if (record) {
+    primaryMailCompletion = record;
+    updateFrameSummary(record.frameId, 1);
+  }
+  return record;
+}
 function prepareDetail(source) {
   const detail = document.getElementById('scr-dzisiaj-detail');
   if (!detail) return;
+  activeDetailSource = source;
   const title = source.querySelector('.t-body-strong')?.textContent.trim()
     || source.getAttribute('aria-label')?.replace(/^Otwórz(?: wykonane| zaległość)?:?\s*/, '').trim()
     || 'Zobowiązanie';
@@ -2274,7 +2419,9 @@ function prepareDetail(source) {
   const dateNode = detail.querySelector('#detail-date');
   if (titleNode) titleNode.textContent = title;
   if (metaNode) metaNode.textContent = time ? `${time} · ${meta}` : meta;
-  if (dateNode) dateNode.textContent = time ? `Dzisiaj · ${time}` : 'Dzisiaj';
+  const relative = meta.match(/wczoraj|\d+ dni temu/i)?.[0];
+  const dayLabel = relative ? relative.charAt(0).toUpperCase() + relative.slice(1) : 'Dzisiaj';
+  if (dateNode) dateNode.textContent = time ? `${dayLabel} · ${time}` : dayLabel;
   if (descriptionNode) descriptionNode.textContent = detailCopy[title] || 'Otwórz zobowiązanie, aby zobaczyć jego kontekst i kolejne kroki.';
   const destination = frames[cur]?.id || 'scr-dzisiaj-clean';
   const navBack = detail.querySelector('[data-detail-back-nav]');
@@ -2306,25 +2453,37 @@ function updateDoneHistory(state) {
   const complete = state === 'complete';
   done.classList.toggle('is-complete', complete);
   done.querySelector('.today-done-frame')?.classList.toggle('is-complete', complete);
+  const hasUndo = complete || genericCompletions.length > 0 || !!primaryMailCompletion;
+  done.classList.toggle('has-undo', hasUndo);
+  done.querySelector('.today-done-frame')?.classList.toggle('has-undo', hasUndo);
   const meta = done.querySelector('#done-meta');
-  if (meta) meta.textContent = `Historia · ${complete ? 3 : 2} elementy`;
+  const historyCount = 3 + genericCompletions.length + (complete ? 1 : 0);
+  if (meta) meta.textContent = `Historia · ${historyCount} ${itemWord(historyCount)}`;
   const destination = complete ? 'scr-dzisiaj-complete' : 'scr-dzisiaj-clean';
   const back = done.querySelector('.today-appbar [data-go]');
   const bottomBack = done.querySelector('[data-done-back]');
+  const undo = done.querySelector('[data-done-undo]');
   if (back) { back.dataset.go = destination; back.setAttribute('aria-label', complete ? 'Wróć do wykonania' : 'Wróć do Dzisiaj'); }
   if (bottomBack) { bottomBack.dataset.go = destination; bottomBack.textContent = complete ? 'Wróć do wykonania' : 'Wróć do Dzisiaj'; }
+  const latest = latestCompletion();
+  if (undo) undo.dataset.go = latest?.frameId || 'scr-dzisiaj-clean';
 }
 function prepareAddResult() {
   const add = document.getElementById('scr-dzisiaj-add');
   const result = document.getElementById('scr-dzisiaj-add-complete');
   if (!add || !result) return;
   const title = add.querySelector('input[type="text"]')?.value.trim() || 'Nowe zobowiązanie';
-  const time = add.querySelector('input[type="time"]')?.value || 'bez określonej godziny';
+  const rawTime = add.querySelector('input[type="time"]')?.value.trim() || '';
+  const time = rawTime || 'bez godziny';
   const titleNode = result.querySelector('[data-add-result-title]');
-  const copyNode = result.querySelector('[data-add-result-copy]');
   if (titleNode) titleNode.textContent = title;
-  if (copyNode) copyNode.textContent = title;
   result.querySelectorAll('[data-add-result-time]').forEach(node => { node.textContent = time; });
+  const dateNode = result.querySelector('[data-add-result-date]');
+  if (dateNode) dateNode.textContent = rawTime ? `Dzisiaj · ${rawTime}` : 'Dzisiaj · bez godziny';
+  const sentence = result.querySelector('[data-add-result-sentence]');
+  if (sentence) sentence.textContent = rawTime
+    ? `${title} pojawi się w planie dnia o ${rawTime}.`
+    : `${title} pojawi się w planie dnia bez określonej godziny.`;
   result.querySelector('[data-add-result-card]')?.setAttribute('aria-label', title);
 }
 function prepareConflictResult(source) {
@@ -2335,26 +2494,35 @@ function prepareConflictResult(source) {
 function prepareGenericCompletion(source) {
   const result = document.getElementById('scr-dzisiaj-complete-generic');
   if (!result) return;
-  const title = source.closest('.today-row')?.querySelector('.t-body-strong')?.textContent.trim() || 'Zobowiązanie';
-  const meta = source.closest('.today-row')?.querySelector('.today-source')?.textContent.trim() || 'Dzisiaj';
-  result.querySelectorAll('[data-completion-result-title]').forEach(node => { node.textContent = title; });
+  const record = markRowCompleted(source);
+  if (!record) return;
+  genericCompletions.push(record);
+  appendGenericHistory(record);
+  updateFrameSummary(record.frameId, 1);
+  updateDoneHistory('clean');
+  result.querySelectorAll('[data-completion-result-title]').forEach(node => { node.textContent = record.title; });
   const metaNode = result.querySelector('[data-completion-result-meta]');
-  if (metaNode) metaNode.textContent = meta;
+  if (metaNode) metaNode.textContent = record.meta;
   const back = result.querySelector('[data-completion-back]');
+  const undo = result.querySelector('[data-completion-undo]');
+  const destination = record.frameId;
   if (back) {
-    const destination = frames[cur]?.id || 'scr-dzisiaj-clean';
     back.dataset.go = destination;
     back.textContent = labelForReturn(destination);
+    back.setAttribute('aria-label', back.textContent);
   }
+  if (undo) { undo.dataset.go = destination; undo.setAttribute('aria-label', 'Cofnij wykonanie'); }
 }
 function go(el) {
   if (view() !== 'proto') return;
   const t = document.getElementById(el.dataset.go);
   if (t) {
+    if (el.hasAttribute('data-primary-undo') || el.hasAttribute('data-done-undo') || el.hasAttribute('data-completion-undo')) undoLatestCompletion();
     if (t.id === 'scr-dzisiaj-detail') prepareDetail(el);
     if (t.id === 'scr-dzisiaj-done') updateDoneHistory(el.dataset.doneState || 'clean');
     if (t.id === 'scr-dzisiaj-add-complete') prepareAddResult();
     if (t.id === 'scr-dzisiaj-conflict-resolved') prepareConflictResult(el.dataset.conflictSource);
+    if (t.id === 'scr-dzisiaj-complete') completePrimaryMail(activeDetailSource || el);
     if (t.id === 'scr-dzisiaj-complete-generic') prepareGenericCompletion(el);
     protoHist.push(cur);
     show(frames.indexOf(t));
@@ -2363,12 +2531,15 @@ function go(el) {
 document.querySelectorAll('.today-row .today-check').forEach(check => {
   if (check.tagName === 'BUTTON' && !check.dataset.go) check.dataset.go = 'scr-dzisiaj-complete-generic';
 });
-document.querySelectorAll('[data-go]').forEach(el => {
+function wireTrigger(el) {
+  if (!el || el.dataset.triggerWired === 'true') return;
+  el.dataset.triggerWired = 'true';
   el.addEventListener('click', e => { e.stopPropagation(); go(el); });
   el.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(el); }
   });
-});
+}
+document.querySelectorAll('[data-go]').forEach(wireTrigger);
 /* gesture shortcuts mirror the row's explicit actions: right = execute,
    left = open for defer/more, long press = open context. They never
    replace the visible buttons and remain available only in Prototype. */
@@ -2390,8 +2561,10 @@ document.querySelectorAll('.today-row').forEach(row => {
     holdTimer = setTimeout(() => {
       if (view() !== 'proto') return;
       longPress = true;
-      suppressClickUntil = Date.now() + 700;
       row.querySelector('.today-open[data-go]')?.click();
+      /* The synthetic click above must pass through the capture guard;
+         suppress only Safari's follow-up native click. */
+      suppressClickUntil = Date.now() + 700;
     }, 560);
   }, { passive: true });
   row.addEventListener('touchmove', () => clearTimeout(holdTimer), { passive: true });
