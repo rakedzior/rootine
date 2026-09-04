@@ -15,6 +15,44 @@ final class AuthenticationTests: XCTestCase {
         XCTAssertNil(AuthInputValidator.passwordError("12345678"))
     }
 
+    func testDevelopmentCanExerciseSelfRegistrationWithBundledLegalCopy() {
+        let configuration = RootineConfiguration(
+            supabaseURL: URL(string: "https://example.supabase.co"),
+            supabasePublishableKey: "publishable",
+            backendURL: nil,
+            authCallbackScheme: "rootine",
+            termsURL: nil,
+            privacyURL: nil,
+            environment: "development"
+        )
+
+        XCTAssertTrue(configuration.isSelfRegistrationAvailable)
+    }
+
+    func testProductionRequiresPublicLegalDocumentsForSelfRegistration() {
+        let incomplete = RootineConfiguration(
+            supabaseURL: URL(string: "https://example.supabase.co"),
+            supabasePublishableKey: "publishable",
+            backendURL: nil,
+            authCallbackScheme: "rootine",
+            termsURL: nil,
+            privacyURL: nil,
+            environment: "production"
+        )
+        let complete = RootineConfiguration(
+            supabaseURL: incomplete.supabaseURL,
+            supabasePublishableKey: incomplete.supabasePublishableKey,
+            backendURL: incomplete.backendURL,
+            authCallbackScheme: incomplete.authCallbackScheme,
+            termsURL: URL(string: "https://rootine.app/terms"),
+            privacyURL: URL(string: "https://rootine.app/privacy"),
+            environment: "production"
+        )
+
+        XCTAssertFalse(incomplete.isSelfRegistrationAvailable)
+        XCTAssertTrue(complete.isSelfRegistrationAvailable)
+    }
+
     func testOAuthCallbackParsesSessionAndRecoveryStateFromFragment() throws {
         let url = try XCTUnwrap(URL(string: "rootine://auth-callback#access_token=access&refresh_token=refresh&expires_in=3600&expires_at=2000000000&token_type=bearer&type=recovery"))
         let callback = try SupabaseAuthCallback.parse(url)

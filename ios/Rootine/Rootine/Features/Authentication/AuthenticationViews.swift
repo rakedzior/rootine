@@ -105,6 +105,17 @@ struct AuthWelcomeView: View {
                     }
                     .buttonStyle(RootineSecondaryButtonStyle())
                     .disabled(pendingProvider != nil)
+
+#if DEBUG
+                    Button {
+                        Task { await environment.loadPreviewData() }
+                    } label: {
+                        Label("Otwórz konto testowe", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(RootineTheme.ColorToken.action)
+                    .accessibilityHint("Otwiera lokalne dane demonstracyjne bez tworzenia konta na serwerze")
+#endif
                 }
 
                 if !environment.configuration.isAuthComplete {
@@ -268,6 +279,7 @@ struct EmailSignUpView: View {
     @Binding var path: [AuthRoute]
     @State private var email = ""
     @State private var password = ""
+    @State private var passwordConfirmation = ""
     @State private var feedback: String?
 
     var body: some View {
@@ -279,6 +291,7 @@ struct EmailSignUpView: View {
 
             AuthEmailField(text: $email)
             AuthPasswordField(label: "Hasło", text: $password, contentType: .newPassword)
+            AuthPasswordField(label: "Powtórz hasło", text: $passwordConfirmation, contentType: .newPassword)
 
             Text("Co najmniej 8 znaków.")
                 .font(.footnote)
@@ -290,6 +303,11 @@ struct EmailSignUpView: View {
             if !environment.configuration.isAuthComplete {
                 AuthFeedbackView(
                     message: "Rejestracja wymaga uzupełnienia konfiguracji aplikacji na Macu.",
+                    tone: .warning
+                )
+            } else if !environment.configuration.hasLegalDocuments {
+                AuthFeedbackView(
+                    message: "Korzystasz z dokumentów informacyjnych wersji testowej. Przed produkcją zostaną zastąpione publicznymi dokumentami Rootine.",
                     tone: .warning
                 )
             }
@@ -304,8 +322,9 @@ struct EmailSignUpView: View {
             .buttonStyle(RootinePrimaryButtonStyle())
             .disabled(
                 environment.isWorking
-                    || !environment.configuration.isAuthComplete
-                    || !environment.configuration.hasLegalDocuments
+                    || !environment.configuration.isSelfRegistrationAvailable
+                    || passwordConfirmation.isEmpty
+                    || password != passwordConfirmation
             )
 
             AuthSwitchView(question: "Masz już konto?", actionTitle: "Zaloguj się") {
@@ -332,10 +351,21 @@ struct EmailSignUpView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            AuthFeedbackView(
-                message: "Rejestracja będzie dostępna po podłączeniu Regulaminu i Polityki prywatności.",
-                tone: .warning
-            )
+            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                Text("Tworząc konto, akceptujesz dokumenty informacyjne wersji testowej Rootine:")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                HStack(spacing: RootineTheme.Spacing.medium) {
+                    NavigationLink("Regulamin") {
+                        RootineLocalLegalDocumentView(document: .terms)
+                    }
+                    NavigationLink("Polityka prywatności") {
+                        RootineLocalLegalDocumentView(document: .privacy)
+                    }
+                }
+                .font(.footnote.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -349,6 +379,10 @@ struct EmailSignUpView: View {
             feedback = passwordError
             return
         }
+        guard password == passwordConfirmation else {
+            feedback = "Hasła nie są takie same. Wpisz je ponownie."
+            return
+        }
         Task {
             do {
                 let needsConfirmation = try await environment.register(email: email, password: password)
@@ -360,6 +394,56 @@ struct EmailSignUpView: View {
                 feedback = error.localizedDescription
             }
         }
+    }
+}
+
+private enum RootineLocalLegalDocument {
+    case terms
+    case privacy
+
+    var title: String {
+        switch self {
+        case .terms: return "Regulamin Rootine"
+        case .privacy: return "Polityka prywatności Rootine"
+        }
+    }
+
+    var sections: [(String, String)] {
+        switch self {
+        case .terms:
+            return [
+                ("Usługa", "Rootine pomaga organizować zadania, cele, notatki i codzienne sprawy w jednym workspace’ie. Wersja testowa może być rozwijana, zmieniana lub czasowo niedostępna."),
+                ("Konto i dane", "Użytkownik odpowiada za dane logowania i treści dodawane do swojego konta. Nie udostępniaj innym osobom danych logowania ani treści, do których nie masz praw."),
+                ("Zasady korzystania", "Z Rootine należy korzystać zgodnie z prawem. Rootine nie zastępuje profesjonalnej porady medycznej, prawnej ani finansowej."),
+            ]
+        case .privacy:
+            return [
+                ("Jakie dane mogą być przetwarzane", "Rootine może przetwarzać adres e-mail, dane konta oraz treści zapisane przez użytkownika w workspace’ie. Dane techniczne są używane do logowania, synchronizacji i bezpieczeństwa."),
+                ("Po co używamy danych", "Dane służą do utworzenia i obsługi konta, synchronizacji workspace’ów oraz zapewnienia działania aplikacji. Nie używamy danych workspace’u do sprzedaży reklam."),
+                ("Przechowywanie i bezpieczeństwo", "Dane lokalne pozostają na urządzeniu, a dane konta i synchronizowane workspace’y mogą być przechowywane przez dostawców infrastruktury Rootine."),
+            ]
+        }
+    }
+}
+
+private struct RootineLocalLegalDocumentView: View {
+    let document: RootineLocalLegalDocument
+
+    var body: some View {
+        List {
+            Section {
+                Text("Wersja informacyjna dla środowiska testowego. Publiczne dokumenty produkcyjne zostaną podłączone przed udostępnieniem aplikacji.")
+                    .font(.footnote)
+                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            }
+            ForEach(Array(document.sections.enumerated()), id: \.offset) { _, section in
+                Section(section.0) {
+                    Text(section.1)
+                }
+            }
+        }
+        .navigationTitle(document.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
