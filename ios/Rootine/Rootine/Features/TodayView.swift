@@ -71,33 +71,37 @@ private struct TodaySnapshot {
     let next: [TodayFocusItem]
     let aggregation: TodayAggregation
 
-    var completedTasks: Int { tasks.filter { rootineTaskIsDoneOnDate($0, dateKey: dateKey) }.count }
-    var completedHabits: Int { habits.filter { isHabitDone($0, dateKey: dateKey) }.count }
+    // These values are read by several cards while SwiftUI lays out and
+    // re-lays out the scroll view. Keep the reductions at snapshot creation
+    // time so a scroll pass never walks the same arrays again.
+    private let completedTasksValue: Int
+    private let completedHabitsValue: Int
+    private let nutritionCaloriesValue: Double
+    private let nutritionProteinValue: Double
+    private let nutritionCarbsValue: Double
+    private let nutritionFatValue: Double
+    private let activeNotesValue: [NoteRecord]
+    private let notesUpdatedTodayValue: Int
+    private let totalItemsValue: Int
+    private let completedItemsValue: Int
+    private let priorityTotalValue: Int
+    private let priorityCompletedValue: Int
+
+    var completedTasks: Int { completedTasksValue }
+    var completedHabits: Int { completedHabitsValue }
     var nutritionCompleted: Bool { nutritionDay?.closedAt != nil }
-    var nutritionEntries: [NutritionEntry] {
-        guard let nutritionDay else { return [] }
-        return nutritionDay.entries.breakfast
-            + nutritionDay.entries.lunch
-            + nutritionDay.entries.snack
-            + nutritionDay.entries.dinner
-    }
-    var nutritionCalories: Double { nutritionEntries.reduce(0) { $0 + $1.calories } }
-    var nutritionProtein: Double { nutritionEntries.reduce(0) { $0 + $1.protein } }
-    var nutritionCarbs: Double { nutritionEntries.reduce(0) { $0 + $1.carbs } }
-    var nutritionFat: Double { nutritionEntries.reduce(0) { $0 + $1.fat } }
-    var activeNotes: [NoteRecord] { notes.filter { !$0.archived } }
-    var notesUpdatedToday: Int { activeNotes.filter { $0.updatedAt.hasPrefix(dateKey) }.count }
-    var totalItems: Int { tasks.count + habits.count + (nutritionDay == nil ? 0 : 1) }
-    var completedItems: Int { completedTasks + completedHabits + (nutritionCompleted ? 1 : 0) }
+    var nutritionCalories: Double { nutritionCaloriesValue }
+    var nutritionProtein: Double { nutritionProteinValue }
+    var nutritionCarbs: Double { nutritionCarbsValue }
+    var nutritionFat: Double { nutritionFatValue }
+    var activeNotes: [NoteRecord] { activeNotesValue }
+    var notesUpdatedToday: Int { notesUpdatedTodayValue }
+    var totalItems: Int { totalItemsValue }
+    var completedItems: Int { completedItemsValue }
     var remainingItems: Int { max(0, totalItems - completedItems) }
     var progress: Double { totalItems == 0 ? 0 : Double(completedItems) / Double(totalItems) }
-    var priorityTotal: Int {
-        tasks.filter { $0.priority != nil }.count + habits.filter { $0.priority != nil }.count
-    }
-    var priorityCompleted: Int {
-        tasks.filter { $0.priority != nil && rootineTaskIsDoneOnDate($0, dateKey: dateKey) }.count
-            + habits.filter { $0.priority != nil && isHabitDone($0, dateKey: dateKey) }.count
-    }
+    var priorityTotal: Int { priorityTotalValue }
+    var priorityCompleted: Int { priorityCompletedValue }
 
     init(
         accountID: String,
@@ -140,6 +144,32 @@ private struct TodaySnapshot {
         notes = aggregation.notes
         now = Self.focusItem(from: aggregation.now)
         next = aggregation.next.compactMap { Self.focusItem(from: $0) }
+
+        completedTasksValue = aggregation.todayTasks.reduce(into: 0) { count, task in
+            if rootineTaskIsDoneOnDate(task, dateKey: aggregation.boundary.dateKey) { count += 1 }
+        }
+        completedHabitsValue = aggregation.todayHabits.reduce(into: 0) { count, habit in
+            if rootineHabitIsDoneOnDate(habit, dateKey: aggregation.boundary.dateKey) { count += 1 }
+        }
+        let nutritionEntries = aggregation.nutritionDay.map {
+            $0.entries.breakfast + $0.entries.lunch + $0.entries.snack + $0.entries.dinner
+        } ?? []
+        nutritionCaloriesValue = nutritionEntries.reduce(0) { $0 + $1.calories }
+        nutritionProteinValue = nutritionEntries.reduce(0) { $0 + $1.protein }
+        nutritionCarbsValue = nutritionEntries.reduce(0) { $0 + $1.carbs }
+        nutritionFatValue = nutritionEntries.reduce(0) { $0 + $1.fat }
+
+        activeNotesValue = aggregation.notes.filter { !$0.archived }
+        notesUpdatedTodayValue = activeNotesValue.filter { $0.updatedAt.hasPrefix(aggregation.boundary.dateKey) }.count
+        totalItemsValue = aggregation.todayTasks.count + aggregation.todayHabits.count + (aggregation.nutritionDay == nil ? 0 : 1)
+        completedItemsValue = completedTasksValue + completedHabitsValue + (aggregation.nutritionDay?.closedAt == nil ? 0 : 1)
+        priorityTotalValue = aggregation.todayTasks.filter { $0.priority != nil }.count
+            + aggregation.todayHabits.filter { $0.priority != nil }.count
+        priorityCompletedValue = aggregation.todayTasks.filter {
+            $0.priority != nil && rootineTaskIsDoneOnDate($0, dateKey: aggregation.boundary.dateKey)
+        }.count + aggregation.todayHabits.filter {
+            $0.priority != nil && rootineHabitIsDoneOnDate($0, dateKey: aggregation.boundary.dateKey)
+        }.count
     }
 
     private static func focusItem(from item: TodayQueueItem?) -> TodayFocusItem? {
@@ -423,6 +453,10 @@ struct TodayView: View {
                 onRefresh: { await environment.flushPendingMutations() },
                 onRetry: { await environment.flushPendingMutations() }
             )
+            // Scrolling invalidates parts of the SwiftUI tree. The content
+            // itself is value-driven, so skip a full LazyVStack rebuild when
+            // the periodic clock produced the same aggregation.
+            .equatable()
             .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: snapshot.completedItems)
         }
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
@@ -466,7 +500,8 @@ struct TodayView: View {
     }
 }
 
-private struct TodayContentView: View {
+@MainActor
+private struct TodayContentView: View, Equatable {
     let snapshot: TodaySnapshot
     let isLaunching: Bool
     let syncStatus: WorkspaceSyncStatus
@@ -481,6 +516,13 @@ private struct TodayContentView: View {
     let onDismissUndo: () -> Void
     let onRefresh: () async -> Void
     let onRetry: () async -> Void
+
+    nonisolated static func == (lhs: TodayContentView, rhs: TodayContentView) -> Bool {
+        lhs.snapshot.aggregation == rhs.snapshot.aggregation
+            && lhs.isLaunching == rhs.isLaunching
+            && lhs.syncStatus == rhs.syncStatus
+            && lhs.undoAction?.id == rhs.undoAction?.id
+    }
 
     var body: some View {
         ScrollView {
@@ -613,63 +655,59 @@ private struct TodayTimelineCard: View {
     @State private var overdueMoveTask: WorkspaceTask?
     @State private var moveNotice: String?
 
-    private var overdueEntries: [TodayFocusItem] {
-        snapshot.overdueTasks.map {
-            TodayFocusItem(
-                id: "overdue-task-\($0.id)",
-                title: $0.text,
-                time: overdueAgeLabel(for: $0, relativeTo: snapshot.dateKey),
-                kind: .task,
-                task: $0,
-                habit: nil
-            )
-        }
-    }
+    private struct TimelineEntries {
+        let overdue: [TodayFocusItem]
+        let timed: [TodayFocusItem]
+        let untimed: [TodayFocusItem]
 
-    private var entries: [TodayFocusItem] {
-        let tasks = snapshot.tasks.map {
-            TodayFocusItem(
-                id: "task-\($0.id)", title: $0.text, time: $0.time,
-                kind: .task, task: $0, habit: nil
-            )
-        }
-        let habits = snapshot.habits.map {
-            TodayFocusItem(
-                id: "habit-\($0.id)", title: $0.name, time: $0.time,
-                kind: .habit, task: nil, habit: $0
-            )
-        }
-        return (tasks + habits).sorted {
-            switch ($0.time, $1.time) {
-            case let (left?, right?): return left == right ? $0.id < $1.id : left < right
-            case (_?, nil): return true
-            case (nil, _?): return false
-            default: return $0.id < $1.id
+        init(snapshot: TodaySnapshot) {
+            overdue = snapshot.overdueTasks.map {
+                TodayFocusItem(
+                    id: "overdue-task-\($0.id)",
+                    title: $0.text,
+                    time: overdueAgeLabel(for: $0, relativeTo: snapshot.dateKey),
+                    kind: .task,
+                    task: $0,
+                    habit: nil
+                )
             }
+
+            let tasks = snapshot.tasks.map {
+                TodayFocusItem(
+                    id: "task-\($0.id)", title: $0.text, time: $0.time,
+                    kind: .task, task: $0, habit: nil
+                )
+            }
+            let habits = snapshot.habits.map {
+                TodayFocusItem(
+                    id: "habit-\($0.id)", title: $0.name, time: $0.time,
+                    kind: .habit, task: nil, habit: $0
+                )
+            }
+            let active = (tasks + habits).filter { item in
+                switch item.kind {
+                case .task: return item.task.map { !rootineTaskIsDoneOnDate($0, dateKey: snapshot.dateKey) } ?? false
+                case .habit: return item.habit.map { !isHabitDone($0, dateKey: snapshot.dateKey) } ?? false
+                }
+            }.sorted {
+                switch ($0.time, $1.time) {
+                case let (left?, right?): return left == right ? $0.id < $1.id : left < right
+                case (_?, nil): return true
+                case (nil, _?): return false
+                default: return $0.id < $1.id
+                }
+            }
+            timed = active.filter { $0.time != nil }
+            untimed = active.filter { $0.time == nil }
         }
-    }
 
-    private var activeEntries: [TodayFocusItem] {
-        entries.filter { !isDone($0) }
-    }
-
-    private var timedEntries: [TodayFocusItem] {
-        activeEntries.filter { $0.time != nil }
-    }
-
-    private var untimedEntries: [TodayFocusItem] {
-        activeEntries.filter { $0.time == nil }
-    }
-
-    private var hasOpenEntries: Bool {
-        !overdueEntries.isEmpty || !timedEntries.isEmpty || !untimedEntries.isEmpty
-    }
-
-    private var nextID: String? {
-        snapshot.next.first?.id ?? snapshot.now?.id
+        var hasOpenEntries: Bool { !overdue.isEmpty || !timed.isEmpty || !untimed.isEmpty }
     }
 
     var body: some View {
+        let timeline = TimelineEntries(snapshot: snapshot)
+        let nextID = snapshot.next.first?.id ?? snapshot.now?.id
+
         TodayCard {
             HStack(alignment: .firstTextBaseline, spacing: RootineTheme.Spacing.small) {
                 Text("Plan dnia")
@@ -685,13 +723,13 @@ private struct TodayTimelineCard: View {
             }
 
             VStack(spacing: 0) {
-                if !overdueEntries.isEmpty {
+                if !timeline.overdue.isEmpty {
                     TodayTimelineSectionLabel(
                         title: "Zaległości",
                         systemImage: "clock.badge.exclamationmark",
                         tint: RootineTheme.ColorToken.warning
                     )
-                    ForEach(overdueEntries) { item in
+                    ForEach(timeline.overdue) { item in
                         TodayTimelineItemRow(
                             item: item,
                             dateKey: snapshot.dateKey,
@@ -706,12 +744,12 @@ private struct TodayTimelineCard: View {
                             section: .overdue
                         )
                     }
-                    if hasOpenEntries {
+                    if timeline.hasOpenEntries {
                         TodayTimelineDivider()
                     }
                 }
 
-                if !hasOpenEntries {
+                if !timeline.hasOpenEntries {
                     Label(
                         "Brak otwartych zobowiązań. Możesz spokojnie domknąć dzień.",
                         systemImage: "checkmark.circle"
@@ -721,7 +759,7 @@ private struct TodayTimelineCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, RootineTheme.Spacing.small)
                 } else {
-                    ForEach(timedEntries) { item in
+                    ForEach(timeline.timed) { item in
                         TodayTimelineItemRow(
                             item: item,
                             dateKey: snapshot.dateKey,
@@ -736,10 +774,10 @@ private struct TodayTimelineCard: View {
                             section: .today
                         )
                     }
-                    if !timedEntries.isEmpty && !untimedEntries.isEmpty {
+                    if !timeline.timed.isEmpty && !timeline.untimed.isEmpty {
                         TodayTimelineDivider()
                     }
-                    ForEach(untimedEntries) { item in
+                    ForEach(timeline.untimed) { item in
                         TodayTimelineItemRow(
                             item: item,
                             dateKey: snapshot.dateKey,
@@ -890,6 +928,20 @@ private struct TodayTimelineDivider: View {
     }
 }
 
+private struct TodayTimelineConnector: View {
+    let color: Color
+
+    var body: some View {
+        Path { path in
+            path.move(to: CGPoint(x: 0.5, y: 0))
+            path.addLine(to: CGPoint(x: 0.5, y: 76))
+        }
+        .stroke(color, style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
+        .frame(width: 1, height: 76)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct TodayTimelineItemRow: View {
     let item: TodayFocusItem
     let dateKey: String
@@ -919,18 +971,11 @@ private struct TodayTimelineItemRow: View {
                 .padding(.top, RootineTheme.Spacing.medium)
 
             ZStack(alignment: .top) {
-                GeometryReader { proxy in
-                    Path { path in
-                        path.move(to: CGPoint(x: proxy.size.width / 2, y: 0))
-                        path.addLine(to: CGPoint(x: proxy.size.width / 2, y: proxy.size.height))
-                    }
-                    .stroke(
-                        isOverdue
-                            ? RootineTheme.ColorToken.warning.opacity(0.55)
-                            : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator),
-                        style: StrokeStyle(lineWidth: 1, dash: [3, 4])
-                    )
-                }
+                TodayTimelineConnector(
+                    color: isOverdue
+                        ? RootineTheme.ColorToken.warning.opacity(0.55)
+                        : (isNext ? RootineTheme.ColorToken.action.opacity(0.75) : RootineTheme.ColorToken.separator)
+                )
 
                 Button(action: toggle) {
                     ZStack {

@@ -321,10 +321,16 @@ enum TodayAggregationService {
                     && validDateKey(task.calendarDate).map { $0 < todayKey } == true
             }
             .sorted(by: taskSort)
+        let todayTaskBuckets = partition(todayTasks) { rootineTaskIsDoneOnDate($0, dateKey: todayKey) }
+        let completedTodayTasks = todayTaskBuckets.matching
+        let openTodayTasks = todayTaskBuckets.other
 
         let todayHabits = uniqueHabits(input.taskWorkspace.habits)
             .filter { rootineHabitIsScheduledOnDate($0, dateKey: todayKey, calendar: calendar) }
             .sorted(by: habitSort)
+        let todayHabitBuckets = partition(todayHabits) { rootineHabitIsDoneOnDate($0, dateKey: todayKey) }
+        let completedTodayHabits = todayHabitBuckets.matching
+        let openTodayHabits = todayHabitBuckets.other
 
         let workTasks = allTasks
             .filter { task in
@@ -333,11 +339,13 @@ enum TodayAggregationService {
                     && validDateKey(task.calendarDate).map { $0 <= todayKey } == true
             }
             .sorted(by: taskSort)
-        let overdueWorkTasks = workTasks.filter {
-            !rootineTaskIsDoneOnDate($0, dateKey: todayKey)
-                && validDateKey($0.calendarDate).map { $0 < todayKey } == true
-        }
         let workDueToday = workTasks.filter { validDateKey($0.calendarDate) == todayKey }
+        let workTaskBuckets = partition(workTasks) { rootineTaskIsDoneOnDate($0, dateKey: todayKey) }
+        let completedWorkDueToday = workTaskBuckets.matching.filter { validDateKey($0.calendarDate) == todayKey }
+        let openWorkTasks = workTaskBuckets.other
+        let overdueWorkTasks = openWorkTasks.filter {
+            validDateKey($0.calendarDate).map { $0 < todayKey } == true
+        }
 
         let nutritionDay = input.nutritionWorkspace.days[todayKey]
         let nutritionEntries = nutritionDay.map(uniqueNutritionEntries) ?? []
@@ -393,18 +401,18 @@ enum TodayAggregationService {
         summaries[.tasks] = TodayDomainSummary(
             domain: .tasks,
             total: todayTasks.count + overdueTasks.count,
-            completed: todayTasks.filter { rootineTaskIsDoneOnDate($0, dateKey: todayKey) }.count,
+            completed: completedTodayTasks.count,
             overdue: overdueTasks.count,
             priorityTotal: (todayTasks + overdueTasks).filter { $0.priority != nil }.count,
-            priorityCompleted: todayTasks.filter { $0.priority != nil && rootineTaskIsDoneOnDate($0, dateKey: todayKey) }.count,
+            priorityCompleted: completedTodayTasks.filter { $0.priority != nil }.count,
             status: status.forDomain(.tasks)
         )
         summaries[.habits] = TodayDomainSummary(
             domain: .habits,
             total: todayHabits.count,
-            completed: todayHabits.filter { rootineHabitIsDoneOnDate($0, dateKey: todayKey) }.count,
+            completed: completedTodayHabits.count,
             priorityTotal: todayHabits.filter { $0.priority != nil }.count,
-            priorityCompleted: todayHabits.filter { $0.priority != nil && rootineHabitIsDoneOnDate($0, dateKey: todayKey) }.count,
+            priorityCompleted: completedTodayHabits.filter { $0.priority != nil }.count,
             status: status.forDomain(.habits)
         )
         summaries[.nutrition] = TodayDomainSummary(
@@ -438,10 +446,10 @@ enum TodayAggregationService {
         summaries[.work] = TodayDomainSummary(
             domain: .work,
             total: workDueToday.count + overdueWorkTasks.count,
-            completed: workDueToday.filter { rootineTaskIsDoneOnDate($0, dateKey: todayKey) }.count,
+            completed: completedWorkDueToday.count,
             overdue: overdueWorkTasks.count,
             priorityTotal: (workDueToday + overdueWorkTasks).filter { $0.priority != nil }.count,
-            priorityCompleted: workDueToday.filter { $0.priority != nil && rootineTaskIsDoneOnDate($0, dateKey: todayKey) }.count,
+            priorityCompleted: completedWorkDueToday.filter { $0.priority != nil }.count,
             metric: focusSessionsToday.isEmpty && !activeFocus ? nil : "\(focusSessionsToday.count) sesji skupienia",
             status: status.forDomain(.work)
         )
@@ -470,7 +478,7 @@ enum TodayAggregationService {
         )
 
         var queue: [TodayQueueItem] = []
-        queue += todayTasks.filter { !rootineTaskIsDoneOnDate($0, dateKey: todayKey) }.map {
+        queue += openTodayTasks.map {
             TodayQueueItem(
                 id: "task-\($0.id)", domain: .tasks, entityID: String($0.id), title: $0.text,
                 dateKey: todayKey, time: normalizedTime($0.time), kind: .task,
@@ -484,7 +492,7 @@ enum TodayAggregationService {
                 isCompleted: false, isOverdue: true, priority: $0.priority, task: $0
             )
         }
-        queue += todayHabits.filter { !rootineHabitIsDoneOnDate($0, dateKey: todayKey) }.map {
+        queue += openTodayHabits.map {
             TodayQueueItem(
                 id: "habit-\($0.id)", domain: .habits, entityID: String($0.id), title: $0.name,
                 dateKey: todayKey, time: normalizedTime($0.time), kind: .habit,
@@ -497,7 +505,7 @@ enum TodayAggregationService {
                 dateKey: todayKey, kind: .workout, isCompleted: false
             )
         }
-        queue += workTasks.filter { !rootineTaskIsDoneOnDate($0, dateKey: todayKey) }.map {
+        queue += openWorkTasks.map {
             let dateKey = validDateKey($0.calendarDate) ?? todayKey
             return TodayQueueItem(
                 id: "work-task-\($0.id)", domain: .work, entityID: String($0.id), title: $0.text,
@@ -625,13 +633,44 @@ enum TodayAggregationService {
     }
 
     private static func uniqueTasks(_ tasks: [WorkspaceTask]) -> [WorkspaceTask] {
-        let ordered = tasks.sorted {
-            if $0.id != $1.id { return $0.id < $1.id }
-            if ($0.deleted == true) != ($1.deleted == true) { return $0.deleted != true }
-            return taskFingerprint($0) < taskFingerprint($1)
+        // Workspace merges can transiently contain the same task more than
+        // once. Select the same winner as the old ID-sorted implementation,
+        // but do it in O(n) and let the consumers' existing sort establish
+        // display order afterwards.
+        var unique: [Int: WorkspaceTask] = [:]
+        unique.reserveCapacity(tasks.count)
+        for task in tasks {
+            guard let current = unique[task.id] else {
+                unique[task.id] = task
+                continue
+            }
+            let currentIsDeleted = current.deleted == true
+            let taskIsDeleted = task.deleted == true
+            if currentIsDeleted != taskIsDeleted {
+                if !taskIsDeleted { unique[task.id] = task }
+            } else if taskFingerprint(task) < taskFingerprint(current) {
+                unique[task.id] = task
+            }
         }
-        var seen = Set<Int>()
-        return ordered.filter { seen.insert($0.id).inserted }
+        return Array(unique.values)
+    }
+
+    private static func partition<Element>(
+        _ values: [Element],
+        where predicate: (Element) -> Bool
+    ) -> (matching: [Element], other: [Element]) {
+        var matching: [Element] = []
+        var other: [Element] = []
+        matching.reserveCapacity(values.count)
+        other.reserveCapacity(values.count)
+        for value in values {
+            if predicate(value) {
+                matching.append(value)
+            } else {
+                other.append(value)
+            }
+        }
+        return (matching, other)
     }
 
     private static func uniqueHabits(_ habits: [WorkspaceHabit]) -> [WorkspaceHabit] {
