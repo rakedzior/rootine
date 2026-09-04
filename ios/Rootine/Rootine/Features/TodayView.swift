@@ -572,34 +572,30 @@ private struct TodaySummaryCard: View {
                 .frame(height: 48)
                 .overlay(RootineTheme.ColorToken.separator)
 
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                HStack(alignment: .center, spacing: RootineTheme.Spacing.xSmall) {
-                    Image(systemName: "flag.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RootineTheme.ColorToken.success)
-                        .frame(width: 24, height: 24, alignment: .leading)
+            HStack(alignment: .top, spacing: RootineTheme.Spacing.xSmall) {
+                Image(systemName: "flag.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.success)
+                    .frame(width: 24, height: 24, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
                     Text("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal))")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RootineTheme.ColorToken.primaryText)
                         .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .allowsTightening(true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text("\(remainingPriorities) pozostało")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .allowsTightening(true)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("\(remainingPriorities) pozostało")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .monospacedDigit()
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
             }
-            .frame(width: 128, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Priorytety: \(snapshot.priorityTotal), pozostało \(remainingPriorities)")
+            .accessibilityLabel("Priorytety")
+            .accessibilityValue("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal)), \(remainingPriorities) pozostało")
         }
         .rootineSurface()
         .accessibilityElement(children: .contain)
