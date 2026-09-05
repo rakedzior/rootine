@@ -12,19 +12,10 @@
 		B00000000000000000000003 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* AppShellView.swift */; };
 		B00000000000000000000004 /* Design/RootineTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* Design/RootineTheme.swift */; };
 		B00000000000000000000005 /* Models/WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* Models/WorkspaceModels.swift */; };
-		B00000000000000000000028 /* Models/SportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000028 /* Models/SportModels.swift */; };
 		B00000000000000000000006 /* Networking/RootineAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* Networking/RootineAPIClient.swift */; };
 		B00000000000000000000007 /* Persistence/KeychainSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */; };
 		B00000000000000000000008 /* Persistence/WorkspaceFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */; };
 		B00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */; };
-		B0000000000000000000001B /* Sync/DualWriteBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001B /* Sync/DualWriteBridge.swift */; };
-		B0000000000000000000001D /* Sync/RootineRealtimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */; };
-		B0000000000000000000001E /* Sync/RootineSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */; };
-		B0000000000000000000001F /* Sync/PendingSyncCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001F /* Sync/PendingSyncCommand.swift */; };
-		B00000000000000000000020 /* Sync/RootineSyncCursorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000020 /* Sync/RootineSyncCursorStore.swift */; };
-		B00000000000000000000021 /* Sync/RootineSyncOperationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000021 /* Sync/RootineSyncOperationLog.swift */; };
-		B00000000000000000000022 /* Sync/RootineConflictStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000022 /* Sync/RootineConflictStore.swift */; };
-		B00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */; };
 		B0000000000000000000000A /* FeatureRootViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* FeatureRootViews.swift */; };
 		B0000000000000000000000B /* Auth/AuthenticationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* Auth/AuthenticationSupport.swift */; };
 		B0000000000000000000000C /* Authentication/AuthenticationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* Authentication/AuthenticationViews.swift */; };
@@ -34,30 +25,39 @@
 		B00000000000000000000010 /* NutritionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* NutritionView.swift */; };
 		B00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */; };
 		B00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */; };
-		B0000000000000000000001C /* Configuration/RootineFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001C /* RootineFeatureFlags.swift */; };
+		B0000000000000000000001B /* Sync/DualWriteBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001B /* Sync/DualWriteBridge.swift */; };
+		B0000000000000000000001C /* Configuration/RootineFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001C /* Configuration/RootineFeatureFlags.swift */; };
+		B0000000000000000000001D /* Sync/RootineRealtimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */; };
+		B0000000000000000000001E /* Sync/RootineSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */; };
+		B0000000000000000000001F /* Sync/PendingSyncCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000001F /* Sync/PendingSyncCommand.swift */; };
+		B00000000000000000000020 /* Sync/RootineSyncCursorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000020 /* Sync/RootineSyncCursorStore.swift */; };
+		B00000000000000000000021 /* Sync/RootineSyncOperationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000021 /* Sync/RootineSyncOperationLog.swift */; };
+		B00000000000000000000022 /* Sync/RootineConflictStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000022 /* Sync/RootineConflictStore.swift */; };
+		B00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */; };
 		B00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */; };
 		B00000000000000000000025 /* Sync/RootineRelationalRead.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* Sync/RootineRelationalRead.swift */; };
 		B00000000000000000000026 /* TodayAggregation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* TodayAggregation.swift */; };
 		B00000000000000000000027 /* Observability.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000027 /* Observability.swift */; };
+		B00000000000000000000028 /* Models/SportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000028 /* Models/SportModels.swift */; };
 		B00000000000000000000101 /* ContractFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* ContractFixtureTests.swift */; };
 		B00000000000000000000102 /* task-workspace-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* task-workspace-v2.json */; };
 		B00000000000000000000103 /* nutrition-workspace-v6.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* nutrition-workspace-v6.json */; };
 		B00000000000000000000104 /* notes-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000104 /* notes-workspace-v1.json */; };
 		B00000000000000000000105 /* nutrition-product.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000105 /* nutrition-product.json */; };
 		B00000000000000000000106 /* AuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000106 /* AuthenticationTests.swift */; };
-		B00000000000000000000110 /* RootineRealtimeLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */; };
-		B00000000000000000000112 /* SyncV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000112 /* SyncV3Tests.swift */; };
-		B00000000000000000000113 /* sync-v3-register-device-response.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000113 /* sync-v3-register-device-response.json */; };
-		B00000000000000000000114 /* LocalNotificationSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */; };
-		B00000000000000000000118 /* SportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000118 /* SportModelsTests.swift */; };
-		B00000000000000000000115 /* TodayAggregationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000115 /* TodayAggregationTests.swift */; };
-		B00000000000000000000117 /* ObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000117 /* ObservabilityTests.swift */; };
-		B00000000000000000000116 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000116 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000107 /* sport-planner-v5.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000107 /* sport-planner-v5.json */; };
 		B00000000000000000000108 /* goals-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000108 /* goals-workspace-v1.json */; };
 		B00000000000000000000109 /* work-workspace-v3.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000109 /* work-workspace-v3.json */; };
 		B0000000000000000000010A /* travel-workspace-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000010A /* travel-workspace-v2.json */; };
 		B0000000000000000000010B /* health-workspace-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000010B /* health-workspace-v1.json */; };
+		B00000000000000000000110 /* RootineRealtimeLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */; };
+		B00000000000000000000112 /* SyncV3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000112 /* SyncV3Tests.swift */; };
+		B00000000000000000000113 /* sync-v3-register-device-response.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000113 /* sync-v3-register-device-response.json */; };
+		B00000000000000000000114 /* LocalNotificationSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */; };
+		B00000000000000000000115 /* TodayAggregationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000115 /* TodayAggregationTests.swift */; };
+		B00000000000000000000116 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000116 /* PrivacyInfo.xcprivacy */; };
+		B00000000000000000000117 /* ObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000117 /* ObservabilityTests.swift */; };
+		B00000000000000000000118 /* SportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000118 /* SportModelsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,12 +76,28 @@
 		F00000000000000000000003 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		F00000000000000000000004 /* Design/RootineTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design/RootineTheme.swift; sourceTree = "<group>"; };
 		F00000000000000000000005 /* Models/WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/WorkspaceModels.swift; sourceTree = "<group>"; };
-		F00000000000000000000028 /* Models/SportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/SportModels.swift; sourceTree = "<group>"; };
 		F00000000000000000000006 /* Networking/RootineAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/RootineAPIClient.swift; sourceTree = "<group>"; };
 		F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/KeychainSessionStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/WorkspaceFileStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/WorkspaceSyncEngine.swift; sourceTree = "<group>"; };
+		F0000000000000000000000A /* FeatureRootViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRootViews.swift; sourceTree = "<group>"; };
+		F0000000000000000000000B /* Rootine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rootine.entitlements; sourceTree = "<group>"; };
+		F0000000000000000000000C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		F0000000000000000000000D /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
+		F0000000000000000000000E /* Auth/AuthenticationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/AuthenticationSupport.swift; sourceTree = "<group>"; };
+		F0000000000000000000000F /* Authentication/AuthenticationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication/AuthenticationViews.swift; sourceTree = "<group>"; };
+		F00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F00000000000000000000011 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		F00000000000000000000012 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		F00000000000000000000013 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		F00000000000000000000014 /* NutritionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionView.swift; sourceTree = "<group>"; };
+		F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/CanonicalWorkspaceMapping.swift; sourceTree = "<group>"; };
+		F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/RootineDeviceRegistry.swift; sourceTree = "<group>"; };
+		F00000000000000000000018 /* Development.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development.xcconfig; sourceTree = "<group>"; };
+		F00000000000000000000019 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
+		F0000000000000000000001A /* Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Production.xcconfig; sourceTree = "<group>"; };
 		F0000000000000000000001B /* Sync/DualWriteBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/DualWriteBridge.swift; sourceTree = "<group>"; };
+		F0000000000000000000001C /* Configuration/RootineFeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configuration/RootineFeatureFlags.swift; sourceTree = "<group>"; };
 		F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineRealtimeClient.swift; sourceTree = "<group>"; };
 		F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineSyncCoordinator.swift; sourceTree = "<group>"; };
 		F0000000000000000000001F /* Sync/PendingSyncCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/PendingSyncCommand.swift; sourceTree = "<group>"; };
@@ -89,46 +105,30 @@
 		F00000000000000000000021 /* Sync/RootineSyncOperationLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineSyncOperationLog.swift; sourceTree = "<group>"; };
 		F00000000000000000000022 /* Sync/RootineConflictStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineConflictStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineSyncRemoteClient.swift; sourceTree = "<group>"; };
-		F0000000000000000000000A /* FeatureRootViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRootViews.swift; sourceTree = "<group>"; };
-		F0000000000000000000000B /* Rootine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Rootine.entitlements; sourceTree = "<group>"; };
-		F0000000000000000000000C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
-		F0000000000000000000000D /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
-		F00000000000000000000018 /* Development.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development.xcconfig; sourceTree = "<group>"; };
-		F00000000000000000000019 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
-		F0000000000000000000001A /* Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Production.xcconfig; sourceTree = "<group>"; };
-		F0000000000000000000000E /* Auth/AuthenticationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/AuthenticationSupport.swift; sourceTree = "<group>"; };
-		F0000000000000000000000F /* Authentication/AuthenticationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication/AuthenticationViews.swift; sourceTree = "<group>"; };
-		F00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		F00000000000000000000116 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		F00000000000000000000011 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
-		F00000000000000000000012 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
-		F00000000000000000000013 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
-		F00000000000000000000014 /* NutritionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionView.swift; sourceTree = "<group>"; };
-		F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/CanonicalWorkspaceMapping.swift; sourceTree = "<group>"; };
-		F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/RootineDeviceRegistry.swift; sourceTree = "<group>"; };
-		F0000000000000000000001C /* Configuration/RootineFeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configuration/RootineFeatureFlags.swift; sourceTree = "<group>"; };
 		F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/LocalNotificationScheduler.swift; sourceTree = "<group>"; };
 		F00000000000000000000025 /* Sync/RootineRelationalRead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync/RootineRelationalRead.swift; sourceTree = "<group>"; };
 		F00000000000000000000026 /* TodayAggregation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayAggregation.swift; sourceTree = "<group>"; };
 		F00000000000000000000027 /* Observability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Observability.swift; sourceTree = "<group>"; };
+		F00000000000000000000028 /* Models/SportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/SportModels.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* ContractFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractFixtureTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* task-workspace-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "task-workspace-v2.json"; sourceTree = "<group>"; };
 		F00000000000000000000103 /* nutrition-workspace-v6.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-workspace-v6.json"; sourceTree = "<group>"; };
 		F00000000000000000000104 /* notes-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "notes-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000105 /* nutrition-product.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "nutrition-product.json"; sourceTree = "<group>"; };
 		F00000000000000000000106 /* AuthenticationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineRealtimeLifecycleTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000112 /* SyncV3Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncV3Tests.swift; sourceTree = "<group>"; };
-		F00000000000000000000113 /* sync-v3-register-device-response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sync-v3-register-device-response.json"; sourceTree = "<group>"; };
-		F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationSchedulerTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000118 /* SportModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportModelsTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000115 /* TodayAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayAggregationTests.swift; sourceTree = "<group>"; };
-		F00000000000000000000117 /* ObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservabilityTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000107 /* sport-planner-v5.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sport-planner-v5.json"; sourceTree = "<group>"; };
 		F00000000000000000000108 /* goals-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "goals-workspace-v1.json"; sourceTree = "<group>"; };
 		F00000000000000000000109 /* work-workspace-v3.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "work-workspace-v3.json"; sourceTree = "<group>"; };
 		F0000000000000000000010A /* travel-workspace-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "travel-workspace-v2.json"; sourceTree = "<group>"; };
 		F0000000000000000000010B /* health-workspace-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "health-workspace-v1.json"; sourceTree = "<group>"; };
+		F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineRealtimeLifecycleTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000112 /* SyncV3Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncV3Tests.swift; sourceTree = "<group>"; };
+		F00000000000000000000113 /* sync-v3-register-device-response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "sync-v3-register-device-response.json"; sourceTree = "<group>"; };
+		F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationSchedulerTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000115 /* TodayAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayAggregationTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000116 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F00000000000000000000117 /* ObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservabilityTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000118 /* SportModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportModelsTests.swift; sourceTree = "<group>"; };
 		F00000000000000000001001 /* Rootine.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rootine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000001002 /* RootineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RootineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -182,24 +182,24 @@
 				F00000000000000000000005 /* Models/WorkspaceModels.swift */,
 				F00000000000000000000028 /* Models/SportModels.swift */,
 				F00000000000000000000016 /* Models/CanonicalWorkspaceMapping.swift */,
-				F0000000000000000000001C /* RootineFeatureFlags.swift */,
+				F0000000000000000000001C /* Configuration/RootineFeatureFlags.swift */,
 				F00000000000000000000006 /* Networking/RootineAPIClient.swift */,
 				F00000000000000000000007 /* Persistence/KeychainSessionStore.swift */,
 				F00000000000000000000008 /* Persistence/WorkspaceFileStore.swift */,
 				F00000000000000000000009 /* Sync/WorkspaceSyncEngine.swift */,
-					F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */,
-					F0000000000000000000001B /* Sync/DualWriteBridge.swift */,
-					F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */,
-					F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */,
-					F0000000000000000000001F /* Sync/PendingSyncCommand.swift */,
-					F00000000000000000000020 /* Sync/RootineSyncCursorStore.swift */,
-					F00000000000000000000021 /* Sync/RootineSyncOperationLog.swift */,
-					F00000000000000000000022 /* Sync/RootineConflictStore.swift */,
-					F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */,
-					F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */,
-					F00000000000000000000025 /* Sync/RootineRelationalRead.swift */,
-					F00000000000000000000026 /* TodayAggregation.swift */,
-					F00000000000000000000027 /* Observability.swift */,
+				F00000000000000000000017 /* Notifications/RootineDeviceRegistry.swift */,
+				F0000000000000000000001B /* Sync/DualWriteBridge.swift */,
+				F0000000000000000000001D /* Sync/RootineRealtimeClient.swift */,
+				F0000000000000000000001E /* Sync/RootineSyncCoordinator.swift */,
+				F0000000000000000000001F /* Sync/PendingSyncCommand.swift */,
+				F00000000000000000000020 /* Sync/RootineSyncCursorStore.swift */,
+				F00000000000000000000021 /* Sync/RootineSyncOperationLog.swift */,
+				F00000000000000000000022 /* Sync/RootineConflictStore.swift */,
+				F00000000000000000000023 /* Sync/RootineSyncRemoteClient.swift */,
+				F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */,
+				F00000000000000000000025 /* Sync/RootineRelationalRead.swift */,
+				F00000000000000000000026 /* TodayAggregation.swift */,
+				F00000000000000000000027 /* Observability.swift */,
 				F0000000000000000000000E /* Auth/AuthenticationSupport.swift */,
 			);
 			path = Rootine/Core;
@@ -233,12 +233,12 @@
 			children = (
 				F00000000000000000000101 /* ContractFixtureTests.swift */,
 				F00000000000000000000106 /* AuthenticationTests.swift */,
-					F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */,
-					F00000000000000000000112 /* SyncV3Tests.swift */,
-					F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */,
-					F00000000000000000000118 /* SportModelsTests.swift */,
-					F00000000000000000000115 /* TodayAggregationTests.swift */,
-					F00000000000000000000117 /* ObservabilityTests.swift */,
+				F00000000000000000000110 /* RootineRealtimeLifecycleTests.swift */,
+				F00000000000000000000112 /* SyncV3Tests.swift */,
+				F00000000000000000000114 /* LocalNotificationSchedulerTests.swift */,
+				F00000000000000000000118 /* SportModelsTests.swift */,
+				F00000000000000000000115 /* TodayAggregationTests.swift */,
+				F00000000000000000000117 /* ObservabilityTests.swift */,
 			);
 			path = RootineTests;
 			sourceTree = "<group>";
@@ -339,7 +339,6 @@
 				};
 			};
 			buildConfigurationList = C000000000000000000000001 /* Build configuration list for PBXProject "Rootine" */;
-			compatibilityVersion = "Xcode 26.0";
 			developmentRegion = pl;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -348,6 +347,7 @@
 				Base,
 			);
 			mainGroup = G00000000000000000000001;
+			preferredProjectObjectVersion = 77;
 			productRefGroup = G00000000000000000000009 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -460,6 +460,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -478,6 +479,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = NUF727H92H;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -489,6 +491,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
 			buildSettings = {
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_TESTABILITY = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -501,6 +504,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F00000000000000000000019 /* Staging.xcconfig */;
 			buildSettings = {
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_TESTABILITY = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -512,6 +516,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
 			buildSettings = {
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_TESTABILITY = YES;
 			};
 			name = Production;
@@ -521,6 +526,7 @@
 			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
@@ -536,6 +542,7 @@
 			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				DEVELOPMENT_TEAM = NUF727H92H;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
@@ -550,6 +557,7 @@
 			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
@@ -565,6 +573,7 @@
 			baseConfigurationReference = F00000000000000000000019 /* Staging.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
@@ -580,6 +589,7 @@
 			baseConfigurationReference = F0000000000000000000001A /* Production.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
+				DEVELOPMENT_TEAM = NUF727H92H;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
