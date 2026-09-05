@@ -1323,13 +1323,15 @@ private struct TodaySummaryCard: View {
                             .font(.system(.largeTitle, design: .rounded).weight(.bold))
                             .foregroundStyle(RootineTheme.ColorToken.primaryText)
                             .monospacedDigit()
-                        Text("wykonane")
-                            .font(.subheadline)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                            .layoutPriority(1)
                         Spacer(minLength: 0)
                         Text("\(Int(snapshot.progress * 100))%")
                             .font(.headline.monospacedDigit())
                             .foregroundStyle(RootineTheme.ColorToken.action)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
 
                     ProgressView(value: snapshot.progress)
