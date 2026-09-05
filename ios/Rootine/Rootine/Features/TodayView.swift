@@ -492,7 +492,6 @@ struct TodayView: View {
                 snapshot: snapshot,
                 isLaunching: environment.isLaunching,
                 syncStatus: environment.workspaceSyncStatus,
-                goals: environment.nutritionWorkspace.goals,
                 dragResetToken: dragResetToken,
                 isBulkRescheduling: isBulkRescheduling,
                 onRequestBulkRescheduleConfirmation: {
@@ -838,7 +837,6 @@ private struct TodayContentView: View, Equatable {
     let snapshot: TodaySnapshot
     let isLaunching: Bool
     let syncStatus: WorkspaceSyncStatus
-    let goals: NutritionGoals
     let dragResetToken: UUID
     let isBulkRescheduling: Bool
     let onRequestBulkRescheduleConfirmation: () -> Void
@@ -859,7 +857,6 @@ private struct TodayContentView: View, Equatable {
         lhs.snapshot.aggregation == rhs.snapshot.aggregation
             && lhs.isLaunching == rhs.isLaunching
             && lhs.syncStatus == rhs.syncStatus
-            && lhs.goals == rhs.goals
             && lhs.undoAction?.id == rhs.undoAction?.id
     }
 
@@ -898,14 +895,6 @@ private struct TodayContentView: View, Equatable {
                 )
                 TodayCompletedCard(snapshot: snapshot)
                 TodayBalanceCard(snapshot: snapshot)
-                TodayAreasSection(
-                    snapshot: snapshot,
-                    goals: goals,
-                    onToggleTask: onToggleTask,
-                    onToggleHabit: onToggleHabit,
-                    onSelectTask: onSelectTask,
-                    onSelectHabit: onSelectHabit
-                )
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
             .padding(.top, RootineTheme.Spacing.small)
@@ -980,9 +969,9 @@ private struct TodaySummaryCard: View {
                 .accessibilityLabel("Postęp dnia")
                 .accessibilityValue("\(Int(snapshot.progress * 100)) procent")
 
-            Divider()
-                .frame(height: 48)
-                .overlay(RootineTheme.ColorToken.separator)
+            Rectangle()
+                .fill(RootineTheme.ColorToken.separator)
+                .frame(height: 1)
 
             HStack(alignment: .top, spacing: RootineTheme.Spacing.xSmall) {
                 Image(systemName: "flag.fill")
