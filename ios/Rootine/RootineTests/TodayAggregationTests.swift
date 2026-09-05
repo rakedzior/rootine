@@ -384,6 +384,8 @@ final class TodayAggregationTests: XCTestCase {
     func testLongPressArbitrationKeepsVerticalScrollSeparateFromHorizontalCancel() {
         XCTAssertTrue(TodayLongPressArbitration.isDominantVertical(CGSize(width: 4, height: 24)))
         XCTAssertFalse(TodayLongPressArbitration.isDominantVertical(CGSize(width: 24, height: 4)))
+        XCTAssertTrue(TodayLongPressArbitration.shouldPassThroughToScroll(for: CGSize(width: 4, height: 24)))
+        XCTAssertFalse(TodayLongPressArbitration.shouldPassThroughToScroll(for: CGSize(width: 24, height: 4)))
         XCTAssertTrue(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 24, height: 4)))
         XCTAssertFalse(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 4, height: 24)))
         XCTAssertFalse(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 20, height: 20)))

@@ -452,6 +452,14 @@ enum TodayLongPressArbitration {
     static func shouldCancelVerticalDrag(for translation: CGSize) -> Bool {
         isDominantHorizontal(translation)
     }
+
+    /// A directional drag that should remain owned by the containing
+    /// ScrollView. Keeping this decision in the same helper as the long-press
+    /// contract prevents a row gesture from recognizing a vertical swipe and
+    /// then merely ignoring its callback after it has already stolen it.
+    static func shouldPassThroughToScroll(for translation: CGSize) -> Bool {
+        isDominantVertical(translation) && !isDominantHorizontal(translation)
+    }
 }
 
 private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.localDate()) -> Bool {
@@ -1477,10 +1485,13 @@ private struct TodayTimelineItemRow: View {
             y: isVerticalDragActive ? 4 : 0
         )
         .zIndex(isVerticalDragActive ? 1 : 0)
-        // Long press owns the gesture once it has armed. Before that point a
-        // horizontal movement is allowed to fall through to the swipe branch;
-        // the exclusive composition prevents both actions in one gesture.
+        // Keep both row interactions independent from the parent ScrollView.
+        // The long-press sequence only arms after the deliberate hold, while
+        // the swipe recognizer runs simultaneously and ignores vertical
+        // motion. An exclusive, unrestricted DragGesture here would recognize
+        // a vertical scroll at 20 pt and prevent ScrollView from receiving it.
         .gesture(sectionGesture)
+        .simultaneousGesture(swipeGesture)
         .onChange(of: dragResetToken) { _, _ in
             resetDragState(notify: true)
         }
@@ -1686,27 +1697,22 @@ private struct TodayTimelineItemRow: View {
             ))
 
         return longPressThenVerticalDrag
-            .exclusively(before: swipeGesture)
             .onChanged { value in
-                switch value {
-                case let .first(sequence):
-                    handleLongPressSequenceChange(sequence)
-                case let .second(swipe):
-                    handleSwipeChange(swipe)
-                }
+                handleLongPressSequenceChange(value)
             }
             .onEnded { value in
-                switch value {
-                case let .first(sequence):
-                    handleLongPressSequenceEnd(sequence)
-                case let .second(swipe):
-                    handleSwipeEnd(swipe)
-                }
+                handleLongPressSequenceEnd(value)
             }
     }
 
-    private var swipeGesture: DragGesture {
+    private var swipeGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onChanged { value in
+                handleSwipeChange(value)
+            }
+            .onEnded { value in
+                handleSwipeEnd(value)
+            }
     }
 
     private func handleLongPressSequenceChange(
@@ -1750,12 +1756,14 @@ private struct TodayTimelineItemRow: View {
         // press failed. Keep this guard as a second line of defence for scene
         // changes and recognizer hand-off edge cases.
         guard !isVerticalDragActive, !verticalDragCancelled,
-              abs(value.translation.width) > abs(value.translation.height) else { return }
+              !TodayLongPressArbitration.shouldPassThroughToScroll(for: value.translation),
+              TodayLongPressArbitration.isDominantHorizontal(value.translation) else { return }
         horizontalDrag = TodaySwipeMotion.clampedOffset(for: value.translation)
     }
 
     private func handleSwipeEnd(_ value: DragGesture.Value) {
         let action = TodaySwipeMotion.action(for: value.translation)
+        let wasVerticalDragActive = isVerticalDragActive
 
         if reduceMotion {
             horizontalDrag = 0
@@ -1764,7 +1772,9 @@ private struct TodayTimelineItemRow: View {
                 horizontalDrag = 0
             }
         }
-        verticalDragCancelled = false
+        if !wasVerticalDragActive {
+            verticalDragCancelled = false
+        }
 
         guard !isVerticalDragActive else { return }
         switch action {
