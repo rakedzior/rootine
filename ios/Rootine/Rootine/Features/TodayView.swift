@@ -1814,6 +1814,7 @@ private struct TodayCompletedDisclosure: View {
     let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
     let onMoveTask: (WorkspaceTask, TodayTaskSection, TodayTaskSection) -> Void
     let onDragEvent: (TodayTaskDragEvent) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded = false
 
     private var completedEntries: [TodayFocusItem] {
@@ -1829,7 +1830,7 @@ private struct TodayCompletedDisclosure: View {
     var body: some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation(.snappy(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             } label: {
@@ -1888,13 +1889,15 @@ private struct TodayCompletedDisclosure: View {
 }
 
 private struct TodayCompletedDisclosureButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
                 RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
                     .fill(RootineTheme.ColorToken.primaryText.opacity(configuration.isPressed ? 0.07 : 0))
             }
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
