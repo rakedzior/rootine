@@ -469,7 +469,6 @@ struct TodayView: View {
     @State private var isBulkRescheduleConfirmationPresented = false
     @State private var isBulkRescheduling = false
     @State private var bulkNotice: String?
-    @State private var isShowingAddTask = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -498,7 +497,6 @@ struct TodayView: View {
                     guard !isBulkRescheduling else { return }
                     isBulkRescheduleConfirmationPresented = true
                 },
-                onAddTask: { isShowingAddTask = true },
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
@@ -675,11 +673,6 @@ struct TodayView: View {
         .onDisappear {
             dragResetToken = UUID()
         }
-        .sheet(isPresented: $isShowingAddTask) {
-            AddTaskSheet()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
         .sheet(item: $selectedTask) { task in
             TaskDetailSheet(task: task)
                 .presentationDetents([.medium, .large])
@@ -840,7 +833,6 @@ private struct TodayContentView: View, Equatable {
     let dragResetToken: UUID
     let isBulkRescheduling: Bool
     let onRequestBulkRescheduleConfirmation: () -> Void
-    let onAddTask: () -> Void
     let onSelectTask: (WorkspaceTask) -> Void
     let onSelectHabit: (WorkspaceHabit) -> Void
     let onToggleTask: (WorkspaceTask) -> Void
@@ -880,7 +872,7 @@ private struct TodayContentView: View, Equatable {
                     RootineOfflineBanner()
                 }
 
-                TodaySummaryCard(snapshot: snapshot, onAddTask: onAddTask)
+                TodaySummaryCard(snapshot: snapshot)
                 TodayTimelineCard(
                     snapshot: snapshot,
                     dragResetToken: dragResetToken,
@@ -893,8 +885,6 @@ private struct TodayContentView: View, Equatable {
                     onRescheduleTask: onRescheduleTask,
                     onMoveTask: onMoveTask
                 )
-                TodayCompletedCard(snapshot: snapshot)
-                TodayBalanceCard(snapshot: snapshot)
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
             .padding(.top, RootineTheme.Spacing.small)
@@ -922,7 +912,6 @@ private struct TodayContentView: View, Equatable {
 
 private struct TodaySummaryCard: View {
     let snapshot: TodaySnapshot
-    let onAddTask: () -> Void
 
     private var remainingPriorities: Int {
         max(0, snapshot.priorityTotal - snapshot.priorityCompleted)
@@ -930,73 +919,54 @@ private struct TodaySummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
-            HStack(alignment: .top, spacing: RootineTheme.Spacing.small) {
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                    Text("Dzisiaj")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                    Text(todayTitle(snapshot.date))
-                        .font(.subheadline)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+            HStack(alignment: .top, spacing: RootineTheme.Spacing.medium) {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+                    HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.small) {
+                        Text("\(snapshot.completedItems) z \(snapshot.totalItems)")
+                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                            .monospacedDigit()
+                        Text("wykonane")
+                            .font(.subheadline)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        Spacer(minLength: 0)
+                        Text("\(Int(snapshot.progress * 100))%")
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(RootineTheme.ColorToken.action)
+                    }
+
+                    ProgressView(value: snapshot.progress)
+                        .tint(RootineTheme.ColorToken.action)
+                        .accessibilityLabel("Postęp dnia")
+                        .accessibilityValue("\(Int(snapshot.progress * 100)) procent")
                 }
-                Spacer(minLength: 0)
-                Button(action: onAddTask) {
-                    Label("Dodaj", systemImage: "plus")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .tint(RootineTheme.ColorToken.action)
-                .accessibilityIdentifier("today-add-task")
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.small) {
-                Text("\(snapshot.completedItems) z \(snapshot.totalItems)")
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                    .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                    .monospacedDigit()
-                Text("wykonane")
-                    .font(.subheadline)
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                Spacer(minLength: 0)
-                Text("\(Int(snapshot.progress * 100))%")
-                    .font(.headline.monospacedDigit())
-                .foregroundStyle(RootineTheme.ColorToken.action)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            ProgressView(value: snapshot.progress)
-                .tint(RootineTheme.ColorToken.action)
-                .accessibilityLabel("Postęp dnia")
-                .accessibilityValue("\(Int(snapshot.progress * 100)) procent")
-
-            Rectangle()
-                .fill(RootineTheme.ColorToken.separator)
-                .frame(height: 1)
-
-            HStack(alignment: .top, spacing: RootineTheme.Spacing.xSmall) {
-                Image(systemName: "flag.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.success)
-                    .frame(width: 24, height: 24, alignment: .leading)
+                Rectangle()
+                    .fill(RootineTheme.ColorToken.separator)
+                    .frame(width: 1)
 
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                    Text("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal))")
+                    Image(systemName: "flag.fill")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                        .monospacedDigit()
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                        .frame(width: 24, height: 24, alignment: .leading)
 
-                    Text("\(remainingPriorities) pozostało")
-                        .font(.subheadline.weight(.semibold))
+                    Text("\(snapshot.priorityCompleted)/\(snapshot.priorityTotal)")
+                        .font(.headline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+
+                    Text("Priorytety")
+                        .font(.caption)
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                        .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
+                .frame(width: 92, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Priorytety")
+                .accessibilityValue("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal)), \(remainingPriorities) pozostało")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Priorytety")
-            .accessibilityValue("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal)), \(remainingPriorities) pozostało")
         }
         .rootineSurface()
         .accessibilityElement(children: .contain)
@@ -2056,114 +2026,6 @@ private struct TodayCompletedDisclosureButtonStyle: ButtonStyle {
     }
 }
 
-private struct TodayCompletedCard: View {
-    let snapshot: TodaySnapshot
-    @State private var isExpanded = false
-
-    private var completedEntries: [TodayFocusItem] {
-        let tasks = snapshot.tasks.filter { rootineTaskIsDoneOnDate($0, dateKey: snapshot.dateKey) }.map {
-            TodayFocusItem(id: "task-\($0.id)", title: $0.text, time: $0.time, kind: .task, task: $0, habit: nil)
-        }
-        let habits = snapshot.habits.filter { isHabitDone($0, dateKey: snapshot.dateKey) }.map {
-            TodayFocusItem(id: "habit-\($0.id)", title: $0.name, time: $0.time, kind: .habit, task: nil, habit: $0)
-        }
-        return (tasks + habits).sorted { ($0.time ?? "99:99") < ($1.time ?? "99:99") }
-    }
-
-    var body: some View {
-        TodayCard {
-            DisclosureGroup(isExpanded: $isExpanded) {
-                VStack(spacing: 0) {
-                    ForEach(completedEntries) { item in
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(RootineTheme.ColorToken.success)
-                            VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                                Text(item.kindLabel)
-                                    .font(.caption)
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
-                            Spacer(minLength: 0)
-                            if let time = item.time {
-                                Text(time)
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
-                        }
-                        .frame(minHeight: 48)
-                        if item.id != completedEntries.last?.id {
-                            Divider().overlay(RootineTheme.ColorToken.separator)
-                        }
-                    }
-                    if completedEntries.isEmpty && snapshot.completedItems > 0 {
-                        Text("Ukończone elementy z innych obszarów dnia.")
-                            .font(.subheadline)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, RootineTheme.Spacing.small)
-                    }
-                }
-            } label: {
-                HStack(spacing: RootineTheme.Spacing.small) {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(RootineTheme.ColorToken.success)
-                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                        Text("Zrobione dzisiaj")
-                            .font(.headline)
-                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                        Text("\(snapshot.completedItems) \(todayItemWord(snapshot.completedItems)) · otwórz historię")
-                            .font(.caption)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    }
-                    Spacer(minLength: 0)
-                    Text("\(snapshot.completedItems)")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                }
-            }
-        }
-        .accessibilityIdentifier("today-completed")
-    }
-}
-
-private struct TodayBalanceCard: View {
-    let snapshot: TodaySnapshot
-
-    var body: some View {
-        TodayCard {
-            TodayCardHeader(title: "Bilans", systemImage: "chart.bar.xaxis")
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: RootineTheme.Spacing.medium) {
-                    metric("Priorytety", value: "\(snapshot.priorityCompleted)/\(snapshot.priorityTotal)")
-                    metric("Pozostało", value: "\(snapshot.remainingItems)")
-                    metric("Notatki", value: "\(snapshot.activeNotes.count)")
-                }
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                    metric("Priorytety", value: "\(snapshot.priorityCompleted)/\(snapshot.priorityTotal)")
-                    metric("Pozostało", value: "\(snapshot.remainingItems)")
-                    metric("Notatki", value: "\(snapshot.activeNotes.count)")
-                }
-            }
-        }
-        .accessibilityIdentifier("today-balance")
-    }
-
-    private func metric(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-            Text(value)
-                .font(.headline.monospacedDigit())
-                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 private struct TodayAreasSection: View {
     let snapshot: TodaySnapshot
     let goals: NutritionGoals
@@ -2468,13 +2330,6 @@ private struct TodayCardHeader: View {
             .font(.headline)
             .foregroundStyle(tint)
     }
-}
-
-private func todayTitle(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "pl_PL")
-    formatter.dateFormat = "EEEE, d MMMM"
-    return formatter.string(from: date).capitalized
 }
 
 private func clock(_ date: Date) -> String {
