@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private struct TodayFocusItem: Identifiable {
     enum Kind {
@@ -427,9 +428,24 @@ enum TodaySwipeMotion {
 /// armed the drag recognizer; once armed, a horizontal excursion cancels the
 /// vertical drag rather than producing a second action.
 enum TodayLongPressArbitration {
+    enum GesturePhase: Equatable {
+        case waitingForLongPress
+        case longPressArmed
+        case longPressCancelled
+    }
+
+    enum GestureDecision: Equatable {
+        case undecided
+        case passToScroll
+        case horizontalSwipe
+        case verticalMove
+        case cancel
+    }
+
     static let minimumDuration: TimeInterval = 0.55
+    static let minimumDragDistance: CGFloat = 4
     private static let axisDominanceRatio: CGFloat = 1.1
-    private static let minimumDirectionalDistance: CGFloat = 12
+    private static let minimumDirectionalDistance: CGFloat = 4
 
     static func isArmed(after elapsed: TimeInterval) -> Bool {
         elapsed >= minimumDuration
@@ -453,12 +469,37 @@ enum TodayLongPressArbitration {
         isDominantHorizontal(translation)
     }
 
+    /// This is the single axis decision used by both UIKit recognizers below.
+    /// A pending row recognizer fails for a vertical translation, allowing the
+    /// ancestor UIScrollView pan recognizer to win before any row callback can
+    /// update state. Once the deliberate hold has armed, only vertical motion
+    /// remains a move; horizontal motion cancels the whole touch sequence.
+    static func decision(
+        for translation: CGSize,
+        phase: GesturePhase
+    ) -> GestureDecision {
+        switch phase {
+        case .waitingForLongPress:
+            if isDominantVertical(translation) {
+                return .passToScroll
+            }
+            if isDominantHorizontal(translation) {
+                return .horizontalSwipe
+            }
+            return .undecided
+        case .longPressArmed:
+            return isDominantHorizontal(translation) ? .cancel : .verticalMove
+        case .longPressCancelled:
+            return .cancel
+        }
+    }
+
     /// A directional drag that should remain owned by the containing
     /// ScrollView. Keeping this decision in the same helper as the long-press
     /// contract prevents a row gesture from recognizing a vertical swipe and
     /// then merely ignoring its callback after it has already stolen it.
     static func shouldPassThroughToScroll(for translation: CGSize) -> Bool {
-        isDominantVertical(translation) && !isDominantHorizontal(translation)
+        decision(for: translation, phase: .waitingForLongPress) == .passToScroll
     }
 
     /// Once a long-press drag has been cancelled, its physical touch must not
@@ -468,6 +509,345 @@ enum TodayLongPressArbitration {
         isLongPressCancelled: Bool
     ) -> TodaySwipeAction? {
         isLongPressCancelled ? nil : action
+    }
+}
+
+/// Shared state for the two row recognizers. It is deliberately held outside
+/// either recognizer so a long-press cancellation remains visible to the
+/// horizontal recognizer until the physical touch ends.
+private final class TodayGestureArbitrationSession {
+    private(set) var phase: TodayLongPressArbitration.GesturePhase = .waitingForLongPress
+
+    func beginTouch() {
+        phase = .waitingForLongPress
+    }
+
+    func armLongPress() {
+        phase = .longPressArmed
+    }
+
+    func cancelLongPress() {
+        phase = .longPressCancelled
+    }
+}
+
+/// A pan recognizer that fails before recognition when the touch is vertical.
+/// A DragGesture can ignore a vertical callback, but it has already entered
+/// the recognizer race by then. This recognizer keeps the touch `.possible`
+/// until it is horizontally directional, or fails so the parent ScrollView
+/// can begin its pan immediately.
+private final class TodayHorizontalSwipeGestureRecognizer: UIPanGestureRecognizer {
+    private let minimumDistance: CGFloat
+    private let session: TodayGestureArbitrationSession
+    private var startLocation: CGPoint?
+    private var forwardedToPan = false
+
+    init(minimumDistance: CGFloat, session: TodayGestureArbitrationSession) {
+        self.minimumDistance = minimumDistance
+        self.session = session
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard touches.count == 1,
+              let touch = touches.first,
+              let view else {
+            state = .failed
+            return
+        }
+
+        startLocation = touch.location(in: view)
+        forwardedToPan = false
+        session.beginTouch()
+        super.touchesBegan(touches, with: event)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible else {
+            super.touchesMoved(touches, with: event)
+            return
+        }
+
+        guard session.phase == .waitingForLongPress,
+              let touch = touches.first,
+              let view,
+              let startLocation else {
+            state = .failed
+            return
+        }
+
+        let location = touch.location(in: view)
+        let translation = CGSize(
+            width: location.x - startLocation.x,
+            height: location.y - startLocation.y
+        )
+
+        switch TodayLongPressArbitration.decision(
+            for: translation,
+            phase: .waitingForLongPress
+        ) {
+        case .passToScroll:
+            state = .failed
+        case .horizontalSwipe:
+            guard abs(translation.width) >= minimumDistance else { return }
+            forwardedToPan = true
+            super.touchesMoved(touches, with: event)
+        case .undecided:
+            return
+        case .verticalMove, .cancel:
+            state = .failed
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        if state == .possible, !forwardedToPan {
+            state = .failed
+            return
+        }
+        super.touchesEnded(touches, with: event)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        if state == .possible, !forwardedToPan {
+            state = .failed
+            return
+        }
+        super.touchesCancelled(touches, with: event)
+    }
+
+    override func reset() {
+        super.reset()
+        startLocation = nil
+        forwardedToPan = false
+    }
+}
+
+/// A long-press recognizer with a vertical drag phase. Before the hold it
+/// fails on directional movement, which leaves the parent ScrollView as the
+/// only recognizer eligible to own a vertical pan. After the hold it begins
+/// only once the drag threshold is crossed.
+private final class TodayLongPressVerticalDragGestureRecognizer: UIGestureRecognizer {
+    private let minimumDuration: TimeInterval
+    private let maximumDistance: CGFloat
+    private let minimumDragDistance: CGFloat
+    private let session: TodayGestureArbitrationSession
+    private var startLocation: CGPoint?
+    private var latestLocation: CGPoint?
+    private var armTimer: Timer?
+    private(set) var didArm = false
+
+    init(
+        minimumDuration: TimeInterval,
+        maximumDistance: CGFloat,
+        minimumDragDistance: CGFloat,
+        session: TodayGestureArbitrationSession
+    ) {
+        self.minimumDuration = minimumDuration
+        self.maximumDistance = maximumDistance
+        self.minimumDragDistance = minimumDragDistance
+        self.session = session
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    var currentTranslation: CGSize {
+        guard let startLocation, let latestLocation else { return .zero }
+        return CGSize(
+            width: latestLocation.x - startLocation.x,
+            height: latestLocation.y - startLocation.y
+        )
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible,
+              touches.count == 1,
+              let touch = touches.first,
+              let view else {
+            state = .failed
+            return
+        }
+
+        session.beginTouch()
+        startLocation = touch.location(in: view)
+        latestLocation = startLocation
+        didArm = false
+        armTimer?.invalidate()
+        let timer = Timer(
+            timeInterval: minimumDuration,
+            target: self,
+            selector: #selector(armTimerFired),
+            userInfo: nil,
+            repeats: false
+        )
+        armTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard state == .possible || state == .began || state == .changed,
+              let touch = touches.first,
+              let view,
+              let startLocation else { return }
+
+        let location = touch.location(in: view)
+        latestLocation = location
+        let translation = CGSize(
+            width: location.x - startLocation.x,
+            height: location.y - startLocation.y
+        )
+
+        switch session.phase {
+        case .waitingForLongPress:
+            guard hypot(translation.width, translation.height) <= maximumDistance else {
+                armTimer?.invalidate()
+                armTimer = nil
+                state = .failed
+                return
+            }
+
+            if TodayLongPressArbitration.decision(
+                for: translation,
+                phase: .waitingForLongPress
+            ) == .passToScroll {
+                armTimer?.invalidate()
+                armTimer = nil
+                state = .failed
+            }
+        case .longPressArmed:
+            switch TodayLongPressArbitration.decision(
+                for: translation,
+                phase: .longPressArmed
+            ) {
+            case .cancel:
+                session.cancelLongPress()
+                state = .cancelled
+            case .verticalMove:
+                guard hypot(translation.width, translation.height) >= minimumDragDistance else { return }
+                if state == .began {
+                    state = .changed
+                }
+            case .undecided, .passToScroll, .horizontalSwipe:
+                return
+            }
+        case .longPressCancelled:
+            state = .cancelled
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        armTimer?.invalidate()
+        armTimer = nil
+        if didArm, state == .began || state == .changed {
+            state = .ended
+        } else if state == .possible {
+            state = .failed
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        armTimer?.invalidate()
+        armTimer = nil
+        state = didArm ? .cancelled : .failed
+    }
+
+    @objc private func armTimerFired() {
+        armTimer = nil
+        guard state == .possible,
+              let startLocation,
+              let latestLocation,
+              hypot(latestLocation.x - startLocation.x, latestLocation.y - startLocation.y) <= maximumDistance else {
+            return
+        }
+
+        didArm = true
+        session.armLongPress()
+        state = .began
+    }
+
+    override func reset() {
+        super.reset()
+        armTimer?.invalidate()
+        armTimer = nil
+        startLocation = nil
+        latestLocation = nil
+        didArm = false
+    }
+}
+
+@available(iOS 18.0, *)
+private struct TodayHorizontalSwipeGesture: UIGestureRecognizerRepresentable {
+    let minimumDistance: CGFloat
+    let session: TodayGestureArbitrationSession
+    let onChanged: (CGSize) -> Void
+    let onEnded: (CGSize) -> Void
+    let onCancelled: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> TodayHorizontalSwipeGestureRecognizer {
+        TodayHorizontalSwipeGestureRecognizer(minimumDistance: minimumDistance, session: session)
+    }
+
+    func handleUIGestureRecognizerAction(
+        _ recognizer: TodayHorizontalSwipeGestureRecognizer,
+        context: Context
+    ) {
+        let translation = recognizer.translation(in: recognizer.view)
+        let value = CGSize(width: translation.x, height: translation.y)
+        switch recognizer.state {
+        case .began, .changed:
+            onChanged(value)
+        case .ended:
+            onEnded(value)
+        case .cancelled:
+            onCancelled()
+        default:
+            break
+        }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct TodayLongPressVerticalDragGesture: UIGestureRecognizerRepresentable {
+    let session: TodayGestureArbitrationSession
+    let onChanged: (CGSize, CGPoint) -> Void
+    let onEnded: (CGSize, CGPoint) -> Void
+    let onCancelled: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> TodayLongPressVerticalDragGestureRecognizer {
+        TodayLongPressVerticalDragGestureRecognizer(
+            minimumDuration: TodayLongPressArbitration.minimumDuration,
+            maximumDistance: 12,
+            minimumDragDistance: TodayLongPressArbitration.minimumDragDistance,
+            session: session
+        )
+    }
+
+    func handleUIGestureRecognizerAction(
+        _ recognizer: TodayLongPressVerticalDragGestureRecognizer,
+        context: Context
+    ) {
+        switch recognizer.state {
+        case .changed:
+            let location = context.converter.location(in: .named(TodayTimelineCoordinateSpace.name))
+            onChanged(recognizer.currentTranslation, location)
+        case .ended where recognizer.didArm:
+            let location = context.converter.location(in: .named(TodayTimelineCoordinateSpace.name))
+            onEnded(recognizer.currentTranslation, location)
+        case .cancelled where recognizer.didArm:
+            onCancelled()
+        default:
+            break
+        }
     }
 }
 
@@ -1459,10 +1839,10 @@ private struct TodayTimelineItemRow: View {
     @State private var isVerticalDragActive = false
     @State private var verticalDragCancelled = false
     @State private var isSwipeGestureActive = false
+    @State private var gestureSession = TodayGestureArbitrationSession()
     @State private var isRescheduleMenuPresented = false
     @State private var isDatePickerPresented = false
     @State private var rescheduleDate = Date()
-    @GestureState private var isPressed = false
 
     var body: some View {
         presentedRow
@@ -1490,8 +1870,7 @@ private struct TodayTimelineItemRow: View {
     }
 
     private var gestureRow: some View {
-        accessibleRow
-        .simultaneousGesture(pressGesture)
+        rowGestureHost
         .offset(y: verticalDragOffset)
         .shadow(
             color: RootineTheme.ColorToken.primaryText.opacity(isVerticalDragActive ? 0.12 : 0),
@@ -1499,18 +1878,24 @@ private struct TodayTimelineItemRow: View {
             y: isVerticalDragActive ? 4 : 0
         )
         .zIndex(isVerticalDragActive ? 1 : 0)
-        // Keep both row interactions independent from the parent ScrollView.
-        // The long-press sequence only arms after the deliberate hold, while
-        // the swipe recognizer runs simultaneously and ignores vertical
-        // motion. An exclusive, unrestricted DragGesture here would recognize
-        // a vertical scroll at 20 pt and prevent ScrollView from receiving it.
-        .gesture(sectionGesture)
-        .simultaneousGesture(swipeGesture)
+        // Both recognizers below fail vertical motion at the recognizer level.
+        // This is important: a callback guard would run after a row drag had
+        // already entered the arena and could still block the ScrollView pan.
+        .gesture(swipeGesture)
         .onChange(of: dragResetToken) { _, _ in
             resetDragState(notify: true)
         }
         .onDisappear {
             resetDragState(notify: true)
+        }
+    }
+
+    @ViewBuilder
+    private var rowGestureHost: some View {
+        if item.task != nil {
+            accessibleRow.gesture(sectionGesture)
+        } else {
+            accessibleRow
         }
     }
 
@@ -1530,11 +1915,6 @@ private struct TodayTimelineItemRow: View {
     private var visualRow: some View {
         rowShell
         .frame(maxWidth: .infinity, minHeight: 76, alignment: .center)
-        .background {
-            RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
-                .fill(RootineTheme.ColorToken.primaryText.opacity(isPressed ? 0.07 : 0))
-        }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isPressed)
         .contentShape(Rectangle())
         .background {
             GeometryReader { proxy in
@@ -1700,96 +2080,99 @@ private struct TodayTimelineItemRow: View {
             .accessibilityHidden(true)
     }
 
-    private var sectionGesture: some Gesture {
-        let longPressThenVerticalDrag = LongPressGesture(
-            minimumDuration: TodayLongPressArbitration.minimumDuration,
-            maximumDistance: 12
+    private var sectionGesture: TodayLongPressVerticalDragGesture {
+        TodayLongPressVerticalDragGesture(
+            session: gestureSession,
+            onChanged: { translation, location in
+                handleLongPressDragChange(translation, location: location)
+            },
+            onEnded: { translation, location in
+                handleLongPressDragEnd(translation, location: location)
+            },
+            onCancelled: handleLongPressDragCancelled
         )
-            .sequenced(before: DragGesture(
-                minimumDistance: 4,
-                coordinateSpace: .named(TodayTimelineCoordinateSpace.name)
-            ))
-
-        return longPressThenVerticalDrag
-            .onChanged { value in
-                handleLongPressSequenceChange(value)
-            }
-            .onEnded { value in
-                handleLongPressSequenceEnd(value)
-            }
     }
 
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 20, coordinateSpace: .local)
-            .onChanged { value in
-                handleSwipeChange(value)
-            }
-            .onEnded { value in
-                handleSwipeEnd(value)
-            }
+    private var swipeGesture: TodayHorizontalSwipeGesture {
+        TodayHorizontalSwipeGesture(
+            // Claim a horizontal direction before the ancestor pan can win;
+            // TodaySwipeMotion still requires 72 pt before any action fires.
+            minimumDistance: TodayLongPressArbitration.minimumDragDistance,
+            session: gestureSession,
+            onChanged: handleSwipeChange,
+            onEnded: handleSwipeEnd,
+            onCancelled: handleSwipeCancelled
+        )
     }
 
-    private func handleLongPressSequenceChange(
-        _ sequence: SequenceGesture<LongPressGesture, DragGesture>.Value
-    ) {
-        guard case let .second(_, drag?) = sequence else { return }
-        guard item.task != nil else { return }
+    private func handleLongPressDragChange(_ translation: CGSize, location: CGPoint) {
+        guard let task = item.task,
+              gestureSession.phase == .longPressArmed else { return }
 
-        if TodayLongPressArbitration.shouldCancelVerticalDrag(for: drag.translation) {
-            if !verticalDragCancelled, isVerticalDragActive {
-                onDragEvent(.cancelled(taskID: item.task?.id ?? 0))
-            }
-            verticalDragCancelled = true
-            // The simultaneous swipe recognizer may not have crossed its
-            // minimum distance yet. Mark this physical touch as active so its
-            // first callback cannot interpret the cancellation as a new swipe
-            // and trigger a second action on release.
-            isSwipeGestureActive = true
-            isVerticalDragActive = false
-            verticalDragOffset = 0
-            return
-        }
+        // The recognizer has already rejected horizontal motion. Keep this
+        // same production decision here so any recognizer hand-off or state
+        // restoration cannot turn a cancelled hold into a row move.
+        guard TodayLongPressArbitration.decision(
+            for: translation,
+            phase: .longPressArmed
+        ) == .verticalMove else { return }
 
-        guard !verticalDragCancelled, let task = item.task else { return }
+        verticalDragCancelled = false
         isVerticalDragActive = true
-        verticalDragOffset = min(max(drag.translation.height, -180), 180)
-        onDragEvent(.changed(taskID: task.id, sourceSection: section, location: drag.location))
+        verticalDragOffset = min(max(translation.height, -180), 180)
+        onDragEvent(.changed(taskID: task.id, sourceSection: section, location: location))
     }
 
-    private func handleLongPressSequenceEnd(
-        _ sequence: SequenceGesture<LongPressGesture, DragGesture>.Value
-    ) {
-        if case let .second(_, drag?) = sequence,
-           let task = item.task,
+    private func handleLongPressDragEnd(_ translation: CGSize, location: CGPoint) {
+        if let task = item.task,
            isVerticalDragActive,
-           !verticalDragCancelled {
-            onDragEvent(.ended(taskID: task.id, sourceSection: section, location: drag.location))
+           !verticalDragCancelled,
+           TodayLongPressArbitration.decision(
+               for: translation,
+               phase: .longPressArmed
+           ) == .verticalMove {
+            onDragEvent(.ended(taskID: task.id, sourceSection: section, location: location))
         } else if isVerticalDragActive, let task = item.task {
             onDragEvent(.cancelled(taskID: task.id))
         }
         resetDragState(notify: false)
     }
 
-    private func handleSwipeChange(_ value: DragGesture.Value) {
-        if !isSwipeGestureActive {
-            isSwipeGestureActive = true
-            verticalDragCancelled = false
+    private func handleLongPressDragCancelled() {
+        guard item.task != nil else { return }
+        if isVerticalDragActive, let task = item.task {
+            onDragEvent(.cancelled(taskID: task.id))
         }
-
-        // Keep this guard as a second line of defence for scene changes and
-        // recognizer hand-off edge cases.
-        guard !isVerticalDragActive, !verticalDragCancelled,
-              !TodayLongPressArbitration.shouldPassThroughToScroll(for: value.translation),
-              TodayLongPressArbitration.isDominantHorizontal(value.translation) else { return }
-        horizontalDrag = TodaySwipeMotion.clampedOffset(for: value.translation)
+        verticalDragCancelled = true
+        isVerticalDragActive = false
+        verticalDragOffset = 0
     }
 
-    private func handleSwipeEnd(_ value: DragGesture.Value) {
+    private func handleSwipeChange(_ translation: CGSize) {
+        if !isSwipeGestureActive {
+            isSwipeGestureActive = true
+            if gestureSession.phase == .waitingForLongPress {
+                verticalDragCancelled = false
+            }
+        }
+
+        guard gestureSession.phase == .waitingForLongPress,
+              !isVerticalDragActive,
+              !verticalDragCancelled,
+              TodayLongPressArbitration.decision(
+                  for: translation,
+                  phase: .waitingForLongPress
+              ) == .horizontalSwipe else { return }
+        horizontalDrag = TodaySwipeMotion.clampedOffset(for: translation)
+    }
+
+    private func handleSwipeEnd(_ translation: CGSize) {
         let wasVerticalDragActive = isVerticalDragActive
         let wasSwipeCancelled = verticalDragCancelled
+        let longPressOwnedTouch = gestureSession.phase != .waitingForLongPress
         let action = TodayLongPressArbitration.swipeAction(
-            after: TodaySwipeMotion.action(for: value.translation),
-            isLongPressCancelled: wasSwipeCancelled
+            after: TodaySwipeMotion.action(for: translation),
+            isLongPressCancelled: wasSwipeCancelled || longPressOwnedTouch
         )
 
         if reduceMotion {
@@ -1800,11 +2183,11 @@ private struct TodayTimelineItemRow: View {
             }
         }
         isSwipeGestureActive = false
-        if !wasVerticalDragActive, !wasSwipeCancelled {
+        if !wasVerticalDragActive, !wasSwipeCancelled, !longPressOwnedTouch {
             verticalDragCancelled = false
         }
 
-        guard !isVerticalDragActive else { return }
+        guard !isVerticalDragActive, !longPressOwnedTouch else { return }
         switch action {
         case .complete:
             toggle()
@@ -1815,6 +2198,17 @@ private struct TodayTimelineItemRow: View {
         case nil:
             break
         }
+    }
+
+    private func handleSwipeCancelled() {
+        if reduceMotion {
+            horizontalDrag = 0
+        } else {
+            withAnimation(.snappy(duration: 0.2)) {
+                horizontalDrag = 0
+            }
+        }
+        isSwipeGestureActive = false
     }
 
     private func resetDragState(notify: Bool) {
@@ -1865,12 +2259,6 @@ private struct TodayTimelineItemRow: View {
         return "\(time)\(item.title), \(item.kindLabel)"
     }
 
-    private var pressGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .updating($isPressed) { _, state, _ in
-                state = true
-            }
-    }
 }
 
 private struct TodayRescheduleAccessibilityModifier: ViewModifier {

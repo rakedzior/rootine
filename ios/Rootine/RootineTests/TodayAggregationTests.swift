@@ -391,6 +391,47 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertFalse(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 20, height: 20)))
     }
 
+    func testProductionGestureDecisionHandsVerticalPanToScrollAndGatesLongPress() {
+        let verticalTranslation = CGSize(width: 3, height: 8)
+        let horizontalTranslation = CGSize(width: 24, height: 3)
+
+        XCTAssertEqual(
+            TodayLongPressArbitration.decision(
+                for: verticalTranslation,
+                phase: .waitingForLongPress
+            ),
+            .passToScroll
+        )
+        XCTAssertEqual(
+            TodayLongPressArbitration.decision(
+                for: horizontalTranslation,
+                phase: .waitingForLongPress
+            ),
+            .horizontalSwipe
+        )
+        XCTAssertEqual(
+            TodayLongPressArbitration.decision(
+                for: verticalTranslation,
+                phase: .longPressArmed
+            ),
+            .verticalMove
+        )
+        XCTAssertEqual(
+            TodayLongPressArbitration.decision(
+                for: horizontalTranslation,
+                phase: .longPressArmed
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            TodayLongPressArbitration.decision(
+                for: verticalTranslation,
+                phase: .longPressCancelled
+            ),
+            .cancel
+        )
+    }
+
     func testCancelledLongPressCannotBecomeASecondSwipeAction() {
         let verticalDrag = CGSize(width: 24, height: 4)
 
