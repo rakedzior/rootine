@@ -89,6 +89,41 @@ enum TodayTaskSectionDropResolver {
     }
 }
 
+/// Resolves the visible insertion point inside the rendered target section.
+/// Row bounds are preferred over a synthetic row height so the indicator stays
+/// anchored when Dynamic Type, completed disclosure, or empty-state copy
+/// changes the timeline layout.
+enum TodayTaskDropIndicatorResolver {
+    static func insertionY(atY y: CGFloat, in sectionFrame: CGRect, rowFrames: [CGRect]) -> CGFloat? {
+        guard sectionFrame.height > 0, y >= sectionFrame.minY, y <= sectionFrame.maxY else {
+            return nil
+        }
+
+        let rows = rowFrames
+            .filter { $0.height > 0 && $0.maxY >= sectionFrame.minY && $0.minY <= sectionFrame.maxY }
+            .sorted { lhs, rhs in
+                if lhs.minY != rhs.minY { return lhs.minY < rhs.minY }
+                return lhs.minX < rhs.minX
+            }
+
+        guard let first = rows.first else {
+            return sectionFrame.midY
+        }
+
+        for row in rows {
+            let midpoint = row.minY + row.height / 2
+            if y <= midpoint {
+                return max(sectionFrame.minY, row.minY)
+            }
+            if y <= row.maxY {
+                return min(sectionFrame.maxY, row.maxY)
+            }
+        }
+
+        return min(sectionFrame.maxY, rows.last?.maxY ?? first.maxY)
+    }
+}
+
 private enum TodayTimelineCoordinateSpace {
     static let name = "today-timeline-coordinate-space"
 }
@@ -111,6 +146,16 @@ private struct TodayTaskSectionFramePreferenceKey: PreferenceKey {
 
     static func reduce(value: inout [TodayTaskSection: CGRect], nextValue: () -> [TodayTaskSection: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, next in next })
+    }
+}
+
+private struct TodayTaskRowFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [TodayTaskSection: [String: CGRect]] = [:]
+
+    static func reduce(value: inout [TodayTaskSection: [String: CGRect]], nextValue: () -> [TodayTaskSection: [String: CGRect]]) {
+        for (section, frames) in nextValue() {
+            value[section, default: [:]].merge(frames, uniquingKeysWith: { _, next in next })
+        }
     }
 }
 
@@ -911,6 +956,7 @@ private struct TodayTimelineCard: View {
     let onMoveTask: (WorkspaceTask, TodayTaskSection, String?) -> Void
     @State private var dragSession: TodayTaskDragSession?
     @State private var sectionFrames: [TodayTaskSection: CGRect] = [:]
+    @State private var rowFrames: [TodayTaskSection: [String: CGRect]] = [:]
     @State private var moveNotice: String?
 
     private struct TimelineEntries {
@@ -978,6 +1024,7 @@ private struct TodayTimelineCard: View {
                 TodayTimelineSectionRegion(
                     section: .overdue,
                     isActive: dragSession?.targetSection == .overdue,
+                    insertionY: insertionY(for: .overdue),
                     minimumHeight: timeline.overdue.isEmpty && dragSession != nil ? 44 : 0
                 ) {
                     VStack(spacing: 0) {
@@ -1016,7 +1063,8 @@ private struct TodayTimelineCard: View {
 
                 TodayTimelineSectionRegion(
                     section: .today,
-                    isActive: dragSession?.targetSection == .today
+                    isActive: dragSession?.targetSection == .today,
+                    insertionY: insertionY(for: .today)
                 ) {
                     VStack(spacing: 0) {
                         if !timeline.hasOpenEntries {
@@ -1073,6 +1121,7 @@ private struct TodayTimelineCard: View {
                 TodayTimelineSectionRegion(
                     section: .completed,
                     isActive: dragSession?.targetSection == .completed,
+                    insertionY: insertionY(for: .completed),
                     minimumHeight: snapshot.completedItems == 0 && dragSession != nil ? 44 : 0
                 ) {
                     VStack(spacing: 0) {
@@ -1099,6 +1148,9 @@ private struct TodayTimelineCard: View {
         .onPreferenceChange(TodayTaskSectionFramePreferenceKey.self) { frames in
             sectionFrames = frames
         }
+        .onPreferenceChange(TodayTaskRowFramePreferenceKey.self) { frames in
+            rowFrames = frames
+        }
         .onChange(of: dragResetToken) { _, _ in
             resetDragSession()
         }
@@ -1110,6 +1162,20 @@ private struct TodayTimelineCard: View {
         } message: {
             Text(moveNotice ?? "")
         }
+    }
+
+    private func insertionY(for section: TodayTaskSection) -> CGFloat? {
+        guard let session = dragSession,
+              session.targetSection == section,
+              let sectionFrame = sectionFrames[section] else {
+            return nil
+        }
+
+        return TodayTaskDropIndicatorResolver.insertionY(
+            atY: session.location.y,
+            in: sectionFrame,
+            rowFrames: rowFrames[section].map { Array($0.values) } ?? []
+        )
     }
 
     private func handleDragEvent(_ event: TodayTaskDragEvent) {
@@ -1174,17 +1240,21 @@ private struct TodayTimelineCard: View {
 private struct TodayTimelineSectionRegion<Content: View>: View {
     let section: TodayTaskSection
     let isActive: Bool
+    let insertionY: CGFloat?
     let minimumHeight: CGFloat
     @ViewBuilder let content: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         section: TodayTaskSection,
         isActive: Bool,
+        insertionY: CGFloat? = nil,
         minimumHeight: CGFloat = 0,
         @ViewBuilder content: () -> Content
     ) {
         self.section = section
         self.isActive = isActive
+        self.insertionY = insertionY
         self.minimumHeight = minimumHeight
         self.content = content()
     }
@@ -1204,6 +1274,22 @@ private struct TodayTimelineSectionRegion<Content: View>: View {
                 if isActive {
                     RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
                         .stroke(section.tint.opacity(0.42), lineWidth: 1)
+                }
+            }
+            .overlay {
+                GeometryReader { proxy in
+                    if isActive, let insertionY {
+                        Capsule()
+                            .fill(section.tint)
+                            .frame(height: 3)
+                            .padding(.leading, 88)
+                            .padding(.trailing, RootineTheme.Spacing.xSmall)
+                            .offset(y: insertionY - proxy.frame(in: .named(TodayTimelineCoordinateSpace.name)).minY - 1.5)
+                            .transition(reduceMotion ? .identity : .opacity)
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: insertionY)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -1395,6 +1481,14 @@ private struct TodayTimelineItemRow: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isPressed)
         .contentShape(Rectangle())
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: TodayTaskRowFramePreferenceKey.self,
+                    value: [section: [item.id: proxy.frame(in: .named(TodayTimelineCoordinateSpace.name))]]
+                )
+            }
+        }
     }
 
     private var rowShell: some View {

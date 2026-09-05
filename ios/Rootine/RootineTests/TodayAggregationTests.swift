@@ -405,6 +405,27 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertNil(TodayTaskSectionDropResolver.section(atY: -80, in: frames))
     }
 
+    func testTodayDropIndicatorUsesTopMiddleAndBottomRowBounds() {
+        let sectionFrame = CGRect(x: 0, y: 40, width: 320, height: 300)
+        let rows = [
+            CGRect(x: 0, y: 80, width: 320, height: 76),
+            CGRect(x: 0, y: 176, width: 320, height: 44),
+            CGRect(x: 0, y: 244, width: 320, height: 64),
+        ]
+
+        XCTAssertEqual(TodayTaskDropIndicatorResolver.insertionY(atY: 90, in: sectionFrame, rowFrames: rows), 80)
+        XCTAssertEqual(TodayTaskDropIndicatorResolver.insertionY(atY: 200, in: sectionFrame, rowFrames: rows), 220)
+        XCTAssertEqual(TodayTaskDropIndicatorResolver.insertionY(atY: 330, in: sectionFrame, rowFrames: rows), 308)
+    }
+
+    func testTodayDropIndicatorCentersEmptySectionAndCancelsOutsideIt() {
+        let sectionFrame = CGRect(x: 0, y: 200, width: 320, height: 44)
+
+        XCTAssertEqual(TodayTaskDropIndicatorResolver.insertionY(atY: 220, in: sectionFrame, rowFrames: []), 222)
+        XCTAssertNil(TodayTaskDropIndicatorResolver.insertionY(atY: 199, in: sectionFrame, rowFrames: []))
+        XCTAssertNil(TodayTaskDropIndicatorResolver.insertionY(atY: 245, in: sectionFrame, rowFrames: []))
+    }
+
     func testRecurringOccurrenceCompletionKeepsSeriesAnchor() {
         let anchor = "2026-09-01"
         let recurring = WorkspaceTask(
