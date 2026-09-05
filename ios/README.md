@@ -102,7 +102,7 @@ The runner explicitly selects `iphonesimulator`, builds the test bundle, runs
 only `testLargeAccountAggregationIsMeasured`, and writes the full log and
 `.xcresult` paths. Set `DESTINATION` to select another simulator and
 `BENCHMARK_TIMEOUT_SECONDS` to bound a stalled CoreSimulator/testmanager run.
-The Development configuration pins the iOS SDK so `TEST_HOST` resolves inside
+The runner pins the iOS Simulator SDK so `TEST_HOST` resolves inside
 `Development-iphonesimulator` instead of the non-existent macOS path.
 
 Production Apple/Google credentials, provider-console settings, and redirect
