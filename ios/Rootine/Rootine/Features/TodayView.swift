@@ -460,6 +460,15 @@ enum TodayLongPressArbitration {
     static func shouldPassThroughToScroll(for translation: CGSize) -> Bool {
         isDominantVertical(translation) && !isDominantHorizontal(translation)
     }
+
+    /// Once a long-press drag has been cancelled, its physical touch must not
+    /// dispatch a swipe action when the second recognizer ends.
+    static func swipeAction(
+        after action: TodaySwipeAction?,
+        isLongPressCancelled: Bool
+    ) -> TodaySwipeAction? {
+        isLongPressCancelled ? nil : action
+    }
 }
 
 private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.localDate()) -> Bool {
@@ -1449,6 +1458,7 @@ private struct TodayTimelineItemRow: View {
     @State private var verticalDragOffset: CGFloat = 0
     @State private var isVerticalDragActive = false
     @State private var verticalDragCancelled = false
+    @State private var isSwipeGestureActive = false
     @State private var isRescheduleMenuPresented = false
     @State private var isDatePickerPresented = false
     @State private var rescheduleDate = Date()
@@ -1730,6 +1740,11 @@ private struct TodayTimelineItemRow: View {
                 onDragEvent(.cancelled(taskID: item.task?.id ?? 0))
             }
             verticalDragCancelled = true
+            // The simultaneous swipe recognizer may not have crossed its
+            // minimum distance yet. Mark this physical touch as active so its
+            // first callback cannot interpret the cancellation as a new swipe
+            // and trigger a second action on release.
+            isSwipeGestureActive = true
             isVerticalDragActive = false
             verticalDragOffset = 0
             return
@@ -1756,9 +1771,13 @@ private struct TodayTimelineItemRow: View {
     }
 
     private func handleSwipeChange(_ value: DragGesture.Value) {
-        // The exclusive gesture gives the swipe branch only when the long
-        // press failed. Keep this guard as a second line of defence for scene
-        // changes and recognizer hand-off edge cases.
+        if !isSwipeGestureActive {
+            isSwipeGestureActive = true
+            verticalDragCancelled = false
+        }
+
+        // Keep this guard as a second line of defence for scene changes and
+        // recognizer hand-off edge cases.
         guard !isVerticalDragActive, !verticalDragCancelled,
               !TodayLongPressArbitration.shouldPassThroughToScroll(for: value.translation),
               TodayLongPressArbitration.isDominantHorizontal(value.translation) else { return }
@@ -1766,8 +1785,12 @@ private struct TodayTimelineItemRow: View {
     }
 
     private func handleSwipeEnd(_ value: DragGesture.Value) {
-        let action = TodaySwipeMotion.action(for: value.translation)
         let wasVerticalDragActive = isVerticalDragActive
+        let wasSwipeCancelled = verticalDragCancelled
+        let action = TodayLongPressArbitration.swipeAction(
+            after: TodaySwipeMotion.action(for: value.translation),
+            isLongPressCancelled: wasSwipeCancelled
+        )
 
         if reduceMotion {
             horizontalDrag = 0
@@ -1776,7 +1799,8 @@ private struct TodayTimelineItemRow: View {
                 horizontalDrag = 0
             }
         }
-        if !wasVerticalDragActive {
+        isSwipeGestureActive = false
+        if !wasVerticalDragActive, !wasSwipeCancelled {
             verticalDragCancelled = false
         }
 
@@ -1799,6 +1823,7 @@ private struct TodayTimelineItemRow: View {
         }
         isVerticalDragActive = false
         verticalDragCancelled = false
+        isSwipeGestureActive = false
         verticalDragOffset = 0
         horizontalDrag = 0
     }

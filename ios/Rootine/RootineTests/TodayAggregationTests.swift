@@ -391,6 +391,20 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertFalse(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 20, height: 20)))
     }
 
+    func testCancelledLongPressCannotBecomeASecondSwipeAction() {
+        let verticalDrag = CGSize(width: 24, height: 4)
+
+        XCTAssertTrue(TodayLongPressArbitration.shouldCancelVerticalDrag(for: verticalDrag))
+        XCTAssertNil(TodayLongPressArbitration.swipeAction(
+            after: .complete,
+            isLongPressCancelled: true
+        ))
+        XCTAssertEqual(TodayLongPressArbitration.swipeAction(
+            after: .complete,
+            isLongPressCancelled: false
+        ), .complete)
+    }
+
     func testTodayDropResolverMapsEveryRenderedSectionAndSeparator() {
         let frames: [TodayTaskSection: CGRect] = [
             .overdue: CGRect(x: 0, y: 40, width: 320, height: 72),
