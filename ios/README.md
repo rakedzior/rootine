@@ -90,5 +90,20 @@ security omissions are documented in [`docs/ios-secure-storage.md`](../docs/ios-
 The protected workflow runs executable `xcodebuild test`, SQL/RLS and Edge
 contract gates, then the isolated staging sync smoke before a TestFlight build.
 
+## Today aggregation benchmark
+
+Run the fixed 2,000-task XCTest benchmark on an available iOS Simulator:
+
+```sh
+./scripts/ios-today-aggregation-benchmark.sh
+```
+
+The runner explicitly selects `iphonesimulator`, builds the test bundle, runs
+only `testLargeAccountAggregationIsMeasured`, and writes the full log and
+`.xcresult` paths. Set `DESTINATION` to select another simulator and
+`BENCHMARK_TIMEOUT_SECONDS` to bound a stalled CoreSimulator/testmanager run.
+The Development configuration pins the iOS SDK so `TEST_HOST` resolves inside
+`Development-iphonesimulator` instead of the non-existent macOS path.
+
 Production Apple/Google credentials, provider-console settings, and redirect
 allowlists are intentionally not committed or configured by this repository.
