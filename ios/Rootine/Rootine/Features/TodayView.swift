@@ -954,22 +954,26 @@ private struct TodaySummaryCard: View {
                     .fill(RootineTheme.ColorToken.separator)
                     .frame(width: 1)
 
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                HStack(alignment: .top, spacing: RootineTheme.Spacing.small) {
                     Image(systemName: "flag.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RootineTheme.ColorToken.success)
                         .frame(width: 24, height: 24, alignment: .leading)
 
-                    Text("\(snapshot.priorityCompleted)/\(snapshot.priorityTotal)")
-                        .font(.headline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
+                        Text("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal))")
+                            .font(.headline.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Priorytety")
-                        .font(.caption)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text("\(remainingPriorities) pozostało")
+                            .font(.caption)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .frame(width: 92, alignment: .leading)
+                .frame(minWidth: 92, alignment: .leading)
+                .layoutPriority(1)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Priorytety")
                 .accessibilityValue("\(snapshot.priorityTotal) \(priorityWord(snapshot.priorityTotal)), \(remainingPriorities) pozostało")
