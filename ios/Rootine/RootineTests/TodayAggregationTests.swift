@@ -374,6 +374,21 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertEqual(TodaySwipeMotion.clampedOffset(for: CGSize(width: 400, height: 0)), 140)
         XCTAssertEqual(TodaySwipeMotion.clampedOffset(for: CGSize(width: -400, height: 0)), -140)
     }
+
+    func testLongPressArbitrationArmsOnlyAtTheContractDuration() {
+        XCTAssertFalse(TodayLongPressArbitration.isArmed(after: 0.54))
+        XCTAssertTrue(TodayLongPressArbitration.isArmed(after: 0.55))
+        XCTAssertTrue(TodayLongPressArbitration.isArmed(after: 0.56))
+    }
+
+    func testLongPressArbitrationKeepsVerticalScrollSeparateFromHorizontalCancel() {
+        XCTAssertTrue(TodayLongPressArbitration.isDominantVertical(CGSize(width: 4, height: 24)))
+        XCTAssertFalse(TodayLongPressArbitration.isDominantVertical(CGSize(width: 24, height: 4)))
+        XCTAssertTrue(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 24, height: 4)))
+        XCTAssertFalse(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 4, height: 24)))
+        XCTAssertFalse(TodayLongPressArbitration.shouldCancelVerticalDrag(for: CGSize(width: 20, height: 20)))
+    }
+
     func testTodayDropResolverMapsEveryRenderedSectionAndSeparator() {
         let frames: [TodayTaskSection: CGRect] = [
             .overdue: CGRect(x: 0, y: 40, width: 320, height: 72),

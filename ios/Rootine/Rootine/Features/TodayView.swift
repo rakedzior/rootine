@@ -422,6 +422,38 @@ enum TodaySwipeMotion {
     }
 }
 
+/// Keeps the long-press/scroll arbitration contract explicit and testable.
+/// A vertical scroll must be allowed to win before the deliberate hold has
+/// armed the drag recognizer; once armed, a horizontal excursion cancels the
+/// vertical drag rather than producing a second action.
+enum TodayLongPressArbitration {
+    static let minimumDuration: TimeInterval = 0.55
+    private static let axisDominanceRatio: CGFloat = 1.1
+    private static let minimumDirectionalDistance: CGFloat = 12
+
+    static func isArmed(after elapsed: TimeInterval) -> Bool {
+        elapsed >= minimumDuration
+    }
+
+    static func isDominantVertical(_ translation: CGSize) -> Bool {
+        abs(translation.height) > max(
+            minimumDirectionalDistance,
+            abs(translation.width) * axisDominanceRatio
+        )
+    }
+
+    static func isDominantHorizontal(_ translation: CGSize) -> Bool {
+        abs(translation.width) > max(
+            minimumDirectionalDistance,
+            abs(translation.height) * axisDominanceRatio
+        )
+    }
+
+    static func shouldCancelVerticalDrag(for translation: CGSize) -> Bool {
+        isDominantHorizontal(translation)
+    }
+}
+
 private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.localDate()) -> Bool {
     rootineHabitIsDoneOnDate(habit, dateKey: dateKey)
 }
@@ -1646,7 +1678,10 @@ private struct TodayTimelineItemRow: View {
     }
 
     private var sectionGesture: some Gesture {
-        let longPressThenVerticalDrag = LongPressGesture(minimumDuration: 0.45, maximumDistance: 12)
+        let longPressThenVerticalDrag = LongPressGesture(
+            minimumDuration: TodayLongPressArbitration.minimumDuration,
+            maximumDistance: 12
+        )
             .sequenced(before: DragGesture(
                 minimumDistance: 4,
                 coordinateSpace: .named(TodayTimelineCoordinateSpace.name)
@@ -1682,9 +1717,7 @@ private struct TodayTimelineItemRow: View {
         guard case let .second(_, drag?) = sequence else { return }
         guard item.task != nil else { return }
 
-        let horizontalDistance = abs(drag.translation.width)
-        let verticalDistance = abs(drag.translation.height)
-        if horizontalDistance > max(12, verticalDistance * 1.1) {
+        if TodayLongPressArbitration.shouldCancelVerticalDrag(for: drag.translation) {
             if !verticalDragCancelled, isVerticalDragActive {
                 onDragEvent(.cancelled(taskID: item.task?.id ?? 0))
             }
