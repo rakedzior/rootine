@@ -1391,11 +1391,14 @@ private struct TodayTimelineCard: View {
     @State private var sectionFrames: [TodayTaskSection: CGRect] = [:]
     @State private var rowFrames: [TodayTaskSection: [String: CGRect]] = [:]
     @State private var moveNotice: String?
+    @State private var isCompletedExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct TimelineEntries {
         let overdue: [TodayFocusItem]
         let timed: [TodayFocusItem]
         let untimed: [TodayFocusItem]
+        let completed: [TodayFocusItem]
 
         init(snapshot: TodaySnapshot) {
             overdue = snapshot.overdueTasks.map {
@@ -1427,18 +1430,29 @@ private struct TodayTimelineCard: View {
                 case .habit: return item.habit.map { !isHabitDone($0, dateKey: snapshot.dateKey) } ?? false
                 }
             }.sorted {
-                switch ($0.time, $1.time) {
-                case let (left?, right?): return left == right ? $0.id < $1.id : left < right
-                case (_?, nil): return true
-                case (nil, _?): return false
-                default: return $0.id < $1.id
-                }
+                Self.itemSort($0, $1)
             }
             timed = active.filter { $0.time != nil }
             untimed = active.filter { $0.time == nil }
+
+            completed = (tasks + habits).filter { item in
+                switch item.kind {
+                case .task: return item.task.map { rootineTaskIsDoneOnDate($0, dateKey: snapshot.dateKey) } ?? false
+                case .habit: return item.habit.map { isHabitDone($0, dateKey: snapshot.dateKey) } ?? false
+                }
+            }.sorted(by: Self.itemSort)
         }
 
         var hasOpenEntries: Bool { !overdue.isEmpty || !timed.isEmpty || !untimed.isEmpty }
+
+        private static func itemSort(_ lhs: TodayFocusItem, _ rhs: TodayFocusItem) -> Bool {
+            switch (lhs.time, rhs.time) {
+            case let (left?, right?): return left == right ? lhs.id < rhs.id : left < right
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return lhs.id < rhs.id
+            }
+        }
     }
 
     var body: some View {
@@ -1446,12 +1460,31 @@ private struct TodayTimelineCard: View {
         let nextID = snapshot.next.first?.id ?? snapshot.now?.id
 
         TodayCard {
-            HStack(alignment: .firstTextBaseline, spacing: RootineTheme.Spacing.small) {
-                Text("Plan dnia")
-                    .font(.headline)
-                    .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                Spacer(minLength: 0)
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                    isCompletedExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: RootineTheme.Spacing.small) {
+                    Text("Plan dnia")
+                        .font(.headline)
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                    Spacer(minLength: 0)
+                    if !timeline.completed.isEmpty {
+                        Text(isCompletedExpanded ? "Ukryj ukończone" : "Pokaż ukończone")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RootineTheme.ColorToken.action)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(timeline.completed.isEmpty)
+            .accessibilityIdentifier("today-completed-toggle")
+            .accessibilityLabel(isCompletedExpanded ? "Ukryj ukończone elementy" : "Pokaż ukończone elementy")
+            .accessibilityValue("\(timeline.completed.count) \(todayItemWord(timeline.completed.count))")
+            .accessibilityHint("Stuknij w dowolnym miejscu nagłówka, aby zmienić widoczność ukończonych elementów")
 
             VStack(spacing: 0) {
                 TodayTimelineSectionRegion(
@@ -1546,31 +1579,39 @@ private struct TodayTimelineCard: View {
                                     onDragEvent: handleDragEvent,
                                     section: .today
                                 )
+                            }
                         }
-                    }
-                }
-                    }
 
-                TodayTimelineSectionRegion(
-                    section: .completed,
-                    isActive: dragSession?.targetSection == .completed,
-                    insertionY: insertionY(for: .completed),
-                    minimumHeight: snapshot.completedItems == 0 && dragSession != nil ? 44 : 0
-                ) {
-                    VStack(spacing: 0) {
-                        if snapshot.completedItems > 0 {
-                            TodayTimelineDivider()
-                            TodayCompletedDisclosure(
-                                snapshot: snapshot,
-                                dragResetToken: dragResetToken,
-                                onSelectTask: onSelectTask,
-                                onSelectHabit: onSelectHabit,
-                                onToggleTask: onToggleTask,
-                                onToggleHabit: onToggleHabit,
-                                onRescheduleTask: onRescheduleTask,
-                                onMoveTask: requestMove,
-                                onDragEvent: handleDragEvent
-                            )
+                        TodayTimelineSectionRegion(
+                            section: .completed,
+                            isActive: dragSession?.targetSection == .completed,
+                            insertionY: insertionY(for: .completed),
+                            minimumHeight: dragSession != nil && (timeline.completed.isEmpty || !isCompletedExpanded) ? 44 : 0
+                        ) {
+                            VStack(spacing: 0) {
+                                if isCompletedExpanded && !timeline.completed.isEmpty {
+                                    if timeline.hasOpenEntries {
+                                        TodayTimelineDivider()
+                                    }
+                                    ForEach(timeline.completed) { item in
+                                        TodayTimelineItemRow(
+                                            item: item,
+                                            dateKey: snapshot.dateKey,
+                                            isNext: false,
+                                            isOverdue: false,
+                                            onSelectTask: onSelectTask,
+                                            onSelectHabit: onSelectHabit,
+                                            onToggleTask: onToggleTask,
+                                            onToggleHabit: onToggleHabit,
+                                            onRescheduleTask: onRescheduleTask,
+                                            onMoveTask: requestMove,
+                                            dragResetToken: dragResetToken,
+                                            onDragEvent: handleDragEvent,
+                                            section: .completed
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2355,103 +2396,6 @@ private struct TodayRescheduleDateSheet: View {
                 }
         }
         .presentationDetents([.medium])
-    }
-}
-
-private struct TodayCompletedDisclosure: View {
-    let snapshot: TodaySnapshot
-    let dragResetToken: UUID
-    let onSelectTask: (WorkspaceTask) -> Void
-    let onSelectHabit: (WorkspaceHabit) -> Void
-    let onToggleTask: (WorkspaceTask) -> Void
-    let onToggleHabit: (WorkspaceHabit) -> Void
-    let onRescheduleTask: (WorkspaceTask, TodayRescheduleOption) -> Void
-    let onMoveTask: (WorkspaceTask, TodayTaskSection, TodayTaskSection) -> Void
-    let onDragEvent: (TodayTaskDragEvent) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isExpanded = false
-
-    private var completedEntries: [TodayFocusItem] {
-        let tasks = snapshot.tasks.filter { rootineTaskIsDoneOnDate($0, dateKey: snapshot.dateKey) }.map {
-            TodayFocusItem(id: "task-\($0.id)", title: $0.text, time: $0.time, kind: .task, task: $0, habit: nil)
-        }
-        let habits = snapshot.habits.filter { isHabitDone($0, dateKey: snapshot.dateKey) }.map {
-            TodayFocusItem(id: "habit-\($0.id)", title: $0.name, time: $0.time, kind: .habit, task: nil, habit: $0)
-        }
-        return (tasks + habits).sorted { ($0.time ?? "99:99") < ($1.time ?? "99:99") }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: RootineTheme.Spacing.small) {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(RootineTheme.ColorToken.success)
-                    VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                        Text(isExpanded ? "Ukryj ukończone" : "Pokaż ukończone")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                        Text("\(snapshot.completedItems) \(todayItemWord(snapshot.completedItems))")
-                            .font(.caption)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
-            .buttonStyle(TodayCompletedDisclosureButtonStyle())
-            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-            .contentShape(Rectangle())
-            .accessibilityLabel(isExpanded ? "Ukryj ukończone elementy" : "Pokaż ukończone elementy")
-            .accessibilityValue("\(snapshot.completedItems) \(todayItemWord(snapshot.completedItems))")
-            .accessibilityHint("Stuknij w dowolnym miejscu wiersza, aby zmienić widoczność ukończonych elementów")
-
-            if isExpanded {
-                VStack(spacing: 0) {
-                    ForEach(completedEntries) { item in
-                        TodayTimelineItemRow(
-                            item: item,
-                            dateKey: snapshot.dateKey,
-                            isNext: false,
-                            isOverdue: false,
-                            onSelectTask: onSelectTask,
-                            onSelectHabit: onSelectHabit,
-                            onToggleTask: onToggleTask,
-                            onToggleHabit: onToggleHabit,
-                            onRescheduleTask: onRescheduleTask,
-                            onMoveTask: onMoveTask,
-                            dragResetToken: dragResetToken,
-                            onDragEvent: onDragEvent,
-                            section: .completed
-                        )
-                    }
-                    if completedEntries.isEmpty {
-                        Text("Ukończone elementy z innych obszarów dnia.")
-                            .font(.subheadline)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, RootineTheme.Spacing.small)
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("today-completed")
-    }
-}
-
-private struct TodayCompletedDisclosureButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous)
-                    .fill(RootineTheme.ColorToken.primaryText.opacity(configuration.isPressed ? 0.07 : 0))
-            }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

@@ -116,6 +116,29 @@ final class TodayAggregationTests: XCTestCase {
         XCTAssertEqual(aggregate.priorityTotal, 4)
     }
 
+    func testOverdueTasksAreSortedFromOldestToMostRecent() {
+        let tasks = [
+            WorkspaceTask(id: 31, text: "Wczoraj", done: false, time: "08:00", view: "wszystkie", calendarDate: "2026-09-01"),
+            WorkspaceTask(id: 32, text: "Najstarsze", done: false, time: "18:00", view: "wszystkie", calendarDate: "2026-08-28"),
+            WorkspaceTask(id: 33, text: "Przedwczoraj", done: false, time: "09:00", view: "wszystkie", calendarDate: "2026-08-30")
+        ]
+        let aggregate = TodayAggregationService.aggregate(TodayAggregationInput(
+            accountID: "account-a",
+            referenceDate: referenceDate,
+            calendar: calendar,
+            taskWorkspace: TaskWorkspace(
+                version: 2,
+                updatedAt: "2026-09-02T10:00:00.000Z",
+                tasks: tasks,
+                habits: [],
+                lists: [],
+                tags: []
+            )
+        ))
+
+        XCTAssertEqual(aggregate.overdueTasks.map(\.id), [32, 33, 31])
+    }
+
     func testTimestampAndDateKeysRespectExplicitTimezoneAcrossMidnight() {
         let date = ISO8601DateFormatter().date(from: "2026-09-01T22:30:00Z")!
         let day = "2026-09-02"

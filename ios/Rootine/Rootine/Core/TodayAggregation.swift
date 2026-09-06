@@ -320,7 +320,7 @@ enum TodayAggregationService {
                     && !rootineTaskIsDoneOnDate(task, dateKey: todayKey)
                     && validDateKey(task.calendarDate).map { $0 < todayKey } == true
             }
-            .sorted(by: taskSort)
+            .sorted { overdueTaskSort($0, $1, todayKey: todayKey) }
         let todayTaskBuckets = partition(todayTasks) { rootineTaskIsDoneOnDate($0, dateKey: todayKey) }
         let completedTodayTasks = todayTaskBuckets.matching
         let openTodayTasks = todayTaskBuckets.other
@@ -747,6 +747,17 @@ enum TodayAggregationService {
     }
 
     private static func taskSort(_ lhs: WorkspaceTask, _ rhs: WorkspaceTask) -> Bool {
+        let leftTime = timeSortValue(lhs.time)
+        let rightTime = timeSortValue(rhs.time)
+        if leftTime != rightTime { return leftTime < rightTime }
+        return lhs.id < rhs.id
+    }
+
+    private static func overdueTaskSort(_ lhs: WorkspaceTask, _ rhs: WorkspaceTask, todayKey: String) -> Bool {
+        let leftDate = validDateKey(lhs.calendarDate) ?? todayKey
+        let rightDate = validDateKey(rhs.calendarDate) ?? todayKey
+        if leftDate != rightDate { return leftDate < rightDate }
+
         let leftTime = timeSortValue(lhs.time)
         let rightTime = timeSortValue(rhs.time)
         if leftTime != rightTime { return leftTime < rightTime }
