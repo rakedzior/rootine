@@ -1319,12 +1319,12 @@ private struct TodaySummaryCard: View {
             HStack(alignment: .top, spacing: RootineTheme.Spacing.medium) {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
                     HStack(alignment: .lastTextBaseline, spacing: RootineTheme.Spacing.small) {
-                        Text("\(snapshot.completedItems) z \(snapshot.totalItems)")
-                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                        Text("\(snapshot.completedItems) z \(snapshot.totalItems) \(todayTaskWord(snapshot.totalItems)) wykonane")
+                            .font(.headline.weight(.semibold))
                             .foregroundStyle(RootineTheme.ColorToken.primaryText)
                             .monospacedDigit()
                             .lineLimit(1)
-                            .minimumScaleFactor(0.65)
+                            .minimumScaleFactor(0.7)
                             .layoutPriority(1)
                         Spacer(minLength: 0)
                         Text("\(Int(snapshot.progress * 100))%")
@@ -2784,6 +2784,14 @@ private func todayItemWord(_ count: Int) -> String {
     let mod10 = value % 10
     let mod100 = value % 100
     return mod10 >= 5 || (12...14).contains(mod100) ? "elementów" : "elementy"
+}
+
+private func todayTaskWord(_ count: Int) -> String {
+    let value = abs(count)
+    if value == 1 { return "zadanie" }
+    let mod10 = value % 10
+    let mod100 = value % 100
+    return (2...4).contains(mod10) && !(12...14).contains(mod100) ? "zadania" : "zadań"
 }
 
 private func priorityWord(_ count: Int) -> String {
