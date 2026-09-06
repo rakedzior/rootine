@@ -1391,6 +1391,8 @@ private struct TodayTimelineCard: View {
     @State private var sectionFrames: [TodayTaskSection: CGRect] = [:]
     @State private var rowFrames: [TodayTaskSection: [String: CGRect]] = [:]
     @State private var moveNotice: String?
+    @State private var isOverdueExpanded = true
+    @State private var isTodayExpanded = true
     @State private var isCompletedExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1460,31 +1462,10 @@ private struct TodayTimelineCard: View {
         let nextID = snapshot.next.first?.id ?? snapshot.now?.id
 
         TodayCard {
-            Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
-                    isCompletedExpanded.toggle()
-                }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: RootineTheme.Spacing.small) {
-                    Text("Plan dnia")
-                        .font(.headline)
-                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                    Spacer(minLength: 0)
-                    if !timeline.completed.isEmpty {
-                        Text(isCompletedExpanded ? "Ukryj ukończone" : "Pokaż ukończone")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(RootineTheme.ColorToken.action)
-                    }
-                }
+            Text("Plan dnia")
+                .font(.headline)
+                .foregroundStyle(RootineTheme.ColorToken.primaryText)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(timeline.completed.isEmpty)
-            .accessibilityIdentifier("today-completed-toggle")
-            .accessibilityLabel(isCompletedExpanded ? "Ukryj ukończone elementy" : "Pokaż ukończone elementy")
-            .accessibilityValue("\(timeline.completed.count) \(todayItemWord(timeline.completed.count))")
-            .accessibilityHint("Stuknij w dowolnym miejscu nagłówka, aby zmienić widoczność ukończonych elementów")
 
             VStack(spacing: 0) {
                 TodayTimelineSectionRegion(
@@ -1494,15 +1475,23 @@ private struct TodayTimelineCard: View {
                     minimumHeight: timeline.overdue.isEmpty && dragSession != nil ? 44 : 0
                 ) {
                     VStack(spacing: 0) {
-                        if !timeline.overdue.isEmpty {
-                            TodayTimelineSectionLabel(
-                                title: "Zaległości",
-                                systemImage: "clock.badge.exclamationmark",
-                                tint: RootineTheme.ColorToken.warning,
-                                actionTitle: "Przełóż",
-                                isActionLoading: isBulkRescheduling,
-                                onAction: onRequestBulkRescheduleConfirmation
-                            )
+                        TodayTimelineSectionLabel(
+                            title: "Zaległości",
+                            systemImage: "clock.badge.exclamationmark",
+                            tint: RootineTheme.ColorToken.warning,
+                            isExpanded: isOverdueExpanded,
+                            accessibilityIdentifier: "today-overdue-toggle",
+                            accessibilityValue: "\(timeline.overdue.count) \(todayItemWord(timeline.overdue.count))",
+                            onToggle: {
+                                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                                    isOverdueExpanded.toggle()
+                                }
+                            },
+                            actionTitle: "Przełóż",
+                            isActionLoading: isBulkRescheduling,
+                            onAction: onRequestBulkRescheduleConfirmation
+                        )
+                        if isOverdueExpanded {
                             ForEach(timeline.overdue) { item in
                                 TodayTimelineItemRow(
                                     item: item,
@@ -1520,12 +1509,11 @@ private struct TodayTimelineCard: View {
                                     section: .overdue
                                 )
                             }
-                            if timeline.hasOpenEntries {
-                                TodayTimelineDivider()
-                            }
                         }
                     }
                 }
+
+                TodayTimelineDivider()
 
                 TodayTimelineSectionRegion(
                     section: .today,
@@ -1533,84 +1521,111 @@ private struct TodayTimelineCard: View {
                     insertionY: insertionY(for: .today)
                 ) {
                     VStack(spacing: 0) {
-                        if !timeline.hasOpenEntries {
-                            Label(
-                                "Brak otwartych zobowiązań. Możesz spokojnie domknąć dzień.",
-                                systemImage: "checkmark.circle"
-                            )
-                            .font(.subheadline)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, RootineTheme.Spacing.small)
-                        } else {
-                            ForEach(timeline.timed) { item in
-                                TodayTimelineItemRow(
-                                    item: item,
-                                    dateKey: snapshot.dateKey,
-                                    isNext: item.id == nextID,
-                                    isOverdue: false,
-                                    onSelectTask: onSelectTask,
-                                    onSelectHabit: onSelectHabit,
-                                    onToggleTask: onToggleTask,
-                                    onToggleHabit: onToggleHabit,
-                                    onRescheduleTask: onRescheduleTask,
-                                    onMoveTask: requestMove,
-                                    dragResetToken: dragResetToken,
-                                    onDragEvent: handleDragEvent,
-                                    section: .today
-                                )
+                        TodayTimelineSectionLabel(
+                            title: "Dzisiaj",
+                            systemImage: "sun.max.fill",
+                            tint: RootineTheme.ColorToken.action,
+                            isExpanded: isTodayExpanded,
+                            accessibilityIdentifier: "today-today-toggle",
+                            accessibilityValue: "\(timeline.timed.count + timeline.untimed.count) \(todayItemWord(timeline.timed.count + timeline.untimed.count))",
+                            onToggle: {
+                                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                                    isTodayExpanded.toggle()
+                                }
                             }
-                            if !timeline.timed.isEmpty && !timeline.untimed.isEmpty {
-                                TodayTimelineDivider()
-                            }
-                            ForEach(timeline.untimed) { item in
-                                TodayTimelineItemRow(
-                                    item: item,
-                                    dateKey: snapshot.dateKey,
-                                    isNext: item.id == nextID,
-                                    isOverdue: false,
-                                    onSelectTask: onSelectTask,
-                                    onSelectHabit: onSelectHabit,
-                                    onToggleTask: onToggleTask,
-                                    onToggleHabit: onToggleHabit,
-                                    onRescheduleTask: onRescheduleTask,
-                                    onMoveTask: requestMove,
-                                    dragResetToken: dragResetToken,
-                                    onDragEvent: handleDragEvent,
-                                    section: .today
+                        )
+                        if isTodayExpanded {
+                            if !timeline.hasOpenEntries {
+                                Label(
+                                    "Brak otwartych zobowiązań. Możesz spokojnie domknąć dzień.",
+                                    systemImage: "checkmark.circle"
                                 )
+                                .font(.subheadline)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, RootineTheme.Spacing.small)
+                            } else {
+                                ForEach(timeline.timed) { item in
+                                    TodayTimelineItemRow(
+                                        item: item,
+                                        dateKey: snapshot.dateKey,
+                                        isNext: item.id == nextID,
+                                        isOverdue: false,
+                                        onSelectTask: onSelectTask,
+                                        onSelectHabit: onSelectHabit,
+                                        onToggleTask: onToggleTask,
+                                        onToggleHabit: onToggleHabit,
+                                        onRescheduleTask: onRescheduleTask,
+                                        onMoveTask: requestMove,
+                                        dragResetToken: dragResetToken,
+                                        onDragEvent: handleDragEvent,
+                                        section: .today
+                                    )
+                                }
+                                if !timeline.timed.isEmpty && !timeline.untimed.isEmpty {
+                                    TodayTimelineDivider()
+                                }
+                                ForEach(timeline.untimed) { item in
+                                    TodayTimelineItemRow(
+                                        item: item,
+                                        dateKey: snapshot.dateKey,
+                                        isNext: item.id == nextID,
+                                        isOverdue: false,
+                                        onSelectTask: onSelectTask,
+                                        onSelectHabit: onSelectHabit,
+                                        onToggleTask: onToggleTask,
+                                        onToggleHabit: onToggleHabit,
+                                        onRescheduleTask: onRescheduleTask,
+                                        onMoveTask: requestMove,
+                                        dragResetToken: dragResetToken,
+                                        onDragEvent: handleDragEvent,
+                                        section: .today
+                                    )
+                                }
                             }
                         }
+                    }
+                }
 
-                        TodayTimelineSectionRegion(
-                            section: .completed,
-                            isActive: dragSession?.targetSection == .completed,
-                            insertionY: insertionY(for: .completed),
-                            minimumHeight: dragSession != nil && (timeline.completed.isEmpty || !isCompletedExpanded) ? 44 : 0
-                        ) {
-                            VStack(spacing: 0) {
-                                if isCompletedExpanded && !timeline.completed.isEmpty {
-                                    if timeline.hasOpenEntries {
-                                        TodayTimelineDivider()
-                                    }
-                                    ForEach(timeline.completed) { item in
-                                        TodayTimelineItemRow(
-                                            item: item,
-                                            dateKey: snapshot.dateKey,
-                                            isNext: false,
-                                            isOverdue: false,
-                                            onSelectTask: onSelectTask,
-                                            onSelectHabit: onSelectHabit,
-                                            onToggleTask: onToggleTask,
-                                            onToggleHabit: onToggleHabit,
-                                            onRescheduleTask: onRescheduleTask,
-                                            onMoveTask: requestMove,
-                                            dragResetToken: dragResetToken,
-                                            onDragEvent: handleDragEvent,
-                                            section: .completed
-                                        )
-                                    }
+                TodayTimelineDivider()
+
+                TodayTimelineSectionRegion(
+                    section: .completed,
+                    isActive: dragSession?.targetSection == .completed,
+                    insertionY: insertionY(for: .completed),
+                    minimumHeight: dragSession != nil && (timeline.completed.isEmpty || !isCompletedExpanded) ? 44 : 0
+                ) {
+                    VStack(spacing: 0) {
+                        TodayTimelineSectionLabel(
+                            title: "Ukończone",
+                            systemImage: "checkmark.circle.fill",
+                            tint: RootineTheme.ColorToken.success,
+                            isExpanded: isCompletedExpanded,
+                            accessibilityIdentifier: "today-completed-toggle",
+                            accessibilityValue: "\(timeline.completed.count) \(todayItemWord(timeline.completed.count))",
+                            onToggle: {
+                                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+                                    isCompletedExpanded.toggle()
                                 }
+                            }
+                        )
+                        if isCompletedExpanded {
+                            ForEach(timeline.completed) { item in
+                                TodayTimelineItemRow(
+                                    item: item,
+                                    dateKey: snapshot.dateKey,
+                                    isNext: false,
+                                    isOverdue: false,
+                                    onSelectTask: onSelectTask,
+                                    onSelectHabit: onSelectHabit,
+                                    onToggleTask: onToggleTask,
+                                    onToggleHabit: onToggleHabit,
+                                    onRescheduleTask: onRescheduleTask,
+                                    onMoveTask: requestMove,
+                                    dragResetToken: dragResetToken,
+                                    onDragEvent: handleDragEvent,
+                                    section: .completed
+                                )
                             }
                         }
                     }
@@ -1786,6 +1801,10 @@ private struct TodayTimelineSectionLabel: View {
     let title: String
     let systemImage: String
     let tint: Color
+    let isExpanded: Bool
+    let accessibilityIdentifier: String
+    let accessibilityValue: String
+    let onToggle: () -> Void
     let actionTitle: String?
     let isActionLoading: Bool
     let onAction: (() -> Void)?
@@ -1794,6 +1813,10 @@ private struct TodayTimelineSectionLabel: View {
         title: String,
         systemImage: String,
         tint: Color,
+        isExpanded: Bool = true,
+        accessibilityIdentifier: String = "today-section-toggle",
+        accessibilityValue: String = "",
+        onToggle: @escaping () -> Void = {},
         actionTitle: String? = nil,
         isActionLoading: Bool = false,
         onAction: (() -> Void)? = nil
@@ -1801,6 +1824,10 @@ private struct TodayTimelineSectionLabel: View {
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
+        self.isExpanded = isExpanded
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.accessibilityValue = accessibilityValue
+        self.onToggle = onToggle
         self.actionTitle = actionTitle
         self.isActionLoading = isActionLoading
         self.onAction = onAction
@@ -1808,9 +1835,23 @@ private struct TodayTimelineSectionLabel: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: RootineTheme.Spacing.small) {
-            Label(title.uppercased(), systemImage: systemImage)
+            Button(action: onToggle) {
+                HStack(spacing: RootineTheme.Spacing.small) {
+                    Label(title.uppercased(), systemImage: systemImage)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .accessibilityLabel("Sekcja \(title)")
+            .accessibilityValue("\(accessibilityValue.isEmpty ? "Brak elementów" : accessibilityValue), \(isExpanded ? "rozwinięta" : "zwinięta")")
+            .accessibilityHint("Stuknij, aby \(isExpanded ? "zwinąć" : "rozwinąć") sekcję")
             Spacer(minLength: 0)
             if let onAction, let actionTitle {
                 Button(action: onAction) {
