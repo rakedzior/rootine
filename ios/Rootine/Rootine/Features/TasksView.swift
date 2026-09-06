@@ -249,6 +249,7 @@ struct TasksView: View {
             TaskDetailSheet(task: task)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .presentationBackground(RootineTheme.ColorToken.canvas)
         }
         .sheet(item: $selectedHabit) { habit in
             HabitDetailSheet(habit: habit)
@@ -804,6 +805,8 @@ struct TaskDetailSheet: View {
     @State private var pendingSave: Task<Void, Never>?
     @State private var isFinishing = false
     @State private var showDeleteConfirmation = false
+    @State private var showDatePicker = false
+    @State private var showTimePicker = false
 
     init(task: WorkspaceTask, completionDate: Date? = nil) {
         self.task = task
@@ -820,208 +823,115 @@ struct TaskDetailSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            taskDetailHeader
+
             ScrollView {
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
-                    TaskEditorSection(title: "Główne") {
-                        TextField("Nazwa zadania", text: $title, axis: .vertical)
-                            .font(.title3.weight(.semibold))
-                            .lineLimit(2...4)
-                            .textInputAutocapitalization(.sentences)
+                    TextField("Nazwa zadania", text: $title, axis: .vertical)
+                        .font(.system(.title, design: .rounded).weight(.bold))
+                        .lineLimit(1...3)
+                        .textInputAutocapitalization(.sentences)
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        .accessibilityLabel("Nazwa zadania")
 
-                        Divider().overlay(RootineTheme.ColorToken.separator)
-
-                        ZStack(alignment: .topLeading) {
-                            if notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text("Treść zadania (opcjonalnie)")
-                                    .font(.body)
-                                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                    .padding(.top, RootineTheme.Spacing.small)
-                                    .allowsHitTesting(false)
-                            }
-                            TextEditor(text: $notes)
+                    ZStack(alignment: .topLeading) {
+                        if notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Treść zadania (opcjonalnie)")
                                 .font(.body)
-                                .scrollContentBackground(.hidden)
-                                .frame(minHeight: 112)
-                                .accessibilityLabel("Treść zadania")
-                        }
-                    }
-
-                    TaskEditorSection(title: "Informacje") {
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            Image(systemName: "calendar")
-                                .foregroundStyle(RootineTheme.ColorToken.action)
-                                .frame(width: 24)
-                            Text("Data")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer(minLength: 0)
-                            if hasDate {
-                                DatePicker("Data", selection: $dueDate, displayedComponents: .date)
-                                    .datePickerStyle(.compact)
-                                    .labelsHidden()
-                                Button {
-                                    hasDate = false
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Usuń datę")
-                            } else {
-                                Button("Bez daty") {
-                                    hasDate = true
-                                    dueDate = dateFromKey(RootineDate.localDate()) ?? Date()
-                                }
-                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
+                                .padding(.top, RootineTheme.Spacing.medium)
+                                .padding(.horizontal, RootineTheme.Spacing.small)
+                                .allowsHitTesting(false)
                         }
-
-                        Divider().overlay(RootineTheme.ColorToken.separator)
-
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            Image(systemName: "clock")
-                                .foregroundStyle(RootineTheme.ColorToken.action)
-                                .frame(width: 24)
-                            Text("Godzina")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer(minLength: 0)
-                            if hasTime {
-                                DatePicker("Godzina", selection: $timeDate, displayedComponents: .hourAndMinute)
-                                    .datePickerStyle(.compact)
-                                    .labelsHidden()
-                                Button {
-                                    hasTime = false
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Usuń godzinę")
-                            } else {
-                                Button("Bez godziny") {
-                                    hasTime = true
-                                    timeDate = taskTimeDate(task.time) ?? Date()
-                                }
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                            }
-                        }
-
-                        Divider().overlay(RootineTheme.ColorToken.separator)
-
-                        HStack(spacing: RootineTheme.Spacing.small) {
-                            TaskEditorIconMenu(
-                                systemImage: "flag.fill",
-                                title: "Priorytet",
-                                value: priorityLabel,
-                                tint: priorityTint
-                            ) {
-                                Button {
-                                    priority = nil
-                                } label: {
-                                    Label("Brak", systemImage: priority == nil ? "checkmark" : "minus")
-                                }
-                                ForEach(TaskPriority.allCases, id: \.rawValue) { option in
-                                    Button {
-                                        priority = option
-                                    } label: {
-                                        Label(editorPriorityLabel(option), systemImage: priority == option ? "checkmark" : "flag")
-                                    }
-                                }
-                            }
-
-                            TaskEditorIconMenu(
-                                systemImage: "folder",
-                                title: "Lista",
-                                value: selectedList.flatMap { listName(for: $0) } ?? "Bez listy",
-                                tint: RootineTheme.ColorToken.action
-                            ) {
-                                Button {
-                                    selectedList = nil
-                                } label: {
-                                    Label("Bez listy", systemImage: selectedList == nil ? "checkmark" : "folder")
-                                }
-                                ForEach(environment.taskWorkspace.lists, id: \.id) { list in
-                                    Button {
-                                        selectedList = list.id
-                                    } label: {
-                                        Label(list.label, systemImage: selectedList == list.id ? "checkmark" : "folder")
-                                    }
-                                }
-                            }
-
-                            TaskEditorIconMenu(
-                                systemImage: "tag",
-                                title: "Tagi",
-                                value: selectedTags.isEmpty ? "Brak" : "\(selectedTags.count)",
-                                tint: RootineTheme.ColorToken.warning
-                            ) {
-                                if environment.taskWorkspace.tags.isEmpty {
-                                    Text("Brak dostępnych tagów")
-                                } else {
-                                    ForEach(environment.taskWorkspace.tags, id: \.id) { tag in
-                                        Button {
-                                            if selectedTags.contains(tag.id) {
-                                                selectedTags.remove(tag.id)
-                                            } else {
-                                                selectedTags.insert(tag.id)
-                                            }
-                                        } label: {
-                                            Label(tag.label, systemImage: selectedTags.contains(tag.id) ? "checkmark" : "tag")
-                                        }
-                                    }
-                                    if !selectedTags.isEmpty {
-                                        Divider()
-                                        Button("Wyczyść tagi", role: .destructive) {
-                                            selectedTags.removeAll()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        TextEditor(text: $notes)
+                            .font(.body)
+                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 168)
+                            .padding(.horizontal, RootineTheme.Spacing.small)
+                            .accessibilityLabel("Treść zadania")
                     }
-
-                    TaskEditorSection(title: "Akcje") {
-                        Button {
-                            toggleCompletion()
-                        } label: {
-                            Label(
-                                isCompletedOnContextDate ? "Oznacz jako niewykonane" : "Oznacz jako wykonane",
-                                systemImage: isCompletedOnContextDate ? "circle" : "checkmark.circle"
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .foregroundStyle(RootineTheme.ColorToken.success)
-
-                        Divider().overlay(RootineTheme.ColorToken.separator)
-
-                        Button("Usuń zadanie", role: .destructive) {
-                            showDeleteConfirmation = true
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RootineTheme.ColorToken.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.surface, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: RootineTheme.Radius.surface, style: .continuous)
+                            .stroke(RootineTheme.ColorToken.separator, lineWidth: 1)
                     }
                 }
                 .padding(.horizontal, RootineTheme.Spacing.medium)
-                .padding(.vertical, RootineTheme.Spacing.medium)
+                .padding(.top, RootineTheme.Spacing.large)
+                .padding(.bottom, RootineTheme.Spacing.medium)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(RootineTheme.ColorToken.canvas)
-            .navigationTitle("Edytuj zadanie")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Gotowe") { finishEditing() }
-                        .disabled(isFinishing || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                taskDetailActionBar
+            }
+        }
+        .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .confirmationDialog("Usunąć zadanie?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Usuń zadanie", role: .destructive) {
+                Task { await environment.deleteTask(id: task.id); dismiss() }
+            }
+            Button("Anuluj", role: .cancel) {}
+        }
+        .sheet(isPresented: $showDatePicker) {
+            NavigationStack {
+                VStack(spacing: RootineTheme.Spacing.large) {
+                    DatePicker("Data", selection: $dueDate, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .labelsHidden()
+                        .tint(RootineTheme.ColorToken.action)
+                    Button("Usuń datę", role: .destructive) {
+                        hasDate = false
+                        showDatePicker = false
+                    }
+                    .frame(minHeight: 44)
+                }
+                .padding(RootineTheme.Spacing.medium)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
+                .navigationTitle("Data")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Gotowe") { showDatePicker = false }
+                    }
                 }
             }
-            .confirmationDialog("Usunąć zadanie?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
-                Button("Usuń zadanie", role: .destructive) {
-                    Task { await environment.deleteTask(id: task.id); dismiss() }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.medium])
+            .presentationBackground(RootineTheme.ColorToken.canvas)
+        }
+        .sheet(isPresented: $showTimePicker) {
+            NavigationStack {
+                VStack(spacing: RootineTheme.Spacing.large) {
+                    DatePicker("Godzina", selection: $timeDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                        .tint(RootineTheme.ColorToken.action)
+                    Button("Usuń godzinę", role: .destructive) {
+                        hasTime = false
+                        showTimePicker = false
+                    }
+                    .frame(minHeight: 44)
                 }
-                Button("Anuluj", role: .cancel) {}
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
+                .navigationTitle("Godzina")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Gotowe") { showTimePicker = false }
+                    }
+                }
             }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.medium])
+            .presentationBackground(RootineTheme.ColorToken.canvas)
         }
         .onChange(of: title) { _, _ in scheduleSave() }
         .onChange(of: notes) { _, _ in scheduleSave() }
@@ -1044,6 +954,181 @@ struct TaskDetailSheet: View {
 
     private var isCompletedOnContextDate: Bool {
         rootineTaskIsDoneOnDate(task, dateKey: RootineDate.localDate(completionDate ?? Date()))
+    }
+
+    private var taskDetailHeader: some View {
+        HStack(spacing: RootineTheme.Spacing.small) {
+            Button {
+                if !hasDate {
+                    dueDate = dateFromKey(RootineDate.localDate()) ?? Date()
+                    hasDate = true
+                }
+                showDatePicker = true
+            } label: {
+                    HStack(spacing: RootineTheme.Spacing.xSmall) {
+                    Image(systemName: "calendar")
+                        .foregroundStyle(RootineTheme.ColorToken.action)
+                    Text(hasDate ? editorDateLabel(dueDate) : "Bez daty")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Data")
+            .accessibilityValue(hasDate ? editorDateLabel(dueDate) : "Bez daty")
+
+            Button {
+                if !hasTime {
+                    timeDate = Date()
+                    hasTime = true
+                }
+                showTimePicker = true
+            } label: {
+                HStack(spacing: RootineTheme.Spacing.xSmall) {
+                    Image(systemName: "clock")
+                        .foregroundStyle(RootineTheme.ColorToken.action)
+                    Text(hasTime ? taskClockString(timeDate) : "Bez godziny")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Godzina")
+            .accessibilityValue(hasTime ? taskClockString(timeDate) : "Bez godziny")
+
+            Spacer(minLength: RootineTheme.Spacing.small)
+
+            Button("Gotowe") { finishEditing() }
+                .font(.headline.weight(.semibold))
+                .frame(minWidth: 44, minHeight: 44)
+                .disabled(isFinishing || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityHint("Zapisuje zmiany i zamyka ekran edycji")
+        }
+        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+        .padding(.horizontal, RootineTheme.Spacing.medium)
+        .padding(.vertical, RootineTheme.Spacing.xSmall)
+        .background(RootineTheme.ColorToken.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(RootineTheme.ColorToken.separator)
+                .frame(height: 1)
+        }
+    }
+
+    private var taskDetailActionBar: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(RootineTheme.ColorToken.separator)
+                .frame(height: 1)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: RootineTheme.Spacing.small) {
+                    TaskDetailActionButton(
+                        systemImage: "flag.fill",
+                        title: "Priorytet",
+                        value: priorityLabel,
+                        tint: priorityTint,
+                        isSelected: priority != nil
+                    ) {
+                        Button {
+                            priority = nil
+                        } label: {
+                            Label("Brak", systemImage: priority == nil ? "checkmark" : "minus")
+                        }
+                        ForEach(TaskPriority.allCases, id: \.rawValue) { option in
+                            Button {
+                                priority = option
+                            } label: {
+                                Label(editorPriorityLabel(option), systemImage: priority == option ? "checkmark" : "flag")
+                            }
+                        }
+                    }
+
+                    TaskDetailActionButton(
+                        systemImage: "folder",
+                        title: "Lista",
+                        value: selectedList.flatMap { listName(for: $0) } ?? "Bez listy",
+                        tint: RootineTheme.ColorToken.action,
+                        isSelected: selectedList != nil
+                    ) {
+                        Button {
+                            selectedList = nil
+                        } label: {
+                            Label("Bez listy", systemImage: selectedList == nil ? "checkmark" : "folder")
+                        }
+                        ForEach(environment.taskWorkspace.lists, id: \.id) { list in
+                            Button {
+                                selectedList = list.id
+                            } label: {
+                                Label(list.label, systemImage: selectedList == list.id ? "checkmark" : "folder")
+                            }
+                        }
+                    }
+
+                    TaskDetailActionButton(
+                        systemImage: "tag",
+                        title: "Tagi",
+                        value: selectedTags.isEmpty ? "Brak" : "\(selectedTags.count)",
+                        tint: RootineTheme.ColorToken.warning,
+                        isSelected: !selectedTags.isEmpty
+                    ) {
+                        if environment.taskWorkspace.tags.isEmpty {
+                            Text("Brak dostępnych tagów")
+                        } else {
+                            ForEach(environment.taskWorkspace.tags, id: \.id) { tag in
+                                Button {
+                                    if selectedTags.contains(tag.id) {
+                                        selectedTags.remove(tag.id)
+                                    } else {
+                                        selectedTags.insert(tag.id)
+                                    }
+                                } label: {
+                                    Label(tag.label, systemImage: selectedTags.contains(tag.id) ? "checkmark" : "tag")
+                                }
+                            }
+                            if !selectedTags.isEmpty {
+                                Divider()
+                                Button("Wyczyść tagi", role: .destructive) {
+                                    selectedTags.removeAll()
+                                }
+                            }
+                        }
+                    }
+
+                    Button {
+                        toggleCompletion()
+                    } label: {
+                        TaskDetailActionLabel(
+                            systemImage: isCompletedOnContextDate ? "checkmark.circle.fill" : "circle",
+                            title: "Ukończone",
+                            tint: RootineTheme.ColorToken.success,
+                            isSelected: isCompletedOnContextDate
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 76, maxWidth: 76, minHeight: 80)
+                    .accessibilityLabel("Ukończone")
+                    .accessibilityValue(isCompletedOnContextDate ? "Tak" : "Nie")
+
+                    Button {
+                        showDeleteConfirmation = true
+                    } label: {
+                        TaskDetailActionLabel(
+                            systemImage: "trash",
+                            title: "Usuń",
+                            tint: RootineTheme.ColorToken.destructive,
+                            isSelected: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 76, maxWidth: 76, minHeight: 80)
+                    .accessibilityLabel("Usuń")
+                    .accessibilityHint("Otwiera potwierdzenie usunięcia zadania")
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.vertical, RootineTheme.Spacing.small)
+            }
+        }
+        .background(RootineTheme.ColorToken.surface)
     }
 
     private var priorityLabel: String {
@@ -1146,58 +1231,71 @@ private struct TaskEditorDraft: Sendable {
     let tags: [String]?
 }
 
-private struct TaskEditorSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(RootineTheme.Spacing.medium)
-            .background(RootineTheme.ColorToken.surface)
-            .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.surface, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: RootineTheme.Radius.surface, style: .continuous)
-                    .stroke(RootineTheme.ColorToken.separator, lineWidth: 1)
-            }
-        }
-    }
-}
-
-private struct TaskEditorIconMenu<Content: View>: View {
+private struct TaskDetailActionButton<Content: View>: View {
     let systemImage: String
     let title: String
     let value: String
     let tint: Color
+    let isSelected: Bool
     @ViewBuilder let menu: Content
+
+    init(
+        systemImage: String,
+        title: String,
+        value: String,
+        tint: Color,
+        isSelected: Bool = false,
+        @ViewBuilder menu: () -> Content
+    ) {
+        self.systemImage = systemImage
+        self.title = title
+        self.value = value
+        self.tint = tint
+        self.isSelected = isSelected
+        self.menu = menu()
+    }
 
     var body: some View {
         Menu {
             menu
         } label: {
-            VStack(spacing: RootineTheme.Spacing.xSmall) {
-                Image(systemName: systemImage)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 44, height: 32)
-                Text(value)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .contentShape(Rectangle())
+            TaskDetailActionLabel(
+                systemImage: systemImage,
+                title: title,
+                tint: tint,
+                isSelected: isSelected
+            )
         }
         .buttonStyle(.plain)
+        .frame(minWidth: 76, maxWidth: 76, minHeight: 80)
         .accessibilityLabel(title)
         .accessibilityValue(value)
+    }
+}
+
+private struct TaskDetailActionLabel: View {
+    let systemImage: String
+    let title: String
+    let tint: Color
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: RootineTheme.Spacing.xSmall) {
+            Image(systemName: systemImage)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 44, height: 44)
+                .background(isSelected ? tint.opacity(0.24) : RootineTheme.ColorToken.elevated)
+                .clipShape(Circle())
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+                .multilineTextAlignment(.center)
+        }
+        .frame(minWidth: 76, maxWidth: 76, minHeight: 80)
+        .contentShape(Rectangle())
     }
 }
 
@@ -1221,6 +1319,13 @@ private func taskClockString(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "pl_PL")
     formatter.dateFormat = "HH:mm"
+    return formatter.string(from: date)
+}
+
+private func editorDateLabel(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "pl_PL")
+    formatter.dateFormat = "d MMM"
     return formatter.string(from: date)
 }
 
