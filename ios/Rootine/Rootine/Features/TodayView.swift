@@ -1445,7 +1445,7 @@ private struct TodayTimelineCard: View {
             }.sorted(by: Self.itemSort)
         }
 
-        var hasOpenEntries: Bool { !overdue.isEmpty || !timed.isEmpty || !untimed.isEmpty }
+        var hasTodayEntries: Bool { !timed.isEmpty || !untimed.isEmpty }
 
         private static func itemSort(_ lhs: TodayFocusItem, _ rhs: TodayFocusItem) -> Bool {
             switch (lhs.time, rhs.time) {
@@ -1460,6 +1460,7 @@ private struct TodayTimelineCard: View {
     var body: some View {
         let timeline = TimelineEntries(snapshot: snapshot)
         let nextID = snapshot.next.first?.id ?? snapshot.now?.id
+        let overdueAction: (() -> Void)? = timeline.overdue.isEmpty ? nil : onRequestBulkRescheduleConfirmation
 
         TodayCard {
             Text("Plan dnia")
@@ -1487,9 +1488,9 @@ private struct TodayTimelineCard: View {
                                     isOverdueExpanded.toggle()
                                 }
                             },
-                            actionTitle: "Przełóż",
+                            actionTitle: overdueAction == nil ? nil : "Przełóż",
                             isActionLoading: isBulkRescheduling,
-                            onAction: onRequestBulkRescheduleConfirmation
+                            onAction: overdueAction
                         )
                         if isOverdueExpanded {
                             ForEach(timeline.overdue) { item in
@@ -1535,7 +1536,7 @@ private struct TodayTimelineCard: View {
                             }
                         )
                         if isTodayExpanded {
-                            if !timeline.hasOpenEntries {
+                            if !timeline.hasTodayEntries {
                                 Label(
                                     "Brak otwartych zobowiązań. Możesz spokojnie domknąć dzień.",
                                     systemImage: "checkmark.circle"
