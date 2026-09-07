@@ -35,6 +35,1630 @@ final class ContractFixtureTests: XCTestCase {
         XCTAssertEqual(try roundTrip(workspace), workspace)
     }
 
+    @MainActor
+    func testTaskSnapshotUndoRestoresRecurringScheduleAfterRemovingDate() async throws {
+        let workspace = try fixture("task-workspace-v2", as: TaskWorkspace.self)
+        let original = try XCTUnwrap(workspace.tasks.first(where: { $0.schedule?.recurrence == "weekly" }))
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        environment.setTaskWorkspaceForTests(workspace)
+
+        await environment.updateTask(
+            id: original.id,
+            text: original.text,
+            time: original.time,
+            calendarDate: nil,
+            priority: original.priority,
+            notes: original.notes,
+            list: original.list,
+            tags: original.tags
+        )
+        XCTAssertNil(environment.taskWorkspace.tasks.first(where: { $0.id == original.id })?.schedule)
+
+        await environment.restoreTaskSnapshot(original)
+
+        XCTAssertEqual(environment.taskWorkspace.tasks.first(where: { $0.id == original.id }), original)
+    }
+
+    @MainActor
+    func testCalendarCanonicalFlowKeepsIDAndRestoresRecurringOccurrenceSnapshot() async throws {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        let anchor = "2026-01-31"
+        let occurrenceDate = "2026-02-28"
+        let recurring = WorkspaceTask(
+            id: 811,
+            text: "Miesięczny przegląd",
+            done: false,
+            time: "09:00",
+            view: "wszystkie",
+            calendarDate: anchor,
+            schedule: WorkspaceTaskSchedule(
+                allDay: false,
+                startTime: "09:00",
+                endDate: "2026-04-30",
+                recurrence: TaskRecurrence.monthly.rawValue,
+                timezone: "Europe/Warsaw"
+            )
+        )
+        environment.setTaskWorkspaceForTests(TaskWorkspace(version: 2, updatedAt: "2026-01-01T00:00:00Z", tasks: [recurring], habits: [], lists: [], tags: []))
+
+        XCTAssertEqual(rootineTaskOccurrences(environment.taskWorkspace.tasks, from: occurrenceDate, through: occurrenceDate).map(\.sourceTaskID), [recurring.id])
+        let occurrenceDay = try XCTUnwrap(
+            Calendar.current.date(from: DateComponents(year: 2026, month: 2, day: 28))
+        )
+        await environment.toggleTaskCompletion(id: recurring.id, on: occurrenceDay)
+        let completed = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        XCTAssertTrue(rootineTaskIsDoneOnDate(completed, dateKey: occurrenceDate))
+        XCTAssertFalse(rootineTaskIsDoneOnDate(completed, dateKey: anchor))
+        XCTAssertEqual(completed.schedule?.recurrence, TaskRecurrence.monthly.rawValue)
+        XCTAssertEqual(rootineTaskOccurrences([completed], from: "2026-03-31", through: "2026-03-31").map(\.sourceTaskID), [recurring.id])
+
+        await environment.restoreTaskSnapshot(recurring)
+        XCTAssertEqual(environment.taskWorkspace.tasks.first, recurring)
+
+        await environment.updateTask(
+            id: recurring.id,
+            text: "Miesięczny przegląd — poprawiony",
+            time: "10:00",
+            calendarDate: "2026-03-01",
+            priority: .high,
+            notes: nil,
+            list: nil,
+            tags: nil
+        )
+        let edited = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        XCTAssertEqual(edited.id, recurring.id)
+        XCTAssertEqual(edited.calendarDate, "2026-03-01")
+        XCTAssertEqual(edited.text, "Miesięczny przegląd — poprawiony")
+    }
+
+    @MainActor
+    func testCalendarUndoRejectsStaleSnapshotAfterLaterEdit() async throws {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil,
+            supabasePublishableKey: "",
+            backendURL: nil,
+            authCallbackScheme: "",
+            termsURL: nil,
+            privacyURL: nil
+        ))
+        let original = WorkspaceTask(
+            id: 812,
+            text: "Zadanie do cofnięcia",
+            done: false,
+            time: "09:00",
+            view: "dzis",
+            priority: .medium,
+            calendarDate: "2026-09-07",
+            schedule: WorkspaceTaskSchedule(allDay: false, startTime: "09:00", timezone: "Europe/Warsaw")
+        )
+        environment.setTaskWorkspaceForTests(TaskWorkspace(version: 2, updatedAt: "2026-09-07T08:00:00Z", tasks: [original], habits: [], lists: [], tags: []))
+
+        let day = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 7)))
+        await environment.toggleTaskCompletion(id: original.id, on: day)
+        let postToggle = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        await environment.updateTask(
+            id: original.id,
+            text: "Późniejsza edycja pozostaje",
+            time: "10:00",
+            calendarDate: "2026-09-08",
+            priority: .high,
+            notes: "Nowa notatka",
+            list: nil,
+            tags: nil
+        )
+
+        let restored = await environment.restoreTaskSnapshot(original, ifCurrentMatches: postToggle)
+        XCTAssertFalse(restored)
+        let current = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        XCTAssertEqual(current.id, original.id)
+        XCTAssertEqual(current.text, "Późniejsza edycja pozostaje")
+        XCTAssertEqual(current.calendarDate, "2026-09-08")
+        XCTAssertEqual(current.time, "10:00")
+        XCTAssertEqual(current.notes, "Nowa notatka")
+        XCTAssertTrue(current.done)
+    }
+
+    @MainActor
+    func testCalendarUndoRejectsEditDuringSuspendedPersistence() async throws {
+        let environment = calendarUndoEnvironment()
+        let original = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        let day = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 7)))
+        let gate = CalendarPersistenceGate()
+        environment.taskWorkspaceDidPublishForTests = {
+            environment.taskWorkspaceDidPublishForTests = nil
+            await gate.pause()
+        }
+        var token: RootineTaskUndo?
+        let completion = Task { @MainActor in
+            await environment.toggleTaskCompletion(id: original.id, on: day) { token = $0 }
+        }
+        await gate.waitUntilPaused()
+        // The token must already identify this published mutation while its
+        // persistence is suspended, not whichever value exists after the await.
+        XCTAssertEqual(token?.snapshot, original)
+        XCTAssertEqual(token?.expectedCurrent, environment.taskWorkspace.tasks.first)
+        await environment.updateTask(
+            id: original.id, text: "B — późniejsza edycja", time: "11:30",
+            calendarDate: "2026-09-08", priority: .high, notes: "Notatka B",
+            list: original.list, tags: original.tags
+        )
+        let laterEdit = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        gate.resume()
+        await completion.value
+        let undo = try XCTUnwrap(token)
+        XCTAssertNotEqual(undo.expectedCurrent, laterEdit)
+        let restored = await environment.restoreTaskSnapshot(undo.snapshot, ifCurrentMatches: undo.expectedCurrent)
+        XCTAssertFalse(restored)
+        XCTAssertEqual(environment.taskWorkspace.tasks.first, laterEdit)
+    }
+
+    @MainActor
+    func testCalendarUndoRestoresFullSnapshotAfterSuspendedPersistence() async throws {
+        let environment = calendarUndoEnvironment()
+        let original = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        let day = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 7)))
+        let gate = CalendarPersistenceGate()
+        environment.taskWorkspaceDidPublishForTests = {
+            environment.taskWorkspaceDidPublishForTests = nil
+            await gate.pause()
+        }
+        var token: RootineTaskUndo?
+        let completion = Task { @MainActor in
+            await environment.toggleTaskCompletion(id: original.id, on: day) { token = $0 }
+        }
+        await gate.waitUntilPaused()
+        XCTAssertEqual(token?.snapshot, original)
+        XCTAssertEqual(token?.expectedCurrent, environment.taskWorkspace.tasks.first)
+        XCTAssertTrue(rootineTaskIsDoneOnDate(try XCTUnwrap(token?.expectedCurrent), dateKey: "2026-09-07"))
+        XCTAssertFalse(rootineTaskIsDoneOnDate(try XCTUnwrap(token?.expectedCurrent), dateKey: "2026-09-14"))
+        gate.resume()
+        await completion.value
+        let undo = try XCTUnwrap(token)
+        let restored = await environment.restoreTaskSnapshot(undo.snapshot, ifCurrentMatches: undo.expectedCurrent)
+        XCTAssertTrue(restored)
+        XCTAssertEqual(environment.taskWorkspace.tasks.first, original)
+    }
+
+    @MainActor
+    func testCalendarConcurrentCompletionsKeepLatestPublishedUndo() async throws {
+        let environment = calendarUndoEnvironment()
+        let original = try XCTUnwrap(environment.taskWorkspace.tasks.first)
+        let firstDay = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 7)))
+        let secondDay = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 14)))
+        let gate = CalendarPersistenceGate()
+        environment.taskWorkspaceDidPublishForTests = {
+            environment.taskWorkspaceDidPublishForTests = nil
+            await gate.pause()
+        }
+        var visibleUndo: RootineTaskUndo?
+        let firstCompletion = Task { @MainActor in
+            await environment.toggleTaskCompletion(id: original.id, on: firstDay) { visibleUndo = $0 }
+        }
+        await gate.waitUntilPaused()
+        let firstUndo = try XCTUnwrap(visibleUndo)
+        await environment.toggleTaskCompletion(id: original.id, on: secondDay) { visibleUndo = $0 }
+        let secondUndo = try XCTUnwrap(visibleUndo)
+        XCTAssertEqual(secondUndo.snapshot, firstUndo.expectedCurrent)
+        XCTAssertTrue(rootineTaskIsDoneOnDate(secondUndo.expectedCurrent, dateKey: "2026-09-07"))
+        XCTAssertTrue(rootineTaskIsDoneOnDate(secondUndo.expectedCurrent, dateKey: "2026-09-14"))
+        gate.resume()
+        await firstCompletion.value
+        XCTAssertEqual(visibleUndo, secondUndo, "An older persistence completion must not replace the newer Undo")
+        let staleRestored = await environment.restoreTaskSnapshot(firstUndo.snapshot, ifCurrentMatches: firstUndo.expectedCurrent)
+        XCTAssertFalse(staleRestored)
+        XCTAssertEqual(environment.taskWorkspace.tasks.first, secondUndo.expectedCurrent)
+        let latestRestored = await environment.restoreTaskSnapshot(secondUndo.snapshot, ifCurrentMatches: secondUndo.expectedCurrent)
+        XCTAssertTrue(latestRestored)
+        XCTAssertEqual(environment.taskWorkspace.tasks.first, firstUndo.expectedCurrent)
+    }
+
+    @MainActor
+    private func calendarUndoEnvironment() -> AppEnvironment {
+        let environment = AppEnvironment(configuration: RootineConfiguration(
+            supabaseURL: nil, supabasePublishableKey: "", backendURL: nil,
+            authCallbackScheme: "", termsURL: nil, privacyURL: nil
+        ))
+        let task = WorkspaceTask(
+            id: 813, text: "A — pełny snapshot", done: false, time: "09:00", endTime: "09:45",
+            view: "dzis", priority: .medium, notes: "Notatka A", calendarDate: "2026-09-07",
+            schedule: WorkspaceTaskSchedule(
+                allDay: false, startTime: "09:00", endTime: "09:45",
+                endDate: "2026-12-31", reminderMinutes: 15, recurrence: "weekly",
+                completedDates: ["2026-08-31"],
+                completedAtByDate: ["2026-08-31": "2026-08-31T07:00:00Z"],
+                timezone: "Europe/Warsaw"
+            )
+        )
+        environment.setTaskWorkspaceForTests(TaskWorkspace(
+            version: 2, updatedAt: "2026-09-07T08:00:00Z",
+            tasks: [task], habits: [], lists: [], tags: []
+        ))
+        return environment
+    }
+
+    @MainActor
+    private final class CalendarPersistenceGate {
+        private var paused = false
+        private var pauseWaiter: CheckedContinuation<Void, Never>?
+        private var persistenceWaiter: CheckedContinuation<Void, Never>?
+
+        func pause() async {
+            await withCheckedContinuation { continuation in
+                persistenceWaiter = continuation
+                paused = true
+                pauseWaiter?.resume()
+                pauseWaiter = nil
+            }
+        }
+
+        func waitUntilPaused() async {
+            if paused { return }
+            await withCheckedContinuation { pauseWaiter = $0 }
+        }
+
+        func resume() {
+            persistenceWaiter?.resume()
+            persistenceWaiter = nil
+        }
+    }
+
+    // Sprint 06: cross-surface identity, domain isolation and complete routing.
+    @MainActor func testS06TaskEditFeedsCalendarProjectionWithoutCopyingIdentity() async throws {
+        let env = calendarUndoEnvironment()
+        let original = try XCTUnwrap(env.taskWorkspace.tasks.first)
+        await env.updateTask(id: original.id, text: "Zmienione w Zadaniach", time: "11:30", calendarDate: "2026-09-08", priority: original.priority, notes: original.notes, list: original.list, tags: original.tags)
+        let edited = try XCTUnwrap(env.taskWorkspace.tasks.first)
+        let projected = rootineTaskOccurrences(env.taskWorkspace.tasks, from: "2026-09-08", through: "2026-09-08")
+        XCTAssertEqual(env.taskWorkspace.tasks.count, 1)
+        XCTAssertEqual(projected.map(\.sourceTaskID), [original.id])
+        XCTAssertEqual(projected.first?.task, edited)
+        XCTAssertEqual(projected.first?.title, "Zmienione w Zadaniach")
+        XCTAssertEqual(projected.first?.time, "11:30")
+        let day = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 8)))
+        var token: RootineTaskUndo?
+        await env.toggleTaskCompletion(id: original.id, on: day) { token = $0 }
+        let undo = try XCTUnwrap(token)
+        XCTAssertTrue(rootineTaskIsDoneOnDate(try XCTUnwrap(env.taskWorkspace.tasks.first), dateKey: "2026-09-08"))
+        let restored = await env.restoreTaskSnapshot(undo.snapshot, ifCurrentMatches: undo.expectedCurrent)
+        XCTAssertTrue(restored)
+        XCTAssertEqual(env.taskWorkspace.tasks, [edited])
+    }
+
+    @MainActor func testS06SuspendedTravelDeleteAndUndoPreserveNutritionMutation() async throws {
+        let env = nutritionEnvironment()
+        let trip = s05Trip()
+        env.setSprint05WorkspacesForTests(travel: TravelWorkspace(version: 1, updatedAt: trip.updatedAt, trips: [trip]))
+        let tasksBefore = env.taskWorkspace
+        let gate = CalendarPersistenceGate()
+        var token: RootineModuleUndo<TravelRecord>?
+        env.moreWorkspaceDidPublishForTests = { key in
+            guard key == .travel else { return }
+            env.moreWorkspaceDidPublishForTests = nil
+            await gate.pause()
+        }
+        let pending = Task { await env.deleteTripWithUndo(id: trip.id) { token = $0 } }
+        await gate.waitUntilPaused()
+        XCTAssertNotNil(token)
+        XCTAssertTrue(env.travelWorkspace.trips.isEmpty)
+        await env.addWater(dateKey: "2026-09-07", amountMl: 250)
+        let nutritionAfter = env.nutritionWorkspace
+        XCTAssertEqual(nutritionAfter.days["2026-09-07"]?.waterMl, 250)
+        gate.resume()
+        await pending.value
+        let restored = await env.undoTripDeletion(try XCTUnwrap(token))
+        XCTAssertTrue(restored)
+        XCTAssertEqual(env.travelWorkspace.trips, [trip])
+        XCTAssertEqual(env.nutritionWorkspace, nutritionAfter)
+        XCTAssertEqual(env.taskWorkspace, tasksBefore)
+        let canonical = try XCTUnwrap(env.moreShadowForTests(.travel))
+        XCTAssertEqual(try RootineCanonicalWorkspaceMapping.travelWorkspace(from: canonical).trips.first?.id, trip.id)
+    }
+
+    func testS06TabAndModuleCatalogPreservesEveryRouteAndAffairsIdentifier() {
+        XCTAssertEqual(RootineTab.allCases.map(\.rawValue), ["today", "tasks", "calendar", "nutrition", "more"])
+        XCTAssertEqual(RootineTab.allCases.map(\.label), ["Dzisiaj", "Zadania", "Kalendarz", "Odżywianie", "Więcej"])
+        XCTAssertEqual(Set(MoreModule.allCases.map(\.rawValue)), Set(["notes", "sport", "goals", "work", "travel", "health", "affairs"]))
+        XCTAssertEqual(MoreModule.affairs.rawValue, "affairs")
+        XCTAssertEqual(MoreModule.affairs.hubTitle, "Sprawy i finanse")
+        XCTAssertEqual(MoreModule.affairs.title, "Sprawy i finanse")
+    }
+
+    // Sprint 05: canonical publication, data-preserving edits and deterministic Undo.
+    private func s05Object(_ value: JSONValue) throws -> [String: JSONValue] { try XCTUnwrap(objectValue(value)) }
+    private func s05Trip(_ id: String = "trip-a") -> TravelRecord {
+        var trip = TravelRecord(id: id, destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, itinerary: [], createdAt: "2026-09-01T08:00:00Z", updatedAt: "2026-09-02T08:00:00Z")
+        trip.startDate = "2026-09-12"; trip.endDate = "2026-09-15"; trip.name = "Własna nazwa"; trip.note = "Notatka"; trip.timezone = "Europe/Warsaw"
+        trip.packingItems = [TravelPackingItem(id: "bag", label: "Torba", quantity: 2, packed: true)]
+        trip.tasks = [TravelTask(id: "task", title: "Odprawa", category: "booking", dueDate: "2026-09-10", completed: false, linkedTask: TravelLinkedTask(originTaskId: 17, view: "today"))]
+        return trip
+    }
+    private func s05Reminder(_ id: String = "reminder-a") -> HealthReminder {
+        HealthReminder(id: id, title: "Spacer", detail: "Po pracy", completedDates: ["2026-09-01", "2026-09-03"])
+    }
+    private func s05CheckIn(_ date: String = "2026-09-07") -> HealthCheckIn {
+        HealthCheckIn(date: date, energy: 2, note: "Pełna notatka", updatedAt: "2026-09-07T08:00:00Z")
+    }
+    private func s05Matter(_ id: String = "matter-a") -> AffairMatter {
+        AffairMatter(id: id, title: "Sprawa", category: "dom", priority: "high", status: "open", dueDate: "2026-09-15", note: "Pełna notatka", createdAt: "2026-09-01T08:00:00Z", kind: "appointment", time: "11:00", location: "Urząd", reminderMinutes: [15,60], sourceAttentionKey: "document:1")
+    }
+    func testS05TravelAgendaPartitionsEveryIDAndHandlesLegacyDates() {
+        var current = s05Trip("current"); current.startDate = "2026-09-05"; current.endDate = "2026-09-07"
+        let future = s05Trip("future")
+        var past = s05Trip("past"); past.startDate = "2026-09-01"; past.endDate = "2026-09-03"
+        var done = s05Trip("done"); done.status = "completed"
+        var archive = s05Trip("archive"); archive.archivedAt = "2026-09-01T08:00:00Z"
+        var legacy = s05Trip("legacy"); legacy.startDate = ""; legacy.endDate = ""
+        let agenda = RootineTravelAgenda([future, past, legacy, done, archive, current], today: "2026-09-07")
+        XCTAssertEqual(agenda.featured?.id, "current"); XCTAssertEqual(agenda.upcoming.map(\.id), ["future"])
+        XCTAssertEqual(agenda.undated.map(\.id), ["legacy"]); XCTAssertEqual(agenda.archived.map(\.id), ["archive"])
+        let all = agenda.current + agenda.upcoming + agenda.undated + agenda.history + agenda.archived
+        XCTAssertEqual(all.count, 6); XCTAssertEqual(Set(all.map(\.id)).count, 6)
+        XCTAssertNil(RootineTravelAgenda([], today: "2026-09-07").featured)
+    }
+    @MainActor func testS05TripBasicEditPreservesDossierAndIndependentName() async throws {
+        let env = nutritionEnvironment(); let original = s05Trip()
+        env.setSprint05WorkspacesForTests(travel: TravelWorkspace(version: 1, updatedAt: original.updatedAt, trips: [original]))
+        await env.updateTrip(id: original.id, destination: "Sopot", dateRange: original.dateRange, nights: 3)
+        var expected = original; expected.destination = "Sopot"; expected.updatedAt = env.travelWorkspace.trips[0].updatedAt
+        XCTAssertEqual(env.travelWorkspace.trips[0], expected)
+        await env.setTravelStatus("ready", tripID: original.id)
+        await env.addTravelPackingItem(tripID: original.id, label: "Bilet", operationID: "same")
+        await env.addTravelPackingItem(tripID: original.id, label: "Bilet", operationID: "same")
+        XCTAssertEqual(env.travelWorkspace.trips[0].packingItems.count, 2)
+        XCTAssertEqual(env.travelWorkspace.trips[0].status, "ready")
+        XCTAssertEqual(env.travelWorkspace.trips[0].tasks, original.tasks)
+    }
+    @MainActor func testS05TravelJoinedCanonicalDeleteLaterEditUndoRetainsOpaqueDossier() async throws {
+        let env = nutritionEnvironment(); var root = try s05Object(fixture("travel-workspace-v2", as: JSONValue.self))
+        guard case .array(var trips) = root["trips"], case .object(var a) = trips[0], case .array(var stays) = a["stays"], case .object(var stay) = stays[0] else { return XCTFail("Rich fixture") }
+        a["vendor"] = .string("opaque trip"); stay["vendor"] = .string("opaque stay"); stays[0] = .object(stay); a["stays"] = .array(stays); trips[0] = .object(a)
+        a["bookings"] = .array([.object(["id":.string("booking"), "provider":.string("Provider"), "bookingReference":.string("REF"), "status":.string("booked"), "amountMinor":.number(12345), "currencyCode":.string("PLN"), "startsAt":.string("2026-09-12T08:00:00Z"), "endsAt":.string("2026-09-15T08:00:00Z"), "timezone":.string("Europe/Warsaw"), "opaque":.string("booking-extra")])])
+        a["packingItems"] = .array([.object(["id":.string("pack"), "label":.string("Torba"), "quantity":.number(2), "packed":.bool(true), "opaque":.string("packing-extra")])])
+        if case .array(var items) = a["itinerary"], case .object(var item) = items[0] {
+            item["opaque"] = .string("itinerary-extra"); items[0] = .object(item); a["itinerary"] = .array(items)
+        }
+        if case .array(var items) = a["tasks"], case .object(var item) = items[0] {
+            item["linkedTask"] = .object(["originTaskId":.number(17),"view":.string("today")]); items[0] = .object(item); a["tasks"] = .array(items)
+        }
+        trips[0] = .object(a)
+        var b = a; b["id"] = .string("trip-b"); trips.append(.object(b)); root["trips"] = .array(trips); root["opaque"] = .string("root")
+        let base = JSONValue.object(root); let ws = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: base)
+        env.setSprint05WorkspacesForTests(travel: ws, shadows: [.travel: base]); var token: RootineModuleUndo<TravelRecord>?
+        await env.deleteTripWithUndo(id: ws.trips[0].id) { token = $0 }
+        let deletedShadow = try XCTUnwrap(env.moreShadowForTests(.travel)); XCTAssertEqual(try RootineCanonicalWorkspaceMapping.travelWorkspace(from: deletedShadow).trips.map(\.id), ["trip-b"])
+        root = try s05Object(XCTUnwrap(env.moreShadowForTests(.travel))); root["opaque"] = .string("later root"); env.setSprint05WorkspacesForTests(shadows: [.travel:.object(root)])
+        await env.updateTrip(id: "trip-b", destination: "Późniejsze", dateRange: ws.trips[1].dateRange, nights: ws.trips[1].nights)
+        let later = env.travelWorkspace.trips[0]
+        let restored = await env.undoTripDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        XCTAssertEqual(env.travelWorkspace.trips[0], ws.trips[0]); XCTAssertEqual(env.travelWorkspace.trips[1], later)
+        let final = try RootineCanonicalWorkspaceMapping.mergedTravelPayload(for: env.travelWorkspace, onto: XCTUnwrap(env.moreShadowForTests(.travel)))
+        let finalRoot = try s05Object(final); guard case .array(let finalTrips) = finalRoot["trips"], case .object(let restoredTrip) = finalTrips[0] else { return XCTFail("Final trip") }
+        XCTAssertEqual(restoredTrip["vendor"], a["vendor"]); XCTAssertEqual(restoredTrip["stays"], a["stays"])
+        XCTAssertEqual(restoredTrip["bookings"], a["bookings"]); XCTAssertEqual(restoredTrip["packingItems"], a["packingItems"]); XCTAssertEqual(restoredTrip["itinerary"], a["itinerary"])
+        XCTAssertEqual(restoredTrip["documents"], a["documents"]); XCTAssertEqual(restoredTrip["budget"], a["budget"]); XCTAssertEqual(restoredTrip["tasks"], a["tasks"])
+        XCTAssertEqual(finalRoot["opaque"], root["opaque"])
+    }
+    @MainActor func testS05HealthDatesEnergyHistoryAndCompletionPreserveNotes() async {
+        let env = nutritionEnvironment(); let day = "2026-09-07"
+        env.setSprint05WorkspacesForTests(health: HealthWorkspace(version: 1, updatedAt: "2026-09-07T08:00:00Z", checkIns: [day: s05CheckIn(day)], reminders: [s05Reminder()]))
+        let date = RootineDate.dateOnly(from: day, timezone: TimeZone.current.identifier)!
+        await env.setHealthEnergy(4, date: date); XCTAssertEqual(env.healthWorkspace.checkIns[day]?.energy, 4); XCTAssertEqual(env.healthWorkspace.checkIns[day]?.note, "Pełna notatka")
+        let before = env.healthWorkspace
+        await env.updateHealthCheckIn(date: "2026-02-30", energy: 3, note: "invalid"); await env.setHealthEnergy(0, date: date); XCTAssertEqual(env.healthWorkspace, before)
+        await env.toggleHealthReminder(id: "reminder-a", date: date)
+        XCTAssertEqual(env.healthWorkspace.reminders[0].completedDates, ["2026-09-01", "2026-09-03", day])
+        await env.toggleHealthReminder(id: "reminder-a", date: date); XCTAssertEqual(env.healthWorkspace.reminders[0].completedDates, s05Reminder().completedDates)
+        await env.updateHealthCheckIn(date: "2026-09-02", energy: 1, note: "Historia")
+        XCTAssertEqual(env.healthWorkspace.checkInHistory(limit: 100).map(\.date), [day, "2026-09-02"])
+    }
+    @MainActor func testS05HealthJoinedCanonicalCheckInUndoPreservesEntriesAndLaterDay() async throws {
+        let env = nutritionEnvironment(); let a = s05CheckIn(); let b = s05CheckIn("2026-09-06")
+        let ws = HealthWorkspace(version: 1, updatedAt: a.updatedAt, checkIns: [a.date:a,b.date:b], reminders: [s05Reminder()])
+        var root = try s05Object(RootineCanonicalWorkspaceMapping.payload(for: ws)); root["entries"] = .array([.object(["id":.string("clinical"),"title":.string("Zapis"),"kind":.string("visit"),"dueDate":.string("2026-09-15"),"time":.string("10:00"),"location":.string("Miejsce"),"note":.string("Notatka"),"status":.string("planned"),"createdAt":.string("2026-09-01T08:00:00Z"),"opaque":.string("original")])]); root["opaque"] = .string("root")
+        env.setSprint05WorkspacesForTests(health: ws, shadows: [.health:.object(root)]); var token: RootineModuleUndo<HealthCheckIn>?
+        await env.deleteHealthCheckInWithUndo(date: a.date) { token = $0 }
+        XCTAssertNil(try RootineCanonicalWorkspaceMapping.healthWorkspace(from: XCTUnwrap(env.moreShadowForTests(.health))).checkIns[a.date])
+        root = try s05Object(XCTUnwrap(env.moreShadowForTests(.health))); root["opaque"] = .string("later root"); env.setSprint05WorkspacesForTests(shadows: [.health:.object(root)])
+        await env.updateHealthCheckIn(date: b.date, energy: 4, note: "Później"); let later = env.healthWorkspace.checkIns[b.date]
+        let restored = await env.undoHealthCheckInDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        XCTAssertEqual(env.healthWorkspace.checkIns[a.date], a); XCTAssertEqual(env.healthWorkspace.checkIns[b.date], later)
+        let final = try s05Object(RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: env.healthWorkspace, onto: XCTUnwrap(env.moreShadowForTests(.health))))
+        XCTAssertEqual(final["entries"], root["entries"]); XCTAssertEqual(final["opaque"], root["opaque"])
+    }
+    @MainActor func testS05HealthJoinedCanonicalReminderUndoPreservesEntriesAndLaterRecord() async throws {
+        let env = nutritionEnvironment(); let a = s05Reminder(); let b = s05Reminder("b")
+        let ws = HealthWorkspace(version: 1, updatedAt: "2026-09-07T08:00:00Z", checkIns: [:], reminders: [a,b])
+        var root = try s05Object(RootineCanonicalWorkspaceMapping.payload(for: ws)); root["entries"] = .array([.object(["id":.string("clinical"),"title":.string("Zapis"),"kind":.string("visit"),"dueDate":.string("2026-09-15"),"time":.string("10:00"),"location":.string("Miejsce"),"note":.string("Notatka"),"status":.string("planned"),"createdAt":.string("2026-09-01T08:00:00Z"),"opaque":.string("original")])]); root["opaque"] = .string("root")
+        env.setSprint05WorkspacesForTests(health: ws, shadows: [.health:.object(root)]); var token: RootineModuleUndo<HealthReminder>?
+        await env.deleteHealthReminderWithUndo(id: a.id) { token = $0 }
+        XCTAssertEqual(try RootineCanonicalWorkspaceMapping.healthWorkspace(from: XCTUnwrap(env.moreShadowForTests(.health))).reminders.map(\.id), ["b"])
+        root = try s05Object(XCTUnwrap(env.moreShadowForTests(.health))); root["opaque"] = .string("later root"); env.setSprint05WorkspacesForTests(shadows: [.health:.object(root)])
+        await env.updateHealthReminder(id: b.id, title: "Później", detail: "Zmieniono"); let later = env.healthWorkspace.reminders[0]
+        let restored = await env.undoHealthReminderDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        XCTAssertEqual(env.healthWorkspace.reminders, [a,later])
+        let final = try s05Object(RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: env.healthWorkspace, onto: XCTUnwrap(env.moreShadowForTests(.health))))
+        XCTAssertEqual(final["entries"], root["entries"]); XCTAssertEqual(final["opaque"], root["opaque"])
+    }
+    @MainActor func testS05AffairsTypedDeleteLaterEditUndoKeepsAllCollections() async throws {
+        let env = nutritionEnvironment(); var ws = try fixture("affairs-workspace-v2", as: AffairsWorkspace.self); ws.matters.insert(s05Matter(), at: 0)
+        env.setSprint05WorkspacesForTests(affairs: ws); var token: RootineModuleUndo<AffairMatter>?
+        await env.deleteAffairMatterWithUndo(id: "matter-a") { token = $0 }
+        let other = try XCTUnwrap(ws.matters.last)
+        await env.updateAffairMatter(id: other.id, title: "Późniejszy", category: other.category, priority: other.priority, dueDate: other.dueDate, note: other.note)
+        var expected = env.affairsWorkspace; expected.matters.insert(ws.matters[0], at: 0)
+        let restored = await env.undoAffairMatterDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        XCTAssertEqual(try roundTrip(env.affairsWorkspace), expected)
+        await env.updateAffairMatter(id: "matter-a", title: "Zmieniona", category: "dom", priority: "high", dueDate: "2026-09-15", note: "Pełna notatka")
+        var edited = s05Matter(); edited.title = "Zmieniona"; XCTAssertEqual(env.affairsWorkspace.matters[0], edited)
+        XCTAssertEqual(env.affairsWorkspace.attentionStates, ws.attentionStates); XCTAssertEqual(env.affairsWorkspace.budgets, ws.budgets)
+    }
+    @MainActor func testS05AffairsVehicleCascadeAndMissingParentProtectOtherCollections() async throws {
+        let env = nutritionEnvironment(); var ws = try fixture("affairs-workspace-v2", as: AffairsWorkspace.self)
+        let vehicle = try XCTUnwrap(ws.vehicles.first); let item = try XCTUnwrap(ws.vehicleItems.first)
+        var other = vehicle; other.id = "other-vehicle"; var otherItem = item; otherItem.id = "other-item"; otherItem.vehicleId = other.id
+        ws.vehicles.append(other); ws.vehicleItems.append(otherItem); env.setSprint05WorkspacesForTests(affairs: ws)
+        await env.deleteAffairVehicle(id: vehicle.id)
+        XCTAssertEqual(env.affairsWorkspace.vehicles, [other]); XCTAssertEqual(env.affairsWorkspace.vehicleItems, [otherItem])
+        let before = env.affairsWorkspace
+        await env.addAffairVehicleItem(vehicleID: vehicle.id, title: "Invalid", type: "service", dueDate: "2026-09-15", operationID: "bad")
+        XCTAssertEqual(env.affairsWorkspace, before)
+        XCTAssertEqual(before.budgets, ws.budgets); XCTAssertEqual(before.attentionStates, ws.attentionStates); XCTAssertEqual(before.payments, ws.payments)
+    }
+    @MainActor func testS05AffairsPaidActiveCadenceAndFractionalMileage() async throws {
+        let env = nutritionEnvironment(); let ws = try fixture("affairs-workspace-v2", as: AffairsWorkspace.self); env.setSprint05WorkspacesForTests(affairs: ws)
+        let one = try XCTUnwrap(ws.oneTimePayments.first); await env.toggleOneTimePayment(id: one.id)
+        XCTAssertEqual(env.affairsWorkspace.oneTimePayments[0].paid, !one.paid); XCTAssertFalse(env.affairsWorkspace.oneTimePayments[0].paidAt.isEmpty)
+        await env.updateAffairOneTimePayment(id: one.id, title: one.title, category: one.category, amount: 12.34, dueDate: one.dueDate, note: one.note)
+        XCTAssertEqual(env.affairsWorkspace.oneTimePayments[0].amount, 12.34); XCTAssertTrue(env.affairsWorkspace.oneTimePayments[0].paid)
+        let payment = try XCTUnwrap(ws.payments.first); let date = RootineDate.dateOnly(from: "2026-09-07", timezone: "UTC")!
+        await env.setAffairPaymentActive(id: payment.id, active: false); await env.advanceAffairPayment(id: payment.id, reference: date)
+        XCTAssertFalse(env.affairsWorkspace.payments[0].active); XCTAssertGreaterThan(env.affairsWorkspace.payments[0].nextDueDate, "2026-09-07")
+        let subscription = try XCTUnwrap(ws.subscriptions.first); await env.setAffairSubscriptionActive(id: subscription.id, active: false); await env.advanceAffairSubscription(id: subscription.id, reference: date)
+        XCTAssertFalse(env.affairsWorkspace.subscriptions[0].active)
+        let vehicle = try XCTUnwrap(ws.vehicles.first); await env.updateAffairVehicle(id: vehicle.id, name: vehicle.name, registration: vehicle.registration, mileage: 123.45)
+        XCTAssertEqual(env.affairsWorkspace.vehicles[0].mileage, 123.45)
+    }
+    func testS05AffairsProjectionKeepsCompletedAndHidesAmountsFromCollapsedDescription() {
+        var done = s05Matter("done"); done.status = "done"; let open = s05Matter()
+        XCTAssertEqual(rootineAffairMatters([done,open], completed: false), [open]); XCTAssertEqual(rootineAffairMatters([done,open], completed: true), [done])
+        let hidden = RootineAffairAmountPresentation(date: "2026-09-15", amount: 1234.56, revealed: false)
+        XCTAssertEqual(hidden.detail, "Termin 2026-09-15")
+        XCTAssertNotEqual(hidden.detail, RootineAffairAmountPresentation(date: "2026-09-15", amount: 1234.56, revealed: true).detail)
+        XCTAssertEqual(MoreModule.affairs.rawValue, "affairs"); XCTAssertEqual(MoreModule.affairs.title, "Sprawy i finanse")
+    }
+    @MainActor func testS05TripUndoPublishedBeforeAwaitRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s05Trip(); env.setSprint05WorkspacesForTests(travel: TravelWorkspace(version: 1, updatedAt: record.updatedAt, trips: [record]))
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<TravelRecord>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteTripWithUndo(id: record.id) { token = $0 } }
+        await gate.waitUntilPaused(); XCTAssertNotNil(token)
+        var b = record; b.note = "Później"; await env.restoreTrip(b)
+        let expected = env.travelWorkspace.trips; let shadow = env.moreShadowForTests(.travel)
+        gate.resume(); await pending.value
+        XCTAssertEqual(env.moreShadowForTests(.travel), shadow)
+        let restored = await env.undoTripDeletion(try XCTUnwrap(token)); XCTAssertFalse(restored)
+        XCTAssertEqual(env.travelWorkspace.trips, expected); XCTAssertTrue(env.foundationMessage.contains("Nie można cofnąć"))
+    }
+    @MainActor func testS05ReminderUndoPublishedBeforeAwaitRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s05Reminder(); env.setSprint05WorkspacesForTests(health: HealthWorkspace(version: 1, updatedAt: "2026-09-07T08:00:00Z", checkIns: [:], reminders: [record]))
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<HealthReminder>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteHealthReminderWithUndo(id: record.id) { token = $0 } }
+        await gate.waitUntilPaused(); XCTAssertNotNil(token)
+        var b = record; b.detail = "Później"; await env.restoreHealthReminder(b)
+        let expected = env.healthWorkspace.reminders; let shadow = env.moreShadowForTests(.health)
+        gate.resume(); await pending.value
+        XCTAssertEqual(env.moreShadowForTests(.health), shadow)
+        let restored = await env.undoHealthReminderDeletion(try XCTUnwrap(token)); XCTAssertFalse(restored)
+        XCTAssertEqual(env.healthWorkspace.reminders, expected); XCTAssertTrue(env.foundationMessage.contains("Nie można cofnąć"))
+    }
+    @MainActor func testS05CheckInUndoPublishedBeforeAwaitRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s05CheckIn(); env.setSprint05WorkspacesForTests(health: HealthWorkspace(version: 1, updatedAt: record.updatedAt, checkIns: [record.date:record], reminders: []))
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<HealthCheckIn>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteHealthCheckInWithUndo(date: record.date) { token = $0 } }
+        await gate.waitUntilPaused(); XCTAssertNotNil(token)
+        await env.updateHealthCheckIn(date: record.date, energy: 4, note: "Później")
+        let expected = env.healthWorkspace.checkIns; let shadow = env.moreShadowForTests(.health)
+        gate.resume(); await pending.value
+        XCTAssertEqual(env.moreShadowForTests(.health), shadow)
+        let restored = await env.undoHealthCheckInDeletion(try XCTUnwrap(token)); XCTAssertFalse(restored)
+        XCTAssertEqual(env.healthWorkspace.checkIns, expected); XCTAssertTrue(env.foundationMessage.contains("Nie można cofnąć"))
+    }
+    @MainActor func testS05MatterUndoPublishedBeforeAwaitRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s05Matter(); var ws = AffairsWorkspace.empty; ws.matters = [record]; env.setSprint05WorkspacesForTests(affairs: ws)
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<AffairMatter>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteAffairMatterWithUndo(id: record.id) { token = $0 } }
+        await gate.waitUntilPaused(); XCTAssertNotNil(token)
+        var b = record; b.note = "Później"; await env.restoreAffairMatter(b)
+        let expected = env.affairsWorkspace.matters; let shadow = env.moreShadowForTests(.affairs)
+        gate.resume(); await pending.value
+        XCTAssertEqual(env.moreShadowForTests(.affairs), shadow)
+        let restored = await env.undoAffairMatterDeletion(try XCTUnwrap(token)); XCTAssertFalse(restored)
+        XCTAssertEqual(env.affairsWorkspace.matters, expected); XCTAssertTrue(env.foundationMessage.contains("Nie można cofnąć"))
+    }
+    @MainActor func testS05TripDistinctOperationsAndRetryDuringPersistence() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        let create: (String) async -> Void = { op in await env.addTrip(destination: "Gdańsk", dateRange: "2026-09-12 – 2026-09-15", nights: 3, operationID: op) }
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await create("A") }; await gate.waitUntilPaused()
+        await create("A"); XCTAssertEqual(env.travelWorkspace.trips.count, 1)
+        await create("B"); XCTAssertEqual(env.travelWorkspace.trips.count, 2)
+        gate.resume(); await pending.value; await create("A"); XCTAssertEqual(env.travelWorkspace.trips.count, 2)
+    }
+    @MainActor func testS05ReminderDistinctOperationsAndRetryDuringPersistence() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        let create: (String) async -> Void = { op in await env.addHealthReminder(title: "Spacer", detail: "Dziś", operationID: op) }
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await create("A") }; await gate.waitUntilPaused()
+        await create("A"); XCTAssertEqual(env.healthWorkspace.reminders.count, 1)
+        await create("B"); XCTAssertEqual(env.healthWorkspace.reminders.count, 2)
+        gate.resume(); await pending.value; await create("A"); XCTAssertEqual(env.healthWorkspace.reminders.count, 2)
+    }
+    @MainActor func testS05MatterDistinctOperationsAndRetryDuringPersistence() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        let create: (String) async -> Void = { op in await env.addAffairMatter(title: "Sprawa", category: "dom", priority: "normal", dueDate: "2026-09-15", note: "", operationID: op) }
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await create("A") }; await gate.waitUntilPaused()
+        await create("A"); XCTAssertEqual(env.affairsWorkspace.matters.count, 1)
+        await create("B"); XCTAssertEqual(env.affairsWorkspace.matters.count, 2)
+        gate.resume(); await pending.value; await create("A"); XCTAssertEqual(env.affairsWorkspace.matters.count, 2)
+    }
+    @MainActor func testS05OneTimeDistinctOperationsAndRetryDuringPersistence() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        let create: (String) async -> Void = { op in await env.addAffairOneTimePayment(title: "Opłata", category: "Dom", amount: 12.34, dueDate: "2026-09-15", operationID: op) }
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await create("A") }; await gate.waitUntilPaused()
+        await create("A"); XCTAssertEqual(env.affairsWorkspace.oneTimePayments.count, 1)
+        await create("B"); XCTAssertEqual(env.affairsWorkspace.oneTimePayments.count, 2)
+        gate.resume(); await pending.value; await create("A"); XCTAssertEqual(env.affairsWorkspace.oneTimePayments.count, 2)
+    }
+    @MainActor func testS05RecurringDistinctOperationsAndRetryDuringPersistence() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        let create: (String) async -> Void = { op in await env.addAffairPayment(name: "Opłata", category: "Dom", amount: 12.34, cadence: "monthly", nextDueDate: "2026-09-15", operationID: op) }
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await create("A") }; await gate.waitUntilPaused()
+        await create("A"); XCTAssertEqual(env.affairsWorkspace.payments.count, 1)
+        await create("B"); XCTAssertEqual(env.affairsWorkspace.payments.count, 2)
+        gate.resume(); await pending.value; await create("A"); XCTAssertEqual(env.affairsWorkspace.payments.count, 2)
+    }
+
+    func testS05OptionalMileageDistinguishesEmptyInvalidAndFractional() {
+        XCTAssertTrue(rootineAffairOptionalMileageIsValid(""))
+        XCTAssertTrue(rootineAffairOptionalMileageIsValid("123,45"))
+        XCTAssertFalse(rootineAffairOptionalMileageIsValid("abc"))
+        XCTAssertFalse(rootineAffairOptionalMileageIsValid("-1"))
+        XCTAssertFalse(rootineAffairOptionalMileageIsValid("nan"))
+        XCTAssertEqual(rootineAffairMileage("123,45"), 123.45)
+    }
+    @MainActor func testS05MissingRecordsDoNotPublishUndoTokens() async {
+        let env = nutritionEnvironment(); var count = 0
+        await env.deleteTripWithUndo(id: "missing") { _ in count += 1 }
+        await env.deleteHealthReminderWithUndo(id: "missing") { _ in count += 1 }
+        await env.deleteHealthCheckInWithUndo(date: "2026-09-07") { _ in count += 1 }
+        await env.deleteAffairMatterWithUndo(id: "missing") { _ in count += 1 }
+        XCTAssertEqual(count, 0)
+    }
+
+    @MainActor func testEvaluatorUndatedTripDoesNotBecomeCurrentAfterCanonicalRead() async throws {
+        let env = nutritionEnvironment()
+        await env.addTrip(destination: "Podróż bez daty", dateRange: "Termin do ustalenia", nights: 3, operationID: "undated")
+        let original = try XCTUnwrap(env.travelWorkspace.trips.first)
+        let today = RootineDate.localDate()
+        XCTAssertNil(RootineTravelAgenda([original], today: today).featured)
+        let read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: XCTUnwrap(env.moreShadowForTests(.travel)))
+        XCTAssertEqual(read.trips.map(\.id), [original.id])
+        XCTAssertNil(RootineTravelAgenda(read.trips, today: today).featured, "Unspecified dates must not become a trip happening on its creation date")
+        XCTAssertEqual(RootineTravelAgenda(read.trips, today: today).undated.map(\.id), [original.id])
+    }
+    @MainActor func testEvaluatorPackingAppendPreservesExistingOpaqueRecordFields() async throws {
+        let env = nutritionEnvironment()
+        var trip = s05Trip()
+        trip.packingItems = [TravelPackingItem(id: "old-packing", label: "Dokumenty", quantity: 1, packed: false)]
+        let ws = TravelWorkspace(version: 1, updatedAt: trip.updatedAt, trips: [trip])
+        var root = try s05Object(RootineCanonicalWorkspaceMapping.payload(for: ws))
+        guard case .array(var trips) = root["trips"], case .object(var first) = trips[0], case .array(var packing) = first["packingItems"], case .object(var old) = packing[0] else { return XCTFail("fixture missing packing") }
+        old["opaquePacking"] = .string("Zachowaj dane z innego klienta")
+        packing[0] = .object(old); first["packingItems"] = .array(packing); trips[0] = .object(first); root["trips"] = .array(trips)
+        let payload = JSONValue.object(root)
+        let initial = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: payload)
+        env.setSprint05WorkspacesForTests(travel: initial, shadows: [.travel: payload])
+        await env.addTravelPackingItem(tripID: trip.id, label: "Ładowarka", operationID: "new-packing")
+        let final = try s05Object(XCTUnwrap(env.moreShadowForTests(.travel)))
+        guard case .array(let afterTrips) = final["trips"], case .object(let afterTrip) = afterTrips[0], case .array(let afterPacking) = afterTrip["packingItems"] else { return XCTFail("result missing packing") }
+        XCTAssertEqual(afterPacking.count, 2)
+        let oldAfter = afterPacking.compactMap { if case .object(let value) = $0 { return value }; return nil }.first { $0["id"] == .string("old-packing") }
+        XCTAssertEqual(oldAfter?["opaquePacking"], old["opaquePacking"], "Appending one item must preserve opaque data on an existing item")
+    }
+    @MainActor func testS05R2UndatedCreateEditAndDatedCanonicalReadKeepMetadata() async throws {
+        let env = nutritionEnvironment()
+        await env.addTrip(destination: "Bez daty", dateRange: "Termin do ustalenia", nights: 3, operationID: "undated-roundtrip")
+        let original = try XCTUnwrap(env.travelWorkspace.trips.first)
+        var read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: XCTUnwrap(env.moreShadowForTests(.travel)))
+        XCTAssertEqual(read.trips[0].dateRange, original.dateRange); XCTAssertEqual(read.trips[0].nights, 3)
+        XCTAssertEqual(read.trips[0].startDate, ""); XCTAssertEqual(read.trips[0].endDate, ""); XCTAssertEqual(read.trips[0].note, original.note)
+        env.setSprint05WorkspacesForTests(travel: read)
+        await env.updateTrip(id: original.id, destination: "Po edycji", dateRange: "Wiosną", nights: 5)
+        read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: XCTUnwrap(env.moreShadowForTests(.travel)))
+        XCTAssertEqual(read.trips[0].dateRange, "Wiosną"); XCTAssertEqual(read.trips[0].nights, 5)
+        XCTAssertNil(RootineTravelAgenda(read.trips, today: RootineDate.localDate()).featured)
+        XCTAssertEqual(RootineTravelAgenda(read.trips, today: RootineDate.localDate()).undated.map(\.id), [original.id])
+        env.setSprint05WorkspacesForTests(travel: read)
+        await env.updateTrip(id: original.id, destination: "Z terminem", dateRange: "2026-10-02 – 2026-10-06", nights: 4)
+        read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: XCTUnwrap(env.moreShadowForTests(.travel)))
+        XCTAssertEqual(read.trips[0].startDate, "2026-10-02"); XCTAssertEqual(read.trips[0].endDate, "2026-10-06")
+        XCTAssertEqual(read.trips[0].dateRange, "2026-10-02 – 2026-10-06"); XCTAssertEqual(read.trips[0].nights, 4)
+        XCTAssertEqual(RootineTravelAgenda(read.trips, today: "2026-10-03").featured?.id, original.id)
+    }
+    @MainActor func testS05R2PackingAppendRetryKeepsLaterOpaqueAndOtherTrip() async throws {
+        let env = nutritionEnvironment(); var original = s05Trip(); let other = s05Trip("other")
+        original.packingItems = [TravelPackingItem(id: "old", label: "Dokumenty", quantity: 1, packed: false)]
+        var root = try s05Object(RootineCanonicalWorkspaceMapping.payload(for: TravelWorkspace(version: 1, updatedAt: original.updatedAt, trips: [original,other])))
+        guard case .array(var trips) = root["trips"], case .object(var first) = trips[0], case .array(var items) = first["packingItems"], case .object(var old) = items[0] else { return XCTFail("Fixture") }
+        old["opaquePacking"] = .object(["revision":.number(1)]); items[0] = .object(old); first["packingItems"] = .array(items); trips[0] = .object(first); root["trips"] = .array(trips)
+        let base = JSONValue.object(root); env.setSprint05WorkspacesForTests(travel: try RootineCanonicalWorkspaceMapping.travelWorkspace(from: base), shadows: [.travel:base])
+        let gate = CalendarPersistenceGate()
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.addTravelPackingItem(tripID: original.id, label: "Ładowarka", operationID: "append") }
+        await gate.waitUntilPaused()
+        var later = try s05Object(XCTUnwrap(env.moreShadowForTests(.travel)))
+        guard case .array(var laterTrips) = later["trips"], case .object(var laterTrip) = laterTrips[0], case .array(var laterItems) = laterTrip["packingItems"], case .object(var laterOld) = laterItems[0] else { gate.resume(); await pending.value; return XCTFail("Published") }
+        laterOld["opaquePacking"] = .object(["revision":.number(2)]); laterItems[0] = .object(laterOld); laterTrip["packingItems"] = .array(laterItems); laterTrips[0] = .object(laterTrip); later["trips"] = .array(laterTrips); later["opaqueRoot"] = .string("later")
+        env.setSprint05WorkspacesForTests(shadows: [.travel:.object(later)])
+        await env.updateTrip(id: other.id, destination: "Późniejsza podróż", dateRange: other.dateRange, nights: other.nights)
+        await env.addTravelPackingItem(tripID: original.id, label: "Ładowarka", operationID: "append")
+        gate.resume(); await pending.value
+        await env.addTravelPackingItem(tripID: original.id, label: "Ładowarka", operationID: "append")
+        let final = try s05Object(XCTUnwrap(env.moreShadowForTests(.travel)))
+        guard case .array(let finalTrips) = final["trips"], case .object(let finalTrip) = finalTrips[0], case .array(let finalItems) = finalTrip["packingItems"], case .object(let finalOld) = finalItems[0] else { return XCTFail("Final") }
+        XCTAssertEqual(finalItems.count, 2); XCTAssertEqual(finalOld["opaquePacking"], laterOld["opaquePacking"])
+        XCTAssertEqual(final["opaqueRoot"], .string("later"))
+        let read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: .object(final))
+        XCTAssertEqual(read.trips[0].packingItems.count, 2); XCTAssertEqual(read.trips[1].destination, "Późniejsza podróż")
+        XCTAssertEqual(read.trips[1].packingItems, other.packingItems)
+    }
+
+    @MainActor func testEvaluatorCanonicalDateEditDoesNotLeaveStaleDisplayedRange() async throws {
+        let env = nutritionEnvironment()
+        await env.addTrip(destination: "Wyjazd", dateRange: "2026-10-02 – 2026-10-06", nights: 4, operationID: "date-edit")
+        var root = try s05Object(XCTUnwrap(env.moreShadowForTests(.travel)))
+        guard case .array(var trips) = root["trips"], case .object(var trip) = trips[0] else { return XCTFail("missing trip") }
+        trip["startDate"] = .string("2026-11-02")
+        trip["endDate"] = .string("2026-11-06")
+        trips[0] = .object(trip); root["trips"] = .array(trips)
+        let read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: .object(root))
+        let current = try XCTUnwrap(read.trips.first)
+        XCTAssertEqual(current.startDate, "2026-11-02")
+        XCTAssertEqual(current.endDate, "2026-11-06")
+        XCTAssertNotNil(RootineTravelAgenda(read.trips, today: "2026-11-03").featured)
+        XCTAssertEqual(current.dateRange, "2026-11-02 – 2026-11-06", "Displayed date range must follow the edited canonical dates")
+        env.setSprint05WorkspacesForTests(travel: read, shadows: [.travel:.object(root)])
+        await env.updateTrip(id: current.id, destination: "Nowa nazwa", dateRange: current.dateRange, nights: current.nights)
+        XCTAssertEqual(env.travelWorkspace.trips.first?.startDate, "2026-11-02", "Saving only destination must not revert a later canonical date edit")
+        XCTAssertEqual(env.travelWorkspace.trips.first?.endDate, "2026-11-06")
+    }
+
+    @MainActor func testS05R3CanonicalDatesReplaceStaleRangeAndDurationAcrossSave() async throws {
+        let env = nutritionEnvironment()
+        await env.addTrip(destination: "Pierwotne miejsce", dateRange: "2026-10-02 – 2026-10-06", nights: 4, operationID: "r03-duration")
+        var root = try s05Object(XCTUnwrap(env.moreShadowForTests(.travel)))
+        guard case .array(var trips) = root["trips"], case .object(var trip) = trips[0] else { return XCTFail("missing trip") }
+        trip["startDate"] = .string("2026-11-02")
+        trip["endDate"] = .string("2026-11-09")
+        trip["laterOpaque"] = .string("retain me")
+        trips[0] = .object(trip); root["trips"] = .array(trips)
+        let read = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: .object(root))
+        let current = try XCTUnwrap(read.trips.first)
+        XCTAssertEqual(current.dateRange, "2026-11-02 – 2026-11-09")
+        XCTAssertEqual(current.nights, 7)
+        XCTAssertNil(RootineTravelAgenda(read.trips, today: "2026-10-03").current.first)
+        XCTAssertEqual(RootineTravelAgenda(read.trips, today: "2026-11-03").current.first?.id, current.id)
+        env.setSprint05WorkspacesForTests(travel: read, shadows: [.travel: .object(root)])
+        await env.updateTrip(id: current.id, destination: "Nowe miejsce", dateRange: current.dateRange, nights: current.nights)
+        let published = try XCTUnwrap(env.moreShadowForTests(.travel))
+        let saved = try XCTUnwrap(RootineCanonicalWorkspaceMapping.travelWorkspace(from: published).trips.first)
+        XCTAssertEqual(saved.destination, "Nowe miejsce")
+        XCTAssertEqual(saved.startDate, "2026-11-02")
+        XCTAssertEqual(saved.endDate, "2026-11-09")
+        XCTAssertEqual(saved.dateRange, "2026-11-02 – 2026-11-09")
+        XCTAssertEqual(saved.nights, 7)
+        let savedRoot = try s05Object(published)
+        guard case .array(let savedTrips) = savedRoot["trips"] else { return XCTFail("missing saved trips") }
+        let savedTrip = try s05Object(XCTUnwrap(savedTrips.first))
+        XCTAssertEqual(savedTrip["laterOpaque"], .string("retain me"))
+        XCTAssertEqual(savedTrip["dateRange"], .string("2026-11-02 – 2026-11-09"))
+        XCTAssertEqual(savedTrip["nights"], .number(7))
+    }
+
+    // Sprint 04: production module mutations, relation guards and canonical Undo.
+    private func s04Note(_ id: String = "note-a", folder: String = "") -> NoteRecord {
+        NoteRecord(id: id, title: "", body: "", kind: "checklist", items: [NoteChecklistItem(id: "check-a", text: "Treść listy", checked: true)], tags: ["praca"], listId: folder, color: .violet, pinned: true, archived: true, createdAt: "2026-09-01T08:00:00Z", updatedAt: "2026-09-02T09:00:00Z")
+    }
+    private func s04Workout(_ id: String = "sport-a", completed: Bool = false) -> SportWorkout {
+        SportWorkout(id: id, title: "Bieg", date: "2026-09-07", minutes: 30, kind: "Bieg", completed: completed, createdAt: "2026-09-01T08:00:00Z", updatedAt: "2026-09-02T09:00:00Z")
+    }
+    private func s04Goal(_ id: String = "goal-a", category: String = "personal") -> GoalRecord {
+        GoalRecord(id: id, title: "Przeczytaj", detail: "Opis", createdAt: "2026-09-01T08:00:00Z", updatedAt: "2026-09-02T09:00:00Z", categoryId: category, customIcon: "web-icon", color: "#123456", progressMode: .milestones, milestones: [GoalMilestone(id: "step", title: "Rozdział", dueDate: "2026-09-08", done: false)], linkedTaskIds: [17], note: "Zachowaj")
+    }
+    @MainActor func testS04NotesChecklistOnlySavePreservesArchiveAndUnfiled() async {
+        let env = nutritionEnvironment(); let note = s04Note()
+        await env.upsertNote(note)
+        XCTAssertEqual(env.notesWorkspace.notes.count, 1)
+        XCTAssertEqual(env.notesWorkspace.notes[0].listId, "")
+        XCTAssertTrue(env.notesWorkspace.notes[0].archived)
+        XCTAssertEqual(env.notesWorkspace.notes[0].items, note.items)
+        XCTAssertEqual(env.notesWorkspace.notes[0].createdAt, note.createdAt)
+        XCTAssertTrue(env.notesWorkspace.lists.isEmpty)
+    }
+    @MainActor func testS04NotesUndoRejectsDeletedFolderAndPreservesLaterRecords() async throws {
+        let env = nutritionEnvironment(); let folder = NoteList(id: "folder", name: "Folder", createdAt: "old")
+        let a = s04Note(folder: folder.id); let b = s04Note("note-b", folder: folder.id)
+        env.setMoreWorkspacesForTests(notes: NotesWorkspace(version: 1, updatedAt: "old", lists: [folder], notes: [a, b]))
+        var token: RootineModuleUndo<NoteRecord>?
+        await env.deleteNoteWithUndo(id: a.id) { token = $0 }
+        await env.deleteNoteList(id: folder.id)
+        let later = env.notesWorkspace
+        let restored = await env.undoNoteDeletion(try XCTUnwrap(token))
+        XCTAssertFalse(restored); XCTAssertEqual(env.notesWorkspace, later)
+        XCTAssertTrue(env.notesWorkspace.lists.isEmpty); XCTAssertEqual(env.notesWorkspace.notes[0].listId, "")
+        XCTAssertTrue(env.foundationMessage.contains("folder"))
+    }
+    @MainActor func testS04GoalsUndoRejectsDeletedCategoryAndPreservesLaterRecords() async throws {
+        let env = nutritionEnvironment(); var ws = GoalsWorkspace.empty
+        ws.categories.append(GoalCategory(id: "custom", label: "Własne", color: "#123456", iconKey: "target"))
+        let a = s04Goal(category: "custom"); ws.goals = [a, s04Goal("goal-b", category: "custom")]
+        env.setMoreWorkspacesForTests(goals: ws)
+        var token: RootineModuleUndo<GoalRecord>?
+        await env.deleteGoalWithUndo(id: a.id) { token = $0 }
+        await env.deleteGoalCategory(id: "custom")
+        let later = env.goalsWorkspace
+        let restored = await env.undoGoalDeletion(try XCTUnwrap(token))
+        XCTAssertFalse(restored); XCTAssertEqual(env.goalsWorkspace, later)
+        XCTAssertEqual(env.goalsWorkspace.goals[0].categoryId, "personal")
+        XCTAssertTrue(env.foundationMessage.contains("kategoria"))
+    }
+    func testS04SportAgendaPartitionsAllIDsAtDayBoundary() {
+        let today = s04Workout(); var past = s04Workout("past"); past.date = "2026-09-06"
+        var future = s04Workout("future"); future.date = "2026-09-08"
+        let done = s04Workout("done", completed: true)
+        let agenda = RootineSportAgenda([future, past, done, today], today: "2026-09-07")
+        XCTAssertEqual(agenda.upcoming.map(\.id), [today.id, future.id]); XCTAssertEqual(agenda.overdue.map(\.id), [past.id]); XCTAssertEqual(agenda.history.map(\.id), [done.id])
+        XCTAssertEqual(Set((agenda.upcoming + agenda.overdue + agenda.history).map(\.id)).count, 4)
+        XCTAssertTrue(RootineSportAgenda([], today: "2026-09-07").upcoming.isEmpty)
+    }
+    func testS04GoalNextStepAndModesReadWithoutMutation() {
+        var goal = s04Goal(); XCTAssertEqual(rootineGoalNextStep(goal), "Rozdział")
+        goal.milestones[0].done = true
+        for mode in GoalProgressMode.allCases { goal.progressMode = mode; let before = goal; XCTAssertFalse(rootineGoalNextStep(goal).isEmpty); XCTAssertEqual(goal, before) }
+        goal.status = .completed; XCTAssertEqual(rootineGoalNextStep(goal), "Cel ukończony")
+    }
+    func testS04WorkDayProjectionPreservesUnscheduledAndExcludesFutureCancelled() {
+        let now = "2026-09-07"
+        let a = WorkItem(id: "a", title: "Dziś", dueDate: now, createdAt: "old")
+        let b = WorkItem(id: "b", title: "Bez terminu", createdAt: "old")
+        let c = WorkItem(id: "c", title: "Jutro", dueDate: "2026-09-08", createdAt: "old")
+        let d = WorkItem(id: "d", title: "Anulowane", status: .cancelled, createdAt: "old")
+        XCTAssertEqual(rootineWorkDayItems([b, c, d, a], today: now).map(\.id), ["a", "b"])
+    }
+    @MainActor func testS04WorkBasicEditKeepsHiddenMetadata() async throws {
+        let env = nutritionEnvironment(); var ws = WorkWorkspace.empty
+        let item = WorkItem(id: "item", companyId: "company", parentId: "parent", title: "Przed", priority: .high, startDate: "2026-09-01", dueDate: "2026-09-07", dueTime: "09:30", note: "Metadane", createdAt: "old", updatedAt: "old")
+        ws.companies = [WorkCompany(id: "company", name: "Firma")]
+        ws.tasks = [item, WorkItem(id: "parent", title: "Rodzic", createdAt: "old")]; env.setMoreWorkspacesForTests(work: ws)
+        await env.editWorkItemBasics(id: item.id, title: "Po", projectID: nil, priority: .urgent, status: .inProgress)
+        var expected = item; expected.title = "Po"; expected.priority = .urgent; expected.status = .inProgress
+        expected.updatedAt = env.workWorkspace.tasks[0].updatedAt
+        XCTAssertEqual(env.workWorkspace.tasks[0], expected)
+    }
+    @MainActor func testS04FocusPauseResumeStopExcludesPauseAndRecovers() async throws {
+        let env = nutritionEnvironment(); let start = Date(timeIntervalSince1970: 1_700_000_000)
+        await env.startFocusSession(now: start)
+        await env.recoverFocusSession(now: start.addingTimeInterval(60))
+        XCTAssertNotNil(env.workWorkspace.activeFocusStartedAt)
+        await env.pauseFocusSession(now: start.addingTimeInterval(300))
+        XCTAssertEqual(env.workWorkspace.focusSessions.map(\.minutes), [5]); XCTAssertNotNil(env.workWorkspace.pausedFocusSessionID)
+        await env.resumeFocusSession(now: start.addingTimeInterval(900))
+        await env.stopFocusSession(now: start.addingTimeInterval(1200))
+        XCTAssertEqual(env.workWorkspace.focusSessions.reduce(0) { $0 + $1.minutes }, 10)
+        XCTAssertNil(env.workWorkspace.pausedFocusSessionID); XCTAssertNil(env.workWorkspace.activeFocusStartedAt)
+        var bad = env.workWorkspace; bad.activeFocusStartedAt = "broken"; env.setMoreWorkspacesForTests(work: bad)
+        await env.recoverFocusSession(now: start); XCTAssertNil(env.workWorkspace.activeFocusStartedAt); XCTAssertEqual(env.workWorkspace.focusSessions.count, 2)
+    }
+    @MainActor func testS04NoteDeletePublishesUndoBeforeSuspensionAndRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s04Note()
+        env.setMoreWorkspacesForTests(notes: NotesWorkspace(version: 1, updatedAt: "old", lists: [], notes: [record]))
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<NoteRecord>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteNoteWithUndo(id: record.id) { token = $0 } }
+        await gate.waitUntilPaused()
+        XCTAssertNotNil(token)
+        var b = record; b.title = "Późniejsza edycja"
+        await env.upsertNote(b)
+        let expected = env.notesWorkspace.notes
+        gate.resume(); await pending.value
+        let restored = await env.undoNoteDeletion(try XCTUnwrap(token))
+        XCTAssertFalse(restored); XCTAssertEqual(env.notesWorkspace.notes, expected)
+    }
+    @MainActor func testS04NoteUndoRestoresFullSnapshotAndConsumesToken() async throws {
+        let env = nutritionEnvironment(); let record = s04Note()
+        env.setMoreWorkspacesForTests(notes: NotesWorkspace(version: 1, updatedAt: "old", lists: [], notes: [record]))
+        var token: RootineModuleUndo<NoteRecord>?
+        await env.deleteNoteWithUndo(id: record.id) { token = $0 }
+        let restored = await env.undoNoteDeletion(try XCTUnwrap(token))
+        XCTAssertTrue(restored); XCTAssertEqual(env.notesWorkspace.notes, [record])
+        let second = await env.undoNoteDeletion(try XCTUnwrap(token)); XCTAssertFalse(second)
+    }
+    @MainActor func testS04WorkoutDeletePublishesUndoBeforeSuspensionAndRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s04Workout()
+        env.setMoreWorkspacesForTests(sport: SportWorkspace(version: 1, updatedAt: "old", workouts: [record]))
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<SportWorkout>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteWorkoutWithUndo(id: record.id) { token = $0 } }
+        await gate.waitUntilPaused()
+        XCTAssertNotNil(token)
+        var b = record; b.title = "Późniejsza edycja"
+        await env.restoreWorkout(b)
+        let expected = env.sportWorkspace.workouts
+        gate.resume(); await pending.value
+        let restored = await env.undoWorkoutDeletion(try XCTUnwrap(token))
+        XCTAssertFalse(restored); XCTAssertEqual(env.sportWorkspace.workouts, expected)
+    }
+    @MainActor func testS04WorkoutUndoRestoresFullSnapshotAndConsumesToken() async throws {
+        let env = nutritionEnvironment(); let record = s04Workout()
+        env.setMoreWorkspacesForTests(sport: SportWorkspace(version: 1, updatedAt: "old", workouts: [record]))
+        var token: RootineModuleUndo<SportWorkout>?
+        await env.deleteWorkoutWithUndo(id: record.id) { token = $0 }
+        let restored = await env.undoWorkoutDeletion(try XCTUnwrap(token))
+        XCTAssertTrue(restored); XCTAssertEqual(env.sportWorkspace.workouts, [record])
+        let second = await env.undoWorkoutDeletion(try XCTUnwrap(token)); XCTAssertFalse(second)
+    }
+    @MainActor func testS04GoalDeletePublishesUndoBeforeSuspensionAndRejectsLaterRecord() async throws {
+        let env = nutritionEnvironment(); let record = s04Goal()
+        env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [record]))
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<GoalRecord>?
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteGoalWithUndo(id: record.id) { token = $0 } }
+        await gate.waitUntilPaused()
+        XCTAssertNotNil(token)
+        var b = record; b.title = "Późniejsza edycja"
+        await env.restoreGoal(b)
+        let expected = env.goalsWorkspace.goals
+        gate.resume(); await pending.value
+        let restored = await env.undoGoalDeletion(try XCTUnwrap(token))
+        XCTAssertFalse(restored); XCTAssertEqual(env.goalsWorkspace.goals, expected)
+    }
+    @MainActor func testS04GoalUndoRestoresFullSnapshotAndConsumesToken() async throws {
+        let env = nutritionEnvironment(); let record = s04Goal()
+        env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [record]))
+        var token: RootineModuleUndo<GoalRecord>?
+        await env.deleteGoalWithUndo(id: record.id) { token = $0 }
+        let restored = await env.undoGoalDeletion(try XCTUnwrap(token))
+        XCTAssertTrue(restored); XCTAssertEqual(env.goalsWorkspace.goals, [record])
+        let second = await env.undoGoalDeletion(try XCTUnwrap(token)); XCTAssertFalse(second)
+    }
+    @MainActor func testS04WorkPriorityUndoInterleavingAndExactSnapshot() async throws {
+        let env = nutritionEnvironment(); await env.addWorkPriority(text: "Priorytet", operationID: "s04")
+        var enriched = env.taskWorkspace
+        enriched.tasks[0].notes = "Pełny snapshot"
+        enriched.tasks[0].time = "09:30"
+        enriched.tasks[0].calendarDate = "2026-09-07"
+        enriched.tasks.append(WorkspaceTask(id: 987654, text: "Chronione inne zadanie", done: false, view: "wszystkie"))
+        env.setTaskWorkspaceForTests(enriched)
+        let original = try XCTUnwrap(env.taskWorkspace.tasks.first)
+        let gate = CalendarPersistenceGate(); var token: RootineModuleUndo<WorkspaceTask>?
+        env.taskWorkspaceDidPublishForTests = { env.taskWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.deleteWorkPriorityWithUndo(id: original.id) { token = $0 } }
+        await gate.waitUntilPaused(); XCTAssertNotNil(token)
+        await env.restoreWorkPriority(original); await env.updateWorkPriority(id: original.id, text: "Późniejsza edycja")
+        let later = env.taskWorkspace.tasks
+        gate.resume(); await pending.value
+        let stale = await env.undoWorkPriorityDeletion(try XCTUnwrap(token)); XCTAssertFalse(stale); XCTAssertEqual(env.taskWorkspace.tasks, later)
+        await env.deleteWorkPriorityWithUndo(id: original.id) { token = $0 }
+        let restored = await env.undoWorkPriorityDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored); XCTAssertEqual(env.taskWorkspace.tasks, later)
+    }
+    @MainActor func testS04NotesJoinedCanonicalDeleteUndoPreservesOpaqueChecklistAndLaterRecord() async throws {
+        let env = nutritionEnvironment(); let a = s04Note(); var b = s04Note("note-b"); b.title = "Inna"
+        let ws = NotesWorkspace(version: 1, updatedAt: "old", lists: [], notes: [a, b])
+        var root = try XCTUnwrap(objectValue(try RootineCanonicalWorkspaceMapping.payload(for: ws)))
+        guard case .array(var records) = root["notes"], case .object(var rich) = records[0], case .array(var items) = rich["items"], case .object(var item) = items[0] else { return XCTFail("Fixture") }
+        rich["webEditor"] = .string("opaque"); item["webFlag"] = .bool(true); items[0] = .object(item); rich["items"] = .array(items); records[0] = .object(rich); root["notes"] = .array(records); root["webRoot"] = .string("keep")
+        env.setMoreWorkspacesForTests(notes: ws, shadows: [.notes: .object(root)])
+        var token: RootineModuleUndo<NoteRecord>?
+        await env.deleteNoteWithUndo(id: a.id) { token = $0 }
+        let deleted = try XCTUnwrap(env.moreShadowForTests(.notes))
+        XCTAssertFalse(s04Records(deleted, key: "notes").contains { objectValue($0)?["id"] == .string(a.id) }, "Actual mapping removes the native tombstone from the document")
+        b.title = "Późniejsza zmiana"; await env.upsertNote(b)
+        let laterOther = s04Records(try XCTUnwrap(env.moreShadowForTests(.notes)), key: "notes").first { objectValue($0)?["id"] == .string(b.id) }
+        let restored = await env.undoNoteDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        let final = try XCTUnwrap(env.moreShadowForTests(.notes))
+        let remapped = try RootineCanonicalWorkspaceMapping.mergedNotesPayload(for: env.notesWorkspace, onto: final)
+        let restoredRecord = try XCTUnwrap(s04Records(remapped, key: "notes").first { objectValue($0)?["id"] == .string(a.id) })
+        XCTAssertEqual(objectValue(restoredRecord)?["webEditor"], .string("opaque")); XCTAssertEqual(objectValue(restoredRecord)?["items"], rich["items"])
+        XCTAssertEqual(s04Records(remapped, key: "notes").first { objectValue($0)?["id"] == .string(b.id) }, laterOther)
+        XCTAssertEqual(objectValue(remapped)?["webRoot"], .string("keep")); XCTAssertEqual(env.notesWorkspace.notes.first, a)
+    }
+    @MainActor func testS04SportJoinedCanonicalDeleteUndoPreservesRichRelationshipsAndLaterRecord() async throws {
+        let env = nutritionEnvironment(); let a = s04Workout(completed: true); let b = s04Workout("sport-b")
+        let ws = SportWorkspace(version: 1, updatedAt: "old", workouts: [a, b])
+        var root = try XCTUnwrap(objectValue(try RootineCanonicalWorkspaceMapping.payload(for: ws)))
+        guard case .array(var sessions) = root["sessions"], case .object(var session) = sessions.first else { return XCTFail("Fixture") }
+        session["metrics"] = .object(["distanceKm": .number(8.4)])
+        session["webField"] = .string("keep-session"); sessions[0] = .object(session); root["sessions"] = .array(sessions)
+        if case .array(var history) = root["history"], case .object(var entry) = history[0] {
+            entry["webHistory"] = .string("keep-history"); history[0] = .object(entry); root["history"] = .array(history)
+        }
+        if case .object(var outcomes) = root["workoutOutcomes"], case .object(var outcome) = outcomes[a.id] {
+            outcome["webOutcome"] = .string("keep-outcome"); outcomes[a.id] = .object(outcome); root["workoutOutcomes"] = .object(outcomes)
+        }
+        root["webRoot"] = .string("keep-root")
+        env.setMoreWorkspacesForTests(sport: ws, shadows: [.sport: .object(root)])
+        var token: RootineModuleUndo<SportWorkout>?
+        await env.deleteWorkoutWithUndo(id: a.id) { token = $0 }
+        let deleted = try XCTUnwrap(env.moreShadowForTests(.sport))
+        XCTAssertFalse(s04Records(deleted, key: "sessions").contains { objectValue($0)?["id"] == session["id"] })
+        XCTAssertTrue(s04Records(deleted, key: "history").isEmpty)
+        XCTAssertNil(objectValue(objectValue(deleted)?["workoutOutcomes"])?[a.id])
+        await env.updateWorkout(id: b.id, title: "Późniejsza zmiana", date: b.date, minutes: 45, kind: b.kind)
+        let beforeUndo = try XCTUnwrap(env.moreShadowForTests(.sport))
+        let other = s04Records(beforeUndo, key: "scheduledWorkouts").first { objectValue($0)?["id"] == .string(b.id) }
+        let restored = await env.undoWorkoutDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        let final = try XCTUnwrap(env.moreShadowForTests(.sport))
+        let remapped = try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: env.sportWorkspace, onto: final)
+        let revived = try XCTUnwrap(s04Records(remapped, key: "sessions").first { objectValue($0)?["id"] == session["id"] })
+        XCTAssertEqual(objectValue(revived)?["metrics"], session["metrics"]); XCTAssertEqual(objectValue(revived)?["webField"], session["webField"])
+        XCTAssertEqual(objectValue(revived)?["cycleWorkoutId"], session["cycleWorkoutId"])
+        XCTAssertEqual(objectValue(remapped)?["history"], root["history"])
+        XCTAssertEqual(objectValue(remapped)?["workoutOutcomes"], root["workoutOutcomes"])
+        XCTAssertEqual(s04Records(remapped, key: "scheduledWorkouts").first { objectValue($0)?["id"] == .string(b.id) }, other)
+        XCTAssertEqual(objectValue(remapped)?["webRoot"], .string("keep-root"))
+        XCTAssertEqual(env.sportWorkspace.workouts.first(where: { $0.id == a.id }), a)
+    }
+    private func s04Records(_ value: JSONValue, key: String) -> [JSONValue] {
+        guard case .array(let records) = objectValue(value)?[key] else { return [] }; return records
+    }
+
+    @MainActor func testS04NotesUndoWithExistingFolderAndFutureKind() async throws {
+        let env = nutritionEnvironment(); var a = s04Note(folder: "folder"); a.kind = "future-kind"
+        let folder = NoteList(id: "folder", name: "Folder", createdAt: "old")
+        env.setMoreWorkspacesForTests(notes: NotesWorkspace(version: 1, updatedAt: "old", lists: [folder], notes: []))
+        await env.upsertNote(a)
+        let saved = try XCTUnwrap(env.notesWorkspace.notes.first)
+        XCTAssertEqual(saved.kind, a.kind); XCTAssertEqual(saved.items, a.items)
+        var token: RootineModuleUndo<NoteRecord>?
+        await env.deleteNoteWithUndo(id: a.id) { token = $0 }
+        let restored = await env.undoNoteDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        XCTAssertEqual(env.notesWorkspace.notes, [saved]); XCTAssertEqual(env.notesWorkspace.lists, [folder])
+    }
+    @MainActor func testS04GoalMilestoneAndBasicEditPreserveNestedFieldsAndCanonicalMapping() async throws {
+        let env = nutritionEnvironment(); let original = s04Goal()
+        env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [original]))
+        await env.updateGoalMilestone(id: original.id, milestoneID: "step", done: true)
+        XCTAssertTrue(env.goalsWorkspace.goals[0].milestones[0].done)
+        XCTAssertEqual(rootineGoalNextStep(env.goalsWorkspace.goals[0]), "Zapisz kolejny krok")
+        let before = env.goalsWorkspace.goals[0]
+        await env.updateGoal(id: original.id, title: "Nowy tytuł", description: before.detail, categoryId: before.categoryId,
+            status: before.status, priority: before.priority, startDate: before.startDate, dueDate: before.dueDate,
+            progressMode: before.progressMode, targetValue: before.targetValue, unit: before.unit, note: before.note, iconKey: "book")
+        let after = env.goalsWorkspace.goals[0]
+        XCTAssertEqual(after.milestones, before.milestones); XCTAssertEqual(after.progressEntries, before.progressEntries)
+        XCTAssertEqual(after.linkedTaskIds, before.linkedTaskIds); XCTAssertEqual(after.customIcon, before.customIcon)
+        XCTAssertEqual(after.color, before.color); XCTAssertEqual(after.createdAt, before.createdAt); XCTAssertEqual(after.iconKey, "book")
+        let payload = try XCTUnwrap(env.moreShadowForTests(.goals))
+        let decoded = try RootineCanonicalWorkspaceMapping.goalsWorkspace(from: payload)
+        XCTAssertEqual(decoded.goals[0].milestones, after.milestones); XCTAssertEqual(decoded.goals[0].linkedTaskIds, after.linkedTaskIds)
+        XCTAssertEqual(decoded.goals[0].customIcon, after.customIcon); XCTAssertEqual(decoded.goals[0].history, after.history)
+    }
+    @MainActor func testS04SportDistinctOperationsOverlapAndRetryIsIdempotent() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        env.moreWorkspaceDidPublishForTests = { _ in env.moreWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.addWorkout(title: "Bieg", date: "2026-09-07", minutes: 30, kind: "Bieg", operationID: "a") }
+        await gate.waitUntilPaused()
+        await env.addWorkout(title: "Bieg", date: "2026-09-07", minutes: 30, kind: "Bieg", operationID: "b")
+        await env.addWorkout(title: "Bieg", date: "2026-09-07", minutes: 30, kind: "Bieg", operationID: "a")
+        XCTAssertEqual(env.sportWorkspace.workouts.count, 2)
+        gate.resume(); await pending.value
+        await env.addWorkout(title: "Bieg", date: "2026-09-07", minutes: 30, kind: "Bieg", operationID: "a")
+        XCTAssertEqual(env.sportWorkspace.workouts.count, 2)
+    }
+    @MainActor func testS04WorkPriorityDistinctOperationsOverlapAndRetryIsIdempotent() async {
+        let env = nutritionEnvironment(); let gate = CalendarPersistenceGate()
+        env.taskWorkspaceDidPublishForTests = { env.taskWorkspaceDidPublishForTests = nil; await gate.pause() }
+        let pending = Task { await env.addWorkPriority(text: "To samo", operationID: "a") }
+        await gate.waitUntilPaused()
+        await env.addWorkPriority(text: "To samo", operationID: "b"); await env.addWorkPriority(text: "To samo", operationID: "a")
+        XCTAssertEqual(env.taskWorkspace.tasks.count, 2)
+        gate.resume(); await pending.value
+        await env.addWorkPriority(text: "To samo", operationID: "a")
+        XCTAssertEqual(env.taskWorkspace.tasks.count, 2)
+    }
+
+    @MainActor func testS04SportPendingCanonicalCycleAndScheduledSnapshotSurviveJoinedUndo() async throws {
+        let env = nutritionEnvironment(); let a = s04Workout(); let b = s04Workout("other")
+        let ws = SportWorkspace(version: 1, updatedAt: "old", workouts: [a, b])
+        func enrich(_ value: JSONValue) -> JSONValue {
+            switch value {
+            case .object(let values):
+                var values = values.mapValues(enrich)
+                if values["id"] == .string(a.id) { values["opaqueSport"] = .string("rich-a") }
+                return .object(values)
+            case .array(let values): return .array(values.map(enrich))
+            default: return value
+            }
+        }
+        func markers(_ value: JSONValue) -> Int {
+            switch value {
+            case .object(let values): return (values["opaqueSport"] == .string("rich-a") ? 1 : 0) + values.values.reduce(0) { $0 + markers($1) }
+            case .array(let values): return values.reduce(0) { $0 + markers($1) }
+            default: return 0
+            }
+        }
+        let rich = enrich(try RootineCanonicalWorkspaceMapping.payload(for: ws))
+        XCTAssertGreaterThanOrEqual(markers(rich), 3, "Scheduled, cycle workout and active-cycle workout all carry rich metadata")
+        env.setMoreWorkspacesForTests(sport: ws, shadows: [.sport: rich])
+        var token: RootineModuleUndo<SportWorkout>?
+        await env.deleteWorkoutWithUndo(id: a.id) { token = $0 }
+        XCTAssertEqual(markers(try XCTUnwrap(env.moreShadowForTests(.sport))), 0)
+        await env.updateWorkout(id: b.id, title: "Nowszy trening", date: b.date, minutes: 45, kind: b.kind)
+        let laterOther = env.sportWorkspace.workouts.first { $0.id == b.id }
+        let restored = await env.undoWorkoutDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        let final = try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: env.sportWorkspace, onto: XCTUnwrap(env.moreShadowForTests(.sport)))
+        XCTAssertEqual(markers(final), markers(rich))
+        XCTAssertEqual(env.sportWorkspace.workouts.first { $0.id == b.id }, laterOther)
+        XCTAssertEqual(env.sportWorkspace.workouts.first { $0.id == a.id }, a)
+    }
+
+    // Sprint 04 round 02: evaluator R1–R3 regressions.
+
+    @MainActor func testEvaluatorManualGoalAdvanceKeepsExistingProgress() async throws {
+        let env = nutritionEnvironment()
+        var goal = s04Goal()
+        goal.progressMode = .manual
+        goal.status = .active
+        goal.initialValue = 0
+        goal.manualProgress = 50
+        goal.progressEntries = []
+        goal.milestones = []
+        env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [goal]))
+        XCTAssertEqual(rootineGoalCurrentValue(goal), 50)
+        XCTAssertEqual(rootineGoalProgressPercent(goal), 50)
+        await env.advanceGoal(id: goal.id)
+        let after = try XCTUnwrap(env.goalsWorkspace.goals.first)
+        XCTAssertEqual(rootineGoalCurrentValue(after), 51, "Adding progress must advance from the existing 50, not replace it with 1")
+        XCTAssertEqual(rootineGoalProgressPercent(after), 51)
+    }
+
+    @MainActor func testS04ManualAdvancePreservesExistingLedgerAndOtherModes() async throws {
+        for mode in [GoalProgressMode.manual, .numeric, .regularity] {
+            let env = nutritionEnvironment(); var goal = s04Goal()
+            goal.progressMode = mode; goal.initialValue = 0; goal.manualProgress = 80
+            goal.progressEntries = [GoalProgressEntry(id: "earlier", date: "2026-01-01", value: 50, kind: .absolute, note: "Zachowaj", createdAt: "2026-01-01T08:00:00Z")]
+            let other = s04Goal("other")
+            env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [goal, other]))
+            await env.advanceGoal(id: goal.id)
+            let after = try XCTUnwrap(env.goalsWorkspace.goals.first)
+            XCTAssertEqual(rootineGoalCurrentValue(after), 51)
+            XCTAssertEqual(after.progressEntries.first, goal.progressEntries.first)
+            XCTAssertEqual(after.progressEntries.last?.kind, .delta)
+            XCTAssertEqual(after.manualProgress, goal.manualProgress)
+            XCTAssertEqual(after.customIcon, goal.customIcon); XCTAssertEqual(after.color, goal.color)
+            XCTAssertEqual(after.note, goal.note); XCTAssertEqual(after.linkedTaskIds, goal.linkedTaskIds)
+            XCTAssertEqual(env.goalsWorkspace.goals.last, other)
+        }
+    }
+    @MainActor func testS04AdvanceNumericAndMilestonesKeepsCanonicalMeaning() async throws {
+        let env = nutritionEnvironment(); var numeric = s04Goal("numeric")
+        numeric.progressMode = .numeric; numeric.initialValue = 5; numeric.targetValue = 20; numeric.milestones = []
+        let stages = s04Goal("stages")
+        env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [numeric, stages]))
+        await env.advanceGoal(id: numeric.id)
+        XCTAssertEqual(rootineGoalCurrentValue(env.goalsWorkspace.goals[0]), 6)
+        await env.advanceGoal(id: stages.id)
+        XCTAssertTrue(env.goalsWorkspace.goals[1].milestones[0].done)
+        XCTAssertEqual(env.goalsWorkspace.goals[1].progressEntries, stages.progressEntries)
+        XCTAssertEqual(rootineGoalProgressPercent(env.goalsWorkspace.goals[1]), 100)
+    }
+    @MainActor func testS04ManualAdvancedSnapshotUndoAndLaterEditAreProtected() async throws {
+        let env = nutritionEnvironment(); var goal = s04Goal()
+        goal.progressMode = .manual; goal.manualProgress = 50; goal.initialValue = 0
+        env.setMoreWorkspacesForTests(goals: GoalsWorkspace(version: 1, updatedAt: "old", goals: [goal]))
+        await env.advanceGoal(id: goal.id)
+        let advanced = try XCTUnwrap(env.goalsWorkspace.goals.first)
+        var token: RootineModuleUndo<GoalRecord>?
+        await env.deleteGoalWithUndo(id: goal.id) { token = $0 }
+        let restored = await env.undoGoalDeletion(try XCTUnwrap(token)); XCTAssertTrue(restored)
+        XCTAssertEqual(env.goalsWorkspace.goals.first, advanced)
+        await env.deleteGoalWithUndo(id: goal.id) { token = $0 }
+        var later = advanced; later.title = "Późniejsza edycja"; later.note = "Nowsze dane"
+        await env.restoreGoal(later)
+        let rejected = await env.undoGoalDeletion(try XCTUnwrap(token)); XCTAssertFalse(rejected)
+        XCTAssertEqual(env.goalsWorkspace.goals.first, later)
+    }
+    func testS04NotesEmptyStateDistinguishesAccountFolderArchiveAndSearch() {
+        let empty = NotesWorkspace.empty
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init()), .account)
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init(listID: "folder")), .folder)
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init(showingArchive: true)), .archive)
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init(search: "missing")), .noResults)
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init(search: "missing", showingArchive: true)), .noResults)
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init(tag: "tag")), .noResults)
+        XCTAssertEqual(rootineNotesEmptyState(empty, query: .init(pinnedOnly: true)), .noResults)
+        var ws = empty; ws.notes = [s04Note()]
+        XCTAssertEqual(rootineNotesEmptyState(ws, query: .init()), .active)
+        XCTAssertNil(rootineNotesEmptyState(ws, query: .init(showingArchive: true)))
+        XCTAssertTrue(RootineNotesEmptyState.noResults.offersClearFilters)
+        XCTAssertTrue(RootineNotesEmptyState.folder.offersClearFilters)
+        XCTAssertFalse(RootineNotesEmptyState.account.offersClearFilters)
+        XCTAssertFalse(RootineNotesEmptyState.archive.offersClearFilters)
+        XCTAssertEqual(Set([RootineNotesEmptyState.account, .folder, .archive, .noResults].map(\.message)).count, 4)
+    }
+    func testS04GoalRowValueAndAccessibilityUseCanonicalValueAndTarget() {
+        var goal = s04Goal(); goal.progressMode = .numeric; goal.initialValue = 5; goal.targetValue = 20; goal.unit = "km"
+        let locale = Locale(identifier: "en_US")
+        let numeric = RootineGoalProgressLabel(goal, locale: locale)
+        XCTAssertEqual(numeric.value, "5 z 20 km")
+        XCTAssertEqual(numeric.accessibilityValue, "5 z 20 km, 25 procent celu")
+        goal.progressMode = .manual; goal.manualProgress = 50
+        XCTAssertEqual(RootineGoalProgressLabel(goal, locale: locale).value, "50 z 100 %")
+        goal.progressMode = .milestones; goal.milestones[0].weight = 2; goal.milestones[0].done = true; goal.unit = "kroków"
+        XCTAssertEqual(RootineGoalProgressLabel(goal, locale: locale).value, "2 z 2 kroków")
+        goal.progressMode = .regularity; goal.targetValue = 10; goal.initialValue = 2
+        XCTAssertEqual(RootineGoalProgressLabel(goal, locale: locale).value, "2 z 10 kroków")
+    }
+
+    // Sprint 03: production navigation preferences with isolated UserDefaults.
+    func testMoreCatalogKeepsAllSevenRoutesAndHubLabels() {
+        XCTAssertEqual(MoreModule.allCases.map(\.rawValue), ["notes", "sport", "goals", "work", "travel", "health", "affairs"])
+        XCTAssertEqual(MoreModule.allCases.map(\.hubTitle), ["Notatki", "Sport", "Cele", "Praca", "Podróże", "Zdrowie", "Sprawy i finanse"])
+        XCTAssertEqual(MoreModule.affairs.title, "Sprawy i finanse", "Detailed module title is outside this sprint")
+        XCTAssertEqual(Set(MoreModule.allCases.map(\.id)).count, 7)
+        XCTAssertTrue(MoreModule.allCases.allSatisfy { !$0.systemImage.isEmpty && !$0.subtitle.isEmpty })
+    }
+
+    func testMoreEmptyHistoryDoesNotSeedOrWritePreferences() throws {
+        try withMoreDefaults { defaults in
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            XCTAssertEqual(store.load(scope: .local), [])
+            XCTAssertEqual(store.load(scope: .account("A")), [])
+            XCTAssertNil(defaults.object(forKey: RootineMoreScope.local.storageKey))
+            XCTAssertFalse(store.remove(.init(module: .notes, scope: .local)))
+            XCTAssertNil(defaults.object(forKey: RootineMoreScope.local.storageKey))
+        }
+    }
+
+    func testMoreHistoryRecordsThreeThenEvictsOldestAndMovesReopenedModule() throws {
+        try withMoreDefaults { defaults in
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            let scope = RootineMoreScope.account("A")
+            XCTAssertTrue(store.record(.init(module: .notes, scope: scope)))
+            XCTAssertEqual(store.load(scope: scope), [.notes])
+            store.record(.init(module: .sport, scope: scope))
+            XCTAssertEqual(store.load(scope: scope), [.sport, .notes])
+            store.record(.init(module: .goals, scope: scope))
+            XCTAssertEqual(store.load(scope: scope), [.goals, .sport, .notes])
+            store.record(.init(module: .work, scope: scope))
+            XCTAssertEqual(store.load(scope: scope), [.work, .goals, .sport])
+            store.record(.init(module: .sport, scope: scope))
+            XCTAssertEqual(store.load(scope: scope), [.sport, .work, .goals])
+            XCTAssertFalse(store.record(.init(module: .sport, scope: scope)))
+            XCTAssertEqual(store.load(scope: scope), [.sport, .work, .goals])
+            XCTAssertEqual(MoreModule.allCases.count, 7)
+        }
+    }
+
+    func testMoreHistoryPersistsAcrossStoreAndDefaultsInstances() throws {
+        let suite = "rootine-tests-more-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = RootineMoreHistoryStore(defaults: defaults)
+        store.record(.init(module: .health, scope: .account("A")))
+        store.record(.init(module: .affairs, scope: .account("A")))
+        let reopenedDefaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let reopened = RootineMoreHistoryStore(defaults: reopenedDefaults)
+        XCTAssertEqual(reopened.load(scope: .account("A")), [.affairs, .health])
+        let bytes = try XCTUnwrap(reopenedDefaults.data(forKey: RootineMoreScope.account("A").storageKey))
+        XCTAssertEqual(try JSONDecoder().decode([String].self, from: bytes), ["affairs", "health"])
+    }
+
+    func testMoreHistoryIsolatesAccountsAndLocalScope() throws {
+        try withMoreDefaults { defaults in
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            store.record(.init(module: .notes, scope: .account("A")))
+            store.record(.init(module: .sport, scope: .account("B")))
+            store.record(.init(module: .work, scope: .local))
+            XCTAssertEqual(store.load(scope: .account("A")), [.notes])
+            XCTAssertEqual(store.load(scope: .account("B")), [.sport])
+            XCTAssertEqual(store.load(scope: .local), [.work])
+            XCTAssertEqual(RootineMoreScope(accountID: nil), .local)
+            XCTAssertEqual(RootineMoreScope(accountID: "A"), .account("A"))
+            XCTAssertNotEqual(RootineMoreScope.account("local").storageKey, RootineMoreScope.local.storageKey)
+            XCTAssertNotEqual(RootineMoreScope.account("").storageKey, RootineMoreScope.local.storageKey)
+        }
+    }
+
+    func testMoreHistoryMalformedUnknownDuplicateAndOversizedDataAreSafe() throws {
+        try withMoreDefaults { defaults in
+            let scope = RootineMoreScope.account("A")
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            for bad in ["not json", "{\"notes\":1}", "[7, null]"] {
+                defaults.set(Data(bad.utf8), forKey: scope.storageKey)
+                XCTAssertEqual(store.load(scope: scope), [])
+            }
+            defaults.set("wrong preference type", forKey: scope.storageKey)
+            XCTAssertEqual(store.load(scope: scope), [])
+            let raw = ["unknown", "notes", "notes", "travel", "unknown", "health", "work", "affairs"]
+            defaults.set(try JSONEncoder().encode(raw), forKey: scope.storageKey)
+            XCTAssertEqual(store.load(scope: scope), [.notes, .travel, .health])
+            store.record(.init(module: .goals, scope: scope))
+            XCTAssertEqual(store.load(scope: scope), [.goals, .notes, .travel])
+        }
+    }
+
+    func testMoreRemovingRecentPreservesFullCatalogAndAllowsReopening() throws {
+        try withMoreDefaults { defaults in
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            for module in [MoreModule.notes, .sport, .health] { store.record(.init(module: module, scope: .local)) }
+            XCTAssertTrue(store.remove(.init(module: .sport, scope: .local)))
+            XCTAssertEqual(store.load(scope: .local), [.health, .notes])
+            XCTAssertFalse(store.remove(.init(module: .sport, scope: .local)))
+            XCTAssertEqual(store.load(scope: .local), [.health, .notes])
+            XCTAssertTrue(MoreModule.allCases.contains(.sport))
+            store.record(.init(module: .sport, scope: .local))
+            XCTAssertEqual(store.load(scope: .local), [.sport, .health, .notes])
+        }
+    }
+
+    func testMoreCapturedRemovalScopeKeepsNewAccountAndLaterHistory() throws {
+        try withMoreDefaults { defaults in
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            let pending = RootineMoreRoute(module: .notes, scope: .account("A"))
+            store.record(pending)
+            // Other navigation occurs after the confirmation target was made.
+            store.record(.init(module: .health, scope: .account("A")))
+            store.record(.init(module: .notes, scope: .account("B")))
+            let accountBBefore = defaults.data(forKey: RootineMoreScope.account("B").storageKey)
+            XCTAssertTrue(store.remove(pending))
+            XCTAssertEqual(store.load(scope: .account("A")), [.health])
+            XCTAssertEqual(store.load(scope: .account("B")), [.notes])
+            XCTAssertEqual(defaults.data(forKey: RootineMoreScope.account("B").storageKey), accountBBefore)
+        }
+    }
+
+    func testMoreCapturedActivationDoesNotSwitchToNewAccount() throws {
+        try withMoreDefaults { defaults in
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            var activeScope = RootineMoreScope.account("A")
+            let target = RootineMoreRoute(module: .travel, scope: activeScope)
+            activeScope = .account("B")
+            store.record(target)
+            XCTAssertEqual(store.load(scope: target.scope), [.travel])
+            XCTAssertEqual(store.load(scope: activeScope), [])
+            XCTAssertNotEqual(target.id, RootineMoreRoute(module: .travel, scope: activeScope).id)
+        }
+    }
+
+    func testMoreHistoryNeverChangesForeignPreferencesOrWorkspaceBytes() throws {
+        try withMoreDefaults { defaults in
+            let workspace = try fixture("nutrition-workspace-v6", as: NutritionWorkspace.self)
+            let bytes = try JSONEncoder().encode(workspace)
+            defaults.set(bytes, forKey: RootineStorageKey.nutrition.rawValue)
+            defaults.set("dark", forKey: "rootine.appearance")
+            let store = RootineMoreHistoryStore(defaults: defaults)
+            let route = RootineMoreRoute(module: .notes, scope: .account("A"))
+            store.record(route); store.remove(route)
+            XCTAssertEqual(defaults.data(forKey: RootineStorageKey.nutrition.rawValue), bytes)
+            XCTAssertEqual(defaults.string(forKey: "rootine.appearance"), "dark")
+            XCTAssertEqual(try JSONDecoder().decode(NutritionWorkspace.self, from: bytes), workspace)
+        }
+    }
+
+    private func withMoreDefaults(_ body: (UserDefaults) throws -> Void) throws {
+        let suite = "rootine-tests-more-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try body(defaults)
+    }
+
+    // Sprint 02: domain and production AppEnvironment mutation regressions.
+    func testNutritionSummaryUsesFourMealsAndHandlesEmptyZeroAndExcess() {
+        var day = NutritionDay.empty(date: "2026-02-28")
+        for meal in NutritionMealKind.allCases { day.entries[meal] = [nutritionEntry(meal.rawValue)] }
+        let zero = NutritionGoals(calories: 0, protein: 0, carbs: 0, fat: 0, waterMl: 0)
+        let empty = RootineNutritionDaySummary(day: .empty(date: "2026-03-01"), goals: zero)
+        XCTAssertEqual(empty.entryCount, 0)
+        XCTAssertEqual(empty.totals.calories, 0)
+        XCTAssertEqual(empty.calorieProgress, 0)
+        let summary = RootineNutritionDaySummary(day: day, goals: zero)
+        XCTAssertEqual(summary.entryCount, 4)
+        XCTAssertEqual(summary.totals, NutritionValues(calories: 800, protein: 40, carbs: 80, fat: 20))
+        XCTAssertEqual(summary.calorieDelta, -800)
+        XCTAssertEqual(summary.calorieProgress, 0)
+        var goals = zero; goals.calories = 500
+        XCTAssertEqual(RootineNutritionDaySummary(day: day, goals: goals).calorieProgress, 1)
+    }
+
+    func testNutritionDateRailLocalCalendarEdges() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Warsaw"))
+        for (year, month, day, expected) in [(2024, 2, 28, "2024-02-29"), (2024, 2, 29, "2024-03-01"), (2026, 3, 29, "2026-03-30"), (2026, 10, 25, "2026-10-26"), (2026, 12, 31, "2027-01-01")] {
+            let date = try XCTUnwrap(calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12)))
+            let next = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: date))
+            XCTAssertEqual(RootineDate.localDate(next, calendar: calendar), expected)
+            XCTAssertEqual(calendar.date(byAdding: .day, value: -1, to: next), date)
+        }
+    }
+
+    @MainActor
+    func testNutritionDeleteUndoRestoresEveryFieldAndOriginalPositionOnce() async throws {
+        let env = nutritionEnvironment()
+        let original = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"])
+        var token: RootineNutritionEntryUndo?
+        await env.deleteNutritionEntry(dateKey: original.date, meal: "breakfast", id: "middle") { token = $0 }
+        let undo = try XCTUnwrap(token)
+        XCTAssertEqual(undo.index, 1)
+        XCTAssertEqual(undo.entry, original.entries.breakfast[1])
+        let restored = await env.restoreNutritionEntry(undo)
+        XCTAssertTrue(restored)
+        XCTAssertEqual(env.nutritionWorkspace.days[original.date], original)
+        let repeated = await env.restoreNutritionEntry(undo)
+        XCTAssertFalse(repeated)
+        XCTAssertEqual(env.nutritionWorkspace.days[original.date], original)
+    }
+
+    @MainActor
+    func testNutritionUndoKeepsLaterWaterEntryAndOtherDay() async throws {
+        let env = nutritionEnvironment()
+        let other = env.nutritionWorkspace.days["2026-03-01"]
+        var token: RootineNutritionEntryUndo?
+        await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: "middle") { token = $0 }
+        await env.addWater(dateKey: "2026-02-28", amountMl: 500)
+        await env.addNutritionEntry(dateKey: "2026-02-28", meal: "dinner", name: "Późniejszy", portion: "120 g", calories: 123, protein: 4, carbs: 5, fat: 6)
+        let restored = await env.restoreNutritionEntry(try XCTUnwrap(token))
+        XCTAssertTrue(restored)
+        let day = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"])
+        XCTAssertEqual(day.waterMl, 750)
+        XCTAssertEqual(day.entries.breakfast.map(\.id), ["first", "middle", "last"])
+        XCTAssertEqual(day.entries.dinner.first?.name, "Późniejszy")
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-03-01"], other)
+    }
+
+    @MainActor
+    func testNutritionUndoRejectsExistingIDInAnyMealOrDay() async throws {
+        for target in ["2026-02-28", "2026-03-01"] {
+            let env = nutritionEnvironment()
+            var token: RootineNutritionEntryUndo?
+            await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: "middle") { token = $0 }
+            var workspace = env.nutritionWorkspace
+            var later = nutritionEntry("middle"); later.name = "Późniejsza wersja"
+            workspace.days[target]?.entries.snack.append(later)
+            env.setNutritionWorkspaceForTests(workspace)
+            let restored = await env.restoreNutritionEntry(try XCTUnwrap(token))
+            XCTAssertFalse(restored)
+            XCTAssertEqual(env.nutritionWorkspace, workspace)
+        }
+    }
+
+    @MainActor
+    func testNutritionDeletePublishesUndoBeforeSuspendedPersistenceAndKeepsEditB() async throws {
+        let env = nutritionEnvironment()
+        let gate = CalendarPersistenceGate()
+        env.nutritionWorkspaceDidPublishForTests = { await gate.pause() }
+        var token: RootineNutritionEntryUndo?
+        let deletion = Task { await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: "middle") { token = $0 } }
+        await gate.waitUntilPaused()
+        let undo = try XCTUnwrap(token)
+        XCTAssertEqual(undo.entry.name, "Produkt middle")
+        env.nutritionWorkspaceDidPublishForTests = nil
+        var workspace = env.nutritionWorkspace
+        var editB = undo.entry; editB.name = "Edycja B"; editB.calories = 777
+        workspace.days["2026-02-28"]?.entries.lunch.append(editB)
+        env.setNutritionWorkspaceForTests(workspace)
+        gate.resume(); await deletion.value
+        let restored = await env.restoreNutritionEntry(undo)
+        XCTAssertFalse(restored)
+        XCTAssertEqual(env.nutritionWorkspace, workspace)
+    }
+
+    @MainActor
+    func testNutritionTwoSuspendedDeletesKeepLatestPublishedToken() async throws {
+        let env = nutritionEnvironment()
+        let firstGate = CalendarPersistenceGate()
+        let secondGate = CalendarPersistenceGate()
+        var published: RootineNutritionEntryUndo?
+        env.nutritionWorkspaceDidPublishForTests = { await firstGate.pause() }
+        let first = Task { await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: "first") { published = $0 } }
+        await firstGate.waitUntilPaused()
+        let firstToken = try XCTUnwrap(published)
+        env.nutritionWorkspaceDidPublishForTests = { await secondGate.pause() }
+        let second = Task { await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: "middle") { published = $0 } }
+        await secondGate.waitUntilPaused()
+        let latest = try XCTUnwrap(published)
+        XCTAssertEqual(latest.entry.id, "middle")
+        secondGate.resume(); await second.value
+        firstGate.resume(); await first.value
+        XCTAssertEqual(published, latest)
+        XCTAssertFalse(env.canRestoreNutritionEntry(firstToken))
+        env.nutritionWorkspaceDidPublishForTests = nil
+        let restored = await env.restoreNutritionEntry(latest)
+        XCTAssertTrue(restored)
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.entries.breakfast.map(\.id), ["middle", "last"])
+    }
+
+    @MainActor
+    func testNutritionDeleteUsesCurrentCanonicalMealAndMissingIDPublishesNothing() async throws {
+        let env = nutritionEnvironment()
+        let initial = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"]?.entries.breakfast[1])
+        await env.updateNutritionEntry(dateKey: "2026-02-28", originalMeal: "breakfast", meal: "lunch", id: initial.id, name: "Zmieniony", portion: "125 g", calories: 999, protein: 13, carbs: 14, fat: 15, amount: 100, unit: "g", brand: initial.brand, catalogId: initial.catalogId, catalogSource: initial.catalogSource, per100g: initial.per100g)
+        let moved = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"]?.entries.lunch.first)
+        XCTAssertEqual(moved.id, initial.id); XCTAssertEqual(moved.createdAt, initial.createdAt)
+        XCTAssertEqual(moved.amount, 125); XCTAssertEqual(moved.calories, 999)
+        XCTAssertNotNil(moved.updatedAt)
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.entries.all.filter { $0.id == initial.id }.count, 1)
+        var token: RootineNutritionEntryUndo?
+        await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: initial.id) { token = $0 }
+        XCTAssertEqual(token?.meal, .lunch); XCTAssertEqual(token?.entry, moved)
+        let undo = try XCTUnwrap(token)
+        var didPublishMissing = false
+        await env.deleteNutritionEntry(dateKey: "2026-02-28", meal: "breakfast", id: "absent") { _ in didPublishMissing = true }
+        XCTAssertFalse(didPublishMissing)
+        XCTAssertTrue(env.canRestoreNutritionEntry(undo))
+    }
+
+    @MainActor
+    func testNutritionWaterAmountsClampAndConcurrentTapsSumWithoutChangingEntries() async throws {
+        let env = nutritionEnvironment()
+        let original = env.nutritionWorkspace
+        for amount in [-750.0, 250, 500, 750, -250] { await env.addWater(dateKey: "2026-02-28", amountMl: amount) }
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.waterMl, 1250)
+        let gate = CalendarPersistenceGate()
+        env.nutritionWorkspaceDidPublishForTests = { await gate.pause() }
+        let first = Task { await env.addWater(dateKey: "2026-02-28", amountMl: 250) }
+        await gate.waitUntilPaused()
+        env.nutritionWorkspaceDidPublishForTests = nil
+        await env.addWater(dateKey: "2026-02-28", amountMl: 500)
+        gate.resume(); await first.value
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.waterMl, 2000)
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.entries, original.days["2026-02-28"]?.entries)
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.closedAt, original.days["2026-02-28"]?.closedAt)
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-03-01"], original.days["2026-03-01"])
+    }
+
+    @MainActor
+    func testNutritionGoalsWeightAndClosePreserveHiddenWorkspaceData() async throws {
+        let env = nutritionEnvironment()
+        let original = try fixture("nutrition-workspace-v6", as: NutritionWorkspace.self)
+        env.setNutritionWorkspaceForTests(original)
+        let goals = NutritionGoals(calories: 2000, protein: 130, carbs: 210, fat: 70, waterMl: 2300)
+        await env.updateNutritionGoals(goals)
+        await env.addWeightMeasurement(weightKg: 72.5, dateKey: "2026-09-07", note: "Rano")
+        await env.toggleNutritionDayClosed(dateKey: "2026-08-19")
+        let updated = env.nutritionWorkspace
+        XCTAssertEqual(updated.goals, goals)
+        XCTAssertEqual(updated.weightMeasurements["2026-09-07"]?.note, "Rano")
+        XCTAssertEqual(updated.weightMeasurements["2026-09-07"]?.weightKg, 72.5)
+        XCTAssertEqual(updated.days["2026-08-19"]?.entries, original.days["2026-08-19"]?.entries)
+        XCTAssertEqual(updated.days["2026-08-19"]?.waterMl, original.days["2026-08-19"]?.waterMl)
+        XCTAssertEqual(updated.calculatorProfile, original.calculatorProfile)
+        XCTAssertEqual(updated.macroConfiguration, original.macroConfiguration)
+        XCTAssertEqual(updated.bodyMeasurements, original.bodyMeasurements)
+        XCTAssertEqual(updated.customMeals, original.customMeals)
+        XCTAssertEqual(updated.pendingBarcodeLookups, original.pendingBarcodeLookups)
+        XCTAssertEqual(try roundTrip(updated), updated)
+        await env.toggleNutritionDayClosed(dateKey: "2026-08-19")
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-08-19"]?.closedAt == nil, original.days["2026-08-19"]?.closedAt == nil)
+    }
+
+    @MainActor
+    func testNutritionDeletingTemplatePreservesLoggedServing() async throws {
+        let env = nutritionEnvironment()
+        let now = "2026-09-07T10:00:00Z"
+        let ingredient = CustomMealIngredient(id: "ingredient", name: "Ryż", brand: "Marka", amount: 200, unit: "g", per100g: NutritionValues(calories: 150, protein: 5, carbs: 25, fat: 2))
+        let template = CustomMeal(id: "template", name: "Obiad", ingredients: [ingredient], totalWeightG: 200, servings: 1, createdAt: now, updatedAt: now)
+        await env.upsertCustomMeal(template)
+        await env.addCustomMealToDay(template, dateKey: "2026-02-28", mealKind: "lunch", operationID: "serving")
+        let before = env.nutritionWorkspace.days
+        XCTAssertEqual(before["2026-02-28"]?.entries.lunch.first?.calories, 300)
+        await env.deleteCustomMeal(id: template.id)
+        XCTAssertTrue(env.nutritionWorkspace.customMeals?.isEmpty == true)
+        XCTAssertEqual(env.nutritionWorkspace.days, before)
+    }
+
+    @MainActor
+    func testNutritionCatalogSaveKeepsOverridesIdentityAndConsumesOnlyResolvedCode() async throws {
+        let env = nutritionEnvironment()
+        let product = NutritionProduct(id: "catalog-product", barcode: "5901234123457", name: "Jogurt", brand: "Marka", source: "remote", defaultAmount: 100, unit: "g", per100g: NutritionValues(calories: 60, protein: 4, carbs: 5, fat: 3))
+        var workspace = env.nutritionWorkspace
+        workspace.pendingBarcodeLookups = [
+            NutritionBarcodeRequest(id: NutritionBarcode.requestID(for: product.barcode), barcode: product.barcode, createdAt: "2026-02-28T08:00:00Z", resolvedProduct: product),
+            NutritionBarcodeRequest(id: NutritionBarcode.requestID(for: "96385074"), barcode: "96385074", createdAt: "2026-02-28T08:00:00Z")
+        ]
+        env.setNutritionWorkspaceForTests(workspace)
+        await env.addNutritionEntry(dateKey: "2026-02-28", meal: "snack", name: product.name, portion: "200 g", calories: 333, protein: 8, carbs: 10, fat: 6, amount: 100, unit: "g", brand: product.brand, catalogId: product.id, catalogSource: product.source, per100g: product.per100g, operationID: "catalog-save")
+        let entry = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"]?.entries.snack.first)
+        XCTAssertEqual(entry.calories, 333)
+        XCTAssertEqual(entry.amount, 200); XCTAssertEqual(entry.unit, "g")
+        XCTAssertEqual(entry.brand, product.brand); XCTAssertEqual(entry.catalogId, product.id)
+        XCTAssertEqual(entry.catalogSource, product.source); XCTAssertEqual(entry.per100g, product.per100g)
+        let consumed = await env.consumeNutritionBarcode(barcode: product.barcode)
+        XCTAssertEqual(consumed, product)
+        XCTAssertEqual(env.nutritionWorkspace.pendingBarcodeLookups?.map(\.barcode), ["96385074"])
+        let unresolved = await env.consumeNutritionBarcode(barcode: "96385074")
+        XCTAssertNil(unresolved)
+        XCTAssertEqual(env.nutritionWorkspace.pendingBarcodeLookups?.count, 1)
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-03-01"], workspace.days["2026-03-01"])
+    }
+
+    @MainActor
+    func testNutritionDistinctServingsDuringSuspendedPersistenceBothPersist() async throws {
+        let env = nutritionEnvironment()
+        let now = "2026-09-07T10:00:00Z"
+        let ingredient = CustomMealIngredient(id: "ingredient", name: "Ryż", brand: nil, amount: 200, unit: "g", per100g: NutritionValues(calories: 150, protein: 5, carbs: 25, fat: 2))
+        let meal = CustomMeal(id: "template", name: "Obiad", ingredients: [ingredient], totalWeightG: 200, servings: 1, createdAt: now, updatedAt: now)
+        let gate = CalendarPersistenceGate()
+        env.nutritionWorkspaceDidPublishForTests = { await gate.pause() }
+        let first = Task { await env.addCustomMealToDay(meal, dateKey: "2026-02-28", mealKind: "lunch", operationID: "intentional-serving-A") }
+        await gate.waitUntilPaused()
+        env.nutritionWorkspaceDidPublishForTests = nil
+        await env.addCustomMealToDay(meal, dateKey: "2026-02-28", mealKind: "lunch", operationID: "intentional-serving-B")
+        gate.resume()
+        await first.value
+        let entries = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"]?.entries.lunch)
+        XCTAssertEqual(entries.count, 2, "Two distinct intentional operation IDs must represent two servings, even while first persistence is suspended")
+        XCTAssertEqual(Set(entries.map(\.id)).count, 2)
+    }
+
+    @MainActor
+    func testNutritionSameServingRetryDuringAndAfterPersistenceIsIdempotent() async throws {
+        let env = nutritionEnvironment()
+        let now = "2026-09-07T10:00:00Z"
+        let ingredient = CustomMealIngredient(id: "ingredient", name: "Ryż", brand: nil, amount: 200, unit: "g", per100g: NutritionValues(calories: 150, protein: 5, carbs: 25, fat: 2))
+        let meal = CustomMeal(id: "template", name: "Obiad", ingredients: [ingredient], totalWeightG: 200, servings: 1, createdAt: now, updatedAt: now)
+        let gate = CalendarPersistenceGate()
+        env.nutritionWorkspaceDidPublishForTests = { await gate.pause() }
+        let first = Task { await env.addCustomMealToDay(meal, dateKey: "2026-02-28", mealKind: "lunch", operationID: "intentional-serving-A") }
+        await gate.waitUntilPaused()
+        env.nutritionWorkspaceDidPublishForTests = nil
+        await env.addCustomMealToDay(meal, dateKey: "2026-02-28", mealKind: "lunch", operationID: "intentional-serving-A")
+        XCTAssertEqual(env.nutritionWorkspace.days["2026-02-28"]?.entries.lunch.count, 1)
+        gate.resume()
+        await first.value
+        await env.addCustomMealToDay(meal, dateKey: "2026-02-28", mealKind: "lunch", operationID: "intentional-serving-A")
+        let entries = try XCTUnwrap(env.nutritionWorkspace.days["2026-02-28"]?.entries.lunch)
+        XCTAssertEqual(entries.count, 1, "Retry of the same operation must stay one serving during and after persistence")
+        XCTAssertEqual(Set(entries.map(\.id)).count, 1)
+    }
+
+    private func nutritionEntry(_ id: String) -> NutritionEntry {
+        NutritionEntry(id: id, name: "Produkt \(id)", portion: "125 g", amount: 125, unit: "g", calories: 200, protein: 10, carbs: 20, fat: 5, brand: "Marka", catalogId: "catalog-\(id)", catalogSource: "local", per100g: NutritionValues(calories: 160, protein: 8, carbs: 16, fat: 4), createdAt: "2026-02-28T08:00:00Z", updatedAt: "2026-02-28T08:30:00Z")
+    }
+
+    @MainActor
+    private func nutritionEnvironment() -> AppEnvironment {
+        let env = AppEnvironment(configuration: RootineConfiguration(supabaseURL: nil, supabasePublishableKey: "", backendURL: nil, authCallbackScheme: "", termsURL: nil, privacyURL: nil))
+        var workspace = NutritionWorkspace.empty
+        var day = NutritionDay.empty(date: "2026-02-28")
+        day.entries.breakfast = [nutritionEntry("first"), nutritionEntry("middle"), nutritionEntry("last")]
+        day.waterMl = 250; day.closedAt = "2026-02-28T22:00:00Z"
+        workspace.days[day.date] = day
+        workspace.days["2026-03-01"] = .empty(date: "2026-03-01")
+        env.setNutritionWorkspaceForTests(workspace)
+        return env
+    }
+
     func testNutritionFixtureDecodesCalculatorDiaryAndProductIdentity() throws {
         let workspace = try fixture("nutrition-workspace-v6", as: NutritionWorkspace.self)
 

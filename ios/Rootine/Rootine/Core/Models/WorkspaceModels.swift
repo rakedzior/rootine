@@ -166,6 +166,37 @@ struct WorkspaceTask: Codable, Equatable, Identifiable, Sendable {
     var source: CommitmentTaskSource? = nil
 }
 
+/// The exact canonical values before and after one published task mutation.
+struct RootineTaskUndo: Equatable {
+    let snapshot: WorkspaceTask
+    let expectedCurrent: WorkspaceTask
+}
+
+/// An Undo action may restore a full task snapshot only if the record still
+/// equals the value written by that action. This protects a later edit or
+/// synchronization update from being replaced by an old snapshot.
+func rootineCanRestoreTaskSnapshot(
+    current: WorkspaceTask,
+    expectedCurrent: WorkspaceTask
+) -> Bool {
+    current == expectedCurrent
+}
+
+/// Applies a complete Undo snapshot only when the record still represents the
+/// action that created the Undo token. Keeping this decision in the domain
+/// layer makes the no-race and stale-token cases independently testable.
+func rootineTaskRestoringSnapshot(
+    current: WorkspaceTask,
+    snapshot: WorkspaceTask,
+    expectedCurrent: WorkspaceTask? = nil
+) -> WorkspaceTask? {
+    if let expectedCurrent,
+       !rootineCanRestoreTaskSnapshot(current: current, expectedCurrent: expectedCurrent) {
+        return nil
+    }
+    return snapshot
+}
+
 func rootineTaskViewForCalendarDate(_ dateKey: String?, referenceDate: String = RootineDate.localDate()) -> String {
     guard let dateKey, RootineDate.isLocalDateKey(dateKey),
           let days = RootineDate.calendarDaysBetween(referenceDate, dateKey) else { return "bezterminu" }
@@ -1390,6 +1421,71 @@ struct NutritionDay: Codable, Equatable, Sendable {
             entries: NutritionMealEntries(breakfast: [], lunch: [], snack: [], dinner: [])
         )
     }
+}
+
+/// Stable journal sections shared by presentation and mutation code.
+enum NutritionMealKind: String, CaseIterable, Identifiable, Sendable {
+    case breakfast, lunch, snack, dinner
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .breakfast: return "Śniadanie"
+        case .lunch: return "Obiad"
+        case .snack: return "Przekąski"
+        case .dinner: return "Kolacja"
+        }
+    }
+}
+
+extension NutritionMealEntries {
+    subscript(_ meal: NutritionMealKind) -> [NutritionEntry] {
+        get {
+            switch meal {
+            case .breakfast: return breakfast
+            case .lunch: return lunch
+            case .snack: return snack
+            case .dinner: return dinner
+            }
+        }
+        set {
+            switch meal {
+            case .breakfast: breakfast = newValue
+            case .lunch: lunch = newValue
+            case .snack: snack = newValue
+            case .dinner: dinner = newValue
+            }
+        }
+    }
+
+    var all: [NutritionEntry] { NutritionMealKind.allCases.flatMap { self[$0] } }
+}
+
+/// One read-only projection of the selected day; never a second data store.
+struct RootineNutritionDaySummary: Equatable {
+    let totals: NutritionValues
+    let entryCount: Int
+    let calorieDelta: Double
+    let calorieProgress: Double
+
+    init(day: NutritionDay, goals: NutritionGoals) {
+        let entries = day.entries.all
+        totals = entries.reduce(NutritionValues(calories: 0, protein: 0, carbs: 0, fat: 0)) {
+            NutritionValues(calories: $0.calories + $1.calories, protein: $0.protein + $1.protein,
+                            carbs: $0.carbs + $1.carbs, fat: $0.fat + $1.fat)
+        }
+        entryCount = entries.count
+        calorieDelta = goals.calories - totals.calories
+        calorieProgress = goals.calories > 0 ? min(1, max(0, totals.calories / goals.calories)) : 0
+    }
+}
+
+/// Snapshot of one actual deletion, delivered with its local publication.
+struct RootineNutritionEntryUndo: Equatable, Identifiable, Sendable {
+    let id = UUID()
+    let dateKey: String
+    let meal: NutritionMealKind
+    let index: Int
+    let entry: NutritionEntry
 }
 
 struct NutritionGoals: Codable, Equatable, Sendable {
@@ -4124,4 +4220,333 @@ func affairAdvancePaymentDateToFuture(_ value: String, cadence: String, referenc
 
 func affairMonthlyEquivalent(_ amount: Double, cadence: String) -> Double {
     AffairMoney.monthlyEquivalent(amount: amount, cadence: cadence)
+}
+
+// MARK: More navigation preferences
+
+enum MoreModule: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case notes
+    case sport
+    case goals
+    case work
+    case travel
+    case health
+    case affairs
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .notes: return "Notatki"
+        case .sport: return "Sport"
+        case .goals: return "Cele"
+        case .work: return "Praca"
+        case .travel: return "Podróże"
+        case .health: return "Zdrowie"
+        case .affairs: return "Sprawy i finanse"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .notes: return "note.text"
+        case .sport: return "figure.run"
+        case .goals: return "target"
+        case .work: return "briefcase"
+        case .travel: return "airplane"
+        case .health: return "heart.text.square"
+        case .affairs: return "checklist.checked"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .notes: return "Myśli i szybkie zapiski"
+        case .sport: return "Ruch i regeneracja"
+        case .goals: return "Kierunek na dziś"
+        case .work: return "Skupienie bez chaosu"
+        case .travel: return "Plany poza rutyną"
+        case .health: return "Samopoczucie i energia"
+        case .affairs: return "Sprawy, płatności i ważne terminy"
+        }
+    }
+
+    var hubTitle: String { self == .affairs ? "Sprawy i finanse" : title }
+}
+
+/// A navigation preference only; no workspace data or synchronization payload.
+enum RootineMoreScope: Hashable, Sendable {
+    case account(String)
+    case local
+
+    init(accountID: String?) {
+        self = accountID.map { .account($0) } ?? .local
+    }
+
+    var storageKey: String {
+        switch self {
+        case .account(let id):
+            return "rootine.more.recent.v1.account." + Data(id.utf8).base64EncodedString()
+        case .local:
+            return "rootine.more.recent.v1.local"
+        }
+    }
+}
+
+/// The navigation/confirmation owns the account selected at activation time.
+struct RootineMoreRoute: Hashable, Identifiable, Sendable {
+    let module: MoreModule
+    let scope: RootineMoreScope
+    var id: String { scope.storageKey + ":" + module.rawValue }
+}
+
+struct RootineMoreHistoryStore {
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+
+    func load(scope: RootineMoreScope) -> [MoreModule] {
+        guard let data = defaults.data(forKey: scope.storageKey),
+              let identifiers = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        var result: [MoreModule] = []
+        for identifier in identifiers {
+            guard let module = MoreModule(rawValue: identifier), !result.contains(module) else { continue }
+            result.append(module)
+            if result.count == 3 { break }
+        }
+        return result
+    }
+
+    @discardableResult
+    func record(_ route: RootineMoreRoute) -> Bool {
+        let current = load(scope: route.scope)
+        let next = Array(([route.module] + current.filter { $0 != route.module }).prefix(3))
+        guard next != current else { return false }
+        return save(next, scope: route.scope)
+    }
+
+    @discardableResult
+    func remove(_ route: RootineMoreRoute) -> Bool {
+        let current = load(scope: route.scope)
+        let next = current.filter { $0 != route.module }
+        guard next != current else { return false }
+        return save(next, scope: route.scope)
+    }
+
+    private func save(_ modules: [MoreModule], scope: RootineMoreScope) -> Bool {
+        guard let data = try? JSONEncoder().encode(modules.map(\.rawValue)) else { return false }
+        defaults.set(data, forKey: scope.storageKey)
+        return true
+    }
+}
+
+
+// MARK: Sprint 04 — module projections and scoped Undo
+
+struct RootineModuleUndo<Record: Equatable & Sendable>: Sendable {
+    let token = UUID()
+    let record: Record
+    let index: Int
+    var expectedRecord: Record? = nil
+    var canonical: [RootineRemovedJSON] = []
+}
+
+/// Only removed leaves/records are retained, never a previous whole workspace.
+/// Paths through record arrays use stable IDs rather than mutable indices.
+struct RootineRemovedJSON: Equatable, Sendable {
+    enum Component: Equatable, Sendable { case key(String), record(String) }
+    var path: [Component]
+    var value: JSONValue
+    var index: Int? = nil
+
+    static func between(_ before: JSONValue, _ after: JSONValue, path: [Component] = []) -> [Self] {
+        switch (before, after) {
+        case let (.object(old), .object(new)):
+            return old.keys.sorted().flatMap { key -> [Self] in
+                guard let latest = new[key] else { return [Self(path: path + [.key(key)], value: old[key]!)] }
+                return between(old[key]!, latest, path: path + [.key(key)])
+            }
+        case let (.array(old), .array(new)):
+            return old.enumerated().flatMap { index, value -> [Self] in
+                guard let id = identifier(value) else { return [] }
+                guard let latest = new.first(where: { identifier($0) == id }) else {
+                    return [Self(path: path + [.record(id)], value: value, index: index)]
+                }
+                return between(value, latest, path: path + [.record(id)])
+            }
+        default: return []
+        }
+    }
+
+    static func identifier(_ value: JSONValue) -> String? {
+        guard case .object(let object) = value, case .string(let id) = object["id"] else { return nil }
+        return id
+    }
+
+    /// Missing parents or a newer value at the deleted path invalidate restore.
+    /// Work on a value copy, so a failed patch never partially changes the shadow.
+    func restoring(into current: JSONValue) -> JSONValue? {
+        func insert(_ current: JSONValue, at components: ArraySlice<Component>) -> JSONValue? {
+            guard let first = components.first else { return nil }
+            let rest = components.dropFirst()
+            switch (first, current) {
+            case let (.key(key), .object(object)):
+                var object = object
+                if rest.isEmpty {
+                    guard object[key] == nil else { return nil }
+                    object[key] = value
+                } else {
+                    guard let child = object[key], let next = insert(child, at: rest) else { return nil }
+                    object[key] = next
+                }
+                return .object(object)
+            case let (.record(id), .array(array)):
+                var array = array
+                if rest.isEmpty {
+                    guard !array.contains(where: { Self.identifier($0) == id }) else { return nil }
+                    array.insert(value, at: min(index ?? array.count, array.count))
+                } else {
+                    guard let i = array.firstIndex(where: { Self.identifier($0) == id }),
+                          let next = insert(array[i], at: rest) else { return nil }
+                    array[i] = next
+                }
+                return .array(array)
+            default: return nil
+            }
+        }
+        return insert(current, at: path[...])
+    }
+}
+
+struct RootineSportAgenda {
+    var upcoming: [SportWorkout]
+    var overdue: [SportWorkout]
+    var history: [SportWorkout]
+    init(_ workouts: [SportWorkout], today: String) {
+        func ascending(_ a: SportWorkout, _ b: SportWorkout) -> Bool {
+            a.date == b.date ? a.id < b.id : a.date < b.date
+        }
+        upcoming = workouts.filter { !$0.completed && $0.date >= today }.sorted(by: ascending)
+        overdue = workouts.filter { !$0.completed && $0.date < today }.sorted(by: ascending)
+        history = workouts.filter(\.completed).sorted { a, b in
+            a.date == b.date ? a.id < b.id : a.date > b.date
+        }
+    }
+}
+
+func rootineGoalNextStep(_ goal: GoalRecord) -> String {
+    if goal.status == .completed { return "Cel ukończony" }
+    if goal.status == .archived { return "Przywróć cel, aby kontynuować" }
+    if let step = goal.milestones.first(where: { !$0.done }) { return step.title }
+    switch goal.progressMode {
+    case .numeric: return "Dodaj postęp: \(goal.unit)"
+    case .manual: return "Zaktualizuj postęp"
+    default: return "Zapisz kolejny krok"
+    }
+}
+
+func rootineWorkDayItems(_ items: [WorkItem], today: String) -> [WorkItem] {
+    items.filter { !$0.completed && $0.status != .cancelled && ($0.dueDate == nil || $0.dueDate!.isEmpty || $0.dueDate! <= today) }
+        .sorted { a, b in
+            let ad = a.dueDate?.isEmpty == false ? a.dueDate! : "9999"
+            let bd = b.dueDate?.isEmpty == false ? b.dueDate! : "9999"
+            return ad == bd ? a.id < b.id : ad < bd
+        }
+}
+
+
+// Sprint 04 round 02: empty-state and progress copy use the same domain data as rows.
+enum RootineNotesEmptyState: Equatable {
+    case account, folder, archive, noResults, active
+
+    var message: String {
+        switch self {
+        case .account: return "Nie masz jeszcze notatek. Zacznij od przycisku Nowa notatka."
+        case .folder: return "Ten folder jest pusty. Dodaj treść przez Nowa notatka lub wybierz inny folder."
+        case .archive: return "Archiwum jest puste. Zarchiwizowane notatki pojawią się tutaj."
+        case .noResults: return "Nie znaleziono notatek dla wybranych filtrów. Wyczyść filtry, aby zobaczyć pozostałe."
+        case .active: return "Nie masz aktywnych notatek. Sprawdź archiwum lub wybierz Nowa notatka."
+        }
+    }
+    var offersClearFilters: Bool { self == .folder || self == .noResults }
+}
+
+func rootineNotesEmptyState(_ workspace: NotesWorkspace, query: RootineNotesQuery) -> RootineNotesEmptyState? {
+    guard rootineNotes(workspace, matching: query).isEmpty else { return nil }
+    if !query.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || query.tag != nil || query.pinnedOnly { return .noResults }
+    if query.listID != nil { return .folder }
+    if query.showingArchive { return .archive }
+    return workspace.notes.isEmpty ? .account : .active
+}
+
+struct RootineGoalProgressLabel {
+    let value: String
+    let accessibilityValue: String
+
+    init(_ goal: GoalRecord, locale: Locale = .current) {
+        let target: Double
+        switch goal.progressMode {
+        case .manual: target = 100
+        case .regularity: target = rootineGoalRegularityTarget(goal)
+        case .milestones: target = goal.milestones.reduce(0) { $0 + max(0, $1.weight) }
+        case .numeric: target = goal.targetValue
+        }
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 2
+        let currentText = formatter.string(from: NSNumber(value: rootineGoalCurrentValue(goal))) ?? "0"
+        let targetText = formatter.string(from: NSNumber(value: target)) ?? "0"
+        let unit = goal.progressMode == .manual ? "%" : goal.unit
+        value = "\(currentText) z \(targetText)\(unit.isEmpty ? "" : " " + unit)"
+        accessibilityValue = "\(value), \(rootineGoalProgressPercent(goal)) procent celu"
+    }
+}
+
+// Sprint 05: deterministic presentation projections, without mutations or I/O.
+struct RootineTravelAgenda {
+    let current: [TravelRecord]
+    let upcoming: [TravelRecord]
+    let undated: [TravelRecord]
+    let history: [TravelRecord]
+    let archived: [TravelRecord]
+    var featured: TravelRecord? { current.first ?? upcoming.first }
+
+    init(_ trips: [TravelRecord], today: String) {
+        func ordered(_ lhs: TravelRecord, _ rhs: TravelRecord) -> Bool {
+            lhs.startDate == rhs.startDate ? lhs.id < rhs.id : lhs.startDate < rhs.startDate
+        }
+        let active = trips.filter { $0.archivedAt == nil }
+        archived = trips.filter { $0.archivedAt != nil }.sorted(by: ordered)
+        let dated = active.filter { rootineHealthLocalDateIsValid($0.startDate) && rootineHealthLocalDateIsValid($0.endDate) }
+        let datedIDs = Set(dated.map(\.id))
+        undated = active.filter { !datedIDs.contains($0.id) && $0.status != "completed" }.sorted { $0.id < $1.id }
+        history = active.filter { $0.status == "completed" || (datedIDs.contains($0.id) && $0.endDate < today) }.sorted { ordered($1, $0) }
+        current = dated.filter { $0.status != "completed" && $0.startDate <= today && $0.endDate >= today }.sorted(by: ordered)
+        upcoming = dated.filter { $0.status != "completed" && $0.startDate > today }.sorted(by: ordered)
+    }
+}
+
+struct RootineAffairAmountPresentation {
+    let detail: String
+    init(date: String, amount: Double, revealed: Bool) {
+        let term = date.isEmpty ? "Bez terminu" : "Termin " + date
+        detail = revealed ? term + " · " + AffairMoney.formatted(amount) : term
+    }
+}
+
+func rootineAffairMatters(_ values: [AffairMatter], completed: Bool) -> [AffairMatter] {
+    values.filter { ($0.status == "done") == completed }.sorted {
+        let a = $0.dueDate.isEmpty ? "9999-12-31" : $0.dueDate
+        let b = $1.dueDate.isEmpty ? "9999-12-31" : $1.dueDate
+        return a == b ? $0.id < $1.id : a < b
+    }
+}
+
+func rootineAffairMileage(_ text: String) -> Double? {
+    Double(text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: " ", with: "").replacingOccurrences(of: ",", with: "."))
+}
+
+func rootineAffairOptionalMileageIsValid(_ text: String) -> Bool {
+    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+    guard let value = rootineAffairMileage(text) else { return false }
+    return value.isFinite && value >= 0
 }

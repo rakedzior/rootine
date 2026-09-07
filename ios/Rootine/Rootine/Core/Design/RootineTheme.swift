@@ -266,6 +266,8 @@ struct RootineOfflineBanner: View {
 }
 
 struct RootineUndoBanner: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let usesAdaptiveLayout: Bool
     let message: String
     let undoTitle: String
     let onUndo: () -> Void
@@ -273,14 +275,29 @@ struct RootineUndoBanner: View {
     init(
         message: String,
         undoTitle: String = "Cofnij",
+        usesAdaptiveLayout: Bool = false,
         onUndo: @escaping () -> Void
     ) {
+        self.usesAdaptiveLayout = usesAdaptiveLayout
         self.message = message
         self.undoTitle = undoTitle
         self.onUndo = onUndo
     }
 
     var body: some View {
+        Group {
+            if usesAdaptiveLayout && typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(undoTitle, action: onUndo)
+                        .font(.headline)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+            } else {
         HStack(spacing: RootineTheme.Spacing.medium) {
             Text(message)
                 .font(.subheadline)
@@ -290,6 +307,8 @@ struct RootineUndoBanner: View {
             Button(undoTitle, action: onUndo)
                 .font(.headline)
                 .frame(minWidth: 44, minHeight: 44)
+        }
+            }
         }
         .padding(.leading, RootineTheme.Spacing.medium)
         .padding(.trailing, RootineTheme.Spacing.small)

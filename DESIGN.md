@@ -259,6 +259,13 @@ i nie zmieniają się razem z motywem aplikacji.
 
 **The Semantic Honesty Rule.** Zieleń, ochra i koral opisują rzeczywisty status. Nie służą do przypadkowego różnicowania kart.
 
+### Natywne zakładki mobilne
+
+- Żadna główna zakładka nie zaczyna się od dużego nagłówka z własną nazwą. Nazwa żyje w dolnej nawigacji i dostępności, a pierwszy viewport zaczyna się od domyślnej treści roboczej.
+- `Atrament` jest domyślnym motywem iOS; `Pergamin` pozostaje opcjonalnym jasnym wariantem.
+- Ukończona zakładka `Dzisiaj` jest źródłem prawdy dla rytmu, gęstości, tonalnych powierzchni, oszczędnego użycia błękitu oraz zachowania gestów.
+- Efekt ma być współczesny, czysty, profesjonalny i dyskretnie luksusowy: hierarchia wynika z typografii, odstępów i tonu, nie z dekoracyjnych gradientów, szkła ani nadmiaru kart.
+
 ## Typography
 
 **Display Font:** Plus Jakarta Sans (with system-ui fallback)

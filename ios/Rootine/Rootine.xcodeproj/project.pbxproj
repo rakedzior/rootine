@@ -58,10 +58,18 @@
 		B00000000000000000000116 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000116 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000117 /* ObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000117 /* ObservabilityTests.swift */; };
 		B00000000000000000000118 /* SportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000118 /* SportModelsTests.swift */; };
+		B00000000000000000000200 /* CalendarHarnessUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000200 /* CalendarHarnessUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		D00000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = P000000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = T000000000000000000000001;
+			remoteInfo = Rootine;
+		};
+		D00000000000000000000003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = P000000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -129,8 +137,10 @@
 		F00000000000000000000116 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F00000000000000000000117 /* ObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservabilityTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000118 /* SportModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportModelsTests.swift; sourceTree = "<group>"; };
+		F00000000000000000000200 /* CalendarHarnessUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarHarnessUITests.swift; sourceTree = "<group>"; };
 		F00000000000000000001001 /* Rootine.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rootine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000001002 /* RootineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RootineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F00000000000000000001003 /* RootineUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RootineUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,6 +158,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		PH0000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -159,6 +176,7 @@
 				G00000000000000000000004 /* Rootine/Features */,
 				G00000000000000000000005 /* Rootine/Resources */,
 				G00000000000000000000006 /* RootineTests */,
+				G00000000000000000000010 /* RootineUITests */,
 				G00000000000000000000007 /* ../../contracts/fixtures */,
 				G00000000000000000000008 /* Config */,
 				G00000000000000000000009 /* Products */,
@@ -243,6 +261,14 @@
 			path = RootineTests;
 			sourceTree = "<group>";
 		};
+		G00000000000000000000010 /* RootineUITests */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000200 /* CalendarHarnessUITests.swift */,
+			);
+			path = RootineUITests;
+			sourceTree = "<group>";
+		};
 		G00000000000000000000007 /* ../../contracts/fixtures */ = {
 			isa = PBXGroup;
 			children = (
@@ -277,6 +303,7 @@
 			children = (
 				F00000000000000000001001 /* Rootine.app */,
 				F00000000000000000001002 /* RootineTests.xctest */,
+				F00000000000000000001003 /* RootineUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -319,6 +346,23 @@
 			productReference = F00000000000000000001002 /* RootineTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		T000000000000000000000003 /* RootineUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C000000000000000000000004 /* Build configuration list for PBXNativeTarget "RootineUITests" */;
+			buildPhases = (
+				PH0000000000000000000013 /* Sources */,
+				PH0000000000000000000003 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000000000000000000004 /* PBXTargetDependency */,
+			);
+			name = RootineUITests;
+			productName = RootineUITests;
+			productReference = F00000000000000000001003 /* RootineUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -333,6 +377,10 @@
 						CreatedOnToolsVersion = 26.3;
 					};
 					T000000000000000000000002 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = T000000000000000000000001;
+					};
+					T000000000000000000000003 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = T000000000000000000000001;
 					};
@@ -354,6 +402,7 @@
 			targets = (
 				T000000000000000000000001 /* Rootine */,
 				T000000000000000000000002 /* RootineTests */,
+				T000000000000000000000003 /* RootineUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -441,6 +490,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		PH0000000000000000000013 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000200 /* CalendarHarnessUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -448,6 +505,11 @@
 			isa = PBXTargetDependency;
 			target = T000000000000000000000001 /* Rootine */;
 			targetProxy = D00000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		D00000000000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = T000000000000000000000001 /* Rootine */;
+			targetProxy = D00000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -674,6 +736,21 @@
 			};
 			name = Production;
 		};
+		C000000000000000000000041 /* Development */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Development.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.ios.dev.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.2;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Rootine;
+			};
+			name = Development;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -709,6 +786,14 @@
 				C000000000000000000000033 /* Development */,
 				C000000000000000000000034 /* Staging */,
 				C000000000000000000000035 /* Production */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Development;
+		};
+		C000000000000000000000004 /* Build configuration list for PBXNativeTarget "RootineUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C000000000000000000000041 /* Development */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Development;

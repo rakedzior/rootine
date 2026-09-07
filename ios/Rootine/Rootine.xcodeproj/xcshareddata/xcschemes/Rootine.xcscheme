@@ -8,6 +8,9 @@
          <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
             <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="T000000000000000000000002" BuildableName="RootineTests.xctest" BlueprintName="RootineTests" ReferencedContainer="container:Rootine.xcodeproj"/>
          </BuildActionEntry>
+		 <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+			<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="T000000000000000000000003" BuildableName="RootineUITests.xctest" BlueprintName="RootineUITests" ReferencedContainer="container:Rootine.xcodeproj"/>
+		 </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction buildConfiguration="Development" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES">
@@ -15,6 +18,9 @@
          <TestableReference skipped="NO">
             <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="T000000000000000000000002" BuildableName="RootineTests.xctest" BlueprintName="RootineTests" ReferencedContainer="container:Rootine.xcodeproj"/>
          </TestableReference>
+		 <TestableReference skipped="NO">
+			<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="T000000000000000000000003" BuildableName="RootineUITests.xctest" BlueprintName="RootineUITests" ReferencedContainer="container:Rootine.xcodeproj"/>
+		 </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction buildConfiguration="Development" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">
