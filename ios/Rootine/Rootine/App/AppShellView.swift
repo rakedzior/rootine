@@ -105,6 +105,17 @@ struct RootineMainView: View {
     @State private var selection: RootineTab = RootineMainView.initialSelection
     @State private var isShowingQuickAdd = false
 
+    private var previewReadinessIdentifier: String? {
+#if DEBUG
+        let isPreviewLaunch = CommandLine.arguments.contains("--rootine-preview")
+            || CommandLine.arguments.contains(where: { $0.hasPrefix("--rootine-preview-") })
+        guard isPreviewLaunch, !environment.isLaunching else { return nil }
+        return "rootine.preview.\(selection.rawValue).ready"
+#else
+        return nil
+#endif
+    }
+
     private static var initialSelection: RootineTab {
 #if DEBUG
         if initialModule != nil { return .more }
@@ -149,6 +160,17 @@ struct RootineMainView: View {
             }
         }
         .tint(RootineTheme.ColorToken.action)
+        .overlay(alignment: .topLeading) {
+            if let previewReadinessIdentifier {
+                Text("Preview gotowy")
+                    .font(.system(size: 1))
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .accessibilityIdentifier(previewReadinessIdentifier)
+                    .accessibilityLabel("Preview gotowy")
+                    .accessibilityHidden(false)
+            }
+        }
         .sheet(isPresented: $isShowingQuickAdd) {
             QuickAddSheet(initialTaskDate: selection == .calendar ? environment.calendarQuickAddDate : nil)
                 .presentationDetents([.medium])

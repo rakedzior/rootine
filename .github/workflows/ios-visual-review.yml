@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Show selected toolchain
         run: xcodebuild -version
@@ -56,14 +56,18 @@ jobs:
             echo "No XCTest result bundle was produced."
           fi
 
+      - name: Validate exported screenshot set
+        if: always()
+        run: node scripts/validate-ios-visual-review.mjs "$ROOTINE_SCREENSHOT_DIR"
+
       - name: Upload screenshot and test artifacts
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ios-visual-review-${{ github.sha }}
           path: |
             rootine-visual-review
             ${{ runner.temp }}/RootineVisualReview.xcresult
             ${{ runner.temp }}/RootineVisualReviewDerivedData/Logs/Test
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14

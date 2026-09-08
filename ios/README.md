@@ -109,8 +109,11 @@ The runner pins the iOS Simulator SDK so `TEST_HOST` resolves inside
 
 The manually triggered `iOS visual review` workflow runs the deterministic
 `--rootine-preview` launch on the iPhone 17 Pro simulator and captures the five
-primary tabs as PNG files. It uses `CODE_SIGNING_ALLOWED=NO`, so it does not
-need a physical iPhone, provisioning profile, or production credentials.
+primary tabs as PNG files. It waits for the preview data to finish loading and
+validates the exported XCTest manifest contains exactly the five named PNG
+attachments before uploading them. It uses `CODE_SIGNING_ALLOWED=NO`, so it
+does not need a physical iPhone, provisioning profile, or production
+credentials.
 
 In GitHub, open Actions → `iOS visual review` → Run workflow. The screenshots,
 XCTest result bundle, and test logs are uploaded as the

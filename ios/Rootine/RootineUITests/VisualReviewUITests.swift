@@ -12,6 +12,7 @@ final class VisualReviewUITests: XCTestCase {
             app.tabBars.buttons["Dzisiaj"].waitForExistence(timeout: 12),
             "Preview launch did not reach the primary tab bar"
         )
+        waitForPreviewReady(app, tabID: "today")
 
         capture(named: "01-today")
         try tapAndCapture(app, tab: "Zadania", named: "02-tasks")
@@ -30,7 +31,30 @@ final class VisualReviewUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 5), "Missing tab: \(tab)")
         button.tap()
         XCTAssertTrue(button.isSelected, "Tab did not become selected: \(tab)")
+        waitForPreviewReady(app, tabID: tabID(for: tab))
         capture(named: named)
+    }
+
+    @MainActor
+    private func waitForPreviewReady(_ app: XCUIApplication, tabID: String) {
+        let markerID = "rootine.preview.\(tabID).ready"
+        let marker = app.descendants(matching: .any)
+            .matching(identifier: markerID)
+            .firstMatch
+        XCTAssertTrue(
+            marker.waitForExistence(timeout: 12),
+            "Preview content did not become ready for tab: \(tabID)"
+        )
+    }
+
+    private func tabID(for label: String) -> String {
+        switch label {
+        case "Zadania": return "tasks"
+        case "Kalendarz": return "calendar"
+        case "Odżywianie": return "nutrition"
+        case "Więcej": return "more"
+        default: return "today"
+        }
     }
 
     @MainActor
