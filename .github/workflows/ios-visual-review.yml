@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 20
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-      ROOTINE_SCREENSHOT_DIR: ${{ runner.temp }}/rootine-visual-review
+      ROOTINE_SCREENSHOT_DIR: rootine-visual-review
       ROOTINE_ENVIRONMENT: development
       ROOTINE_CONTRACT_VERSION: "3"
       ROOTINE_FLAG_NORMALIZED_SYNC: disabled-by-default
@@ -62,7 +62,7 @@ jobs:
         with:
           name: ios-visual-review-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/rootine-visual-review
+            rootine-visual-review
             ${{ runner.temp }}/RootineVisualReview.xcresult
             ${{ runner.temp }}/RootineVisualReviewDerivedData/Logs/Test
           if-no-files-found: warn
