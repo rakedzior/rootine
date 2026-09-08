@@ -40,17 +40,30 @@ function collectPngFiles(directory) {
 }
 
 const pngFiles = collectPngFiles(resolvedDirectory)
+const attachments = Array.isArray(manifest)
+  ? manifest.flatMap((test) => (Array.isArray(test?.attachments) ? test.attachments : []))
+  : []
 const manifestText = JSON.stringify(manifest)
 const missingManifestEntries = expectedScreenshots.filter((name) => !manifestText.includes(name))
 const missingPngFiles = expectedScreenshots.filter(
-  (name) => !pngFiles.some((filePath) => path.basename(filePath).includes(name))
+  (name) => !pngFiles.some((filePath) => path.basename(filePath) === `${name}.png`)
+)
+const unexpectedPngFiles = pngFiles.filter(
+  (filePath) => !expectedScreenshots.some((name) => path.basename(filePath) === `${name}.png`)
 )
 
-if (pngFiles.length !== expectedScreenshots.length || missingManifestEntries.length > 0 || missingPngFiles.length > 0) {
+if (
+  pngFiles.length !== expectedScreenshots.length
+  || attachments.length !== expectedScreenshots.length
+  || missingManifestEntries.length > 0
+  || missingPngFiles.length > 0
+  || unexpectedPngFiles.length > 0
+) {
   console.error("Invalid iOS visual review screenshot set")
-  console.error(`PNG files: ${pngFiles.length}; expected: ${expectedScreenshots.length}`)
+  console.error(`PNG files: ${pngFiles.length}; manifest attachments: ${attachments.length}; expected: ${expectedScreenshots.length}`)
   if (missingManifestEntries.length > 0) console.error(`Missing manifest entries: ${missingManifestEntries.join(", ")}`)
   if (missingPngFiles.length > 0) console.error(`Missing PNG files: ${missingPngFiles.join(", ")}`)
+  if (unexpectedPngFiles.length > 0) console.error(`Unexpected PNG files: ${unexpectedPngFiles.map((filePath) => path.basename(filePath)).join(", ")}`)
   process.exit(1)
 }
 
