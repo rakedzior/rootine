@@ -13,7 +13,7 @@ concurrency:
 jobs:
   screenshots:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       ROOTINE_SCREENSHOT_DIR: rootine-visual-review
@@ -29,6 +29,42 @@ jobs:
 
       - name: Show selected toolchain
         run: xcodebuild -version
+
+      - name: Ensure iOS simulator runtime and device
+        run: |
+          set -euo pipefail
+
+          ios_runtimes="$(xcrun simctl list runtimes | sed -n '/^iOS /p' | sed '/unavailable/d')"
+          if [ -z "$ios_runtimes" ]; then
+            echo "No available iOS simulator runtime found; downloading the Xcode-matched platform."
+            xcodebuild -downloadPlatform iOS
+            ios_runtimes="$(xcrun simctl list runtimes | sed -n '/^iOS /p' | sed '/unavailable/d')"
+          fi
+
+          runtime_id="$(printf '%s\n' "$ios_runtimes" | sed -E 's/.* - (com.apple.CoreSimulator.SimRuntime.iOS-[^ ]+).*/\1/' | head -n 1)"
+          if [ -z "$runtime_id" ]; then
+            echo "Unable to identify an available iOS simulator runtime."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+
+          device_type_id="$(xcrun simctl list devicetypes | awk -F '[()]' '$1 ~ /iPhone 17 Pro/ {print $2; exit}')"
+          if [ -z "$device_type_id" ]; then
+            echo "The iPhone 17 Pro simulator device type is not installed."
+            xcrun simctl list devicetypes
+            exit 1
+          fi
+
+          device_id="$(xcrun simctl list devices available | awk -F '[()]' '{label=$1; gsub(/^[ \t]+|[ \t]+$/, "", label); if (label == "iPhone 17 Pro") {print $2; exit}}')"
+          if [ -z "$device_id" ]; then
+            device_id="$(xcrun simctl create "iPhone 17 Pro" "$device_type_id" "$runtime_id")"
+            echo "Created iPhone 17 Pro simulator: $device_id"
+          fi
+
+          echo "Using iOS runtime: $runtime_id"
+          echo "Using iPhone 17 Pro simulator: $device_id"
+          xcrun simctl list runtimes
+          xcrun simctl list devices available
 
       - name: Prepare screenshot directory
         run: mkdir -p "$ROOTINE_SCREENSHOT_DIR"
