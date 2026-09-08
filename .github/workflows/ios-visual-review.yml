@@ -1,0 +1,69 @@
+name: iOS visual review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-visual-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      ROOTINE_SCREENSHOT_DIR: ${{ runner.temp }}/rootine-visual-review
+      ROOTINE_ENVIRONMENT: development
+      ROOTINE_CONTRACT_VERSION: "3"
+      ROOTINE_FLAG_NORMALIZED_SYNC: disabled-by-default
+      ROOTINE_FLAG_NORMALIZED_READ: disabled-by-default
+      ROOTINE_FLAG_NOTIFICATIONS: disabled-by-default
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Show selected toolchain
+        run: xcodebuild -version
+
+      - name: Prepare screenshot directory
+        run: mkdir -p "$ROOTINE_SCREENSHOT_DIR"
+
+      - name: Capture primary tab screenshots
+        run: >-
+          xcodebuild test
+          -project ios/Rootine/Rootine.xcodeproj
+          -scheme Rootine
+          -configuration Development
+          -only-testing:RootineUITests/VisualReviewUITests/testCapturePrimaryTabs
+          -destination "platform=iOS Simulator,name=iPhone 17 Pro"
+          -derivedDataPath "$RUNNER_TEMP/RootineVisualReviewDerivedData"
+          -resultBundlePath "$RUNNER_TEMP/RootineVisualReview.xcresult"
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Export XCTest screenshot attachments
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/RootineVisualReview.xcresult" ]; then
+            xcrun xcresulttool export attachments \
+              --path "$RUNNER_TEMP/RootineVisualReview.xcresult" \
+              --output-path "$ROOTINE_SCREENSHOT_DIR"
+          else
+            echo "No XCTest result bundle was produced."
+          fi
+
+      - name: Upload screenshot and test artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-visual-review-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/rootine-visual-review
+            ${{ runner.temp }}/RootineVisualReview.xcresult
+            ${{ runner.temp }}/RootineVisualReviewDerivedData/Logs/Test
+          if-no-files-found: warn
+          retention-days: 14

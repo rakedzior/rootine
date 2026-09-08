@@ -59,6 +59,7 @@
 		B00000000000000000000117 /* ObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000117 /* ObservabilityTests.swift */; };
 		B00000000000000000000118 /* SportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000118 /* SportModelsTests.swift */; };
 		B00000000000000000000200 /* CalendarHarnessUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000200 /* CalendarHarnessUITests.swift */; };
+		B00000000000000000000201 /* VisualReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000201 /* VisualReviewUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -138,6 +139,7 @@
 		F00000000000000000000117 /* ObservabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservabilityTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000118 /* SportModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportModelsTests.swift; sourceTree = "<group>"; };
 		F00000000000000000000200 /* CalendarHarnessUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarHarnessUITests.swift; sourceTree = "<group>"; };
+		F00000000000000000000201 /* VisualReviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualReviewUITests.swift; sourceTree = "<group>"; };
 		F00000000000000000001001 /* Rootine.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rootine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000001002 /* RootineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RootineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000001003 /* RootineUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RootineUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -265,6 +267,7 @@
 			isa = PBXGroup;
 			children = (
 				F00000000000000000000200 /* CalendarHarnessUITests.swift */,
+				F00000000000000000000201 /* VisualReviewUITests.swift */,
 			);
 			path = RootineUITests;
 			sourceTree = "<group>";
@@ -495,6 +498,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000200 /* CalendarHarnessUITests.swift in Sources */,
+				B00000000000000000000201 /* VisualReviewUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

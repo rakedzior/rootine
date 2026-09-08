@@ -105,5 +105,17 @@ only `testLargeAccountAggregationIsMeasured`, and writes the full log and
 The runner pins the iOS Simulator SDK so `TEST_HOST` resolves inside
 `Development-iphonesimulator` instead of the non-existent macOS path.
 
+## Visual review screenshots
+
+The manually triggered `iOS visual review` workflow runs the deterministic
+`--rootine-preview` launch on the iPhone 17 Pro simulator and captures the five
+primary tabs as PNG files. It uses `CODE_SIGNING_ALLOWED=NO`, so it does not
+need a physical iPhone, provisioning profile, or production credentials.
+
+In GitHub, open Actions → `iOS visual review` → Run workflow. The screenshots,
+XCTest result bundle, and test logs are uploaded as the
+`ios-visual-review-<commit>` artifact for 14 days. The default simulator and
+toolchain match the existing release workflow: iPhone 17 Pro on Xcode 26.3.
+
 Production Apple/Google credentials, provider-console settings, and redirect
 allowlists are intentionally not committed or configured by this repository.
