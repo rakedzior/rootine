@@ -33,6 +33,27 @@ final class VisualReviewUITests: XCTestCase {
         XCTAssertTrue(button.isSelected, "Tab did not become selected: \(tab)")
         waitForPreviewReady(app, tabID: tabID(for: tab))
         capture(named: named)
+
+        if tab == "Zadania" {
+            assertLastTaskCardIsReachable(app)
+        }
+    }
+
+    @MainActor
+    private func assertLastTaskCardIsReachable(_ app: XCUIApplication) {
+        let lastCard = app.buttons
+            .matching(identifier: "tasks.task.3")
+            .firstMatch
+
+        for _ in 0..<12 {
+            if lastCard.exists && lastCard.isHittable { return }
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(
+            lastCard.exists && lastCard.isHittable,
+            "The last preview task card was not reachable above the floating tab bar"
+        )
     }
 
     @MainActor
