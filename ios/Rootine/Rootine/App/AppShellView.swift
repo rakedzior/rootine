@@ -184,6 +184,7 @@ struct RootineMainView: View {
     ) -> some View {
         NavigationStack {
             content()
+                .safeAreaPadding(.bottom, RootineTheme.Layout.floatingTabBarClearance)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarVisibility(.visible, for: .navigationBar)
                 .toolbarBackground(RootineTheme.ColorToken.canvas, for: .navigationBar)

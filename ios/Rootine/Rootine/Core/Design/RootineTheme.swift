@@ -48,6 +48,14 @@ enum RootineTheme {
         static let xLarge: CGFloat = 32
     }
 
+    enum Layout {
+        /// Extra scrollable clearance for the floating iOS tab bar.
+        /// The system tab bar does not reserve its full visual height when it
+        /// floats over scroll content, so every root tab needs this shared
+        /// bottom inset to keep the last row reachable.
+        static let floatingTabBarClearance: CGFloat = 112
+    }
+
     enum Radius {
         static let control: CGFloat = 10
         static let surface: CGFloat = 16
