@@ -85,10 +85,8 @@ export async function openRootineRoute(page: Page, path: string) {
   }
   await expect(page.locator(".app-route-state")).toHaveCount(0, { timeout: 15_000 });
   if (new URL(page.url()).pathname === "/dzisiaj") {
-    await page.waitForFunction(() => {
-      const modules = document.querySelectorAll(".today-module-row__identity > strong");
-      return modules.length > 0 && Array.from(modules).every((module) => module.textContent?.trim().length);
-    }, { timeout: 10_000 });
+    await expect(page.locator(".today-plan")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(".today-overview__progress")).toBeVisible({ timeout: 10_000 });
   }
   await settleModuleTransition(page);
   return pageShell;

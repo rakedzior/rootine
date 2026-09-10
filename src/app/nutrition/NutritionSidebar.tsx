@@ -36,7 +36,7 @@ export function NutritionSidebar({
   onSelect: (item: NutritionSidebarItem) => void;
 }) {
   return (
-    <ModuleSidebar label="Widoki Odżywiania" className="nutrition-context-sidebar">
+    <ModuleSidebar label="Widoki diety" className="nutrition-context-sidebar">
       <div className="nutrition-context-sidebar__nav">
         {GROUPS.map((group) => (
           <section key={group.label}>

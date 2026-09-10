@@ -20,6 +20,7 @@ import {
   createEmptyNutritionWorkspace,
   createNutritionReviewWorkspace,
   NUTRITION_STORAGE_KEY,
+  type NutritionDay,
   type NutritionWorkspace,
 } from "../data/nutritionWorkspace";
 import { createDefaultNotesWorkspace, NOTES_STORAGE_KEY, type NoteRecord, type NotesWorkspace } from "../data/notesWorkspace";
@@ -447,12 +448,94 @@ function createDemoNutrition(): NutritionWorkspace {
       }))])) as NutritionWorkspace["days"][string]["entries"],
     }];
   }));
+  const referenceDate = dateKey(0);
+  const referenceTimestamp = timestampAt(0, 8);
+  days[referenceDate] = {
+    date: referenceDate,
+    waterMl: 1250,
+    source: "demo",
+    entries: {
+      breakfast: [
+        {
+          id: `demo-reference-isolate-${referenceDate}`,
+          name: "IZOLAT BIAŁKA",
+          portion: "50 g",
+          calories: 169,
+          protein: 40,
+          carbs: 1,
+          fat: 1,
+          brand: "Sport Definition",
+          createdAt: referenceTimestamp,
+        },
+        {
+          id: `demo-reference-milk-${referenceDate}`,
+          name: "Mleko Wiejskie Świeże 2%",
+          portion: "250 ml",
+          calories: 125,
+          protein: 9,
+          carbs: 11,
+          fat: 4,
+          brand: "Piątnica",
+          createdAt: referenceTimestamp,
+        },
+        {
+          id: `demo-reference-ham-${referenceDate}`,
+          name: "Szynka",
+          portion: "30 g",
+          calories: 44,
+          protein: 8,
+          carbs: 1,
+          fat: 2,
+          brand: "Szynka",
+          createdAt: referenceTimestamp,
+        },
+      ],
+      lunch: [
+        {
+          id: `demo-reference-chicken-${referenceDate}`,
+          name: "Kurczak z ryżem",
+          portion: "300 g",
+          calories: 420,
+          protein: 35,
+          carbs: 45,
+          fat: 12,
+          brand: "Domowe",
+          createdAt: referenceTimestamp,
+        },
+        {
+          id: `demo-reference-salad-${referenceDate}`,
+          name: "Surówka z warzyw",
+          portion: "150 g",
+          calories: 260,
+          protein: 13,
+          carbs: 30,
+          fat: 8,
+          brand: "Domowa",
+          createdAt: referenceTimestamp,
+        },
+      ],
+      snack: [],
+      dinner: [
+        {
+          id: `demo-reference-dinner-${referenceDate}`,
+          name: "Makaron z warzywami",
+          portion: "350 g",
+          calories: 440,
+          protein: 15,
+          carbs: 92,
+          fat: 28,
+          brand: "Domowe",
+          createdAt: referenceTimestamp,
+        },
+      ],
+    },
+  } satisfies NutritionDay;
   const timestamp = timestampAt(0, 8);
   const weightOffsets = Array.from({ length: 15 }, (_, index) => -29 + index * 2).concat(0);
   return {
     ...workspace,
     updatedAt: timestamp,
-    goals: { calories: 2200, protein: 140, carbs: 245, fat: 72, waterMl: 2100 },
+    goals: { calories: 2300, protein: 150, carbs: 270, fat: 75, waterMl: 2000 },
     days,
     weightMeasurements: Object.fromEntries(weightOffsets.map((offset, index) => {
       const date = dateKey(offset);

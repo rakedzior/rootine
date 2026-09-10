@@ -94,6 +94,7 @@ const WEEKDAYS = ["pon.", "wt.", "śr.", "czw.", "pt.", "sob.", "niedz."];
 
 type CalendarEvent = Task & { calendarDate: string };
 type CalendarMode = "full" | "compact" | "narrow";
+type CalendarView = "month" | "list" | "week" | "three-days" | "day" | "year";
 type CalendarPriority = NonNullable<Task["priority"]>;
 type CalendarFilter =
   | { kind: "all" }
@@ -184,6 +185,27 @@ function formatHeaderDate(value: Date) {
   return `${MONTHS[value.getMonth()]} ${value.getFullYear()}`;
 }
 
+function formatDateNavigator(value: Date) {
+  return value.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function isCalendarView(value: unknown): value is CalendarView {
+  return value === "month" || value === "list" || value === "week" || value === "three-days" || value === "day" || value === "year";
+}
+
+function isCalendarDateKey(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+const CALENDAR_VIEW_OPTIONS: Array<{ value: CalendarView; label: string }> = [
+  { value: "month", label: "Miesiąc" },
+  { value: "list", label: "Lista" },
+  { value: "week", label: "Tydzień" },
+  { value: "three-days", label: "3 dni" },
+  { value: "day", label: "Dzień" },
+  { value: "year", label: "Rok" },
+];
+
 function formatTaskDate(calendarDate: string) {
   const parsed = new Date(`${calendarDate}T12:00:00`);
   return parsed.toLocaleDateString("pl-PL", { weekday: "short", day: "numeric", month: "short" });
@@ -206,12 +228,267 @@ function shiftCalendarDate(calendarDate: string, amount: number) {
   return dateKey(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
+function startOfCalendarWeek(value: Date) {
+  const result = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+  return result;
+}
+
+function calendarDateKeys(start: Date, count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const value = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
+    return dateKey(value.getFullYear(), value.getMonth(), value.getDate());
+  });
+}
+
+function calendarDateOrdinal(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+function calendarTimeMinutes(value: string | null | undefined) {
+  const match = value?.match(/(?:^|\s)(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
 function occurrenceStatusTone(status: CalendarOccurrenceStatusKey) {
   if (status === "completed") return "success" as const;
   if (status === "incomplete" || status === "waiting" || status === "in_progress") return "warning" as const;
   if (status === "missed") return "danger" as const;
   if (status === "automatic") return "neutral" as const;
   return "primary" as const;
+}
+
+function CalendarViewMenu({ value, onChange }: { value: CalendarView; onChange: (value: CalendarView) => void }) {
+  return (
+    <Select
+      compact
+      aria-label="Widok kalendarza"
+      fieldClassName="calendar-view-menu"
+      value={value}
+      options={CALENDAR_VIEW_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+      onChange={(event) => {
+        if (isCalendarView(event.target.value)) onChange(event.target.value);
+      }}
+    />
+  );
+}
+
+function CalendarAgendaRow({
+  event,
+  onSelect,
+  onToggle,
+}: {
+  event: CalendarOccurrence;
+  onSelect: (event: CalendarOccurrence, trigger: HTMLElement) => void;
+  onToggle: (occurrence: TaskOccurrence) => void;
+}) {
+  const task = event.kind === "task" ? event.task : null;
+  return (
+    <div className={`calendar-agenda-row${event.status.completed ? " is-completed" : ""}`}>
+      <div className="calendar-agenda-row__time">{event.time ?? "Cały dzień"}</div>
+      {task ? (
+        <button
+          type="button"
+          className={`calendar-agenda-row__checkbox task-checkbox${event.status.completed ? " is-checked" : ""}`}
+          aria-label={event.status.completed ? "Oznacz jako niewykonane" : "Oznacz jako wykonane"}
+          onClick={() => onToggle(task)}
+        >
+          {event.status.completed && <Check size={12} strokeWidth={2.5} />}
+        </button>
+      ) : <span className={`calendar-agenda-row__dot ${calendarPriorityClass(event)}`} aria-hidden="true" />}
+      <button
+        type="button"
+        className="calendar-agenda-row__content"
+        onClick={(clickEvent) => onSelect(event, clickEvent.currentTarget)}
+        aria-label={`Otwórz szczegóły: ${event.title || "wpis bez nazwy"}`}
+      >
+        <span className="calendar-agenda-row__title">{event.title || "Wpis bez nazwy"}</span>
+        <span className="calendar-agenda-row__meta">
+          {event.source.kind !== "task" ? event.source.label : formatTaskDate(event.calendarDate)}
+          {event.status.completed ? " · Wykonane" : ""}
+        </span>
+      </button>
+      <ChevronRight size={17} aria-hidden="true" />
+    </div>
+  );
+}
+
+function CalendarUndatedRow({
+  task,
+  onSelect,
+  onToggle,
+}: {
+  task: Task;
+  onSelect: (task: Task, trigger: HTMLElement) => void;
+  onToggle: (task: Task) => void;
+}) {
+  return (
+    <div className={`calendar-agenda-row${task.done ? " is-completed" : ""}`}>
+      <div className="calendar-agenda-row__time">Bez terminu</div>
+      <button
+        type="button"
+        className={`calendar-agenda-row__checkbox task-checkbox${task.done ? " is-checked" : ""}`}
+        aria-label={task.done ? "Oznacz jako niewykonane" : "Oznacz jako wykonane"}
+        onClick={() => onToggle(task)}
+      >
+        {task.done && <Check size={12} strokeWidth={2.5} />}
+      </button>
+      <button
+        type="button"
+        className="calendar-agenda-row__content"
+        onClick={(clickEvent) => onSelect(task, clickEvent.currentTarget)}
+        aria-label={`Otwórz szczegóły: ${task.text || "bez nazwy"}`}
+      >
+        <span className="calendar-agenda-row__title">{task.text || "Wpis bez nazwy"}</span>
+        <span className="calendar-agenda-row__meta">Bez terminu</span>
+      </button>
+      <ChevronRight size={17} aria-hidden="true" />
+    </div>
+  );
+}
+
+function CalendarListView({
+  dateKeys,
+  eventsByDate,
+  undatedTasks,
+  onSelect,
+  onSelectUndated,
+  onToggle,
+  onToggleUndated,
+}: {
+  dateKeys: string[];
+  eventsByDate: Map<string, CalendarOccurrence[]>;
+  undatedTasks: Task[];
+  onSelect: (event: CalendarOccurrence, trigger: HTMLElement) => void;
+  onSelectUndated: (task: Task, trigger: HTMLElement) => void;
+  onToggle: (occurrence: TaskOccurrence) => void;
+  onToggleUndated: (task: Task) => void;
+}) {
+  const groups = dateKeys.map((key) => ({ key, events: eventsByDate.get(key) ?? [] })).filter((group) => group.events.length > 0);
+  if (!groups.length && !undatedTasks.length) {
+    return <div className="calendar-empty-state"><CalendarDays size={24} /><strong>Brak wpisów w tym zakresie</strong><span>Dodaj zadanie, wydarzenie lub nawyk, aby zobaczyć je tutaj.</span></div>;
+  }
+  return (
+    <div className="calendar-list-view" aria-label="Lista wpisów">
+      {groups.map(({ key, events }) => (
+        <section key={key} className="calendar-list-group" aria-labelledby={`calendar-list-${key}`}>
+          <header className="calendar-list-group__header">
+            <h2 id={`calendar-list-${key}`}>{formatCalendarDayTitle(key)}</h2>
+            <span>{formatCalendarOccurrenceCount(events.length)}</span>
+          </header>
+          <div className="calendar-list-group__rows">
+            {events.map((event) => <CalendarAgendaRow key={event.key} event={event} onSelect={onSelect} onToggle={onToggle} />)}
+          </div>
+        </section>
+      ))}
+      {undatedTasks.length > 0 && (
+        <section className="calendar-list-group" aria-labelledby="calendar-list-undated">
+          <header className="calendar-list-group__header">
+            <h2 id="calendar-list-undated">Bez terminu</h2>
+            <span>{formatCalendarOccurrenceCount(undatedTasks.length)}</span>
+          </header>
+          <div className="calendar-list-group__rows">
+            {undatedTasks.map((task) => (
+              <CalendarUndatedRow key={task.id} task={task} onSelect={onSelectUndated} onToggle={onToggleUndated} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function CalendarYearView({
+  value,
+  eventsByDate,
+  onSelectMonth,
+}: {
+  value: Date;
+  eventsByDate: Map<string, CalendarOccurrence[]>;
+  onSelectMonth: (month: number) => void;
+}) {
+  return (
+    <div className="calendar-year-view" aria-label={`Rok ${value.getFullYear()}`}>
+      {MONTHS.map((month, monthIndex) => {
+        const miniCells = getCalendarCells(value.getFullYear(), monthIndex);
+        const monthHasEvents = miniCells.some((cell) => (eventsByDate.get(dateKey(cell.year, cell.month, cell.day)) ?? []).length > 0);
+        return (
+          <button key={month} type="button" className={`calendar-year-month${monthIndex === value.getMonth() ? " is-current" : ""}`} onClick={() => onSelectMonth(monthIndex)}>
+            <strong>{month}</strong>
+            <span className="calendar-year-month__weekdays">P W Ś C P S N</span>
+            <span className="calendar-year-month__days">
+              {miniCells.map((cell) => {
+                const hasEvents = (eventsByDate.get(dateKey(cell.year, cell.month, cell.day)) ?? []).length > 0;
+                return <span key={`${cell.year}-${cell.month}-${cell.day}`} className={`${cell.current ? "" : "is-outside"}${hasEvents ? " has-events" : ""}`}>{cell.day}</span>;
+              })}
+            </span>
+            {monthHasEvents && <span className="calendar-year-month__legend">● wpisy</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CalendarTimeView({
+  dateKeys,
+  eventsByDate,
+  onSelect,
+  onToggle,
+}: {
+  dateKeys: string[];
+  eventsByDate: Map<string, CalendarOccurrence[]>;
+  onSelect: (event: CalendarOccurrence, trigger: HTMLElement) => void;
+  onToggle: (occurrence: TaskOccurrence) => void;
+}) {
+  return (
+    <div className={`calendar-time-view calendar-time-view--${dateKeys.length}-days`} aria-label="Widok osi czasu">
+      <div className="calendar-time-view__columns">
+        {dateKeys.map((key) => {
+          const parsed = new Date(`${key}T12:00:00`);
+          const events = eventsByDate.get(key) ?? [];
+          return (
+            <section key={key} className="calendar-time-column">
+              <header className="calendar-time-column__header">
+                <span>{parsed.toLocaleDateString("pl-PL", { weekday: "short" })}</span>
+                <strong>{parsed.getDate()}</strong>
+              </header>
+              <div className="calendar-time-column__all-day">
+                <span>Cały dzień</span>
+                {events.filter((event) => !event.time).map((event) => <CalendarAgendaRow key={event.key} event={event} onSelect={onSelect} onToggle={onToggle} />)}
+              </div>
+              <div className="calendar-time-column__hours">
+                {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="calendar-time-slot"><span>{String(hour).padStart(2, "0")}:00</span></div>)}
+                <div className="calendar-time-column__events">
+                  {events.filter((event) => event.time).map((event) => {
+                    const task = event.kind === "task" ? event.task : null;
+                    const startMinutes = calendarTimeMinutes(event.time) ?? 0;
+                    const endMinutes = calendarTimeMinutes(task?.endTime) ?? startMinutes + 60;
+                    const top = Math.max(0, startMinutes);
+                    const height = Math.max(56, endMinutes - startMinutes);
+                    return (
+                      <div
+                        key={event.key}
+                        className="calendar-time-block"
+                        style={{ top: `${top}px`, minHeight: `${height}px` }}
+                      >
+                        <CalendarAgendaRow event={event} onSelect={onSelect} onToggle={onToggle} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 const currencyFormatter = new Intl.NumberFormat("pl-PL", {
@@ -231,7 +508,7 @@ function CalendarEventBar({ event, mode, dragging, onClick, onToggle, onMoveByDa
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
 }) {
-  if (mode !== "full") {
+  if (mode !== "full" && !event.title.trim()) {
     return (
       <span
         className={`calendar-event calendar-event--dot ${calendarPriorityClass(event)}`}
@@ -248,7 +525,7 @@ function CalendarEventBar({ event, mode, dragging, onClick, onToggle, onMoveByDa
     <div
       role="group"
       aria-label={`${event.source.label}: ${event.title || "bez nazwy"}; status ${event.status.label}${virtual ? "; wystąpienie cykliczne" : ""}${event.source.context ? `; ${event.source.context}` : ""}`}
-      className={`calendar-event${task ? "" : " calendar-event--readonly"}${draggable ? " is-draggable" : ""}${dragging ? " is-dragging" : ""}`}
+      className={`calendar-event${mode !== "full" ? " calendar-event--dot" : ""}${task ? "" : " calendar-event--readonly"}${draggable ? " is-draggable" : ""}${dragging ? " is-dragging" : ""}${event.status.completed ? " is-completed" : ""}`}
       draggable={draggable}
       aria-grabbed={draggable ? dragging : undefined}
       onDragStart={draggable ? onDragStart : undefined}
@@ -349,7 +626,7 @@ function CalendarDayPanel({
                   type="button"
                   className="calendar-day-panel__task"
                   onClick={(clickEvent) => onSelectEvent(event, clickEvent.currentTarget)}
-                  aria-label={`Otwórz szczegóły: ${event.title || "bez nazwy"}`}
+                  aria-label={`Edytuj wpis: ${event.title || "bez nazwy"}`}
                 >
                   <span className="calendar-day-panel__task-title">{event.title || "Wpis bez nazwy"}</span>
                   {event.source.kind !== "task" && <span className="calendar-day-panel__task-meta">{event.source.label}</span>}
@@ -362,7 +639,7 @@ function CalendarDayPanel({
       ) : (
         <div className="calendar-day-panel__empty">
           <p>Brak zadań w tym dniu.</p>
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} strokeWidth={1.7} />} onClick={onAddTask}>
+          <Button variant="quiet" size="sm" onClick={onAddTask}>
             Dodaj zadanie
           </Button>
         </div>
@@ -370,7 +647,7 @@ function CalendarDayPanel({
 
       {events.length > 0 && (
         <footer className="calendar-day-panel__footer">
-          <Button variant="quiet" size="sm" leadingIcon={<Plus size={13} strokeWidth={1.7} />} onClick={onAddTask}>
+          <Button variant="quiet" size="sm" onClick={onAddTask}>
             Dodaj zadanie
           </Button>
         </footer>
@@ -395,6 +672,11 @@ export default function Kalendarz() {
     const [year, month] = rememberedMonth.split("-").map(Number);
     return new Date(year, month - 1, 1);
   });
+  const [calendarView, setCalendarView] = useState<CalendarView>(() => {
+    const queryView = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view") : null;
+    if (isCalendarView(queryView)) return queryView;
+    return "month";
+  });
   const [events, setEvents] = useState<CalendarEvent[]>(() => initialWorkspace.tasks.filter(isTasksCalendarEvent));
   const [lists, setLists] = useState<ListItem[]>(initialWorkspace.lists);
   const [tags, setTags] = useState<TagItem[]>(initialWorkspace.tags);
@@ -415,8 +697,14 @@ export default function Kalendarz() {
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
   const [agendaDateKey, setAgendaDateKey] = useState<string | null>(null);
   const [calendarAnnouncement, setCalendarAnnouncement] = useState("");
+  const [calendarAddOpen, setCalendarAddOpen] = useState(false);
   const [calendarWidth, setCalendarWidth] = useState<number | null>(null);
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(() => todayKey());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(() => {
+    const queryDate = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("date") : null;
+    if (isCalendarDateKey(queryDate)) return queryDate;
+    return readModuleMemoryValue("calendar", "selectedDate", isCalendarDateKey) ?? todayKey();
+  });
+  const [isDayPanelOpen, setIsDayPanelOpen] = useState(false);
 
   const [trashedTask, setTrashedTask] = useState<CalendarEvent | null>(null);
   const calendarRootRef = useRef<HTMLDivElement>(null);
@@ -434,7 +722,7 @@ export default function Kalendarz() {
   const [focusedDateKey, setFocusedDateKey] = useState(todayKey);
   const sidebarTasks = workspaceRef.current.tasks.filter(isTaskOwnedByTasksModule);
   const calendarMode: CalendarMode = calendarWidth === null ? "full" : getCalendarMode(calendarWidth);
-  const visibleEventLimit = 3;
+  const visibleEventLimit = 2;
   const hideCalendarTime = calendarMode !== "full";
 
   useEffect(() => {
@@ -446,8 +734,24 @@ export default function Kalendarz() {
   }, [viewDate]);
 
   useEffect(() => {
+    writeModuleMemoryValue("calendar", "view", calendarView);
+    const url = new URL(window.location.href);
+    if (calendarView === "month") url.searchParams.delete("view");
+    else url.searchParams.set("view", calendarView);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [calendarView]);
+
+  useEffect(() => {
     writeModuleMemoryValue("calendar", "filter", calendarFilter);
   }, [calendarFilter]);
+
+  useEffect(() => {
+    if (!selectedCalendarDate) return;
+    writeModuleMemoryValue("calendar", "selectedDate", selectedCalendarDate);
+    const url = new URL(window.location.href);
+    url.searchParams.set("date", selectedCalendarDate);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [selectedCalendarDate]);
 
   useLayoutEffect(() => {
     const root = calendarRootRef.current;
@@ -474,11 +778,12 @@ export default function Kalendarz() {
 
   useEffect(() => {
     if (!taskWorkspaceHydrated) return;
+    if (draftId !== null && events.some((event) => event.id === draftId && !event.text.trim())) return;
     const persistedEvents = events.filter((event) => event.text.trim().length > 0);
     const nextWorkspace = replaceCalendarTasks(workspaceRef.current, persistedEvents);
     setStorageFailed(!saveTaskWorkspace(nextWorkspace));
     workspaceRef.current = nextWorkspace;
-  }, [events, taskWorkspaceHydrated]);
+  }, [draftId, events, taskWorkspaceHydrated]);
 
   useEffect(() => {
     const syncWorkspace = () => {
@@ -488,12 +793,12 @@ export default function Kalendarz() {
       setEvents(nextWorkspace.tasks.filter(isTasksCalendarEvent));
       setLists(nextWorkspace.lists);
       setTags(nextWorkspace.tags);
-      setSelectedId((current) => current !== null && nextWorkspace.tasks.some((task) => task.id === current && isCalendarTask(task)) ? current : null);
+      setSelectedId((current) => current !== null && (current === draftId || nextWorkspace.tasks.some((task) => task.id === current && isCalendarTask(task))) ? current : null);
       if (result.status !== "missing") setTaskWorkspaceHydrated(true);
     };
     const unsubscribe = subscribeToLocalWorkspace(TASK_STORAGE_KEY, syncWorkspace);
     return unsubscribe;
-  }, []);
+  }, [draftId]);
 
   const cells = useMemo(() => getCalendarCells(viewDate.getFullYear(), viewDate.getMonth()), [viewDate]);
   const calendarRows = useMemo(
@@ -577,23 +882,54 @@ export default function Kalendarz() {
   const visibleTags = useMemo(() => [...tags]
     .sort((a, b) => (tagUsage[b.id] ?? 0) - (tagUsage[a.id] ?? 0))
     .slice(0, showAllTags ? undefined : VISIBLE_TAG_LIMIT), [showAllTags, tagUsage, tags]);
+  const calendarViewDate = useMemo(() => {
+    const source = selectedCalendarDate ? new Date(`${selectedCalendarDate}T12:00:00`) : viewDate;
+    return Number.isNaN(source.getTime()) ? viewDate : source;
+  }, [selectedCalendarDate, viewDate]);
+  const calendarDateKeysForView = useMemo(() => {
+    if (calendarView === "month") {
+      return cells.map((cell) => dateKey(cell.year, cell.month, cell.day));
+    }
+    if (calendarView === "list") {
+      const datedKeys = filteredEvents
+        .map((event) => event.calendarDate)
+        .filter((value): value is string => Boolean(value))
+        .sort();
+      if (!datedKeys.length) return calendarDateKeys(new Date(viewDate.getFullYear(), viewDate.getMonth(), 1), 31);
+      const first = new Date(`${datedKeys[0]}T12:00:00`);
+      const span = calendarDateOrdinal(datedKeys[datedKeys.length - 1]) - calendarDateOrdinal(datedKeys[0]) + 1;
+      return calendarDateKeys(first, Math.min(Math.max(span, 1), 3660));
+    }
+    if (calendarView === "year") return calendarDateKeys(new Date(viewDate.getFullYear(), 0, 1), 366);
+    if (calendarView === "week") return calendarDateKeys(startOfCalendarWeek(calendarViewDate), 7);
+    if (calendarView === "three-days") return calendarDateKeys(calendarViewDate, 3);
+    return calendarDateKeys(calendarViewDate, 1);
+  }, [calendarView, calendarViewDate, cells, filteredEvents, viewDate]);
   const visibleOccurrences = useMemo(() => {
-    const first = cells[0];
-    const last = cells.at(-1);
-    if (!first || !last) return [] as CalendarOccurrence[];
+    const firstKey = calendarDateKeysForView[0];
+    const lastKey = calendarDateKeysForView.at(-1);
+    if (!firstKey || !lastKey) return [] as CalendarOccurrence[];
     return selectTaskCalendarOccurrences(
       filteredEvents,
-      dateKey(first.year, first.month, first.day),
-      dateKey(last.year, last.month, last.day),
-    ).filter((occurrence) => !occurrence.status.completed);
-  }, [cells, filteredEvents]);
+      firstKey,
+      lastKey,
+    );
+  }, [calendarDateKeysForView, filteredEvents]);
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarOccurrence[]>();
     visibleOccurrences.forEach((event) => grouped.set(event.calendarDate, [...(grouped.get(event.calendarDate) ?? []), event]));
     return grouped;
   }, [visibleOccurrences]);
   const selectedDayOccurrences = selectedCalendarDate ? eventsByDate.get(selectedCalendarDate) ?? [] : [];
-  const selectedTask = selectedId === null ? null : events.find((event) => event.id === selectedId && !event.deleted) ?? null;
+  const selectedTask = selectedId === null ? null : (draftId === selectedId
+    ? events.find((event) => event.id === selectedId && !event.deleted) ?? null
+    : sidebarTasks.find((task) => task.id === selectedId && !task.deleted) ?? null);
+  const undatedTasks = useMemo(
+    () => sidebarTasks
+      .filter((task) => !task.deleted && !task.calendarDate && taskMatchesCalendarFilter(task, calendarFilter))
+      .sort((left, right) => left.text.localeCompare(right.text, "pl")),
+    [calendarFilter, sidebarTasks],
+  );
   const selectedExternalOccurrence = selectedExternalKey === null
     ? null
     : visibleOccurrences.find((occurrence) => occurrence.kind !== "task" && occurrence.key === selectedExternalKey) ?? null;
@@ -689,7 +1025,18 @@ export default function Kalendarz() {
     if ((!selectedTask && !selectedExternalOccurrence) || !anchorDateKey) return;
     const repositionDetail = () => {
       const cell = calendarRootRef.current?.querySelector<HTMLElement>(`[data-calendar-cell="${anchorDateKey}"]`);
-      if (!cell) return;
+      if (!cell) {
+        const width = Math.min(520, Math.max(320, window.innerWidth - 16));
+        const height = Math.min(520, Math.max(300, window.innerHeight - 16));
+        setDetailPosition({
+          left: Math.max(8, (window.innerWidth - width) / 2),
+          top: Math.max(8, (window.innerHeight - height) / 2),
+          width,
+          height,
+          ready: true,
+        });
+        return;
+      }
       const cellRect = cell.getBoundingClientRect();
       const width = Math.min(Math.max(cellRect.width * 1.5, 320), 520, window.innerWidth - 16);
       const height = Math.min(Math.max(cellRect.height * 1.5, 300), 520, window.innerHeight - 16);
@@ -713,7 +1060,7 @@ export default function Kalendarz() {
       window.removeEventListener("resize", repositionDetail);
       window.removeEventListener("scroll", repositionDetail, true);
     };
-  }, [selectedExternalOccurrence, selectedTask, anchorDateKey, viewDate]);
+  }, [calendarView, selectedExternalOccurrence, selectedTask, anchorDateKey, viewDate]);
 
   const closeTaskDetail = useCallback((restoreFocus = true) => {
     const currentState = window.history.state as { rootineCalendarDetail?: unknown } | null;
@@ -759,10 +1106,9 @@ export default function Kalendarz() {
   };
 
   const switchTasksViewMode = (mode: "list" | "calendar") => {
-    if (mode === "calendar") return;
-    saveTasksViewMode("list");
-    saveTaskSidebarState({ taskView: "wszystkie", listFilter: null, tagFilter: null });
-    switchRoute("/zadania");
+    const nextView: CalendarView = mode === "list" ? "list" : "month";
+    saveTasksViewMode(mode === "list" ? "list" : "calendar");
+    setCalendarView(nextView);
   };
 
   const applyCalendarFilter = (nextFilter: CalendarFilter) => {
@@ -777,6 +1123,9 @@ export default function Kalendarz() {
 
   const selectEvent = (event: CalendarOccurrence, trigger?: HTMLElement) => {
     if (trigger) detailReturnFocusRef.current = trigger;
+    setSelectedCalendarDate(event.calendarDate);
+    setFocusedDateKey(event.calendarDate);
+    setIsDayPanelOpen(true);
     if (event.kind !== "task") {
       if (selectedExternalKey === event.key) {
         closeTaskDetail();
@@ -804,6 +1153,19 @@ export default function Kalendarz() {
     window.history.pushState({
       ...(window.history.state ?? {}),
       rootineCalendarDetail: { kind: "task", id, date: event.task.occurrence.date },
+    }, "", window.location.href);
+  };
+  const selectUndatedTask = (task: Task, trigger: HTMLElement) => {
+    detailReturnFocusRef.current = trigger;
+    const anchorDate = selectedCalendarDate ?? todayKey();
+    setIsDayPanelOpen(false);
+    setSelectedExternalKey(null);
+    setAnchorDateKey(anchorDate);
+    setSelectedId(task.id);
+    setSelectedOccurrenceDate(null);
+    window.history.pushState({
+      ...(window.history.state ?? {}),
+      rootineCalendarDetail: { kind: "task", id: task.id },
     }, "", window.location.href);
   };
 
@@ -872,8 +1234,21 @@ export default function Kalendarz() {
   }, [closeTaskDetail, draftId, selectedDetailId, selectedId]);
 
   const moveMonth = (amount: number) => {
-    setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+    if (calendarView === "month" || calendarView === "list") {
+      setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+    } else if (calendarView === "year") {
+      setViewDate((current) => new Date(current.getFullYear() + amount, current.getMonth(), 1));
+    } else {
+      const step = calendarView === "week" ? 7 : calendarView === "three-days" ? 3 : 1;
+      const nextDate = new Date(calendarViewDate);
+      nextDate.setDate(nextDate.getDate() + amount * step);
+      const nextKey = dateKey(nextDate.getFullYear(), nextDate.getMonth(), nextDate.getDate());
+      setSelectedCalendarDate(nextKey);
+      setFocusedDateKey(nextKey);
+      setViewDate(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+    }
     setAgendaDateKey(null);
+    setIsDayPanelOpen(false);
     closeTaskDetail();
   };
   const goToday = () => {
@@ -947,6 +1322,17 @@ export default function Kalendarz() {
       occurrence.occurrence.date,
       !occurrence.done,
     );
+  };
+  const toggleUndatedTask = (task: Task) => {
+    const nextWorkspace = {
+      ...workspaceRef.current,
+      tasks: workspaceRef.current.tasks.map((current) => current.id === task.id
+        ? setTaskDoneState(current, !current.done)
+        : current),
+    };
+    workspaceRef.current = nextWorkspace;
+    setStorageFailed(!saveTaskWorkspace(nextWorkspace));
+    setEvents((current) => [...current]);
   };
   const moveTaskToDate = (id: number, calendarDate: string) => {
     const source = events.find((event) => event.id === id);
@@ -1034,11 +1420,15 @@ export default function Kalendarz() {
     setFocusedDateKey(calendarDate);
     setAgendaDateKey(null);
     closeTaskDetail(false);
-    setSelectedCalendarDate((current) => calendarMode === "compact" && current === calendarDate ? null : calendarDate);
+    setSelectedCalendarDate(calendarDate);
   };
   const activateCalendarDate = (calendarDate: string) => {
-    if (calendarMode === "full") createDraft(calendarDate);
-    else selectCalendarDate(calendarDate);
+    if (isDayPanelOpen && selectedCalendarDate === calendarDate) {
+      setIsDayPanelOpen(false);
+      return;
+    }
+    selectCalendarDate(calendarDate);
+    setIsDayPanelOpen(true);
   };
 
   return (
@@ -1160,7 +1550,7 @@ export default function Kalendarz() {
       <ModuleMain className="calendar-module-main" transitionKey={`${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, "0")}-01`}>
         <ContentHeader
           headingLevel={1}
-          title={formatHeaderDate(viewDate)}
+          title={calendarView === "year" ? `Rok ${viewDate.getFullYear()}` : calendarView === "month" || calendarView === "list" ? formatHeaderDate(viewDate) : formatDateNavigator(calendarViewDate)}
           meta={storageFailed ? <Button variant="quiet" size="sm" onClick={retryTaskSave}>Spróbuj zapisać ponownie</Button> : undefined}
           // The open count belongs in the description, exactly as in the task list. As a badge in
           // `meta` it sat next to a 28px button and made the calendar header 9px taller than the
@@ -1234,7 +1624,26 @@ export default function Kalendarz() {
                 <CalendarDays size={13} strokeWidth={1.7} />
               </Button>
             </div>
-            <Button className="ui-button--icon-mobile" variant="primary" onClick={() => createDraft()} leadingIcon={<Plus size={13} strokeWidth={1.7} />}><span className="header-action-label">Dodaj zadanie</span></Button>
+            <CalendarViewMenu value={calendarView} onChange={setCalendarView} />
+            <div className="calendar-global-add-wrap">
+              <Button
+                className="ui-button--icon-mobile calendar-global-add"
+                variant="primary"
+                aria-haspopup="menu"
+                aria-expanded={calendarAddOpen}
+                onClick={() => setCalendarAddOpen((open) => !open)}
+                leadingIcon={<Plus size={13} strokeWidth={1.7} />}
+              >
+                <span className="header-action-label">Dodaj</span>
+              </Button>
+              {calendarAddOpen && (
+                <div className="calendar-add-menu" role="menu" aria-label="Dodaj do kalendarza">
+                  <button type="button" role="menuitem" onClick={() => { setCalendarAddOpen(false); createDraft(selectedCalendarDate ?? todayKey()); }}>Zadanie</button>
+                  <button type="button" role="menuitem" onClick={() => { setCalendarAddOpen(false); createDraft(selectedCalendarDate ?? todayKey()); }}>Wydarzenie</button>
+                  <button type="button" role="menuitem" onClick={() => { setCalendarAddOpen(false); switchRoute("/zadania?widok=nawyki"); }}>Nawyk</button>
+                </div>
+              )}
+            </div>
           </div>
           </>}
         />
@@ -1261,7 +1670,7 @@ export default function Kalendarz() {
         {/* A <div> rather than <section>: ARIA does not allow role="grid" on a sectioning
             element, and the grid already carries its own accessible name. */}
         <div ref={calendarRootRef} className={`calendar-workspace calendar-workspace--${calendarMode}`}>
-        <div
+        {calendarView === "month" ? <div
           role="grid"
           aria-label={`Kalendarz: ${formatHeaderDate(viewDate)}`}
           aria-colcount={7}
@@ -1462,13 +1871,39 @@ export default function Kalendarz() {
           </div>
         ))}
           </div>
-        </div>
-        {selectedCalendarDate && calendarMode !== "full" && (
+        </div> : calendarView === "year" ? (
+          <CalendarYearView
+            value={viewDate}
+            eventsByDate={eventsByDate}
+            onSelectMonth={(month) => {
+              setViewDate(new Date(viewDate.getFullYear(), month, 1));
+              setCalendarView("month");
+            }}
+          />
+        ) : calendarView === "list" ? (
+          <CalendarListView
+            dateKeys={calendarDateKeysForView}
+            eventsByDate={eventsByDate}
+            undatedTasks={undatedTasks}
+            onSelect={selectEvent}
+            onSelectUndated={selectUndatedTask}
+            onToggle={toggleOccurrence}
+            onToggleUndated={toggleUndatedTask}
+          />
+        ) : (
+          <CalendarTimeView
+            dateKeys={calendarDateKeysForView}
+            eventsByDate={eventsByDate}
+            onSelect={selectEvent}
+            onToggle={toggleOccurrence}
+          />
+        )}
+        {isDayPanelOpen && selectedCalendarDate && (
           <CalendarDayPanel
             calendarDate={selectedCalendarDate}
             events={selectedDayOccurrences}
             mode={calendarMode}
-            onClose={() => setSelectedCalendarDate(null)}
+            onClose={() => setIsDayPanelOpen(false)}
             onAddTask={() => createDraft(selectedCalendarDate)}
             onSelectEvent={selectEvent}
             onToggle={toggleOccurrence}
