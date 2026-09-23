@@ -1,0 +1,24 @@
+name: iOS screenshots
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build SwiftUI app and capture its entry screen
+        run: python3 scripts/ios-screenshot.py --name welcome
+      - name: Save screenshots and capture metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rootine-ios-${{ github.sha }}
+          path: output/ios/
+          if-no-files-found: warn
+          retention-days: 14

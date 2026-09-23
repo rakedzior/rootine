@@ -1,0 +1,49 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "x86_64",
+        "deviceId" : "35728ECB-E355-4583-9361-8D10A04C0E2A",
+        "deviceName" : "Rootine Windows Verification",
+        "modelName" : "iPhone 14",
+        "osBuildNumber" : "23D8133",
+        "osVersion" : "26.3.1",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 177,
+      "skippedTests" : 2,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "RootineHeadless · Built with macOS 15.7.9",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1790199951.432,
+  "passedTests" : 177,
+  "result" : "Passed",
+  "skippedTests" : 2,
+  "startTime" : 1790199912.63,
+  "statistics" : [
+    {
+      "subtitle" : "1 test run",
+      "title" : "1 test collected performance metrics"
+    }
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - RootineHeadless",
+  "topInsights" : [
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "81% of duration",
+      "text" : "1 longest test run with outlier durations exceeding 2.10s (three standard deviations)"
+    }
+  ],
+  "totalTestCount" : 179
+}

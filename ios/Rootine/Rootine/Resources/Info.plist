@@ -65,6 +65,13 @@
 	<string>$(ROOTINE_SUPABASE_URL)</string>
 	<key>ROOTINE_TERMS_URL</key>
 	<string>$(ROOTINE_TERMS_URL)</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict/>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

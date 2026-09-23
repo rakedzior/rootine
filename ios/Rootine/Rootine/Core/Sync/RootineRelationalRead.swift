@@ -125,10 +125,7 @@ final class UserDefaultsRootineReadFeatureFlagStore: RootineReadFeatureFlagStore
         // migration; new writes never update that raw key.
         let legacy = legacyKey(accountID: accountID, environment: environment)
         guard let legacyObject = defaults.object(forKey: legacy) else { return false }
-        guard let value = legacyObject as? Bool else {
-            defaults.removeObject(forKey: legacy)
-            return false
-        }
+        guard let value = legacyObject as? Bool else { return false }
         defaults.set(value, forKey: currentKey)
         return value
     }
@@ -513,7 +510,10 @@ enum RootineRelationalWorkspaceAdapter {
             }
             result.documents[key] = document
             result.revisions[key] = max(result.revisions[key] ?? 0, change.revision ?? change.cursor)
-            let recordKey = "\(key)\u{1F}\(normalized(change.entity))\u{1F}\(normalized(change.entityID))"
+            // Entity names are aliases; record IDs are opaque. Removing a
+            // hyphen from an ID makes CAS revisions collide or disappear.
+            let recordID = change.entityID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let recordKey = "\(key)\u{1F}\(normalized(change.entity))\u{1F}\(recordID)"
             result.recordRevisions[recordKey] = max(
                 result.recordRevisions[recordKey] ?? 0,
                 change.revision ?? change.cursor
@@ -531,7 +531,18 @@ enum RootineRelationalWorkspaceAdapter {
         guard let payload = materialization.documents[rawKey] else {
             throw RootineNormalizedReadError.materializationFailed("brak \(rawKey)")
         }
-        do { return try JSONDecoder().decode(T.self, from: JSONEncoder().encode(payload)) }
+        do {
+            // The retained document is canonical, not the smaller native
+            // projection. Decode through the same boundary used by snapshot
+            // sync while keeping the original payload available to the web.
+            if type == SportWorkspace.self, let value = try RootineCanonicalWorkspaceMapping.sportWorkspace(from: payload) as? T { return value }
+            if type == GoalsWorkspace.self, let value = try RootineCanonicalWorkspaceMapping.goalsWorkspace(from: payload) as? T { return value }
+            if type == WorkWorkspace.self, let value = try RootineCanonicalWorkspaceMapping.workWorkspace(from: payload) as? T { return value }
+            if type == TravelWorkspace.self, let value = try RootineCanonicalWorkspaceMapping.travelWorkspace(from: payload) as? T { return value }
+            if type == HealthWorkspace.self, let value = try RootineCanonicalWorkspaceMapping.healthWorkspace(from: payload) as? T { return value }
+            if type == NotesWorkspace.self, let value = try RootineCanonicalWorkspaceMapping.notesWorkspace(from: payload) as? T { return value }
+            return try JSONDecoder().decode(T.self, from: JSONEncoder().encode(payload))
+        }
         catch { throw RootineNormalizedReadError.materializationFailed("nie można zdekodować \(rawKey)") }
     }
 
@@ -620,7 +631,7 @@ enum RootineRelationalWorkspaceAdapter {
         guard case .object(var root) = document, case .object(var row) = record else {
             throw RootineNormalizedReadError.materializationFailed("wiersz \(entity) nie jest obiektem")
         }
-        let id = stringValue(row["id"]) ?? normalized(entityID)
+        let id = stringValue(row["id"]) ?? entityID.trimmingCharacters(in: .whitespacesAndNewlines)
         if !id.isEmpty { row["id"] = idValue(id, like: row["id"]) }
         let name = normalized(entity)
         switch key {
@@ -901,7 +912,8 @@ enum RootineRelationalWorkspaceAdapter {
             value["kind"] = row["kind"] ?? .string("text")
             value["items"] = row["items"] ?? .array([])
             value["tags"] = row["tags"] ?? .array([])
-            value["listId"] = row["listId"] ?? row["list_id"] ?? .string("")
+            // A nullable relational foreign key means the native inbox.
+            value["listId"] = .string(stringValue(row["listId"] ?? row["list_id"]) ?? "")
             value["color"] = row["color"] ?? .string("graphite")
             value["pinned"] = row["pinned"] ?? .bool(false)
             value["archived"] = row["archived"] ?? .bool(false)

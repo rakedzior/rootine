@@ -2,10 +2,9 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
-/// Daily nutrition is deliberately a quick log, not a spreadsheet. The first
-/// screen answers "how am I doing?" and keeps the next useful action within one
-/// tap. The detailed input remains in a native sheet so keyboard focus and
-/// dismissal follow the system conventions.
+/// A compact daily ledger: the balance stays above water and the four meals.
+/// Every meal is both an add target and a drop target, so changes remain local
+/// to the part of the day the user is working on.
 struct NutritionView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -14,7 +13,6 @@ struct NutritionView: View {
     @State private var selectedMeal: NutritionMealKind = .breakfast
     @State private var isShowingAddEntry = false
     @State private var editorTarget: NutritionEditorTarget?
-    @State private var hasAppeared = false
     @State private var entryToDelete: DeletedNutritionEntry?
     @State private var deletedEntry: DeletedNutritionEntry?
     @State private var resolvedBarcodeRequest: NutritionBarcodeRequest?
@@ -35,30 +33,10 @@ struct NutritionView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
-                NutritionDateRail(date: $selectedDate)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-
-                if case .localOnly = environment.workspaceSyncStatus {
-                    RootineOfflineBanner(message: "Dane są zapisane na tym iPhonie. Synchronizacja wróci online automatycznie.")
-                } else if case .conflict = environment.workspaceSyncStatus {
-                    RootineOfflineBanner(message: "Wykryto konflikt synchronizacji. Twoje lokalne wpisy są bezpieczne.")
-                }
-
-                if let pendingBarcodes = environment.nutritionWorkspace.pendingBarcodeLookups,
-                   !pendingBarcodes.isEmpty {
-                    let resolved = pendingBarcodes.filter { $0.resolvedProduct != nil }
-                    let waiting = pendingBarcodes.filter { $0.resolvedProduct == nil }
-                    if !resolved.isEmpty {
-                        resolvedBarcodeSection(resolved)
-                    }
-                    if !waiting.isEmpty {
-                        RootineOfflineBanner(
-                            message: waiting.count == 1
-                                ? "Kod produktu zapisany lokalnie. Ponowimy wyszukiwanie po połączeniu."
-                                : "\(waiting.count) kody produktów zapisane lokalnie. Ponowimy wyszukiwanie po połączeniu."
-                        )
-                    }
+            LazyVStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 4) {
+                    NutritionDateRail(date: $selectedDate)
+                    dayOptions
                 }
 
                 NutritionSummaryCard(
@@ -69,46 +47,26 @@ struct NutritionView: View {
                     carbs: carbs,
                     fat: fat
                 )
-                .offset(y: hasAppeared ? 0 : 12)
-                .opacity(hasAppeared ? 1 : 0)
-
-                RootinePrimaryButton("Dodaj produkt", systemImage: "plus", isWorking: environment.isWorking) {
-                    selectedMeal = suggestedMeal
-                    isShowingAddEntry = true
-                }
-                .frame(minHeight: 48)
-                .accessibilityHint("Otwiera katalog produktów i formularz ręcznego wpisu")
 
                 NutritionWaterCard(
                     current: day.waterMl,
                     goal: goals.waterMl,
                     onChange: { amount in
+                        let targetDate = dateKey
                         performAnimated {
                             _Concurrency.Task<Void, Never> {
-                                await environment.addWater(dateKey: dateKey, amountMl: amount)
+                                await environment.addWater(dateKey: targetDate, amountMl: amount)
                             }
                         }
                     }
                 )
-                .offset(y: hasAppeared ? 0 : 18)
-                .opacity(hasAppeared ? 1 : 0)
 
-                NutritionQuickLinks(goals: goals, calories: calories, water: day.waterMl, dateKey: dateKey, meal: selectedMeal)
-
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("Dziennik posiłków")
-                            .font(.title3.weight(.bold))
-                        Spacer(minLength: RootineTheme.Spacing.small)
-                        Text("\(entries.count) \(entries.count == 1 ? "wpis" : "wpisów")")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    }
-
-                    ForEach(Array(NutritionMealKind.allCases.enumerated()), id: \.element.id) { index, meal in
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(NutritionMealKind.allCases) { meal in
                         NutritionMealCard(
                             meal: meal,
                             entries: entries(for: meal),
+                            dateKey: dateKey,
                             onAdd: {
                                 selectedMeal = meal
                                 isShowingAddEntry = true
@@ -118,25 +76,38 @@ struct NutritionView: View {
                             },
                             onEdit: { entry in
                                 editorTarget = NutritionEditorTarget(dateKey: dateKey, meal: meal, entry: entry)
+                            },
+                            onDuplicate: { entry in
+                                duplicate(entry, in: meal)
+                            },
+                            onMove: { entry, destination in
+                                move(entry, from: meal, to: destination)
+                            },
+                            onDropEntry: { value in
+                                receiveDrop(value, into: meal)
                             }
                         )
-                        .offset(y: hasAppeared ? 0 : CGFloat(24 + index * 6))
-                        .opacity(hasAppeared ? 1 : 0)
                     }
                 }
 
-                RootineSecondaryButton(
-                    day.closedAt == nil ? "Zamknij dzień" : "Otwórz dzień ponownie",
-                    systemImage: day.closedAt == nil ? "checkmark.seal" : "arrow.uturn.backward"
-                ) {
-                    performAnimated {
-                        _Concurrency.Task<Void, Never> {
-                            await environment.toggleNutritionDayClosed(dateKey: dateKey)
-                        }
+                if day.closedAt != nil {
+                    Label("Dzień zamknięty", systemImage: "checkmark.seal")
+                        .font(.footnote)
+                        .foregroundStyle(RootineTheme.ColorToken.success)
+                        .frame(maxWidth: .infinity)
+                }
+
+                if let pending = environment.nutritionWorkspace.pendingBarcodeLookups,
+                   !pending.isEmpty {
+                    let resolved = pending.filter { $0.resolvedProduct != nil }
+                    if !resolved.isEmpty { resolvedBarcodeSection(resolved) }
+                    let waitingCount = pending.filter { $0.resolvedProduct == nil }.count
+                    if waitingCount > 0 {
+                        Label("Kody do wyszukania: \(waitingCount). Ponowimy po połączeniu.", systemImage: "barcode")
+                            .font(.footnote)
+                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     }
                 }
-                .tint(day.closedAt == nil ? RootineTheme.ColorToken.action : RootineTheme.ColorToken.success)
-                .frame(maxWidth: .infinity, minHeight: 48)
             }
             .padding(.horizontal, RootineTheme.Spacing.medium)
             .padding(.top, RootineTheme.Spacing.small)
@@ -144,6 +115,10 @@ struct NutritionView: View {
         }
         .scrollIndicators(.hidden)
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
+        .rootineScreenChrome(title: "Odżywianie", addLabel: "Dodaj posiłek", onAdd: {
+            selectedMeal = suggestedMeal
+            isShowingAddEntry = true
+        })
         .overlay(alignment: .bottom) {
             if let deletedEntry {
                 RootineUndoBanner(message: "Usunięto \(deletedEntry.entry.name)") {
@@ -152,13 +127,6 @@ struct NutritionView: View {
                 .padding(.horizontal, RootineTheme.Spacing.medium)
                 .padding(.bottom, RootineTheme.Spacing.small)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .onAppear {
-            if reduceMotion {
-                hasAppeared = true
-            } else {
-                withAnimation(.easeOut(duration: 0.42)) { hasAppeared = true }
             }
         }
         .task {
@@ -198,12 +166,49 @@ struct NutritionView: View {
         ) {
             if let entryToDelete {
                 Button("Usuń wpis", role: .destructive) {
-                    delete(entry: entryToDelete.entry, from: entryToDelete.meal)
+                    delete(entryToDelete)
                     self.entryToDelete = nil
                 }
             }
             Button("Anuluj", role: .cancel) {}
         }
+    }
+
+    private var dayOptions: some View {
+        Menu {
+            NavigationLink {
+                NutritionGoalsView(goals: goals)
+            } label: {
+                Label("Cele żywieniowe", systemImage: "target")
+            }
+            NavigationLink {
+                NutritionAnalysisView(goals: goals, calories: calories, water: day.waterMl, dateKey: dateKey)
+            } label: {
+                Label("Analiza i pomiary", systemImage: "chart.bar.xaxis")
+            }
+            NavigationLink {
+                NutritionCustomMealsView(dateKey: dateKey, meal: suggestedMeal)
+            } label: {
+                Label("Zapisane posiłki", systemImage: "fork.knife.circle")
+            }
+            Divider()
+            Button {
+                let targetDate = dateKey
+                Task { await environment.toggleNutritionDayClosed(dateKey: targetDate) }
+            } label: {
+                Label(
+                    day.closedAt == nil ? "Zamknij dzień" : "Otwórz dzień ponownie",
+                    systemImage: day.closedAt == nil ? "checkmark.seal" : "arrow.uturn.backward"
+                )
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.headline)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+        .accessibilityLabel("Opcje odżywiania")
     }
 
     private var suggestedMeal: NutritionMealKind {
@@ -273,13 +278,52 @@ struct NutritionView: View {
         }
     }
 
-    private func delete(entry: NutritionEntry, from meal: NutritionMealKind) {
-        deletedEntry = DeletedNutritionEntry(entry: entry, meal: meal, dateKey: dateKey)
+    private func delete(_ target: DeletedNutritionEntry) {
+        deletedEntry = target
         performAnimated {
             _Concurrency.Task<Void, Never> {
-                await environment.deleteNutritionEntry(dateKey: dateKey, meal: meal.rawValue, id: entry.id)
+                await environment.deleteNutritionEntry(dateKey: target.dateKey, meal: target.meal.rawValue, id: target.entry.id)
             }
         }
+    }
+
+    private func duplicate(_ entry: NutritionEntry, in meal: NutritionMealKind) {
+        let targetDate = dateKey
+        Task {
+            await environment.addNutritionEntry(
+                dateKey: targetDate, meal: meal.rawValue, name: entry.name, portion: entry.portion,
+                calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat,
+                amount: entry.amount, unit: entry.unit, brand: entry.brand,
+                catalogId: entry.catalogId, catalogSource: entry.catalogSource, per100g: entry.per100g
+            )
+        }
+    }
+
+    private func move(_ entry: NutritionEntry, from source: NutritionMealKind, to destination: NutritionMealKind) {
+        guard source != destination else { return }
+        let targetDate = dateKey
+        Task {
+            await environment.updateNutritionEntry(
+                dateKey: targetDate, originalMeal: source.rawValue, meal: destination.rawValue,
+                id: entry.id, name: entry.name, portion: entry.portion,
+                calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat,
+                amount: entry.amount, unit: entry.unit, brand: entry.brand,
+                catalogId: entry.catalogId, catalogSource: entry.catalogSource, per100g: entry.per100g
+            )
+        }
+    }
+
+    private func receiveDrop(_ value: String, into destination: NutritionMealKind) -> Bool {
+        let prefix = "rootine-nutrition|\(dateKey)|"
+        guard value.hasPrefix(prefix) else { return false }
+        let entryID = String(value.dropFirst(prefix.count))
+        for meal in NutritionMealKind.allCases where meal != destination {
+            if let entry = entries(for: meal).first(where: { $0.id == entryID }) {
+                move(entry, from: meal, to: destination)
+                return true
+            }
+        }
+        return false
     }
 
     private func requestDelete(entry: NutritionEntry, from meal: NutritionMealKind) {
@@ -315,9 +359,18 @@ private struct NutritionEditorTarget: Identifiable {
 
 private struct NutritionDateRail: View {
     @Binding var date: Date
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isShowingDatePicker = false
+
+    private var title: String {
+        if Calendar.current.isDateInToday(date) { return "Dzisiaj" }
+        if Calendar.current.isDateInYesterday(date) { return "Wczoraj" }
+        if Calendar.current.isDateInTomorrow(date) { return "Jutro" }
+        return date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "pl_PL"))).capitalized
+    }
 
     var body: some View {
-        HStack(spacing: RootineTheme.Spacing.small) {
+        HStack(spacing: 0) {
             Button { shift(-1) } label: {
                 Image(systemName: "chevron.left")
                     .frame(width: 44, height: 44)
@@ -326,11 +379,21 @@ private struct NutritionDateRail: View {
             .buttonStyle(.borderless)
             .accessibilityLabel("Poprzedni dzień")
 
-            DatePicker("Dzień", selection: $date, displayedComponents: .date)
-                .datePickerStyle(.compact)
-                .labelsHidden()
+            Button { isShowingDatePicker = true } label: {
+                VStack(spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(date.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "pl_PL"))))
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                }
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("Wybrany dzień")
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Wybierz dzień, \(title), \(RootineDate.localDate(date))")
+            .accessibilityHint("Przesuń pasek w lewo lub w prawo, aby zmienić dzień")
 
             Button { shift(1) } label: {
                 Image(systemName: "chevron.right")
@@ -342,12 +405,42 @@ private struct NutritionDateRail: View {
         }
         .font(.headline)
         .foregroundStyle(RootineTheme.ColorToken.primaryText)
-        .padding(.horizontal, RootineTheme.Spacing.small)
-        .rootineSurface()
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 35)
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
+                    shift(value.translation.width < 0 ? 1 : -1)
+                }
+        )
+        .sheet(isPresented: $isShowingDatePicker) {
+            NavigationStack {
+                VStack {
+                    DatePicker("Dzień", selection: $date, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                        .tint(RootineTheme.ColorToken.action)
+                    Button("Wróć do dzisiaj") { date = Date(); isShowingDatePicker = false }
+                        .frame(minHeight: 44)
+                    Spacer(minLength: 0)
+                }
+                .padding()
+                .background(RootineTheme.ColorToken.canvas)
+                .navigationTitle("Wybierz dzień")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Gotowe") { isShowingDatePicker = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 
     private func shift(_ days: Int) {
-        date = Calendar.current.date(byAdding: .day, value: days, to: date) ?? date
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+            date = Calendar.current.date(byAdding: .day, value: days, to: date) ?? date
+        }
     }
 }
 
@@ -364,52 +457,55 @@ private struct NutritionSummaryCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                    Text("Bilans dnia")
-                        .font(.headline)
-                    Text("\(Int(calories.rounded())) kcal")
-                        .font(.largeTitle.weight(.bold))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text(calorieStatusText)
-                        .font(.subheadline)
-                        .foregroundStyle(calorieStatusColor)
-                }
-                Spacer(minLength: RootineTheme.Spacing.medium)
-                VStack(alignment: .trailing, spacing: RootineTheme.Spacing.xSmall) {
-                    Text("Cel")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Zjedzone")
                         .font(.caption)
                         .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    Text("\(Int(goals.calories.rounded())) kcal")
-                        .font(.subheadline.weight(.semibold))
-                    Text("\(Int(calorieProgress * 100))%")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.action)
+                    (Text("\(Int(calories.rounded())) ").font(.title2.weight(.semibold))
+                     + Text("kcal").font(.subheadline))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                }
+                Spacer(minLength: 12)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(calorieDelta < 0 ? "Ponad cel" : "Pozostało")
+                        .font(.caption)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    Text("\(Int(abs(calorieDelta).rounded())) kcal")
+                        .font(.headline)
+                        .monospacedDigit()
+                        .foregroundStyle(calorieStatusColor)
                 }
             }
+            VStack(spacing: 6) {
+                ProgressView(value: calorieProgress)
+                    .tint(calorieDelta < 0 ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.action)
+                    .accessibilityLabel("Realizacja celu kalorii")
+                    .accessibilityValue(calorieStatusText)
+                HStack {
+                    Text("Cel \(Int(goals.calories.rounded())) kcal")
+                    Spacer()
+                    Text(goals.calories > 0 ? "\(Int((calories / goals.calories * 100).rounded()))%" : "Ustaw cel w opcjach")
+                }
+                .font(.caption)
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                .monospacedDigit()
+            }
 
-            ProgressView(value: calorieProgress)
-                .tint(calorieDelta < 0 ? RootineTheme.ColorToken.warning : RootineTheme.ColorToken.action)
-                .accessibilityLabel("Realizacja celu kalorii")
-                .accessibilityValue(calorieStatusText)
+            Divider().overlay(RootineTheme.ColorToken.separator)
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: RootineTheme.Spacing.small) {
                     MacroValue(label: "Białko", value: protein, goal: goals.protein, tint: RootineTheme.ColorToken.success)
-                    MacroValue(label: "Węgle", value: carbs, goal: goals.carbs, tint: RootineTheme.ColorToken.warning)
+                    MacroValue(label: "Węglowodany", value: carbs, goal: goals.carbs, tint: RootineTheme.ColorToken.warning)
                     MacroValue(label: "Tłuszcz", value: fat, goal: goals.fat, tint: RootineTheme.ColorToken.action)
                 }
                 VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
-                    HStack {
-                        MacroValue(label: "Białko", value: protein, goal: goals.protein, tint: RootineTheme.ColorToken.success)
-                        MacroValue(label: "Węgle", value: carbs, goal: goals.carbs, tint: RootineTheme.ColorToken.warning)
-                    }
-                    HStack {
-                        MacroValue(label: "Tłuszcz", value: fat, goal: goals.fat, tint: RootineTheme.ColorToken.action)
-                        Spacer()
-                    }
+                    MacroValue(label: "Białko", value: protein, goal: goals.protein, tint: RootineTheme.ColorToken.success)
+                    MacroValue(label: "Węglowodany", value: carbs, goal: goals.carbs, tint: RootineTheme.ColorToken.warning)
+                    MacroValue(label: "Tłuszcz", value: fat, goal: goals.fat, tint: RootineTheme.ColorToken.action)
                 }
             }
         }
@@ -426,7 +522,7 @@ private struct NutritionSummaryCard: View {
     private var calorieStatusColor: Color {
         if calorieDelta < 0 { return RootineTheme.ColorToken.warning }
         if calorieDelta == 0 { return RootineTheme.ColorToken.success }
-        return RootineTheme.ColorToken.secondaryText
+        return RootineTheme.ColorToken.primaryText
     }
 }
 
@@ -441,16 +537,22 @@ private struct MacroValue: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-            Text("\(Int(value.rounded())) g")
-                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: true, vertical: false)
+            Text("\(Int(value.rounded())) / \(Int(goal.rounded())) g")
+                .font(.caption.weight(.semibold))
                 .monospacedDigit()
-            Text("z \(Int(goal.rounded()))")
+                .fixedSize(horizontal: true, vertical: false)
+            ProgressView(value: min(1, goal > 0 ? value / goal : 0))
+                .tint(tint)
+                .accessibilityHidden(true)
+            Text(value > goal ? "+\(Int((value - goal).rounded())) g ponad cel" : "Zostało \(Int((goal - value).rounded())) g")
                 .font(.caption2)
-                .foregroundStyle(tint)
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(Int(value.rounded())) gramów z \(Int(goal.rounded()))")
+        .accessibilityLabel("\(label), zjedzone \(Int(value.rounded())) gramów, cel \(Int(goal.rounded())) gramów, \(value > goal ? "ponad cel" : "pozostało") \(Int(abs(goal - value).rounded())) gramów")
     }
 }
 
@@ -462,99 +564,76 @@ private struct NutritionWaterCard: View {
     private var progress: Double { min(1, goal > 0 ? current / goal : 0) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("Woda", systemImage: "drop.fill")
-                    .font(.headline)
-                Spacer(minLength: RootineTheme.Spacing.small)
-                Text("\(Int(current.rounded())) / \(Int(goal.rounded())) ml")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.action)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                waterInfo
+                Spacer(minLength: 0)
+                waterActions
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                waterInfo
+                HStack { Spacer(); waterActions }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+        .background(RootineTheme.ColorToken.surface, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var waterInfo: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "drop.fill")
+                .font(.body)
+                .foregroundStyle(RootineTheme.ColorToken.action)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Woda · \(Int(current.rounded())) / \(Int(goal.rounded())) ml")
+                    .font(.caption.weight(.medium))
+                    .fixedSize(horizontal: true, vertical: false)
                     .monospacedDigit()
                     .contentTransition(.numericText())
-            }
-
-            ProgressView(value: progress)
-                .tint(RootineTheme.ColorToken.action)
-                .accessibilityLabel("Realizacja celu wody")
-                .accessibilityValue("\(Int(progress * 100)) procent")
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: RootineTheme.Spacing.small) { actionButtons }
-                VStack(spacing: RootineTheme.Spacing.small) { actionButtons }
+                ProgressView(value: progress)
+                    .tint(RootineTheme.ColorToken.action)
+                    .accessibilityLabel("Realizacja celu wody")
+                    .accessibilityValue("\(Int(progress * 100)) procent")
             }
         }
-        .foregroundStyle(RootineTheme.ColorToken.primaryText)
-        .rootineSurface()
     }
 
-    @ViewBuilder
-    private var actionButtons: some View {
-        ForEach([250.0, 500.0, 750.0], id: \.self) { amount in
-            Button("+\(Int(amount)) ml") { onChange(amount) }
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(RootineTheme.ColorToken.elevated)
-                .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
-                .accessibilityHint("Dodaje \(Int(amount)) mililitrów")
+    private var waterActions: some View {
+        HStack(spacing: 2) {
+            Button { onChange(-250) } label: {
+                Image(systemName: "minus")
+                    .font(.subheadline.weight(.medium))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(current <= 0)
+            .accessibilityLabel("Odejmij 250 ml wody")
+            Button { onChange(250) } label: {
+                Text("+250")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RootineTheme.ColorToken.action)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dodaj 250 ml wody")
+            .contextMenu {
+                Button("Dodaj 250 ml") { onChange(250) }
+                Button("Dodaj 500 ml") { onChange(500) }
+                Button("Dodaj 750 ml") { onChange(750) }
+            }
+            .accessibilityHint("Przytrzymaj, aby wybrać inną ilość")
         }
-        Button { onChange(-250) } label: {
-            Image(systemName: "minus")
-                .frame(minWidth: 44, minHeight: 44)
-        }
-        .buttonStyle(.bordered)
-        .tint(RootineTheme.ColorToken.secondaryText)
-        .accessibilityLabel("Odejmij 250 ml")
-    }
-}
-
-private struct NutritionQuickLinks: View {
-    let goals: NutritionGoals
-    let calories: Double
-    let water: Double
-    let dateKey: String
-    let meal: NutritionMealKind
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: RootineTheme.Spacing.small) { links }
-            VStack(spacing: RootineTheme.Spacing.small) { links }
-        }
-    }
-
-    @ViewBuilder
-    private var links: some View {
-        NavigationLink {
-            NutritionGoalsView(goals: goals)
-        } label: {
-            Label("Cele", systemImage: "target")
-                .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(.bordered)
-        .tint(RootineTheme.ColorToken.success)
-
-        NavigationLink {
-            NutritionAnalysisView(goals: goals, calories: calories, water: water)
-        } label: {
-            Label("Analiza", systemImage: "chart.bar.xaxis")
-                .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(.bordered)
-        .tint(RootineTheme.ColorToken.action)
-
-        NavigationLink {
-            NutritionCustomMealsView(dateKey: dateKey, meal: meal)
-        } label: {
-            Label("Własne posiłki", systemImage: "fork.knife.circle")
-                .frame(maxWidth: .infinity, minHeight: 44)
-        }
-        .buttonStyle(.bordered)
-        .tint(RootineTheme.ColorToken.warning)
     }
 }
 
 private struct NutritionGoalsView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.dismiss) private var dismiss
     let goals: NutritionGoals
     @State private var calories: String
     @State private var protein: String
@@ -573,7 +652,7 @@ private struct NutritionGoalsView: View {
 
     var body: some View {
         Form {
-            Section("Dzisiejsze cele") {
+            Section("Codzienne cele") {
                 numericGoalField("Kalorie", text: $calories, unit: "kcal", image: "flame.fill", tint: RootineTheme.ColorToken.action)
                 numericGoalField("Białko", text: $protein, unit: "g", image: "bolt.fill", tint: RootineTheme.ColorToken.success)
                 numericGoalField("Węglowodany", text: $carbs, unit: "g", image: "leaf.fill", tint: RootineTheme.ColorToken.warning)
@@ -592,10 +671,13 @@ private struct NutritionGoalsView: View {
                                 waterMl: number(water)
                             )
                         )
+                        dismiss()
                     }
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(RootineTheme.ColorToken.canvas)
         .navigationTitle("Cele żywieniowe")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -605,7 +687,7 @@ private struct NutritionGoalsView: View {
             Label(title, systemImage: image)
                 .foregroundStyle(tint)
             Spacer()
-            TextField(unit, text: text)
+            TextField(unit, text: text, prompt: Text(unit).foregroundColor(RootineTheme.ColorToken.secondaryText))
                 .multilineTextAlignment(.trailing)
                 .keyboardType(.decimalPad)
                 .frame(width: 92)
@@ -623,11 +705,12 @@ private struct NutritionAnalysisView: View {
     let goals: NutritionGoals
     let calories: Double
     let water: Double
+    let dateKey: String
     @State private var isShowingWeightEntry = false
 
     var body: some View {
         List {
-            Section("Dzisiaj") {
+            Section("Bilans · \(dateKey)") {
                 analysisRow(title: "Kalorie", current: calories, goal: goals.calories, unit: "kcal")
                 analysisRow(title: "Woda", current: water, goal: goals.waterMl, unit: "ml")
             }
@@ -661,6 +744,8 @@ private struct NutritionAnalysisView: View {
                 Label("Cele są orientacyjne — dopasuj je do zaleceń specjalisty.", systemImage: "info.circle")
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(RootineTheme.ColorToken.canvas)
         .navigationTitle("Analiza")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingWeightEntry) {
@@ -699,10 +784,10 @@ private struct WeightMeasurementSheet: View {
         NavigationStack {
             Form {
                 Section("Pomiar") {
-                    TextField("Masa (kg)", text: $weight)
+                    TextField("Masa (kg)", text: $weight, prompt: Text("Masa (kg)").foregroundColor(RootineTheme.ColorToken.secondaryText))
                         .keyboardType(.decimalPad)
                     DatePicker("Dzień", selection: $date, displayedComponents: .date)
-                    TextField("Notatka (opcjonalnie)", text: $note)
+                    TextField("Notatka (opcjonalnie)", text: $note, prompt: Text("Notatka (opcjonalnie)").foregroundColor(RootineTheme.ColorToken.secondaryText))
                 }
             }
             .navigationTitle("Nowy pomiar")
@@ -864,15 +949,15 @@ private struct CustomMealEditorSheet: View {
         NavigationStack {
             Form {
                 Section("Posiłek") {
-                    TextField("Nazwa posiłku", text: $name)
+                    TextField("Nazwa posiłku", text: $name, prompt: Text("Nazwa posiłku").foregroundColor(RootineTheme.ColorToken.secondaryText))
                 }
                 Section("Pierwszy składnik") {
-                    TextField("Nazwa składnika", text: $ingredientName)
-                    TextField("Ilość (g)", text: $amount).keyboardType(.decimalPad)
-                    TextField("Kalorie / 100 g", text: $calories).keyboardType(.decimalPad)
-                    TextField("Białko / 100 g", text: $protein).keyboardType(.decimalPad)
-                    TextField("Węglowodany / 100 g", text: $carbs).keyboardType(.decimalPad)
-                    TextField("Tłuszcz / 100 g", text: $fat).keyboardType(.decimalPad)
+                    TextField("Nazwa składnika", text: $ingredientName, prompt: Text("Nazwa składnika").foregroundColor(RootineTheme.ColorToken.secondaryText))
+                    TextField("Ilość (g)", text: $amount, prompt: Text("Ilość (g)").foregroundColor(RootineTheme.ColorToken.secondaryText)).keyboardType(.decimalPad)
+                    TextField("Kalorie / 100 g", text: $calories, prompt: Text("Kalorie / 100 g").foregroundColor(RootineTheme.ColorToken.secondaryText)).keyboardType(.decimalPad)
+                    TextField("Białko / 100 g", text: $protein, prompt: Text("Białko / 100 g").foregroundColor(RootineTheme.ColorToken.secondaryText)).keyboardType(.decimalPad)
+                    TextField("Węglowodany / 100 g", text: $carbs, prompt: Text("Węglowodany / 100 g").foregroundColor(RootineTheme.ColorToken.secondaryText)).keyboardType(.decimalPad)
+                    TextField("Tłuszcz / 100 g", text: $fat, prompt: Text("Tłuszcz / 100 g").foregroundColor(RootineTheme.ColorToken.secondaryText)).keyboardType(.decimalPad)
                 }
             }
             .navigationTitle("Nowy własny posiłek")
@@ -917,8 +1002,8 @@ private struct CustomMealEditorSheet: View {
 private enum NutritionMealKind: String, CaseIterable, Identifiable {
     case breakfast
     case lunch
-    case snack
     case dinner
+    case snack
 
     var id: String { rawValue }
 
@@ -943,62 +1028,89 @@ private enum NutritionMealKind: String, CaseIterable, Identifiable {
 
 private struct NutritionMealCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isDropTargeted = false
     let meal: NutritionMealKind
     let entries: [NutritionEntry]
+    let dateKey: String
     let onAdd: () -> Void
     let onDelete: (NutritionEntry) -> Void
     let onEdit: (NutritionEntry) -> Void
+    let onDuplicate: (NutritionEntry) -> Void
+    let onMove: (NutritionEntry, NutritionMealKind) -> Void
+    let onDropEntry: (String) -> Bool
 
     private var calories: Double { entries.reduce(0) { $0 + $1.calories } }
+    private var protein: Double { entries.reduce(0) { $0 + $1.protein } }
+    private var carbs: Double { entries.reduce(0) { $0 + $1.carbs } }
+    private var fat: Double { entries.reduce(0) { $0 + $1.fat } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            .padding(.bottom, RootineTheme.Spacing.xSmall)
+            header.padding(.bottom, 8)
 
             if entries.isEmpty {
                 emptyState
             } else {
+                Divider().overlay(RootineTheme.ColorToken.separator)
                 entryRows
             }
         }
         .foregroundStyle(RootineTheme.ColorToken.primaryText)
         .rootineSurface()
+        .overlay {
+            RoundedRectangle(cornerRadius: RootineTheme.Radius.surface)
+                .stroke(isDropTargeted ? RootineTheme.ColorToken.action : .clear, lineWidth: 2)
+                .allowsHitTesting(false)
+        }
+        .dropDestination(for: String.self) { values, _ in
+            guard let value = values.first else { return false }
+            return onDropEntry(value)
+        } isTargeted: { isDropTargeted = $0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: entries)
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Label(meal.title, systemImage: meal.systemImage)
-                .font(.headline)
-            Spacer(minLength: RootineTheme.Spacing.small)
-            if calories > 0 {
-                Text("\(Int(calories.rounded())) kcal")
-                    .font(.caption.weight(.semibold))
+        HStack(alignment: .center, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: meal.systemImage)
+                        .font(.subheadline)
+                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        .accessibilityHidden(true)
+                    Text(meal.title)
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityIdentifier("nutrition-meal-\(meal.rawValue)")
+                    Spacer(minLength: 4)
+                    Text("\(Int(calories.rounded())) kcal")
+                        .font(.caption.weight(.medium))
+                        .monospacedDigit()
+                }
+                Text("B \(Int(protein.rounded())) g  ·  W \(Int(carbs.rounded())) g  ·  T \(Int(fat.rounded())) g")
+                    .font(.caption2)
                     .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                     .monospacedDigit()
-                    .accessibilityLabel("\(Int(calories.rounded())) kilokalorii")
+                    .accessibilityLabel("Białko \(Int(protein.rounded())) gramów, węglowodany \(Int(carbs.rounded())) gramów, tłuszcz \(Int(fat.rounded())) gramów")
             }
             Button(action: onAdd) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
+                Image(systemName: "plus")
+                    .font(.body.weight(.medium))
                     .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(RootineTheme.ColorToken.action)
             .accessibilityLabel("Dodaj do: \(meal.title)")
+            .accessibilityIdentifier("nutrition-add-\(meal.rawValue)")
         }
     }
 
     private var emptyState: some View {
         Button(action: onAdd) {
             HStack(spacing: RootineTheme.Spacing.small) {
-                Image(systemName: "plus")
-                Text("Dodaj pierwszy wpis")
+                Text("Dodaj posiłek lub produkt")
                 Spacer()
-                Image(systemName: "arrow.up.right")
             }
-            .font(.subheadline.weight(.medium))
+            .font(.subheadline)
             .foregroundStyle(RootineTheme.ColorToken.secondaryText)
             .frame(minHeight: 44)
         }
@@ -1013,18 +1125,32 @@ private struct NutritionMealCard: View {
 
     @ViewBuilder
     private func entryRow(_ entry: NutritionEntry) -> some View {
-        Button { onEdit(entry) } label: {
-            entryLabel(entry)
-        }
-        .buttonStyle(.plain)
+        entryLabel(entry)
+        .onTapGesture { onEdit(entry) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(accessibilityLabel(for: entry))
         .accessibilityValue(entry.portion)
-        .accessibilityHint("Otwiera wartości produktu i posiłek")
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) { onDelete(entry) } label: {
-                Label("Usuń", systemImage: "trash")
+        .accessibilityIdentifier("nutrition-entry-\(entry.id)")
+        .accessibilityHint("Kliknij, aby edytować. Przytrzymaj, aby przenieść lub skopiować")
+        .accessibilityAction { onEdit(entry) }
+        .rootineSwipeActions(
+            leadingLabel: "Edytuj", leadingIcon: "pencil", onLeading: { onEdit(entry) },
+            trailingLabel: "Usuń", trailingIcon: "trash", onTrailing: { onDelete(entry) }
+        )
+        .contextMenu {
+            Button { onEdit(entry) } label: { Label("Edytuj", systemImage: "pencil") }
+            Button { onDuplicate(entry) } label: { Label("Dodaj taką samą porcję", systemImage: "plus.square.on.square") }
+            Menu {
+                ForEach(NutritionMealKind.allCases.filter { $0 != meal }) { destination in
+                    Button(destination.title) { onMove(entry, destination) }
+                }
+            } label: {
+                Label("Przenieś do", systemImage: "arrow.up.arrow.down")
             }
+            Button(role: .destructive) { onDelete(entry) } label: { Label("Usuń", systemImage: "trash") }
         }
+        .draggable("rootine-nutrition|\(dateKey)|\(entry.id)")
         if entry.id != entries.last?.id {
             Divider().overlay(RootineTheme.ColorToken.separator)
         }
@@ -1034,29 +1160,21 @@ private struct NutritionMealCard: View {
         HStack(spacing: RootineTheme.Spacing.small) {
             VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
                 Text(entry.name)
-                    .font(.body.weight(.medium))
+                    .font(.subheadline.weight(.medium))
                     .lineLimit(2)
-                Text(
-                    "\(entry.portion) · B \(Int(entry.protein.rounded())) g · "
-                        + "W \(Int(entry.carbs.rounded())) g · T \(Int(entry.fat.rounded())) g"
-                )
+                Text(entry.portion)
                 .font(.caption)
                 .foregroundStyle(RootineTheme.ColorToken.secondaryText)
                 .lineLimit(2)
             }
             Spacer(minLength: RootineTheme.Spacing.small)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(Int(entry.calories.rounded()))")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .monospacedDigit()
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    .accessibilityHidden(true)
-            }
+            Text("\(Int(entry.calories.rounded())) kcal")
+                .font(.caption)
+                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                .monospacedDigit()
         }
-        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
         .contentShape(Rectangle())
     }
 
@@ -1102,6 +1220,8 @@ private struct AddNutritionEntrySheet: View {
     @State private var scanMessage: String?
     @State private var isSaving = false
     @State private var saveOperationID: String
+    @State private var saveError: String?
+    @State private var isBrowsingCatalog: Bool
 
     init(
         dateKey: String,
@@ -1115,6 +1235,7 @@ private struct AddNutritionEntrySheet: View {
         self.existingEntry = existingEntry
         self.prefilledProduct = prefilledProduct
         self.barcodeToConsume = barcodeToConsume
+        _isBrowsingCatalog = State(initialValue: existingEntry == nil && prefilledProduct == nil)
         _selectedMeal = State(initialValue: meal)
         let catalogProduct: NutritionProduct? = existingEntry.flatMap { entry in
             guard let catalogId = entry.catalogId else { return nil }
@@ -1186,93 +1307,107 @@ private struct AddNutritionEntrySheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("Szukaj produktu", text: $query)
-                        .focused($focusedField, equals: .search)
-                        .textInputAutocapitalization(.never)
-                        .accessibilityLabel("Szukaj w katalogu produktów")
+                Picker("Sposób dodawania", selection: $isBrowsingCatalog) {
+                    Text("Katalog").tag(true)
+                    Text("Wpis ręczny").tag(false)
+                }
+                .pickerStyle(.segmented)
 
-                    if filteredProducts.isEmpty {
-                        Label("Nie znaleziono produktu — wpisz dane ręcznie poniżej.", systemImage: "pencil.and.list.clipboard")
-                            .font(.subheadline)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    } else {
-                        ForEach(filteredProducts) { product in
-                            Button {
-                                select(product)
-                            } label: {
-                                HStack(spacing: RootineTheme.Spacing.small) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(product.name)
-                                            .font(.body.weight(.medium))
-                                            .foregroundStyle(RootineTheme.ColorToken.primaryText)
-                                        Text("\(product.brand ?? "Własny katalog") · \(Int(product.per100g.calories.rounded())) kcal / 100 g")
-                                            .font(.caption)
-                                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                                    }
-                                    Spacer()
-                                    Image(systemName: selectedProduct?.id == product.id ? "checkmark.circle.fill" : "plus.circle")
-                                        .foregroundStyle(RootineTheme.ColorToken.action)
-                                }
-                                .frame(minHeight: 48)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Uzupełnia formularz wartościami produktu")
-                        }
-                    }
-                    Button {
-                        isShowingScanner = true
-                    } label: {
-                        Label("Skanuj kod produktu", systemImage: "barcode.viewfinder")
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                    .accessibilityHint("Otwiera aparat i wyszukuje produkt po kodzie EAN, UPC, GTIN lub QR")
-                    Button {
-                        isShowingManualCode = true
-                        focusedField = .manualCode
-                    } label: {
-                        Label("Wpisz kod ręcznie", systemImage: "keyboard")
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                    .accessibilityHint("Pozwala wpisać kod produktu, gdy aparat jest niedostępny")
-                    if isShowingManualCode {
-                        TextField("Kod EAN / UPC / GTIN lub Rootine QR", text: $manualCode)
+                if isBrowsingCatalog {
+                    Section {
+                        TextField("Szukaj produktu", text: $query, prompt: Text("Szukaj produktu").foregroundColor(RootineTheme.ColorToken.secondaryText))
+                            .focused($focusedField, equals: .search)
                             .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .manualCode)
-                            .submitLabel(.search)
-                            .onSubmit { lookupManualCode() }
-                        Button("Wyszukaj kod") { lookupManualCode() }
-                            .disabled(manualCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                    if let scanMessage {
-                        Label(scanMessage, systemImage: "info.circle")
-                            .font(.footnote)
-                            .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                    }
-                } header: {
-                    Text("Katalog lub wpis ręczny")
-                } footer: {
-                    Text("Katalog pomaga wystartować. Możesz zawsze zmienić wartości ręcznie.")
-                }
+                            .accessibilityLabel("Szukaj w katalogu produktów")
 
-                Section("Produkt") {
-                    TextField("Nazwa produktu", text: $name)
-                        .focused($focusedField, equals: .name)
-                    TextField("Porcja", text: portionBinding)
-                        .accessibilityHint("Zmiana porcji przelicza wartości z wybranego produktu")
-                    Picker("Posiłek", selection: $selectedMeal) {
-                        ForEach(NutritionMealKind.allCases) { option in
-                            Text(option.title).tag(option)
+                        if filteredProducts.isEmpty {
+                            Label("Nie znaleziono produktu. Wybierz Wpis ręczny, aby dodać własny posiłek.", systemImage: "pencil.and.list.clipboard")
+                                .font(.subheadline)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        } else {
+                            ForEach(filteredProducts) { product in
+                                Button {
+                                    select(product)
+                                } label: {
+                                    HStack(spacing: RootineTheme.Spacing.small) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(product.name)
+                                                .font(.body.weight(.medium))
+                                                .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                            Text("\(product.brand ?? "Własny katalog") · \(Int(product.per100g.calories.rounded())) kcal / 100 g")
+                                                .font(.caption)
+                                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                                        }
+                                        Spacer()
+                                        Image(systemName: selectedProduct?.id == product.id ? "checkmark.circle.fill" : "plus.circle")
+                                            .foregroundStyle(RootineTheme.ColorToken.action)
+                                    }
+                                    .frame(minHeight: 48)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Uzupełnia formularz wartościami produktu")
+                            }
                         }
+                        Button {
+                            isShowingScanner = true
+                        } label: {
+                            Label("Skanuj kod produktu", systemImage: "barcode.viewfinder")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .accessibilityHint("Otwiera aparat i wyszukuje produkt po kodzie EAN, UPC, GTIN lub QR")
+                        Button {
+                            isShowingManualCode = true
+                            focusedField = .manualCode
+                        } label: {
+                            Label("Wpisz kod ręcznie", systemImage: "keyboard")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .accessibilityHint("Pozwala wpisać kod produktu, gdy aparat jest niedostępny")
+                        if isShowingManualCode {
+                            TextField("Kod EAN / UPC / GTIN lub Rootine QR", text: $manualCode, prompt: Text("Kod EAN / UPC / GTIN lub Rootine QR").foregroundColor(RootineTheme.ColorToken.secondaryText))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($focusedField, equals: .manualCode)
+                                .submitLabel(.search)
+                                .onSubmit { lookupManualCode() }
+                            Button("Wyszukaj kod") { lookupManualCode() }
+                                .disabled(manualCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        if let scanMessage {
+                            Label(scanMessage, systemImage: "info.circle")
+                                .font(.footnote)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }
+                    } header: {
+                        Text("Znajdź produkt")
+                    } footer: {
+                        Text("Wybierz produkt, aby ustawić porcję. Wpis ręczny pozwala dodać własny posiłek.")
                     }
-                }
+                } else {
+                    Section("Produkt") {
+                        TextField("Nazwa produktu", text: $name, prompt: Text("Nazwa produktu").foregroundColor(RootineTheme.ColorToken.secondaryText))
+                            .focused($focusedField, equals: .name)
+                            .accessibilityIdentifier("nutrition-entry-name")
+                        LabeledContent("Porcja") {
+                            TextField("Porcja", text: portionBinding, prompt: Text("Porcja").foregroundColor(RootineTheme.ColorToken.secondaryText))
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityLabel("Porcja")
+                                .accessibilityHint("Zmiana porcji przelicza wartości z wybranego produktu")
+                        }
+                        Picker("Posiłek", selection: $selectedMeal) {
+                            ForEach(NutritionMealKind.allCases) { option in
+                                Text(option.title).tag(option)
+                            }
+                        }
+                        .accessibilityIdentifier("nutrition-entry-meal")
+                    }
 
-                Section("Wartości odżywcze") {
-                    numericField("Kalorie (kcal)", text: $calories, field: .calories, valueField: .calories)
-                    numericField("Białko (g)", text: $protein, field: .protein, valueField: .protein)
-                    numericField("Węglowodany (g)", text: $carbs, field: .carbs, valueField: .carbs)
-                    numericField("Tłuszcz (g)", text: $fat, field: .fat, valueField: .fat)
+                    Section("Wartości odżywcze") {
+                        numericField("Kalorie (kcal)", text: $calories, field: .calories, valueField: .calories)
+                        numericField("Białko (g)", text: $protein, field: .protein, valueField: .protein)
+                        numericField("Węglowodany (g)", text: $carbs, field: .carbs, valueField: .carbs)
+                        numericField("Tłuszcz (g)", text: $fat, field: .fat, valueField: .fat)
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -1293,6 +1428,14 @@ private struct AddNutritionEntrySheet: View {
             }
             .navigationTitle(existingEntry == nil ? "Dodaj do dziennika" : "Edytuj wpis")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("Nie zapisano wpisu", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "Spróbuj ponownie.")
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Anuluj") { dismiss() }
@@ -1304,11 +1447,20 @@ private struct AddNutritionEntrySheet: View {
                                 || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         )
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Gotowe") { focusedField = nil }
+                        .accessibilityIdentifier("nutrition-keyboard-done")
+                }
             }
             .task {
-                guard !reduceMotion, prefilledProduct == nil else { return }
+                guard existingEntry == nil, prefilledProduct == nil else { return }
+                if reduceMotion { focusedField = .search; return }
                 try? await _Concurrency.Task.sleep(for: .milliseconds(180))
                 focusedField = .search
+            }
+            .onChange(of: isBrowsingCatalog) { _, browsing in
+                focusedField = browsing ? .search : nil
             }
         }
     }
@@ -1318,7 +1470,7 @@ private struct AddNutritionEntrySheet: View {
         name = product.name
         portion = "\(Int(product.defaultAmount)) \(product.unit)"
         applyCalculatedValues(base: product.per100g, portionText: portion)
-        focusedField = .name
+        isBrowsingCatalog = false
     }
 
     private var portionBinding: Binding<String> {
@@ -1387,8 +1539,8 @@ private struct AddNutritionEntrySheet: View {
                 } == true
                 scanMessage = wasQueued
                     ? "Nie znaleziono produktu online. Kod zapisano — ponowimy próbę po połączeniu; możesz też wpisać dane ręcznie."
-                    : "Nie znaleziono produktu. Uzupełnij dane ręcznie poniżej."
-                focusedField = .name
+                    : "Nie znaleziono produktu. Wybierz Wpis ręczny, aby uzupełnić dane."
+                focusedField = nil
             }
         }
     }
@@ -1399,6 +1551,15 @@ private struct AddNutritionEntrySheet: View {
 
     private func submit() {
         guard !isSaving else { return }
+        guard [calories, protein, carbs, fat].allSatisfy({ value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return true }
+            guard let amount = Double(trimmed.replacingOccurrences(of: ",", with: ".")) else { return false }
+            return amount.isFinite && amount >= 0
+        }) else {
+            saveError = "Wpisz nieujemne liczby w kaloriach i makroskładnikach."
+            return
+        }
         isSaving = true
         let parsed = parsedPortion
         let entered = NutritionValues(
@@ -1435,6 +1596,24 @@ private struct AddNutritionEntrySheet: View {
                 await save(existing, draft: draft)
             } else {
                 await add(draft)
+            }
+            let entryID = existing?.id ?? RootineLocalIdentifier.string(namespace: "nutrition-entry", operationID: saveOperationID)
+            let savedDay = environment.nutritionWorkspace.days[dateKey]
+            let savedEntries: [NutritionEntry]
+            switch draft.meal {
+            case "breakfast": savedEntries = savedDay?.entries.breakfast ?? []
+            case "lunch": savedEntries = savedDay?.entries.lunch ?? []
+            case "snack": savedEntries = savedDay?.entries.snack ?? []
+            default: savedEntries = savedDay?.entries.dinner ?? []
+            }
+            guard savedEntries.contains(where: {
+                $0.id == entryID && $0.name == draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    && $0.calories == draft.calories && $0.protein == draft.protein
+                    && $0.carbs == draft.carbs && $0.fat == draft.fat
+            }) else {
+                isSaving = false
+                saveError = "Wpis nie został dodany do dziennika. Twoje dane są w formularzu — spróbuj ponownie."
+                return
             }
             if let barcodeToConsume {
                 _ = await environment.consumeNutritionBarcode(barcode: barcodeToConsume)
@@ -1491,18 +1670,23 @@ private struct AddNutritionEntrySheet: View {
         field: NutritionEntryField,
         valueField: NutritionValueField
     ) -> some View {
-        TextField(
-            title,
-            text: Binding(
-                get: { text.wrappedValue },
-                set: { newValue in
-                    text.wrappedValue = newValue
-                    nutritionOverrides.insert(valueField)
-                }
+        LabeledContent(title) {
+            TextField(
+                title,
+                text: Binding(
+                    get: { text.wrappedValue },
+                    set: { newValue in
+                        text.wrappedValue = newValue
+                        nutritionOverrides.insert(valueField)
+                    }
+                ),
+                prompt: Text(title).foregroundColor(RootineTheme.ColorToken.secondaryText)
             )
-        )
             .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+            .accessibilityLabel(title)
             .focused($focusedField, equals: field)
+        }
     }
 
     private func number(_ value: String) -> Double {

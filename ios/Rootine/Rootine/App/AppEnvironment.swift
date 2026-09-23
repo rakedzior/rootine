@@ -1250,6 +1250,56 @@ final class AppEnvironment: ObservableObject {
         await persistTaskWorkspace(next)
     }
 
+    func rescheduleOverdueTasksToToday(ids: Set<Int>, on date: Date = Date()) async {
+        let today = RootineDate.localDate(date)
+        var next = taskWorkspace
+        var changed = false
+        for index in next.tasks.indices {
+            let task = next.tasks[index]
+            guard ids.contains(task.id), task.deleted != true, task.source?.kind != "work",
+                  let oldDate = task.calendarDate, oldDate < today,
+                  !rootineTaskIsDoneOnDate(task, dateKey: today) else { continue }
+            var schedule = rootineTaskSchedule(for: today, time: task.time,
+                                               endTime: task.endTime ?? task.schedule?.endTime,
+                                               existing: task.schedule)
+            // A multi-day task keeps its duration when its start is moved.
+            if let end = task.schedule?.endDate,
+               let startDate = RootineDate.dateOnly(from: oldDate),
+               let endDate = RootineDate.dateOnly(from: end),
+               let newStart = RootineDate.dateOnly(from: today) {
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+                let days = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+                if let newEnd = calendar.date(byAdding: .day, value: days, to: newStart) {
+                    schedule?.endDate = RootineDate.localDate(newEnd, calendar: calendar)
+                }
+            }
+            guard let schedule, rootineValidTaskSchedule(schedule, taskDate: today) else { continue }
+            next.tasks[index].calendarDate = today
+            next.tasks[index].view = "dzis"
+            next.tasks[index].schedule = schedule
+            changed = true
+        }
+        if changed { await persistTaskWorkspace(next) }
+    }
+
+    func updateTaskPriority(id: Int, priority: TaskPriority?) async {
+        var next = taskWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
+        next.tasks[index].priority = priority
+        await persistTaskWorkspace(next)
+    }
+
+    @discardableResult
+    func rescheduleTask(id: Int, dateKey: String, time: String?) async -> Bool {
+        var next = taskWorkspace
+        guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }),
+              let moved = TodayTaskMovement.rescheduled(next.tasks[index], dateKey: dateKey, time: time) else { return false }
+        next.tasks[index] = moved
+        await persistTaskWorkspace(next)
+        return true
+    }
+
     func updateTaskSchedule(id: Int, schedule: WorkspaceTaskSchedule?) async {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
@@ -1579,21 +1629,12 @@ final class AppEnvironment: ObservableObject {
         var normalized = note
         normalized.title = normalized.title.trimmingCharacters(in: .whitespacesAndNewlines)
         normalized.body = normalized.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.title.isEmpty || !normalized.body.isEmpty else { return }
-        normalized.updatedAt = RootineDate.isoTimestamp()
-        if normalized.listId.isEmpty {
-            if let list = next.lists.first {
-                normalized.listId = list.id
-            } else {
-                let list = NoteList(
-                    id: RootineLocalIdentifier.string(namespace: "note-list", operationID: normalized.id),
-                    name: "Osobiste",
-                    createdAt: normalized.updatedAt
-                )
-                next.lists.append(list)
-                normalized.listId = list.id
-            }
+        let hasChecklistContent = normalized.kind == "checklist" && normalized.items.contains {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+        guard !normalized.title.isEmpty || !normalized.body.isEmpty || hasChecklistContent else { return }
+        normalized.updatedAt = RootineDate.isoTimestamp()
+        // Empty listId is the explicit, persisted "Bez folderu" selection.
         if let index = next.notes.firstIndex(where: { $0.id == normalized.id }) {
             next.notes[index] = normalized
         } else {
@@ -2362,6 +2403,8 @@ final class AppEnvironment: ObservableObject {
               normalizedProject == nil || next.projects.contains(where: { $0.id == normalizedProject }),
               normalizedCompany == nil || next.companies.contains(where: { $0.id == normalizedCompany }),
               validWorkParent(parentID, projectID: normalizedProject, workspace: next, childID: id) else { return }
+        guard next.tasks[index].projectId == normalizedProject
+                || !next.tasks.contains(where: { $0.parentId == id }) else { return }
         next.tasks[index].title = trimmedTitle
         next.tasks[index].projectId = normalizedProject
         next.tasks[index].companyId = normalizedCompany ?? normalizedProject.flatMap { projectID in next.projects.first(where: { $0.id == projectID })?.companyId }
@@ -2645,6 +2688,46 @@ final class AppEnvironment: ObservableObject {
         await updateTravelTrip(id: tripID) { trip in
             guard !trip.packingItems.contains(where: { $0.id == itemID }) else { return }
             trip.packingItems.append(TravelPackingItem(id: itemID, label: cleanLabel, quantity: quantity, packed: packed))
+        }
+    }
+
+    func toggleTravelPackingItem(tripID: String, itemID: String) async {
+        await updateTravelTrip(id: tripID) { trip in
+            guard let index = trip.packingItems.firstIndex(where: { $0.id == itemID }) else { return }
+            trip.packingItems[index].packed.toggle()
+        }
+    }
+
+    func deleteTravelPackingItem(tripID: String, itemID: String) async {
+        await updateTravelTrip(id: tripID) { trip in
+            trip.packingItems.removeAll { $0.id == itemID }
+        }
+    }
+
+    func moveTravelItineraryItem(tripID: String, itemID: String, beforeID: String) async {
+        guard itemID != beforeID else { return }
+        await updateTravelTrip(id: tripID) { trip in
+            guard let source = trip.itinerary.firstIndex(where: { $0.id == itemID }),
+                  trip.itinerary.contains(where: { $0.id == beforeID }) else { return }
+            let item = trip.itinerary.remove(at: source)
+            if let destination = trip.itinerary.firstIndex(where: { $0.id == beforeID }) {
+                trip.itinerary.insert(item, at: destination)
+            }
+        }
+    }
+
+    func upsertTravelItineraryItem(tripID: String, item: TravelItineraryItem) async {
+        guard !item.id.isEmpty, !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        await updateTravelTrip(id: tripID) { trip in
+            if let index = trip.itinerary.firstIndex(where: { $0.id == item.id }) {
+                trip.itinerary[index] = item
+            } else { trip.itinerary.append(item) }
+        }
+    }
+
+    func deleteTravelItineraryItem(tripID: String, itemID: String) async {
+        await updateTravelTrip(id: tripID) { trip in
+            trip.itinerary.removeAll { $0.id == itemID }
         }
     }
 

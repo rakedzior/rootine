@@ -943,6 +943,193 @@ private struct HabitScheduleSection: View {
     }
 }
 
+struct HabitManagerSheet: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var showAdd = false
+    @State private var selectedHabit: WorkspaceHabit?
+
+    private var habits: [WorkspaceHabit] {
+        environment.taskWorkspace.habits.filter {
+            query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)
+        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if habits.isEmpty {
+                    ContentUnavailableView(query.isEmpty ? "Jeszcze nie masz nawyków" : "Brak wyników",
+                                           systemImage: "repeat",
+                                           description: Text(query.isEmpty ? "Dodaj nawyk i wybierz dni, w które chcesz go wykonywać." : "Spróbuj innej nazwy."))
+                }
+                ForEach(habits) { habit in
+                    Button { selectedHabit = habit } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(habit.name).foregroundStyle(RootineTheme.ColorToken.primaryText)
+                                Text(rootineHabitIsPausedOnDate(habit, dateKey: RootineDate.localDate())
+                                     ? "Wstrzymany" : habitScheduleLabel(habit.schedule))
+                                    .font(.caption).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption)
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }.padding(.vertical, 5)
+                    }
+                }
+            }
+            .searchable(text: $query, prompt: "Szukaj nawyku")
+            .scrollContentBackground(.hidden)
+            .background(RootineTheme.ColorToken.canvas)
+            .navigationTitle("Wszystkie nawyki")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Gotowe") { dismiss() } }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showAdd = true } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("Dodaj nawyk")
+                }
+            }
+            .sheet(isPresented: $showAdd) { AddHabitSheet() }
+            .sheet(item: $selectedHabit) { HabitOverviewSheet(habitID: $0.id) }
+        }
+    }
+}
+
+struct HabitOverviewSheet: View {
+    let habitID: Int
+    @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.dismiss) private var dismiss
+    @State private var showEdit = false
+    @State private var showDelete = false
+    @State private var isUpdating = false
+    private var today: String { RootineDate.localDate() }
+    private var habit: WorkspaceHabit? { environment.taskWorkspace.habits.first { $0.id == habitID } }
+
+    var body: some View {
+        NavigationStack {
+            if let habit {
+                Form {
+                    Section {
+                        Text(habit.name).font(.title2.weight(.semibold))
+                        if rootineHabitIsPausedOnDate(habit, dateKey: today) {
+                            Label("Nawyk wstrzymany", systemImage: "pause.circle")
+                                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        } else if rootineHabitIsScheduledOnDate(habit, dateKey: today) {
+                            Button {
+                                update { await environment.toggleHabitCompletion(id: habitID) }
+                            } label: {
+                                Label(isHabitDone(habit) ? "Dzisiaj wykonany" : "Oznacz jako wykonany",
+                                      systemImage: isHabitDone(habit) ? "checkmark.circle.fill" : "circle")
+                            }.disabled(isUpdating)
+                                .foregroundStyle(isHabitDone(habit) ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.action)
+                                .accessibilityIdentifier("habit-detail-toggle")
+                        } else {
+                            Text("Dziś dzień przerwy").foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }
+                    }
+                    Section("Regularność") {
+                        LabeledContent("Seria wykonań", value: "\(currentStreak(habit))")
+                        LabeledContent("Łącznie wykonano", value: "\(Set(habit.completedDates ?? []).count)")
+                    }
+                    Section {
+                        HabitHistoryGrid(habit: habit)
+                    } header: { Text("Ostatnie 28 dni") } footer: {
+                        Text("Zielony znacznik: wykonano. Puste kółko: nie wykonano. Pauza: nawyk wstrzymany. Kreska: dzień wolny.")
+                    }
+                    Section("Harmonogram") {
+                        LabeledContent("Powtarzaj", value: habitScheduleLabel(habit.schedule))
+                        if let time = habit.time, !time.isEmpty { LabeledContent("Godzina", value: time) }
+                        if let priority = habit.priority {
+                            LabeledContent("Priorytet", value: priority == .high ? "Wysoki" : priority == .medium ? "Średni" : "Niski")
+                        }
+                    }
+                    Section {
+                        Button(rootineHabitIsPausedOnDate(habit, dateKey: today) ? "Wznów od dzisiaj" : "Wstrzymaj nawyk") {
+                            update {
+                                if rootineHabitIsPausedOnDate(habit, dateKey: today) {
+                                    await environment.resumeHabit(id: habitID)
+                                } else { await environment.pauseHabit(id: habitID) }
+                            }
+                        }.disabled(isUpdating)
+                            .accessibilityIdentifier("habit-pause-resume")
+                    } footer: { Text("Wstrzymanie zachowuje historię. Nawyk wróci do listy na dziś po wznowieniu, zgodnie z harmonogramem.") }
+                    Section { Button("Usuń nawyk", role: .destructive) { showDelete = true } }
+                }
+                .scrollContentBackground(.hidden)
+                .background(RootineTheme.ColorToken.canvas)
+                .navigationTitle("Szczegóły nawyku")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Gotowe") { dismiss() } }
+                    ToolbarItem(placement: .primaryAction) { Button("Edytuj") { showEdit = true } }
+                }
+                .sheet(isPresented: $showEdit) { HabitDetailSheet(habit: habit) }
+                .confirmationDialog("Usunąć nawyk wraz z historią?", isPresented: $showDelete, titleVisibility: .visible) {
+                    Button("Usuń nawyk", role: .destructive) {
+                        Task { await environment.deleteHabit(id: habitID); dismiss() }
+                    }
+                    Button("Anuluj", role: .cancel) {}
+                }
+            }
+        }
+        .onChange(of: habit == nil) { _, missing in if missing { dismiss() } }
+    }
+
+    private func update(_ action: @escaping () async -> Void) {
+        isUpdating = true
+        Task { await action(); isUpdating = false }
+    }
+
+    private func currentStreak(_ habit: WorkspaceHabit) -> Int {
+        // An unfinished today should not erase a series while the day is still in progress.
+        let reference = isHabitDone(habit) ? today : RootineDate.shiftLocalDate(today, by: -1)
+        return rootineHabitCurrentStreak(habit, referenceDate: reference)
+    }
+}
+
+private struct HabitHistoryGrid: View {
+    let habit: WorkspaceHabit
+    private var dates: [String] {
+        (0..<28).reversed().compactMap { RootineDate.shiftLocalDateKey(RootineDate.localDate(), by: -$0) }
+    }
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 14) {
+            ForEach(dates, id: \.self) { date in
+                let state = rootineHabitDayState(habit, dateKey: date)
+                VStack(spacing: 5) {
+                    Text(String(Int(date.suffix(2)) ?? 0)).font(.caption).monospacedDigit()
+                    Image(systemName: symbol(state)).font(.body)
+                        .foregroundStyle(state == .completed ? RootineTheme.ColorToken.success : RootineTheme.ColorToken.secondaryText)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(shortDate(date)): \(label(state))")
+            }
+        }.padding(.vertical, 8)
+    }
+
+    private func symbol(_ state: RootineHabitDayState) -> String {
+        switch state {
+        case .completed: return "checkmark.circle.fill"
+        case .scheduled: return "circle"
+        case .paused: return "pause.circle"
+        case .rest, .inactive: return "minus"
+        }
+    }
+    private func label(_ state: RootineHabitDayState) -> String {
+        switch state {
+        case .completed: return "wykonano"
+        case .scheduled: return "nie wykonano"
+        case .paused: return "wstrzymany"
+        case .rest, .inactive: return "dzień wolny"
+        }
+    }
+}
+
 struct AddHabitSheet: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
@@ -983,7 +1170,9 @@ struct AddHabitSheet: View {
                             dismiss()
                         }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || (!time.isEmpty && !RootineDate.isClockTime(time))
+                              || (frequency == .weekly && weekdays.isEmpty))
                 }
             }
         }
@@ -1056,7 +1245,7 @@ struct HabitDetailSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(RootineTheme.ColorToken.canvas)
-            .navigationTitle("Szczegóły nawyku")
+            .navigationTitle("Edytuj nawyk")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } }
@@ -1067,7 +1256,9 @@ struct HabitDetailSheet: View {
                             dismiss()
                         }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || (!time.isEmpty && !RootineDate.isClockTime(time))
+                              || (frequency == .weekly && weekdays.isEmpty))
                 }
             }
             .confirmationDialog("Usunąć nawyk?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {

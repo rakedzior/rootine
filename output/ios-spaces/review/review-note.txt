@@ -1,0 +1,1 @@
+﻿Zrzuty aplikacji SwiftUI z symulatora iPhone 14: aktualne ekrany, formularze, profil oraz próbki jasnego motywu i większego tekstu. Zaliczone: 14 testów interfejsu i 177 testów jednostkowych; 2 testy jawnie pominięte. Końcowy build działa na Macu. Szczegóły w ios/NATIVE-SPACES.md.

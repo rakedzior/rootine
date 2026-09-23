@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 /// screens are separately reviewed and approved.
 enum RootineTab: String, CaseIterable, Identifiable {
     case today
-    case tasks
     case calendar
     case nutrition
     case more
@@ -16,7 +15,6 @@ enum RootineTab: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .today: return "Dzisiaj"
-        case .tasks: return "Zadania"
         case .calendar: return "Kalendarz"
         case .nutrition: return "Odżywianie"
         case .more: return "Więcej"
@@ -26,7 +24,6 @@ enum RootineTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .today: return "sun.max.fill"
-        case .tasks: return "checklist"
         case .calendar: return "calendar"
         case .nutrition: return "fork.knife"
         case .more: return "ellipsis.circle"
@@ -108,7 +105,7 @@ struct RootineMainView: View {
 #if DEBUG
         if initialModule != nil { return .more }
         if CommandLine.arguments.contains("--rootine-preview-more") { return .more }
-        if CommandLine.arguments.contains("--rootine-preview-tasks") { return .tasks }
+        if CommandLine.arguments.contains("--rootine-preview-tasks") { return .calendar }
         if CommandLine.arguments.contains("--rootine-preview-calendar") { return .calendar }
         if CommandLine.arguments.contains("--rootine-preview-nutrition") { return .nutrition }
 #endif
@@ -130,9 +127,6 @@ struct RootineMainView: View {
             rootTab(.today) {
                 TodayView()
             }
-            rootTab(.tasks) {
-                TasksView()
-            }
             rootTab(.calendar) {
                 CalendarView()
             }
@@ -149,9 +143,7 @@ struct RootineMainView: View {
         }
         .tint(RootineTheme.ColorToken.action)
         .sheet(isPresented: $isShowingQuickAdd) {
-            QuickAddSheet()
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+            TaskComposerSheet(date: Date())
         }
     }
 
@@ -160,10 +152,20 @@ struct RootineMainView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationStack {
-            content()
-                .navigationTitle(tab.label)
-                .navigationBarTitleDisplayMode(.large)
+            Group {
+                if tab == .today || tab == .calendar {
+                    content()
+                        .navigationTitle(tab.label)
+                        .navigationBarTitleDisplayMode(.inline)
+                } else {
+                    content()
+                }
+            }
                 .toolbar {
+                    if tab == .today || tab == .calendar {
+                        ToolbarItem(placement: .topBarLeading) { RootineProfileButton() }
+                    }
+                    if tab == .today {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             isShowingQuickAdd = true
@@ -172,8 +174,9 @@ struct RootineMainView: View {
                                 .frame(minWidth: 44, minHeight: 44)
                                 .contentShape(Rectangle())
                         }
-                        .accessibilityLabel("Dodaj")
-                        .accessibilityHint("Otwiera wybór nowego zadania lub nawyku")
+                        .accessibilityLabel(tab == .today ? "Dodaj zadanie" : "Dodaj")
+                        .accessibilityHint(tab == .today ? "Otwiera formularz nowego zadania na dzisiaj" : "Otwiera wybór nowego zadania lub nawyku")
+                    }
                     }
                 }
         }
@@ -184,131 +187,100 @@ struct RootineMainView: View {
     }
 }
 
-private struct QuickAddSheet: View {
-    @EnvironmentObject private var environment: AppEnvironment
-    @Environment(\.dismiss) private var dismiss
-    @State private var mode: QuickAddMode?
-
-    private enum QuickAddMode: Identifiable {
-        case task
-        case habit
-
-        var id: String { String(describing: self) }
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Dodaj do Rootine") {
-                    Button { mode = .task } label: {
-                        Label("Zadanie", systemImage: "checklist")
-                    }
-                    Button { mode = .habit } label: {
-                        Label("Nawyk", systemImage: "flame")
-                    }
-                    Label("Posiłki dodasz bezpośrednio w zakładce Odżywianie.", systemImage: "info.circle")
-                        .font(.footnote)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(RootineTheme.ColorToken.canvas)
-            .navigationTitle("Dodaj")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Anuluj") { dismiss() }
-                }
-            }
-            .sheet(item: $mode) { mode in
-                Group {
-                    switch mode {
-                    case .task: AddTaskSheet()
-                    case .habit: AddHabitSheet()
-                    }
-                }
-                .environmentObject(environment)
-            }
-        }
-    }
-}
-
 private struct MoreLandingView: View {
     @EnvironmentObject private var environment: AppEnvironment
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isShowingAccount = false
-    @State private var hasAppeared = false
+    @AppStorage("rootine.spaces.order.v1") private var savedOrders = "{}"
+    @State private var showAdd = false
+    @State private var selectedModule: MoreModule?
+    @State private var pendingAddModule: MoreModule?
 
-    private var activeTasks: Int {
-        environment.taskWorkspace.tasks.filter {
-            $0.deleted != true && !rootineTaskIsDoneOnDate($0, dateKey: RootineDate.localDate())
-        }.count
+    private var accountKey: String { environment.session?.user.id ?? "local" }
+    private var orders: [String: [String]] {
+        (try? JSONDecoder().decode([String: [String]].self, from: Data(savedOrders.utf8))) ?? [:]
     }
-
-    private var activeHabits: Int {
-        environment.taskWorkspace.habits.filter {
-            rootineHabitIsScheduledOnDate($0, dateKey: RootineDate.localDate())
-                && !rootineHabitIsDoneOnDate($0, dateKey: RootineDate.localDate())
-        }.count
-    }
-
-    private var activeNotes: Int {
-        environment.notesWorkspace.notes.filter { !$0.archived }.count
+    private var modules: [MoreModule] {
+        let stored = orders[accountKey] ?? []
+        let ordered = stored.compactMap(MoreModule.init(rawValue:))
+        return ordered + MoreModule.allCases.filter { !ordered.contains($0) }
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
-                MoreLandingSyncStatusBanner()
-                MoreAccountCard(message: environment.foundationMessage) {
-                    isShowingAccount = true
-                }
-                .offset(y: hasAppeared ? 0 : 12)
-                .opacity(hasAppeared ? 1 : 0)
-
-                MorePulseCard(activeTasks: activeTasks, activeHabits: activeHabits, activeNotes: activeNotes)
-                    .offset(y: hasAppeared ? 0 : 16)
-                    .opacity(hasAppeared ? 1 : 0)
-
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
-                    Text("Twoje przestrzenie")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
-
-                    LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: RootineTheme.Spacing.small), GridItem(.flexible(), spacing: RootineTheme.Spacing.small)],
-                        spacing: RootineTheme.Spacing.small
-                    ) {
-                        ForEach(Array(MoreModule.allCases.enumerated()), id: \.element.id) { index, module in
-                            NavigationLink {
-                                MoreModuleView(module: module)
-                            } label: {
-                                MoreModuleTile(module: module)
-                            }
-                            .buttonStyle(.plain)
-                            .offset(y: hasAppeared ? 0 : CGFloat(18 + index * 3))
-                            .opacity(hasAppeared ? 1 : 0)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) {
+                ForEach(modules) { module in
+                    NavigationLink {
+                        MoreModuleView(module: module)
+                    } label: {
+                        MoreModuleTile(module: module)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("space-\(module.rawValue)")
+                    .contextMenu {
+                        Button(module.addLabel, systemImage: "plus") { selectedModule = module }
+                        Button("Przenieś na początek", systemImage: "arrow.up.to.line") {
+                            move(module, before: modules.first ?? module)
                         }
+                    }
+                    .draggable("rootine-space:\(module.rawValue)")
+                    .dropDestination(for: String.self) { values, _ in
+                        guard let value = values.first, value.hasPrefix("rootine-space:"),
+                              let source = MoreModule(rawValue: String(value.dropFirst("rootine-space:".count))) else { return false }
+                        move(source, before: module)
+                        return true
+                    }
+                    .accessibilityAction(named: "Przenieś na początek") {
+                        move(module, before: modules.first ?? module)
                     }
                 }
             }
-            .padding(.horizontal, RootineTheme.Spacing.medium)
-            .padding(.top, RootineTheme.Spacing.medium)
-            .padding(.bottom, RootineTheme.Spacing.xLarge)
+            .padding(16)
+            .padding(.bottom, 24)
         }
         .scrollIndicators(.hidden)
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
-        .onAppear {
-            if reduceMotion {
-                hasAppeared = true
-            } else {
-                withAnimation(.easeOut(duration: 0.42)) { hasAppeared = true }
-            }
+        .rootineScreenChrome(title: "Więcej", addLabel: "Dodaj do przestrzeni") { showAdd = true }
+        .navigationDestination(item: $selectedModule) { module in
+            MoreModuleView(module: module, startsAdding: true)
         }
-        .sheet(isPresented: $isShowingAccount) {
-            MoreAccountSheet()
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showAdd, onDismiss: {
+            if let pendingAddModule {
+                selectedModule = pendingAddModule
+                self.pendingAddModule = nil
+            }
+        }) {
+            NavigationStack {
+                List(modules) { module in
+                    Button {
+                        pendingAddModule = module
+                        showAdd = false
+                    } label: {
+                        Label(module.addLabel, systemImage: module.systemImage)
+                            .frame(minHeight: 40)
+                    }
+                }
+                .navigationTitle("Co chcesz dodać?")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Anuluj") { showAdd = false }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(RootineTheme.ColorToken.canvas)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .overlay(alignment: .top) { MoreLandingSyncStatusBanner().padding(.horizontal, 16) }
+    }
+
+    private func move(_ source: MoreModule, before target: MoreModule) {
+        guard source != target else { return }
+        var values = modules.filter { $0 != source }
+        if let index = values.firstIndex(of: target) { values.insert(source, at: index) }
+        var updated = orders
+        updated[accountKey] = values.map(\.rawValue)
+        if let data = try? JSONEncoder().encode(updated), let string = String(data: data, encoding: .utf8) {
+            withAnimation(.easeInOut(duration: 0.2)) { savedOrders = string }
         }
     }
 }
@@ -350,6 +322,17 @@ enum MoreModule: String, CaseIterable, Identifiable {
     case affairs
 
     var id: String { rawValue }
+    var addLabel: String {
+        switch self {
+        case .notes: return "Dodaj notatkę"
+        case .sport: return "Dodaj trening"
+        case .goals: return "Dodaj cel"
+        case .work: return "Dodaj zadanie w pracy"
+        case .travel: return "Dodaj podróż"
+        case .health: return "Dodaj przypomnienie"
+        case .affairs: return "Dodaj sprawę lub płatność"
+        }
+    }
     var title: String {
         switch self {
         case .notes: return "Notatki"
@@ -398,97 +381,6 @@ enum MoreModule: String, CaseIterable, Identifiable {
     }
 }
 
-private struct MoreAccountCard: View {
-    let message: String
-    let onOpen: () -> Void
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: RootineTheme.Spacing.medium) {
-                ZStack {
-                    Circle()
-                        .fill(RootineTheme.ColorToken.action.opacity(0.18))
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(RootineTheme.ColorToken.action)
-                }
-                .frame(width: 52, height: 52)
-
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                    Text("Twoje Rootine")
-                        .font(.title3.weight(.semibold))
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-            }
-            .foregroundStyle(RootineTheme.ColorToken.primaryText)
-        }
-        .buttonStyle(.plain)
-        .rootineSurface()
-    }
-}
-
-private struct MorePulseCard: View {
-    let activeTasks: Int
-    let activeHabits: Int
-    let activeNotes: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.medium) {
-            HStack {
-                VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-                    Text("Twój rytm")
-                        .font(.headline)
-                    Text("Małe kroki, które trzymają dzień w ruchu.")
-                        .font(.caption)
-                        .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                }
-                Spacer()
-                Image(systemName: "sparkles")
-                    .font(.title2)
-                    .foregroundStyle(RootineTheme.ColorToken.warning)
-            }
-
-            HStack(spacing: RootineTheme.Spacing.small) {
-                MorePulseMetric(value: activeTasks, label: "zadania", tint: RootineTheme.ColorToken.action)
-                MorePulseMetric(value: activeHabits, label: "nawyki", tint: RootineTheme.ColorToken.success)
-                MorePulseMetric(value: activeNotes, label: "notatki", tint: RootineTheme.ColorToken.warning)
-            }
-        }
-        .foregroundStyle(RootineTheme.ColorToken.primaryText)
-        .rootineSurface()
-    }
-}
-
-private struct MorePulseMetric: View {
-    let value: Int
-    let label: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: RootineTheme.Spacing.xSmall) {
-            Text("\(value)")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(tint)
-                .contentTransition(.numericText())
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, RootineTheme.Spacing.small)
-        .padding(.horizontal, RootineTheme.Spacing.small)
-        .background(RootineTheme.ColorToken.elevated.opacity(0.8))
-        .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
-    }
-}
-
 private struct MoreModuleTile: View {
     let module: MoreModule
 
@@ -525,88 +417,58 @@ private struct MoreModuleTile: View {
     }
 }
 
-private struct MoreModuleRow: View {
-    let module: MoreModule
-
-    var body: some View {
-        HStack(spacing: RootineTheme.Spacing.medium) {
-            Image(systemName: module.systemImage)
-                .font(.title3)
-                .foregroundStyle(RootineTheme.ColorToken.action)
-                .frame(width: 28)
-            Text(module.title)
-                .font(.body.weight(.medium))
-                .foregroundStyle(RootineTheme.ColorToken.primaryText)
-            Spacer()
-            Image(systemName: "arrow.up.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-        }
-        .padding(.vertical, RootineTheme.Spacing.small)
-        .contentShape(Rectangle())
-    }
-}
-
-private struct MoreAccountSheet: View {
+struct RootineAccountSheet: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: RootineTheme.Spacing.large) {
-                Label("Synchronizacja", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.headline)
-                Text(environment.foundationMessage)
-                    .font(.subheadline)
-                    .foregroundStyle(RootineTheme.ColorToken.secondaryText)
-                NavigationLink {
-                    RootineProfileView()
-                } label: {
-                    Label("Profil i dane konta", systemImage: "person.crop.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            List {
+                Section {
+                    HStack(spacing: 14) {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 40)).foregroundStyle(RootineTheme.ColorToken.action)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Twoje konto").font(.headline)
+                            Text(environment.profilePreferences.privacyMode ? "Dane konta ukryte" : environment.session?.user.email ?? "Dane na tym urządzeniu")
+                                .font(.subheadline).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                        }
+                    }.padding(.vertical, 8)
                 }
-                .frame(minHeight: 44)
-                NavigationLink {
-                    RootineDataCenterView()
-                } label: {
-                    Label("Kopie i odzyskiwanie", systemImage: "externaldrive.badge.icloud")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Section {
+                    NavigationLink { RootineProfileView() } label: {
+                        Label("Profil i dane konta", systemImage: "person.crop.circle")
+                    }
+                    NavigationLink { RootineSettingsView() } label: {
+                        Label("Ustawienia", systemImage: "gearshape")
+                    }
+                    NavigationLink { RootineDataCenterView() } label: {
+                        Label("Kopie i odzyskiwanie", systemImage: "externaldrive.badge.icloud")
+                    }
+                    NavigationLink { RootineHelpView() } label: {
+                        Label("Pomoc i prywatność", systemImage: "questionmark.circle")
+                    }
                 }
-                .frame(minHeight: 44)
-                NavigationLink {
-                    RootineSettingsView()
-                } label: {
-                    Label("Ustawienia aplikacji", systemImage: "gearshape")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Section("Synchronizacja") {
+                    Text(environment.foundationMessage)
+                        .font(.subheadline).foregroundStyle(RootineTheme.ColorToken.secondaryText)
+                    Button {
+                        Task { await environment.flushPendingMutations() }
+                    } label: {
+                        Label("Synchronizuj teraz", systemImage: "arrow.clockwise")
+                    }
                 }
-                .frame(minHeight: 44)
-                NavigationLink {
-                    RootineHelpView()
-                } label: {
-                    Label("Pomoc i prywatność", systemImage: "questionmark.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Section {
+                    Button("Wyloguj się", role: .destructive) {
+                        environment.signOutFoundationSession()
+                        dismiss()
+                    }
                 }
-                .frame(minHeight: 44)
-                Button {
-                    Task { await environment.flushPendingMutations() }
-                } label: {
-                    Label("Synchronizuj teraz", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(RootineTheme.ColorToken.action)
-
-                Button("Wyloguj się", role: .destructive) {
-                    environment.signOutFoundationSession()
-                    dismiss()
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(RootineTheme.Spacing.large)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .scrollContentBackground(.hidden)
             .background(RootineTheme.ColorToken.canvas)
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
-            .navigationTitle("Konto")
+            .navigationTitle("Profil")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1319,6 +1181,20 @@ private struct RootineHelpView: View {
 
     var body: some View {
         List {
+            Section("Gesty i skróty") {
+                DisclosureGroup("Otwieranie i szybkie akcje") {
+                    Text("Dotknij treści, aby wejść w szczegóły. Przytrzymaj wpis, aby zobaczyć jego dostępne akcje. Checkbox służy do odhaczania bez otwierania szczegółów.")
+                        .font(.subheadline)
+                }
+                DisclosureGroup("Przesuwanie w lewo i w prawo") {
+                    Text("W prawo wykonasz szybką akcję, np. ukończysz trening lub przypniesz notatkę. W lewo otworzysz edycję albo akcję porządkowania wpisu. Te same czynności są dostępne w menu po przytrzymaniu.")
+                        .font(.subheadline)
+                }
+                DisclosureGroup("Przenoszenie elementów") {
+                    Text("Przytrzymaj i przeciągnij posiłek do innej kategorii, notatkę do folderu, trening na inny dzień lub zadanie pracy do projektu. W Więcej możesz w ten sposób ustawić kolejność przestrzeni.")
+                        .font(.subheadline)
+                }
+            }
             Section("Najczęstsze pytania") {
                 DisclosureGroup("Czy dane działają offline?") {
                     Text("Tak. Zmiany zapisują się lokalnie, a kolejka synchronizacji wysyła je po odzyskaniu połączenia.")

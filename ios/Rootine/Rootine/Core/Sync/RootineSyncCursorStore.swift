@@ -144,7 +144,11 @@ actor RootineSyncCursorStore {
     ) -> URL {
         let base: URL
         if let rootURL {
-            base = rootURL
+            // An injected root can serve multiple accounts, just like the
+            // default Application Support root. Keep their cursors isolated.
+            base = rootURL.appendingPathComponent(
+                RootineSecureStorageSupport.accountNamespace(accountID), isDirectory: true
+            )
         } else {
             base = (fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? fileManager.temporaryDirectory)

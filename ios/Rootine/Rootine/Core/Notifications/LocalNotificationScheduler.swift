@@ -334,8 +334,9 @@ struct RootineNotificationRule: Codable, Equatable, Hashable, Sendable {
 
 /// The metadata is also the local half of B11's dedupe contract. Request IDs
 /// are hashed so a user's UUID or task text never appears in an OS-level
-/// identifier. UserInfo keeps only the occurrence metadata needed for
-/// deterministic reconciliation; the raw user-derived dedupe key stays local.
+/// identifier. UserInfo uses a hash for deterministic reconciliation and a
+/// validated opaque deep link for tap routing; raw account and dedupe material
+/// stay local, and entity/occurrence IDs are not duplicated as metadata fields.
 struct RootineNotificationOccurrence: Codable, Equatable, Hashable, Sendable {
     let entity: RootineNotificationEntity
     let entityID: String
@@ -407,10 +408,9 @@ struct RootineNotificationOccurrence: Codable, Equatable, Hashable, Sendable {
         var info: [AnyHashable: Any] = [
             "rootine_schema_version": 1,
             "rootine_entity": entity.rawValue,
-            "rootine_entity_id": entityID,
             "rootine_local_date": localDate,
             "rootine_local_time": localTime,
-            "rootine_occurrence_id": occurrenceID,
+            "rootine_occurrence_hash": RootineSecureStorageSupport.stableHash(dedupeKey),
             "rootine_notification_type": notificationType
         ]
         if let linkEntity = RootineNotificationDeepLink.Entity(rawValue: entity.rawValue),
@@ -797,7 +797,6 @@ enum RootineLocalNotificationPlanner {
         let recurrence = normalizedRecurrence(schedule?.recurrence)
         let endDateKey = schedule?.endDate.flatMap { normalizedDateKey($0, calendar: calendar) }
         let reminderMinutes = max(0, schedule?.reminderMinutes ?? 0)
-        let eventComponents = DateComponents(hour: time.hour, minute: time.minute)
         var result: [RootineNotificationOccurrence] = []
 
         for offset in 0..<dayCount {
@@ -813,12 +812,7 @@ enum RootineLocalNotificationPlanner {
                     calendar: calendar
                   ) else { continue }
             if rootineTaskIsDoneOnDate(task, dateKey: dateKey) { continue }
-            guard let eventDate = calendar.date(
-                bySettingHour: eventComponents.hour!,
-                minute: eventComponents.minute!,
-                second: 0,
-                of: day
-            ) else { continue }
+            guard let eventDate = resolvedLocalTime(time, on: day, calendar: calendar) else { continue }
             let scheduledAt = calendar.date(byAdding: .minute, value: -reminderMinutes, to: eventDate) ?? eventDate
             guard scheduledAt > now,
                   !isQuietHour(scheduledAt, preferences: preferences, calendar: calendar) else { continue }
@@ -859,12 +853,7 @@ enum RootineLocalNotificationPlanner {
             guard dateKey >= startDateKey,
                   endDateKey == nil || dateKey <= endDateKey!,
                   rootineHabitIsScheduledOnDate(habit, dateKey: dateKey, calendar: calendar),
-                  let eventDate = calendar.date(
-                    bySettingHour: time.hour,
-                    minute: time.minute,
-                    second: 0,
-                    of: day
-                  ) else { continue }
+                  let eventDate = resolvedLocalTime(time, on: day, calendar: calendar) else { continue }
             // `WorkspaceHabit.done` is a legacy global flag whose implicit
             // date must be interpreted in the profile timezone, not the
             // device's current timezone. An explicit completedDates array
@@ -985,6 +974,20 @@ enum RootineLocalNotificationPlanner {
         let parts = value.split(separator: ":").compactMap { Int($0) }
         guard parts.count >= 2, (0...23).contains(parts[0]), (0...59).contains(parts[1]) else { return nil }
         return LocalTime(hour: parts[0], minute: parts[1])
+    }
+
+    private static func resolvedLocalTime(_ time: LocalTime, on day: Date, calendar: Calendar) -> Date? {
+        // date(bySettingHour:) snaps a missing 02:30 to 03:00 on Foundation
+        // even with this matching policy. nextDate preserves the requested
+        // minutes across the gap; starting before the day also includes 00:00.
+        guard let resolved = calendar.nextDate(
+            after: calendar.startOfDay(for: day).addingTimeInterval(-1),
+            matching: DateComponents(hour: time.hour, minute: time.minute, second: 0),
+            matchingPolicy: .nextTimePreservingSmallerComponents,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        ), calendar.isDate(resolved, inSameDayAs: day) else { return nil }
+        return resolved
     }
 
     private static func formatTime(_ date: Date, calendar: Calendar) -> String {

@@ -482,6 +482,8 @@ enum RootineCanonicalWorkspaceMapping {
         let projectedPayload = try payload(for: workspace)
         let projected = try objectValue(projectedPayload)
         let nativeGoals = dictionaryByID(projected["goals"])
+        let originalProjection = try? objectValue(payload(for: goalsWorkspace(from: base)))
+        let originalGoals = dictionaryByID(originalProjection?["goals"])
         let canonicalGoals = deduplicatedRecords(arrayValue(root["goals"]))
         var existingIDs = Set<String>()
         let mergedGoals = canonicalGoals.compactMap { value -> JSONValue? in
@@ -497,7 +499,12 @@ enum RootineCanonicalWorkspaceMapping {
                 "initialValue", "targetValue", "unit", "manualProgress", "milestones", "progressEntries", "linkedTaskIds",
                 "history", "note", "createdAt", "updatedAt"
             ] {
-                if let replacement = native[key] { goal[key] = replacement }
+                // Defaults introduced while decoding are not user edits.
+                // Compare native projections, then apply only the changed
+                // fields to the retained wire record (including its children).
+                goal[key] = mergingProjectionChanges(
+                    existing: goal[key], original: originalGoals[id]?[key], replacement: native[key]
+                )
             }
             return .object(goal)
         }
@@ -509,7 +516,9 @@ enum RootineCanonicalWorkspaceMapping {
             })
         }
         root["goals"] = .array(allGoals)
-        if let categories = projected["categories"] { root["categories"] = categories }
+        root["categories"] = mergingProjectionChanges(
+            existing: root["categories"], original: originalProjection?["categories"], replacement: projected["categories"]
+        )
         return .object(root)
     }
 
@@ -708,8 +717,15 @@ enum RootineCanonicalWorkspaceMapping {
                 return nil
             }
             let originalTrip = originalNative?.trips.first(where: { normalizedIdentifier($0.id) == id })
+            let currentTrip = workspace.trips.first(where: { normalizedIdentifier($0.id) == id })
             for key in ["name", "destination", "startDate", "endDate", "status", "travelers", "baseCurrency", "note", "archivedAt"] {
-                if key == "itinerary" { continue }
+                // Legacy compact records synthesize name from destination;
+                // that convenience value cannot rename an independent web
+                // trip title when only its itinerary was edited.
+                if key == "name", let currentTrip,
+                   currentTrip.startDate.isEmpty && currentTrip.endDate.isEmpty,
+                   currentTrip.name == currentTrip.destination,
+                   currentTrip.destination == originalTrip?.destination { continue }
                 if let replacement = native[key] { trip[key] = replacement }
             }
             if let existingItinerary = trip["itinerary"] {
@@ -802,6 +818,39 @@ enum RootineCanonicalWorkspaceMapping {
     private static func arrayValue(_ value: JSONValue?) -> [JSONValue] {
         guard case .array(let array) = value else { return [] }
         return array
+    }
+
+    /// A three-way merge keeps wire-only fields and absent legacy defaults
+    /// while applying actual native changes. Stable child IDs distinguish
+    /// edits, additions and deletions without replacing an entire dossier.
+    private static func mergingProjectionChanges(
+        existing: JSONValue?, original: JSONValue?, replacement: JSONValue?
+    ) -> JSONValue? {
+        if original == replacement { return existing }
+        if case .object(var retained) = existing,
+           case .object(let before) = original,
+           case .object(let after) = replacement {
+            for key in Set(before.keys).union(after.keys) {
+                retained[key] = mergingProjectionChanges(existing: retained[key], original: before[key], replacement: after[key])
+            }
+            return .object(retained)
+        }
+        if case .array(let retained) = existing,
+           case .array(let before) = original,
+           case .array(let after) = replacement,
+           (retained + before + after).allSatisfy({ identifier(objectValueIfPresent($0)?["id"]) != nil }) {
+            let retainedByID = dictionaryByID(.array(retained))
+            let beforeByID = dictionaryByID(.array(before))
+            return .array(after.compactMap { value in
+                guard let id = identifier(objectValueIfPresent(value)?["id"]) else { return value }
+                return mergingProjectionChanges(
+                    existing: retainedByID[id].map(JSONValue.object),
+                    original: beforeByID[id].map(JSONValue.object),
+                    replacement: value
+                )
+            })
+        }
+        return replacement
     }
 
     private static func stringValue(_ value: JSONValue?) -> String? {

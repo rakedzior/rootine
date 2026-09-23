@@ -511,10 +511,10 @@ func rootineHabitIsScheduledOnDate(
     dateKey: String,
     calendar: Calendar = .current
 ) -> Bool {
+    guard !rootineHabitIsPausedOnDate(habit, dateKey: dateKey) else { return false }
     guard let schedule = habit.schedule else { return true }
     guard dateKey >= schedule.startDate,
-          schedule.endDate == nil || dateKey <= schedule.endDate!,
-          !rootineHabitIsPausedOnDate(habit, dateKey: dateKey) else { return false }
+          schedule.endDate == nil || dateKey <= schedule.endDate! else { return false }
 
     switch schedule.type {
     case "daily":

@@ -1,5 +1,55 @@
 import Foundation
 
+enum TodayTaskMovement {
+    static func reordered(_ ids: [String], source: String, target: String) -> [String] {
+        guard source != target, let from = ids.firstIndex(of: source),
+              let to = ids.firstIndex(of: target) else { return ids }
+        var result = ids
+        result.remove(at: from)
+        result.insert(source, at: to)
+        return result
+    }
+
+    /// Shift the whole interval, preserving reminders, recurrence and completion history.
+    static func rescheduled(_ task: WorkspaceTask, dateKey: String, time: String?) -> WorkspaceTask? {
+        guard RootineDate.isLocalDateKey(dateKey), time == nil || RootineDate.isClockTime(time!) else { return nil }
+        var result = task
+        guard var schedule = rootineTaskSchedule(for: dateKey, time: time, existing: task.schedule) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let days = task.calendarDate.flatMap { start in
+            task.schedule?.endDate.flatMap { RootineDate.calendarDaysBetween(start, $0) }
+        } ?? 0
+        func minutes(_ clock: String) -> Int {
+            let parts = clock.split(separator: ":").compactMap { Int($0) }
+            return parts.count == 2 ? parts[0] * 60 + parts[1] : 0
+        }
+        var endDays = max(0, days)
+        if let time, let oldStart = task.time, let oldEnd = task.endTime ?? task.schedule?.endTime {
+            let duration = days * 1440 + minutes(oldEnd) - minutes(oldStart)
+            guard duration >= 0 else { return nil }
+            let end = minutes(time) + duration
+            endDays = end / 1440
+            schedule.endTime = String(format: "%02d:%02d", (end % 1440) / 60, end % 60)
+        } else {
+            schedule.endTime = nil
+        }
+        if endDays > 0, let start = RootineDate.dateOnly(from: dateKey),
+           let end = calendar.date(byAdding: .day, value: endDays, to: start) {
+            schedule.endDate = RootineDate.localDate(end, calendar: calendar)
+        } else {
+            schedule.endDate = nil
+        }
+        guard rootineValidTaskSchedule(schedule, taskDate: dateKey) else { return nil }
+        result.calendarDate = dateKey
+        result.view = rootineTaskViewForCalendarDate(dateKey)
+        result.time = time
+        result.endTime = schedule.endTime
+        result.schedule = schedule
+        return result
+    }
+}
+
 /// The domain order used by Today is a contract, not an implementation detail.
 /// Keeping it here makes every consumer (Today, notifications and future
 /// widgets) render the same deterministic order.
@@ -295,6 +345,68 @@ struct TodayAggregation: Equatable, Sendable {
 
     var degradedDomains: [TodayDomain] {
         orderedSummaries.filter { $0.status.isDegraded }.map(\.domain)
+    }
+}
+
+/// Membership is independent of completion for today's plan. An overdue item
+/// completed today stays visible until the next local day, including after relaunch.
+enum TodaySummaryGroup: String, CaseIterable {
+    case overdue, today, completed
+}
+
+struct TodayPlanSummary {
+    var overdueIDs = Set<Int>()
+    var todayIDs = Set<Int>()
+    var completedIDs = Set<Int>()
+    var remainingPriorities = 0
+
+    init(tasks: [WorkspaceTask], date: Date, calendar: Calendar = .current) {
+        let day = RootineDate.localDate(date, calendar: calendar)
+        var seen = Set<Int>()
+        for task in tasks where task.deleted != true && task.source?.kind != "work" {
+            guard seen.insert(task.id).inserted else { continue }
+            if rootineTaskIsDoneOnDate(task, dateKey: day) {
+                if task.schedule?.completedDates?.contains(day) == true {
+                    completedIDs.insert(task.id)
+                    continue
+                }
+                let timestamp = task.schedule?.completedAtByDate?[day] ?? task.completedAt
+                if let timestamp, let completed = RootineDate.date(from: timestamp) {
+                    if calendar.isDate(completed, inSameDayAs: date) { completedIDs.insert(task.id) }
+                } else if task.calendarDate == day {
+                    // Older records may only retain a completion flag for their scheduled day.
+                    completedIDs.insert(task.id)
+                }
+            } else {
+                if let due = task.calendarDate, due < day { overdueIDs.insert(task.id) }
+                else { todayIDs.insert(task.id) }
+                if task.priority != nil { remainingPriorities += 1 }
+            }
+        }
+    }
+
+    func ids(for group: TodaySummaryGroup) -> Set<Int> {
+        switch group {
+        case .overdue: return overdueIDs
+        case .today: return todayIDs
+        case .completed: return completedIDs
+        }
+    }
+}
+
+enum TodayTimelineTasks {
+    static func collect(today: [WorkspaceTask], overdue: [WorkspaceTask], all: [WorkspaceTask], date: Date, calendar: Calendar) -> [WorkspaceTask] {
+        let day = RootineDate.localDate(date, calendar: calendar)
+        let finishedOverdue = all.filter { task in
+            guard task.deleted != true, task.source?.kind != "work",
+                  let due = task.calendarDate, due < day,
+                  rootineTaskIsDoneOnDate(task, dateKey: day) else { return false }
+            let completion = task.schedule?.completedAtByDate?[day] ?? task.completedAt
+            guard let completion, let completedDate = RootineDate.date(from: completion) else { return false }
+            return calendar.isDate(completedDate, inSameDayAs: date)
+        }
+        var seen = Set<Int>()
+        return (today + overdue + finishedOverdue).filter { seen.insert($0.id).inserted }
     }
 }
 

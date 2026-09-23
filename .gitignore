@@ -26,3 +26,11 @@ ios/Rootine/Config/Secrets.*.xcconfig
 ios/**/xcuserdata/
 ios/**/DerivedData/
 ios/**/*.xcuserstate
+
+output/ios-remote/
+output/ios-gallery-check/
+# Keep generated runs, build logs and source archives local. Curated review
+# evidence is explicitly versioned; tracked files still receive updates.
+output/ios-spaces/
+
+.local/

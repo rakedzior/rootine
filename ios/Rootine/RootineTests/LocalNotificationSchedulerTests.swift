@@ -34,6 +34,12 @@ final class LocalNotificationSchedulerTests: XCTestCase {
         )
 
         XCTAssertNil(occurrence.userInfo["rootine_dedupe_key"])
+        XCTAssertNil(occurrence.userInfo["rootine_entity_id"])
+        XCTAssertNil(occurrence.userInfo["rootine_occurrence_id"])
+        let occurrenceHash = try XCTUnwrap(occurrence.userInfo["rootine_occurrence_hash"] as? String)
+        XCTAssertFalse(occurrenceHash.isEmpty)
+        XCTAssertFalse(occurrenceHash.contains("sensitive-user-id"))
+        XCTAssertFalse(occurrenceHash.contains("task-42"))
         let rawLink = try XCTUnwrap(occurrence.userInfo["rootine_deep_link"] as? String)
         let link = try XCTUnwrap(RootineNotificationDeepLink(userInfo: occurrence.userInfo))
         XCTAssertEqual(link.entity, .task)
@@ -120,14 +126,21 @@ final class LocalNotificationSchedulerTests: XCTestCase {
         XCTAssertEqual(plan.occurrences.first?.localTime, "01:00")
     }
 
-    func testPlannerResolvesSpringDSTGapToNextValidLocalTime() {
+    func testPlannerResolvesTaskAndHabitSpringDSTGapPreservingMinutes() {
         let timeZone = try! XCTUnwrap(TimeZone(identifier: "America/New_York"))
         let now = date("2026-03-08", time: "00:00", timeZone: timeZone)
         let workspace = TaskWorkspace(
             version: 2,
             updatedAt: RootineDate.isoTimestamp(now),
             tasks: [WorkspaceTask(id: 1, text: "DST", done: false, time: "02:30", view: "dzis", calendarDate: "2026-03-08")],
-            habits: [],
+            habits: [WorkspaceHabit(
+                id: 2,
+                name: "DST habit",
+                streak: 0,
+                done: false,
+                schedule: WorkspaceHabitSchedule(type: "daily", startDate: "2026-03-08"),
+                time: "02:30"
+            )],
             lists: [],
             tags: []
         )
@@ -141,13 +154,15 @@ final class LocalNotificationSchedulerTests: XCTestCase {
             maxPendingRequests: 64
         )
 
-        XCTAssertEqual(plan.occurrences.count, 1)
-        XCTAssertEqual(plan.occurrences[0].localDate, "2026-03-08")
-        XCTAssertEqual(plan.occurrences[0].localTime, "03:30")
-        XCTAssertEqual(
-            RootineLocalNotificationPlanner.triggerComponents(for: plan.occurrences[0].scheduledAt, timeZone: timeZone).hour,
-            3
-        )
+        XCTAssertEqual(plan.occurrences.count, 2)
+        XCTAssertEqual(Set(plan.occurrences.map(\.entity)), [.task, .habit])
+        for occurrence in plan.occurrences {
+            XCTAssertEqual(occurrence.localDate, "2026-03-08")
+            XCTAssertEqual(occurrence.localTime, "03:30")
+            let trigger = RootineLocalNotificationPlanner.triggerComponents(for: occurrence.scheduledAt, timeZone: timeZone)
+            XCTAssertEqual(trigger.hour, 3)
+            XCTAssertEqual(trigger.minute, 30)
+        }
     }
 
     func testCompletedPausedAndDeletedRecordsDoNotProduceOccurrences() {

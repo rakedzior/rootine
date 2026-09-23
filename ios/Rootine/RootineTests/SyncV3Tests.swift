@@ -134,6 +134,8 @@ final class SyncV3Tests: XCTestCase {
         let deviceTwoCursor = try await deviceTwo.load()
         XCTAssertNil(accountBCursor)
         XCTAssertNil(deviceTwoCursor)
+        let originalCursor = try await accountA.load()
+        XCTAssertEqual(originalCursor, 9, "Reading another account must not invalidate this account's cursor")
 
         let cursorURL = await accountA.location()
         try Data("{\"contractVersion\":1,\"accountID\":\"other\",\"deviceID\":\"device-1\",\"cursor\":9,\"updatedAt\":\"2026-09-03T10:00:00Z\"}".utf8)
@@ -195,18 +197,41 @@ final class SyncV3Tests: XCTestCase {
         XCTAssertEqual(defaults.object(forKey: legacyKey) as? String, "not-a-bool")
     }
 
-    func testWorkspaceFilesUseDataProtectionAndRefuseBroadRootDeletion() async throws {
+    func testWorkspaceFilesUseDataProtection() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("rootine-protection-tests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
+
+        #if targetEnvironment(simulator)
+        // Probe Foundation directly so missing protection on a simulator
+        // volume cannot mask a WorkspaceFileStore regression on a device.
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let probe = root.appendingPathComponent("protection-capability")
+        try Data("probe".utf8).write(
+            to: probe,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
+        let probeAttributes = try FileManager.default.attributesOfItem(atPath: probe.path)
+        try XCTSkipIf(
+            probeAttributes[.protectionKey] == nil,
+            "This simulator does not expose file protection after a direct Foundation protected write; verify protection on a physical iOS device."
+        )
+        #endif
+
         let store = WorkspaceFileStore(userID: "protected-user", rootURL: root)
         let workspace = TaskWorkspace(version: 2, updatedAt: "2026-09-02T10:00:00Z", tasks: [], habits: [], lists: [], tags: [])
 
         try await store.save(workspace, key: .tasks)
         let file = root.appendingPathComponent("Workspaces/rootine-task-workspace-v1.json")
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
-        XCTAssertEqual(attributes[.protectionKey] as? FileProtectionType, .completeUntilFirstUserAuthentication)
+        // Foundation returns an NSString value for NSFileProtectionKey.
+        XCTAssertEqual(
+            attributes[.protectionKey] as? String,
+            FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+        )
+    }
 
+    func testWorkspaceStoreRefusesBroadRootDeletion() async throws {
         let broadStore = WorkspaceFileStore(
             userID: "protected-user",
             rootURL: FileManager.default.temporaryDirectory
@@ -223,12 +248,12 @@ final class SyncV3Tests: XCTestCase {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("rootine-corrupt-cursor-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = root.appendingPathComponent("Sync/device", isDirectory: true)
+        let store = RootineSyncCursorStore(accountID: "account", deviceID: "device", rootURL: root)
+        let cursorURL = await store.location()
+        let directory = cursorURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let cursorURL = directory.appendingPathComponent("cursor.json")
         try Data("not-a-cursor".utf8).write(to: cursorURL, options: .atomic)
 
-        let store = RootineSyncCursorStore(accountID: "account", deviceID: "device", rootURL: root)
         do {
             _ = try await store.load()
             XCTFail("A corrupt cursor must not be accepted")

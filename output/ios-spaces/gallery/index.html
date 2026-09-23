@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Rootine — przegląd iOS</title>
+  <style>
+    :root { color-scheme: dark; --bg: #15181b; --text: #f1f0ec; --muted: #b6b8bb; --line: #3d444c; --accent: #a1b5ee; }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 24px; scrollbar-color: #606a78 var(--bg); }
+    body { margin: 0; color: var(--text); background: var(--bg); font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    ::selection { background: #657fce; color: #fff; }
+    a { color: var(--accent); text-underline-offset: 4px; }
+    a:hover { color: var(--text); }
+    a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+    .wrap { width: min(1600px, 100%); margin: 0 auto; padding: 40px clamp(16px, 4vw, 64px) 64px; }
+    header { margin-bottom: 40px; }
+    h1 { margin: 0 0 12px; font-size: clamp(28px, 3vw, 36px); line-height: 1.15; letter-spacing: -.025em; text-wrap: balance; }
+    header p { max-width: 70ch; margin: 0; color: var(--muted); }
+    header .review-note { margin-top: 16px; color: var(--text); }
+    nav { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 20px; }
+    nav a { display: inline-flex; align-items: center; min-height: 44px; }
+    section + section { margin-top: 64px; }
+    h2 { margin: 0 0 24px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 24px; line-height: 1.3; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 40px 28px; align-items: start; }
+    figure { min-width: 0; width: 100%; max-width: 380px; margin: 0; }
+    .screenshot { display: block; width: 100%; }
+    img { display: block; width: 100%; height: auto; }
+    figcaption { padding-top: 14px; }
+    h3 { margin: 0 0 5px; font-size: 16px; line-height: 1.4; }
+    .version { color: var(--muted); font-size: 14px; font-weight: 400; }
+    .dimensions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .dimensions a { display: inline-flex; align-items: center; min-height: 36px; }
+    details { margin-top: 6px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+    summary { width: fit-content; padding: 6px 0; cursor: pointer; }
+    details p { margin: 6px 0; }
+    footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+    @media (max-width: 600px) { .wrap { padding-top: 28px; } figure { margin-inline: auto; } nav { gap: 4px 16px; } section + section { margin-top: 48px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header><h1>Rootine — przegląd iOS</h1>
+      <p>Zrzuty ekranu z symulatora iOS. Kliknij obraz, aby otworzyć oryginalny plik PNG w pełnej rozdzielczości.</p>
+      <p class="review-note">Zrzuty aplikacji SwiftUI z symulatora iPhone 14: aktualne ekrany, formularze, profil oraz próbki jasnego motywu i większego tekstu. Zaliczone: 14 testów interfejsu i 177 testów jednostkowych; 2 testy jawnie pominięte. Końcowy build działa na Macu. Szczegóły w ios/NATIVE-SPACES.md.</p>
+      <nav aria-label="Sekcje przeglądu"><a href="#main">Główne ekrany i przestrzenie</a><a href="#editors">Dodawanie i edycja</a><a href="#account">Profil i ustawienia</a><a href="#states">Pozostałe widoki i stany</a></nav>
+    </header>
+    <main><section id="main" aria-labelledby="main-title"><h2 id="main-title">Główne ekrany i przestrzenie</h2><div class="gallery"><figure>
+      <a class="screenshot" href="screenshots/5560a8ee210e7cd83179.png" target="_blank" rel="noopener" aria-label="Dzisiaj — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/5560a8ee210e7cd83179.png" width="1170" height="2532" alt="Dzisiaj" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Dzisiaj</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/5560a8ee210e7cd83179.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Dzisiaj (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces today profile</p><p>today-profile.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/c16b15025aab1425e30a.png" target="_blank" rel="noopener" aria-label="Kalendarz — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/c16b15025aab1425e30a.png" width="1170" height="2532" alt="Kalendarz" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Kalendarz</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/c16b15025aab1425e30a.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Kalendarz (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces calendar profile</p><p>calendar-profile.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/49d0f86df5a094c2a1ba.png" target="_blank" rel="noopener" aria-label="Odżywianie — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/49d0f86df5a094c2a1ba.png" width="1170" height="2532" alt="Odżywianie" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/49d0f86df5a094c2a1ba.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition</p><p>nutrition.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/edf07de4e4742747327d.png" target="_blank" rel="noopener" aria-label="Przestrzenie — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/edf07de4e4742747327d.png" width="1170" height="2532" alt="Przestrzenie" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Przestrzenie</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/edf07de4e4742747327d.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Przestrzenie (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces more</p><p>more.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/7caa60b598e4e6ee687b.png" target="_blank" rel="noopener" aria-label="Notatki — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/7caa60b598e4e6ee687b.png" width="1170" height="2532" alt="Notatki" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Notatki</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/7caa60b598e4e6ee687b.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Notatki (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces notes</p><p>notes.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/d9025681f99aee950d9a.png" target="_blank" rel="noopener" aria-label="Notatki — z listy przestrzeni — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/d9025681f99aee950d9a.png" width="1170" height="2532" alt="Notatki — z listy przestrzeni" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Notatki — z listy przestrzeni</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/d9025681f99aee950d9a.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Notatki — z listy przestrzeni (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces notes from hub</p><p>notes-from-hub.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/d69a24987be341b05a14.png" target="_blank" rel="noopener" aria-label="Sport — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/d69a24987be341b05a14.png" width="1170" height="2532" alt="Sport" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sport</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/d69a24987be341b05a14.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sport (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces sport</p><p>sport.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/019b01dc02207e07b6f8.png" target="_blank" rel="noopener" aria-label="Cele — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/019b01dc02207e07b6f8.png" width="1170" height="2532" alt="Cele" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Cele</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/019b01dc02207e07b6f8.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Cele (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces goals</p><p>goals.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/2ec7631c93da69b4af69.png" target="_blank" rel="noopener" aria-label="Praca — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/2ec7631c93da69b4af69.png" width="1170" height="2532" alt="Praca" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Praca</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/2ec7631c93da69b4af69.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Praca (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces work</p><p>work.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/366ff826c1006b3d16a9.png" target="_blank" rel="noopener" aria-label="Podróże — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/366ff826c1006b3d16a9.png" width="1170" height="2532" alt="Podróże" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Podróże</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/366ff826c1006b3d16a9.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Podróże (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces travel</p><p>travel.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/9cee7ade8a5c5caf040a.png" target="_blank" rel="noopener" aria-label="Zdrowie — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/9cee7ade8a5c5caf040a.png" width="1170" height="2532" alt="Zdrowie" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Zdrowie</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/9cee7ade8a5c5caf040a.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Zdrowie (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces health</p><p>health.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/7a6bd64fac9c9bf35805.png" target="_blank" rel="noopener" aria-label="Sprawy — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/7a6bd64fac9c9bf35805.png" width="1170" height="2532" alt="Sprawy" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sprawy</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/7a6bd64fac9c9bf35805.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sprawy (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces affairs</p><p>affairs.png</p></details>
+      </figcaption>
+    </figure></div></section>
+<section id="editors" aria-labelledby="editors-title"><h2 id="editors-title">Dodawanie i edycja</h2><div class="gallery"><figure>
+      <a class="screenshot" href="screenshots/170e8e3fb40d355dc2eb.png" target="_blank" rel="noopener" aria-label="Odżywianie — dodaj śniadanie — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/170e8e3fb40d355dc2eb.png" width="1170" height="2532" alt="Odżywianie — dodaj śniadanie" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie — dodaj śniadanie</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/170e8e3fb40d355dc2eb.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie — dodaj śniadanie (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition add breakfast</p><p>nutrition-add-breakfast.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/eefbd71eef808a19586a.png" target="_blank" rel="noopener" aria-label="Odżywianie — kategorie posiłków — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/eefbd71eef808a19586a.png" width="1170" height="2532" alt="Odżywianie — kategorie posiłków" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie — kategorie posiłków</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/eefbd71eef808a19586a.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie — kategorie posiłków (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition meal categories</p><p>nutrition-meal-categories.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/c5c4df124ae91c0b7291.png" target="_blank" rel="noopener" aria-label="Przestrzenie — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/c5c4df124ae91c0b7291.png" width="1170" height="2532" alt="Przestrzenie — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Przestrzenie — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/c5c4df124ae91c0b7291.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Przestrzenie — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces more add</p><p>more-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/2730b25ac8532095c071.png" target="_blank" rel="noopener" aria-label="Notatki — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/2730b25ac8532095c071.png" width="1170" height="2532" alt="Notatki — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Notatki — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/2730b25ac8532095c071.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Notatki — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces notes add</p><p>notes-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/46bdd317ef29aa7be583.png" target="_blank" rel="noopener" aria-label="Sport — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/46bdd317ef29aa7be583.png" width="1170" height="2532" alt="Sport — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sport — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/46bdd317ef29aa7be583.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sport — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces sport add</p><p>sport-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/02780709d42caedb547e.png" target="_blank" rel="noopener" aria-label="Cele — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/02780709d42caedb547e.png" width="1170" height="2532" alt="Cele — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Cele — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/02780709d42caedb547e.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Cele — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces goals add</p><p>goals-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/810fb2c192fd2385c7a5.png" target="_blank" rel="noopener" aria-label="Praca — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/810fb2c192fd2385c7a5.png" width="1170" height="2532" alt="Praca — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Praca — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/810fb2c192fd2385c7a5.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Praca — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces work add</p><p>work-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/190affbd49ddd2e7299d.png" target="_blank" rel="noopener" aria-label="Podróże — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/190affbd49ddd2e7299d.png" width="1170" height="2532" alt="Podróże — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Podróże — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/190affbd49ddd2e7299d.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Podróże — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces travel add</p><p>travel-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/14ad86f5e5601d13ac1b.png" target="_blank" rel="noopener" aria-label="Zdrowie — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/14ad86f5e5601d13ac1b.png" width="1170" height="2532" alt="Zdrowie — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Zdrowie — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/14ad86f5e5601d13ac1b.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Zdrowie — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces health add</p><p>health-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/fdc51f5416dba605c259.png" target="_blank" rel="noopener" aria-label="Sprawy — dodaj wpis — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/fdc51f5416dba605c259.png" width="1170" height="2532" alt="Sprawy — dodaj wpis" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sprawy — dodaj wpis</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/fdc51f5416dba605c259.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sprawy — dodaj wpis (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces affairs add</p><p>affairs-add.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/4bcca5f3cdfb62c2640f.png" target="_blank" rel="noopener" aria-label="Sprawy — wybierz rodzaj wpisu — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/4bcca5f3cdfb62c2640f.png" width="1170" height="2532" alt="Sprawy — wybierz rodzaj wpisu" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sprawy — wybierz rodzaj wpisu</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/4bcca5f3cdfb62c2640f.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sprawy — wybierz rodzaj wpisu (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces affairs add choice</p><p>affairs-add-choice.png</p></details>
+      </figcaption>
+    </figure></div></section>
+<section id="account" aria-labelledby="account-title"><h2 id="account-title">Profil i ustawienia</h2><div class="gallery"><figure>
+      <a class="screenshot" href="screenshots/bc7294ad32af1d3a0b06.png" target="_blank" rel="noopener" aria-label="Kalendarz — menu profilu — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/bc7294ad32af1d3a0b06.png" width="1170" height="2532" alt="Kalendarz — menu profilu" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Kalendarz — menu profilu</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/bc7294ad32af1d3a0b06.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Kalendarz — menu profilu (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces calendar profile menu</p><p>calendar-profile-menu.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/6726099883f9b63cec5a.png" target="_blank" rel="noopener" aria-label="Profil — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/6726099883f9b63cec5a.png" width="1170" height="2532" alt="Profil" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Profil</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/6726099883f9b63cec5a.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Profil (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces profile</p><p>profile.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/9f77913a39a5ec5a58df.png" target="_blank" rel="noopener" aria-label="Ustawienia — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/9f77913a39a5ec5a58df.png" width="1170" height="2532" alt="Ustawienia" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Ustawienia</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/9f77913a39a5ec5a58df.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Ustawienia (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces settings</p><p>settings.png</p></details>
+      </figcaption>
+    </figure></div></section>
+<section id="states" aria-labelledby="states-title"><h2 id="states-title">Pozostałe widoki i stany</h2><div class="gallery"><figure>
+      <a class="screenshot" href="screenshots/24d14db8e18754a2f5dc.png" target="_blank" rel="noopener" aria-label="Odżywianie — before gesture entry — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/24d14db8e18754a2f5dc.png" width="1170" height="2532" alt="Odżywianie — before gesture entry" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie — before gesture entry</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/24d14db8e18754a2f5dc.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie — before gesture entry (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition before gesture entry</p><p>nutrition-before-gesture-entry.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/9b235de4f3f3e42d50d5.png" target="_blank" rel="noopener" aria-label="Odżywianie — ciemny motyw, większy tekst — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/9b235de4f3f3e42d50d5.png" width="1170" height="2532" alt="Odżywianie — ciemny motyw, większy tekst" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie — ciemny motyw, większy tekst</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/9b235de4f3f3e42d50d5.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie — ciemny motyw, większy tekst (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition dark extra-extra-extra-large</p><p>nutrition-dark-extra-extra-extra-large.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/7f8f7c19ff176b677693.png" target="_blank" rel="noopener" aria-label="Odżywianie — jasny motyw — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/7f8f7c19ff176b677693.png" width="1170" height="2532" alt="Odżywianie — jasny motyw" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie — jasny motyw</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/7f8f7c19ff176b677693.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie — jasny motyw (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition light large</p><p>nutrition-light-large.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/637372bc99c12fe8260d.png" target="_blank" rel="noopener" aria-label="Odżywianie — po przesunięciu posiłku — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/637372bc99c12fe8260d.png" width="1170" height="2532" alt="Odżywianie — po przesunięciu posiłku" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Odżywianie — po przesunięciu posiłku</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/637372bc99c12fe8260d.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Odżywianie — po przesunięciu posiłku (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces nutrition after drag</p><p>nutrition-after-drag.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/70999552893d99bdae8e.png" target="_blank" rel="noopener" aria-label="Przestrzenie — jasny motyw — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/70999552893d99bdae8e.png" width="1170" height="2532" alt="Przestrzenie — jasny motyw" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Przestrzenie — jasny motyw</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/70999552893d99bdae8e.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Przestrzenie — jasny motyw (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces more light large</p><p>more-light-large.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/1c23b4870309aba51a34.png" target="_blank" rel="noopener" aria-label="Notatki — menu kontekstowe — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/1c23b4870309aba51a34.png" width="1170" height="2532" alt="Notatki — menu kontekstowe" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Notatki — menu kontekstowe</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/1c23b4870309aba51a34.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Notatki — menu kontekstowe (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces notes hold menu</p><p>notes-hold-menu.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/c37295e27fcb0851cab5.png" target="_blank" rel="noopener" aria-label="Notatki — po archiwizacji — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/c37295e27fcb0851cab5.png" width="1170" height="2532" alt="Notatki — po archiwizacji" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Notatki — po archiwizacji</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/c37295e27fcb0851cab5.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Notatki — po archiwizacji (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces notes archived temporary note</p><p>notes-archived-temporary-note.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/43a9a32b9da94f307dcf.png" target="_blank" rel="noopener" aria-label="Sport — po przesunięciu treningu — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/43a9a32b9da94f307dcf.png" width="1170" height="2532" alt="Sport — po przesunięciu treningu" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sport — po przesunięciu treningu</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/43a9a32b9da94f307dcf.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sport — po przesunięciu treningu (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces sport after weekday drag</p><p>sport-after-weekday-drag.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/5eb8912dea9c3348ecf5.png" target="_blank" rel="noopener" aria-label="Sport — po zakończeniu treningu — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/5eb8912dea9c3348ecf5.png" width="1170" height="2532" alt="Sport — po zakończeniu treningu" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Sport — po zakończeniu treningu</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/5eb8912dea9c3348ecf5.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Sport — po zakończeniu treningu (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces sport completed temporary workout</p><p>sport-completed-temporary-workout.png</p></details>
+      </figcaption>
+    </figure>
+<figure>
+      <a class="screenshot" href="screenshots/b02d70688265f0fface7.png" target="_blank" rel="noopener" aria-label="Zdrowie — ciemny motyw, większy tekst — otwórz pełny PNG w nowej karcie">
+        <img src="screenshots/b02d70688265f0fface7.png" width="1170" height="2532" alt="Zdrowie — ciemny motyw, większy tekst" loading="lazy" decoding="async">
+      </a>
+      <figcaption><h3>Zdrowie — ciemny motyw, większy tekst</h3>
+        <p class="dimensions">1170 × 2532 px <a href="screenshots/b02d70688265f0fface7.png" target="_blank" rel="noopener">Pełny PNG<span class="sr-only">: Zdrowie — ciemny motyw, większy tekst (nowa karta)</span></a></p>
+        <details><summary>Źródło zrzutu</summary><p>Spaces health dark extra-extra-extra-large</p><p>health-dark-extra-extra-extra-large.png</p></details>
+      </figcaption>
+    </figure></div></section></main>
+    <footer>Liczba zrzutów: 36. Obrazy zachowują oryginalne proporcje i rozdzielczość.</footer>
+  </div>
+</body>
+</html>

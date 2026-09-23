@@ -1,17 +1,144 @@
 import SwiftUI
+import UIKit
+
+private struct RootineInitialAddKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var rootineInitialAdd: Bool {
+        get { self[RootineInitialAddKey.self] }
+        set { self[RootineInitialAddKey.self] = newValue }
+    }
+}
+
+/// Shared navigation for native spaces; each space supplies its own creation action.
+private struct RootineScreenChrome: ViewModifier {
+    let title: String
+    let addLabel: String
+    let onAdd: () -> Void
+    @Environment(\.rootineInitialAdd) private var initialAdd
+    @State private var handledInitialAdd = false
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { RootineProfileButton() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onAdd) {
+                        Image(systemName: "plus").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(addLabel)
+                    .accessibilityIdentifier("rootine-add")
+                }
+            }
+            .task {
+                if initialAdd && !handledInitialAdd {
+                    handledInitialAdd = true
+                    onAdd()
+                }
+            }
+    }
+}
+
+struct RootineProfileButton: View {
+    @State private var isShowingProfile = false
+
+    var body: some View {
+        Button { isShowingProfile = true } label: {
+            Image(systemName: "person.crop.circle")
+                .font(.title3)
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Profil i ustawienia")
+        .accessibilityIdentifier("rootine-profile")
+        .sheet(isPresented: $isShowingProfile) { RootineAccountSheet() }
+    }
+}
+
+extension View {
+    func rootineScreenChrome(title: String, addLabel: String, onAdd: @escaping () -> Void) -> some View {
+        modifier(RootineScreenChrome(title: title, addLabel: addLabel, onAdd: onAdd))
+    }
+
+    /// Swipes are short commands; vertical pans and a held drag remain available.
+    func rootineSwipeActions(
+        leadingLabel: String, leadingIcon: String, onLeading: @escaping () -> Void,
+        trailingLabel: String, trailingIcon: String, onTrailing: @escaping () -> Void
+    ) -> some View {
+        self
+            .gesture(RootineHorizontalSwipe(direction: .right, action: onLeading))
+            .gesture(RootineHorizontalSwipe(direction: .left, action: onTrailing))
+            .accessibilityAction(named: Text(leadingLabel), onLeading)
+            .accessibilityAction(named: Text(trailingLabel), onTrailing)
+    }
+}
+
+private struct RootineHorizontalSwipe: UIGestureRecognizerRepresentable {
+    let direction: UISwipeGestureRecognizer.Direction
+    let action: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UISwipeGestureRecognizer {
+        let recognizer = UISwipeGestureRecognizer()
+        recognizer.direction = direction
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UISwipeGestureRecognizer, context: Context) {
+        if recognizer.state == .ended {
+            UISelectionFeedbackGenerator().selectionChanged()
+            action()
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
+    }
+}
 
 enum RootineTheme {
     enum ColorToken {
-        static let canvas = Color(uiColor: .systemGroupedBackground)
-        static let surface = Color(uiColor: .secondarySystemGroupedBackground)
-        static let elevated = Color(uiColor: .tertiarySystemGroupedBackground)
-        static let separator = Color(uiColor: .separator)
-        static let primaryText = Color(uiColor: .label)
-        static let secondaryText = Color(uiColor: .secondaryLabel)
-        static let action = Color(uiColor: .systemBlue)
-        static let success = Color(uiColor: .systemGreen)
-        static let warning = Color(uiColor: .systemOrange)
-        static let destructive = Color(uiColor: .systemRed)
+        // These values mirror the web product tokens while retaining a
+        // semantic light-mode counterpart and Dynamic Type-friendly system
+        // rendering on iOS.
+        static let canvas = adaptive(dark: rgb(0x15181B), light: rgb(0xF2EEE6))
+        static let surface = adaptive(dark: rgb(0x1D2125), light: rgb(0xFAF8F3))
+        static let elevated = adaptive(dark: rgb(0x24292F), light: rgb(0xFFFFFF))
+        static let separator = adaptive(
+            dark: rgba(0xDEE5F4, alpha: 0.10),
+            light: rgba(0x302C27, alpha: 0.12)
+        )
+        static let primaryText = adaptive(dark: rgb(0xF1F0EC), light: rgb(0x302C27))
+        static let secondaryText = adaptive(dark: rgb(0xB6B8BB), light: rgb(0x685F55))
+        static let action = adaptive(dark: rgb(0x657FCE), light: rgb(0x4F63A6))
+        static let success = adaptive(dark: rgb(0x69A77A), light: rgb(0x5F8A68))
+        static let warning = adaptive(dark: rgb(0xD2A04D), light: rgb(0xB97828))
+        static let destructive = adaptive(dark: rgb(0xD36A6A), light: rgb(0xB95858))
+
+        private static func adaptive(dark: UIColor, light: UIColor) -> Color {
+            Color(uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark ? dark : light
+            })
+        }
+
+        private static func rgb(_ hex: UInt32) -> UIColor {
+            rgba(hex, alpha: 1)
+        }
+
+        private static func rgba(_ hex: UInt32, alpha: CGFloat) -> UIColor {
+            UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: alpha
+            )
+        }
     }
 
     enum Spacing {
@@ -222,12 +349,16 @@ private struct RootineStateView: View {
 
 struct RootineOfflineBanner: View {
     let message: String
+    @State private var isVisible = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(message: String = "Pracujesz offline. Zmiany zsynchronizują się po odzyskaniu połączenia.") {
         self.message = message
     }
 
     var body: some View {
+        Group {
+            if isVisible {
         Label(message, systemImage: "wifi.slash")
             .font(.subheadline)
             .foregroundStyle(RootineTheme.ColorToken.primaryText)
@@ -236,6 +367,15 @@ struct RootineOfflineBanner: View {
             .background(RootineTheme.ColorToken.warning.opacity(0.16))
             .clipShape(RoundedRectangle(cornerRadius: RootineTheme.Radius.control, style: .continuous))
             .accessibilityElement(children: .combine)
+            .transition(.opacity)
+            }
+        }
+        .task {
+            do {
+                try await Task.sleep(for: .seconds(UIAccessibility.isVoiceOverRunning ? 10 : 5))
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { isVisible = false }
+            } catch { /* View left the screen; cancel its dismissal timer. */ }
+        }
     }
 }
 

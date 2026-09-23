@@ -1,0 +1,65 @@
+{
+  "test_exit": 0,
+  "build_exit": 0,
+  "errors": [],
+  "screenshots": [
+    {
+      "exportedFileName": "nutrition-dark-large.png",
+      "suggestedHumanReadableName": "Spaces nutrition"
+    },
+    {
+      "exportedFileName": "more-dark-large.png",
+      "suggestedHumanReadableName": "Spaces more"
+    },
+    {
+      "exportedFileName": "notes-dark-large.png",
+      "suggestedHumanReadableName": "Spaces notes"
+    },
+    {
+      "exportedFileName": "sport-dark-large.png",
+      "suggestedHumanReadableName": "Spaces sport"
+    },
+    {
+      "exportedFileName": "goals-dark-large.png",
+      "suggestedHumanReadableName": "Spaces goals"
+    },
+    {
+      "exportedFileName": "work-dark-large.png",
+      "suggestedHumanReadableName": "Spaces work"
+    },
+    {
+      "exportedFileName": "travel-dark-large.png",
+      "suggestedHumanReadableName": "Spaces travel"
+    },
+    {
+      "exportedFileName": "health-dark-large.png",
+      "suggestedHumanReadableName": "Spaces health"
+    },
+    {
+      "exportedFileName": "affairs-dark-large.png",
+      "suggestedHumanReadableName": "Spaces affairs"
+    },
+    {
+      "exportedFileName": "nutrition-light-large.png",
+      "suggestedHumanReadableName": "Spaces nutrition light large"
+    },
+    {
+      "exportedFileName": "more-light-large.png",
+      "suggestedHumanReadableName": "Spaces more light large"
+    },
+    {
+      "exportedFileName": "nutrition-dark-extra-extra-extra-large.png",
+      "suggestedHumanReadableName": "Spaces nutrition dark extra-extra-extra-large"
+    },
+    {
+      "exportedFileName": "health-dark-extra-extra-extra-large.png",
+      "suggestedHumanReadableName": "Spaces health dark extra-extra-extra-large"
+    }
+  ],
+  "xcode": "Xcode 26.3\nBuild version 17C529",
+  "original_simulator_settings": {
+    "appearance": "dark",
+    "content_size": "large"
+  },
+  "passed": true
+}

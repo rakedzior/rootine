@@ -742,11 +742,9 @@ private extension Duration {
 
     func bounded(minimum: Duration, maximum: Duration) -> Duration {
         let value = timeInterval
-        let lower = minimum.timeInterval
-        let upper = maximum.timeInterval
         guard value.isFinite else { return maximum }
-        let bounded = Swift.max(lower, Swift.min(value, upper))
-        return .milliseconds(Int64((bounded * 1_000).rounded(.up)))
+        guard value > 0 else { return minimum }
+        return Swift.min(self, maximum)
     }
 }
 
