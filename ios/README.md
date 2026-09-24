@@ -233,9 +233,13 @@ unit launch argument and final verification results.
 ## Account configuration
 
 The native callback is `rootine://auth-callback`. Add that exact redirect URL to
-the Supabase Auth allowlist. Registration stays visibly unavailable until real
-`ROOTINE_TERMS_URL` and `ROOTINE_PRIVACY_URL` values are supplied; the app never
-ships dead legal links.
+the Supabase Auth allowlist. In `Development` and `Staging`, registration can
+be exercised with clearly labelled local informational documents bundled in
+the app. `Production` still keeps registration unavailable until real
+`ROOTINE_TERMS_URL` and `ROOTINE_PRIVACY_URL` values are supplied; the app
+never ships dead legal links. The local Development build also exposes a
+test-account entry in the native sign-in screen; it uses deterministic preview
+data only and never creates a server account.
 
 The server is authoritative for `normalized_sync_enabled`,
 `normalized_read_enabled`, and `notifications_enabled`. Bundle values are safe
@@ -247,6 +251,36 @@ The local-storage boundary, account isolation, lifecycle cleanup, and explicit
 security omissions are documented in [`docs/ios-secure-storage.md`](../docs/ios-secure-storage.md).
 The protected workflow runs executable `xcodebuild test`, SQL/RLS and Edge
 contract gates, then the isolated staging sync smoke before a TestFlight build.
+
+## Today aggregation benchmark
+
+Run the fixed 2,000-task XCTest benchmark on an available iOS Simulator:
+
+```sh
+./scripts/ios-today-aggregation-benchmark.sh
+```
+
+The runner explicitly selects `iphonesimulator`, builds the test bundle, runs
+only `testLargeAccountAggregationIsMeasured`, and writes the full log and
+`.xcresult` paths. Set `DESTINATION` to select another simulator and
+`BENCHMARK_TIMEOUT_SECONDS` to bound a stalled CoreSimulator/testmanager run.
+The runner pins the iOS Simulator SDK so `TEST_HOST` resolves inside
+`Development-iphonesimulator` instead of the non-existent macOS path.
+
+## Visual review screenshots
+
+The manually triggered `iOS visual review` workflow runs the deterministic
+`--rootine-preview` launch on the iPhone 17 Pro simulator and captures the five
+primary tabs as PNG files. It waits for the preview data to finish loading and
+validates the exported XCTest manifest contains exactly the five named PNG
+attachments before uploading them. It uses `CODE_SIGNING_ALLOWED=NO`, so it
+does not need a physical iPhone, provisioning profile, or production
+credentials.
+
+In GitHub, open Actions → `iOS visual review` → Run workflow. The screenshots,
+XCTest result bundle, and test logs are uploaded as the
+`ios-visual-review-<commit>` artifact for 14 days. The default simulator and
+toolchain match the existing release workflow: iPhone 17 Pro on Xcode 26.3.
 
 Production Apple/Google credentials, provider-console settings, and redirect
 allowlists are intentionally not committed or configured by this repository.

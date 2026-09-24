@@ -149,6 +149,14 @@ enum RootineTheme {
         static let xLarge: CGFloat = 32
     }
 
+    enum Layout {
+        /// Extra scrollable clearance for the floating iOS tab bar.
+        /// The system tab bar does not reserve its full visual height when it
+        /// floats over scroll content, so every root tab needs this shared
+        /// bottom inset to keep the last row reachable.
+        static let floatingTabBarClearance: CGFloat = 112
+    }
+
     enum Radius {
         static let control: CGFloat = 10
         static let surface: CGFloat = 16
@@ -380,6 +388,8 @@ struct RootineOfflineBanner: View {
 }
 
 struct RootineUndoBanner: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let usesAdaptiveLayout: Bool
     let message: String
     let undoTitle: String
     let onUndo: () -> Void
@@ -387,14 +397,29 @@ struct RootineUndoBanner: View {
     init(
         message: String,
         undoTitle: String = "Cofnij",
+        usesAdaptiveLayout: Bool = false,
         onUndo: @escaping () -> Void
     ) {
+        self.usesAdaptiveLayout = usesAdaptiveLayout
         self.message = message
         self.undoTitle = undoTitle
         self.onUndo = onUndo
     }
 
     var body: some View {
+        Group {
+            if usesAdaptiveLayout && typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: RootineTheme.Spacing.small) {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(RootineTheme.ColorToken.primaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(undoTitle, action: onUndo)
+                        .font(.headline)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+            } else {
         HStack(spacing: RootineTheme.Spacing.medium) {
             Text(message)
                 .font(.subheadline)
@@ -404,6 +429,8 @@ struct RootineUndoBanner: View {
             Button(undoTitle, action: onUndo)
                 .font(.headline)
                 .frame(minWidth: 44, minHeight: 44)
+        }
+            }
         }
         .padding(.leading, RootineTheme.Spacing.medium)
         .padding(.trailing, RootineTheme.Spacing.small)

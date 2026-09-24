@@ -29,6 +29,14 @@ struct RootineConfiguration: Equatable, Sendable {
         termsURL != nil && privacyURL != nil
     }
 
+    /// Development and staging builds ship a clearly labelled local legal
+    /// document surface so self-registration can be exercised before the
+    /// public web deployment is configured. Production still requires both
+    /// externally hosted URLs.
+    var isSelfRegistrationAvailable: Bool {
+        isAuthComplete && (hasLegalDocuments || environment != "production")
+    }
+
     var authCallbackURL: URL? {
         URL(string: "\(authCallbackScheme)://auth-callback")
     }

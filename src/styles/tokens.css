@@ -448,3 +448,53 @@
   --row-height-default: 38px;
   --row-height-comfortable: 48px;
 }
+
+/* stylelint-disable projectwallace/max-unique-colors */
+/* Graphite Cool Ice v3 — the default dark contract. Warm Linen remains opt-in. */
+:root:not([data-theme="rootine-warm-linen"]),
+:root[data-theme="rootine-cobalt"] {
+  --color-app-bg: #0d131b;
+  --color-sidebar-bg: #0d131b;
+  --color-surface-1: #141d29;
+  --color-surface-2: #1b2838;
+  --color-surface-hover: #25364a;
+  --color-border: rgba(230, 237, 245, 0.08);
+  --color-border-strong: rgba(230, 237, 245, 0.16);
+  --color-text-primary: #e6edf5;
+  --color-text-secondary: #a7b4c2;
+  --color-text-tertiary: #78889a;
+  --color-sidebar-text: #a7b4c2;
+  --color-primary: #7dd3fc;
+  --color-primary-hover: #38bdf8;
+  --color-primary-subtle: rgba(125, 211, 252, 0.12);
+  --color-primary-text: #7dd3fc;
+  --color-on-primary: #0d131b;
+  --color-warning: #fbbf24;
+  --color-warning-subtle: rgba(251, 191, 36, 0.12);
+  --color-warning-text: #fbbf24;
+  --color-success: #34d399;
+  --color-success-subtle: rgba(52, 211, 153, 0.12);
+  --color-success-text: #5eead4;
+  --color-danger: #f87171;
+  --color-danger-subtle: rgba(248, 113, 113, 0.12);
+  --color-danger-text: #f87171;
+  --color-disabled-bg: #141d29;
+  --color-disabled-text: #4c5a6b;
+  --color-neutral-subtle: rgba(167, 180, 194, 0.07);
+  --color-backdrop: rgba(5, 10, 16, 0.76);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  --font-data: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --theme-ambient-brand: #38bdf8;
+  --theme-ambient-warm: #fbbf24;
+  --theme-ambient-cool: #7dd3fc;
+  --theme-ambient-focus: #7dd3fc;
+  --theme-ambient-organic: #5eead4;
+  --theme-ambient-material: #78889a;
+  --theme-ambient-soft: #a7b4c2;
+  --theme-material-fiber: rgba(167, 180, 194, 0.08);
+  --theme-material-vein: rgba(125, 211, 252, 0.12);
+}
+/* stylelint-enable projectwallace/max-unique-colors */

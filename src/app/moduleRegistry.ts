@@ -41,7 +41,7 @@ export type AppModule = {
 export const APP_MODULES = [
   { id: "today", label: "Dzisiaj", icon: SunMedium, to: "/dzisiaj", mobilePriority: 0 },
   { id: "tasks", label: "Zadania", icon: CheckSquare, to: "/zadania", ownedPaths: ["/kalendarz"], mobilePriority: 1 },
-  { id: "nutrition", label: "Odżywianie", icon: Salad, to: "/odzywianie", mobilePriority: null },
+  { id: "nutrition", label: "Dieta", icon: Salad, to: "/odzywianie", mobilePriority: null },
   { id: "sport", label: "Sport", icon: Dumbbell, to: "/sport", mobilePriority: null },
   { id: "work", label: "Praca", icon: BriefcaseBusiness, to: "/praca", mobilePriority: 2 },
   { id: "goals", label: "Cele", icon: Target, to: "/cele", mobilePriority: null },

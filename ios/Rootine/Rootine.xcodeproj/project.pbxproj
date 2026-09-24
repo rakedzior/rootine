@@ -59,6 +59,8 @@
 		B00000000000000000000117 /* ObservabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000117 /* ObservabilityTests.swift */; };
 		B00000000000000000000118 /* SportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000118 /* SportModelsTests.swift */; };
 		B00000000000000000000901 = {isa = PBXBuildFile; fileRef = F00000000000000000000901; };
+		B00000000000000000000200 /* CalendarHarnessUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000200; };
+		B00000000000000000000201 /* VisualReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000201; };
 		B00000000000000000000029 /* ProductivityModules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000029 /* ProductivityModules.swift */; };
 		B0000000000000000000002A /* LifeModules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002A /* LifeModules.swift */; };
 /* End PBXBuildFile section */
@@ -135,6 +137,8 @@
 		F00000000000000000001001 /* Rootine.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rootine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000001002 /* RootineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RootineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000901 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineUITests/TodayGesturesUITests.swift; sourceTree = SOURCE_ROOT; };
+		F00000000000000000000200 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineUITests/CalendarHarnessUITests.swift; sourceTree = SOURCE_ROOT; };
+		F00000000000000000000201 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootineUITests/VisualReviewUITests.swift; sourceTree = SOURCE_ROOT; };
 		F00000000000000000001901 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RootineUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000029 /* ProductivityModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductivityModules.swift; sourceTree = "<group>"; };
 		F0000000000000000000002A /* LifeModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeModules.swift; sourceTree = "<group>"; };
@@ -294,7 +298,7 @@
 		};
 		G00000000000000000000901 /* RootineUITests */ = {
 			isa = PBXGroup;
-			children = (F00000000000000000000901,);
+			children = (F00000000000000000000901,F00000000000000000000200,F00000000000000000000201,);
 			name = RootineUITests;
 			sourceTree = "<group>";
 		};
@@ -462,7 +466,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		PH0000000000000000000901 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00000000000000000000901,); runOnlyForDeploymentPostprocessing = 0; };
+		PH0000000000000000000901 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B00000000000000000000901,B00000000000000000000200,B00000000000000000000201,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */

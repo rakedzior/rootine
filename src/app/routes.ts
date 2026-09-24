@@ -21,6 +21,13 @@ const PracaPage = lazy(ROUTE_LOADERS["/praca"]);
 const SprawyPage = lazy(ROUTE_LOADERS["/sprawy"]);
 const PodrozePage = lazy(ROUTE_LOADERS["/podroze"]);
 
+function redirectLegacyTaskRoute({ request }: { request: Request }) {
+  const target = new URL(request.url);
+  target.pathname = "/kalendarz";
+  target.searchParams.set("view", "list");
+  return redirect(`${target.pathname}${target.search}${target.hash}`);
+}
+
 /**
  * Reviewable inventory of every URL declared by the router. Runtime layout behavior
  * stays generic in ModuleShell/PageShell; this registry documents coverage without
@@ -35,7 +42,7 @@ export const ROUTE_LAYOUT_AUDIT = [
   },
   {
     path: "/kalendarz", component: "KalendarzPage", moduleId: "tasks", width: "fluid", moduleSidebar: true, h1: "route", layout: "calendar",
-    queryViews: ["widok=jutro", "widok=7dni", "widok=30dni", "widok=bezterminu", "widok=wszystkie", "zadanie=<taskId>"],
+    queryViews: ["view=month|list|week|three-days|day|year", "widok=jutro", "widok=7dni", "widok=30dni", "widok=bezterminu", "widok=wszystkie", "zadanie=<taskId>"],
   },
   {
     path: "/notatki", component: "NotatkiPage", moduleId: "notes", width: "standard", moduleSidebar: true, h1: "route", layout: "collection + editor",
@@ -69,6 +76,8 @@ export const ROUTE_LAYOUT_AUDIT = [
   { path: "/biuro", component: "redirect", moduleId: null, redirectTo: "/praca", width: "—", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
   { path: "/finanse", component: "redirect", moduleId: null, redirectTo: "/sprawy?widok=finances", width: "—", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
   { path: "/jdg", component: "redirect", moduleId: null, redirectTo: "/sprawy?widok=jdg", width: "—", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
+  { path: "/tasks", component: "redirect", moduleId: null, redirectTo: "/kalendarz?view=list", width: "legacy", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
+  { path: "/calendar", component: "redirect", moduleId: null, redirectTo: "/kalendarz?view=list", width: "legacy", moduleSidebar: false, h1: "—", layout: "legacy redirect" },
   { path: "*", component: "RouteNotFoundState", moduleId: null, width: "route state", moduleSidebar: false, h1: "route", layout: "error state" },
 ] as const;
 
@@ -87,6 +96,8 @@ export const router = createBrowserRouter([
           { path: "dzisiaj",       Component: DzisiajPage },
           { path: "zadania",       Component: ZadaniaPage },
           { path: "kalendarz",     Component: KalendarzPage },
+          { path: "tasks",         loader: redirectLegacyTaskRoute },
+          { path: "calendar",      loader: redirectLegacyTaskRoute },
           { path: "notatki",       Component: NotatkiPage },
           { path: "cele",          Component: CelePage },
           { path: "cele/:goalId",  Component: CelSzczegolyPage },

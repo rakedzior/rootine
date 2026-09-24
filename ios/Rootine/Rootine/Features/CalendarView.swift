@@ -92,6 +92,8 @@ struct CalendarView: View {
     @State private var showAgenda = false
     @State private var showComposer = false
     @State private var selectedOccurrence: RootineCalendarOccurrence?
+    @State private var undoAction: RootineTaskUndo?
+    @State private var undoMessage: String?
 
     private var days: [Date] { CalendarLayout.visibleDays(mode, date: selectedDate) }
     private var occurrences: [RootineCalendarOccurrence] {
@@ -185,6 +187,32 @@ struct CalendarView: View {
             TaskDetailSheet(task: occurrence.task, completionDate: RootineDate.localDateValue(occurrence.calendarDate) ?? selectedDate)
                 .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         }
+        .alert("Nie można cofnąć", isPresented: Binding(
+            get: { undoMessage != nil }, set: { if !$0 { undoMessage = nil } }
+        )) { Button("OK", role: .cancel) {} } message: { Text(undoMessage ?? "") }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let undoAction {
+                RootineUndoBanner(message: "Zmieniono wykonanie zadania", usesAdaptiveLayout: true) {
+                    self.undoAction = nil
+                    Task {
+                        if !(await environment.restoreTaskSnapshot(undoAction.snapshot, ifCurrentMatches: undoAction.expectedCurrent)) {
+                            undoMessage = "Dane zadania zmieniły się od tej akcji. Nowsze zmiany zostały zachowane."
+                        }
+                    }
+                }
+                .padding(.horizontal, RootineTheme.Spacing.medium)
+                .padding(.vertical, RootineTheme.Spacing.small)
+                .background(RootineTheme.ColorToken.canvas)
+            }
+        }
+        .onAppear { environment.setCalendarQuickAddDate(selectedDate) }
+        .onChange(of: selectedDate) { _, value in environment.setCalendarQuickAddDate(value) }
+        .onChange(of: environment.taskWorkspace) { _, workspace in
+            if let undoAction,
+               workspace.tasks.first(where: { $0.id == undoAction.snapshot.id }) != undoAction.expectedCurrent {
+                self.undoAction = nil
+            }
+        }
     }
 
     private var periodNavigation: some View {
@@ -193,6 +221,7 @@ struct CalendarView: View {
                 .accessibilityLabel("Poprzedni okres")
             Text(periodTitle).font(.headline).foregroundStyle(RootineTheme.ColorToken.primaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("calendar-period-title")
             if mode == .month && showAgenda {
                 Button { withAnimation(reduceMotion ? nil : .snappy) { showAgenda = false } } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
@@ -275,7 +304,12 @@ struct CalendarView: View {
         selectedDate = CalendarLayout.adding(component, amount, to: selectedDate)
     }
     private func toggle(_ occurrence: RootineCalendarOccurrence) {
-        Task { await environment.toggleTaskCompletion(id: occurrence.sourceTaskID, on: RootineDate.localDateValue(occurrence.calendarDate) ?? selectedDate) }
+        let date = RootineDate.localDateValue(occurrence.calendarDate) ?? selectedDate
+        Task {
+            await environment.toggleTaskCompletion(id: occurrence.sourceTaskID, on: date) { mutation in
+                undoAction = mutation
+            }
+        }
     }
 }
 
@@ -556,6 +590,7 @@ private struct CalendarEventLabel: View {
             .background(calendarTaskColor(item).opacity(item.isDone ? 0.10 : 0.24), in: RoundedRectangle(cornerRadius: 5))
         }.buttonStyle(.plain)
         .accessibilityLabel("\(item.title), \(item.time ?? "Bez godziny")\(item.isDone ? ", ukończone" : "")")
+        .accessibilityIdentifier("calendar-task-\(item.sourceTaskID)-\(item.calendarDate)")
     }
 }
 
@@ -573,6 +608,7 @@ private struct CalendarAgendaRows: View {
                             .font(.title3).foregroundStyle(calendarTaskColor(item)).frame(width: 44, height: 48)
                     }.buttonStyle(.plain)
                     .accessibilityLabel("\(item.isDone ? "Cofnij ukończenie" : "Ukończ"): \(item.title)")
+                    .accessibilityIdentifier("calendar-complete-\(item.sourceTaskID)-\(item.calendarDate)")
                     Button { onSelect(item) } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(item.title).font(.body).strikethrough(item.isDone)
@@ -587,6 +623,7 @@ private struct CalendarAgendaRows: View {
                             }.font(.caption)
                         }.frame(maxWidth: .infinity, minHeight: 60, alignment: .leading).contentShape(Rectangle())
                     }.buttonStyle(.plain)
+                    .accessibilityIdentifier("calendar-task-\(item.sourceTaskID)-\(item.calendarDate)")
                 }
                 if item.id != tasks.last?.id { Divider() }
             }

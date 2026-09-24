@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import {
+  Apple,
   ArrowRight,
   BriefcaseBusiness,
   CalendarCheck2,
@@ -12,11 +13,12 @@ import {
   Target,
 } from "lucide-react";
 import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
+import { isMobileBrowser } from "../../infrastructure/supabase/authRedirect";
 import { Button, Input } from "../ui";
 import { useAppSession } from "./AppSession";
 
 type AuthView = "sign-in" | "sign-up";
-type PendingAction = "credentials" | "google" | "reset" | "password" | null;
+type PendingAction = "credentials" | "google" | "apple" | "reset" | "password" | null;
 
 function GoogleMark() {
   return (
@@ -82,6 +84,7 @@ export function AuthScreen() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction>(null);
+  const mobileBrowser = isMobileBrowser();
 
   const clearFeedback = () => {
     auth.clearAuthError();
@@ -93,6 +96,10 @@ export function AuthScreen() {
   const submitCredentials = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     clearFeedback();
+    if (view === "sign-up" && password !== passwordConfirmation) {
+      setError("Hasła nie są takie same. Wpisz je ponownie.");
+      return;
+    }
     setPending("credentials");
     const result = view === "sign-in"
       ? await auth.signIn(email, password)
@@ -157,6 +164,7 @@ export function AuthScreen() {
   const changeView = (next: AuthView) => {
     clearFeedback();
     setPassword("");
+    setPasswordConfirmation("");
     setView(next);
   };
 
@@ -222,6 +230,31 @@ export function AuthScreen() {
                 Kontynuuj z Google
               </Button>
 
+              <Button
+                className="auth-apple-button"
+                variant="quiet"
+                fullWidth
+                leadingIcon={pending === "apple" ? <RefreshCw className="is-spinning" aria-hidden="true" /> : <Apple aria-hidden="true" />}
+                disabled={!auth.configured || pending !== null}
+                title={!auth.configured ? unavailableMessage : undefined}
+                onClick={() => {
+                  clearFeedback();
+                  setPending("apple");
+                  void auth.signInWithApple().then((result) => {
+                    if (result.error) setError(result.error);
+                    setPending(null);
+                  });
+                }}
+              >
+                {pending === "apple" ? "Łączę z Apple…" : "Kontynuuj z Apple"}
+              </Button>
+
+              {mobileBrowser && (
+                <p className="auth-feedback is-success" role="status">
+                  Po zalogowaniu otworzymy aplikację Rootine na tym telefonie.
+                </p>
+              )}
+
               <div className="auth-divider"><span>lub</span></div>
 
               <form className="auth-form" onSubmit={submitCredentials}>
@@ -253,6 +286,19 @@ export function AuthScreen() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                 />
+                {view === "sign-up" && (
+                  <Input
+                    className="auth-form__control"
+                    label="Powtórz hasło"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={passwordConfirmation}
+                    disabled={!auth.configured}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                    required
+                  />
+                )}
                 {view === "sign-in" && (
                   <button
                     className="auth-password-reset"

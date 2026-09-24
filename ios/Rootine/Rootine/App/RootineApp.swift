@@ -6,7 +6,7 @@ import UserNotifications
 struct RootineApp: App {
     @UIApplicationDelegateAdaptor(RootineAppDelegate.self) private var appDelegate
     @StateObject private var environment = AppEnvironment()
-    @AppStorage("rootine.appearance") private var appearance = "system"
+    @AppStorage("rootine.appearance") private var appearance = "dark"
 
     var body: some Scene {
         WindowGroup {

@@ -635,7 +635,7 @@ enum RootineCanonicalWorkspaceMapping {
                 status: trip.status,
                 travelers: trip.travelers,
                 baseCurrency: trip.baseCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-                note: trip.note.isEmpty ? travelMigrationNote(trip, dates: dates) : trip.note,
+                note: dates.start.isEmpty ? trip.note : (trip.note.isEmpty ? travelMigrationNote(trip, dates: dates) : trip.note),
                 archivedAt: trip.archivedAt,
                 stays: try jsonArray(trip.stays),
                 transports: try jsonArray(trip.transports),
@@ -647,7 +647,9 @@ enum RootineCanonicalWorkspaceMapping {
                 documents: try jsonArray(trip.documents),
                 tasks: try jsonArray(trip.tasks),
                 packingItems: try jsonArray(trip.packingItems),
-                timezone: trip.timezone
+                timezone: trip.timezone,
+                dateRange: trip.dateRange,
+                nights: trip.nights
             )
         }
         return try jsonValue(CanonicalTravelWorkspace(version: 2, updatedAt: workspace.updatedAt, trips: trips))
@@ -659,7 +661,7 @@ enum RootineCanonicalWorkspaceMapping {
             throw RootineNormalizedReadError.materializationFailed("nieobsługiwana wersja podróży \(canonical.version)")
         }
         let trips = try canonical.trips.map { trip in
-            return TravelRecord(
+            var record = TravelRecord(
                 id: trip.id,
                 name: trip.name,
                 destination: trip.destination,
@@ -696,6 +698,14 @@ enum RootineCanonicalWorkspaceMapping {
                 createdAt: canonical.updatedAt,
                 updatedAt: canonical.updatedAt
             )
+            // Canonical dates may have been edited by another client while its
+            // additional display metadata stayed unchanged. Use that metadata
+            // only for undated trips; dated records derive both values above.
+            if trip.startDate.isEmpty && trip.endDate.isEmpty {
+                if let dateRange = trip.dateRange { record.dateRange = dateRange }
+                if let nights = trip.nights { record.nights = max(1, nights) }
+            }
+            return record
         }
         let workspace = TravelWorkspace(version: 1, updatedAt: canonical.updatedAt, trips: deduplicatedTravelTrips(trips))
         guard rootineValidateTravelWorkspace(workspace).isEmpty else {
@@ -718,7 +728,7 @@ enum RootineCanonicalWorkspaceMapping {
             }
             let originalTrip = originalNative?.trips.first(where: { normalizedIdentifier($0.id) == id })
             let currentTrip = workspace.trips.first(where: { normalizedIdentifier($0.id) == id })
-            for key in ["name", "destination", "startDate", "endDate", "status", "travelers", "baseCurrency", "note", "archivedAt"] {
+            for key in ["name", "destination", "startDate", "endDate", "status", "travelers", "baseCurrency", "note", "archivedAt", "dateRange", "nights"] {
                 // Legacy compact records synthesize name from destination;
                 // that convenience value cannot rename an independent web
                 // trip title when only its itinerary was edited.
@@ -726,6 +736,13 @@ enum RootineCanonicalWorkspaceMapping {
                    currentTrip.startDate.isEmpty && currentTrip.endDate.isEmpty,
                    currentTrip.name == currentTrip.destination,
                    currentTrip.destination == originalTrip?.destination { continue }
+                // Keep derived display defaults absent on untouched legacy
+                // records. Existing metadata still follows canonical dates,
+                // and a real native edit may introduce either field.
+                if trip[key] == nil, let currentTrip, let originalTrip {
+                    if key == "dateRange", currentTrip.dateRange == originalTrip.dateRange { continue }
+                    if key == "nights", currentTrip.nights == originalTrip.nights { continue }
+                }
                 if let replacement = native[key] { trip[key] = replacement }
             }
             if let existingItinerary = trip["itinerary"] {
@@ -743,7 +760,7 @@ enum RootineCanonicalWorkspaceMapping {
                 if currentTrip.budget != originalTrip.budget { trip["budget"] = try? jsonValue(currentTrip.budget) }
                 if currentTrip.documents != originalTrip.documents { trip["documents"] = try? jsonValue(currentTrip.documents) }
                 if currentTrip.tasks != originalTrip.tasks { trip["tasks"] = try? jsonValue(currentTrip.tasks) }
-                if currentTrip.packingItems != originalTrip.packingItems { trip["packingItems"] = try? jsonValue(currentTrip.packingItems) }
+                if currentTrip.packingItems != originalTrip.packingItems { trip["packingItems"] = mergedTravelPacking(existing: trip["packingItems"], native: currentTrip.packingItems) }
                 if currentTrip.timezone != originalTrip.timezone { trip["timezone"] = currentTrip.timezone.map(JSONValue.string) ?? .null }
             }
             return deduplicatedRecordCollections(
@@ -1308,12 +1325,28 @@ enum RootineCanonicalWorkspaceMapping {
         }
     }
 
+    private static func mergedTravelPacking(existing: JSONValue?, native: [TravelPackingItem]) -> JSONValue {
+        let previous = dictionaryByID(existing)
+        return .array(native.map { item in
+            // Native keys change, while each current canonical record owns its
+            // opaque fields. Missing IDs are deletions, new IDs are additions.
+            var record = previous[normalizedIdentifier(item.id)] ?? [:]
+            record["id"] = .string(item.id)
+            record["label"] = .string(item.label)
+            record["quantity"] = .number(Double(item.quantity))
+            record["packed"] = .bool(item.packed)
+            return .object(record)
+        })
+    }
+
     private static func travelDates(_ trip: TravelRecord, createdAt: String) -> (start: String, end: String) {
-        let value = trip.dateRange
-        let pieces = value.components(separatedBy: "–").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let fallback = validDate(String(createdAt.prefix(10)), fallback: "1970-01-01")
-        let start = validDate(trip.startDate.isEmpty ? (pieces.first ?? fallback) : trip.startDate, fallback: fallback)
-        let end = validDate(trip.endDate.isEmpty ? (pieces.count > 1 ? pieces[1] : start) : trip.endDate, fallback: start)
+        let pieces = trip.dateRange.components(separatedBy: "–").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        // An unknown term is not a trip on its creation date. Compact display
+        // metadata travels separately so a canonical read remains lossless.
+        let start = (trip.startDate.isEmpty ? (pieces.first ?? "") : trip.startDate).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isLocalDate(start), date(from: start) != nil else { return ("", "") }
+        let candidateEnd = trip.endDate.isEmpty ? (pieces.count > 1 ? pieces[1] : start) : trip.endDate
+        let end = isLocalDate(candidateEnd) && date(from: candidateEnd) != nil ? candidateEnd : start
         return (start, end >= start ? end : start)
     }
 
@@ -1661,6 +1694,8 @@ private struct CanonicalTravelTrip: Codable {
     var tasks: [JSONValue]?
     var packingItems: [JSONValue]?
     var timezone: String?
+    var dateRange: String?
+    var nights: Int?
 }
 
 private struct CanonicalTravelItinerary: Codable {

@@ -14,7 +14,8 @@ struct NutritionView: View {
     @State private var isShowingAddEntry = false
     @State private var editorTarget: NutritionEditorTarget?
     @State private var entryToDelete: DeletedNutritionEntry?
-    @State private var deletedEntry: DeletedNutritionEntry?
+    @State private var deletedEntry: RootineNutritionEntryUndo?
+    @State private var undoMessage: String?
     @State private var resolvedBarcodeRequest: NutritionBarcodeRequest?
 
     private var dateKey: String { RootineDate.localDate(selectedDate) }
@@ -22,14 +23,12 @@ struct NutritionView: View {
         environment.nutritionWorkspace.days[dateKey] ?? .empty(date: dateKey)
     }
     private var goals: NutritionGoals { environment.nutritionWorkspace.goals }
-    private var entries: [NutritionEntry] {
-        day.entries.breakfast + day.entries.lunch + day.entries.snack + day.entries.dinner
-    }
-    private var calories: Double { entries.reduce(0) { $0 + $1.calories } }
-    private var protein: Double { entries.reduce(0) { $0 + $1.protein } }
-    private var carbs: Double { entries.reduce(0) { $0 + $1.carbs } }
-    private var fat: Double { entries.reduce(0) { $0 + $1.fat } }
-    private var calorieDelta: Double { goals.calories - calories }
+    private var summary: RootineNutritionDaySummary { RootineNutritionDaySummary(day: day, goals: goals) }
+    private var calories: Double { summary.totals.calories }
+    private var protein: Double { summary.totals.protein }
+    private var carbs: Double { summary.totals.carbs }
+    private var fat: Double { summary.totals.fat }
+    private var calorieDelta: Double { summary.calorieDelta }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -62,7 +61,7 @@ struct NutritionView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(NutritionMealKind.allCases) { meal in
+                    ForEach(NutritionMealKind.presentationOrder) { meal in
                         NutritionMealCard(
                             meal: meal,
                             entries: entries(for: meal),
@@ -129,6 +128,14 @@ struct NutritionView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .alert("Nie można cofnąć", isPresented: Binding(
+            get: { undoMessage != nil }, set: { if !$0 { undoMessage = nil } }
+        )) { Button("OK", role: .cancel) {} } message: { Text(undoMessage ?? "") }
+        .onChange(of: environment.nutritionWorkspace) { _, _ in
+            if let deletedEntry, !environment.canRestoreNutritionEntry(deletedEntry) {
+                self.deletedEntry = nil
+            }
+        }
         .task {
             await environment.retryPendingNutritionBarcodes()
         }
@@ -182,7 +189,7 @@ struct NutritionView: View {
                 Label("Cele żywieniowe", systemImage: "target")
             }
             NavigationLink {
-                NutritionAnalysisView(goals: goals, calories: calories, water: day.waterMl, dateKey: dateKey)
+                NutritionAnalysisView(dateKey: dateKey)
             } label: {
                 Label("Analiza i pomiary", systemImage: "chart.bar.xaxis")
             }
@@ -279,10 +286,11 @@ struct NutritionView: View {
     }
 
     private func delete(_ target: DeletedNutritionEntry) {
-        deletedEntry = target
         performAnimated {
             _Concurrency.Task<Void, Never> {
-                await environment.deleteNutritionEntry(dateKey: target.dateKey, meal: target.meal.rawValue, id: target.entry.id)
+                await environment.deleteNutritionEntry(dateKey: target.dateKey, meal: target.meal.rawValue, id: target.entry.id) { undo in
+                    deletedEntry = undo
+                }
             }
         }
     }
@@ -330,14 +338,12 @@ struct NutritionView: View {
         entryToDelete = DeletedNutritionEntry(entry: entry, meal: meal, dateKey: dateKey)
     }
 
-    private func undoDelete(_ deleted: DeletedNutritionEntry) {
+    private func undoDelete(_ deleted: RootineNutritionEntryUndo) {
         self.deletedEntry = nil
         _Concurrency.Task<Void, Never> {
-            await environment.restoreNutritionEntry(
-                dateKey: deleted.dateKey,
-                meal: deleted.meal.rawValue,
-                entry: deleted.entry
-            )
+            if !(await environment.restoreNutritionEntry(deleted)) {
+                undoMessage = "Stan danych zmienił się od usunięcia wpisu. Nowsze zmiany zostały zachowane."
+            }
         }
     }
 }
@@ -702,10 +708,11 @@ private struct NutritionGoalsView: View {
 
 private struct NutritionAnalysisView: View {
     @EnvironmentObject private var environment: AppEnvironment
-    let goals: NutritionGoals
-    let calories: Double
-    let water: Double
     let dateKey: String
+    private var day: NutritionDay { environment.nutritionWorkspace.days[dateKey] ?? .empty(date: dateKey) }
+    private var goals: NutritionGoals { environment.nutritionWorkspace.goals }
+    private var calories: Double { RootineNutritionDaySummary(day: day, goals: goals).totals.calories }
+    private var water: Double { day.waterMl }
     @State private var isShowingWeightEntry = false
 
     var body: some View {
@@ -999,22 +1006,8 @@ private struct CustomMealEditorSheet: View {
     }
 }
 
-private enum NutritionMealKind: String, CaseIterable, Identifiable {
-    case breakfast
-    case lunch
-    case dinner
-    case snack
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .breakfast: return "Śniadanie"
-        case .lunch: return "Obiad"
-        case .snack: return "Przekąski"
-        case .dinner: return "Kolacja"
-        }
-    }
+private extension NutritionMealKind {
+    static var presentationOrder: [Self] { [.breakfast, .lunch, .dinner, .snack] }
 
     var systemImage: String {
         switch self {
@@ -1142,7 +1135,7 @@ private struct NutritionMealCard: View {
             Button { onEdit(entry) } label: { Label("Edytuj", systemImage: "pencil") }
             Button { onDuplicate(entry) } label: { Label("Dodaj taką samą porcję", systemImage: "plus.square.on.square") }
             Menu {
-                ForEach(NutritionMealKind.allCases.filter { $0 != meal }) { destination in
+                ForEach(NutritionMealKind.presentationOrder.filter { $0 != meal }) { destination in
                     Button(destination.title) { onMove(entry, destination) }
                 }
             } label: {
@@ -1395,7 +1388,7 @@ private struct AddNutritionEntrySheet: View {
                                 .accessibilityHint("Zmiana porcji przelicza wartości z wybranego produktu")
                         }
                         Picker("Posiłek", selection: $selectedMeal) {
-                            ForEach(NutritionMealKind.allCases) { option in
+                            ForEach(NutritionMealKind.presentationOrder) { option in
                                 Text(option.title).tag(option)
                             }
                         }

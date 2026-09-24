@@ -722,10 +722,18 @@ private struct TasksEmptyState: View {
 struct AddTaskSheet: View {
     @EnvironmentObject private var environment: AppEnvironment
     @Environment(\.dismiss) private var dismiss
+    private let initialDate: Date?
     @State private var text = ""
     @State private var time = ""
-    @State private var dateChoice = "today"
+    @State private var dateChoice: String
+    @State private var selectedCalendarDate: Date
     @State private var priorityChoice = "none"
+
+    init(initialDate: Date? = nil) {
+        self.initialDate = initialDate
+        _dateChoice = State(initialValue: initialDate == nil ? "today" : "selected")
+        _selectedCalendarDate = State(initialValue: initialDate ?? Date())
+    }
 
     var body: some View {
         NavigationStack {
@@ -740,9 +748,16 @@ struct AddTaskSheet: View {
                     Picker("Dzień", selection: $dateChoice) {
                         Text("Dziś").tag("today")
                         Text("Jutro").tag("tomorrow")
+                        Text("Wybrany dzień").tag("selected")
                         Text("Bez terminu").tag("none")
                     }
-                    .pickerStyle(.segmented)
+                    // Four meaningful choices no longer fit a segmented
+                    // control at accessibility text sizes; the menu keeps
+                    // every choice reachable without horizontal clipping.
+                    .pickerStyle(.menu)
+                    if dateChoice == "selected" {
+                        DatePicker("Data", selection: $selectedCalendarDate, displayedComponents: .date)
+                    }
                 }
                 Section("Priorytet") {
                     Picker("Priorytet", selection: $priorityChoice) {
@@ -766,7 +781,7 @@ struct AddTaskSheet: View {
                                 text: text,
                                 time: time,
                                 calendarDate: selectedDate,
-                                view: dateChoice == "tomorrow" ? "jutro" : dateChoice == "none" ? "bezterminu" : "dzis",
+                                view: rootineTaskViewForCalendarDate(selectedDate),
                                 priority: TaskPriority(rawValue: priorityChoice)
                             )
                             dismiss()
@@ -781,6 +796,7 @@ struct AddTaskSheet: View {
     private var selectedDate: String? {
         switch dateChoice {
         case "tomorrow": return RootineDate.localDate(Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+        case "selected": return RootineDate.localDate(selectedCalendarDate)
         case "none": return nil
         default: return RootineDate.localDate()
         }
@@ -857,12 +873,18 @@ struct TaskDetailSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
                         Task {
+                            guard let current = environment.taskWorkspace.tasks.first(where: {
+                                $0.id == task.id && $0.deleted != true
+                            }) else { dismiss(); return }
                             await environment.updateTask(
                                 id: task.id,
                                 text: title,
                                 time: time,
                                 calendarDate: hasDate ? RootineDate.localDate(dueDate) : nil,
-                                priority: TaskPriority(rawValue: priority)
+                                priority: TaskPriority(rawValue: priority),
+                                notes: current.notes,
+                                list: current.list,
+                                tags: current.tags
                             )
                             dismiss()
                         }

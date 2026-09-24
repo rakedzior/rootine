@@ -212,7 +212,10 @@ private struct TodayUndoAction: Identifiable {
     let title: String
     let date: Date
 
-    var message: String { "Oznaczono „\(title)” jako wykonane" }
+    var taskUndo: RootineTaskUndo? = nil
+    var wasCompleted: Bool = false
+
+    var message: String { "Oznaczono „\(title)” jako \(wasCompleted ? "niewykonane" : "wykonane")" }
 }
 
 private func isHabitDone(_ habit: WorkspaceHabit, dateKey: String = RootineDate.localDate()) -> Bool {
@@ -253,11 +256,20 @@ struct TodayView: View {
                 onSelectTask: { selectedTask = $0 },
                 onSelectHabit: { selectedHabit = $0 },
                 onToggleTask: { task in
-                    undoAction = TodayUndoAction(kind: .task, recordID: task.id, title: task.text, date: context.date)
-                    Task { await environment.toggleTaskCompletion(id: task.id, on: context.date) }
+                    undoAction = nil
+                    Task {
+                        await environment.toggleTaskCompletion(id: task.id, on: context.date) { change in
+                            undoAction = TodayUndoAction(
+                                kind: .task, recordID: task.id, title: change.snapshot.text, date: context.date,
+                                taskUndo: change,
+                                wasCompleted: rootineTaskIsDoneOnDate(change.snapshot, dateKey: snapshot.dateKey)
+                            )
+                        }
+                    }
                 },
                 onToggleHabit: { habit in
-                    undoAction = TodayUndoAction(kind: .habit, recordID: habit.id, title: habit.name, date: context.date)
+                    undoAction = TodayUndoAction(kind: .habit, recordID: habit.id, title: habit.name, date: context.date,
+                                                wasCompleted: isHabitDone(habit, dateKey: snapshot.dateKey))
                     Task { await environment.toggleHabitCompletion(id: habit.id, on: context.date) }
                 },
                 undoAction: undoAction,
@@ -289,7 +301,9 @@ struct TodayView: View {
         Task {
             switch action.kind {
             case .task:
-                await environment.toggleTaskCompletion(id: action.recordID, on: action.date)
+                if let change = action.taskUndo {
+                    _ = await environment.restoreTaskSnapshot(change.snapshot, ifCurrentMatches: change.expectedCurrent)
+                }
             case .habit:
                 await environment.toggleHabitCompletion(id: action.recordID, on: action.date)
             }
@@ -622,13 +636,12 @@ private struct TodayTimelineCard: View {
         guard let value = values.first, value.hasPrefix("rootine-today-task:"),
               let id = Int(value.dropFirst("rootine-today-task:".count)),
               let source = entries.first(where: { $0.task?.id == id }),
-              source.id != target.id, let task = source.task else { return false }
+              let task = source.task, let targetTask = target.task,
+              let action = TodayTaskMovement.dropAction(source: task, target: targetTask, todayKey: snapshot.dateKey)
+        else { return false }
         activeSwipe = nil
-        let sourceUntimed = source.time?.isEmpty != false
-        let targetUntimed = target.time?.isEmpty != false
         let sourceDay = task.calendarDate ?? snapshot.dateKey
-        let targetDay = target.task?.calendarDate ?? snapshot.dateKey
-        if sourceUntimed && targetUntimed && sourceDay == targetDay {
+        if action == .reorder {
             let ids = entries.filter {
                 $0.time?.isEmpty != false && ($0.task?.calendarDate ?? snapshot.dateKey) == sourceDay
             }.map(\.id)

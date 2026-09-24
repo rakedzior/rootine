@@ -48,6 +48,38 @@ enum WorkspaceSyncStatus: Equatable, Sendable {
     case error
 }
 
+enum TodayBulkRescheduleSyncState: Equatable, Sendable {
+    case synced
+    case queuedOffline
+    case conflict
+}
+
+struct TodayBulkRescheduleReport: Equatable, Sendable {
+    let changes: [TodayBulkRescheduleChange]
+    let skippedRecurring: [WorkspaceTask]
+    let syncState: TodayBulkRescheduleSyncState
+}
+
+enum TodayBulkRescheduleResult: Equatable, Sendable {
+    case moved(TodayBulkRescheduleReport)
+    case noChanges(skippedRecurring: [WorkspaceTask])
+    case duplicate
+    case failed(String)
+}
+
+enum TodayBulkRescheduleUndoResult: Equatable, Sendable {
+    case restored(count: Int, skippedCount: Int, syncState: TodayBulkRescheduleSyncState)
+    case nothingToUndo
+    case failed(String)
+}
+
+private enum RootineTaskPersistenceOutcome: Equatable, Sendable {
+    case synced
+    case queuedOffline
+    case conflict
+    case failed(String)
+}
+
 private func normalizedGoalStartDate(_ value: String) -> String {
     rootineGoalIsLocalDate(value) ? value : RootineDate.localDate()
 }
@@ -112,6 +144,7 @@ final class AppEnvironment: ObservableObject {
     @Published private(set) var notificationPreferences = RootineNotificationPreferences()
     @Published private(set) var normalizedReadEnabled = false
     @Published private(set) var normalizedReadFallbackReason: String?
+    @Published private(set) var calendarQuickAddDate: Date?
 
     let configuration: RootineConfiguration
     private let api: RootineAPIClient
@@ -134,6 +167,10 @@ final class AppEnvironment: ObservableObject {
     private var nutritionProductCache: [String: NutritionProduct] = [:]
     private var normalizedRecordRevisions: [String: Int64] = [:]
     private var creationGate = WorkspaceCreationGate()
+    /// A UI confirmation can generate more than one async callback. Keep the
+    /// operation gate on the main actor so one tap can never publish two
+    /// bulk snapshots while the first write is suspended.
+    private var activeTodayBulkRescheduleOperations = Set<String>()
     private var realtimeClient: RootineRealtimeClient?
     private var syncCoordinator: RootineSyncCoordinator?
     private var realtimeRuntimeUserID: String?
@@ -466,6 +503,19 @@ final class AppEnvironment: ObservableObject {
     }
 
 #if DEBUG
+    /// Deterministically suspends a test after local publication, before I/O.
+    var moreWorkspaceDidPublishForTests: ((RootineStorageKey) async -> Void)?
+    func setMoreWorkspacesForTests(notes: NotesWorkspace? = nil, sport: SportWorkspace? = nil, goals: GoalsWorkspace? = nil, work: WorkWorkspace? = nil, shadows: [RootineStorageKey: JSONValue]? = nil) {
+        if let notes { notesWorkspace = notes }; if let sport { sportWorkspace = sport }; if let goals { goalsWorkspace = goals }; if let work { workWorkspace = work }; if let shadows { canonicalShadows = shadows }
+    }
+    func moreShadowForTests(_ key: RootineStorageKey) -> JSONValue? { canonicalShadows[key] }
+    var taskWorkspaceDidPublishForTests: (() async -> Void)?
+    var nutritionWorkspaceDidPublishForTests: (() async -> Void)?
+
+    func setNutritionWorkspaceForTests(_ workspace: NutritionWorkspace) {
+        nutritionWorkspace = workspace
+    }
+
     func setTaskWorkspaceForTests(_ workspace: TaskWorkspace) {
         taskWorkspace = workspace
     }
@@ -476,6 +526,9 @@ final class AppEnvironment: ObservableObject {
         let yesterday = RootineDate.localDate(Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now)
         let tomorrow = RootineDate.localDate(Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now)
         let timestamp = RootineDate.isoTimestamp(now)
+        let previewScenario = CommandLine.arguments
+            .first(where: { $0.hasPrefix("--rootine-preview-calendar-scenario=") })?
+            .replacingOccurrences(of: "--rootine-preview-calendar-scenario=", with: "")
 
         session = SupabaseSession(
             accessToken: "rootine-preview",
@@ -522,6 +575,50 @@ final class AppEnvironment: ObservableObject {
             lists: [],
             tags: []
         )
+
+        // Calendar scenarios are deterministic and intentionally bypass the
+        // persistent preview snapshot below. They exist only for visual and
+        // UI-flow verification; normal preview launches keep their local data.
+        switch previewScenario {
+        case "empty":
+            taskWorkspace.tasks = []
+        case "agenda", "offline", "conflict":
+            taskWorkspace.tasks = [
+                WorkspaceTask(id: 701, text: "Przygotować materiały na spotkanie", done: false, view: "dzis", priority: .high, calendarDate: today),
+                WorkspaceTask(id: 702, text: "Rozmowa z zespołem", done: false, time: "10:30", view: "dzis", priority: .medium, calendarDate: today),
+                WorkspaceTask(id: 703, text: "Zamknięte ustalenia", done: true, completedAt: timestamp, time: "14:00", view: "dzis", calendarDate: today),
+                WorkspaceTask(
+                    id: 704,
+                    text: "Codzienny przegląd planu",
+                    done: false,
+                    time: "16:00",
+                    view: "wszystkie",
+                    calendarDate: today,
+                    schedule: WorkspaceTaskSchedule(
+                        allDay: false,
+                        startTime: "16:00",
+                        recurrence: TaskRecurrence.daily.rawValue,
+                        timezone: TimeZone.current.identifier
+                    )
+                )
+            ]
+            if previewScenario == "offline" { workspaceSyncStatus = .localOnly(pending: 1) }
+            if previewScenario == "conflict" { workspaceSyncStatus = .conflict(storageKeys: [RootineStorageKey.tasks.rawValue]) }
+        case "long-title":
+            taskWorkspace.tasks = [
+                WorkspaceTask(
+                    id: 705,
+                    text: "Doprecyzować zakres wdrożenia i przesłać kompletną, czytelną propozycję do akceptacji przed końcem dnia",
+                    done: false,
+                    time: "09:45",
+                    view: "dzis",
+                    priority: .high,
+                    calendarDate: today
+                )
+            ]
+        default:
+            break
+        }
 
         let breakfast = NutritionEntry(id: "preview-breakfast", name: "Owsianka z bananem", portion: "1 miska", calories: 420, protein: 18, carbs: 62, fat: 12, createdAt: timestamp)
         let lunch = NutritionEntry(id: "preview-lunch", name: "Kurczak z ryżem", portion: "1 porcja", calories: 680, protein: 46, carbs: 72, fat: 18, createdAt: timestamp)
@@ -646,7 +743,7 @@ final class AppEnvironment: ObservableObject {
         // Preview mode uses the same file-backed store as a signed-in user so
         // simulator interactions survive a relaunch. Missing snapshots keep
         // the deterministic sample data above.
-        if let store {
+        if let store, previewScenario == nil {
             if let value = try? await store.load(TaskWorkspace.self, key: .tasks) { taskWorkspace = value }
             if let value = try? await store.load(NutritionWorkspace.self, key: .nutrition) { nutritionWorkspace = value }
             if let value = try? await store.load(NotesWorkspace.self, key: .notes) { notesWorkspace = value }
@@ -1178,21 +1275,120 @@ final class AppEnvironment: ObservableObject {
         if account == session?.user.id { normalizedReadEnabled = enabled }
     }
 
-    func toggleTaskCompletion(id: Int, on date: Date = Date()) async {
-        var next = taskWorkspace
-        guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
+    func toggleTaskCompletion(
+        id: Int,
+        on date: Date = Date(),
+        onMutation: ((RootineTaskUndo) -> Void)? = nil
+    ) async {
         let dateKey = RootineDate.localDate(date)
-        let done = !rootineTaskIsDoneOnDate(next.tasks[index], dateKey: dateKey)
-        // Recurring records use the explicit per-date map; a schedule object
-        // without recurrence remains a one-off task and keeps its legacy
-        // global completion flag.
-        next.tasks[index] = rootineTaskSettingCompletion(
-            next.tasks[index],
-            dateKey: dateKey,
-            done: done,
-            completedAt: RootineDate.isoTimestamp()
-        )
-        await persistTaskWorkspace(next)
+        var snapshot: WorkspaceTask?
+        await persistTaskWorkspace(updating: { current in
+            var next = current
+            guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return nil }
+            snapshot = next.tasks[index]
+            // Read the canonical record and compute this mutation together,
+            // after the persistence gate and before any post-publication await.
+            next.tasks[index] = rootineTaskSettingCompletion(
+                next.tasks[index],
+                dateKey: dateKey,
+                done: !rootineTaskIsDoneOnDate(next.tasks[index], dateKey: dateKey),
+                completedAt: RootineDate.isoTimestamp()
+            )
+            return next
+        }, onPublish: { published in
+            guard let snapshot,
+                  let expectedCurrent = published.tasks.first(where: { $0.id == id }) else { return }
+            onMutation?(RootineTaskUndo(snapshot: snapshot, expectedCurrent: expectedCurrent))
+        })
+    }
+
+    /// Moves every currently actionable, non-recurring overdue task in one
+    /// workspace write. Recurring rows are deliberately excluded because
+    /// `calendarDate` is their series anchor; the caller receives those rows
+    /// so the UI can explain the partial result instead of silently changing
+    /// the schedule. Re-running after success is naturally idempotent because
+    /// moved rows no longer satisfy the overdue predicate, while the in-flight
+    /// gate protects the suspension window around the single write.
+    func rescheduleOverdueTasksToToday(
+        todayKey: String = RootineDate.localDate(),
+        operationID: String = UUID().uuidString
+    ) async -> TodayBulkRescheduleResult {
+        let normalizedOperationID = operationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedOperationID.isEmpty else {
+            return .failed("Nie można przełożyć zaległości bez identyfikatora operacji.")
+        }
+        guard activeTodayBulkRescheduleOperations.insert(normalizedOperationID).inserted else {
+            return .duplicate
+        }
+        defer { activeTodayBulkRescheduleOperations.remove(normalizedOperationID) }
+
+        guard RootineDate.isLocalDateKey(todayKey) else {
+            return .failed("Nieprawidłowa data dzisiejszego dnia.")
+        }
+
+        let plan = TodayBulkReschedulePlanner.plan(tasks: taskWorkspace.tasks, todayKey: todayKey)
+        guard !plan.changes.isEmpty else {
+            return .noChanges(skippedRecurring: plan.skippedRecurring)
+        }
+
+        var next = taskWorkspace
+        let updatesByID = Dictionary(uniqueKeysWithValues: plan.changes.map { ($0.original.id, $0.updated) })
+        next.tasks = next.tasks.map { updatesByID[$0.id] ?? $0 }
+        switch await persistTaskWorkspaceOutcome(next) {
+        case .synced:
+            return .moved(TodayBulkRescheduleReport(
+                changes: plan.changes,
+                skippedRecurring: plan.skippedRecurring,
+                syncState: .synced
+            ))
+        case .queuedOffline:
+            return .moved(TodayBulkRescheduleReport(
+                changes: plan.changes,
+                skippedRecurring: plan.skippedRecurring,
+                syncState: .queuedOffline
+            ))
+        case .conflict:
+            return .moved(TodayBulkRescheduleReport(
+                changes: plan.changes,
+                skippedRecurring: plan.skippedRecurring,
+                syncState: .conflict
+            ))
+        case .failed(let message):
+            return .failed(message)
+        }
+    }
+
+    /// Conditional bulk Undo. A task edited after the move must not be
+    /// overwritten by an old banner, so only rows still equal to their exact
+    /// post-move projection are restored.
+    func undoTodayBulkReschedule(
+        changes: [TodayBulkRescheduleChange],
+        operationID: String = UUID().uuidString
+    ) async -> TodayBulkRescheduleUndoResult {
+        let normalizedOperationID = operationID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedOperationID.isEmpty else {
+            return .failed("Nie można cofnąć przełożenia bez identyfikatora operacji.")
+        }
+        guard activeTodayBulkRescheduleOperations.insert(normalizedOperationID).inserted else {
+            return .nothingToUndo
+        }
+        defer { activeTodayBulkRescheduleOperations.remove(normalizedOperationID) }
+
+        let plan = TodayBulkReschedulePlanner.undo(changes: changes, in: taskWorkspace.tasks)
+        guard !plan.restoredIDs.isEmpty else { return .nothingToUndo }
+        var next = taskWorkspace
+        next.tasks = plan.tasks
+
+        switch await persistTaskWorkspaceOutcome(next) {
+        case .synced:
+            return .restored(count: plan.restoredIDs.count, skippedCount: plan.skippedIDs.count, syncState: .synced)
+        case .queuedOffline:
+            return .restored(count: plan.restoredIDs.count, skippedCount: plan.skippedIDs.count, syncState: .queuedOffline)
+        case .conflict:
+            return .restored(count: plan.restoredIDs.count, skippedCount: plan.skippedIDs.count, syncState: .conflict)
+        case .failed(let message):
+            return .failed(message)
+        }
     }
 
     func toggleHabitCompletion(id: Int, on date: Date = Date()) async {
@@ -1219,7 +1415,10 @@ final class AppEnvironment: ObservableObject {
         text: String,
         time: String?,
         calendarDate: String?,
-        priority: TaskPriority?
+        priority: TaskPriority?,
+        notes: String?,
+        list: String?,
+        tags: [String]?
     ) async {
         var next = taskWorkspace
         guard let index = next.tasks.firstIndex(where: { $0.id == id && $0.deleted != true }) else { return }
@@ -1228,12 +1427,28 @@ final class AppEnvironment: ObservableObject {
         let normalizedTime = time?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let normalizedTime, !normalizedTime.isEmpty, !RootineDate.isClockTime(normalizedTime) { return }
         if let calendarDate, !RootineDate.isLocalDateKey(calendarDate) { return }
+        let normalizedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTags = tags?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let existingTask = next.tasks[index]
+        let existingTags = Set(existingTask.tags ?? [])
+        // Keep legacy/orphaned references round-trippable when an editor
+        // saves an otherwise valid task. New assignments still must point to
+        // the current taxonomy.
+        guard list == nil
+                || list == existingTask.list
+                || next.lists.contains(where: { $0.id == list }) else { return }
+        guard (normalizedTags ?? []).allSatisfy({ tagID in
+            existingTags.contains(tagID) || next.tags.contains(where: { $0.id == tagID })
+        }) else { return }
         next.tasks[index].text = trimmedText
         next.tasks[index].time = normalizedTime?.isEmpty == true ? nil : normalizedTime
         if normalizedTime?.isEmpty != false { next.tasks[index].endTime = nil }
         next.tasks[index].calendarDate = calendarDate
         next.tasks[index].view = rootineTaskViewForCalendarDate(calendarDate)
         next.tasks[index].priority = priority
+        next.tasks[index].notes = normalizedNotes?.isEmpty == true ? nil : normalizedNotes
+        next.tasks[index].list = list
+        next.tasks[index].tags = normalizedTags
         if calendarDate == nil {
             next.tasks[index].schedule = nil
         } else {
@@ -1322,6 +1537,39 @@ final class AppEnvironment: ObservableObject {
             )
         }
         await persistTaskWorkspace(next)
+    }
+
+    /// Restores the exact pre-action value used by short-lived UI Undo.
+    /// Replaying the regular editor fields is insufficient after removing a
+    /// date because that operation intentionally clears recurrence, reminder,
+    /// completion-history, source and other schedule-owned metadata.
+    /// Restores an Undo snapshot only when no later write changed this record.
+    /// Supplying the expected post-action value prevents an old completion Undo
+    /// from silently erasing a newer editor or synchronization update.
+    @discardableResult
+    func restoreTaskSnapshot(
+        _ snapshot: WorkspaceTask,
+        ifCurrentMatches expectedCurrent: WorkspaceTask? = nil
+    ) async -> Bool {
+        var didRestore = false
+        await persistTaskWorkspace(updating: { current in
+            var next = current
+            guard snapshot.deleted != true,
+                  let index = next.tasks.firstIndex(where: { $0.id == snapshot.id && $0.deleted != true }),
+                  let restored = rootineTaskRestoringSnapshot(
+                    current: next.tasks[index],
+                    snapshot: snapshot,
+                    expectedCurrent: expectedCurrent
+                  )
+            else { return nil }
+            next.tasks[index] = restored
+            return next
+        }, onPublish: { _ in didRestore = true })
+        return didRestore
+    }
+
+    func setCalendarQuickAddDate(_ date: Date?) {
+        calendarQuickAddDate = date
     }
 
     func deleteTask(id: Int) async {
@@ -1536,7 +1784,7 @@ final class AppEnvironment: ObservableObject {
     func addWorkPriority(text: String, operationID: String = UUID().uuidString) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
-        let creationFingerprint = "work-priority|\(trimmedText)"
+        let creationFingerprint = "work-priority|\(operationID)"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = taskWorkspace
@@ -1579,6 +1827,211 @@ final class AppEnvironment: ObservableObject {
             next.tasks.append(restored)
         }
         await persistTaskWorkspace(next)
+    }
+
+    private var activeModuleUndo: [RootineStorageKey: UUID] = [:]
+
+
+    /// Publication owns the in-memory shadow; a delayed disk write cannot put
+    /// an older shadow back over a newer mutation on this actor.
+    private func persistMorePublished<T: Codable & Sendable>(_ value: T, mapped: JSONValue, key: RootineStorageKey) async {
+        guard let store else { foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"; return }
+        do {
+            try await store.save(value, key: key)
+            if let shadowKey = RootineCanonicalWorkspaceMapping.shadowKey(for: key) { try await store.save(mapped, key: shadowKey) }
+            guard let syncEngine else { foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"; return }
+            try await syncEngine.enqueue(payload: mapped, storageKey: RootineCanonicalWorkspaceMapping.storageKey(for: key))
+            await markLocalOnly()
+            await flushPendingMutations()
+        } catch { foundationMessage = "Zapisano lokalnie — synchronizacja spróbuje ponownie" }
+    }
+
+    private func moduleUndoShadow(_ patches: [RootineRemovedJSON], key: RootineStorageKey) -> Bool {
+        guard !patches.isEmpty else { return true }
+        guard var shadow = canonicalShadows[key] else { return false }
+        for patch in patches {
+            guard let next = patch.restoring(into: shadow) else { return false }
+            shadow = next
+        }
+        canonicalShadows[key] = shadow
+        return true
+    }
+
+    func deleteNoteWithUndo(id: String, onPublish: @escaping (RootineModuleUndo<NoteRecord>) -> Void) async {
+        var token: RootineModuleUndo<NoteRecord>?
+        await persistNotesWorkspace(updating: { current in
+            guard let index = current.notes.firstIndex(where: { $0.id == id }) else { return nil }
+            token = RootineModuleUndo(record: current.notes[index], index: index)
+            var next = current
+            next.notes.remove(at: index)
+            if let base = self.canonicalShadows[.notes], let mapped = try? RootineCanonicalWorkspaceMapping.mergedNotesPayload(for: next, onto: base) {
+                token?.canonical = RootineRemovedJSON.between(base, mapped)
+            }
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.notes] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoNoteDeletion(_ undo: RootineModuleUndo<NoteRecord>) async -> Bool {
+        var restored = false
+        await persistNotesWorkspace(updating: { current in
+            guard self.activeModuleUndo[.notes] == undo.token,
+                  !current.notes.contains(where: { $0.id == undo.record.id }) else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            guard undo.record.listId.isEmpty || current.lists.contains(where: { $0.id == undo.record.listId }) else {
+                self.activeModuleUndo[.notes] = nil
+                self.foundationMessage = "Nie można cofnąć — folder został usunięty"
+                return nil
+            }
+            guard self.moduleUndoShadow(undo.canonical, key: .notes) else {
+                self.activeModuleUndo[.notes] = nil
+                self.foundationMessage = "Nie można cofnąć — powiązane dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.notes.insert(undo.record, at: min(undo.index, next.notes.count))
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.notes] = nil
+            restored = true
+        })
+        return restored
+    }
+
+    func deleteWorkoutWithUndo(id: String, onPublish: @escaping (RootineModuleUndo<SportWorkout>) -> Void) async {
+        var token: RootineModuleUndo<SportWorkout>?
+        await persistSportWorkspace(updating: { current in
+            guard let index = current.workouts.firstIndex(where: { $0.id == id }) else { return nil }
+            token = RootineModuleUndo(record: current.workouts[index], index: index)
+            var next = current
+            next.workouts.remove(at: index)
+            if let base = self.canonicalShadows[.sport], let mapped = try? RootineCanonicalWorkspaceMapping.mergedSportPayload(for: next, onto: base) {
+                token?.canonical = RootineRemovedJSON.between(base, mapped)
+            }
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.sport] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoWorkoutDeletion(_ undo: RootineModuleUndo<SportWorkout>) async -> Bool {
+        var restored = false
+        await persistSportWorkspace(updating: { current in
+            guard self.activeModuleUndo[.sport] == undo.token,
+                  !current.workouts.contains(where: { $0.id == undo.record.id }) else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            guard self.moduleUndoShadow(undo.canonical, key: .sport) else {
+                self.activeModuleUndo[.sport] = nil
+                self.foundationMessage = "Nie można cofnąć — powiązane dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.workouts.insert(undo.record, at: min(undo.index, next.workouts.count))
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.sport] = nil
+            restored = true
+        })
+        return restored
+    }
+
+    func deleteGoalWithUndo(id: String, onPublish: @escaping (RootineModuleUndo<GoalRecord>) -> Void) async {
+        var token: RootineModuleUndo<GoalRecord>?
+        await persistGoalsWorkspace(updating: { current in
+            guard let index = current.goals.firstIndex(where: { $0.id == id }) else { return nil }
+            token = RootineModuleUndo(record: current.goals[index], index: index)
+            var next = current
+            next.goals.remove(at: index)
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.goals] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoGoalDeletion(_ undo: RootineModuleUndo<GoalRecord>) async -> Bool {
+        var restored = false
+        await persistGoalsWorkspace(updating: { current in
+            guard self.activeModuleUndo[.goals] == undo.token,
+                  !current.goals.contains(where: { $0.id == undo.record.id }) else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            guard current.categories.contains(where: { $0.id == undo.record.categoryId }) else {
+                self.activeModuleUndo[.goals] = nil
+                self.foundationMessage = "Nie można cofnąć — kategoria została usunięta"
+                return nil
+            }
+            guard self.moduleUndoShadow(undo.canonical, key: .goals) else {
+                self.activeModuleUndo[.goals] = nil
+                self.foundationMessage = "Nie można cofnąć — powiązane dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.goals.insert(undo.record, at: min(undo.index, next.goals.count))
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.goals] = nil
+            restored = true
+        })
+        return restored
+    }
+
+    func deleteWorkPriorityWithUndo(id: Int, onPublish: @escaping (RootineModuleUndo<WorkspaceTask>) -> Void) async {
+        var token: RootineModuleUndo<WorkspaceTask>?
+        await persistTaskWorkspace(updating: { current in
+            guard let i = current.tasks.firstIndex(where: { $0.id == id && $0.deleted != true && $0.source?.kind == "work" }) else { return nil }
+            token = RootineModuleUndo(record: current.tasks[i], index: i)
+            var next = current; next.tasks[i].deleted = true
+            return next
+        }, onPublish: { current in
+            guard var captured = token else { return }
+            captured.expectedRecord = current.tasks.first(where: { $0.id == id })
+            self.activeModuleUndo[.tasks] = captured.token
+            onPublish(captured)
+        })
+    }
+
+    @discardableResult
+    func undoWorkPriorityDeletion(_ undo: RootineModuleUndo<WorkspaceTask>) async -> Bool {
+        var restored = false
+        await persistTaskWorkspace(updating: { current in
+            guard self.activeModuleUndo[.tasks] == undo.token,
+                  let i = current.tasks.firstIndex(where: { $0.id == undo.record.id }),
+                  current.tasks[i] == undo.expectedRecord else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"; return nil
+            }
+            var next = current; next.tasks[i] = undo.record; return next
+        }, onPublish: { _ in self.activeModuleUndo[.tasks] = nil; restored = true })
+        return restored
+    }
+
+    func restoreArchivedNote(id: String) async {
+        await persistNotesWorkspace(updating: { current in
+            guard let i = current.notes.firstIndex(where: { $0.id == id }) else { return nil }
+            var next = current; next.notes[i].archived = false; next.notes[i].updatedAt = RootineDate.isoTimestamp(); return next
+        })
+    }
+
+    func editWorkItemBasics(id: String, title: String, projectID: String?, priority: WorkItemPriority, status: WorkItemStatus) async {
+        guard let item = workWorkspace.tasks.first(where: { $0.id == id }) else { return }
+        await updateWorkItem(id: id, title: title, priority: priority, status: status, projectID: projectID,
+            companyID: projectID == item.projectId ? item.companyId : nil,
+            parentID: projectID == item.projectId ? item.parentId : nil,
+            dueDate: item.dueDate, dueTime: item.dueTime, note: item.note)
     }
 
     // MARK: More module actions
@@ -1635,6 +2088,7 @@ final class AppEnvironment: ObservableObject {
         guard !normalized.title.isEmpty || !normalized.body.isEmpty || hasChecklistContent else { return }
         normalized.updatedAt = RootineDate.isoTimestamp()
         // Empty listId is the explicit, persisted "Bez folderu" selection.
+        guard normalized.listId.isEmpty || next.lists.contains(where: { $0.id == normalized.listId }) else { return }
         if let index = next.notes.firstIndex(where: { $0.id == normalized.id }) {
             next.notes[index] = normalized
         } else {
@@ -1675,7 +2129,7 @@ final class AppEnvironment: ObservableObject {
     ) async {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
-        let creationFingerprint = "workout|\(trimmedTitle)|\(date)|\(minutes)|\(kind)"
+        let creationFingerprint = "workout|\(operationID)"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = sportWorkspace
@@ -1865,11 +2319,16 @@ final class AppEnvironment: ObservableObject {
             next.goals[index].milestones[milestoneIndex].done = true
             next.goals[index].milestones[milestoneIndex].completedAt = now
         } else {
+            // The first entry switches manual goals from their stored manual
+            // value to the entry ledger. Seed that transition with the current
+            // absolute value; subsequent entries retain normal delta semantics.
+            let startsManualLedger = next.goals[index].progressMode == .manual && next.goals[index].progressEntries.isEmpty
+            let value = startsManualLedger ? rootineGoalCurrentValue(next.goals[index]) + amount : amount
             next.goals[index].progressEntries.append(GoalProgressEntry(
                 id: RootineLocalIdentifier.string(namespace: "goal-progress", operationID: now + id),
                 date: RootineDate.localDate(),
-                value: amount,
-                kind: .delta,
+                value: value,
+                kind: startsManualLedger ? .absolute : .delta,
                 note: "Postęp z aplikacji iOS",
                 createdAt: now
             ))
@@ -1991,7 +2450,8 @@ final class AppEnvironment: ObservableObject {
         progressMode: GoalProgressMode,
         targetValue: Double,
         unit: String,
-        note: String
+        note: String,
+        iconKey: String? = nil
     ) async {
         var next = goalsWorkspace
         guard let index = next.goals.firstIndex(where: { $0.id == id }) else { return }
@@ -2009,6 +2469,7 @@ final class AppEnvironment: ObservableObject {
         next.goals[index].target = max(1, targetValue)
         next.goals[index].targetValue = max(0, targetValue)
         next.goals[index].unit = unit
+        if let iconKey { next.goals[index].iconKey = iconKey; next.goals[index].icon = iconKey }
         next.goals[index].note = note
         next.goals[index].current = rootineGoalCurrentValue(next.goals[index])
         next.goals[index].updatedAt = now
@@ -2408,7 +2869,7 @@ final class AppEnvironment: ObservableObject {
         next.tasks[index].title = trimmedTitle
         next.tasks[index].projectId = normalizedProject
         next.tasks[index].companyId = normalizedCompany ?? normalizedProject.flatMap { projectID in next.projects.first(where: { $0.id == projectID })?.companyId }
-        next.tasks[index].parentId = normalizedProject == nil ? nil : parentID?.rootineTrimmedNonEmpty
+        next.tasks[index].parentId = parentID?.rootineTrimmedNonEmpty
         if let priority { next.tasks[index].priority = priority }
         if let status {
             next.tasks[index].status = status
@@ -2602,6 +3063,176 @@ final class AppEnvironment: ObservableObject {
         foundationMessage = message
     }
 
+    func deleteTripWithUndo(id: String, onPublish: @escaping (RootineModuleUndo<TravelRecord>) -> Void) async {
+        var token: RootineModuleUndo<TravelRecord>?
+        await persistTravelWorkspace(updating: { current in
+            guard let index = current.trips.firstIndex(where: { $0.id == id }) else { return nil }
+            token = RootineModuleUndo(record: current.trips[index], index: index)
+            var next = current
+            next.trips.remove(at: index)
+            if let base = self.canonicalShadows[.travel], let mapped = try? RootineCanonicalWorkspaceMapping.mergedTravelPayload(for: next, onto: base) {
+                token?.canonical = RootineRemovedJSON.between(base, mapped)
+            }
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.travel] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoTripDeletion(_ undo: RootineModuleUndo<TravelRecord>) async -> Bool {
+        var restored = false
+        await persistTravelWorkspace(updating: { current in
+            guard self.activeModuleUndo[.travel] == undo.token,
+                  !current.trips.contains(where: { $0.id == undo.record.id }) else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            guard self.moduleUndoShadow(undo.canonical, key: .travel) else {
+                self.activeModuleUndo[.travel] = nil
+                self.foundationMessage = "Nie można cofnąć — powiązane dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.trips.insert(undo.record, at: min(undo.index, next.trips.count))
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.travel] = nil
+            restored = true
+        })
+        return restored
+    }
+
+    func deleteHealthReminderWithUndo(id: String, onPublish: @escaping (RootineModuleUndo<HealthReminder>) -> Void) async {
+        var token: RootineModuleUndo<HealthReminder>?
+        await persistHealthWorkspace(updating: { current in
+            guard let index = current.reminders.firstIndex(where: { $0.id == id }) else { return nil }
+            token = RootineModuleUndo(record: current.reminders[index], index: index)
+            var next = current
+            next.reminders.remove(at: index)
+            if let base = self.canonicalShadows[.health], let mapped = try? RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: next, onto: base) {
+                token?.canonical = RootineRemovedJSON.between(base, mapped)
+            }
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.health] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoHealthReminderDeletion(_ undo: RootineModuleUndo<HealthReminder>) async -> Bool {
+        var restored = false
+        await persistHealthWorkspace(updating: { current in
+            guard self.activeModuleUndo[.health] == undo.token,
+                  !current.reminders.contains(where: { $0.id == undo.record.id }) else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            guard self.moduleUndoShadow(undo.canonical, key: .health) else {
+                self.activeModuleUndo[.health] = nil
+                self.foundationMessage = "Nie można cofnąć — powiązane dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.reminders.insert(undo.record, at: min(undo.index, next.reminders.count))
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.health] = nil
+            restored = true
+        })
+        return restored
+    }
+
+    func deleteAffairMatterWithUndo(id: String, onPublish: @escaping (RootineModuleUndo<AffairMatter>) -> Void) async {
+        var token: RootineModuleUndo<AffairMatter>?
+        await persistAffairsWorkspace(updating: { current in
+            guard let index = current.matters.firstIndex(where: { $0.id == id }) else { return nil }
+            token = RootineModuleUndo(record: current.matters[index], index: index)
+            var next = current
+            next.matters.remove(at: index)
+
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.affairs] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoAffairMatterDeletion(_ undo: RootineModuleUndo<AffairMatter>) async -> Bool {
+        var restored = false
+        await persistAffairsWorkspace(updating: { current in
+            guard self.activeModuleUndo[.affairs] == undo.token,
+                  !current.matters.contains(where: { $0.id == undo.record.id }) else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.matters.insert(undo.record, at: min(undo.index, next.matters.count))
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.affairs] = nil
+            restored = true
+        })
+        return restored
+    }
+
+    func deleteHealthCheckInWithUndo(date: String, onPublish: @escaping (RootineModuleUndo<HealthCheckIn>) -> Void) async {
+        var token: RootineModuleUndo<HealthCheckIn>?
+        await persistHealthWorkspace(updating: { current in
+            guard let record = current.checkIns[date] else { return nil }
+            token = RootineModuleUndo(record: record, index: 0)
+            var next = current
+            next.checkIns.removeValue(forKey: date)
+            if let base = self.canonicalShadows[.health], let mapped = try? RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: next, onto: base) {
+                token?.canonical = RootineRemovedJSON.between(base, mapped)
+            }
+            return next
+        }, onPublish: { _ in
+            guard let token else { return }
+            self.activeModuleUndo[.health] = token.token
+            onPublish(token)
+        })
+    }
+
+    @discardableResult
+    func undoHealthCheckInDeletion(_ undo: RootineModuleUndo<HealthCheckIn>) async -> Bool {
+        var restored = false
+        await persistHealthWorkspace(updating: { current in
+            guard self.activeModuleUndo[.health] == undo.token,
+                  current.checkIns[undo.record.date] == nil else {
+                self.foundationMessage = "Nie można cofnąć — dane zmieniły się później"
+                return nil
+            }
+            guard self.moduleUndoShadow(undo.canonical, key: .health) else {
+                self.activeModuleUndo[.health] = nil
+                self.foundationMessage = "Nie można cofnąć — powiązane dane zmieniły się później"
+                return nil
+            }
+            var next = current
+            next.checkIns[undo.record.date] = undo.record
+            return next
+        }, onPublish: { _ in
+            self.activeModuleUndo[.health] = nil
+            restored = true
+        })
+        return restored
+    }
+
+#if DEBUG
+    func setSprint05WorkspacesForTests(travel: TravelWorkspace? = nil, health: HealthWorkspace? = nil, affairs: AffairsWorkspace? = nil, shadows: [RootineStorageKey: JSONValue] = [:]) {
+        if let travel { travelWorkspace = travel }
+        if let health { healthWorkspace = health }
+        if let affairs { affairsWorkspace = affairs }
+        for (key, value) in shadows { canonicalShadows[key] = value }
+    }
+#endif
+
     func addTrip(
         destination: String,
         dateRange: String,
@@ -2610,14 +3241,19 @@ final class AppEnvironment: ObservableObject {
     ) async {
         let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDestination.isEmpty else { return }
-        let creationFingerprint = "trip|\(trimmedDestination)|\(dateRange)|\(nights)"
+        let creationFingerprint = "trip|\(operationID)"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = travelWorkspace
         let now = RootineDate.isoTimestamp()
         let recordID = RootineLocalIdentifier.string(namespace: "trip", operationID: operationID)
         guard !next.trips.contains(where: { $0.id == recordID }) else { return }
-        next.trips.insert(TravelRecord(id: recordID, destination: trimmedDestination, dateRange: dateRange, nights: max(1, nights), itinerary: [], createdAt: now, updatedAt: now), at: 0)
+        var record = TravelRecord(id: recordID, destination: trimmedDestination, dateRange: dateRange, nights: max(1, nights), itinerary: [], createdAt: now, updatedAt: now)
+        let dates = dateRange.components(separatedBy: "–").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if dates.count == 2, rootineHealthLocalDateIsValid(dates[0]), rootineHealthLocalDateIsValid(dates[1]) {
+            record.startDate = dates[0]; record.endDate = dates[1]
+        }
+        next.trips.insert(record, at: 0)
         next.updatedAt = now
         await persistTravelWorkspace(next)
     }
@@ -2635,7 +3271,6 @@ final class AppEnvironment: ObservableObject {
         let trimmedDestination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDestination.isEmpty else { return }
         next.trips[index].destination = trimmedDestination
-        next.trips[index].name = trimmedDestination
         next.trips[index].dateRange = dateRange.trimmingCharacters(in: .whitespacesAndNewlines)
         let pieces = next.trips[index].dateRange
             .components(separatedBy: "–")
@@ -2852,7 +3487,7 @@ final class AppEnvironment: ObservableObject {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedDueDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty, AffairDate.isValid(normalizedDueDate) else { return }
-        let fingerprint = "affair|\(trimmedTitle)|\(category)|\(dueDate)"
+        let fingerprint = "affair|\(operationID)"
         guard creationGate.claim(fingerprint) else { return }
         defer { creationGate.release(fingerprint) }
         var next = affairsWorkspace
@@ -2929,7 +3564,7 @@ final class AppEnvironment: ObservableObject {
         let normalizedDate = dueDate.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty, AffairMoney.decimal(amount) != nil,
               AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
-        let fingerprint = "affair-one-time|\(trimmedTitle)|\(normalizedDate)|\(AffairMoney.normalized(amount))"
+        let fingerprint = "affair-one-time|\(operationID)"
         guard creationGate.claim(fingerprint) else { return }
         defer { creationGate.release(fingerprint) }
         let id = RootineLocalIdentifier.string(namespace: "affair-one-time", operationID: operationID)
@@ -3001,7 +3636,7 @@ final class AppEnvironment: ObservableObject {
         guard !trimmedName.isEmpty, AffairMoney.decimal(amount) != nil,
               AffairsWorkspaceRules.cadences.contains(cadence),
               AffairDate.isValid(normalizedDate, allowingEmpty: false) else { return }
-        let fingerprint = "affair-payment|\(trimmedName)|\(normalizedDate)|\(cadence)"
+        let fingerprint = "affair-payment|\(operationID)"
         guard creationGate.claim(fingerprint) else { return }
         defer { creationGate.release(fingerprint) }
         let id = RootineLocalIdentifier.string(namespace: "affair-payment", operationID: operationID)
@@ -3378,6 +4013,8 @@ final class AppEnvironment: ObservableObject {
         await persistAffairsWorkspace(next)
     }
 
+    private var activeNutritionEntryUndo: RootineNutritionEntryUndo?
+
     // MARK: Nutrition secondary records
 
     func updateNutritionGoals(_ goals: NutritionGoals) async {
@@ -3494,7 +4131,9 @@ final class AppEnvironment: ObservableObject {
     ) async {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-        let creationFingerprint = "nutrition|\(dateKey)|\(meal)|\(trimmedName)|\(portion)|\(calories)|\(protein)|\(carbs)|\(fat)"
+        // One operation identifies one serving. Equal contents with another
+        // operation ID are an intentional additional serving, even during I/O.
+        let creationFingerprint = "nutrition|\(operationID)"
         guard creationGate.claim(creationFingerprint) else { return }
         defer { creationGate.release(creationFingerprint) }
         var next = nutritionWorkspace
@@ -3818,48 +4457,76 @@ final class AppEnvironment: ObservableObject {
         _ = originalMeal // Kept in the API for explicit caller intent and telemetry.
     }
 
-    func restoreNutritionEntry(dateKey: String, meal: String, entry: NutritionEntry) async {
-        var next = nutritionWorkspace
-        var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
-        let allEntries = day.entries.breakfast + day.entries.lunch + day.entries.snack + day.entries.dinner
-        guard !allEntries.contains(where: { $0.id == entry.id }) else { return }
-        switch meal {
-        case "breakfast": day.entries.breakfast.append(entry)
-        case "lunch": day.entries.lunch.append(entry)
-        case "snack": day.entries.snack.append(entry)
-        default: day.entries.dinner.append(entry)
-        }
-        next.days[dateKey] = day
-        await persistNutritionWorkspace(next)
+    func canRestoreNutritionEntry(_ undo: RootineNutritionEntryUndo) -> Bool {
+        activeNutritionEntryUndo == undo
+            && !nutritionWorkspace.days.values.contains { day in
+                day.entries.all.contains { $0.id == undo.entry.id }
+            }
     }
 
-    func deleteNutritionEntry(dateKey: String, meal: String, id: String) async {
-        var next = nutritionWorkspace
-        guard var day = next.days[dateKey] else { return }
-        switch meal {
-        case "breakfast": day.entries.breakfast.removeAll { $0.id == id }
-        case "lunch": day.entries.lunch.removeAll { $0.id == id }
-        case "snack": day.entries.snack.removeAll { $0.id == id }
-        default: day.entries.dinner.removeAll { $0.id == id }
-        }
-        next.days[dateKey] = day
-        await persistNutritionWorkspace(next)
+    @discardableResult
+    func restoreNutritionEntry(_ undo: RootineNutritionEntryUndo) async -> Bool {
+        var restored = false
+        await persistNutritionWorkspace(updating: { current in
+            guard self.canRestoreNutritionEntry(undo) else { return nil }
+            var next = current
+            var day = next.days[undo.dateKey] ?? NutritionDay.empty(date: undo.dateKey)
+            day.entries[undo.meal].insert(undo.entry, at: min(undo.index, day.entries[undo.meal].count))
+            next.days[undo.dateKey] = day
+            return next
+        }, onPublish: { _ in
+            self.activeNutritionEntryUndo = nil
+            restored = true
+        })
+        return restored
     }
 
-    func addWater(dateKey: String, amountMl: Double) async {
-        var next = nutritionWorkspace
-        var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
-        day.waterMl = max(0, day.waterMl + amountMl)
-        next.days[dateKey] = day
-        await persistNutritionWorkspace(next)
+    func deleteNutritionEntry(
+        dateKey: String,
+        meal: String,
+        id: String,
+        onMutation: ((RootineNutritionEntryUndo) -> Void)? = nil
+    ) async {
+        var undo: RootineNutritionEntryUndo?
+        await persistNutritionWorkspace(updating: { current in
+            var next = current
+            guard var day = next.days[dateKey] else { return nil }
+            // An editor/sync may have moved this ID to another meal since the
+            // confirmation opened. Delete its current canonical value once.
+            guard let actualMeal = NutritionMealKind.allCases.first(where: {
+                day.entries[$0].contains { $0.id == id }
+            }), let index = day.entries[actualMeal].firstIndex(where: { $0.id == id }) else { return nil }
+            let entry = day.entries[actualMeal].remove(at: index)
+            undo = RootineNutritionEntryUndo(dateKey: dateKey, meal: actualMeal, index: index, entry: entry)
+            next.days[dateKey] = day
+            return next
+        }, onPublish: { _ in
+            guard let undo else { return }
+            self.activeNutritionEntryUndo = undo
+            onMutation?(undo)
+        })
+        _ = meal // Kept for callers' explicit context; the ID owns the record.
     }
 
-    func toggleNutritionDayClosed(dateKey: String) async {
-        var next = nutritionWorkspace
-        var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
-        day.closedAt = day.closedAt == nil ? RootineDate.isoTimestamp() : nil
-        next.days[dateKey] = day
-        await persistNutritionWorkspace(next)
+    func addWater(dateKey: String, amountMl: Double, onMutation: (() -> Void)? = nil) async {
+        guard amountMl.isFinite else { return }
+        await persistNutritionWorkspace(updating: { current in
+            var next = current
+            var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
+            day.waterMl = max(0, day.waterMl + amountMl)
+            next.days[dateKey] = day
+            return next
+        }, onPublish: { _ in onMutation?() })
+    }
+
+    func toggleNutritionDayClosed(dateKey: String, onMutation: (() -> Void)? = nil) async {
+        await persistNutritionWorkspace(updating: { current in
+            var next = current
+            var day = next.days[dateKey] ?? NutritionDay.empty(date: dateKey)
+            day.closedAt = day.closedAt == nil ? RootineDate.isoTimestamp() : nil
+            next.days[dateKey] = day
+            return next
+        }, onPublish: { _ in onMutation?() })
     }
 
     /// MainActor isolation alone does not serialize two async methods across
@@ -3944,8 +4611,16 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func persistTaskWorkspace(_ value: TaskWorkspace) async {
+        await persistTaskWorkspace(updating: { _ in value })
+    }
+
+    private func persistTaskWorkspace(
+        updating update: (TaskWorkspace) -> TaskWorkspace?,
+        onPublish: ((TaskWorkspace) -> Void)? = nil
+    ) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(taskWorkspace) else { return }
         var next = rootineNormalizedTaskWorkspace(value)
         next.updatedAt = RootineDate.isoTimestamp()
         guard (try? RootineTaskDomain.validate(next)) != nil else {
@@ -3953,6 +4628,12 @@ final class AppEnvironment: ObservableObject {
             return
         }
         taskWorkspace = next
+        // Deliver the immutable before/after pair in the same actor turn as
+        // publication. A later completion must never install an older token.
+        onPublish?(next)
+#if DEBUG
+        await taskWorkspaceDidPublishForTests?()
+#endif
         // Schedule from the just-published local aggregate before attempting
         // the network queue. This keeps reminders working while offline and
         // ensures an edit/completion/delete invalidates its old occurrence.
@@ -3971,12 +4652,109 @@ final class AppEnvironment: ObservableObject {
         }
     }
 
+    /// Bulk Today actions need an explicit persistence outcome so a failed
+    /// local write or queue preparation cannot be presented as a successful
+    /// move. The legacy task editor keeps its local-first behavior above.
+    @discardableResult
+    private func persistTaskWorkspaceOutcome(_ value: TaskWorkspace) async -> RootineTaskPersistenceOutcome {
+        guard await beginWorkspacePersistence() else {
+            return .failed("Nie można zapisać zmian podczas importu danych.")
+        }
+        defer { endWorkspacePersistence() }
+
+        var next = rootineNormalizedTaskWorkspace(value)
+        next.updatedAt = RootineDate.isoTimestamp()
+        guard (try? RootineTaskDomain.validate(next)) != nil else {
+            foundationMessage = "Nieprawidłowe dane zadania — zapis odrzucony"
+            return .failed("Nieprawidłowe dane zadania — zapis odrzucony")
+        }
+
+        // Persist before publishing. If the filesystem or queue rejects the
+        // write, the caller receives an error and the old workspace remains
+        // authoritative.
+        guard let store else {
+            taskWorkspace = next
+            workspaceSyncStatus = .localOnly(pending: 0)
+            await reconcileLocalNotifications()
+            foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+            return .queuedOffline
+        }
+
+        let receipt: WorkspaceWriteReceipt
+        do {
+            receipt = try await store.saveWithReceipt(next, key: .tasks)
+        } catch {
+            foundationMessage = "Nie udało się zapisać zmian lokalnie"
+            return .failed("Nie udało się zapisać zmian lokalnie.")
+        }
+
+        guard let syncEngine else {
+            taskWorkspace = next
+            workspaceSyncStatus = .localOnly(pending: 0)
+            await reconcileLocalNotifications()
+            foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
+            return .queuedOffline
+        }
+
+        do {
+            try await syncEngine.enqueue(next, key: .tasks)
+        } catch {
+            // A receipt lets us remove an unqueueable local snapshot, so the
+            // UI never reports a move that cannot be retried safely.
+            let didRollback = (try? await store.undo(receipt)) == true
+            if !didRollback {
+                // A concurrent writer may have superseded the receipt. Keep
+                // the local projection and report it as pending rather than
+                // claiming that the operation was discarded while leaving a
+                // moved snapshot on disk.
+                taskWorkspace = next
+                let pending = (try? await syncEngine.pendingMutationCount()) ?? 0
+                workspaceSyncStatus = .localOnly(pending: pending)
+                await reconcileLocalNotifications()
+                foundationMessage = "Zapisano lokalnie — synchronizacja czeka na ponowienie"
+                return .queuedOffline
+            }
+            foundationMessage = "Nie udało się przygotować synchronizacji — zmian nie zastosowano"
+            return .failed("Nie udało się przygotować synchronizacji — zmian nie zastosowano.")
+        }
+
+        taskWorkspace = next
+        // Schedule from the just-published local aggregate before attempting
+        // the network flush. This keeps reminders working while offline and
+        // ensures an edit/completion/delete invalidates its old occurrence.
+        await reconcileLocalNotifications()
+        await markLocalOnly()
+        await flushPendingMutations()
+        switch workspaceSyncStatus {
+        case .synced:
+            return .synced
+        case .conflict:
+            return .conflict
+        case .unavailable, .localOnly, .syncing, .schemaMismatch, .unauthorized, .error:
+            // Local-first writes remain valid when the remote is unavailable,
+            // but callers must present that state as pending rather than as a
+            // successful server-side move.
+            return .queuedOffline
+        }
+    }
+
     private func persistNutritionWorkspace(_ value: NutritionWorkspace) async {
+        await persistNutritionWorkspace(updating: { _ in value })
+    }
+
+    private func persistNutritionWorkspace(
+        updating update: (NutritionWorkspace) -> NutritionWorkspace?,
+        onPublish: ((NutritionWorkspace) -> Void)? = nil
+    ) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
+        guard var next = update(nutritionWorkspace) else { return }
         next.updatedAt = RootineDate.isoTimestamp()
         nutritionWorkspace = next
+        onPublish?(next)
+#if DEBUG
+        await nutritionWorkspaceDidPublishForTests?()
+#endif
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
@@ -4003,22 +4781,31 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func persistNotesWorkspace(_ value: NotesWorkspace) async {
-        let previous = notesWorkspace
+        await persistNotesWorkspace(updating: { _ in value })
+    }
+
+    private func persistNotesWorkspace(updating update: (NotesWorkspace) -> NotesWorkspace?, onPublish: ((NotesWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
-        var next = value
+        let previous = notesWorkspace
+        guard var next = update(previous) else { return }
         next.updatedAt = RootineDate.isoTimestamp()
+        let mapped: JSONValue
+        do {
+            mapped = try canonicalShadows[.notes].map { try RootineCanonicalWorkspaceMapping.mergedNotesPayload(for: next, onto: $0) } ?? RootineCanonicalWorkspaceMapping.payload(for: next)
+        } catch { foundationMessage = "Nie można zapisać notatki"; return }
         notesWorkspace = next
+        canonicalShadows[.notes] = mapped
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.notes)
+#endif
         guard let store, let syncEngine else {
             foundationMessage = "Zapisano lokalnie — synchronizacja czeka na sesję"
             return
         }
         do {
-            let mapped = try (canonicalShadows[.notes].map {
-                try RootineCanonicalWorkspaceMapping.mergedNotesPayload(for: next, onto: $0)
-            } ?? RootineCanonicalWorkspaceMapping.payload(for: next))
             try await store.save(next, key: .notes)
-            canonicalShadows[.notes] = mapped
             try await store.save(mapped, key: .notesCanonicalShadow)
             if normalizedReadEnabled {
                 let canUseNormalized = try await enqueueNormalizedNoteMutations(from: previous, to: next, payload: mapped, syncEngine: syncEngine)
@@ -4126,63 +4913,138 @@ final class AppEnvironment: ObservableObject {
     }
 
     private func persistSportWorkspace(_ value: SportWorkspace) async {
+        await persistSportWorkspace(updating: { _ in value })
+    }
+
+    private func persistSportWorkspace(updating update: (SportWorkspace) -> SportWorkspace?, onPublish: ((SportWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(sportWorkspace) else { return }
         var next = value.normalizedForPersistence()
         next.updatedAt = RootineDate.isoTimestamp()
-        guard (try? next.validate()) != nil else {
-            foundationMessage = "Nieprawidłowe dane aktywności"
-            return
-        }
+        guard (try? next.validate()) != nil else { foundationMessage = "Nieprawidłowe dane aktywności"; return }
+        let mapped: JSONValue
+        do {
+            mapped = try canonicalShadows[.sport].map { try RootineCanonicalWorkspaceMapping.mergedSportPayload(for: next, onto: $0) } ?? RootineCanonicalWorkspaceMapping.payload(for: next)
+        } catch { foundationMessage = "Nie można zapisać zmian"; return }
         sportWorkspace = next
-        await persistCanonicalWorkspace(next, key: .sport, merge: RootineCanonicalWorkspaceMapping.mergedSportPayload)
+        canonicalShadows[.sport] = mapped
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.sport)
+#endif
+        await persistMorePublished(next, mapped: mapped, key: .sport)
     }
 
     private func persistGoalsWorkspace(_ value: GoalsWorkspace) async {
+        await persistGoalsWorkspace(updating: { _ in value })
+    }
+
+    private func persistGoalsWorkspace(updating update: (GoalsWorkspace) -> GoalsWorkspace?, onPublish: ((GoalsWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(goalsWorkspace) else { return }
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
+        let mapped: JSONValue
+        do {
+            mapped = try canonicalShadows[.goals].map { try RootineCanonicalWorkspaceMapping.mergedGoalsPayload(for: next, onto: $0) } ?? RootineCanonicalWorkspaceMapping.payload(for: next)
+        } catch { foundationMessage = "Nie można zapisać zmian"; return }
         goalsWorkspace = next
-        await persistCanonicalWorkspace(next, key: .goals, merge: RootineCanonicalWorkspaceMapping.mergedGoalsPayload)
+        canonicalShadows[.goals] = mapped
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.goals)
+#endif
+        await persistMorePublished(next, mapped: mapped, key: .goals)
     }
 
     private func persistWorkWorkspace(_ value: WorkWorkspace) async {
+        await persistWorkWorkspace(updating: { _ in value })
+    }
+
+    private func persistWorkWorkspace(updating update: (WorkWorkspace) -> WorkWorkspace?, onPublish: ((WorkWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(workWorkspace) else { return }
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
+        let mapped: JSONValue
+        do {
+            mapped = try canonicalShadows[.work].map { try RootineCanonicalWorkspaceMapping.mergedWorkPayload(for: next, onto: $0) } ?? RootineCanonicalWorkspaceMapping.payload(for: next)
+        } catch { foundationMessage = "Nie można zapisać zmian"; return }
         workWorkspace = next
-        await persistCanonicalWorkspace(next, key: .work, merge: RootineCanonicalWorkspaceMapping.mergedWorkPayload)
+        canonicalShadows[.work] = mapped
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.work)
+#endif
+        await persistMorePublished(next, mapped: mapped, key: .work)
     }
 
     private func persistTravelWorkspace(_ value: TravelWorkspace) async {
+        await persistTravelWorkspace(updating: { _ in value })
+    }
+
+    private func persistTravelWorkspace(updating update: (TravelWorkspace) -> TravelWorkspace?, onPublish: ((TravelWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(travelWorkspace) else { return }
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
-        guard rootineValidateTravelWorkspace(next).isEmpty else {
-            foundationMessage = "Nie zapisano podróży — dane wymagają korekty"
-            return
-        }
+        guard rootineValidateTravelWorkspace(next).isEmpty else { foundationMessage = "Nie zapisano podróży — dane wymagają korekty"; return }
+        let mapped: JSONValue
+        do { mapped = try canonicalShadows[.travel].map { try RootineCanonicalWorkspaceMapping.mergedTravelPayload(for: next, onto: $0) } ?? RootineCanonicalWorkspaceMapping.payload(for: next) }
+        catch { foundationMessage = "Nie można zapisać zmian"; return }
         travelWorkspace = next
-        await persistCanonicalWorkspace(next, key: .travel, merge: RootineCanonicalWorkspaceMapping.mergedTravelPayload)
+        canonicalShadows[.travel] = mapped
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.travel)
+#endif
+        await persistMorePublished(next, mapped: mapped, key: .travel)
     }
 
     private func persistHealthWorkspace(_ value: HealthWorkspace) async {
+        await persistHealthWorkspace(updating: { _ in value })
+    }
+
+    private func persistHealthWorkspace(updating update: (HealthWorkspace) -> HealthWorkspace?, onPublish: ((HealthWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(healthWorkspace) else { return }
         var next = value
         next.updatedAt = RootineDate.isoTimestamp()
+
+        let mapped: JSONValue
+        do { mapped = try canonicalShadows[.health].map { try RootineCanonicalWorkspaceMapping.mergedHealthPayload(for: next, onto: $0) } ?? RootineCanonicalWorkspaceMapping.payload(for: next) }
+        catch { foundationMessage = "Nie można zapisać zmian"; return }
         healthWorkspace = next
-        await persistCanonicalWorkspace(next, key: .health, merge: RootineCanonicalWorkspaceMapping.mergedHealthPayload)
+        canonicalShadows[.health] = mapped
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.health)
+#endif
+        await persistMorePublished(next, mapped: mapped, key: .health)
     }
 
     private func persistAffairsWorkspace(_ value: AffairsWorkspace) async {
+        await persistAffairsWorkspace(updating: { _ in value })
+    }
+
+    private func persistAffairsWorkspace(updating update: (AffairsWorkspace) -> AffairsWorkspace?, onPublish: ((AffairsWorkspace) -> Void)? = nil) async {
         guard await beginWorkspacePersistence() else { return }
         defer { endWorkspacePersistence() }
+        guard let value = update(affairsWorkspace) else { return }
         let next = AffairsWorkspaceRules.normalized(value)
+
+
         affairsWorkspace = next
+
+        onPublish?(next)
+#if DEBUG
+        await moreWorkspaceDidPublishForTests?(.affairs)
+#endif
         await persistWorkspace(next, key: .affairs)
     }
 

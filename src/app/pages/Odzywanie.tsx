@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { useLocation, useNavigate } from "react-router";
 import {
   ChartNoAxesCombined, CheckCircle2, ChevronLeft, ChevronRight, Droplets,
-  LoaderCircle, Pencil, Plus, RefreshCw, Save, Settings, Trash2, X,
+  LoaderCircle, MoreHorizontal, Pencil, Plus, RefreshCw, Save, Trash2, X,
 } from "lucide-react";
 import {
   Badge, Button, Card, ConfirmDialog, ContentHeader, DatePicker, Input, Modal, ModuleMain, ModuleShell,
@@ -67,7 +67,6 @@ import { useSupabaseAuth } from "../../infrastructure/supabase/auth";
 import "../../styles/nutrition.css";
 import {
   MEAL_META,
-  WATER_AMOUNTS,
   calculateMacroDraftTargets,
   createCalculatorDraft,
   createEntryDraft,
@@ -76,7 +75,6 @@ import {
   formatDate,
   formatEntryCount,
   formatNumber,
-  formatWater,
   parseCalculatorDraft,
   parseDraftNumber,
   parseMacroDraft,
@@ -118,6 +116,7 @@ export default function Odzywanie() {
       ) ?? nutritionDateKey()
   ));
   const [entryDialogOpen, setEntryDialogOpen] = useState(quickAddRequested);
+  const [nutritionAddOpen, setNutritionAddOpen] = useState(false);
   const [entryDraft, setEntryDraft] = useState<EntryDraft>(() => ({
     ...createEntryDraft(),
     name: quickAddRequested ? initialCommand.title : "",
@@ -168,6 +167,7 @@ export default function Odzywanie() {
   }, [selectedDate]);
   const [waterCustomAmount, setWaterCustomAmount] = useState("");
   const [waterCustomError, setWaterCustomError] = useState("");
+  const [waterCustomOpen, setWaterCustomOpen] = useState(false);
   const [waterEditOpen, setWaterEditOpen] = useState(false);
   const [waterEditDraft, setWaterEditDraft] = useState("");
   const [waterEditError, setWaterEditError] = useState("");
@@ -187,6 +187,8 @@ export default function Odzywanie() {
   const [undoEntry, setUndoEntry] = useState<{ meal: MealSlot; entry: NutritionEntry } | null>(null);
   const [pendingWeightDelete, setPendingWeightDelete] = useState<WeightMeasurement | null>(null);
   const waterCustomInputRef = useRef<HTMLInputElement>(null);
+  const waterHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waterHoldTriggeredRef = useRef(false);
   const entryReturnFocusRef = useRef<HTMLElement | null>(null);
   useNutritionCommandAction({
     setSelectedDate, setEntryDraft, setEditingEntry, setSelectedFood, setEntryErrors,
@@ -778,6 +780,38 @@ export default function Odzywanie() {
     updateDay((current) => adjustNutritionWater(current, delta));
   };
 
+  const openCustomWater = () => {
+    if (dayClosed) return;
+    setWaterCustomAmount("");
+    setWaterCustomError("");
+    setWaterCustomOpen(true);
+  };
+
+  const startWaterHold = () => {
+    if (dayClosed) return;
+    waterHoldTriggeredRef.current = false;
+    waterHoldTimerRef.current = setTimeout(() => {
+      waterHoldTriggeredRef.current = true;
+      openCustomWater();
+    }, 550);
+  };
+
+  const cancelWaterHold = () => {
+    if (waterHoldTimerRef.current) {
+      clearTimeout(waterHoldTimerRef.current);
+      waterHoldTimerRef.current = null;
+    }
+  };
+
+  const addQuickWater = () => {
+    cancelWaterHold();
+    if (waterHoldTriggeredRef.current) {
+      waterHoldTriggeredRef.current = false;
+      return;
+    }
+    changeWater(250);
+  };
+
   const openWaterEdit = () => {
     if (dayClosed) return;
     setWaterEditDraft(String(day.waterMl));
@@ -797,6 +831,7 @@ export default function Odzywanie() {
   };
 
   const addCustomWater = () => {
+    if (dayClosed) return;
     const amount = Math.round(parseDraftNumber(waterCustomAmount));
     if (amount <= 0) {
       setWaterCustomError("Wpisz dodatnią ilość wody.");
@@ -805,7 +840,18 @@ export default function Odzywanie() {
     changeWater(amount);
     setWaterCustomAmount("");
     setWaterCustomError("");
+    setWaterCustomOpen(false);
   };
+
+  useEffect(() => () => {
+    if (waterHoldTimerRef.current) clearTimeout(waterHoldTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!waterCustomOpen) return undefined;
+    const frame = window.requestAnimationFrame(() => waterCustomInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [waterCustomOpen]);
 
   const closeDay = () => {
     if (selectedDate > today) return;
@@ -1156,7 +1202,7 @@ export default function Odzywanie() {
     <Select
       compact
       fieldClassName="context-mobile-select"
-      aria-label="Widok Odżywiania"
+      aria-label="Widok diety"
       value={view}
       options={[
         { value: "today", label: "Dzisiaj" },
@@ -1232,40 +1278,82 @@ export default function Odzywanie() {
           <ContentHeader
             headingLevel={1}
             className="nutrition-content-header"
-            title="Dzienny rejestr"
+            title="Dieta"
             description={`${formatEntryCount(allEntries.length)} · ${formatNumber(totals.calories)} / ${formatNumber(workspace.goals.calories)} kcal`}
             meta={headerMeta}
             mobileNavigation={mobileNavigation}
             actions={<>
               <div className="nutrition-date-navigation">
-                <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => selectNutritionDate(shiftDate(selectedDate, -1))}><ChevronLeft size={13} /></Button>
-                <DatePicker value={selectedDate} onChange={(value) => selectNutritionDate(value || today)} aria-label="Wybrany dzień" displayValue={formatDate(selectedDate)} density="compact" fieldClassName="nutrition-date-input" />
-                <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => selectNutritionDate(shiftDate(selectedDate, 1))}><ChevronRight size={13} /></Button>
-                {selectedDate !== today && <Button variant="quiet" size="sm" onClick={() => selectNutritionDate(today)}>Dzisiaj</Button>}
+                <div className="nutrition-date-navigation__row">
+                  <Button variant="ghost" size="sm" iconOnly aria-label="Poprzedni dzień" onClick={() => selectNutritionDate(shiftDate(selectedDate, -1))}><ChevronLeft size={16} /></Button>
+                  <DatePicker value={selectedDate} onChange={(value) => selectNutritionDate(value || today)} aria-label="Wybrany dzień" displayValue={new Date(`${selectedDate}T12:00:00`).toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" })} density="compact" fieldClassName="nutrition-date-input" />
+                  <Button variant="ghost" size="sm" iconOnly aria-label="Następny dzień" onClick={() => selectNutritionDate(shiftDate(selectedDate, 1))}><ChevronRight size={16} /></Button>
+                </div>
+                {selectedDate !== today
+                  ? <Button variant="quiet" size="sm" onClick={() => selectNutritionDate(today)}>Dziś</Button>
+                  : <span className="nutrition-date-today">Dziś</span>}
               </div>
-              <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={13} />} onClick={() => selectSidebarItem("analysis")}>
-                Analiza
-              </Button>
-              {day.source === "demo" && <Button variant="quiet" size="sm" disabled={dayClosed} onClick={clearDemoDay}>Wyczyść przykład</Button>}
-              {!dayClosed && (
+              <details className="nutrition-header-options">
+                <summary aria-label="Więcej opcji diety"><MoreHorizontal size={20} /></summary>
+                <div className="nutrition-header-options__menu" role="menu">
+                  <Button variant="quiet" size="sm" leadingIcon={<ChartNoAxesCombined size={14} />} onClick={() => selectSidebarItem("analysis")}>
+                    Analiza
+                  </Button>
+                  <Button variant="quiet" size="sm" onClick={() => openGoalDialog("nutrition")}>
+                    Cele kalorii i makro
+                  </Button>
+                  <Button variant="quiet" size="sm" onClick={() => openGoalDialog("water")}>
+                    Cel nawodnienia
+                  </Button>
+                  <Button variant="quiet" size="sm" leadingIcon={<Pencil size={14} />} disabled={dayClosed} onClick={openWaterEdit}>
+                    Edytuj wypitą wodę
+                  </Button>
+                  {day.source === "demo" && <Button variant="quiet" size="sm" disabled={dayClosed} onClick={clearDemoDay}>Wyczyść przykład</Button>}
+                  {!dayClosed && (
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      className="nutrition-day-close"
+                      leadingIcon={<CheckCircle2 size={14} />}
+                      aria-label="Zamknij wybrany dzień"
+                      disabled={selectedDate > today}
+                      title={selectedDate > today
+                        ? "Nie można zamknąć przyszłego dnia."
+                        : "Oznacz dzień jako wykonany na ekranie Dzisiaj."}
+                      onClick={closeDay}
+                    >
+                      Zamknij dzień
+                    </Button>
+                  )}
+                </div>
+              </details>
+              <div className="nutrition-global-add-wrap">
                 <Button
-                  variant="quiet"
-                  size="sm"
-                  className="nutrition-day-close"
-                  leadingIcon={<CheckCircle2 size={13} />}
-                  aria-label="Zamknij wybrany dzień"
-                  disabled={selectedDate > today}
-                  title={selectedDate > today
-                    ? "Nie można zamknąć przyszłego dnia."
-                    : "Oznacz dzień jako wykonany na ekranie Dzisiaj."}
-                  onClick={closeDay}
+                  className="nutrition-primary-action"
+                  variant="primary"
+                  leadingIcon={<Plus size={20} />}
+                  aria-label="Dodaj produkt"
+                  aria-haspopup="menu"
+                  aria-expanded={nutritionAddOpen}
+                  disabled={dayClosed}
+                  onClick={() => setNutritionAddOpen((open) => !open)}
                 >
-                  Zamknij dzień
+                  <span className="nutrition-primary-action__label">Dodaj</span>
                 </Button>
-              )}
-              <Button className="nutrition-primary-action" variant="primary" leadingIcon={<Plus size={13} />} aria-label="Dodaj produkt" disabled={dayClosed} onClick={() => openEntryDialog()}>
-                Dodaj produkt
-              </Button>
+                {nutritionAddOpen && (
+                  <div className="nutrition-add-menu" role="menu" aria-label="Dodaj do diety">
+                    <button type="button" role="menuitem" onClick={() => { setNutritionAddOpen(false); openEntryDialog(); }}>Produkt</button>
+                    <button type="button" role="menuitem" onClick={() => { setNutritionAddOpen(false); selectSidebarItem("meals"); }}>Posiłek</button>
+                    <button type="button" role="menuitem" onClick={() => { setNutritionAddOpen(false); changeWater(250); }}>Woda +250 ml</button>
+                    <div className="nutrition-add-menu__secondary">
+                      <button type="button" role="menuitem" onClick={() => { setNutritionAddOpen(false); selectSidebarItem("analysis"); }}>Analiza</button>
+                      <button type="button" role="menuitem" onClick={() => { setNutritionAddOpen(false); openGoalDialog("nutrition"); }}>Cele kalorii i makro</button>
+                      <button type="button" role="menuitem" onClick={() => { setNutritionAddOpen(false); openGoalDialog("water"); }}>Cel nawodnienia</button>
+                      <button type="button" role="menuitem" disabled={dayClosed} onClick={() => { setNutritionAddOpen(false); openWaterEdit(); }}>Edytuj wypitą wodę</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>}
           />
 
@@ -1382,118 +1470,93 @@ export default function Odzywanie() {
                   totals={totals}
                   goals={workspace.goals}
                   onOpenGoals={() => openGoalDialog("nutrition")}
-                />
-
-                <SectionSurface elevated padding="default" className="nutrition-summary-card">
-                  <SectionHeader
-                    title="Nawodnienie"
-                    variant="label"
-                    action={(
-                      <div className="nutrition-section-actions">
-                        {!waterEditOpen && (
-                          <Button variant="ghost" size="sm" iconOnly disabled={dayClosed} aria-label="Edytuj wypitą wodę" onClick={openWaterEdit}>
-                            <Pencil size={13} />
+                  waterPanel={(
+                    <div className="nutrition-water-panel">
+                      <div className="nutrition-water-panel__heading">
+                        <div className="nutrition-water-card__label">
+                          <Droplets size={24} strokeWidth={1.7} aria-hidden="true" />
+                          <span>Woda</span>
+                        </div>
+                      </div>
+                      {waterEditOpen ? (
+                        <div className="nutrition-water-card__editor">
+                          <input
+                            aria-label="Edytuj wypitą wodę"
+                            className="nutrition-inline-number"
+                            inputMode="decimal"
+                            type="text"
+                            value={waterEditDraft}
+                            onChange={(event) => {
+                              setWaterEditDraft(event.target.value.replace(/\./g, ","));
+                              setWaterEditError("");
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") saveWaterEdit();
+                              if (event.key === "Escape") setWaterEditOpen(false);
+                            }}
+                          />
+                          <Button variant="ghost" size="sm" iconOnly aria-label="Zapisz ilość wypitej wody" onClick={saveWaterEdit}>
+                            <CheckCircle2 size={14} />
                           </Button>
-                        )}
-                        <Button variant="ghost" size="sm" iconOnly aria-label="Ustaw cel nawodnienia" onClick={() => openGoalDialog("water")}>
-                          <Settings size={13} />
-                        </Button>
-                      </div>
-                    )}
-                  />
-                  <Card tone="panel" padding="default">
-                    <div className="nutrition-water-card__summary">
-                      <div className="nutrition-water-card__label">
-                        <Droplets size={16} strokeWidth={1.5} />
-                        <span>Wypita woda</span>
-                      </div>
-                      <div className="nutrition-water-card__value">
-                        {waterEditOpen ? (
-                          <div className="nutrition-water-card__editor">
-                            <input
-                              aria-label="Edytuj wypitą wodę"
-                              className="nutrition-inline-number"
-                              inputMode="decimal"
-                              type="text"
-                              value={waterEditDraft}
-                              onChange={(event) => {
-                                setWaterEditDraft(event.target.value.replace(/\./g, ","));
-                                setWaterEditError("");
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") saveWaterEdit();
-                                if (event.key === "Escape") setWaterEditOpen(false);
-                              }}
-                            />
-                            <Button variant="ghost" size="sm" iconOnly aria-label="Zapisz ilość wypitej wody" onClick={saveWaterEdit}>
-                              <CheckCircle2 size={13} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              iconOnly
-                              aria-label="Anuluj edycję wypitej wody"
-                              onClick={() => {
-                                setWaterEditOpen(false);
-                                setWaterEditError("");
-                              }}
-                            >
-                              <X size={13} />
-                            </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            iconOnly
+                            aria-label="Anuluj edycję wypitej wody"
+                            onClick={() => {
+                              setWaterEditOpen(false);
+                              setWaterEditError("");
+                            }}
+                          >
+                            <X size={14} />
+                          </Button>
+                        </div>
+                      ) : waterCustomOpen ? (
+                        <div className="nutrition-water-custom-editor">
+                          <Input
+                            ref={waterCustomInputRef}
+                            fieldClassName="nutrition-water-custom__field"
+                            aria-label="Inna ilość wody"
+                            type="number"
+                            min="1"
+                            step="50"
+                            placeholder="Ilość wody (ml)"
+                            value={waterCustomAmount}
+                            error={waterCustomError || undefined}
+                            onChange={(event) => {
+                              setWaterCustomAmount(event.target.value);
+                              setWaterCustomError("");
+                            }}
+                          />
+                          <div className="nutrition-water-custom-editor__actions">
+                            <Button variant="primary" size="sm" disabled={dayClosed || !waterCustomAmount} onClick={addCustomWater}>Dodaj</Button>
+                            <Button variant="ghost" size="sm" onClick={() => { setWaterCustomOpen(false); setWaterCustomError(""); }}>Anuluj</Button>
                           </div>
-                        ) : (
-                          <strong>{day.waterMl.toLocaleString("pl-PL")} ml / {workspace.goals.waterMl.toLocaleString("pl-PL")} ml</strong>
-                        )}
-                        {!waterEditOpen && (
-                          <span>
-                            {day.waterMl >= workspace.goals.waterMl
-                              ? day.waterMl === workspace.goals.waterMl
-                                ? "Cel osiągnięty"
-                                : `Przekroczono o ${(day.waterMl - workspace.goals.waterMl).toLocaleString("pl-PL")} ml`
-                              : `Pozostało ${(workspace.goals.waterMl - day.waterMl).toLocaleString("pl-PL")} ml`}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {waterEditError && <p className="nutrition-inline-error" role="alert">{waterEditError}</p>}
-                    <div
-                      className="nutrition-water-progress"
-                      role="progressbar"
-                      aria-label="Nawodnienie"
-                      aria-valuemin={0}
-                      aria-valuemax={Math.max(workspace.goals.waterMl, day.waterMl, 1)}
-                      aria-valuenow={day.waterMl}
-                      aria-valuetext={`${formatWater(day.waterMl)} z celu ${formatWater(workspace.goals.waterMl)}${day.waterMl > workspace.goals.waterMl ? `, przekroczono o ${formatWater(day.waterMl - workspace.goals.waterMl)}` : ""}`}
-                    >
-                      <div className="nutrition-water-progress__fill" style={{ transform: `scaleX(${Math.min(1, day.waterMl / workspace.goals.waterMl)})` }} />
-                    </div>
-                    <div className="nutrition-water-actions">
-                      <div className="nutrition-water-controls">
-                        {WATER_AMOUNTS.map((amount) => (
-                          <Button key={amount} variant="quiet" size="sm" disabled={dayClosed} onClick={() => changeWater(amount)}>+{amount} ml</Button>
-                        ))}
-                      </div>
-                      <div className="nutrition-water-custom__form">
-                        <Input
-                          ref={waterCustomInputRef}
-                          fieldClassName="nutrition-water-custom__field"
-                          aria-label="Inna ilość wody"
-                          type="number"
-                          min="1"
-                          step="50"
-                          placeholder="Własna ilość (ml)"
-                          value={waterCustomAmount}
-                          error={waterCustomError || undefined}
-                          onChange={(event) => {
-                            setWaterCustomAmount(event.target.value);
-                            setWaterCustomError("");
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="nutrition-water-card__tap-target"
+                          disabled={dayClosed}
+                          aria-label="Dodaj 250 ml wody. Przytrzymaj, aby dodać inną ilość."
+                          onPointerDown={startWaterHold}
+                          onPointerUp={cancelWaterHold}
+                          onPointerCancel={cancelWaterHold}
+                          onPointerLeave={cancelWaterHold}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            openCustomWater();
                           }}
-                        />
-                        <Button variant="ghost" size="sm" disabled={dayClosed || !waterCustomAmount} onClick={addCustomWater}>Dodaj</Button>
-                      </div>
+                          onClick={addQuickWater}
+                        >
+                          <strong>{day.waterMl.toLocaleString("pl-PL")} <small>/ {workspace.goals.waterMl.toLocaleString("pl-PL")} ml</small></strong>
+                          <span>Dotknij: +250 ml<br />Przytrzymaj: inna ilość</span>
+                        </button>
+                      )}
+                      {waterEditError && <p className="nutrition-inline-error" role="alert">{waterEditError}</p>}
                     </div>
-                  </Card>
-                </SectionSurface>
+                  )}
+                />
 
                 <SectionSurface elevated padding="default" className="nutrition-summary-card">
                   <SectionHeader

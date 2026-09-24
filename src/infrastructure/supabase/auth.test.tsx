@@ -53,6 +53,14 @@ function AuthProbe() {
       >
         Google
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          void auth.signInWithApple().then(({ error }) => setResult(error ?? "apple-ok"));
+        }}
+      >
+        Apple
+      </button>
       <button type="button" onClick={() => { void auth.signIn("  Ola@Example.COM ", "haslo").then(({ error }) => setResult(error ?? "email-ok")); }}>
         E-mail
       </button>
@@ -110,6 +118,42 @@ describe("SupabaseAuthProvider Google OAuth", () => {
       provider: "google",
       options: { redirectTo: new URL("/dzisiaj", window.location.origin).toString() },
     });
+  });
+
+  it("starts Apple OAuth with the allowlisted post-login route", async () => {
+    const user = userEvent.setup();
+    render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+    await user.click(screen.getByRole("button", { name: "Apple" }));
+
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("apple-ok"));
+    expect(testState.providerEnabled).toHaveBeenCalledWith("apple");
+    expect(testState.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "apple",
+      options: { redirectTo: new URL("/dzisiaj", window.location.origin).toString() },
+    });
+  });
+
+  it("hands mobile Google OAuth to the installed native app", async () => {
+    const originalUserAgent = navigator.userAgent;
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+    });
+    try {
+      const user = userEvent.setup();
+      render(<SupabaseAuthProvider><AuthProbe /></SupabaseAuthProvider>);
+      await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+      await user.click(screen.getByRole("button", { name: "Google" }));
+      await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("ok"));
+      expect(testState.signInWithOAuth).toHaveBeenCalledWith({
+        provider: "google",
+        options: { redirectTo: "rootine://auth-callback" },
+      });
+    } finally {
+      Object.defineProperty(navigator, "userAgent", { configurable: true, value: originalUserAgent });
+    }
   });
 
   it("normalizes e-mail credentials and sends the configured confirmation redirect", async () => {

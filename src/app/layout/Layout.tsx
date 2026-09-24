@@ -146,12 +146,6 @@ const MOBILE_CORE_NAV = [
     to: APP_MODULE_BY_ID.today.to,
   },
   {
-    id: "tasks",
-    label: APP_MODULE_BY_ID.tasks.label,
-    icon: APP_MODULE_BY_ID.tasks.icon,
-    to: APP_MODULE_BY_ID.tasks.to,
-  },
-  {
     id: "calendar",
     label: "Kalendarz",
     icon: CalendarDays,
@@ -159,9 +153,15 @@ const MOBILE_CORE_NAV = [
   },
   {
     id: "nutrition",
-    label: APP_MODULE_BY_ID.nutrition.label,
+    label: "Dieta",
     icon: APP_MODULE_BY_ID.nutrition.icon,
     to: APP_MODULE_BY_ID.nutrition.to,
+  },
+  {
+    id: "notes",
+    label: APP_MODULE_BY_ID.notes.label,
+    icon: APP_MODULE_BY_ID.notes.icon,
+    to: APP_MODULE_BY_ID.notes.to,
   },
 ] as const;
 
@@ -243,7 +243,7 @@ const HELP_GUIDES = {
     steps: ["Zmień miesiąc strzałkami lub wróć przyciskiem „Dziś”.", "Wybierz dzień, aby zobaczyć jego zadania i wolne miejsce.", "Przeciągnij zadanie albo użyj Alt + strzałka, by zmienić termin."],
   },
   nutrition: {
-    title: "Odżywianie",
+    title: "Dieta",
     steps: ["Wybierz dzień i sprawdź bilans kalorii oraz makro.", "Dodaj produkt do właściwego posiłku i podaj rzeczywistą porcję.", "Porównaj dzień z celem; usunięty wpis możesz od razu przywrócić."],
   },
   sport: {
@@ -357,7 +357,7 @@ function PrimaryNavItem({
       viewTransition
       title={item.label}
       aria-current={active ? "page" : undefined}
-      data-module-id={item.id}
+      data-module-id={item.id === "tasks" && item.to === "/kalendarz" ? "calendar" : item.id}
       data-area-active={areaActive || undefined}
       className={[
         mobile ? "app-mobile-nav__item" : "app-nav-item",
@@ -626,6 +626,18 @@ export default function Layout() {
     );
   }, [location.hash, location.pathname, location.search]);
 
+  useEffect(() => {
+    // Old builds persisted the mobile destination independently of the route.
+    // Migrate that pointer only; task records remain untouched in their workspace.
+    for (const key of ["rootine.active-tab", "rootine.activeTab"]) {
+      try {
+        if (window.localStorage.getItem(key) === "tasks") window.localStorage.setItem(key, "today");
+      } catch {
+        // A storage-disabled session can still use the route redirect.
+      }
+    }
+  }, []);
+
   // Hover covers the deliberate switch; this covers the first one of the session.
   useEffect(() => prefetchModuleRoutesWhenIdle(), []);
 
@@ -808,9 +820,14 @@ export default function Layout() {
   };
 
   const orderedNav = getOrderedModules(modulePreferences);
-  const visibleNav = getVisibleModules(modulePreferences);
+  const visibleNav = getVisibleModules(modulePreferences).map((item) => item.id === "tasks"
+    ? { ...item, label: "Kalendarz", icon: CalendarDays, to: "/kalendarz" }
+    : item);
   const mobileMoreModules = orderedNav.filter((item) => (
-    item.id !== "today" && item.id !== "tasks" && item.id !== "nutrition"
+    item.id !== "today"
+    && item.id !== "tasks"
+    && item.id !== "nutrition"
+    && item.id !== "notes"
   ));
   const enabledModuleCount = visibleNav.length;
   const currentModule = findModuleForPath(location.pathname);

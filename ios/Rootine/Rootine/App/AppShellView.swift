@@ -206,35 +206,7 @@ private struct MoreLandingView: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) {
-                ForEach(modules) { module in
-                    NavigationLink {
-                        MoreModuleView(module: module)
-                    } label: {
-                        MoreModuleTile(module: module)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("space-\(module.rawValue)")
-                    .contextMenu {
-                        Button(module.addLabel, systemImage: "plus") { selectedModule = module }
-                        Button("Przenieś na początek", systemImage: "arrow.up.to.line") {
-                            move(module, before: modules.first ?? module)
-                        }
-                    }
-                    .draggable("rootine-space:\(module.rawValue)")
-                    .dropDestination(for: String.self) { values, _ in
-                        guard let value = values.first, value.hasPrefix("rootine-space:"),
-                              let source = MoreModule(rawValue: String(value.dropFirst("rootine-space:".count))) else { return false }
-                        move(source, before: module)
-                        return true
-                    }
-                    .accessibilityAction(named: "Przenieś na początek") {
-                        move(module, before: modules.first ?? module)
-                    }
-                }
-            }
-            .padding(16)
-            .padding(.bottom, 24)
+            moduleGrid
         }
         .scrollIndicators(.hidden)
         .background(RootineTheme.ColorToken.canvas.ignoresSafeArea())
@@ -242,35 +214,85 @@ private struct MoreLandingView: View {
         .navigationDestination(item: $selectedModule) { module in
             MoreModuleView(module: module, startsAdding: true)
         }
-        .sheet(isPresented: $showAdd, onDismiss: {
-            if let pendingAddModule {
-                selectedModule = pendingAddModule
-                self.pendingAddModule = nil
+        .sheet(isPresented: $showAdd, onDismiss: finishAddFlow) { addModuleSheet }
+        .overlay(alignment: .top) { syncStatusBanner }
+    }
+
+    private var moduleGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 12)], spacing: 12) {
+            ForEach(modules) { module in
+                moduleTile(module)
             }
-        }) {
-            NavigationStack {
-                List(modules) { module in
-                    Button {
-                        pendingAddModule = module
-                        showAdd = false
-                    } label: {
-                        Label(module.addLabel, systemImage: module.systemImage)
-                            .frame(minHeight: 40)
-                    }
-                }
-                .navigationTitle("Co chcesz dodać?")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Anuluj") { showAdd = false }
-                    }
-                }
-                .scrollContentBackground(.hidden)
-                .background(RootineTheme.ColorToken.canvas)
-            }
-            .presentationDetents([.medium, .large])
         }
-        .overlay(alignment: .top) { MoreLandingSyncStatusBanner().padding(.horizontal, 16) }
+        .padding(16)
+        .padding(.bottom, 24)
+    }
+
+    private func moduleTile(_ module: MoreModule) -> some View {
+        NavigationLink {
+            MoreModuleView(module: module)
+        } label: {
+            MoreModuleTile(module: module)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("space-\(module.rawValue)")
+        .contextMenu {
+            Button(module.addLabel, systemImage: "plus") { selectedModule = module }
+            Button("Przenieś na początek", systemImage: "arrow.up.to.line") {
+                move(module, before: modules.first ?? module)
+            }
+        }
+        .draggable("rootine-space:\(module.rawValue)")
+        .dropDestination(for: String.self) { values, _ in
+            moveDroppedModule(values, before: module)
+        }
+        .accessibilityAction(named: "Przenieś na początek") {
+            move(module, before: modules.first ?? module)
+        }
+    }
+
+    private var addModuleSheet: some View {
+        NavigationStack {
+            List(modules) { module in
+                Button {
+                    pendingAddModule = module
+                    showAdd = false
+                } label: {
+                    Label(module.addLabel, systemImage: module.systemImage)
+                        .frame(minHeight: 40)
+                }
+            }
+            .navigationTitle("Co chcesz dodać?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Anuluj") { showAdd = false }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(RootineTheme.ColorToken.canvas)
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var syncStatusBanner: some View {
+        MoreLandingSyncStatusBanner().padding(.horizontal, 16)
+    }
+
+    private func finishAddFlow() {
+        guard let pendingAddModule else { return }
+        selectedModule = pendingAddModule
+        self.pendingAddModule = nil
+    }
+
+    private func moveDroppedModule(_ values: [String], before target: MoreModule) -> Bool {
+        guard let value = values.first,
+              value.hasPrefix("rootine-space:"),
+              let source = MoreModule(rawValue: String(value.dropFirst("rootine-space:".count))) else {
+            return false
+        }
+        move(source, before: target)
+        return true
     }
 
     private func move(_ source: MoreModule, before target: MoreModule) {
@@ -312,16 +334,7 @@ private struct MoreLandingSyncStatusBanner: View {
     }
 }
 
-enum MoreModule: String, CaseIterable, Identifiable {
-    case notes
-    case sport
-    case goals
-    case work
-    case travel
-    case health
-    case affairs
-
-    var id: String { rawValue }
+extension MoreModule {
     var addLabel: String {
         switch self {
         case .notes: return "Dodaj notatkę"
@@ -331,40 +344,6 @@ enum MoreModule: String, CaseIterable, Identifiable {
         case .travel: return "Dodaj podróż"
         case .health: return "Dodaj przypomnienie"
         case .affairs: return "Dodaj sprawę lub płatność"
-        }
-    }
-    var title: String {
-        switch self {
-        case .notes: return "Notatki"
-        case .sport: return "Sport"
-        case .goals: return "Cele"
-        case .work: return "Praca"
-        case .travel: return "Podróże"
-        case .health: return "Zdrowie"
-        case .affairs: return "Pozostałe"
-        }
-    }
-    var systemImage: String {
-        switch self {
-        case .notes: return "note.text"
-        case .sport: return "figure.run"
-        case .goals: return "target"
-        case .work: return "briefcase"
-        case .travel: return "airplane"
-        case .health: return "heart.text.square"
-        case .affairs: return "checklist.checked"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .notes: return "Myśli i szybkie zapiski"
-        case .sport: return "Ruch i regeneracja"
-        case .goals: return "Kierunek na dziś"
-        case .work: return "Skupienie bez chaosu"
-        case .travel: return "Plany poza rutyną"
-        case .health: return "Samopoczucie i energia"
-        case .affairs: return "Sprawy, płatności i ważne terminy"
         }
     }
 
