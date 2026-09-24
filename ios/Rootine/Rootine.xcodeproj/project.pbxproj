@@ -37,6 +37,7 @@
 		B00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* Notifications/LocalNotificationScheduler.swift */; };
 		B00000000000000000000025 /* Sync/RootineRelationalRead.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* Sync/RootineRelationalRead.swift */; };
 		B00000000000000000000026 /* TodayAggregation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* TodayAggregation.swift */; };
+		B00000000000000000000300 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000300 /* Assets.xcassets */; };
 		B00000000000000000000027 /* Observability.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000027 /* Observability.swift */; };
 		B00000000000000000000028 /* Models/SportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000028 /* Models/SportModels.swift */; };
 		B00000000000000000000101 /* ContractFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* ContractFixtureTests.swift */; };
@@ -142,6 +143,7 @@
 		F00000000000000000001901 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RootineUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000029 /* ProductivityModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductivityModules.swift; sourceTree = "<group>"; };
 		F0000000000000000000002A /* LifeModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeModules.swift; sourceTree = "<group>"; };
+		F00000000000000000000300 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -238,6 +240,7 @@
 				F0000000000000000000000B /* Rootine.entitlements */,
 				F00000000000000000000010 /* Info.plist */,
 				F00000000000000000000116 /* PrivacyInfo.xcprivacy */,
+				F00000000000000000000300 /* Assets.xcassets */,
 			);
 			path = Rootine/Resources;
 			sourceTree = "<group>";
@@ -386,6 +389,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B00000000000000000000300 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -554,6 +558,7 @@
 				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -569,6 +574,7 @@
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
 				DEVELOPMENT_TEAM = NUF727H92H;
 				GENERATE_INFOPLIST_FILE = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -585,6 +591,7 @@
 				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -601,6 +608,7 @@
 				DEVELOPMENT_TEAM = NUF727H92H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -616,6 +624,7 @@
 				CODE_SIGN_ENTITLEMENTS = Rootine/Resources/Rootine.entitlements;
 				DEVELOPMENT_TEAM = NUF727H92H;
 				GENERATE_INFOPLIST_FILE = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_FILE = Rootine/Resources/Info.plist;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rootine.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
